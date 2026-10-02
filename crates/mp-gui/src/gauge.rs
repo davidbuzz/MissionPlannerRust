@@ -1,14 +1,18 @@
-//! The Gauges page's speed dial, `Gspeed`: an `AGauge` with two needles, airspeed and ground
-//! speed, over a scale from 0 to its maximum - 60 until a double click asks for another.
+//! The `AGauge` dials: the Gauges page's speed dial, `Gspeed`, with two needles, airspeed and
+//! ground speed, over a scale from 0 to its maximum - 60 until a double click asks for another -
+//! and the RAW Sensor window's roll, pitch and yaw dials, each with one needle.
 //!
-//! `AGauge` draws in a 150-pixel square scaled to the control: a major line and a number every
-//! step, nine minor lines between with the middle one longer, the caption, and each needle as
-//! three shaded triangles about the centre over a cap. The C# draws its dial face from a
-//! `BackgroundImage` in the `.resx`; the face is not drawn here, under the palette ruling, and the
-//! scale and needles are drawn on the page's own background.
-//! `// C#: ExtLibs/Controls/AGauge.cs:1499-1987, GCSViews/FlightData.Designer.cs:1464-1607`
+//! `AGauge` draws in a 150-pixel square scaled to the control: the coloured bands of its ranges,
+//! the base arc, a major line and a number every step, the minor lines between with the middle
+//! one longer when there is one, the caption, and each needle as three shaded triangles about
+//! the centre over a cap. The C# draws its dial face from a `BackgroundImage` in the `.resx`;
+//! the face is not drawn here, under the palette ruling, and the scale and needles are drawn on
+//! the page's own background - in white where the Designer has them black, which the dark
+//! background would swallow.
+//! `// C#: ExtLibs/Controls/AGauge.cs:1499-1987, GCSViews/FlightData.Designer.cs:1464-1607,
+//! Controls/RAW_Sensor.Designer.cs:405-547, 609-750, 752-893`
 //!
-//! Galt, Gheading and Gvspeed, the page's other dials, are not ported.
+//! Galt, Gheading and Gvspeed, the Gauges page's other dials, are not ported.
 
 // This module is internal to the binary; `pub` here documents intent rather than exporting API.
 #![allow(unreachable_pub)]
@@ -24,6 +28,14 @@ const FONT: f32 = 11.0;
 
 /// White, the scale's colour. `// C#: GCSViews/FlightData.Designer.cs:1581-1595`
 const WHITE: u32 = 0xff_ff_ff;
+/// `Color.Gray`.
+const GRAY: u32 = 0x80_80_80;
+/// `Color.DimGray`, the RAW Sensor needles' cap.
+const DIM_GRAY: u32 = 0x69_69_69;
+/// `Color.LightGreen`.
+const LIGHT_GREEN: u32 = 0x90_ee_90;
+/// `Color.LightSteelBlue`.
+const LIGHT_STEEL_BLUE: u32 = 0xb0_c4_de;
 
 /// `AGauge.NeedleColorEnum`, the needles' shading.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -49,6 +61,58 @@ pub struct Needle {
     pub cap: u32,
 }
 
+/// `RangesEnabled[i]`: a coloured band between two radii from one value of the scale to another,
+/// drawn under the scale when its end is past its start.
+/// `// C#: ExtLibs/Controls/AGauge.cs:1588-1614`
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Band {
+    /// `RangesStartValue`.
+    pub from: f32,
+    /// `RangesEndValue`.
+    pub to: f32,
+    /// `RangesInnerRadius`.
+    pub inner: f32,
+    /// `RangesOuterRadius`.
+    pub outer: f32,
+    /// `RangesColor`.
+    pub colour: u32,
+}
+
+/// One dial's settings, as its Designer gives them: the scale's span and arc, the arc under it,
+/// its lines and their colours, its numbers, its caption and its bands.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Dial {
+    /// `MinValue`.
+    pub min: f32,
+    /// `MaxValue`.
+    pub max: f32,
+    /// `BaseArcStart`, degrees clockwise from east.
+    pub arc_start: f32,
+    /// `BaseArcSweep`.
+    pub arc_sweep: f32,
+    /// `BaseArcRadius`, `BaseArcWidth` and `BaseArcColor`: the arc the scale sits on, or `None`
+    /// where it is not drawn.
+    pub base_arc: Option<(f32, f32, u32)>,
+    /// `ScaleLinesMajorStepValue`.
+    pub major_step: f32,
+    /// `ScaleLinesMinorNumOf`.
+    pub minor_count: u8,
+    /// `ScaleLinesMajorInnerRadius`, `OuterRadius`, `Width`.
+    pub major: (f32, f32, f32),
+    /// `ScaleLinesMinorInnerRadius`, `OuterRadius`, `Width`.
+    pub minor: (f32, f32, f32),
+    /// `ScaleLinesInterInnerRadius`, `OuterRadius`, `Width`: the middle minor line.
+    pub inter: (f32, f32, f32),
+    /// `ScaleLinesMajorColor` (and the inter line's), `ScaleLinesMinorColor`, `ScaleNumbersColor`.
+    pub colours: (u32, u32, u32),
+    /// `ScaleNumbersRadius`.
+    pub numbers_radius: f32,
+    /// `CapsText[0]` at `CapsPosition[0]`; the other caps are empty.
+    pub cap: (&'static str, (f32, f32)),
+    /// The ranges enabled.
+    pub bands: &'static [Band],
+}
+
 /// The speed dial's settings, as the Designer gives them. `// C#: GCSViews/FlightData.Designer.cs:1464-1607`
 #[derive(Debug, Clone, PartialEq)]
 pub struct SpeedGauge {
@@ -62,28 +126,8 @@ impl Default for SpeedGauge {
     }
 }
 
-/// `MinValue`.
-const MIN: f32 = 0.0;
-/// `BaseArcStart` and `BaseArcSweep`, degrees clockwise from east.
-const ARC_START: f32 = 135.0;
-/// See [`ARC_START`].
-const ARC_SWEEP: f32 = 270.0;
-/// `Center`, in the base square.
-const CENTRE: (f32, f32) = (75.0, 75.0);
-/// `ScaleLinesMajorStepValue`.
-const MAJOR_STEP: f32 = 10.0;
-/// `ScaleLinesMinorNumOf`.
-const MINOR_COUNT: u8 = 9;
-/// `ScaleLinesMajorInnerRadius`, `OuterRadius`, `Width`.
-const MAJOR: (f32, f32, f32) = (50.0, 60.0, 2.0);
-/// `ScaleLinesMinorInnerRadius`, `OuterRadius`, `Width`.
-const MINOR: (f32, f32, f32) = (55.0, 60.0, 1.0);
-/// `ScaleLinesInterInnerRadius`, `OuterRadius`, `Width`: the middle minor line.
-const INTER: (f32, f32, f32) = (52.0, 60.0, 1.0);
-/// `ScaleNumbersRadius`.
-const NUMBERS_RADIUS: f32 = 42.0;
-/// `CapsText[0]` at `CapsPosition[0]`; the other caps are empty.
-const CAP: (&str, (f32, f32)) = ("Speed", (58.0, 85.0));
+/// The speed dial's `MinValue`.
+const SPEED_MIN: f32 = 0.0;
 
 impl SpeedGauge {
     /// The two needles the Designer enables: airspeed, gray and two wide, and ground speed, red
@@ -91,7 +135,7 @@ impl SpeedGauge {
     /// `Value` setters hold it. `// C#: ExtLibs/Controls/AGauge.cs:240-250`
     #[must_use]
     pub fn needles(&self, airspeed: f32, groundspeed: f32) -> [Needle; 2] {
-        let held = |value: f32| value.max(MIN).min(self.max);
+        let held = |value: f32| value.max(SPEED_MIN).min(self.max);
         [
             Needle {
                 value: held(airspeed),
@@ -117,19 +161,165 @@ impl SpeedGauge {
     pub fn set_max(&mut self, text: &str) -> Result<(), &'static str> {
         let value =
             crate::fly::dotnet_float(text).ok_or("Input string was not in a correct format.")?;
-        if value > MIN {
+        if value > SPEED_MIN {
             self.max = value;
         }
         Ok(())
+    }
+
+    /// The dial as the Designer sets it: 0 to the maximum over 270 degrees from the lower left,
+    /// a line and a number every 10 with nine between, "Speed" under the centre, no ranges; its
+    /// base arc (radius 70) is not drawn, as it has not been.
+    /// `// C#: GCSViews/FlightData.Designer.cs:1464-1607`
+    #[must_use]
+    pub const fn dial(&self) -> Dial {
+        Dial {
+            min: SPEED_MIN,
+            max: self.max,
+            arc_start: 135.0,
+            arc_sweep: 270.0,
+            base_arc: None,
+            major_step: 10.0,
+            minor_count: 9,
+            major: (50.0, 60.0, 2.0),
+            minor: (55.0, 60.0, 1.0),
+            inter: (52.0, 60.0, 1.0),
+            colours: (WHITE, WHITE, WHITE),
+            numbers_radius: 42.0,
+            cap: ("Speed", (58.0, 85.0)),
+            bands: &[],
+        }
     }
 
     /// The dial drawn `size` pixels square: the scale, the caption and the needles.
     /// `// C#: ExtLibs/Controls/AGauge.cs:1499-1987`
     #[must_use]
     pub fn scene(&self, size: f32, needles: &[Needle]) -> Scene {
+        self.dial().scene(size, needles)
+    }
+}
+
+/// The RAW Sensor dials' bands for roll and pitch: LightSteelBlue from -90 to 90, LightGreen
+/// beyond it either way, 50 to 60 out. `// C#: Controls/RAW_Sensor.Designer.cs:689-725, 832-868`
+const LEVEL_BANDS: [Band; 3] = [
+    Band {
+        from: -90.0,
+        to: 90.0,
+        inner: 50.0,
+        outer: 60.0,
+        colour: LIGHT_STEEL_BLUE,
+    },
+    Band {
+        from: 90.0,
+        to: 180.0,
+        inner: 50.0,
+        outer: 60.0,
+        colour: LIGHT_GREEN,
+    },
+    Band {
+        from: -180.0,
+        to: -90.0,
+        inner: 50.0,
+        outer: 60.0,
+        colour: LIGHT_GREEN,
+    },
+];
+
+/// The yaw dial's one band: LightGreen the whole way round.
+/// `// C#: Controls/RAW_Sensor.Designer.cs:481-521`
+const YAW_BANDS: [Band; 1] = [Band {
+    from: 0.0,
+    to: 360.0,
+    inner: 50.0,
+    outer: 60.0,
+    colour: LIGHT_GREEN,
+}];
+
+/// What the three RAW Sensor dials share: a gray base arc of 50, the major lines 50 to 60 and
+/// two wide, the minor 50 to 55, the inter line the Designer's 60 to 50 - the same line - the
+/// numbers at 38, the caption at (10, 10); the black lines white under the palette ruling.
+/// `// C#: Controls/RAW_Sensor.Designer.cs:405-547`
+const fn raw_dial(
+    min: f32,
+    max: f32,
+    arc_start: f32,
+    major_step: f32,
+    minor_count: u8,
+    cap: &'static str,
+    bands: &'static [Band],
+) -> Dial {
+    Dial {
+        min,
+        max,
+        arc_start,
+        arc_sweep: 360.0,
+        base_arc: Some((50.0, 2.0, GRAY)),
+        major_step,
+        minor_count,
+        major: (50.0, 60.0, 2.0),
+        minor: (50.0, 55.0, 1.0),
+        inter: (50.0, 60.0, 1.0),
+        colours: (WHITE, GRAY, WHITE),
+        numbers_radius: 38.0,
+        cap: (cap, (10.0, 10.0)),
+        bands,
+    }
+}
+
+/// `Groll`: -180 to 179 the whole way round from the bottom, a line every 30 with five between,
+/// "Roll". `// C#: Controls/RAW_Sensor.Designer.cs:752-893`
+#[must_use]
+pub const fn roll_dial() -> Dial {
+    raw_dial(-180.0, 179.0, 90.0, 30.0, 5, "Roll", &LEVEL_BANDS)
+}
+
+/// `Gpitch`: -90 to 89 the whole way round from the bottom, a line every 20 with nine between,
+/// "Pitch". `// C#: Controls/RAW_Sensor.Designer.cs:609-750`
+#[must_use]
+pub const fn pitch_dial() -> Dial {
+    raw_dial(-90.0, 89.0, 90.0, 20.0, 9, "Pitch", &LEVEL_BANDS)
+}
+
+/// `aGauge1`: 0 to 359 the whole way round from the top, a line every 45 with two between,
+/// "Yaw". `// C#: Controls/RAW_Sensor.Designer.cs:405-547`
+#[must_use]
+pub const fn yaw_dial() -> Dial {
+    raw_dial(0.0, 359.0, 270.0, 45.0, 2, "Yaw", &YAW_BANDS)
+}
+
+impl Dial {
+    /// A value held to the scale, as the `Value` setters hold it.
+    /// `// C#: ExtLibs/Controls/AGauge.cs:240-250`
+    #[must_use]
+    pub fn held(&self, value: f32) -> f32 {
+        value.max(self.min).min(self.max)
+    }
+
+    /// The RAW Sensor dials' one needle, `NeedlesEnabled[0]`: gray, 50 long, two wide, over a
+    /// DimGray cap. `// C#: Controls/RAW_Sensor.Designer.cs:443-478`
+    #[must_use]
+    pub fn raw_needle(&self, value: f32) -> Needle {
+        Needle {
+            value: self.held(value),
+            radius: 50.0,
+            width: 2.0,
+            colour: NeedleColour::Gray,
+            cap: DIM_GRAY,
+        }
+    }
+
+    /// Where a value of the scale points, in degrees clockwise from east.
+    fn angle_of(&self, value: f32) -> f32 {
+        self.arc_start + (value - self.min) * self.arc_sweep / (self.max - self.min)
+    }
+
+    /// The dial drawn `size` pixels square: the bands, the base arc, the scale, the caption and
+    /// the needles. `// C#: ExtLibs/Controls/AGauge.cs:1499-1987`
+    #[must_use]
+    pub fn scene(&self, size: f32, needles: &[Needle]) -> Scene {
         let scale = size / BASE_SIZE;
         let mut scene = Scene::default();
-        let span = self.max - MIN;
+        let span = self.max - self.min;
         let at = |radius: f32, degrees: f32| {
             let radians = degrees.to_radians();
             (
@@ -137,45 +327,90 @@ impl SpeedGauge {
                 (CENTRE.1 + radius * radians.sin()) * scale,
             )
         };
-        let line = |scene: &mut Scene, (inner, outer, width): (f32, f32, f32), degrees: f32| {
+        // An arc as points, one every five degrees and the end.
+        let arc = |radius: f32, from: f32, sweep: f32| -> Vec<(f32, f32)> {
+            let sweep = sweep.min(360.0);
+            #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)] // whole steps
+            let steps = ((sweep / 5.0).ceil() as usize).max(1);
+            #[allow(clippy::cast_precision_loss)] // small counts
+            (0..=steps)
+                .map(|step| at(radius, from + sweep * step as f32 / steps as f32))
+                .collect()
+        };
+        // `AddPie` outer, `AddPie` inner reversed, `FillPie` clipped to the two: the band.
+        for band in self.bands {
+            if band.to <= band.from {
+                continue;
+            }
+            let from = self.angle_of(band.from);
+            let sweep = (band.to - band.from) * self.arc_sweep / span;
+            let mut points = arc(band.outer, from, sweep);
+            let mut inner = arc(band.inner, from, sweep);
+            inner.reverse();
+            points.append(&mut inner);
+            scene.items.push(Item::Fill {
+                points,
+                colour: band.colour,
+                alpha: 1.0,
+            });
+        }
+        // `DrawArc` with the base arc's pen.
+        if let Some((radius, width, colour)) = self.base_arc {
+            scene.items.push(Item::Stroke {
+                points: arc(radius, self.arc_start, self.arc_sweep),
+                width: width * scale,
+                colour,
+                alpha: 1.0,
+            });
+        }
+        let line = |scene: &mut Scene,
+                    (inner, outer, width): (f32, f32, f32),
+                    colour: u32,
+                    degrees: f32| {
             scene.items.push(Item::Stroke {
                 points: vec![at(inner, degrees), at(outer, degrees)],
                 width: width * scale,
-                colour: WHITE,
+                colour,
                 alpha: 1.0,
             });
         };
+        let (major_colour, minor_colour, numbers_colour) = self.colours;
         // `(m_MaxValue - m_MinValue) / m_ScaleLinesMajorStepValue * (MinorNumOf + 1)` minor
         // steps across the sweep.
-        let minor_step = ARC_SWEEP / ((span / MAJOR_STEP) * (f32::from(MINOR_COUNT) + 1.0));
+        let minor_step =
+            self.arc_sweep / ((span / self.major_step) * (f32::from(self.minor_count) + 1.0));
         let mut count = 0.0f32;
         while count <= span {
-            let major = ARC_START + count * ARC_SWEEP / span;
-            line(&mut scene, MAJOR, major);
+            let major = self.arc_start + count * self.arc_sweep / span;
+            line(&mut scene, self.major, major_colour, major);
             if count < span {
-                for minor in 1..=MINOR_COUNT {
+                for minor in 1..=self.minor_count {
                     let degrees = major + f32::from(minor) * minor_step;
                     // With an odd count, the middle one is the longer "inter" line.
-                    let middle = MINOR_COUNT % 2 == 1 && MINOR_COUNT / 2 + 1 == minor;
-                    line(&mut scene, if middle { INTER } else { MINOR }, degrees);
+                    let middle = self.minor_count % 2 == 1 && self.minor_count / 2 + 1 == minor;
+                    if middle {
+                        line(&mut scene, self.inter, major_colour, degrees);
+                    } else {
+                        line(&mut scene, self.minor, minor_colour, degrees);
+                    }
                 }
             }
             // The number, centred on its point at the numbers' radius.
-            let (x, y) = at(NUMBERS_RADIUS, major);
+            let (x, y) = at(self.numbers_radius, major);
             scene.items.push(Item::Label {
-                text: number_text(MIN + count),
+                text: number_text(self.min + count),
                 at: (x, y - FONT * scale / 2.0),
                 size: FONT * scale,
-                colour: WHITE,
+                colour: numbers_colour,
                 align: Align::Centre,
             });
-            count += MAJOR_STEP;
+            count += self.major_step;
         }
         scene.items.push(Item::Label {
-            text: CAP.0.to_owned(),
-            at: (CAP.1.0 * scale, CAP.1.1 * scale),
+            text: self.cap.0.to_owned(),
+            at: (self.cap.1.0 * scale, self.cap.1.1 * scale),
             size: FONT * scale,
-            colour: WHITE,
+            colour: numbers_colour,
             align: Align::Left,
         });
         for needle in needles {
@@ -187,10 +422,8 @@ impl SpeedGauge {
     /// A needle of type 0: its cap, three shaded triangles about the centre, and two lines in
     /// the cap's colour. `// C#: ExtLibs/Controls/AGauge.cs:1818-1946`
     fn needle(&self, scene: &mut Scene, needle: &Needle, scale: f32) {
-        let span = self.max - MIN;
         #[allow(clippy::cast_possible_truncation)] // `(Int32)(...) % 360`
-        let brush_angle =
-            ((ARC_START + (needle.value - MIN) * ARC_SWEEP / span) as i32 % 360) as f32;
+        let brush_angle = (self.angle_of(needle.value) as i32 % 360) as f32;
         let angle = f64::from(brush_angle).to_radians();
         #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
         let subcol = (((brush_angle + 225.0) % 180.0) * 100.0 / 180.0) as i32;
@@ -282,6 +515,9 @@ impl SpeedGauge {
         }
     }
 }
+
+/// `Center`, in the base square: every dial here has it at (75, 75).
+const CENTRE: (f32, f32) = (75.0, 75.0);
 
 /// A scale number as `float.ToString()` writes it: "0", "10", "12.5".
 fn number_text(value: f32) -> String {

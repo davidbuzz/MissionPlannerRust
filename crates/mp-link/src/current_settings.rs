@@ -41,7 +41,7 @@ use mp_vehicle::{StreamRates, VehicleId};
 pub const UPDATE_INTERVAL: Duration = Duration::from_millis(50);
 
 /// `MAV_DATA_STREAM_RAW_SENSORS`.
-const RAW_SENSORS: u8 = 1;
+pub const RAW_SENSORS: u8 = 1;
 /// `MAV_DATA_STREAM_EXTENDED_STATUS`.
 const EXTENDED_STATUS: u8 = 2;
 /// `MAV_DATA_STREAM_RC_CHANNELS`.

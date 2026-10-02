@@ -1956,6 +1956,26 @@ impl Telemetry {
             link.set_stream_rates(id, rates);
         }
     }
+
+    /// `requestDatastream(MAV_DATA_STREAM.RAW_SENSORS, hz)`: the RAW Sensor window asking for
+    /// the raw sensor stream at a rate now - twice, as `getDatastream` sends every request; the
+    /// link asks again at the vehicle's rates on its own clock. Nothing without a vehicle.
+    /// `// C#: Controls/RAW_Sensor.cs:257, 272-273; ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:3262-3263`
+    pub fn request_raw_sensors(&self, hz: i32) {
+        let Some((link, id)) = self.target() else {
+            return;
+        };
+        let Some(request) = mp_link::current_settings::request_datastream(
+            id,
+            mp_link::current_settings::RAW_SENSORS,
+            hz,
+        ) else {
+            return;
+        };
+        for _ in 0..2 {
+            link.send(&request);
+        }
+    }
 }
 
 /// A `COMMAND_LONG` a builder made, read back as `doCommand`'s arguments: the vehicle it names,

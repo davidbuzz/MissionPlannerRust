@@ -1004,6 +1004,9 @@ pub enum Prompt {
     /// The speed dial's double click: `InputBox.Show("Enter Max Speed", "Enter Max Speed", ref
     /// max)`. `// C#: GCSViews/FlightData.cs:3140-3143`
     GaugeMax,
+    /// The RAW Sensor window's Save CSV: `BUT_savecsv_Click`'s `SaveFileDialog`, which has no
+    /// filter and no title of its own, `DefaultExt = ".csv"`. `// C#: Controls/RAW_Sensor.cs:278-298`
+    RawSensorCsv,
     /// Set MJPEG source's `InputBox.Show("Mjpeg url", "Enter the url to the mjpeg source url",
     /// ref url)`. `// C#: GCSViews/FlightData.cs:4898`
     MjpegUrl,
@@ -1043,6 +1046,8 @@ impl Prompt {
             Self::ViewRows => "Rows",
             Self::CellCount => "Battery Cell Count",
             Self::GaugeMax => "Enter Max Speed",
+            // The dialog's own caption, no `Title` being set.
+            Self::RawSensorCsv => "Save As",
             Self::MjpegUrl => "Mjpeg url",
             Self::GStreamerUrl => mp_video::gstreamer::PIPELINE_TITLE,
             Self::HereLinkIp => mp_video::gstreamer::HERELINK_TITLE,
@@ -1090,6 +1095,8 @@ impl Prompt {
             Self::SelectScript => "Python script (*.py)".to_owned(),
             Self::CellCount => "Cell Count".to_owned(),
             Self::GaugeMax => "Enter Max Speed".to_owned(),
+            // No filter; the default extension is the only words the dialog is given.
+            Self::RawSensorCsv => ".csv".to_owned(),
             Self::MjpegUrl => "Enter the url to the mjpeg source url".to_owned(),
             Self::GStreamerUrl => mp_video::gstreamer::PIPELINE_TEXT.to_owned(),
             Self::HereLinkIp => mp_video::gstreamer::HERELINK_TEXT.to_owned(),
@@ -1121,6 +1128,7 @@ impl Prompt {
                 | Self::ViewRows
                 | Self::CellCount
                 | Self::GaugeMax
+                | Self::RawSensorCsv
                 | Self::MjpegUrl
                 | Self::GStreamerUrl
                 | Self::HereLinkIp
@@ -2743,7 +2751,8 @@ fn actions_tab(
             }
             .render(window, cx),
         ))
-        // `BUT_RAWSensor`: `new RAW_Sensor().Show()`, a window of its own, not ported.
+        // `BUT_RAWSensor`: `new RAW_Sensor().Show()`, the window in `raw_sensor.rs`; enabled
+        // whatever the link, the form itself saying "Please connect first".
         // `// C#: GCSViews/FlightData.cs:1464-1469`
         .child(cell(
             3,
@@ -2752,8 +2761,11 @@ fn actions_tab(
                 "fly-rawsensor",
                 fl!("flightdata-BUT_RAWSensor-Text"),
                 theme::ACCENT,
-                false,
-                |_event: &(), _window, _cx| {},
+                true,
+                cx.listener(|this, _event: &(), _window, cx| {
+                    this.raw_sensor_open();
+                    cx.notify();
+                }),
             ),
         ))
         // Row 3: CMB_mountmode, BUT_mountmode, (BUT_joystick), (BUT_ARM), BUT_clear_track.
@@ -2920,7 +2932,11 @@ impl Prompt {
     pub const fn is_file_dialog(self) -> bool {
         matches!(
             self,
-            Self::LoadLog | Self::PoiSave | Self::PoiLoad | Self::SelectScript
+            Self::LoadLog
+                | Self::PoiSave
+                | Self::PoiLoad
+                | Self::SelectScript
+                | Self::RawSensorCsv
         )
     }
 }
@@ -4118,6 +4134,11 @@ impl MissionPlanner {
             Prompt::GaugeMax => {
                 if accepted && let Err(why) = self.fly_data.speed_gauge.set_max(&text) {
                     self.file_status = Some(error_box(why));
+                }
+            }
+            Prompt::RawSensorCsv => {
+                if accepted {
+                    self.raw_sensor_csv_named(&text);
                 }
             }
             Prompt::MjpegUrl => {
@@ -6283,7 +6304,7 @@ fn vertical_bar(value: i32, maximum: i32, lines: (i32, i32), scale: f32, colour:
 
 /// A form as `Show()` shows it: a titled box over the screen that leaves the rest usable, with
 /// its close box.
-fn floating_window(
+pub(crate) fn floating_window(
     id: &'static str,
     title: &'static str,
     close: &'static str,

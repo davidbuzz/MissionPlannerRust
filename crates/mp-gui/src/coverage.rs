@@ -261,7 +261,7 @@ pub const FLIGHTDATA: &[Action] = &[
         "Click",
         "BUT_RAWSensor_Click",
         "Raw Sensor View",
-        Missing,
+        Done("fly-rawsensor"),
     ),
     row(
         "BUT_resetGimbalPos",
@@ -1001,11 +1001,6 @@ pub const FLIGHTDATA: &[Action] = &[
 /// window of its own, or the owner's call.
 #[cfg(test)]
 pub const WHY_MISSING: &[(&str, &str, &str)] = &[
-    (
-        "BUT_RAWSensor",
-        "Click",
-        "later: RAW_Sensor is a window of its own; drawn dimmed in the Actions grid",
-    ),
     ("startCameraToolStripMenuItem", "Click", VIDEO),
     (
         "onOffCameraOverlapToolStripMenuItem",
@@ -1241,7 +1236,7 @@ mod tests {
         );
         assert_eq!(
             (done, elsewhere, missing, plumbing, dropped),
-            (111, 1, 4, 18, 2)
+            (112, 1, 3, 18, 2)
         );
     }
 }

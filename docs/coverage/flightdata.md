@@ -4,7 +4,7 @@ Generated from `crates/mp-gui/src/coverage.rs` by `cargo test -p mp-gui coverage
 
 | total | done | elsewhere | missing | plumbing | dropped |
 |---:|---:|---:|---:|---:|---:|
-| 136 | 111 | 1 | 4 | 18 | 2 |
+| 136 | 112 | 1 | 3 | 18 | 2 |
 
 | control | event | handler | text | ours |
 |---|---|---|---|---|
@@ -34,7 +34,7 @@ Generated from `crates/mp-gui/src/coverage.rs` by `cargo test -p mp-gui coverage
 | `BUT_quickauto` | Click | `BUT_quickauto_Click` | Auto | done: `mode` |
 | `BUT_quickmanual` | Click | `BUT_quickmanual_Click` | Loiter | done: `mode` |
 | `BUT_quickrtl` | Click | `BUT_quickrtl_Click` | RTL | done: `mode` |
-| `BUT_RAWSensor` | Click | `BUT_RAWSensor_Click` | Raw Sensor View | **missing** - later: RAW_Sensor is a window of its own; drawn dimmed in the Actions grid |
+| `BUT_RAWSensor` | Click | `BUT_RAWSensor_Click` | Raw Sensor View | done: `fly-rawsensor` |
 | `BUT_resetGimbalPos` | Click | `BUT_resetGimbalPos_Click` | Reset Position | done: `fly-gimbal-reset` |
 | `BUTrestartmission` | Click | `BUTrestartmission_Click` | Restart Mission | done: `fly-restartmission` |
 | `BUT_resumemis` | Click | `BUT_resumemis_Click` | Resume Mission | done: `fly-resumemis` |

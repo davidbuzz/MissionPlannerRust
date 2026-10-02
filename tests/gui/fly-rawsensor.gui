@@ -1,0 +1,61 @@
+# The RAW Sensor window: the Actions grid's Raw Sensor View, Controls/RAW_Sensor.cs over its
+# Designer and .resx, ported in crates/mp-gui/src/raw_sensor.rs with the dials in gauge.rs.
+#
+# The claim: the button shows the form on its Raw Sensor page (the Load selects Radio, then Raw
+# Sensor) with its six boxes checked and the combo reading "Update Speed"; every 10 ms the state
+# is sampled into the checked curves (an unchecked one is emptied); choosing a rate writes the
+# vehicle's ratesensors and asks for the RAW_SENSORS stream; Save CSV names a file, .csv added to
+# a bare name, and the samples go into it a line each; the Radio page has the eight inputs and
+# eight outputs; the close box closes the form.
+#
+# Plays the recorded copter flight, which sends RAW_IMU, ATTITUDE, RC_CHANNELS and
+# SERVO_OUTPUT_RAW. Run from the repository root:
+#   tools/gui-test.sh tests/gui/fly-rawsensor.gui -- file:testdata/mavlink/autotest.tlog
+
+screen fly
+window 1600x1200
+budget 17
+
+# The button is on the Actions page of the tab control under the HUD.
+click fly-tab-actions
+expect fly.tab tabActions
+expect raw.open false
+click fly-rawsensor
+expect raw.open true
+expect raw.tab Raw Sensor
+expect raw.rate Update Speed
+expect raw.checked true,true,true,true,true,true
+expect raw.points > 3
+expect raw.attitude ~ ,
+
+# Unchecking Accel X empties its curve; checking it again fills it.
+click raw-chk-ax
+expect raw.checked false,true,true,true,true,true
+click raw-chk-ax
+expect raw.checked true,true,true,true,true,true
+
+# Update Speed: 50 written as the vehicle's ratesensors and asked for.
+click raw-rate
+click raw-rate-50
+expect raw.rate 50
+expect vehicle.rates ~ ,50,
+
+# Save CSV: a name with no extension gets .csv, and the samples' lines start.
+click raw-savecsv
+expect fly.prompt .csv
+type $WORK/raw-sensor-samples
+click fly-prompt-ok
+expect raw.csv ~ raw-sensor-samples.csv
+expect raw.csv.lines > 2
+
+# The Radio page: eight inputs and eight outputs from the replayed RC_CHANNELS and
+# SERVO_OUTPUT_RAW.
+click raw-tab-radio
+expect raw.tab Radio
+expect raw.rc ~ ,
+expect raw.servo ~ ,
+click raw-tab-rawsensor
+expect raw.tab Raw Sensor
+
+click raw-sensor-close
+expect raw.open false

@@ -41,6 +41,7 @@ mod raw_params;
 // ---- end row 82 ----
 // ---- ConfigRawParams remainder ----
 mod raw_params_grid;
+mod raw_sensor;
 mod scripts_tab;
 // ---- end ConfigRawParams remainder ----
 mod plan;
@@ -357,6 +358,8 @@ struct MissionPlanner {
     metadata: metadata::Fetch,
     /// The live tuning graph.
     tuning: tuning::Tuning,
+    /// The RAW Sensor window.
+    raw_sensor: raw_sensor::RawSensor,
     /// Initial Setup's Flight Modes page.
     flight_modes: config::flight_modes::FlightModes,
     /// The log being reviewed.
@@ -787,6 +790,7 @@ impl MissionPlanner {
             warnings,
             metadata: metadata::Fetch::default(),
             tuning: tuning::Tuning::new(),
+            raw_sensor: raw_sensor::RawSensor::new(),
             flight_modes: config::flight_modes::FlightModes::default(),
             log_browse: logbrowse::LogBrowse::new(),
             log_name: textfield::TextField::new("a .BIN or .log in the plan directory"),
@@ -2955,6 +2959,8 @@ impl Render for MissionPlanner {
         // The flight screen's clock: `cs.lastautowp`, a Resume Mission moved on a step, and the
         // Transponder page's look for a status.
         self.fly_tick(&view, window);
+        // The RAW Sensor window's 10 ms sample.
+        self.raw_sensor_tick(&view);
         // ---- row 96 ----
         // The plugins' snapshot, and what they did and asked since the last frame.
         self.plugins_tick(&view, window, cx);
@@ -3298,6 +3304,7 @@ impl Render for MissionPlanner {
                 self.telemetry.log_listings().len(),
                 fly::alt_offset_home(&view),
             );
+            self.raw_sensor.record_facts(&view);
             // The state's clock, its counts, its rates and the fence handed to the quick view.
             self.telemetry.record_facts(&view);
             self.fly_pages
@@ -3649,6 +3656,7 @@ impl Render for MissionPlanner {
                 ))
                 // The forms the flight screen shows with `Show()`: over it, and it stays usable.
                 .children(fly::hud_windows(&self.fly_data, &view, cx))
+                .children(raw_sensor::window(&self.raw_sensor, &view, cx))
                 .children(logdownload::window(
                     &self.fly_data.logs,
                     &self.telemetry.log_listings(),

@@ -1,0 +1,27 @@
+# The RAW Sensor window without a link: tabControl1_SelectedIndexChanged's "Please connect
+# first" and Close, Controls/RAW_Sensor.cs:239-247 - on the status line here, the owner's rule
+# for an avoidable error, and the form never shown.
+#
+# Started from an empty config.xml, as main-connect.gui is, so no saved connection is opened at
+# start and the link is closed.
+#
+# Needs no link: tools/gui-test.sh tests/gui/fly-rawsensor-nolink.gui
+
+env XDG_DATA_HOME $WORK
+env TMPDIR $WORK
+env MP_SETTINGS $WORK/settings.conf
+setup mkdir -p "$WORK/MissionPlannerRust" && printf '<?xml version="1.0" encoding="utf-8"?><Config></Config>' > "$WORK/MissionPlannerRust/config.xml"
+
+screen fly
+window 1600x1200
+budget 3
+
+expect link.button CONNECT
+
+# The button is on the Actions page of the tab control under the HUD.
+click fly-tab-actions
+expect fly.tab tabActions
+expect raw.open false
+click fly-rawsensor
+expect raw.open false
+expect status Please connect first
