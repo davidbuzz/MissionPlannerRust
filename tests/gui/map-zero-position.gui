@@ -1,0 +1,34 @@
+# Nothing at latitude 0 or longitude 0 is drawn or framed (the owner's report, 2026-10-03): with
+# two vehicles on the link, picking the one whose GPS has no fix - GLOBAL_POSITION_INT at
+# latitude 0 - used to put its marker on the equator and refit the map to Brisbane and the
+# equator at once, half the world. Mission Planner draws no marker and no route point at such a
+# position (FlightData.cs:962-968, 3794) and no waypoint, leg or home there (WPOverlay.cs:44,
+# 134, 231); crates/mp-gui/src/mapview.rs is_fixed applies that to every layer and to the fit.
+#
+# The claim: against tests/gui/zero-vehicles.py - system 1 at Brisbane with a creeping route and
+# an ADS-B report at 0,0, system 2 at latitude 0 - the map stays zoomed in on Brisbane; picking
+# system 2 above the map draws no marker and keeps the zoom.
+#
+# Run from the repository root:
+#   tools/gui-test.sh tests/gui/map-zero-position.gui -- tcp:127.0.0.1:5796
+setup python3 tests/gui/zero-vehicles.py --work $WORK --port 5796
+screen fly
+window 1600x1200
+budget 3
+
+expect vehicle.count 2
+expect map.vehicle.sysid 1
+expect map.vehicle.drawn true
+expect map.zoom >= 12
+
+# The vehicle without a fix: no marker, the fit on the route it has not got - Brisbane's.
+click vehicle-2-1
+expect map.vehicle.sysid 2
+expect map.vehicle.drawn false
+expect map.zoom >= 12
+
+# And back to the one with a fix.
+click vehicle-1-1
+expect map.vehicle.sysid 1
+expect map.vehicle.drawn true
+expect map.zoom >= 12

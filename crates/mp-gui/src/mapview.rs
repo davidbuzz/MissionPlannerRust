@@ -596,9 +596,22 @@ impl MapViewport {
     /// Guinea to the vehicle (the owner saw it on 2026-09-26, the SITL started at Brisbane).
     /// `// C#: GCSViews/FlightData.cs:3793-3797`
     pub fn observe(&mut self, position: LatLon, heading: Bearing) {
+        // No marker at 0,0 either: `addMAVMarker` returns on one, and a marker there anchors
+        // the fit to the Gulf of Guinea and zooms the map out to half the world (the owner's
+        // report, 2026-10-03). `// C#: GCSViews/FlightData.cs:962-968`
+        if !is_fixed(position) {
+            return;
+        }
         let projected = position.to_web_mercator();
         self.vehicle = Some((projected, heading));
         self.note_moved(position, projected);
+    }
+
+    /// The shown vehicle has no position worth drawing - none, or one at 0,0 - so its marker
+    /// comes off the map, as `addMAVMarker` adds none for it; the flown route stays.
+    /// `// C#: GCSViews/FlightData.cs:962-968`
+    pub fn vehicle_unfixed(&mut self) {
+        self.vehicle = None;
     }
 
     /// What the vehicle's marker draws besides where it is and which way it points, and the
@@ -624,9 +637,7 @@ impl MapViewport {
         let moved = self.path.last().is_none_or(|last| {
             (last.x - projected.x).abs() > MOVED || (last.y - projected.y).abs() > MOVED
         });
-        #[allow(clippy::float_cmp)] // the C#'s test is exact: 0 is what a GPS without a fix sends
-        let fixed = position.latitude() != 0.0 && position.longitude() != 0.0;
-        if moved && fixed {
+        if moved && is_fixed(position) {
             self.path.push(projected);
             self.path_extent = Some(Extent::grow(self.path_extent, projected));
         }
@@ -641,6 +652,8 @@ impl MapViewport {
     pub fn set_home(&mut self, home: Option<LatLon>) {
         // `writeKML` rebuilds every marker, and a new marker is not under the pointer until the
         // pointer moves: a home that moved is no longer the one hovered.
+        // `WPOverlay` draws no "H" at `PointLatLngAlt.Zero`. `// C#: ExtLibs/Maps/WPOverlay.cs:44`
+        let home = home.filter(|home| is_fixed(*home));
         if home != self.home_position {
             self.hovered.forget(MarkerTag::Home);
         }
@@ -681,7 +694,9 @@ impl MapViewport {
     /// `geofenceoverlay`.
     /// `// C#: GCSViews/FlightPlanner.cs:6663-6670, 4368-4381, 881-889`
     pub fn set_fence_return(&mut self, position: Option<LatLon>) {
-        self.fence_return = position.map(LatLon::to_web_mercator);
+        self.fence_return = position
+            .filter(|position| is_fixed(*position))
+            .map(LatLon::to_web_mercator);
     }
 
     /// Whether the flown route is drawn: on the flight screen, whose `route` it is, and not the
@@ -711,7 +726,7 @@ impl MapViewport {
         self.mission = items
             .iter()
             .filter_map(|item| {
-                let position = item.position().ok().flatten()?;
+                let position = item.position().ok().flatten().filter(|p| is_fixed(*p))?;
                 Some((position.to_web_mercator(), item.seq))
             })
             .collect();
@@ -726,10 +741,7 @@ impl MapViewport {
 
     /// Replaces the survey area shown on the map.
     pub fn set_polygon(&mut self, vertices: &[LatLon]) {
-        self.polygon = vertices
-            .iter()
-            .map(|vertex| vertex.to_web_mercator())
-            .collect();
+        self.polygon = fixed_only(vertices);
     }
 
     /// Replaces KML Overlay's layer: `kmlpolygonsoverlay`'s polygons, routes and labels, projected,
@@ -742,7 +754,8 @@ impl MapViewport {
                     points: shape
                         .points
                         .iter()
-                        .filter_map(|coord| LatLon::new(coord.lat, coord.lon).ok())
+                                                .filter_map(|coord| LatLon::new(coord.lat, coord.lon).ok())
+                        .filter(|position| is_fixed(*position))
                         .map(LatLon::to_web_mercator)
                         .collect(),
                     argb: shape.argb,
@@ -775,10 +788,7 @@ impl MapViewport {
 
     /// Replaces the geofence shown on the map.
     pub fn set_fence(&mut self, vertices: &[LatLon]) {
-        self.fence = vertices
-            .iter()
-            .map(|vertex| vertex.to_web_mercator())
-            .collect();
+        self.fence = fixed_only(vertices);
     }
 
     /// How many rally pins the map draws.
@@ -789,16 +799,14 @@ impl MapViewport {
 
     /// Replaces the rally points shown on the map.
     pub fn set_rally(&mut self, positions: &[LatLon]) {
-        self.rally = positions
-            .iter()
-            .map(|position| position.to_web_mercator())
-            .collect();
+        self.rally = fixed_only(positions);
     }
 
     /// Replaces the other aircraft shown on the map.
     pub fn set_traffic(&mut self, traffic: &[(LatLon, bool)]) {
         self.traffic = traffic
             .iter()
+            .filter(|(position, _)| is_fixed(*position))
             .map(|(position, stale)| (position.to_web_mercator(), *stale))
             .collect();
     }
@@ -807,6 +815,7 @@ impl MapViewport {
     pub fn set_photos(&mut self, photos: &[PhotoMarker]) {
         self.photos = photos
             .iter()
+            .filter(|photo| is_fixed(photo.position))
             .map(|photo| ProjectedPhoto {
                 at: photo.position.to_web_mercator(),
                 red: photo.below_min_interval,
@@ -943,6 +952,8 @@ impl MapViewport {
     /// `// C#: ExtLibs/GMap.NET.WindowsForms/GMap.NET.WindowsForms/GMapControl.cs:919-1053;
     /// ExtLibs/GMap.NET.Core/GMap.NET.Internals/Core.cs:549-575`
     pub fn zoom_to_fit(&mut self, points: &[LatLon]) -> bool {
+        let fixed: Vec<LatLon> = points.iter().copied().filter(|p| is_fixed(*p)).collect();
+        let points = fixed.as_slice();
         let Some(rect) = LatLngRect::around(points) else {
             return false;
         };
@@ -2169,7 +2180,7 @@ impl MapViewport {
 
     /// Puts the planner's "Tracker Home" marker on the map, or takes it away.
     pub fn set_tracker(&mut self, tracker: Option<GuidedMarker>) {
-        self.tracker = tracker;
+        self.tracker = tracker.filter(|marker| is_fixed(marker.position));
     }
 
     /// `chk_grid_CheckedChanged`: `grid = chk_grid.Checked; MainMap.Refresh()`.
@@ -2200,20 +2211,12 @@ impl MapViewport {
 
     /// Replaces the geofence's exclusion polygons.
     pub fn set_fence_exclusions(&mut self, polygons: &[Vec<LatLon>]) {
-        self.fence_exclusions = polygons
-            .iter()
-            .map(|polygon| {
-                polygon
-                    .iter()
-                    .map(|vertex| vertex.to_web_mercator())
-                    .collect()
-            })
-            .collect();
+        self.fence_exclusions = polygons.iter().map(|polygon| fixed_only(polygon)).collect();
     }
 
     /// Puts the flight screen's Guided Mode marker on the map, or takes it away.
     pub fn set_guided(&mut self, guided: Option<GuidedMarker>) {
-        self.guided = guided;
+        self.guided = guided.filter(|marker| is_fixed(marker.position));
     }
 
     /// The "Alt: " tooltips to draw: each `GMapMarkerWP` under the pointer, which
@@ -2315,8 +2318,31 @@ impl MapViewport {
                 ),
             ),
             ("map.vehicle.sysid", self.marker.sysid.to_string()),
+            ("map.vehicle.drawn", self.vehicle.is_some().to_string()),
         ]
     }
+}
+
+/// Whether a position is one worth drawing: a latitude and a longitude that are not 0, which is
+/// what a GPS reports before its fix and what an unset mission item or home holds. Mission
+/// Planner draws nothing at such a position - no route point (`FlightData.cs:3794`), no vehicle
+/// marker (`:962-968`), no waypoint, loiter or landing marker and no leg to it
+/// (`WPOverlay.cs:134, 183, 231`), no home (`WPOverlay.cs:44`) - and here every layer applies the
+/// same test, and the fit with it, so nothing at 0,0 can be drawn, run a line to, or zoom the map
+/// out to half the world (the owner's report, 2026-10-03).
+#[must_use]
+#[allow(clippy::float_cmp)] // the C#'s test is exact: 0 is what a GPS without a fix sends
+pub fn is_fixed(position: LatLon) -> bool {
+    position.latitude() != 0.0 && position.longitude() != 0.0
+}
+
+/// The positions worth drawing, projected.
+fn fixed_only(positions: &[LatLon]) -> Vec<WebMercator> {
+    positions
+        .iter()
+        .filter(|position| is_fixed(**position))
+        .map(|position| position.to_web_mercator())
+        .collect()
 }
 
 /// `double.ToString("0")`: rounded half away from zero, and never "-0".
@@ -4797,8 +4823,10 @@ mod tests {
     }
 
     /// A position with a latitude or a longitude of 0 - a GPS before its fix - is no point of the
-    /// flown route, as `FlightData`'s `cs.lat != 0 && cs.lng != 0` keeps it out; the vehicle is
-    /// still shown where it is said to be. `// C#: GCSViews/FlightData.cs:3793-3797`
+    /// flown route, as `FlightData`'s `cs.lat != 0 && cs.lng != 0` keeps it out, and no marker
+    /// either, as `addMAVMarker` adds none at 0,0 (the owner's report of 2026-10-03: a marker
+    /// there anchored the fit to half the world); a marker already placed stays where the fix was.
+    /// `// C#: GCSViews/FlightData.cs:962-968, 3793-3797`
     #[test]
     fn a_position_at_zero_is_no_point_of_the_flown_route() {
         let mut map = viewport();
@@ -4807,9 +4835,11 @@ mod tests {
             map.observe(LatLon::new(lat, lng).expect("valid"), heading);
         }
         assert_eq!(map.path_len(), 0);
-        assert!(map.has_fix());
+        assert!(!map.has_fix(), "no marker at 0,0");
         map.observe(LatLon::new(-27.5134, 153.0095).expect("valid"), heading);
+        assert!(map.has_fix());
         map.observe(LatLon::new(0.0, 0.0).expect("valid"), heading);
+        assert!(map.has_fix(), "the marker stays where the fix was");
         map.observe(LatLon::new(-27.5140, 153.0100).expect("valid"), heading);
         assert_eq!(
             map.path_len(),
@@ -5742,5 +5772,117 @@ mod point_list_tests {
                 Some(("11", 10.0)),
             ]
         );
+    }
+}
+
+#[cfg(test)]
+mod zero_position_tests {
+    //! Nothing at latitude 0 or longitude 0 is drawn, run a line to, or framed (the owner's
+    //! report of 2026-10-03; the C#'s `lat != 0 && lng != 0` guards).
+    use super::*;
+
+    fn at(lat: f64, lng: f64) -> LatLon {
+        LatLon::new(lat, lng).expect("a valid position")
+    }
+
+    fn waypoint(seq: u16, position: LatLon) -> MissionItem {
+        MissionItem {
+            seq,
+            current: 0,
+            frame: 3,
+            command: 16,
+            param1: 0.0,
+            param2: 0.0,
+            param3: 0.0,
+            param4: 0.0,
+            x: position.latitude(),
+            y: position.longitude(),
+            z: 50.0,
+            autocontinue: 1,
+        }
+    }
+
+    #[test]
+    fn a_position_with_a_zero_coordinate_is_not_fixed() {
+        assert!(is_fixed(at(-27.4698, 153.0251)));
+        assert!(!is_fixed(at(0.0, 0.0)));
+        assert!(
+            !is_fixed(at(0.0, 153.0251)),
+            "the C#'s test is either coordinate"
+        );
+        assert!(!is_fixed(at(-27.4698, 0.0)));
+    }
+
+    #[test]
+    fn nothing_at_zero_reaches_a_layer() {
+        let brisbane = at(-27.4698, 153.0251);
+        let mut map = MapViewport::new(0, 0);
+        map.observe(brisbane, Bearing(mp_units::Degrees(90.0)));
+        assert!(map.vehicle.is_some());
+        let before = map.vehicle;
+        // The vehicle's next report at 0,0 or on the equator moves neither the marker nor the path.
+        map.observe(at(0.0, 0.0), Bearing(mp_units::Degrees(0.0)));
+        map.observe(at(0.0, 153.0251), Bearing(mp_units::Degrees(0.0)));
+        assert_eq!(map.vehicle, before, "the marker stays where the fix was");
+        assert_eq!(map.path.len(), 1, "no route point at 0,0");
+        map.vehicle_unfixed();
+        assert!(map.vehicle.is_none());
+        assert_eq!(map.path.len(), 1, "the flown route stays");
+
+        map.set_mission(&[
+            waypoint(1, brisbane),
+            waypoint(2, at(0.0, 0.0)),
+            waypoint(3, at(0.0, 153.0)),
+        ]);
+        assert_eq!(map.mission.len(), 1, "no waypoint and no leg to 0,0");
+        map.set_traffic(&[(at(0.0, 0.0), false), (brisbane, false)]);
+        assert_eq!(map.traffic.len(), 1);
+        map.set_rally(&[at(0.0, 0.0), brisbane]);
+        assert_eq!(map.rally.len(), 1);
+        map.set_polygon(&[brisbane, at(0.0, 0.0), at(-27.47, 153.03)]);
+        assert_eq!(map.polygon.len(), 2);
+        map.set_fence(&[brisbane, at(0.0, 0.0)]);
+        assert_eq!(map.fence.len(), 1);
+        map.set_fence_exclusions(&[vec![brisbane, at(0.0, 0.0), at(-27.47, 153.03)]]);
+        assert_eq!(map.fence_exclusions[0].len(), 2);
+        map.set_fence_return(Some(at(0.0, 0.0)));
+        assert!(map.fence_return.is_none());
+        map.set_home(Some(at(0.0, 0.0)));
+        assert!(map.home.is_none(), "no H at PointLatLngAlt.Zero");
+        map.set_home(Some(brisbane));
+        assert!(map.home.is_some());
+        map.set_guided(Some(GuidedMarker {
+            tag: "Guided Mode",
+            position: at(0.0, 0.0),
+            alt: 10,
+            wp_radius: 30.0,
+        }));
+        assert!(map.guided.is_none());
+    }
+
+    /// The owner's case: a vehicle at Brisbane, then a report at 0,0 - the fit stays on
+    /// Brisbane rather than framing both, which is half the world.
+    #[test]
+    fn a_report_at_zero_does_not_zoom_the_fit_out() {
+        let mut map = MapViewport::new(0, 0);
+        map.last_viewport = (800.0, 600.0);
+        map.observe(at(-27.4698, 153.0251), Bearing(mp_units::Degrees(90.0)));
+        let (_, _, span_before, _) = map.view_box().expect("a vehicle frames a view");
+        map.observe(at(0.0, 0.0), Bearing(mp_units::Degrees(0.0)));
+        map.set_mission(&[waypoint(1, at(0.0, 0.0))]);
+        map.set_traffic(&[(at(0.0, 0.0), false)]);
+        let (_, _, span_after, _) = map.view_box().expect("still framed");
+        assert!(
+            (span_after - span_before).abs() < 1e-12,
+            "the fit moved: {span_before} to {span_after}"
+        );
+        assert!(
+            span_after < 1e-4,
+            "a few hundred metres, not half the world: {span_after}"
+        );
+        // `zoom_to_fit` over a set that includes 0,0 frames the rest.
+        assert!(map.zoom_to_fit(&[at(-27.4698, 153.0251), at(0.0, 0.0), at(-27.47, 153.03)]));
+        let span_fit = map.camera.expect("a view chosen").span;
+        assert!(span_fit < 1e-3, "Zoom to Mission ignores 0,0: {span_fit}");
     }
 }

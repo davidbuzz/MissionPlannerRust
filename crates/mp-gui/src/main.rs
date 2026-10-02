@@ -3540,8 +3540,13 @@ impl Render for MissionPlanner {
             };
             let settings = self.marker_settings();
             let mut map = self.map.borrow_mut();
-            if let Some(position) = state.position {
-                map.observe(position, mp_units::Bearing(mp_units::Degrees(yaw)));
+                        // A position at 0,0 - a GPS before its fix - draws no marker and no route point,
+            // as `addMAVMarker` and the route add none (the owner's report, 2026-10-03).
+            match state.position.filter(|position| mapview::is_fixed(*position)) {
+                Some(position) => {
+                    map.observe(position, mp_units::Bearing(mp_units::Degrees(yaw)));
+                }
+                None => map.vehicle_unfixed(),
             }
             map.set_marker(details, settings);
         }
