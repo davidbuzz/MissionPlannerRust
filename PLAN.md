@@ -789,7 +789,7 @@ stalls *all* telemetry during a parameter download.
 
 | Metric | Target | MP today (derived) | Measured how |
 |---|---|---|---|
-| Startup → first frame | ≤300 ms cold, ≤120 ms warm | 3–10 s (splash + plugin load + IronPython + WinForms) | instrumented `main`, 20-run median |
+| Startup → first frame | ≤300 ms cold, ≤120 ms warm | 3–10 s (splash + plugin load + IronPython + WinForms) | instrumented `main`, 20-run median. Measured 2026-10-03 by `tools/cold-start.sh` (the release build, `MP_SMOKE` exiting at the third painted frame, on Xvfb with lavapipe - the software rasteriser, slower than a GPU): 20 runs, median 200 ms to the third frame on the smoke's 50 ms clock (max 601), 465 ms process start to exit (max 1,230); the runs are warm - the binary and its files in the page cache |
 | Idle, disconnected | **0 frames rendered**, <0.1% of a core | polls at 1 ms | 5-second CI assertion |
 | Idle, 1 vehicle @10 Hz, HUD visible | ≤2% of one core | — | `perf stat` over 60 s |
 | Packet → snapshot published | p99 ≤200 µs | — | hdrhistogram in the loopback rig |
