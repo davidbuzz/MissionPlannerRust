@@ -49,6 +49,8 @@
 #   doubleclick log-chart@0.5x0.5  a double click: two left presses at one point, 80 ms apart
 #   scroll servo-SERVO9_FUNCTION-list down 3 [ms]  the wheel over a control: up or down, N notches, a gap between them
 #   hover map@0.40x0.40          move the pointer onto a control and press nothing
+#   drag fft-INS_LOG_BAT_CNT-thumb fft-INS_LOG_BAT_CNT-track@0.5x0.5  press on the first control,
+#                               move to the second in steps, let go: a track bar's thumb dragged
 #   reveal servo-SERVO9_FUNCTION-list servo-SERVO9_FUNCTION-1   wheel a list until an entry is inside its box
 #   type flight.bin             type into whatever has focus
 #   key Return                  press a named key
@@ -712,6 +714,34 @@ PY
                 echo "revealed '$ENTRY' in '$LIST'"
             else
                 echo "line $LINE_NO: could not reveal '$ENTRY' in '$LIST' ($DIRECTION)" >&2
+                FAILURES=$((FAILURES + 1))
+            fi
+            sleep 0.1
+            ;;
+        drag)
+            # The left button pressed on one control and let go on another, the pointer moved
+            # between them in eight steps, as a hand moves it, so the application sees it travel:
+            # a track bar's thumb dragged along its channel.
+            FROM="${2:?drag needs a start}"
+            TO="${3:?drag needs an end}"
+            wait_publishes 1
+            raise_window
+            if FROM_AT=$(resolve_control "$FROM") && TO_AT=$("$ROOT/tools/gui-click.sh" --resolve "$PROBE_FILE" "$WIN_ID" "$TO"); then
+                FROM_AT=$(printf '%s\n' "$FROM_AT" | tail -1)
+                echo "dragging '$FROM' at ${FROM_AT/ /,} to '$TO' at ${TO_AT/ /,}"
+                read -r X0 Y0 <<<"$FROM_AT"
+                read -r X1 Y1 <<<"$TO_AT"
+                xdotool mousemove --window "$WIN_ID" "$X0" "$Y0"
+                sleep 0.05
+                xdotool mousedown 1
+                for STEP in 1 2 3 4 5 6 7 8; do
+                    sleep 0.03
+                    xdotool mousemove --window "$WIN_ID" $(( X0 + (X1 - X0) * STEP / 8 )) $(( Y0 + (Y1 - Y0) * STEP / 8 ))
+                done
+                sleep 0.05
+                xdotool mouseup 1
+            else
+                echo "line $LINE_NO: could not drag '$FROM' to '$TO'" >&2
                 FAILURES=$((FAILURES + 1))
             fi
             sleep 0.1

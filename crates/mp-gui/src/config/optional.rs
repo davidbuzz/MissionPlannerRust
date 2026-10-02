@@ -913,6 +913,10 @@ pub struct Focus {
     pub text: FocusHandle,
     /// An `InputBox`'s answer box.
     pub prompt: FocusHandle,
+    /// The ADSB page itself, for `ProcessCmdKey`'s Ctrl+S.
+    pub page: FocusHandle,
+    /// A `RangeControl`'s track bar, for its keys.
+    pub track: FocusHandle,
 }
 
 impl Focus {
@@ -922,6 +926,8 @@ impl Focus {
             number: cx.focus_handle(),
             text: cx.focus_handle(),
             prompt: cx.focus_handle(),
+            page: cx.focus_handle(),
+            track: cx.focus_handle(),
         }
     }
 }
@@ -950,10 +956,13 @@ impl MissionPlanner {
         match page {
             Page::Adsb => {
                 let favourites = adsb::favourites(adsb::ADSB.favourites);
-                let jobs = self
-                    .optional
-                    .adsb
-                    .activate(&view.parameters, key, lookup, &favourites);
+                let jobs = self.optional.adsb.activate(
+                    &view.parameters,
+                    &|name| view.parameter_type(name),
+                    key,
+                    lookup,
+                    &favourites,
+                );
                 self.optional.adsb.push(jobs);
             }
             Page::Battery2 => {

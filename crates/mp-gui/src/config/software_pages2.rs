@@ -55,6 +55,10 @@ pub struct Focus {
     pub prompt: FocusHandle,
     /// A MAVFtp row's name being edited.
     pub rename: FocusHandle,
+    /// A params page itself, for `ProcessCmdKey`'s Ctrl+S.
+    pub page: FocusHandle,
+    /// A `RangeControl`'s track bar, for its keys.
+    pub track: FocusHandle,
 }
 
 impl Focus {
@@ -64,6 +68,8 @@ impl Focus {
             number: cx.focus_handle(),
             prompt: cx.focus_handle(),
             rename: cx.focus_handle(),
+            page: cx.focus_handle(),
+            track: cx.focus_handle(),
         }
     }
 }
@@ -104,7 +110,13 @@ impl MissionPlanner {
                     &mut pages.advanced
                 };
                 let favourites = adsb::favourites(friendly_params::FAVOURITES);
-                let jobs = list.activate(&view.parameters, key, lookup, &favourites);
+                let jobs = list.activate(
+                    &view.parameters,
+                    &|name| view.parameter_type(name),
+                    key,
+                    lookup,
+                    &favourites,
+                );
                 list.push(jobs);
             }
             // C#: Controls/MavFTPUI.cs:29-71, 665-668
@@ -152,6 +164,8 @@ impl MissionPlanner {
                     access,
                     &focus.number,
                     &focus.prompt,
+                    &focus.page,
+                    &focus.track,
                     window,
                     cx,
                 )
@@ -163,6 +177,8 @@ impl MissionPlanner {
                     access,
                     &focus.number,
                     &focus.prompt,
+                    &focus.page,
+                    &focus.track,
                     window,
                     cx,
                 )

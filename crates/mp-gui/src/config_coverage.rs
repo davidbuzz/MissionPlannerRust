@@ -570,17 +570,15 @@ pub const PANELS: &[Panel] = &[
         Some(5),
         &[setup(263, "ADSB", MANDATORY, ANY)],
         // C#: GCSViews/ConfigurationView/ConfigADSB.cs:17-710 - the controls built from the
-        // documentation, Write Params, Refresh Params with its question, Find; the flight id and
+        // documentation (a RangeControl, bitmask or ValuesControl per documented ADSB_/AVD_
+        // parameter, favourites first, recording changes; the track bar paged, dragged and
+        // keyed; the values box typed into; a bitmask narrowed to its type), Write Params
+        // writing them ENABLE-first, each in its own try, then "Parameters successfully saved.",
+        // and Ctrl+S for it; Refresh Params with MessageShowAgain, its unticked box kept as
+        // SHOWAGAIN_Refresh_Params; Find filtering as typed, its OK's word kept as InputBox
+        // keeps it; a bitmask updated on Activate writing as the C#'s does; the flight id and
         // registration panel disabled, as the C# leaves it.
-        Partial(
-            at("crates/mp-gui/src/config/adsb.rs", "fn page"),
-            "a RangeControl, bitmask or ValuesControl per documented ADSB_/AVD_ parameter,
-        //     favourites first, recording changes; Write Params writing them ENABLE-first, each
-        //     in its own try, then \"Parameters successfully saved.\"; Refresh Params with
-        //     MessageShowAgain, its unticked box kept as SHOWAGAIN_Refresh_Params; Find
-        //     filtering as typed, its OK's word kept as InputBox keeps it; a bitmask updated on Activate writing as the C#'s does; missing Ctrl+S,
-        //     dragging the track bar (a click pages it) and typing into a ValuesControl",
-        ),
+        Ours::Done(at("crates/mp-gui/src/config/adsb.rs", "fn page")),
     ),
     panel(
         "ConfigGPSOrder",
@@ -904,19 +902,14 @@ pub const PANELS: &[Panel] = &[
         )],
         // ---- Standard / Advanced Params, MAVFtp, Heli Setup (row 71) ----
         // C#: GCSViews/ConfigurationView/ConfigFriendlyParams.cs:17-589 - ConfigADSB's code over
-        // another list: adsb.rs's page object with friendly_params.rs's Spec. Listed, as in the
-        // C#, only for a Custom display view that turns displayStandardParams on, chosen with the
-        // Planner page's Layout (display_view.rs); neither preset does.
-        Partial(
-            at("crates/mp-gui/src/config/friendly_params.rs", "fn page"),
-            "a RangeControl, bitmask or ValuesControl per parameter documented @User: Standard
-        //     with a display name, fav_params first; changes recorded; Write Params ENABLE-first,
-        //     each in its own try, then \"Parameters successfully saved.\"; Refresh Params with
-        //     MessageShowAgain, its unticked box kept as SHOWAGAIN_Refresh_Params; Find
-        //     filtering as typed, its OK's word kept as InputBox keeps it; the flow panel's
-        //     layout; a failed write or fetch on the status line (the owner's ruling); missing
-        //     Ctrl+S, dragging the track bar (a click pages it) and typing into a ValuesControl",
-        ),
+        // another list: adsb.rs's page object with friendly_params.rs's Spec - a RangeControl,
+        // bitmask or ValuesControl per parameter documented @User: Standard with a display name,
+        // fav_params first, in the flow panel's layout; changes recorded and written by Write
+        // Params or Ctrl+S; Refresh Params and Find as ADSB's; a failed write or fetch on the
+        // status line (the owner's ruling). Listed, as in the C#, only for a Custom display view
+        // that turns displayStandardParams on, chosen with the Planner page's Layout
+        // (display_view.rs); neither preset does.
+        Ours::Done(at("crates/mp-gui/src/config/friendly_params.rs", "fn page")),
         // ---- end Standard / Advanced Params, MAVFtp, Heli Setup ----
     ),
     panel(
@@ -935,11 +928,7 @@ pub const PANELS: &[Panel] = &[
         // C#: GCSViews/ConfigurationView/ConfigFriendlyParamsAdv.cs:5-10 - ConfigFriendlyParams
         // with ParameterMode Advanced: @User: Advanced, or no @User. Listed for a Custom display
         // view with displayAdvancedParams on, and drawn while its isAdvancedMode is on.
-        Partial(
-            at("crates/mp-gui/src/config/friendly_params.rs", "fn page"),
-            "Standard Params' page over the parameters documented @User: Advanced or not at all;
-        //     missing what it misses",
-        ),
+        Ours::Done(at("crates/mp-gui/src/config/friendly_params.rs", "fn page")),
         // ---- end Standard / Advanced Params, MAVFtp, Heli Setup ----
     ),
     panel(
@@ -1894,7 +1883,7 @@ mod tests {
         );
         assert_eq!(
             (done, partial, missing, plumbing, dropped),
-            (35, 10, 2, 2, 12)
+            (38, 7, 2, 2, 12)
         );
         let by_group: Vec<usize> = [Some(Screen::Setup), Some(Screen::Config), None]
             .iter()

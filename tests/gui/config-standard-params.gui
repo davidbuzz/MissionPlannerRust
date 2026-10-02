@@ -25,7 +25,7 @@ env MP_CONFIG_XML $WORK/config.xml
 setup printf '{\n  "displayStandardParams": true,\n  "isAdvancedMode": true\n}\n' > $WORK/custom.displayview
 screen params
 window 1600x1200
-budget 19
+budget 25
 # RawParamWarning, on the Full Parameter List's Activate (ConfigRawParams.cs:92): "Show me
 # again?" unticked, so no later visit asks, and OK.
 # The vehicle first: a click before its first heartbeat is a click the screen may forget
@@ -99,6 +99,22 @@ click standardparams-message-ok
 expect config.standardparams.message none
 
 # And back.
+# The box is a DropDown combo: a click in its text puts the caret there, and typing a row's text
+# selects that row and records it (ValuesControl.cs:33-41, 68-72); text that names no row leaves
+# none selected, and the C#'s Value getter's NullReferenceException goes on the status line.
+click standardparams-FS_THR_ENABLE-text
+expect config.standardparams.typing FS_THR_ENABLE
+key ctrl+u
+type Enabled always LAND
+expect config.standardparams.FS_THR_ENABLE.text Enabled always Land
+expect config.standardparams.changed.FS_THR_ENABLE 3
+type x
+expect status ~ Object reference not set to an instance of an object.
+key BackSpace
+expect config.standardparams.FS_THR_ENABLE.text Enabled always Land
+key Return
+expect config.standardparams.typing none
+
 click standardparams-FS_THR_ENABLE
 click standardparams-FS_THR_ENABLE-1
 click standardparams-write

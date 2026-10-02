@@ -35,10 +35,10 @@
 //!   (`mp_params::pdef`), and ArduPilot writes no other;
 //! * the flow panel's own scroll bar: the page scrolls, with the list in it.
 //!
-//! Not ported, as on the ADSB page and for its reasons: Ctrl+S (`ProcessCmdKey`, `:159-168`),
-//! dragging the track bar's thumb (a click beside it pages it), typing into a `ValuesControl`'s
-//! box, and a bitmask's narrowing to the parameter's integer type. Find's answer and Refresh
-//! Params' "Show me again?" are kept in `Settings.Instance` as ADSB's are, under the same keys.
+//! Ctrl+S (`ProcessCmdKey`, `:159-168`), the track bar's thumb and keys, typing into a
+//! `ValuesControl`'s box and a bitmask's narrowing to the parameter's integer type are the ADSB
+//! page's, as `adsb.rs` has them. Find's answer and Refresh Params' "Show me again?" are kept in
+//! `Settings.Instance` as ADSB's are, under the same keys.
 
 // This module is internal to the binary; `pub` here documents intent rather than exporting API.
 #![allow(unreachable_pub)]
@@ -186,18 +186,21 @@ pub fn advanced_page() -> Adsb {
 
 /// The page, laid out as `ConfigFriendlyParams.resx` lays it out, in a 652-wide page.
 /// `// C#: GCSViews/ConfigurationView/ConfigFriendlyParams.Designer.cs:29-74; ConfigFriendlyParams.resx`
+#[allow(clippy::too_many_arguments)] // the page's four focuses, and the window they are read in
 pub fn page(
     list: &Adsb,
     access: Access,
     number: &FocusHandle,
     prompt: &FocusHandle,
+    page: &FocusHandle,
+    track: &FocusHandle,
     window: &Window,
     cx: &mut Context<MissionPlanner>,
 ) -> AnyElement {
     if !list.is_active() {
         return div().into_any_element();
     }
-    let body = list_body(list, access, number, prompt, window, cx);
+    let body = list_body(list, access, number, prompt, page, track, window, cx);
     panel(list.spec().title, body).into_any_element()
 }
 
@@ -208,6 +211,11 @@ mod tests {
     use mp_link::requests::RequestOutcome;
 
     use super::*;
+
+    /// A table that says no parameter's type.
+    fn untyped(_: &str) -> Option<mp_params::ParamType> {
+        None
+    }
     use crate::config::adsb::Control;
     use crate::config::flight_modes::Progress;
     use crate::config::optional::tests::Answering;
@@ -304,7 +312,7 @@ mod tests {
     #[test]
     fn standard_lists_the_standard_parameters() {
         let mut page = standard_page();
-        let jobs = page.activate(&copter(), key(), bundled, &[]);
+        let jobs = page.activate(&copter(), &untyped, key(), bundled, &[]);
         assert!(jobs.is_empty());
         assert_eq!(names(&page), ["ARMING_CHECK", "FS_THR_ENABLE", "RTL_ALT"]);
         assert_eq!(
@@ -325,7 +333,7 @@ mod tests {
     #[test]
     fn advanced_lists_the_advanced_and_unmarked_parameters() {
         let mut page = advanced_page();
-        page.activate(&copter(), key(), bundled, &[]);
+        page.activate(&copter(), &untyped, key(), bundled, &[]);
         assert_eq!(names(&page), ["ANGLE_MAX", "BARO_FLTR_RNG"]);
         assert_eq!(
             bundled("BARO_FLTR_RNG").map(|m| m.user_level),
@@ -333,7 +341,7 @@ mod tests {
         );
         // A parameter nothing documents is on neither.
         let mut standard = standard_page();
-        standard.activate(&copter(), key(), bundled, &[]);
+        standard.activate(&copter(), &untyped, key(), bundled, &[]);
         assert!(control(&standard, "NOT_DOCUMENTED").is_none());
         assert!(control(&page, "NOT_DOCUMENTED").is_none());
     }
@@ -354,9 +362,9 @@ mod tests {
             .collect();
         assert_eq!(parameters.len(), 1408);
         let mut standard_list = standard_page();
-        standard_list.activate(&parameters, key(), bundled, &[]);
+        standard_list.activate(&parameters, &untyped, key(), bundled, &[]);
         let mut advanced_list = advanced_page();
-        advanced_list.activate(&parameters, key(), bundled, &[]);
+        advanced_list.activate(&parameters, &untyped, key(), bundled, &[]);
         for (name, _) in &parameters {
             let Some(meta) = bundled(name) else {
                 continue;
@@ -391,7 +399,7 @@ mod tests {
     #[test]
     fn favourites_come_first() {
         let mut page = standard_page();
-        page.activate(&copter(), key(), bundled, &["RTL_ALT".to_owned()]);
+        page.activate(&copter(), &untyped, key(), bundled, &["RTL_ALT".to_owned()]);
         assert_eq!(names(&page), ["RTL_ALT", "ARMING_CHECK", "FS_THR_ENABLE"]);
     }
 
@@ -399,7 +407,7 @@ mod tests {
     #[test]
     fn write_params_writes_what_changed() {
         let mut page = standard_page();
-        page.activate(&copter(), key(), bundled, &[]);
+        page.activate(&copter(), &untyped, key(), bundled, &[]);
         let index = page
             .controls()
             .iter()
@@ -429,7 +437,7 @@ mod tests {
     #[test]
     fn a_failed_write_is_a_link_error() {
         let mut page = standard_page();
-        page.activate(&copter(), key(), bundled, &[]);
+        page.activate(&copter(), &untyped, key(), bundled, &[]);
         let index = page
             .controls()
             .iter()
@@ -449,7 +457,7 @@ mod tests {
     #[test]
     fn find_filters_by_name_and_description() {
         let mut page = standard_page();
-        page.activate(&copter(), key(), bundled, &[]);
+        page.activate(&copter(), &untyped, key(), bundled, &[]);
         page.filter("rtl");
         let shown: Vec<&str> = page
             .controls()
@@ -471,7 +479,7 @@ mod tests {
             include_str!("adsb.rs"),
             include_str!("friendly_params.rs")
         );
-        let per_control = [".kind", ".text", ".visible", ".label"];
+        let per_control = [".kind", ".text", ".visible", ".label", ".trackbar"];
         for (script, name) in [
             (
                 include_str!("../../../../tests/gui/config-standard-params.gui"),

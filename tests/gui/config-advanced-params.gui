@@ -25,7 +25,7 @@ env MP_CONFIG_XML $WORK/config.xml
 setup printf '{\n  "displayAdvancedParams": true,\n  "isAdvancedMode": true\n}\n' > $WORK/custom.displayview
 screen params
 window 1600x1200
-budget 21
+budget 26
 # RawParamWarning, on the Full Parameter List's Activate (ConfigRawParams.cs:92): "Show me
 # again?" unticked, so no later visit asks, and OK.
 # The vehicle first: a click before its first heartbeat is a click the screen may forget
@@ -90,6 +90,29 @@ click advancedparams-message-ok
 # And back.
 click advancedparams-BARO_FLTR_RNG-down
 click advancedparams-write
+expect params.value.BARO_FLTR_RNG 0
+click advancedparams-message-ok
+
+# The track bar's thumb dragged to the channel's middle: the bar follows it to 500 of its
+# thousand - give or take the pixel the pointer lands on - and the value, 0 to 100 by ones, is
+# 50 (RangeControl.cs:228-233). Ctrl+S is ProcessCmdKey's Write Params (ConfigFriendlyParams.cs:
+# 159-168): the bar holds the keyboard, and the chord reaches the page from it.
+drag advancedparams-BARO_FLTR_RNG-thumb advancedparams-BARO_FLTR_RNG-track@0.5x0.5
+expect config.advancedparams.BARO_FLTR_RNG.trackbar >= 495
+expect config.advancedparams.BARO_FLTR_RNG.trackbar < 506
+expect config.advancedparams.BARO_FLTR_RNG.text 50
+expect config.advancedparams.changed.BARO_FLTR_RNG 50
+key ctrl+s
+expect config.advancedparams.write BARO_FLTR_RNG 50 accepted
+expect params.value.BARO_FLTR_RNG 50
+expect config.advancedparams.message Parameters successfully saved.
+click advancedparams-message-ok
+
+# Dragged to the channel's start: 0, written back the same way.
+drag advancedparams-BARO_FLTR_RNG-thumb advancedparams-BARO_FLTR_RNG-track@0.0x0.5
+expect config.advancedparams.BARO_FLTR_RNG.trackbar 0
+expect config.advancedparams.BARO_FLTR_RNG.text 0
+key ctrl+s
 expect params.value.BARO_FLTR_RNG 0
 click advancedparams-message-ok
 

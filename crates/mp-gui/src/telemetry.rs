@@ -92,6 +92,9 @@ pub struct TelemetryView {
     /// Shared rather than owned: the same list is handed to every frame until a parameter
     /// arrives ([`Telemetry::view`]), so taking a view does not copy fourteen hundred names.
     pub parameters: Arc<[(String, f64)]>,
+    /// Each parameter's `MAV_PARAM_TYPE`, as the vehicle declared it: `TypeAP`. Shared as
+    /// `parameters` is, and made with it.
+    pub parameter_types: Arc<std::collections::BTreeMap<String, mp_params::ParamType>>,
     /// How many the vehicle says it has, once it has said.
     pub parameters_expected: u16,
     /// Whether a parameter download has run to its end since the link opened: `doConnect`'s
@@ -144,11 +147,19 @@ impl TelemetryView {
             messages_dropped: 0,
             transfer: None,
             parameters: Arc::default(),
+            parameter_types: Arc::default(),
             parameters_expected: 0,
             parameters_fetched: false,
             parameters_fetch: "none".to_owned(),
             parameters_defaults: Arc::default(),
         }
+    }
+
+    /// A parameter's type as the vehicle declared it, `TypeAP`; `None` for a name the table has
+    /// not got.
+    #[must_use]
+    pub fn parameter_type(&self, name: &str) -> Option<mp_params::ParamType> {
+        self.parameter_types.get(name).copied()
     }
 }
 
@@ -158,6 +169,7 @@ struct SharedParameters {
     /// The table's [`mp_params::ParamTable::generation`] when the list was made from it.
     generation: u64,
     list: Arc<[(String, f64)]>,
+    types: Arc<std::collections::BTreeMap<String, mp_params::ParamType>>,
     expected: u16,
 }
 
@@ -516,8 +528,8 @@ impl Telemetry {
             .and_then(|(id, _)| link.param_fetch(*id))
             .map(|fetch| fetch.defaults)
             .unwrap_or_default();
-        let (parameters, parameters_expected) = primary.as_ref().map_or_else(
-            || (Arc::default(), 0),
+        let (parameters, parameter_types, parameters_expected) = primary.as_ref().map_or_else(
+            || (Arc::default(), Arc::default(), 0),
             |(id, _)| self.parameters_of(link, *id),
         );
         let fetch_complete = primary.as_ref().is_some_and(|(id, _)| {
@@ -593,6 +605,7 @@ impl Telemetry {
             messages_dropped: link.messages_dropped(),
             transfer,
             parameters,
+            parameter_types,
             parameters_expected,
             parameters_fetched,
             parameters_fetch,
@@ -641,9 +654,18 @@ impl Telemetry {
     /// is at, and the list is made again only when that has moved; otherwise the last one is
     /// handed out again. Generations are numbered across every table in the process, so a list
     /// made for one vehicle is never handed out for another.
-    fn parameters_of(&self, link: &Link, id: VehicleId) -> (Arc<[(String, f64)]>, u16) {
+    #[allow(clippy::type_complexity)] // the list, its types and the count, shared as one
+    fn parameters_of(
+        &self,
+        link: &Link,
+        id: VehicleId,
+    ) -> (
+        Arc<[(String, f64)]>,
+        Arc<std::collections::BTreeMap<String, mp_params::ParamType>>,
+        u16,
+    ) {
         let Some(generation) = link.params_generation(id) else {
-            return (Arc::default(), 0);
+            return (Arc::default(), Arc::default(), 0);
         };
         let mut shared = self
             .parameters
@@ -652,24 +674,35 @@ impl Telemetry {
         if let Some(held) = shared.as_ref()
             && held.generation == generation
         {
-            return (Arc::clone(&held.list), held.expected);
+            return (
+                Arc::clone(&held.list),
+                Arc::clone(&held.types),
+                held.expected,
+            );
         }
         let Some(table) = link.params(id) else {
-            return (Arc::default(), 0);
+            return (Arc::default(), Arc::default(), 0);
         };
         let list: Arc<[(String, f64)]> = table
             .iter()
             .map(|(name, value)| (name.clone(), value.as_f64()))
             .collect();
+        let types: Arc<std::collections::BTreeMap<String, mp_params::ParamType>> = Arc::new(
+            table
+                .iter()
+                .map(|(name, value)| (name.clone(), value.param_type()))
+                .collect(),
+        );
         let expected = table.expected().unwrap_or(0);
         // The table's own generation, which a parameter arriving since the question may have
         // moved past the one asked about; the list is of this table, so it is kept under it.
         *shared = Some(SharedParameters {
             generation: table.generation(),
             list: Arc::clone(&list),
+            types: Arc::clone(&types),
             expected,
         });
-        (list, expected)
+        (list, types, expected)
     }
 
     /// Asks the vehicle for its mission. Explicit, never automatic.
@@ -839,8 +872,17 @@ impl Telemetry {
     /// asks for the first item, the link's retries between. `None` without a link; the outcome
     /// is read with [`Telemetry::request`].
     /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:3753-3882`
-    pub fn set_wp_total(&self, target: VehicleId, total: u16, mission_type: u8) -> Option<RequestId> {
-        Some(self.link.as_ref()?.set_wp_total(target, total, mission_type))
+    pub fn set_wp_total(
+        &self,
+        target: VehicleId,
+        total: u16,
+        mission_type: u8,
+    ) -> Option<RequestId> {
+        Some(
+            self.link
+                .as_ref()?
+                .set_wp_total(target, total, mission_type),
+        )
     }
 
     /// `setParam(sysid, compid, name, value, force)` on `target`, for a caller that reads the
@@ -867,10 +909,7 @@ impl Telemetry {
     /// heard on the link.
     #[must_use]
     pub fn vehicle_state(&self, id: VehicleId) -> Option<Arc<VehicleState>> {
-        self.link
-            .as_ref()?
-            .vehicle(id)
-            .map(|handle| handle.load())
+        self.link.as_ref()?.vehicle(id).map(|handle| handle.load())
     }
 
     /// `MAVlist[sysid, compid].param[name].Value`: a parameter of the vehicle `id` as the link
@@ -1442,7 +1481,11 @@ impl Telemetry {
         let next = self
             .link
             .as_ref()
-            .and_then(|link| link.recent_messages(1).first().map(|message| message.seq + 1))
+            .and_then(|link| {
+                link.recent_messages(1)
+                    .first()
+                    .map(|message| message.seq + 1)
+            })
             .unwrap_or(0);
         self.messages_shown_from
             .store(next, std::sync::atomic::Ordering::Relaxed);
@@ -1849,7 +1892,10 @@ impl Telemetry {
     /// `CameraProtocol.VideoStreams`.
     pub fn video_streams(
         &self,
-    ) -> Vec<((u8, u8, u8), mp_mavlink_dialects::all::VideoStreamInformation)> {
+    ) -> Vec<(
+        (u8, u8, u8),
+        mp_mavlink_dialects::all::VideoStreamInformation,
+    )> {
         self.link
             .as_ref()
             .map(Link::video_streams)

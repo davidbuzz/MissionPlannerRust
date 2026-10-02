@@ -98,6 +98,8 @@ pub struct Focus {
     pub text: FocusHandle,
     /// The FFT window's Bins or Start Freq box being typed into.
     pub fft_number: FocusHandle,
+    /// FFT Setup's `INS_LOG_BAT_CNT` track bar, for its keys.
+    pub fft_track: FocusHandle,
     /// The FFT window's file dialog or rate question.
     pub fft_prompt: FocusHandle,
     /// The MAVLink Inspector's "Points of history?".
@@ -111,6 +113,7 @@ impl Focus {
             number: cx.focus_handle(),
             text: cx.focus_handle(),
             fft_number: cx.focus_handle(),
+            fft_track: cx.focus_handle(),
             fft_prompt: cx.focus_handle(),
             inspector_prompt: cx.focus_handle(),
         }
@@ -197,7 +200,7 @@ impl MissionPlanner {
             "ConfigHWIDs" => hw_ids::page(&pages.hw_ids, cx),
             "ConfigCompassMot" => compass_mot::page(&pages.compass_mot, cx),
             "ConfigInitialParams" => initial_params::page(&pages.initial_params, focus, window, cx),
-            "ConfigFFT" => fft::page(&pages.fft, &focus.number, window, cx),
+            "ConfigFFT" => fft::page(&pages.fft, &focus.number, &focus.fft_track, window, cx),
             _ => div().into_any_element(),
         }
     }

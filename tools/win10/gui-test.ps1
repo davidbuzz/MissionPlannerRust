@@ -633,7 +633,7 @@ try {
         $w = $line -split '\s+'
         Check-HardStop
         Write-Output ("t=+{0}s line {1}: {2}" -f (Secs ((Now-Ms) - $t0)), $lineNo, $line)
-        if ('click', 'doubleclick', 'hover', 'scroll', 'reveal', 'type', 'key' -contains $w[0]) {
+        if ('click', 'doubleclick', 'hover', 'drag', 'scroll', 'reveal', 'type', 'key' -contains $w[0]) {
             if (-not [GuiInput]::IsWindow($script:Hwnd)) { Fail "line ${lineNo}: the application has no window"; break }
         }
         switch ($w[0]) {
@@ -661,6 +661,25 @@ try {
                     Start-Sleep -Milliseconds 50
                     Press 1; Start-Sleep -Milliseconds 80; Press 1
                 } else { Fail "line ${lineNo}: could not double-click '$($w[1])'" }
+                Start-Sleep -Milliseconds 100
+            }
+            'drag' {
+                # The left button pressed on one control and let go on another, the pointer moved
+                # between them in eight steps (gui-test.sh's drag). Not yet run in the VM.
+                Wait-Publishes 1
+                Raise-Window
+                $from = Resolve-Control $w[1]; $to = Resolve-Control $w[2]
+                if ($from -and $to) {
+                    Write-Output "dragging '$($w[1])' at $(Move-Pointer $from) to '$($w[2])' at $($to[0]),$($to[1])"
+                    Start-Sleep -Milliseconds 50
+                    [GuiInput]::mouse_event(0x2, 0, 0, 0, [UIntPtr]::Zero)
+                    for ($i = 1; $i -le 8; $i++) {
+                        Start-Sleep -Milliseconds 30
+                        [void](Move-Pointer @([int]($from[0] + ($to[0] - $from[0]) * $i / 8), [int]($from[1] + ($to[1] - $from[1]) * $i / 8)))
+                    }
+                    Start-Sleep -Milliseconds 50
+                    [GuiInput]::mouse_event(0x4, 0, 0, 0, [UIntPtr]::Zero)
+                } else { Fail "line ${lineNo}: could not drag '$($w[1])' to '$($w[2])'" }
                 Start-Sleep -Milliseconds 100
             }
             'hover' {

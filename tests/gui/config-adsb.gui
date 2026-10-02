@@ -80,7 +80,9 @@ expect config.adsb.message none
 # And back.
 click adsb-AVD_ENABLE
 click adsb-AVD_ENABLE-0
-click adsb-write
+# Ctrl+S is ProcessCmdKey's Write Params (ConfigADSB.cs:159-168): the page took the focus when
+# its list was clicked, so the chord reaches it.
+key ctrl+s
 expect config.adsb.write AVD_ENABLE 0 accepted
 expect params.value.AVD_ENABLE 0
 expect config.adsb.message Parameters successfully saved.

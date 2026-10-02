@@ -11,14 +11,14 @@ Generated from `crates/mp-gui/src/config_coverage.rs` by `cargo test -p mp-gui
 
 | panels | done | partial | missing | plumbing | dropped | wirings |
 |---:|---:|---:|---:|---:|---:|---:|
-| 61 | 35 | 10 | 2 | 2 | 12 | 569 |
+| 61 | 38 | 7 | 2 | 2 | 12 | 569 |
 
 | group | panels | done | partial | missing | plumbing | dropped | wirings | wirings
         // in missing panels |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
-| SETUP, `InitialSetup.HardwareConfig_Load` | 44 | 28 | 6 | 1 | 2 | 7 | 258 |
+| SETUP, `InitialSetup.HardwareConfig_Load` | 44 | 29 | 5 | 1 | 2 | 7 | 258 |
         //     15 |
-| CONFIG, `SoftwareConfig.SoftwareConfig_Load` | 13 | 7 | 4 | 1 | 0 | 1 | 277 |
+| CONFIG, `SoftwareConfig.SoftwareConfig_Load` | 13 | 9 | 2 | 1 | 0 | 1 | 277 |
         //     0 |
 | neither list | 4 | 0 | 0 | 0 | 0 | 4 | 34 |
         //     0 |
@@ -96,12 +96,7 @@ Vehicles: **any** is a connected vehicle whose parameter list is whole
         //     names first time (rtk_inject.rs's module note) |
 | 254 | `ConfigCubeID` | CubeID Update | Optional Hardware | connected | 2 | dropped: ruled out of the port by the owner, 2026-09-25 (PLAN §12 D13) |
 | 259 | `Sikradio` (`Radio/Sikradio.cs`, not a panel) | Sik Radio | Optional Hardware | always | 17 | **missing** |
-| 263 | `ConfigADSB` | ADSB | Mandatory Hardware | any | 5 | partial: `crates/mp-gui/src/config/adsb.rs` `fn page` - a RangeControl, bitmask or ValuesControl per documented ADSB_/AVD_ parameter,
-        //     favourites first, recording changes; Write Params writing them ENABLE-first, each
-        //     in its own try, then "Parameters successfully saved."; Refresh Params with
-        //     MessageShowAgain, its unticked box kept as SHOWAGAIN_Refresh_Params; Find
-        //     filtering as typed, its OK's word kept as InputBox keeps it; a bitmask updated on Activate writing as the C#'s does; missing Ctrl+S,
-        //     dragging the track bar (a click pages it) and typing into a ValuesControl |
+| 263 | `ConfigADSB` | ADSB | Mandatory Hardware | any | 5 | done: `crates/mp-gui/src/config/adsb.rs` `fn page` |
 | 266 | `ConfigGPSOrder` | CAN GPS Order | Optional Hardware | any | 1 | done: `crates/mp-gui/src/config/gps_order.rs` `fn page` |
 | 270 | `ConfigBatteryMonitoring` | Battery Monitor | Optional Hardware | any | 13 | done: `crates/mp-gui/src/config/battery_monitor.rs` `fn page` |
 | 271 | `ConfigBatteryMonitoring2` | Battery Monitor 2 | Optional Hardware | any | 10 | done: `crates/mp-gui/src/config/battery_monitor2.rs` `fn page` |
@@ -151,15 +146,8 @@ Vehicles: **any** is a connected vehicle whose parameter list is whole
 | 182 | `ConfigArducopter` | QP Extended Tuning |  | plane (enabled for a quadplane) | 128 | as at `GCSViews/SoftwareConfig.cs:169` |
 | 188 | `ConfigArdurover` | Basic Tuning |  | rover | 3 | done: `crates/mp-gui/src/config/rover_tuning.rs` `fn page` |
 | 193 | `ConfigAntennaTracker` | Extended Tuning |  | tracker | 3 | as at `GCSViews/InitialSetup.cs:313` |
-| 198 | `ConfigFriendlyParams` | Standard Params |  | any, Custom view with Standard Params | 1 | partial: `crates/mp-gui/src/config/friendly_params.rs` `fn page` - a RangeControl, bitmask or ValuesControl per parameter documented @User: Standard
-        //     with a display name, fav_params first; changes recorded; Write Params ENABLE-first,
-        //     each in its own try, then "Parameters successfully saved."; Refresh Params with
-        //     MessageShowAgain, its unticked box kept as SHOWAGAIN_Refresh_Params; Find
-        //     filtering as typed, its OK's word kept as InputBox keeps it; the flow panel's
-        //     layout; a failed write or fetch on the status line (the owner's ruling); missing
-        //     Ctrl+S, dragging the track bar (a click pages it) and typing into a ValuesControl |
-| 203 | `ConfigFriendlyParamsAdv` | Advanced Params |  | any, Custom view with Advanced Params and Advanced mode | no Designer | partial: `crates/mp-gui/src/config/friendly_params.rs` `fn page` - Standard Params' page over the parameters documented @User: Advanced or not at all;
-        //     missing what it misses |
+| 198 | `ConfigFriendlyParams` | Standard Params |  | any, Custom view with Standard Params | 1 | done: `crates/mp-gui/src/config/friendly_params.rs` `fn page` |
+| 203 | `ConfigFriendlyParamsAdv` | Advanced Params |  | any, Custom view with Advanced Params and Advanced mode | no Designer | done: `crates/mp-gui/src/config/friendly_params.rs` `fn page` |
 | 208 | `ConfigOSD` | Onboard OSD |  | any with OSD parameters, not on Mono | 0 | **missing** |
 | 215 | `MavFTPUI` (`Controls/MavFTPUI.cs`, not a panel) | MAVFtp |  | any reporting MAVLink FTP | 16 | partial: `crates/mp-gui/src/config/mavftp.rs` `fn page` - the tree of / and @SYS/ with @SYS selected and listed, a node's listing replacing its
         //     children, the list's double click and column sort; Download Burst, Download,

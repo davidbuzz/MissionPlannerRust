@@ -34,17 +34,24 @@
 //! another list, and their page object is this one with another [`Spec`]; see
 //! `friendly_params.rs`.
 //!
+//! The controls take the keyboard and the pointer as WinForms' do. Ctrl+S anywhere on the page is
+//! Write Params (`ProcessCmdKey`, `:159-168`): the page takes the focus when it is clicked, as the
+//! Flight Modes page does, so the chord reaches it from any of its controls. A `RangeControl`'s
+//! track bar moves `LargeChange` - ten of its thousand - on a click beside its thumb, follows the
+//! thumb while it is dragged, and with the focus takes the arrows (`SmallChange`, ten), Page Up
+//! and Page Down, Home and End (`RangeControl.Designer.cs:53-58`). A `ValuesControl`'s box is a
+//! `DropDown` combo: a click on its text puts the caret in it, and the row whose text the typed
+//! text matches is selected, as `FindStringExact` selects it, and recorded by
+//! `SelectedIndexChanged`. Typed text that names no row leaves `SelectedValue` null, which the
+//! C#'s `Value` getter throws a `NullReferenceException` on, into Mission Planner's
+//! unhandled-exception box; here the exception's text ([`NULL_REFERENCE`]) goes on the status
+//! line and the box keeps the text, no row selected, until it names one. A bitmask's `Value` is
+//! narrowed to the parameter's integer type (`TypeAP`) as the C# casts it - "int8 255 = -1" -
+//! from the type the vehicle's table carries with each value.
+//!
 //! What is not ported, and why:
 //!
-//! * Ctrl+S (`ProcessCmdKey`, `:159-168`): the page's key handling needs a focus the page does not
-//!   have here, as on the Flight Modes page;
 //! * the list panel's own scroll bar: the page scrolls, with the list in it;
-//! * typing into a `ValuesControl`'s box: it is a `DropDown` combo, and text that names no row
-//!   leaves `SelectedValue` null, which its `Value` getter throws on; here it is a list;
-//! * dragging the track bar's thumb and its keys: a click beside the thumb moves it by
-//!   `LargeChange`, five of its thousand, as a click on a WinForms track bar's channel does;
-//! * a bitmask value's narrowing to the parameter's integer type (`TypeAP`): the vehicle's table
-//!   here carries values, not types; it matters only for a mask with its type's top bit set;
 //!
 //! Where the C# is wrong and this is not: a control added by a later `Activate` - a parameter
 //! the vehicle has begun listing - is placed at the top, over the first, because `y` starts again
@@ -54,13 +61,16 @@
 // This module is internal to the binary; `pub` here documents intent rather than exporting API.
 #![allow(unreachable_pub)]
 
+use std::cell::Cell;
 use std::cmp::Ordering;
 use std::collections::{BTreeMap, VecDeque};
+use std::rc::Rc;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use gpui::{
-    AnyElement, Context, FocusHandle, KeyDownEvent, SharedString, Window, div, prelude::*, px, rgb,
+    AnyElement, Bounds, Context, FocusHandle, KeyDownEvent, MouseButton, MouseDownEvent,
+    MouseMoveEvent, MouseUpEvent, Pixels, SharedString, Window, div, prelude::*, px, rgb,
 };
 
 use super::battery_monitor::float_text;
@@ -72,14 +82,16 @@ use crate::MissionPlanner;
 use crate::config::extra_setup::{link_error, take_link_errors};
 use crate::config::failsafe::{CheckState, Lookup, decimal_of};
 use crate::config::flight_modes::ParamWriter;
-use crate::config::servo_output::{
-    Check, Combo, Message, check_box, combo_box, decimal_text, dropdown,
-};
+use crate::config::servo_output::{Check, Combo, Message, check_box, decimal_text, dropdown};
 use crate::setup::Key;
 use crate::telemetry::TelemetryView;
 use crate::textfield::{KeyOutcome, TextField};
 use crate::ui::{action, panel, theme};
-use mp_params::ParamMeta;
+use mp_params::{ParamMeta, ParamType};
+
+/// Where a parameter's type comes from: the vehicle's table, through the view
+/// (`TelemetryView::parameter_type`), or nothing for a parameter the table has no type for.
+pub type Types<'a> = &'a dyn Fn(&str) -> Option<ParamType>;
 
 /// The page's title in Initial Setup's list: the literal "ADSB".
 /// `// C#: GCSViews/InitialSetup.cs:263`
@@ -233,10 +245,19 @@ const RANGE_HEIGHT: f32 = 108.0;
 /// `ValuesControl`'s.
 const VALUES_HEIGHT: f32 = 89.0;
 
-/// A WinForms track bar's `LargeChange`, and the range `trackBar1` has.
-const TRACK_PAGE: i32 = 5;
+/// `trackBar1.LargeChange`: a click on the channel, Page Up and Page Down.
+/// `// C#: ExtLibs/Controls/RangeControl.Designer.cs:53`
+const TRACK_PAGE: i32 = 10;
+/// `trackBar1.SmallChange`: the arrow keys. `// C#: ExtLibs/Controls/RangeControl.Designer.cs:58`
+const TRACK_SMALL: i32 = 10;
 /// `trackBar1.Maximum`. `// C#: ExtLibs/Controls/RangeControl.Designer.cs:55`
 const TRACK_MAX: i32 = 1000;
+/// The thumb's width as drawn; the channel it travels is the bar less this.
+const THUMB_WIDTH: f32 = 10.0;
+
+/// `NullReferenceException`'s message: what the C#'s `ValuesControl.Value` throws for typed text
+/// that names no row, said on the status line here as `mavftp.rs` says the C#'s crashes.
+pub const NULL_REFERENCE: &str = "Object reference not set to an instance of an object.";
 
 // ---------------------------------------------------------------------------------------------
 // Text as .NET makes it.
@@ -361,6 +382,8 @@ pub struct RangeControl {
     pub orange: bool,
     field: TextField,
     edited: bool,
+    /// Where the track bar was last laid out, which a drag measures the pointer along.
+    pub bounds: Rc<Cell<Option<Bounds<Pixels>>>>,
 }
 
 /// `map`, in decimals; `None` for the `DivideByZeroException` of an empty range.
@@ -419,6 +442,7 @@ impl RangeControl {
             orange: false,
             field: TextField::new(""),
             edited: false,
+            bounds: Rc::new(Cell::new(None)),
         };
         // `Increment = increment`: its step, and `ToString().Length - 1` places.
         let (step, _) = decimal(increment);
@@ -579,14 +603,32 @@ impl RangeControl {
     /// the bar.
     /// `// C#: ExtLibs/Controls/RangeControl.cs:228-233`
     pub fn page(&mut self, up: bool) -> bool {
+        self.nudge(if up { TRACK_PAGE } else { -TRACK_PAGE })
+    }
+
+    /// The bar moved `delta` of its thousand, held within it: a channel click, or a key with the
+    /// bar focused. Whether the value changed.
+    pub fn nudge(&mut self, delta: i32) -> bool {
         let committed = self.commit();
-        let next = if up {
-            (self.trackbar + TRACK_PAGE).min(TRACK_MAX)
-        } else {
-            (self.trackbar - TRACK_PAGE).max(0)
-        };
+        let next = (self.trackbar + delta).clamp(0, TRACK_MAX);
+        self.move_trackbar(next) || committed
+    }
+
+    /// The thumb dragged to `fraction` of its travel: `trackBar1.Value` set to the nearest of
+    /// the thousand, then the value from the bar. Whether the value changed.
+    pub fn drag(&mut self, fraction: f64) -> bool {
+        #[allow(clippy::cast_possible_truncation)] // 0 to 1000
+        let next = (fraction.clamp(0.0, 1.0) * f64::from(TRACK_MAX)).round() as i32;
+        let committed = self.commit();
+        self.move_trackbar(next) || committed
+    }
+
+    /// `trackBar1.Value = next`: nothing for the value it has, else `trackBar1_ValueChanged`
+    /// maps it onto the number.
+    /// `// C#: ExtLibs/Controls/RangeControl.cs:228-233`
+    fn move_trackbar(&mut self, next: i32) -> bool {
         if next == self.trackbar {
-            return committed;
+            return false;
         }
         self.trackbar = next;
         let Some(value) = map(
@@ -596,9 +638,37 @@ impl RangeControl {
             self.minimum,
             self.maximum,
         ) else {
-            return committed;
+            return false;
         };
-        self.change_to(value, true) || committed
+        self.change_to(value, true)
+    }
+
+    /// Where `position` falls along the thumb's travel, 0 to 1, from the bar as it was last laid
+    /// out: the pointer less half the thumb, over the bar less the thumb. `None` before it has
+    /// been laid out.
+    #[must_use]
+    pub fn fraction_of(&self, position: gpui::Point<Pixels>) -> Option<f64> {
+        let laid_out = self.bounds.get()?;
+        let along = f32::from(position.x - laid_out.origin.x) - THUMB_WIDTH / 2.0;
+        let travel = (f32::from(laid_out.size.width) - THUMB_WIDTH).max(1.0);
+        Some(f64::from((along / travel).clamp(0.0, 1.0)))
+    }
+
+    /// A key while the track bar has the focus, as a Win32 trackbar takes them: Left and Up are
+    /// `TB_LINEUP`, `SmallChange` down; Right and Down `TB_LINEDOWN`, up; Page Up and Page Down
+    /// `LargeChange`; Home the minimum and End the maximum. Whether the key was one of those,
+    /// and whether the value changed.
+    pub fn trackbar_key(&mut self, event: &KeyDownEvent) -> (bool, bool) {
+        let changed = match event.keystroke.key.as_str() {
+            "left" | "up" => self.nudge(-TRACK_SMALL),
+            "right" | "down" => self.nudge(TRACK_SMALL),
+            "pageup" => self.nudge(-TRACK_PAGE),
+            "pagedown" => self.nudge(TRACK_PAGE),
+            "home" => self.nudge(-TRACK_MAX),
+            "end" => self.nudge(TRACK_MAX),
+            _ => return (false, false),
+        };
+        (true, changed)
     }
 
     /// A key while the box has the focus.
@@ -632,17 +702,22 @@ impl RangeControl {
 pub struct Bitmask {
     /// Each bit, its name and whether it is ticked.
     pub bits: Vec<(u32, &'static str, bool)>,
+    /// `Type`: the parameter's `TypeAP`, which `Value` is narrowed to; `REAL32` where the table
+    /// has none, as the C#'s field starts.
+    pub kind: ParamType,
 }
 
 impl Bitmask {
-    /// `setup`: each bit ticked as the vehicle's value has it.
+    /// `setup`: each bit ticked as the vehicle's value has it, and the parameter's type kept.
+    /// `// C#: Controls/MavlinkCheckBoxBitMask.cs:90-91`
     #[must_use]
-    pub fn new(bits: &'static [(u32, &'static str)], value: f64) -> Self {
+    pub fn new(bits: &'static [(u32, &'static str)], value: f64, kind: ParamType) -> Self {
         let mut mask = Self {
             bits: bits
                 .iter()
                 .map(|(bit, name)| (*bit, *name, false))
                 .collect(),
+            kind,
         };
         mask.set(value);
         mask
@@ -663,18 +738,30 @@ impl Bitmask {
         changed
     }
 
-    /// The `Value` getter, as a float's text.
+    /// The `Value` getter: the ticked bits added up, then narrowed to the parameter's integer
+    /// type - "ie int8 255 = -1" - as the C# casts its float through `sbyte`, `short` or `int`,
+    /// which the JIT truncates to the integer's width.
+    /// `// C#: Controls/MavlinkCheckBoxBitMask.cs:21-43`
     #[must_use]
+    #[allow(
+        clippy::cast_precision_loss,
+        clippy::cast_possible_truncation,
+        clippy::cast_possible_wrap
+    )]
     pub fn value(&self) -> f32 {
-        let mut answer: f32 = 0.0;
-        for (bit, _, checked) in &self.bits {
-            if *checked {
-                #[allow(clippy::cast_precision_loss)]
-                let add = 1_u32.checked_shl(*bit).unwrap_or(0) as f32;
-                answer += add;
-            }
+        let bits = self
+            .bits
+            .iter()
+            .filter(|(_, _, checked)| *checked)
+            .fold(0_u32, |sum, (bit, _, _)| {
+                sum.wrapping_add(1_u32.checked_shl(*bit).unwrap_or(0))
+            });
+        match self.kind {
+            ParamType::Int8 => f32::from(bits as u8 as i8),
+            ParamType::Int16 => f32::from(bits as u16 as i16),
+            ParamType::Int32 => bits as i32 as f32,
+            _ => bits as f32,
         }
-        answer
     }
 
     /// Where each box goes and the rows' bottom: 9 from the left and top, each box's width and
@@ -792,6 +879,7 @@ pub fn build(
     name: &str,
     display: &str,
     value: f64,
+    kind: ParamType,
     lookup: Lookup,
 ) -> Option<Control> {
     let meta = lookup(name)?;
@@ -825,7 +913,7 @@ pub fn build(
             name: name.to_owned(),
             label,
             description: fit_description(units, meta.description, spec.bitmask_description_width()),
-            kind: Kind::Bitmask(Bitmask::new(meta.bitmask, value)),
+            kind: Kind::Bitmask(Bitmask::new(meta.bitmask, value, kind)),
             visible: true,
         });
     }
@@ -887,6 +975,12 @@ pub struct Adsb<H = mp_link::RequestId> {
     dropdown: Option<usize>,
     /// The number being typed into, by the control's index.
     editing: Option<usize>,
+    /// The values box being typed into, by the control's index, and its edit box.
+    typed: Option<(usize, TextField)>,
+    /// The track bar whose thumb the pointer holds, by the control's index.
+    dragging: Option<usize>,
+    /// The track bar with the keyboard, by the control's index.
+    track_focus: Option<usize>,
     messages: VecDeque<Message>,
     /// The last link failure the C# boxes, for the status line (the owner's ruling of
     /// 2026-09-25), until the holder takes it.
@@ -961,6 +1055,9 @@ impl<H: Copy> Adsb<H> {
             last_press: "none",
             dropdown: None,
             editing: None,
+            typed: None,
+            dragging: None,
+            track_focus: None,
             messages: VecDeque::new(),
             status: None,
             queue: SetQueue::default(),
@@ -1038,6 +1135,7 @@ impl<H: Copy> Adsb<H> {
     pub fn activate(
         &mut self,
         parameters: &[(String, f64)],
+        types: Types<'_>,
         key: Key,
         lookup: Lookup,
         favourites: &[String],
@@ -1056,7 +1154,7 @@ impl<H: Copy> Adsb<H> {
         }
         self.active = true;
         self.dropdown = None;
-        self.bind(parameters, lookup, favourites)
+        self.bind(parameters, types, lookup, favourites)
     }
 
     /// `BindParamList`: each parameter the page's list takes (for ADSB each `ADSB_` and `AVD_`
@@ -1067,6 +1165,7 @@ impl<H: Copy> Adsb<H> {
     fn bind(
         &mut self,
         parameters: &[(String, f64)],
+        types: Types<'_>,
         lookup: Lookup,
         favourites: &[String],
     ) -> Vec<Job> {
@@ -1127,7 +1226,8 @@ impl<H: Copy> Adsb<H> {
                 }
                 continue;
             }
-            if let Some(control) = build(self.spec, &name, &display, value, lookup) {
+            let kind = types(&name).unwrap_or(ParamType::Real32);
+            if let Some(control) = build(self.spec, &name, &display, value, kind, lookup) {
                 self.controls.push(control);
             }
         }
@@ -1139,6 +1239,9 @@ impl<H: Copy> Adsb<H> {
     pub fn deactivate(&mut self) {
         self.active = false;
         self.dropdown = None;
+        self.typed = None;
+        self.dragging = None;
+        self.track_focus = None;
         if let Some(index) = self.editing.take() {
             self.commit(index);
         }
@@ -1246,8 +1349,10 @@ impl<H: Copy> Adsb<H> {
         }
     }
 
-    /// The number being typed into loses the focus.
+    /// The number or values box being typed into loses the focus: the number is validated, and
+    /// the values box shows its row's text again.
     pub fn leave(&mut self) {
+        self.typed = None;
         if let Some(index) = self.editing.take() {
             self.commit(index);
         }
@@ -1281,13 +1386,178 @@ impl<H: Copy> Adsb<H> {
         }
     }
 
-    /// A click on a track bar's channel, above or below its thumb.
+    /// A click on a track bar's channel, above or below its thumb: the bar takes the focus, and
+    /// moves a `LargeChange` towards the click.
     pub fn page_trackbar(&mut self, index: usize, up: bool) {
         self.leave();
         self.dropdown = None;
+        if self.range_mut(index).is_none() {
+            return;
+        }
+        self.track_focus = Some(index);
         if self.range_mut(index).is_some_and(|range| range.page(up)) {
             self.record_change(index);
         }
+    }
+
+    /// The thumb taken by the pointer: the bar takes the focus and follows the pointer until
+    /// the button is let go ([`Self::drag_thumb`], [`Self::release_thumb`]).
+    pub fn grab_thumb(&mut self, index: usize) {
+        self.leave();
+        self.dropdown = None;
+        if self.range_mut(index).is_some() {
+            self.dragging = Some(index);
+            self.track_focus = Some(index);
+        }
+    }
+
+    /// The pointer moved with a thumb held: the bar follows it along its travel, and every value
+    /// it passes is recorded, as `trackBar1_ValueChanged` raises each.
+    pub fn drag_thumb(&mut self, position: gpui::Point<Pixels>) {
+        let Some(index) = self.dragging else {
+            return;
+        };
+        let Some(range) = self.range_mut(index) else {
+            return;
+        };
+        let Some(fraction) = range.fraction_of(position) else {
+            return;
+        };
+        if range.drag(fraction) {
+            self.record_change(index);
+        }
+    }
+
+    /// The button let go.
+    pub fn release_thumb(&mut self) {
+        self.dragging = None;
+    }
+
+    /// The track bar the pointer holds.
+    #[must_use]
+    pub const fn dragging(&self) -> Option<usize> {
+        self.dragging
+    }
+
+    /// The track bar with the keyboard.
+    #[must_use]
+    pub const fn track_focus(&self) -> Option<usize> {
+        self.track_focus
+    }
+
+    /// A key for the track bar with the keyboard; whether it took it.
+    pub fn trackbar_key(&mut self, event: &KeyDownEvent) -> bool {
+        let Some(index) = self.track_focus else {
+            return false;
+        };
+        let Some((handled, changed)) = self.range_mut(index).map(|range| range.trackbar_key(event))
+        else {
+            return false;
+        };
+        if changed {
+            self.record_change(index);
+        }
+        handled
+    }
+
+    /// `ProcessCmdKey`: Ctrl+S anywhere on the page is Write Params. Its jobs, when it was.
+    /// `// C#: GCSViews/ConfigurationView/ConfigADSB.cs:159-168; ConfigFriendlyParams.cs:159-168`
+    pub fn chord(&mut self, event: &KeyDownEvent) -> Option<Vec<Job>> {
+        let keystroke = &event.keystroke;
+        let chord = keystroke.modifiers.control || keystroke.modifiers.platform;
+        (chord && keystroke.key == "s").then(|| self.write_params())
+    }
+
+    /// A values box clicked into: the `DropDown` combo's edit box, with its row's text.
+    pub fn begin_typing(&mut self, index: usize) {
+        if self.typing() == Some(index) {
+            return;
+        }
+        self.leave();
+        self.dropdown = None;
+        if let Some(Control {
+            kind: Kind::Values(combo),
+            ..
+        }) = self.controls.get(index)
+        {
+            let mut field = TextField::new("");
+            field.set(combo.text().to_owned());
+            self.typed = Some((index, field));
+        }
+    }
+
+    /// The values box being typed into, by the control's index.
+    #[must_use]
+    pub fn typing(&self) -> Option<usize> {
+        self.typed.as_ref().map(|(index, _)| *index)
+    }
+
+    /// What the values box being typed into shows.
+    #[must_use]
+    pub fn typed_text(&self) -> Option<&str> {
+        self.typed.as_ref().map(|(_, field)| field.value())
+    }
+
+    /// A key in the values box: text changed selects the row it names, or none; Enter or Escape
+    /// leaves the box. Whether the key was taken.
+    pub fn type_key(&mut self, event: &KeyDownEvent) -> bool {
+        let Some((index, field)) = self.typed.as_mut() else {
+            return false;
+        };
+        let index = *index;
+        match field.key(event) {
+            KeyOutcome::Changed => {
+                let text = field.value().to_owned();
+                self.typed_changed(index, &text);
+                true
+            }
+            KeyOutcome::Submitted | KeyOutcome::Cancelled => {
+                self.leave();
+                true
+            }
+            KeyOutcome::Ignored => false,
+        }
+    }
+
+    /// The edit box's text as the combo takes it: the row whose text it is - `FindStringExact`,
+    /// case aside - selected, and `SelectedIndexChanged` records it; none is `SelectedIndex` -1,
+    /// on which the C#'s `Value` getter throws ([`NULL_REFERENCE`], here the status line).
+    /// `// C#: ExtLibs/Controls/ValuesControl.cs:33-41, 68-72`
+    fn typed_changed(&mut self, index: usize, text: &str) {
+        let Some(Control {
+            kind: Kind::Values(combo),
+            ..
+        }) = self.controls.get_mut(index)
+        else {
+            return;
+        };
+        let named = combo
+            .options
+            .iter()
+            .find(|(_, option)| option.eq_ignore_ascii_case(text.trim()))
+            .map(|(key, _)| *key);
+        match named {
+            Some(key) => {
+                if combo.select(key) {
+                    self.record_change(index);
+                }
+            }
+            None => {
+                combo.selected = None;
+                self.status = Some(NULL_REFERENCE.to_owned());
+            }
+        }
+    }
+
+    /// Types into the values box, for a test.
+    #[cfg(test)]
+    pub fn type_into(&mut self, text: &str) {
+        let Some((index, field)) = self.typed.as_mut() else {
+            return;
+        };
+        let index = *index;
+        field.set(text);
+        self.typed_changed(index, text);
     }
 
     /// Write Params: every recorded value, `ENABLE` names first, each in its own `try`.
@@ -1493,7 +1763,12 @@ impl<H: Copy> Adsb<H> {
                 self.refreshing = None;
                 if self.active {
                     let favourites = favourites(self.spec.favourites);
-                    let jobs = self.bind(&view.parameters, crate::metadata::lookup, &favourites);
+                    let jobs = self.bind(
+                        &view.parameters,
+                        &|name| view.parameter_type(name),
+                        crate::metadata::lookup,
+                        &favourites,
+                    );
                     self.queue.push(jobs);
                 }
             }
@@ -1577,7 +1852,18 @@ pub fn record_facts(page: &Adsb, view: &TelemetryView) {
         record(fact(&format!("{name}.text")), control.shown());
         record(fact(&format!("{name}.visible")), control.visible);
         record(fact(&format!("{name}.label")), &control.label);
+        if let Kind::Range(range) = &control.kind {
+            record(fact(&format!("{name}.trackbar")), range.trackbar);
+        }
     }
+    let name_of = |index: Option<usize>| {
+        index
+            .and_then(|index| page.controls().get(index))
+            .map_or("none", |control| control.name.as_str())
+    };
+    record(fact("typing"), name_of(page.typing()));
+    record(fact("dragging"), name_of(page.dragging()));
+    record(fact("track.focus"), name_of(page.track_focus()));
     record(fact("write"), page.queue.last().unwrap_or("none"));
     record(fact("writes.pending"), page.queue.pending());
     record(
@@ -1607,6 +1893,16 @@ pub trait RangeHost {
     fn step(&mut self, index: usize, up: bool);
     /// A click on a track bar's channel, above or below its thumb.
     fn page_trackbar(&mut self, index: usize, up: bool);
+    /// A track bar's thumb taken by the pointer.
+    fn grab_thumb(&mut self, index: usize);
+    /// The pointer moved with a thumb held.
+    fn drag_thumb(&mut self, position: gpui::Point<Pixels>);
+    /// The button let go.
+    fn release_thumb(&mut self);
+    /// A key for the track bar with the keyboard; whether it took it.
+    fn trackbar_key(&mut self, event: &KeyDownEvent) -> bool;
+    /// The track bar the pointer holds.
+    fn dragging(&self) -> Option<usize>;
 }
 
 impl RangeHost for Adsb {
@@ -1624,6 +1920,26 @@ impl RangeHost for Adsb {
 
     fn page_trackbar(&mut self, index: usize, up: bool) {
         Self::page_trackbar(self, index, up);
+    }
+
+    fn grab_thumb(&mut self, index: usize) {
+        Self::grab_thumb(self, index);
+    }
+
+    fn drag_thumb(&mut self, position: gpui::Point<Pixels>) {
+        Self::drag_thumb(self, position);
+    }
+
+    fn release_thumb(&mut self) {
+        Self::release_thumb(self);
+    }
+
+    fn trackbar_key(&mut self, event: &KeyDownEvent) -> bool {
+        Self::trackbar_key(self, event)
+    }
+
+    fn dragging(&self) -> Option<usize> {
+        Self::dragging(self)
     }
 }
 
@@ -1746,34 +2062,56 @@ pub fn range_number<H: RangeHost + 'static>(
         .into_any_element()
 }
 
-/// A `RangeControl`'s track bar: the channel either side of the thumb takes a click. Anchored
+/// A `RangeControl`'s track bar: the channel either side of the thumb takes a click, the thumb
+/// is dragged, and with the focus - a click on either gives it - the bar takes the keys. Anchored
 /// left and right, it keeps the Designer's margins as the control is made wider: 69 in from the
-/// left, 3 from the right.
+/// left, 3 from the right. `holds_keys` says the host gave this bar the keyboard; it has it while
+/// `track` is focused, as the Simple PIDs page's bars have theirs.
 /// `// C#: ExtLibs/Controls/RangeControl.Designer.cs:48-58`
+#[allow(clippy::too_many_arguments)] // the bar's host, its focus and the window it is drawn in
 pub fn trackbar<H: RangeHost + 'static>(
     id: &str,
     range: &RangeControl,
     index: usize,
     width: f32,
     access: fn(&mut MissionPlanner) -> &mut H,
+    holds_keys: bool,
+    track: &FocusHandle,
+    window: &Window,
     cx: &mut Context<MissionPlanner>,
 ) -> AnyElement {
     #[allow(clippy::cast_precision_loss)]
-    let thumb = (width - 10.0) * range.trackbar as f32 / TRACK_MAX as f32;
+    let thumb = (width - THUMB_WIDTH) * range.trackbar as f32 / TRACK_MAX as f32;
+    let focused = holds_keys && track.is_focused(window);
+    let laid = Rc::clone(&range.bounds);
     let side = |up: bool, cx: &mut Context<MissionPlanner>| {
         let name = format!("{id}-track-{}", if up { "up" } else { "down" });
+        let handle = track.clone();
         crate::probe::measured(name.clone(), div())
             .id(SharedString::from(name))
             .h_full()
             .cursor_pointer()
-            .on_click(cx.listener(move |this, _event, _window, cx| {
+            .on_click(cx.listener(move |this, _event, window, cx| {
                 access(this).page_trackbar(index, up);
+                handle.focus(window, cx);
                 cx.notify();
             }))
     };
-    at(69.0, 58.0, width, 20.0)
+    let thumb_id = format!("{id}-thumb");
+    let grab = track.clone();
+    let track_id = format!("{id}-track");
+    let bar = crate::probe::measured(track_id.clone(), at(69.0, 58.0, width, 20.0))
+        .id(SharedString::from(track_id))
         .flex()
         .items_center()
+        .child(
+            gpui::canvas(
+                move |laid_out, _window, _cx| laid.set(Some(laid_out)),
+                |_bounds, (), _window, _cx| {},
+            )
+            .absolute()
+            .inset_0(),
+        )
         .child(
             div()
                 .absolute()
@@ -1785,14 +2123,145 @@ pub fn trackbar<H: RangeHost + 'static>(
         )
         .child(side(false, cx).w(px(thumb)))
         .child(
-            div()
-                .w(px(10.0))
+            crate::probe::measured(thumb_id.clone(), div())
+                .id(SharedString::from(thumb_id))
+                .w(px(THUMB_WIDTH))
                 .h(px(18.0))
                 .flex_shrink_0()
                 .rounded_sm()
-                .bg(rgb(theme::ACCENT)),
+                .bg(rgb(if focused { theme::OK } else { theme::ACCENT }))
+                .cursor_pointer()
+                // The probe measures an element by its children: one, the thumb's size.
+                .child(div().size_full())
+                .on_mouse_down(
+                    MouseButton::Left,
+                    cx.listener(move |this, _event: &MouseDownEvent, window, cx| {
+                        access(this).grab_thumb(index);
+                        grab.focus(window, cx);
+                        // The page under it would take the focus back.
+                        cx.stop_propagation();
+                        cx.notify();
+                    }),
+                ),
         )
         .child(side(true, cx).flex_1())
+        .on_mouse_move(
+            cx.listener(move |this, event: &MouseMoveEvent, _window, cx| {
+                if event.pressed_button != Some(MouseButton::Left)
+                    || access(this).dragging() != Some(index)
+                {
+                    return;
+                }
+                access(this).drag_thumb(event.position);
+                cx.notify();
+            }),
+        )
+        .on_mouse_up(
+            MouseButton::Left,
+            cx.listener(move |this, _event: &MouseUpEvent, _window, cx| {
+                access(this).release_thumb();
+                cx.notify();
+            }),
+        )
+        .on_mouse_up_out(
+            MouseButton::Left,
+            cx.listener(move |this, _event: &MouseUpEvent, _window, cx| {
+                access(this).release_thumb();
+                cx.notify();
+            }),
+        );
+    if focused {
+        bar.track_focus(track)
+            .on_key_down(cx.listener(move |this, event: &KeyDownEvent, _window, cx| {
+                if access(this).trackbar_key(event) {
+                    cx.stop_propagation();
+                    cx.notify();
+                }
+            }))
+            .into_any_element()
+    } else {
+        bar.into_any_element()
+    }
+}
+
+/// A `ValuesControl`'s combo box, a `DropDown`: its edit box, which a click puts the caret in
+/// and typing selects rows from, and its arrow, which drops the list down.
+/// `// C#: ExtLibs/Controls/ValuesControl.cs:33-41, 68-72; ValuesControl.Designer.cs`
+#[allow(clippy::too_many_arguments)] // the box's host, its focus and the window it is drawn in
+fn values_box(
+    id: String,
+    combo: &Combo,
+    index: usize,
+    typing: bool,
+    typed: Option<&str>,
+    access: Access,
+    handle: &FocusHandle,
+    window: &Window,
+    cx: &mut Context<MissionPlanner>,
+) -> AnyElement {
+    let focused = typing && handle.is_focused(window);
+    let shown = typed.unwrap_or_else(|| combo.text()).to_owned();
+    let text_id = format!("{id}-text");
+    let text = crate::probe::measured(text_id.clone(), div())
+        .id(SharedString::from(text_id))
+        .flex_1()
+        .h_full()
+        .flex()
+        .items_center()
+        .px_1()
+        .overflow_hidden()
+        .text_xs()
+        .text_color(rgb(theme::TEXT))
+        .cursor_text()
+        .child(div().flex_1().whitespace_nowrap().child(shown))
+        .children(focused.then(|| div().w(px(1.0)).h(px(12.0)).bg(rgb(theme::ACCENT))));
+    let text = if typing {
+        text.track_focus(handle)
+            .key_context("TextField")
+            .on_key_down(cx.listener(move |this, event: &KeyDownEvent, _window, cx| {
+                if access(this).type_key(event) {
+                    cx.stop_propagation();
+                    cx.notify();
+                }
+            }))
+    } else {
+        let handle = handle.clone();
+        text.on_click(cx.listener(move |this, _event, window, cx| {
+            access(this).begin_typing(index);
+            handle.focus(window, cx);
+            cx.notify();
+        }))
+    };
+    let arrow = crate::probe::measured(id.clone(), div())
+        .id(SharedString::from(id))
+        .w(px(16.0))
+        .h_full()
+        .flex()
+        .items_center()
+        .justify_center()
+        .border_l_1()
+        .border_color(rgb(theme::BORDER))
+        .text_size(px(7.0))
+        .text_color(rgb(theme::TEXT))
+        .cursor_pointer()
+        .hover(|style| style.bg(rgb(theme::BORDER)))
+        .child("▼")
+        .on_click(cx.listener(move |this, _event, _window, cx| {
+            access(this).toggle_dropdown(index);
+            cx.notify();
+        }));
+    at(3.0, 65.0, 207.0, 21.0)
+        .flex()
+        .rounded_sm()
+        .border_1()
+        .border_color(rgb(if focused {
+            theme::ACCENT
+        } else {
+            theme::BORDER
+        }))
+        .bg(rgb(theme::ACTION))
+        .child(text)
+        .child(arrow)
         .into_any_element()
 }
 
@@ -1801,18 +2270,40 @@ pub fn trackbar<H: RangeHost + 'static>(
 /// down over them. The page's own panel is the caller's.
 /// `// C#: GCSViews/ConfigurationView/ConfigADSB.Designer.cs; ConfigFriendlyParams.Designer.cs:29-74;
 /// ConfigFriendlyParams.resx`
+#[allow(clippy::too_many_arguments)] // the page's four focuses, and the window they are read in
 pub fn list_body(
     list: &Adsb,
     access: Access,
     number: &FocusHandle,
     prompt: &FocusHandle,
+    page: &FocusHandle,
+    track: &FocusHandle,
     window: &Window,
     cx: &mut Context<MissionPlanner>,
-) -> gpui::Div {
+) -> gpui::Stateful<gpui::Div> {
     let spec = list.spec;
     let ids = spec.ids;
     let prompt = prompt.clone();
-    let mut body = div()
+    let page_handle = page.clone();
+    // The page takes the focus when it is clicked, so `ProcessCmdKey`'s Ctrl+S reaches it from
+    // any of its controls: a key bubbles from the focused box up to here.
+    let mut body = crate::probe::measured(format!("{}-page", spec.name), div())
+        .id(SharedString::from(format!("{}-page", spec.name)))
+        .track_focus(page)
+        .on_key_down(cx.listener(move |this, event: &KeyDownEvent, _window, cx| {
+            let list = access(this);
+            if let Some(jobs) = list.chord(event) {
+                list.push(jobs);
+                cx.stop_propagation();
+                cx.notify();
+            }
+        }))
+        .on_mouse_down(
+            MouseButton::Left,
+            cx.listener(move |_this, _event: &MouseDownEvent, window, cx| {
+                page_handle.focus(window, cx);
+            }),
+        )
         .relative()
         .w(px(spec.list_at.0 + spec.list_size.0 + 14.0))
         .child(button(
@@ -1885,18 +2376,34 @@ pub fn list_body(
                         window,
                         cx,
                     ))
-                    .child(trackbar(&id, range, index, width - 72.0, access, cx))
+                    .child(trackbar(
+                        &id,
+                        range,
+                        index,
+                        width - 72.0,
+                        access,
+                        list.track_focus() == Some(index),
+                        track,
+                        window,
+                        cx,
+                    ))
                     .child(label(72.0, 90.0, range.lbl_min.clone(), true))
                     .child(label(width - 69.0, 90.0, range.lbl_max.clone(), true));
             }
             Kind::Values(combo) => {
-                item = item.child(texts(control, width, 4.0, 3.0)).child(combo_box(
-                    id.clone(),
-                    combo,
-                    (3.0, 65.0, 207.0, 21.0),
-                    move |this| access(this).toggle_dropdown(index),
-                    cx,
-                ));
+                item = item
+                    .child(texts(control, width, 4.0, 3.0))
+                    .child(values_box(
+                        id.clone(),
+                        combo,
+                        index,
+                        list.typing() == Some(index),
+                        list.typed_text(),
+                        access,
+                        number,
+                        window,
+                        cx,
+                    ));
                 if list.dropdown == Some(index) {
                     dropdown_at = Some((index, list_x + x + 3.0, list_y + y + 65.0 + 21.0));
                 }
@@ -2005,7 +2512,17 @@ pub fn page(
             |_, _, _| {},
             cx,
         ));
-    let body = list_body(adsb, access, &focus.number, &focus.prompt, window, cx).child(panel1);
+    let body = list_body(
+        adsb,
+        access,
+        &focus.number,
+        &focus.prompt,
+        &focus.page,
+        &focus.track,
+        window,
+        cx,
+    )
+    .child(panel1);
     panel(TITLE, body).into_any_element()
 }
 
@@ -2138,6 +2655,12 @@ pub fn overlay(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use gpui::{point, size};
+
+    /// A table that says no parameter's type: a mask is left `REAL32`, as the C# starts it.
+    fn untyped(_: &str) -> Option<ParamType> {
+        None
+    }
     use crate::config::flight_modes::Progress;
     use crate::config::optional::tests::Answering;
     use crate::telemetry::Telemetry;
@@ -2269,7 +2792,7 @@ mod tests {
     fn the_sitl_copter_gets_two_value_lists() {
         let mut page = Adsb::default();
         let parameters = table(&[("ADSB_TYPE", 0.0), ("AVD_ENABLE", 0.0), ("RTL_ALT", 1500.0)]);
-        let jobs = page.activate(&parameters, key(), bundled, &[]);
+        let jobs = page.activate(&parameters, &untyped, key(), bundled, &[]);
         assert!(jobs.is_empty());
         let names: Vec<&str> = page.controls().iter().map(|c| c.name.as_str()).collect();
         assert_eq!(names, ["ADSB_TYPE", "AVD_ENABLE"]);
@@ -2292,7 +2815,7 @@ mod tests {
     #[test]
     fn each_parameter_gets_the_control_its_documentation_makes() {
         let mut page = Adsb::default();
-        page.activate(&configured(), key(), documented, &[]);
+        page.activate(&configured(), &untyped, key(), documented, &[]);
         assert_eq!(
             page.control("ADSB_RF_SELECT").map(Control::kind_name),
             Some("bitmask")
@@ -2312,7 +2835,13 @@ mod tests {
         assert_eq!(range.shown(), "300");
         // Favourites first, then by name.
         let mut page = Adsb::default();
-        page.activate(&configured(), key(), bundled, &["AVD_ENABLE".to_owned()]);
+        page.activate(
+            &configured(),
+            &untyped,
+            key(),
+            bundled,
+            &["AVD_ENABLE".to_owned()],
+        );
         assert_eq!(
             page.controls().first().map(|c| c.name.as_str()),
             Some("AVD_ENABLE")
@@ -2325,7 +2854,7 @@ mod tests {
     fn write_params_writes_what_changed() {
         let mut page = Adsb::default();
         let parameters = configured();
-        page.activate(&parameters, key(), bundled, &[]);
+        page.activate(&parameters, &untyped, key(), bundled, &[]);
         let type_index = page
             .controls()
             .iter()
@@ -2375,7 +2904,7 @@ mod tests {
     #[test]
     fn a_failed_write_keeps_the_record() {
         let mut page = Adsb::default();
-        page.activate(&configured(), key(), bundled, &[]);
+        page.activate(&configured(), &untyped, key(), bundled, &[]);
         let type_index = page
             .controls()
             .iter()
@@ -2414,7 +2943,7 @@ mod tests {
     fn a_timed_out_write_is_a_status_line_not_a_box() {
         let view = TelemetryView::disconnected("test");
         let mut page = Adsb::<usize>::new(&ADSB);
-        page.activate(&configured(), key(), bundled, &[]);
+        page.activate(&configured(), &untyped, key(), bundled, &[]);
         let avd_index = page
             .controls()
             .iter()
@@ -2451,7 +2980,7 @@ mod tests {
     #[allow(clippy::cast_possible_truncation)] // the floats the control writes
     fn a_range_steps_pages_and_types() {
         let mut page = Adsb::default();
-        page.activate(&configured(), key(), documented, &[]);
+        page.activate(&configured(), &untyped, key(), documented, &[]);
         let index = page
             .controls()
             .iter()
@@ -2517,12 +3046,203 @@ mod tests {
         );
     }
 
+    fn press(key: &str, control: bool) -> KeyDownEvent {
+        KeyDownEvent {
+            keystroke: gpui::Keystroke {
+                modifiers: gpui::Modifiers {
+                    control,
+                    ..gpui::Modifiers::default()
+                },
+                key: key.to_owned(),
+                key_char: None,
+            },
+            is_held: false,
+            prefer_character_input: false,
+        }
+    }
+
+    /// The track bar's thumb dragged along its channel: the bar follows the pointer to the nearest
+    /// of its thousand and the value with it, recorded as each `ValueChanged`; nothing moves while
+    /// the thumb is not held. With the bar's focus the arrows step it `SmallChange`, Page Up and
+    /// Page Down `LargeChange`, Home and End take it to its ends - a Win32 trackbar's keys.
+    /// `// C#: ExtLibs/Controls/RangeControl.cs:228-233; RangeControl.Designer.cs:53-58`
+    #[test]
+    #[allow(clippy::cast_possible_truncation)] // the C#'s float
+    fn a_thumb_dragged_and_the_bars_keys_move_the_value() {
+        let mut page = Adsb::default();
+        page.activate(&configured(), &untyped, key(), documented, &[]);
+        let index = page
+            .controls()
+            .iter()
+            .position(|c| c.name == "AVD_F_DIST_XY")
+            .unwrap_or(0);
+        let range_of = |page: &Adsb| match page.controls().get(index).map(|c| &c.kind) {
+            Some(Kind::Range(range)) => (range.trackbar, range.minimum, range.maximum),
+            _ => panic!("a range"),
+        };
+        let (_, minimum, maximum) = range_of(&page);
+        // The bar as the painter laid it out: 300 wide from x = 100.
+        let laid_out = Bounds {
+            origin: point(px(100.0), px(50.0)),
+            size: size(px(300.0), px(20.0)),
+        };
+        page.range_mut(index)
+            .expect("a range")
+            .bounds
+            .set(Some(laid_out));
+        // Not held: the pointer over the bar moves nothing.
+        page.drag_thumb(point(px(250.0), px(60.0)));
+        assert!(page.changed().is_empty());
+        page.grab_thumb(index);
+        assert_eq!(page.dragging(), Some(index));
+        assert_eq!(page.track_focus(), Some(index));
+        // The thumb's centre at the channel's middle: half its width in, then half the travel.
+        page.drag_thumb(point(px(100.0 + 5.0 + 145.0), px(60.0)));
+        assert_eq!(range_of(&page).0, 500);
+        let expected = map(500.0, 0.0, 1000.0, minimum, maximum)
+            .map(round_even)
+            .unwrap_or(0.0);
+        assert_eq!(
+            page.changed().get("AVD_F_DIST_XY").map(String::as_str),
+            Some(float_text(expected as f32).as_str())
+        );
+        // Past the end: held to it.
+        page.drag_thumb(point(px(900.0), px(60.0)));
+        assert_eq!(range_of(&page).0, 1000);
+        page.release_thumb();
+        assert_eq!(page.dragging(), None);
+        page.drag_thumb(point(px(100.0), px(60.0)));
+        assert_eq!(range_of(&page).0, 1000, "let go: the bar stays");
+        // The keys.
+        assert!(page.trackbar_key(&press("left", false)));
+        assert_eq!(range_of(&page).0, 1000 - TRACK_SMALL);
+        assert!(page.trackbar_key(&press("pagedown", false)));
+        assert_eq!(range_of(&page).0, 1000, "held to the maximum");
+        assert!(page.trackbar_key(&press("home", false)));
+        assert_eq!(range_of(&page).0, 0);
+        assert!(page.trackbar_key(&press("right", false)));
+        assert_eq!(range_of(&page).0, TRACK_SMALL);
+        assert!(page.trackbar_key(&press("pageup", false)));
+        assert_eq!(range_of(&page).0, 0);
+        assert!(page.trackbar_key(&press("end", false)));
+        assert_eq!(range_of(&page).0, 1000);
+        assert!(!page.trackbar_key(&press("a", false)), "not a bar's key");
+        // Leaving the page takes the keyboard from the bar.
+        page.deactivate();
+        assert_eq!(page.track_focus(), None);
+        assert!(!page.trackbar_key(&press("home", false)));
+    }
+
+    /// The values box typed into, a `DropDown` combo: the row whose text is typed, case aside,
+    /// is selected and recorded; text that names no row leaves none selected and puts the C#'s
+    /// `NullReferenceException` on the status line; leaving the box ends the typing.
+    /// `// C#: ExtLibs/Controls/ValuesControl.cs:33-41, 68-72`
+    #[test]
+    fn typing_into_a_values_box_selects_the_row_it_names() {
+        let mut page = Adsb::default();
+        page.activate(&configured(), &untyped, key(), bundled, &[]);
+        let index = page
+            .controls()
+            .iter()
+            .position(|c| c.name == "AVD_ENABLE")
+            .expect("AVD_ENABLE");
+        assert_eq!(page.controls()[index].kind_name(), "values");
+        assert_eq!(page.controls()[index].shown(), "Disabled");
+        page.begin_typing(index);
+        assert_eq!(page.typing(), Some(index));
+        assert_eq!(page.typed_text(), Some("Disabled"));
+        page.type_into("enabled");
+        assert_eq!(page.controls()[index].shown(), "Enabled");
+        assert_eq!(
+            page.changed().get("AVD_ENABLE").map(String::as_str),
+            Some("1")
+        );
+        assert_eq!(page.take_status(), None);
+        page.type_into("enabledx");
+        assert_eq!(page.controls()[index].shown(), "", "no row selected");
+        assert_eq!(page.take_status().as_deref(), Some(NULL_REFERENCE));
+        assert_eq!(
+            page.changed().get("AVD_ENABLE").map(String::as_str),
+            Some("1"),
+            "nothing recorded for no row"
+        );
+        page.type_into("Disabled");
+        assert_eq!(
+            page.changed().get("AVD_ENABLE").map(String::as_str),
+            Some("0")
+        );
+        page.leave();
+        assert_eq!(page.typing(), None);
+        // A number clicked into ends the typing too.
+        page.begin_typing(index);
+        page.begin(0);
+        assert_eq!(page.typing(), None);
+    }
+
+    /// `ProcessCmdKey`: Ctrl+S is Write Params, with its jobs - with nothing changed, the write
+    /// of nothing that `BUT_writePIDS_Click` ends with "Parameters successfully saved."; S alone
+    /// is not.
+    /// `// C#: GCSViews/ConfigurationView/ConfigADSB.cs:159-168, 179-205`
+    #[test]
+    fn ctrl_s_is_write_params() {
+        let mut page = Adsb::default();
+        page.activate(&configured(), &untyped, key(), bundled, &[]);
+        let nothing = page.chord(&press("s", true)).expect("Write Params");
+        assert_eq!(nothing.len(), 1);
+        assert!(nothing[0].sets.is_empty());
+        let index = page
+            .controls()
+            .iter()
+            .position(|c| c.name == "AVD_F_DIST_XY")
+            .unwrap_or(0);
+        page.step(index, true);
+        assert!(page.chord(&press("s", false)).is_none());
+        let jobs = page.chord(&press("s", true)).expect("Write Params");
+        assert_eq!(jobs.len(), 1);
+    }
+
+    /// `Value` narrowed to the parameter's type as the C# casts it: an INT8 mask with bit 7 set
+    /// is negative - "int8 255 = -1" - an INT16's bit 15, an INT32's bit 31; a REAL32's or an
+    /// unsigned type's is the sum as it is.
+    /// `// C#: Controls/MavlinkCheckBoxBitMask.cs:21-43`
+    #[test]
+    fn a_bitmask_is_narrowed_to_its_parameters_type() {
+        let bits: &[(u32, &str)] = &[(0, "a"), (7, "b"), (15, "c"), (31, "d")];
+        let value = |kind: ParamType| {
+            let mut mask = Bitmask::new(bits, 0.0, kind);
+            for bit in &mut mask.bits {
+                bit.2 = true;
+            }
+            mask.value()
+        };
+        assert_eq!(value(ParamType::Int8), -127.0);
+        assert_eq!(value(ParamType::Int16), -32_639.0);
+        assert_eq!(value(ParamType::Int32), -2_147_450_751.0);
+        assert_eq!(value(ParamType::Uint8), 2_147_516_545.0);
+        assert_eq!(value(ParamType::Real32), 2_147_516_545.0);
+        let eight: &[(u32, &str)] = &[
+            (0, "a"),
+            (1, "b"),
+            (2, "c"),
+            (3, "d"),
+            (4, "e"),
+            (5, "f"),
+            (6, "g"),
+            (7, "h"),
+        ];
+        assert_eq!(Bitmask::new(eight, 255.0, ParamType::Int8).value(), -1.0);
+        assert_eq!(Bitmask::new(eight, 255.0, ParamType::Uint8).value(), 255.0);
+        // The vehicle's -1 for an INT8 mask reads back as all eight bits.
+        let mask = Bitmask::new(eight, -1.0, ParamType::Int8);
+        assert!(mask.bits.iter().all(|(_, _, checked)| *checked));
+    }
+
     /// Showing the page again takes the vehicle's values; a bitmask whose bits changed writes
     /// each change as it makes it.
     #[test]
     fn showing_again_takes_the_vehicles_values_and_a_bitmask_writes() {
         let mut page = Adsb::default();
-        page.activate(&configured(), key(), bundled, &[]);
+        page.activate(&configured(), &untyped, key(), bundled, &[]);
         let mut later = configured();
         for (name, value) in &mut later {
             match name.as_str() {
@@ -2531,7 +3251,7 @@ mod tests {
                 _ => {}
             }
         }
-        let jobs = page.activate(&later, key(), bundled, &[]);
+        let jobs = page.activate(&later, &untyped, key(), bundled, &[]);
         assert_eq!(
             page.control("ADSB_TYPE").map(Control::shown).as_deref(),
             Some("Sagetech")
@@ -2554,7 +3274,7 @@ mod tests {
     #[test]
     fn find_filters_by_name_and_description() {
         let mut page = Adsb::default();
-        page.activate(&configured(), key(), bundled, &[]);
+        page.activate(&configured(), &untyped, key(), bundled, &[]);
         let total = page.controls().len();
         let now = Instant::now();
         page.open_find();
@@ -2636,7 +3356,7 @@ mod tests {
         let telemetry = Telemetry::idle();
         let view = TelemetryView::disconnected("test");
         let mut page = Adsb::default();
-        page.activate(&configured(), key(), bundled, &[]);
+        page.activate(&configured(), &untyped, key(), bundled, &[]);
         assert!(!page.press_refresh(false, &view, None));
         assert!(page.confirm.is_none(), "no link, no question");
         assert!(!page.press_refresh(true, &view, None), "asks first");
@@ -2674,7 +3394,7 @@ mod tests {
         let view = TelemetryView::disconnected("test");
         let mut settings = crate::settings::Persisted::at(None);
         let mut page = Adsb::default();
-        page.activate(&configured(), key(), bundled, &[]);
+        page.activate(&configured(), &untyped, key(), bundled, &[]);
         assert!(!page.press_refresh(true, &view, settings.get(SHOW_AGAIN_KEY)));
         assert!(page.confirming(), "asked while nothing is kept");
         if let Some(value) = page.toggle_show_again() {
@@ -2693,7 +3413,7 @@ mod tests {
             &crate::config::friendly_params::ADVANCED,
         ] {
             let mut next: Adsb = Adsb::new(spec);
-            next.activate(&configured(), key(), bundled, &[]);
+            next.activate(&configured(), &untyped, key(), bundled, &[]);
             assert!(
                 next.press_refresh(true, &view, settings.get(SHOW_AGAIN_KEY)),
                 "fetches at once"
@@ -2702,13 +3422,13 @@ mod tests {
         }
         // Ticked again: "True", and asked.
         let mut page = Adsb::default();
-        page.activate(&configured(), key(), bundled, &[]);
+        page.activate(&configured(), &untyped, key(), bundled, &[]);
         assert!(
             page.press_refresh(true, &view, Some("maybe")),
             "not a bool: false"
         );
         let mut page = Adsb::default();
-        page.activate(&configured(), key(), bundled, &[]);
+        page.activate(&configured(), &untyped, key(), bundled, &[]);
         settings.set(SHOW_AGAIN_KEY, "True");
         assert!(!page.press_refresh(true, &view, settings.get(SHOW_AGAIN_KEY)));
         assert_eq!(page.toggle_show_again(), Some("False"));

@@ -143,9 +143,12 @@ impl Mask {
             .map(|meta| meta.description)
             .unwrap_or_default()
             .to_owned();
+        // `INS_LOG_BAT_MASK`'s three bits never reach a sign bit, so the type the C# narrows
+        // the value to makes no difference here; `REAL32` is the C# field's start.
         self.bits = Some(Bitmask::new(
             meta.map_or(&[][..], |meta| meta.bitmask),
             value,
+            mp_params::ParamType::Real32,
         ));
     }
 }
@@ -169,6 +172,10 @@ pub struct Fft {
     pub log_bitmask: Mask,
     /// Whether the number is being typed into.
     editing: bool,
+    /// Whether the pointer holds the track bar's thumb.
+    dragging: bool,
+    /// Whether the track bar has the keyboard.
+    track_focus: bool,
     /// How many times FFT has opened the window.
     pub opened: usize,
     /// The FFT window, while it is open.
@@ -191,6 +198,8 @@ impl Default for Fft {
             mask: Mask::new(MASK),
             log_bitmask: Mask::new(LOG_BITMASK),
             editing: false,
+            dragging: false,
+            track_focus: false,
             opened: 0,
             window: None,
             messages: VecDeque::new(),
@@ -423,9 +432,56 @@ impl RangeHost for Fft {
             return;
         }
         self.leave();
+        self.track_focus = true;
         if self.count.as_mut().is_some_and(|range| range.page(up)) {
             self.count_changed();
         }
+    }
+
+    fn grab_thumb(&mut self, _index: usize) {
+        if !self.enabled || self.count.is_none() {
+            return;
+        }
+        self.leave();
+        self.dragging = true;
+        self.track_focus = true;
+    }
+
+    fn drag_thumb(&mut self, position: gpui::Point<gpui::Pixels>) {
+        if !self.dragging {
+            return;
+        }
+        let Some(range) = self.count.as_mut() else {
+            return;
+        };
+        let Some(fraction) = range.fraction_of(position) else {
+            return;
+        };
+        if range.drag(fraction) {
+            self.count_changed();
+        }
+    }
+
+    fn release_thumb(&mut self) {
+        self.dragging = false;
+    }
+
+    fn trackbar_key(&mut self, event: &KeyDownEvent) -> bool {
+        if !self.track_focus || !self.enabled {
+            return false;
+        }
+        let Some((handled, changed)) = self.count.as_mut().map(|range| range.trackbar_key(event))
+        else {
+            return false;
+        };
+        if changed {
+            self.count_changed();
+        }
+        handled
+    }
+
+    fn dragging(&self) -> Option<usize> {
+        self.dragging.then_some(0)
     }
 }
 
@@ -540,6 +596,7 @@ fn mask_element(
 pub fn page(
     fft: &Fft,
     number: &FocusHandle,
+    track: &FocusHandle,
     window: &Window,
     cx: &mut Context<MissionPlanner>,
 ) -> AnyElement {
@@ -593,6 +650,9 @@ pub fn page(
                     0,
                     width - 72.0,
                     access,
+                    fft.track_focus,
+                    track,
+                    window,
                     cx,
                 ))
                 .child(label(72.0, 90.0, range.lbl_min.clone(), true))

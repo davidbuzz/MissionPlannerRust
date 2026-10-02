@@ -1,5 +1,7 @@
 | Area or filename | Functional item | Priority | Progress |
 |---|---|---|---|
+| crates/mp-gui/src/mapview.rs | The flight map drew the vehicle as a red arrow (owner's bug report 2026-10-02: "looks like a mouse cursor, not like a quadcopter or plane or rover"); now Mission Planner's marker for the vehicle's type - the quad's motors and arms with its sysid, the plane's coloured outline, the rover, boat, heli, sub and single copter icons turned to the heading, the tracker's icon - with the heading, course, nav bearing and target lines and the Planner page's GMapMarkerBase settings, as Common.getMAVMarker and ExtLibs/Maps/GMapMarker*.cs have them | high | 90 |
+| crates/mp-gui/src/fly.rs | The flight map's right-click menu is absent (owner's bug report 2026-10-02): the port made a right click Fly To Here and put contextMenuStripMap's other entries in a row under the Actions grid; the menu with its thirteen entries and three drop-downs is owed over the map | high | 0 |
 | crates/mp-transport/src/win32.rs | Windows board detection: the port list takes SetupAPI's hardware id and bus-reported name as Win32DeviceMgmt reads them - Install Firmware found no board on Windows (owner's bug report 2026-09-26); committed 9a51796, the bench CubeOrange detected in the VM as board id 140 | high | 100 |
 | dist/ | Linux release app rebuilt at today's main (owner's ask): built 2026-09-26 14:25 at 962cd28, thin LTO and no debuginfo to fit beside the VM (fat LTO needs the VM off) | high | 100 |
 | crates/mp-gui/src/plotline.rs | Logs > PLOT drew a string of dots (owner's bug report 2026-09-26): every ZedGraph curve - the log browser's, the tuning graph's, the FFT screen's - as a line through its points, clipped, the FFT's diamonds; log-browse.gui passed headless (ATT.Roll one line of 182 points) | high | 100 |
@@ -17,8 +19,8 @@
 | crates/mp-video/src/gstreamer.rs | On Windows the HUD's and the gimbal's GStreamer pipelines gave no frames in the suite (fly-gstreamer, fly-gimbal-video): not the planner - GStreamer's first-run plugin scan outlasts a script's wait in the VM and a launcher stopped mid-scan writes no registry. The Windows runner builds the registry once, before the scripts; both passed from an empty registry 2026-09-27 | med | 100 |
 | crates/mp-gui/src/setup.rs | On Windows a click on the SETUP list in the first frames after the Serial page opens was lost one run in three (setup-list.gui probed 2026-09-26: 1 of 3 without a pause, 0 of 3 with one); the script now waits for the page's rows. Why the debug build drops it is not known | low | 10 |
 | crates/mp-gui/src/config/advanced.rs | Advanced page: eight of its thirteen windows to port - Follow Me, Moving Base and Anon Log are ruled out of scope (the last 2026-10-02: beta and not interesting), FFT and the MAVLink Inspector are done; the Inspector merged 2026-09-27 (its tree, rates, GCS traffic and Graph It over a packet subscription on the link; config-mavlink-inspector.gui passed headless against the SITL) | med | 45 |
-| crates/mp-gui/src/config/friendly_params.rs | Standard Params page remainder | med | 80 |
-| crates/mp-gui/src/config/friendly_params.rs | Advanced Params page remainder | med | 80 |
+| crates/mp-gui/src/config/friendly_params.rs | Standard Params page: the DropDown combo typed into (the exact-matching row, or none and the C#'s NullReferenceException text), Ctrl+S as Write Params, Refresh Params; config-standard-params.gui passed headless | med | 100 |
+| crates/mp-gui/src/config/friendly_params.rs | Advanced Params page: the track bar's thumb dragged and its keys (LargeChange and SmallChange 10), Ctrl+S; config-advanced-params.gui passed headless with the runner's new drag verb | med | 100 |
 | crates/mp-gui/src/config/mavftp.rs | MAVFtp page: remaining wirings of 16 | med | 60 |
 | crates/mp-gui/src/config | Sik Radio page (Radio/Sikradio.cs, 17 wirings) | med | 1 |
 | crates/mp-gui/src/config | DroneCAN/UAVCAN page (15 wirings) | med | 1 |
@@ -38,7 +40,7 @@
 | crates/mp-gui/src/plan.rs | Inject custom map button | low | 1 |
 | crates/mp-gui/src/plan.rs | KML link (lnk_kml) | low | 1 |
 | crates/mp-gui/src/config/firmware_legacy.rs | Install Firmware Legacy: remaining wirings of 20 | low | 70 |
-| crates/mp-gui/src/config/adsb.rs | ADSB page: remaining wirings of 5 | low | 70 |
+| crates/mp-gui/src/config/adsb.rs | ADSB page: its five wirings, the bitmask narrowed to the parameter's type, Ctrl+S; config-adsb.gui passed headless | low | 100 |
 | crates/mp-gui/src/config/optical_flow.rs | Optical Flow: remaining wirings | low | 70 |
 | crates/mp-gui/src/config/user_params.rs | User Params page remainder | low | 80 |
 | crates/mp-gui/src/config | Antenna Tracker page (Antenna/TrackerUI.cs) | low | 1 |
