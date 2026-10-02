@@ -11,14 +11,14 @@ Generated from `crates/mp-gui/src/config_coverage.rs` by `cargo test -p mp-gui
 
 | panels | done | partial | missing | plumbing | dropped | wirings |
 |---:|---:|---:|---:|---:|---:|---:|
-| 61 | 38 | 8 | 1 | 2 | 12 | 569 |
+| 61 | 39 | 8 | 0 | 2 | 12 | 569 |
 
 | group | panels | done | partial | missing | plumbing | dropped | wirings | wirings
         // in missing panels |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
 | SETUP, `InitialSetup.HardwareConfig_Load` | 44 | 29 | 6 | 0 | 2 | 7 | 258 |
         //     0 |
-| CONFIG, `SoftwareConfig.SoftwareConfig_Load` | 13 | 9 | 2 | 1 | 0 | 1 | 277 |
+| CONFIG, `SoftwareConfig.SoftwareConfig_Load` | 13 | 10 | 2 | 0 | 0 | 1 | 277 |
         //     0 |
 | neither list | 4 | 0 | 0 | 0 | 0 | 4 | 34 |
         //     0 |
@@ -31,7 +31,6 @@ The largest missing panels, by wirings:
 
 | panel | title | wirings |
 |---|---|---:|
-| `ConfigOSD` | Onboard OSD | 0 |
 
 Vehicles: **any** is a connected vehicle whose parameter list is whole
         // (`isConnected && gotAllParams`); **always** is connected or not; **connected** and
@@ -171,7 +170,7 @@ Vehicles: **any** is a connected vehicle whose parameter list is whole
 | 193 | `ConfigAntennaTracker` | Extended Tuning |  | tracker | 3 | as at `GCSViews/InitialSetup.cs:313` |
 | 198 | `ConfigFriendlyParams` | Standard Params |  | any, Custom view with Standard Params | 1 | done: `crates/mp-gui/src/config/friendly_params.rs` `fn page` |
 | 203 | `ConfigFriendlyParamsAdv` | Advanced Params |  | any, Custom view with Advanced Params and Advanced mode | no Designer | done: `crates/mp-gui/src/config/friendly_params.rs` `fn page` |
-| 208 | `ConfigOSD` | Onboard OSD |  | any with OSD parameters, not on Mono | 0 | **missing** |
+| 208 | `ConfigOSD` | Onboard OSD |  | any with OSD parameters, not on Mono | 0 | done: `crates/mp-gui/src/config/onboard_osd_ui.rs` `fn page` |
 | 215 | `MavFTPUI` (`Controls/MavFTPUI.cs`, not a panel) | MAVFtp |  | any reporting MAVLink FTP | 16 | done: `crates/mp-gui/src/config/mavftp.rs` `fn page` |
 | 221 | `ConfigUserDefined` | User Params |  | any | 0 | partial: `crates/mp-gui/src/config/user_params.rs` `fn page` - the UserParams list (or the C#'s 22 RC option names), a row for each name the
         //     vehicle has with a combo of its documented values writing it, Modify's multiline

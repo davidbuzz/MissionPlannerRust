@@ -1050,7 +1050,8 @@ impl MissionPlanner {
                 class @ ("ConfigFriendlyParams"
                 | "ConfigFriendlyParamsAdv"
                 | "MavFTPUI"
-                | "ConfigTradHeli4"),
+                | "ConfigTradHeli4"
+                | "ConfigOSD"),
             ) => self.software2_activate(class),
             // ---- end Standard / Advanced Params, MAVFtp, Heli Setup ----
             // ---- SETUP's small pages (row 70) ----
@@ -1188,7 +1189,8 @@ impl MissionPlanner {
                 class @ ("ConfigFriendlyParams"
                 | "ConfigFriendlyParamsAdv"
                 | "MavFTPUI"
-                | "ConfigTradHeli4"),
+                | "ConfigTradHeli4"
+                | "ConfigOSD"),
             ) => self.software2_deactivate(class),
             // ---- end Standard / Advanced Params, MAVFtp, Heli Setup ----
             // ---- SETUP's small pages (row 70) ----
@@ -1475,6 +1477,8 @@ impl MissionPlanner {
             "MavFTPUI" => self.software2_page(class, window, cx),
             // C#: GCSViews/ConfigurationView/ConfigTradHeli4.Designer.cs:29-1068
             "ConfigTradHeli4" => self.software2_page(class, window, cx),
+            // C#: GCSViews/ConfigurationView/ConfigOSD.Designer.cs:28-136; ExtLibs/OSDConfigurator/GUI
+            "ConfigOSD" => self.software2_page(class, window, cx),
             // ---- end Standard / Advanced Params, MAVFtp, Heli Setup ----
             // ---- SETUP's small pages (row 70) ----
             // C#: GCSViews/ConfigurationView/ConfigHWParachute.Designer.cs; ConfigHWOSD.resx;

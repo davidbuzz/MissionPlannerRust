@@ -1,0 +1,180 @@
+# The Onboard OSD page (CONFIG > Onboard OSD): GCSViews/ConfigurationView/ConfigOSD.cs over
+# ExtLibs/OSDConfigurator, ported in crates/mp-gui/src/config/onboard_osd*.rs.
+#
+# The claim, control by control: the page is listed over a vehicle with OSD parameters and
+# activates with every OSD* parameter as a setting and a tab a screen (ConfigOSD.cs:207-231,
+# ConfigFactory.cs); on the Settings tab OSD_FONT is a dropdown whose index is the value,
+# OSD_OPTIONS a bitwise box, OSD_H_OFFSET a spin box and OSD_MSG_TIME a text box
+# (OptionControlFactory.cs:40-66); on Screen 1 the enabled items are drawn on the 30x16 canvas of
+# 24x36 cells (Visualizer.cs), an item is selected from its list row or by a press on it, dragged
+# a cell at a time (LayoutControl.cs:453-484), its caption the OSD's symbols or its name with Show
+# Names, the canvas 12x18 cells with Decrease and 60x22 of 18x27 with HD Layout
+# (ScreenControl.cs:150-179); Copy Layout and Paste Layout carry the items between screens and
+# Clear All disables them (ScreenControl.cs:145-147, OSDItem.cs:52-73); Discard all changes asks
+# "Are you sure?", Refresh with changes asks "This will reset your changes. Continue?"
+# (ConfigOSD.cs:239-246, 302-307); Write customization writes each changed setting and the vehicle
+# holds them, which Refresh's fetch shows (ConfigOSD.cs:248-329); Screen 5's captions are the
+# parameters its slots are assigned, fetched with OSD_PARAM_SHOW_CONFIG, "(NOT SET)" for a slot
+# without one (ConfigOSD.cs:331-359, OsdTuningSlotProvider.cs); OSD / Telmetry Slots Config opens
+# the slots dialog, a row a slot, and Done & Refresh sends a changed row with OSD_PARAM_CONFIG and
+# refreshes (SetupDialog.cs, ItemControl.cs, ConfigOSD.cs:89-178); Auto write on leaving writes
+# the changes silently when another page is chosen (ConfigOSD.cs:233-237).
+#
+# Against tests/gui/osd-vehicle.py, a copter with AP_OSD's whole table and the slot protocol,
+# which the SITL copter has not got (it lists OSD_TYPE alone).
+#
+# Run as: tools/gui-test.sh tests/gui/config-onboard-osd.gui -- tcp:127.0.0.1:5791
+
+env MP_CONFIG_XML $WORK/config.xml
+env XDG_DATA_HOME $WORK
+setup python3 tests/gui/osd-vehicle.py --work $WORK --port 5791
+screen config
+window 1600x1200
+budget 39
+expect vehicle.count > 0
+expect params.held > 400
+expect config.pages ~ ConfigOSD
+
+click config-page-ConfigOSD
+expect config.onboard_osd.active true
+expect config.onboard_osd.screens 1,2,3,4,5,6
+expect config.onboard_osd.tab settings
+expect config.onboard_osd.settings > 400
+expect config.onboard_osd.changed 0
+
+# The Settings tab: a dropdown, a bitwise box, a spin box and a text box.
+click osd-set-OSD_FONT
+click osd-set-OSD_FONT-3
+expect config.onboard_osd.values ~ OSD_FONT=3
+click osd-set-OSD_OPTIONS-bit-1
+expect config.onboard_osd.values ~ OSD_OPTIONS=3
+click osd-set-OSD_H_OFFSET-up
+expect config.onboard_osd.values ~ OSD_H_OFFSET=19
+click osd-set-OSD_MSG_TIME
+key BackSpace
+key BackSpace
+type 12
+key Return
+expect config.onboard_osd.values ~ OSD_MSG_TIME=12
+expect config.onboard_osd.changed 4
+
+# Screen 1: eleven items drawn on the 720x576 canvas, 360x288 with Decrease ticked - which the
+# rest of the screen's checks run under, so the whole item list is in view (the C#'s column
+# scrolls); ALTITUDE selected from its row, HOME by a press on it; ALTITUDE dragged from cell 25
+# (its caption sits two cells right of its X) to the left: X 23 to 13.
+click osd-tab-screen-1
+expect config.onboard_osd.tab Screen 1
+expect config.onboard_osd.canvas 720x576
+expect config.onboard_osd.drawn 11
+click osd-decrease
+expect config.onboard_osd.canvas 360x288
+click osd-item-ALTITUDE
+expect config.onboard_osd.selected ALTITUDE
+expect config.onboard_osd.caption ~ @-2
+click osd-layout@0.583x0.094
+expect config.onboard_osd.selected HOME
+drag osd-layout@0.883x0.531 osd-layout@0.55x0.531
+expect config.onboard_osd.selected ALTITUDE
+expect config.onboard_osd.items ~ ALTITUDE=1:13,8
+
+# An item's check box enables it; Show Names; HD Layout, then both boxes cleared again.
+click osd-item-WIND-check
+expect config.onboard_osd.drawn 12
+expect config.onboard_osd.selected ALTITUDE
+click osd-names
+expect config.onboard_osd.caption ALTITUDE@0
+click osd-names
+expect config.onboard_osd.caption ~ @-2
+click osd-hd
+expect config.onboard_osd.canvas 720x396
+click osd-hd
+click osd-decrease
+expect config.onboard_osd.canvas 720x576
+
+# The selected item's X spin box in Item Options.
+click osd-set-OSD1_ALTITUDE_X-up
+expect config.onboard_osd.items ~ ALTITUDE=1:14,8
+
+# Copy Layout on screen 1, Paste Layout on screen 2, Clear All there.
+click osd-copy
+expect config.onboard_osd.copied Screen 1
+click osd-tab-screen-2
+expect config.onboard_osd.tab Screen 2
+expect config.onboard_osd.drawn 0
+click osd-paste
+expect config.onboard_osd.drawn 12
+expect config.onboard_osd.items ~ ALTITUDE=1:14,8
+click osd-clear-all
+expect config.onboard_osd.drawn 0
+
+# Discard asks and Cancel keeps; Refresh with changes asks and No keeps.
+click osd-discard
+expect config.onboard_osd.question discard
+click osd-question-no
+expect config.onboard_osd.question none
+expect config.onboard_osd.changed > 4
+click osd-refresh
+expect config.onboard_osd.question reset
+click osd-question-no
+expect config.onboard_osd.question none
+
+# Write customization: every change written and cleared; Refresh fetches the list again and the
+# vehicle has them.
+click osd-write
+within 20
+expect config.onboard_osd.changed 0
+expect config.onboard_osd.writing false
+click osd-refresh
+within 20
+expect config.onboard_osd.refreshing false
+expect config.onboard_osd.tab settings
+click osd-tab-screen-1
+expect config.onboard_osd.items ~ ALTITUDE=1:14,8
+expect config.onboard_osd.items ~ WIND=1:2,12
+
+# Screen 5: the slot names fetched for its captions.
+click osd-tab-screen-5
+within 15
+expect config.onboard_osd.slots.fetched true
+expect config.onboard_osd.slots.names ~ 5:1=RTL_ALT
+expect config.onboard_osd.slots.names ~ 6:1=FLTMODE1
+click osd-item-PARAM1
+expect config.onboard_osd.caption RTL_ALT@0
+click osd-item-PARAM3
+expect config.onboard_osd.caption PARAM3 (NOT SET)@0
+
+# The slots dialog: slot 5:3 assigned ARMING_CHECK, Done & Refresh sends it and refreshes, and
+# the names fetched again show it.
+click osd-slots
+within 15
+expect config.onboard_osd.slots.dialog true
+expect config.onboard_osd.slots.rows 18
+expect config.onboard_osd.slots.row_values ~ 5:1=RTL_ALT/0/0/10000/100
+click osd-slot-5-3-name
+reveal osd-slot-5-3-name-list osd-slot-5-3-name-2
+click osd-slot-5-3-name-2
+expect config.onboard_osd.slots.row_values ~ 5:3=ARMING_CHECK/0/0/1/0.001
+click osd-slots-done
+expect config.onboard_osd.slots.dialog false
+within 15
+expect config.onboard_osd.slots.phase idle
+expect config.onboard_osd.slots.changes 1
+within 20
+expect config.onboard_osd.refreshing false
+click osd-tab-screen-5
+within 15
+expect config.onboard_osd.slots.names ~ 5:3=ARMING_CHECK
+
+# Auto write on leaving: a change made, another page chosen, the page back with nothing left to
+# write and the vehicle holding it.
+click osd-tab-screen-1
+click osd-item-THROTTLE-check
+expect config.onboard_osd.changed 1
+click config-page-ConfigPlanner
+expect config.onboard_osd.active false
+click config-page-ConfigOSD
+expect config.onboard_osd.active true
+within 20
+expect config.onboard_osd.changed 0
+click osd-tab-screen-1
+expect config.onboard_osd.items ~ THROTTLE=1:24,11

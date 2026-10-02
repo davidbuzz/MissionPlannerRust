@@ -972,7 +972,13 @@ pub const PANELS: &[Panel] = &[
             "Onboard OSD",
             "any with OSD parameters, not on Mono",
         )],
-        Missing,
+        // The page over ExtLibs/OSDConfigurator: every OSD* parameter a setting, a tab a screen
+        // of items drawn with the Clarity font and dragged on the canvas, the option rows, Copy
+        // and Paste Layout, Show Names, Decrease and HD Layout, Write customization, Auto write
+        // on leaving, Discard, Refresh with its questions, and the OSD5/6 slots dialog over
+        // OSD_PARAM_SHOW_CONFIG and OSD_PARAM_CONFIG (onboard_osd.rs, onboard_osd_slots.rs,
+        // onboard_osd_ui.rs).
+        Ours::Done(at("crates/mp-gui/src/config/onboard_osd_ui.rs", "fn page")),
     ),
     panel(
         "ConfigUserDefined",
@@ -1879,7 +1885,7 @@ mod tests {
             );
             checked += 1;
         }
-        assert_eq!(checked, 49);
+        assert_eq!(checked, 50);
     }
 
     /// The committed report matches the table.
@@ -1911,7 +1917,7 @@ mod tests {
         );
         assert_eq!(
             (done, partial, missing, plumbing, dropped),
-            (38, 8, 1, 2, 12)
+            (39, 8, 0, 2, 12)
         );
         let by_group: Vec<usize> = [Some(Screen::Setup), Some(Screen::Config), None]
             .iter()

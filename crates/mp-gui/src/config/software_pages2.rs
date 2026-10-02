@@ -18,7 +18,7 @@ use gpui::{AnyElement, Context, FocusHandle, Window, div, prelude::*};
 
 use super::adsb::{self, Access, Adsb};
 use super::extra_setup::{link_error, status_words};
-use super::{friendly_params, mavftp, trad_heli};
+use super::{friendly_params, mavftp, onboard_osd, onboard_osd_ui, trad_heli};
 use crate::MissionPlanner;
 use crate::setup::Key;
 use crate::telemetry::TelemetryView;
@@ -34,6 +34,8 @@ pub struct SoftwarePages2 {
     pub mavftp: mavftp::MavFtp,
     /// Heli Setup.
     pub heli: trad_heli::TradHeli,
+    /// Onboard OSD.
+    pub onboard_osd: onboard_osd::OnboardOsd,
 }
 
 impl Default for SoftwarePages2 {
@@ -43,6 +45,7 @@ impl Default for SoftwarePages2 {
             advanced: friendly_params::advanced_page(),
             mavftp: mavftp::MavFtp::default(),
             heli: trad_heli::TradHeli::default(),
+            onboard_osd: onboard_osd::OnboardOsd::default(),
         }
     }
 }
@@ -59,6 +62,8 @@ pub struct Focus {
     pub page: FocusHandle,
     /// A `RangeControl`'s track bar, for its keys.
     pub track: FocusHandle,
+    /// An Onboard OSD text box being typed into.
+    pub osd_text: FocusHandle,
 }
 
 impl Focus {
@@ -70,6 +75,7 @@ impl Focus {
             rename: cx.focus_handle(),
             page: cx.focus_handle(),
             track: cx.focus_handle(),
+            osd_text: cx.focus_handle(),
         }
     }
 }
@@ -90,6 +96,7 @@ pub fn record_facts(pages: &SoftwarePages2, view: &TelemetryView) {
     adsb::record_facts(&pages.advanced, view);
     mavftp::record_facts(&pages.mavftp);
     trad_heli::record_facts(&pages.heli, view);
+    onboard_osd::record_facts(&pages.onboard_osd, view);
     crate::display_view::record_facts();
 }
 
@@ -126,6 +133,8 @@ impl MissionPlanner {
                 let jobs = pages.heli.activate(&view.parameters, key, lookup);
                 pages.heli.push(jobs);
             }
+            // C#: GCSViews/ConfigurationView/ConfigOSD.cs:219-231
+            onboard_osd::CLASS => pages.onboard_osd.activate(&view.parameters),
             _ => {}
         }
     }
@@ -142,6 +151,15 @@ impl MissionPlanner {
             trad_heli::CLASS => {
                 let jobs = pages.heli.deactivate(Instant::now());
                 pages.heli.push(jobs);
+            }
+            // C#: GCSViews/ConfigurationView/ConfigOSD.cs:233-237
+            onboard_osd::CLASS => {
+                let view = self.telemetry.view();
+                let connected = view.connected && view.vehicle.is_some();
+                let telemetry = &self.telemetry;
+                self.software_pages2
+                    .onboard_osd
+                    .deactivate(telemetry, connected);
             }
             _ => {}
         }
@@ -185,6 +203,13 @@ impl MissionPlanner {
             }
             mavftp::CLASS => mavftp::page(&pages.mavftp, &focus.rename, window, cx),
             trad_heli::CLASS => trad_heli::page(&pages.heli, &focus.number, window, cx),
+            onboard_osd::CLASS => onboard_osd_ui::page(
+                &pages.onboard_osd,
+                &focus.number,
+                &focus.osd_text,
+                window,
+                cx,
+            ),
             _ => div().into_any_element(),
         }
     }
@@ -205,6 +230,7 @@ impl MissionPlanner {
         pages
             .heli
             .tick(telemetry, view, on_setup, number_focused, now);
+        pages.onboard_osd.tick(telemetry, view, now);
         // The two parameter pages move their link failures out of their boxes themselves, in
         // their tick (`adsb.rs`); the words are taken here.
         let mut status = pages.standard.take_status();
@@ -217,6 +243,9 @@ impl MissionPlanner {
         }
         while let Some(line) = pages.mavftp.take_status_line() {
             status = Some(line.replace("\r\n", " ").replace('\n', " "));
+        }
+        if let Some(words) = pages.onboard_osd.take_status() {
+            status = Some(words);
         }
         if status.is_some() {
             self.file_status = status;
@@ -235,5 +264,6 @@ impl MissionPlanner {
             .or_else(|| adsb::list_overlay(&pages.advanced, advanced, prompt, window, cx))
             .or_else(|| mavftp::overlay(&pages.mavftp, prompt, window, cx))
             .or_else(|| trad_heli::overlay(&pages.heli, window, cx))
+            .or_else(|| onboard_osd_ui::overlay(&pages.onboard_osd, &self.software2_focus.osd_text, window, cx))
     }
 }
