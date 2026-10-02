@@ -1065,7 +1065,8 @@ impl MissionPlanner {
                 | "ConfigHWIDs"
                 | "ConfigCompassMot"
                 | "ConfigInitialParams"
-                | "ConfigFFT"),
+                | "ConfigFFT"
+                | "Sikradio"),
             ) => self.extra_setup_activate(class),
             // C#: GCSViews/ConfigurationView/ConfigDroneCAN.cs:39-57
             Some("ConfigDroneCAN") => self.extra_setup_activate("ConfigDroneCAN"),
@@ -1201,7 +1202,8 @@ impl MissionPlanner {
                 | "ConfigHWIDs"
                 | "ConfigCompassMot"
                 | "ConfigInitialParams"
-                | "ConfigFFT"),
+                | "ConfigFFT"
+                | "Sikradio"),
             ) => self.extra_setup_deactivate(class),
             // C#: GCSViews/ConfigurationView/ConfigDroneCAN.cs:680-684
             Some("ConfigDroneCAN") => self.extra_setup_deactivate("ConfigDroneCAN"),
@@ -1488,6 +1490,8 @@ impl MissionPlanner {
             "ConfigFFT" => self.extra_setup_page(class, window, cx),
             // C#: GCSViews/ConfigurationView/ConfigDroneCAN.Designer.cs:29-695
             "ConfigDroneCAN" => self.extra_setup_page(class, window, cx),
+            // C#: Radio/Sikradio.Designer.cs and Sikradio.resx
+            "Sikradio" => self.extra_setup_page(class, window, cx),
             // ---- end SETUP's small pages ----
             // ---- RTK/GPS Inject ----
             // C#: GCSViews/ConfigurationView/ConfigSerialInjectGPS.Designer.cs:29-783;

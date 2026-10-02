@@ -23,8 +23,8 @@ Generated from `crates/mp-gui/src/config_coverage.rs` by `cargo test -p mp-gui
 | neither list | 4 | 0 | 0 | 0 | 0 | 4 | 34 |
         //     0 |
 
-The lists also add 4 pages that are not in `ConfigurationView/` (`Sikradio`, `JoystickSetup`, `TrackerUI`, `MavFTPUI`): 1 done,
-        // 1 partial, 2 missing, 0 plumbing, 0 dropped. They are
+The lists also add 4 pages that are not in `ConfigurationView/` (`Sikradio`, `JoystickSetup`, `TrackerUI`, `MavFTPUI`): 2 done,
+        // 1 partial, 1 missing, 0 plumbing, 0 dropped. They are
         // in the lists below and not in the counts above.
 
 The largest missing panels, by wirings:
@@ -94,7 +94,7 @@ Vehicles: **any** is a connected vehicle whose parameter list is whole
         //     port name .NET's SerialPort refuses, is not needed: SerialTransport opens those
         //     names first time (rtk_inject.rs's module note) |
 | 254 | `ConfigCubeID` | CubeID Update | Optional Hardware | connected | 2 | dropped: ruled out of the port by the owner, 2026-09-25 (PLAN §12 D13) |
-| 259 | `Sikradio` (`Radio/Sikradio.cs`, not a panel) | Sik Radio | Optional Hardware | always | 17 | **missing** |
+| 259 | `Sikradio` (`Radio/Sikradio.cs`, not a panel) | Sik Radio | Optional Hardware | always | 17 | done: `crates/mp-gui/src/config/sikradio.rs` `fn page` |
 | 263 | `ConfigADSB` | ADSB | Mandatory Hardware | any | 5 | done: `crates/mp-gui/src/config/adsb.rs` `fn page` |
 | 266 | `ConfigGPSOrder` | CAN GPS Order | Optional Hardware | any | 1 | done: `crates/mp-gui/src/config/gps_order.rs` `fn page` |
 | 270 | `ConfigBatteryMonitoring` | Battery Monitor | Optional Hardware | any | 13 | done: `crates/mp-gui/src/config/battery_monitor.rs` `fn page` |

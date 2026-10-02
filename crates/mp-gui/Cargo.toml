@@ -60,6 +60,8 @@ base64.workspace = true
 # (config/auth_keys.rs).
 aes.workspace = true
 cbc.workspace = true
+# SETUP's Sik Radio page: the AT commands, the settings and the firmware upload of a SiK radio.
+mp-sikradio.workspace = true
 # The Planner page's Video Device and Video Format, Start and Stop, and the frame under the HUD:
 # WebCamService.Capture's part, over V4L2 on Linux.
 mp-video.workspace = true

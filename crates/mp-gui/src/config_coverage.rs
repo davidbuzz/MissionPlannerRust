@@ -1092,7 +1092,10 @@ pub const OTHER_PAGES: &[Panel] = &[
         "Radio/Sikradio.cs",
         Some(17),
         &[setup(259, "Sik Radio", OPTIONAL, ALWAYS)],
-        Missing,
+        // C#: Radio/Sikradio.cs over SikRadio/RFD900.cs, SikRadio/RFDLib/, Radio/Uploader.cs,
+        // IHex.cs, XModem.cs, ComPort.cs and Models.cs (crates/mp-sikradio); BUT_upload is
+        // invisible in Sikradio.resx and is not drawn.
+        Ours::Done(at("crates/mp-gui/src/config/sikradio.rs", "fn page")),
     ),
     panel(
         "JoystickSetup",
@@ -1868,7 +1871,7 @@ mod tests {
             );
             checked += 1;
         }
-        assert_eq!(checked, 48);
+        assert_eq!(checked, 49);
     }
 
     /// The committed report matches the table.

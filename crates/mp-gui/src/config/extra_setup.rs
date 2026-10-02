@@ -16,7 +16,7 @@ use gpui::{AnyElement, Context, FocusHandle, Window, div, prelude::*};
 
 use super::{
     auth_keys, compass_mot, fft, gps_order, hw_ids, initial_params, mavlink_inspector, osd,
-    parachute, proximity, spectrogram, support_proxy, warnings_manager,
+    parachute, proximity, sikradio, spectrogram, support_proxy, warnings_manager,
 };
 use crate::MissionPlanner;
 use crate::config::servo_output::{ERROR_TITLE, Message};
@@ -101,6 +101,8 @@ pub struct ExtraSetup {
     pub support_proxy: support_proxy::SupportProxy,
     /// DroneCAN/UAVCAN (`config/dronecan.rs`).
     pub dronecan: super::dronecan::DroneCan,
+    /// Sik Radio (`config/sikradio.rs`).
+    pub sikradio: sikradio::SikRadio,
 }
 
 /// The keyboard focus of the pages' boxes: Parachute's number being typed into, and Initial
@@ -132,6 +134,8 @@ pub struct Focus {
     pub spectrogram: spectrogram::FocusHandles,
     /// The Support Proxy's server and number.
     pub support_proxy: support_proxy::FocusHandles,
+    /// Sik Radio's key boxes and its dialogs.
+    pub sikradio: FocusHandle,
 }
 
 impl Focus {
@@ -151,6 +155,7 @@ impl Focus {
             auth_keys_prompt: cx.focus_handle(),
             spectrogram: spectrogram::FocusHandles::new(cx),
             support_proxy: support_proxy::FocusHandles::new(cx),
+            sikradio: cx.focus_handle(),
         }
     }
 }
@@ -171,6 +176,7 @@ pub fn record_facts(pages: &ExtraSetup, view: &TelemetryView) {
     spectrogram::record_facts(&pages.spectrogram);
     support_proxy::record_facts(&pages.support_proxy);
     super::dronecan::record_facts(&pages.dronecan);
+    sikradio::record_facts(&pages.sikradio);
 }
 
 impl MissionPlanner {
@@ -205,6 +211,8 @@ impl MissionPlanner {
             }
             // C#: GCSViews/ConfigurationView/ConfigDroneCAN.cs:39-57
             "ConfigDroneCAN" => self.dronecan_activate(),
+            // `Sikradio` is no `IActivate`: shown, made the first time.
+            "Sikradio" => self.extra.sikradio.activate(),
             _ => {}
         }
     }
@@ -225,6 +233,7 @@ impl MissionPlanner {
             "ConfigFFT" => self.extra.fft.hide(),
             // C#: GCSViews/ConfigurationView/ConfigDroneCAN.cs:680-684
             "ConfigDroneCAN" => self.extra.dronecan.deactivate(),
+            "Sikradio" => self.extra.sikradio.hide(),
             _ => {}
         }
     }
@@ -247,6 +256,7 @@ impl MissionPlanner {
             "ConfigInitialParams" => initial_params::page(&pages.initial_params, focus, window, cx),
             "ConfigFFT" => fft::page(&pages.fft, &focus.number, &focus.fft_track, window, cx),
             "ConfigDroneCAN" => super::dronecan::page(&pages.dronecan, cx),
+            "Sikradio" => sikradio::page(&pages.sikradio, &focus.sikradio, window, cx),
             _ => div().into_any_element(),
         }
     }
@@ -255,6 +265,7 @@ impl MissionPlanner {
     /// the timers, the calibration's statuses, and the writes.
     pub(crate) fn extra_setup_tick(&mut self, view: &TelemetryView, window: &Window) {
         let on_setup = self.screen == crate::Screen::Setup;
+        self.sikradio_tick(on_setup);
         // `logreadmode`, for the proximity window's clock.
         let replaying = self.fly_data.playback.playing();
         let now = Instant::now();
@@ -407,6 +418,7 @@ impl MissionPlanner {
             .or_else(|| compass_mot::overlay(&pages.compass_mot, window, cx))
             .or_else(|| initial_params::overlay(&pages.initial_params, window, cx))
             .or_else(|| super::dronecan::overlay(&pages.dronecan, window, cx))
+            .or_else(|| sikradio::overlay(&pages.sikradio, &focus.sikradio, window, cx))
     }
 }
 

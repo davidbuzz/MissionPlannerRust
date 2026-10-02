@@ -1,0 +1,174 @@
+# Initial Setup's Sik Radio page (Optional Hardware), ported from Radio/Sikradio.cs over
+# SikRadio/RFD900.cs, Radio/Uploader.cs and Radio/IHex.cs.
+#
+# The claims: the page is listed and laid out as Sikradio.resx lays it out - Upload Firmware
+# (standard) invisible, as nothing shows it; Load Settings closes the window's link and opens the
+# page's own port - the link being TCP, a TcpSerial that asks "remote host" and "remote Port" with
+# the link's own answers filled in (Radio/ComPort.cs:10-20, Radio/Sikradio.cs:236-244,
+# CommsTCPSerial.cs:117-143) - then reads both radios: ATI, ATI3, ATI2, the key, ATI7, ATI5 and
+# ATI5?'s ranges, RTI and the remote radio's the same, and leaves them in transparent mode
+# (Sikradio.cs:1467-1903); a setting the page has no control for borrows a spare one (MANCHESTER,
+# GPI1_1R_CIN's check box: RFDLib/GUI/Settings.cs:115-154); Status Leds and the progress bar's
+# click show their boxes (Sikradio.cs:2090-2097, 2332-2336); Copy required to remote copies the
+# local Net ID to the remote radio (:2076-2088); Save Settings writes both radios, which a second
+# Load Settings reads back (:849-1013); Save to File writes the settings and Load from File reads
+# a file's into the controls (:2632-2720); Reset to Defaults puts both radios back (:2108-2165);
+# Upload Firmware (custom) asks for the file with the model's filter and programs it over the SiK
+# bootloader (:2248-2314, RFD900.cs:1795-1824, 2012-2029, Uploader.cs:86-178); leaving SETUP puts
+# the radio back in transparent mode and closes the port (:278-292).
+#
+# Runs against tests/gui/sik-radio.py, an RFD900+ with a remote one, as the link: the setup line
+# starts it, and it writes $WORK/rfd900p.hex, the firmware uploaded. The radio's guard times make
+# a load or a save take several seconds, hence the `within`s.
+#
+# Run as: tools/gui-test.sh tests/gui/config-sikradio.gui -- tcp:127.0.0.1:5795
+
+env MP_CONFIG_XML $WORK/config.xml
+env XDG_DATA_HOME $WORK
+setup python3 tests/gui/sik-radio.py --work $WORK --port 5795
+setup printf 'NETID = 33\n; a comment\nNOT_A_SETTING = 1\n' > "$WORK/netid.ini"
+
+screen setup
+window 1600x1200
+budget 88
+# A first budget, set by hand until a passing run records one.
+
+expect setup.pages ~ Sikradio
+expect config.sikradio.active false
+click setup-page-ConfigOptional
+click setup-page-Sikradio
+expect setup.page Sikradio
+expect config.sikradio.active true
+
+# As the Designer leaves it: Upload Firmware (standard) invisible, Save Settings and Copy required
+# to remote disabled, the note in the status.
+expect config.sikradio.BUT_upload.visible false
+expect config.sikradio.BUT_getcurrent.enabled true
+expect config.sikradio.BUT_savesettings.enabled false
+expect config.sikradio.BUT_Syncoptions.enabled false
+expect config.sikradio.NODEID.visible false
+expect config.sikradio.status ~ NOTE: Always click "Copy required to remote"
+expect config.sikradio.port none
+
+# Status Leds and the progress bar's beta.
+click sikradio-linkLabel1
+expect config.sikradio.message ~ The Sik Radios have 2 status LEDs
+click sikradio-message-ok
+expect config.sikradio.message none
+click sikradio-Progressbar
+expect config.sikradio.message Beta set to True
+click sikradio-message-ok
+expect config.sikradio.beta true
+
+# Load Settings: the window's link closed, the TCP port's two questions, then both radios read.
+click sikradio-BUT_getcurrent
+expect config.sikradio.prompt remote host
+click sikradio-input-ok
+expect config.sikradio.prompt remote Port
+click sikradio-input-ok
+expect config.sikradio.prompt none
+expect config.sikradio.port tcp:127.0.0.1:5795
+within 40
+expect config.sikradio.busy none
+expect config.sikradio.status Done
+expect config.sikradio.mode TRANSPARENT
+expect config.sikradio.ATI.text RFD SiK 2.65 on RFD900P
+expect config.sikradio.ATI2.text DEVICE_ID_RFD900P
+expect config.sikradio.ATI3.text FREQ_915
+expect config.sikradio.txtCountry.text --
+expect config.sikradio.RSSI.text ~ L/R RSSI: 210/198
+expect config.sikradio.FORMAT.text 25
+expect config.sikradio.SERIAL_SPEED.text 57600
+expect config.sikradio.AIR_SPEED.text 64
+expect config.sikradio.NETID.text 25
+expect config.sikradio.TXPOWER.text 30
+expect config.sikradio.MAVLINK.text Mavlink
+expect config.sikradio.MIN_FREQ.text 915000
+expect config.sikradio.MAX_WINDOW.text 131
+expect config.sikradio.ENCRYPTION_LEVEL.text Off
+expect config.sikradio.OPPRESEND.checked true
+expect config.sikradio.ECC.checked false
+expect config.sikradio.AESKEY.text 00000000000000000000000000000000
+# MANCHESTER has no control of its own: it takes the first spare check box's, GPI1_1R/CIN's.
+expect config.sikradio.GPI1_1R_CIN.name MANCHESTER
+expect config.sikradio.lblGPI1_1R_CIN.text MANCHESTER
+expect config.sikradio.RTI.text RFD SiK 2.65 on RFD900P
+expect config.sikradio.RTI2.text DEVICE_ID_RFD900P
+expect config.sikradio.RNETID.text 25
+expect config.sikradio.local.enabled true
+expect config.sikradio.remote.enabled true
+expect config.sikradio.BUT_savesettings.enabled true
+expect config.sikradio.BUT_Syncoptions.enabled true
+expect config.sikradio.BUT_SetPPMFailSafe.enabled false
+
+# Net ID 28 chosen for the local radio, copied to the remote one, both saved.
+click sikradio-NETID
+click sikradio-NETID-28
+expect config.sikradio.NETID.text 28
+expect config.sikradio.RNETID.text 25
+click sikradio-BUT_Syncoptions
+expect config.sikradio.RNETID.text 28
+click sikradio-BUT_savesettings
+within 40
+expect config.sikradio.busy none
+expect config.sikradio.status Done
+expect config.sikradio.mode AT_COMMAND
+
+# Read back from both radios.
+click sikradio-BUT_getcurrent
+within 40
+expect config.sikradio.busy none
+expect config.sikradio.status Done
+expect config.sikradio.NETID.text 28
+expect config.sikradio.RNETID.text 28
+
+# Save to File: the local radio's settings written.
+click sikradio-btnSaveToFile
+expect config.sikradio.prompt Save As INI Files|*.ini
+type $WORK/local.ini
+key Return
+expect config.sikradio.prompt none
+expect config.sikradio.message Saved settings to $WORK/local.ini OK
+click sikradio-message-ok
+
+# Load from File: a file's Net ID in the control, and the box saying what was loaded.
+click sikradio-btnLoadFromFile
+expect config.sikradio.prompt Open INI Files|*.ini
+type $WORK/netid.ini
+key Return
+expect config.sikradio.prompt none
+expect config.sikradio.message Loaded NETID = 33 from $WORK/netid.ini OK
+click sikradio-message-ok
+expect config.sikradio.NETID.text 33
+
+# Reset to Defaults: both radios' factory settings, read back.
+click sikradio-BUT_resettodefault
+within 40
+expect config.sikradio.busy none
+click sikradio-BUT_getcurrent
+within 40
+expect config.sikradio.busy none
+expect config.sikradio.NETID.text 25
+expect config.sikradio.RNETID.text 25
+
+# Upload Firmware (custom): the file asked for with the RFD900+'s filter, programmed over the SiK
+# bootloader; Save Settings disabled after, as ProgramFirmware leaves it.
+click sikradio-BUT_loadcustom
+within 20
+expect config.sikradio.prompt Open Firmware|*.hex;*.ihx
+click sikradio-path-value
+type $WORK/rfd900p.hex
+key Return
+within 40
+expect config.sikradio.busy none
+expect config.sikradio.status Programmed firmware into device
+expect config.sikradio.progress 100
+expect config.sikradio.mode ended
+expect config.sikradio.BUT_savesettings.enabled false
+expect config.sikradio.BUT_loadcustom.enabled true
+
+# Another screen: the page goes, the radio left transparent and the port closed.
+click tab-config
+expect config.sikradio.active false
+within 20
+expect config.sikradio.port none

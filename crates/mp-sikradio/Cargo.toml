@@ -1,0 +1,13 @@
+[package]
+name = "mp-sikradio"
+description = "SiK telemetry radios: the AT command protocol, the settings and the firmware upload of SETUP's Sik Radio page"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]

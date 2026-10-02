@@ -4560,6 +4560,7 @@ dependencies = [
  "mp-plugin-host",
  "mp-script",
  "mp-settings",
+ "mp-sikradio",
  "mp-terrain",
  "mp-tiles",
  "mp-transport",
@@ -4695,6 +4696,10 @@ dependencies = [
  "roxmltree 0.20.0",
  "thiserror 2.0.20",
 ]
+
+[[package]]
+name = "mp-sikradio"
+version = "0.1.0"
 
 [[package]]
 name = "mp-terrain"
