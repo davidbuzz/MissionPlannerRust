@@ -46,7 +46,7 @@
 | crates/mp-gui/src/config/user_params.rs | User Params: the whole page since 2026-09-26 (the list or the 22 RC option names, the combos writing their parameters, Modify's InputBox with the C#'s Cancel quirk kept); the row was not moved when the page was finished; the coverage entry is Done since 2026-10-03 | low | 100 |
 | crates/mp-gui/src/config | Antenna Tracker page (Antenna/TrackerUI.cs): out of scope at the owner's word - PLAN.md section 12 D13 (2026-09-25) lists the Antenna Tracker (Antenna/, ConfigAntennaTracker, TrackerUI) among the features ruled out, and the ledger has its ten files dropped with that reason; nothing to port unless the ruling changes | low | 1 |
 | crates/mp-gui/src/config | Mandatory and Optional Hardware heading panels' text: both sentences at label1's place since 2026-09-26 (setup.rs heading_page, ConfigMandatory.resx and ConfigOptional.resx); the row was not moved then | low | 100 |
-| crates/mp-log | ulog reading | low | 1 |
+| crates/mp-log | ulog reading: not ported under D16 (2026-10-03) - ExtLibs/Utilities/ULog.cs has no caller in the C# tree, the only other mention being MAV_CMD.LOGGING_START's doc comment; the ledger row is dropped with that reason. A .ulg reader would be a feature Mission Planner does not have | low | 1 |
 | tools/sitl/wasm | Node bridge from the WASM SITL's SERIAL0 to tcp:5760 | low | 40 |
 | CI, macOS | First macOS run of the application | low | 5 |
 | DELIVERABLES D18 | Translation factory beyond the ledger | low | 30 |
