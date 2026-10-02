@@ -182,9 +182,9 @@ pub const OUT_OF_RANGE: &str = super::fftui::OUT_OF_RANGE;
 /// `// C#: Controls/MAVLinkInspector.cs:192`
 const CHAR_WIDTH: f32 = 7.0;
 /// A tree row: the font's height and the tree's padding, `ItemHeight`'s default for it.
-const ROW_HEIGHT: f32 = 16.0;
+pub(crate) const ROW_HEIGHT: f32 = 16.0;
 /// `TreeView.Indent`'s default: how far each level is set in.
-const INDENT: f32 = 19.0;
+pub(crate) const INDENT: f32 = 19.0;
 
 // ---------------------------------------------------------------------------------------------
 // The tree.
@@ -207,7 +207,7 @@ pub struct Node {
 /// `Nodes.Find(name, false)`, or a new node of `text` added when there is none - which sets
 /// `added`. WinForms finds a key whatever its case.
 /// `// C#: Controls/MAVLinkInspector.cs:69-106, 122-126`
-fn child<'a>(
+pub(crate) fn child<'a>(
     nodes: &'a mut Vec<Node>,
     name: &str,
     text: impl FnOnce() -> String,
@@ -400,7 +400,7 @@ pub fn culture_cmp(a: &str, b: &str) -> Ordering {
 }
 
 /// Each level sorted by its text.
-fn sort(nodes: &mut [Node]) {
+pub(crate) fn sort(nodes: &mut [Node]) {
     nodes.sort_by(|a, b| culture_cmp(&a.text, &b.text));
     for node in nodes {
         sort(&mut node.nodes);
@@ -510,7 +510,7 @@ pub struct Row {
 }
 
 /// The rows showing: each node, and the children of each expanded one under it.
-fn rows_of(
+pub(crate) fn rows_of(
     nodes: &[Node],
     prefix: &[String],
     expanded: &BTreeSet<Vec<String>>,
@@ -657,7 +657,7 @@ impl Curves {
     }
 
     /// A point on curve `index`, made as the C# makes a curve an element needs.
-    fn push(&mut self, index: usize, field: &str, point: (f64, f64)) {
+    pub(crate) fn push(&mut self, index: usize, field: &str, point: (f64, f64)) {
         while self.list.len() < index + 1 {
             let a = self.list.len();
             self.list.push(Curve::new(
@@ -678,6 +678,26 @@ impl Curves {
             while curve.points.len() > self.capacity {
                 curve.points.pop_front();
             }
+        }
+    }
+
+    /// A curve `index` made for `label` if there is none yet, as the C# makes a curve for a
+    /// nested type's field before its point.
+    pub(crate) fn ensure(&mut self, index: usize, label: &str) {
+        while self.list.len() < index + 1 {
+            let a = self.list.len();
+            let name = if a == index {
+                label.to_owned()
+            } else {
+                format!("{label}[{a}]")
+            };
+            self.list.push(Curve::new(
+                name,
+                COLOURS
+                    .get(a % COLOURS.len())
+                    .copied()
+                    .unwrap_or(COLOURS[0]),
+            ));
         }
     }
 
@@ -810,21 +830,27 @@ impl Graph {
     /// `// C#: ExtLibs/ZedGraph/ZedGraph/Scale.cs:2684-2710`
     #[must_use]
     pub fn ranges(&self) -> ((f64, f64), (f64, f64)) {
-        let mut x = (f64::MAX, f64::MIN);
-        let mut y = (f64::MAX, f64::MIN);
-        for (px_, py_) in self.shown.list.iter().flat_map(|curve| curve.points.iter()) {
-            x = (x.0.min(*px_), x.1.max(*px_));
-            y = (y.0.min(*py_), y.1.max(*py_));
-        }
-        let fix = |(low, high): (f64, f64)| {
-            if low >= f64::MAX || high <= f64::MIN {
-                (0.0, 1.0)
-            } else {
-                (low, high)
-            }
-        };
-        (fix(x), fix(y))
+        ranges_of(&self.shown)
     }
+}
+
+/// Every point's `x` and `y` ranges over `curves`; `0` to `1` for none.
+#[must_use]
+pub(crate) fn ranges_of(curves: &Curves) -> ((f64, f64), (f64, f64)) {
+    let mut x = (f64::MAX, f64::MIN);
+    let mut y = (f64::MAX, f64::MIN);
+    for (px_, py_) in curves.list.iter().flat_map(|curve| curve.points.iter()) {
+        x = (x.0.min(*px_), x.1.max(*px_));
+        y = (y.0.min(*py_), y.1.max(*py_));
+    }
+    let fix = |(low, high): (f64, f64)| {
+        if low >= f64::MAX || high <= f64::MIN {
+            (0.0, 1.0)
+        } else {
+            (low, high)
+        }
+    };
+    (fix(x), fix(y))
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -1679,7 +1705,7 @@ const fn on_dark(colour: u32) -> u32 {
 /// A field's row: the name, the value and the type each where Courier New's columns put them -
 /// the value right-aligned in its twenty, or where its left padding ends when a NUL cuts it,
 /// and the type after it unless the NUL has cut it off.
-fn field_cells(name: &str, value: &str, type_name: &str) -> gpui::Div {
+pub(crate) fn field_cells(name: &str, value: &str, type_name: &str) -> gpui::Div {
     #[allow(clippy::cast_precision_loss)] // a row's characters
     let at_chars = |chars: usize| chars as f32 * CHAR_WIDTH;
     let length = value.chars().count();
@@ -1709,13 +1735,47 @@ fn field_cells(name: &str, value: &str, type_name: &str) -> gpui::Div {
 /// One row of the tree: set in by its depth, its plus or minus box, its text, highlighted when
 /// selected.
 fn row_element(row: &Row, selected: bool, cx: &mut Context<MissionPlanner>) -> AnyElement {
-    #[allow(clippy::cast_precision_loss)] // four levels
-    let indent = INDENT * row.depth as f32;
     let toggle_id = row_id("toggle", &row.key);
     let node_id = row_id("node", &row.key);
-    let key = row.key.clone();
+    let toggle_key = row.key.clone();
+    let select_key = row.key.clone();
+    tree_row(
+        row,
+        selected,
+        toggle_id,
+        node_id,
+        cx.listener(move |this, _event, _window, cx| {
+            if let Some(window) = access(this) {
+                window.toggle(&toggle_key);
+                cx.notify();
+            }
+        }),
+        cx.listener(move |this, event: &gpui::ClickEvent, _window, cx| {
+            if let Some(window) = access(this) {
+                window.select(&select_key);
+                // A double click opens or closes the node, as the tree does.
+                if event.click_count() == 2 {
+                    window.toggle(&select_key);
+                }
+                cx.notify();
+            }
+        }),
+    )
+}
+
+/// A tree row as both inspectors draw one: the plus or minus box (`on_toggle`), the text -
+/// a field's in its cells - and the node selected on a click (`on_select`).
+pub(crate) fn tree_row(
+    row: &Row,
+    selected: bool,
+    toggle_id: String,
+    node_id: String,
+    on_toggle: impl Fn(&gpui::ClickEvent, &mut Window, &mut gpui::App) + 'static,
+    on_select: impl Fn(&gpui::ClickEvent, &mut Window, &mut gpui::App) + 'static,
+) -> AnyElement {
+    #[allow(clippy::cast_precision_loss)] // four levels
+    let indent = INDENT * row.depth as f32;
     let toggle = if row.parent {
-        let key = key.clone();
         crate::probe::measured(toggle_id.clone(), div())
             .id(SharedString::from(toggle_id))
             .size(px(9.0))
@@ -1728,12 +1788,7 @@ fn row_element(row: &Row, selected: bool, cx: &mut Context<MissionPlanner>) -> A
             .text_color(rgb(theme::TEXT))
             .cursor_pointer()
             .child(if row.expanded { "-" } else { "+" })
-            .on_click(cx.listener(move |this, _event, _window, cx| {
-                if let Some(window) = access(this) {
-                    window.toggle(&key);
-                    cx.notify();
-                }
-            }))
+            .on_click(on_toggle)
             .into_any_element()
     } else {
         div().size(px(9.0)).into_any_element()
@@ -1748,8 +1803,6 @@ fn row_element(row: &Row, selected: bool, cx: &mut Context<MissionPlanner>) -> A
             .child(shown(&row.text).to_owned())
             .into_any_element(),
     };
-    let select_key = key.clone();
-    let double_key = key;
     div()
         .flex()
         .items_center()
@@ -1764,18 +1817,7 @@ fn row_element(row: &Row, selected: bool, cx: &mut Context<MissionPlanner>) -> A
                 .when(selected, |this| this.bg(rgb(theme::SELECTION)))
                 .cursor_pointer()
                 .child(text)
-                .on_click(
-                    cx.listener(move |this, event: &gpui::ClickEvent, _window, cx| {
-                        if let Some(window) = access(this) {
-                            window.select(&select_key);
-                            // A double click opens or closes the node, as the tree does.
-                            if event.click_count() == 2 {
-                                window.toggle(&double_key);
-                            }
-                            cx.notify();
-                        }
-                    }),
-                ),
+                .on_click(on_select),
         )
         .into_any_element()
 }
@@ -1913,13 +1955,42 @@ fn graph_form(
     window: &Window,
     cx: &mut Context<MissionPlanner>,
 ) -> AnyElement {
+    graph_pane(
+        "inspector-graph",
+        index,
+        &graph.y_title,
+        &graph.shown,
+        graph.ranges(),
+        move |this| {
+            if let Some(inspector) = access(this) {
+                inspector.close_graph(index);
+            }
+        },
+        window,
+        cx,
+    )
+}
+
+/// A graph's form as both inspectors draw one, ids under `prefix`: a caption with a close box
+/// (`on_close`), and the pane - the legend, the axes' titles and labels, and the curves.
+#[allow(clippy::too_many_arguments)] // the pane's parts
+pub(crate) fn graph_pane(
+    prefix: &str,
+    index: usize,
+    y_title: &str,
+    shown: &Curves,
+    ranges: ((f64, f64), (f64, f64)),
+    on_close: impl Fn(&mut MissionPlanner) + 'static,
+    window: &Window,
+    cx: &mut Context<MissionPlanner>,
+) -> AnyElement {
     let (width, height) = GRAPH_SIZE;
     let caption_height = 26.0;
     let pane_height = height - caption_height;
     let (left, top, right, bottom) = PLOT_MARGINS;
     let plot_width = width - left - right;
     let plot_height = pane_height - top - bottom;
-    let ((x_low, x_high), (y_low, y_high)) = graph.ranges();
+    let ((x_low, x_high), (y_low, y_high)) = ranges;
     let x_scale = DateScale::pick(x_low, x_high);
     let y_scale = Scale::pick(y_low, y_high, None);
     #[allow(clippy::cast_possible_truncation)]
@@ -1934,7 +2005,7 @@ fn graph_form(
             .text_color(rgb(theme::TEXT))
             .child(content)
     };
-    let close_id = format!("inspector-graph-{index}-close");
+    let close_id = format!("{prefix}-{index}-close");
     let caption = div()
         .flex()
         .items_center()
@@ -1954,10 +2025,8 @@ fn graph_form(
                 .hover(|style| style.bg(rgb(theme::BORDER)))
                 .child("X")
                 .on_click(cx.listener(move |this, _event, _window, cx| {
-                    if let Some(inspector) = access(this) {
-                        inspector.close_graph(index);
-                        cx.notify();
-                    }
+                    on_close(this);
+                    cx.notify();
                 })),
         );
     let legend = div()
@@ -1969,7 +2038,7 @@ fn graph_form(
         .flex_wrap()
         .justify_center()
         .gap_4()
-        .children(graph.shown.list.iter().map(|curve| {
+        .children(shown.list.iter().map(|curve| {
             div()
                 .flex()
                 .items_center()
@@ -1982,14 +2051,14 @@ fn graph_form(
                         .child(curve.label.clone()),
                 )
         }));
-    let mut pane = crate::probe::measured(format!("inspector-graph-{index}"), div())
+    let mut pane = crate::probe::measured(format!("{prefix}-{index}"), div())
         .relative()
         .w(px(width))
         .h(px(pane_height))
         .bg(rgb(theme::BG))
         .child(legend)
         .child(
-            text(y_scale.title(&graph.y_title))
+            text(y_scale.title(y_title))
                 .left(px(4.0))
                 .top(px(top - 16.0)),
         )
@@ -2025,8 +2094,7 @@ fn graph_form(
                 .top(px(top + (1.0 - up(tic)) * plot_height - 7.0)),
         );
     }
-    let lines: Vec<crate::plotline::Line> = graph
-        .shown
+    let lines: Vec<crate::plotline::Line> = shown
         .list
         .iter()
         .map(|curve| crate::plotline::Line {
@@ -2068,7 +2136,7 @@ fn graph_form(
     gpui::deferred(
         gpui::anchored().position(gpui::point(px(x), px(y))).child(
             div()
-                .id(SharedString::from(format!("inspector-graph-{index}-form")))
+                .id(SharedString::from(format!("{prefix}-{index}-form")))
                 .occlude()
                 .child(form),
         ),
@@ -3016,7 +3084,10 @@ mod tests {
                     } else if let Some(path) = id.strip_prefix("inspector-node-") {
                         assert!(node(path).is_some(), "{id}");
                     } else if id.starts_with("inspector-graph-") {
-                        assert!(source.contains("format!(\"inspector-graph-{index}-close\")"));
+                        assert!(
+                            source.contains("\"inspector-graph\"")
+                                && source.contains("format!(\"{prefix}-{index}-close\")")
+                        );
                     } else if id.starts_with("inspector-points-") {
                         assert!(optional.contains(&format!("\"{id}\"")), "{id}");
                     } else {

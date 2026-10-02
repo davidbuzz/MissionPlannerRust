@@ -733,6 +733,11 @@ pub fn input_box(
         "fft-rate-box" => ("fft-rate-ok", "fft-rate-cancel", "fft-rate-value"),
         // ---- end FFT Setup ----
         // The MAVLink Inspector's "Points of history?".
+        "dronecan-inspector-points-box" => (
+            "dronecan-inspector-points-ok",
+            "dronecan-inspector-points-cancel",
+            "dronecan-inspector-points-value",
+        ),
         "inspector-points-box" => (
             "inspector-points-ok",
             "inspector-points-cancel",

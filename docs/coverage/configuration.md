@@ -104,9 +104,10 @@ Vehicles: **any** is a connected vehicle whose parameter list is whole
         //     adapter opened) and MCastCan1/2; node 127 heard by itself; the node grid, details and
         //     debug grid; the node menu's Parameters (the parameter window), Restart, Update and
         //     Update Beta (CubePilot's server, the manifest, a .bin or .apj), both passthroughs;
-        //     Filter, Stats, Check for Updates, Log, Exit SLCAN; not the Inspector's window
-        //     (Controls/DroneCANInspector.cs), nor the parameter window's Compare Params and Reset
-        //     to Default, which act on the autopilot |
+        //     Filter, Stats, the Inspector (every message heard field by field, Graph It, the
+        //     Subscriber), Check for Updates, Log, Exit SLCAN; not the parameter window's Compare
+        //     Params and Reset to Default, which act on the autopilot from the node's window
+        //     (for the owner's ruling) |
 | 280 | `JoystickSetup` (`Joystick/JoystickSetup.cs`, not a panel) | Joystick | Optional Hardware | always | 11 | partial: `crates/mp-gui/src/joystick.rs` `fn load` - all of the page - the device list, the sixteen channel rows with axis, Auto Detect,
         //     bar, expo and reverse, the button rows with number, Detect, bar, function and the
         //     seven Joy_* settings forms, Enable, Save, Elevons, Manual Control, Export and Import,

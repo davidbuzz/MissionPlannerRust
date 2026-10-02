@@ -56,11 +56,11 @@
 //!
 //! Where it differs from the C#, and why (each also at its site):
 //!
-//! * **Inspector** opens nothing: `Controls/DroneCANInspector.cs` - a window of every message
-//!   heard, field by field, with Graph It and Subscribe - is not ported. It shows each of the 155
-//!   data types' fields, and 140 of them are not decoded here (`mp-dronecan`'s module notes);
-//!   it is its own ledger row. The click says so on the status line ([`INSPECTOR_NOT_PORTED`]);
-//!   with no node it is "Please connect first" there, the C#'s box (the owner's ruling).
+//! * **Inspector** opens `config/dronecan_inspector.rs` - `Controls/DroneCANInspector.cs`, a
+//!   window of every message heard, field by field, with Graph It and Subscribe - over the
+//!   page's node, drawn over the page; the 27 types decoded here show their fields and any
+//!   other its payload bytes (that module's notes). With no node the click is "Please connect
+//!   first" on the status line, the C#'s box (the owner's ruling).
 //! * The C#'s message boxes for what the window can show - "Check port settings or Port in
 //!   use?", "No network interfaces found", "Forwarder problem", a parameter window's "Failed to
 //!   save", an update's error, the C#'s exceptions out of a click - go on the status line (the
@@ -219,9 +219,6 @@ pub const MENU: [(&str, &str); 6] = [
 
 /// `Strings.PleaseConnect`. `// C#: ExtLibs/Strings/Strings.resx:205-207`
 pub const PLEASE_CONNECT: &str = "Please connect first";
-/// What Inspector says here instead of opening the window, which is not ported.
-pub const INSPECTOR_NOT_PORTED: &str = "DroneCAN Inspector (Controls/DroneCANInspector.cs) is not \
-     ported: it shows every data type's fields, and 140 of the 155 are not decoded here";
 /// `startslcan`'s question with no link, and its caption.
 /// `// C#: GCSViews/ConfigurationView/ConfigDroneCAN.cs:211-214`
 pub const NOT_CONNECTED_SLCAN: &str = "You are not currently connected via mavlink. Please \
@@ -1610,6 +1607,10 @@ pub struct DroneCan {
     passthrough: Option<Passthrough>,
     /// The window open.
     window: Option<OpenWindow>,
+    /// The Inspector, while it is open, and how many times it has been opened
+    /// (`config/dronecan_inspector.rs`).
+    pub inspector: Option<super::dronecan_inspector::Inspector>,
+    pub inspector_opened: usize,
     /// Boxes, oldest first.
     messages: VecDeque<Message>,
     /// The question showing.
@@ -1676,6 +1677,8 @@ impl Default for DroneCan {
             update: None,
             passthrough: None,
             window: None,
+            inspector: None,
+            inspector_opened: 0,
             messages: VecDeque::new(),
             question: None,
             path: None,
@@ -2569,16 +2572,25 @@ impl DroneCan {
         }
     }
 
-    /// `But_uavcaninspector_Click`: "Please connect first" with no node; the window is not
-    /// ported (see the module's notes).
+    /// `But_uavcaninspector_Click`: "Please connect first" with no node, else `new
+    /// DroneCANInspector(can).Show()`, the window fed what the node hears from here on.
     /// `// C#: GCSViews/ConfigurationView/ConfigDroneCAN.cs:714-723`
     pub fn click_inspector(&mut self) {
         self.menu = None;
-        self.status = Some(if self.can.is_none() {
-            PLEASE_CONNECT.to_owned()
-        } else {
-            INSPECTOR_NOT_PORTED.to_owned()
-        });
+        // `can == null`: the C# makes its node on Connect; here the node is made with the page
+        // and the bus attached on Connect, so "connected" is the test.
+        if !self.connected {
+            self.status = Some(PLEASE_CONNECT.to_owned());
+            return;
+        }
+        self.inspector = Some(super::dronecan_inspector::Inspector::new(Instant::now()));
+        self.inspector_opened += 1;
+    }
+
+    /// The Inspector closed: `FormClosing`, its handler and timer ended.
+    /// `// C#: Controls/DroneCANInspector.cs:289-294`
+    pub fn close_inspector(&mut self) {
+        self.inspector = None;
     }
 
     /// The window closed.
@@ -2998,6 +3010,9 @@ impl DroneCan {
             if let Some(OpenWindow::Stats(stats)) = self.window.as_mut() {
                 stats.heard(&received);
             }
+            if let Some(inspector) = self.inspector.as_mut() {
+                inspector.heard(&received, now);
+            }
             self.passthrough_handler(&received, &node);
             if let Some(fetch) = self.fetch.as_mut() {
                 fetch.job.handle(&received, &mut node, now);
@@ -3033,6 +3048,9 @@ impl DroneCan {
                 update.event(&event);
             }
             self.node_event(&event);
+        }
+        if let Some(inspector) = self.inspector.as_mut() {
+            inspector.tick(now, &|id| node.node_name(id));
         }
         self.can = Some(node);
     }
@@ -5828,7 +5846,16 @@ mod tests {
         let mut page = DroneCan::default();
         page.activate(key(), None, None);
         page.click_inspector();
-        assert_eq!(page.take_status().as_deref(), Some(INSPECTOR_NOT_PORTED));
+        assert_eq!(page.take_status().as_deref(), Some(PLEASE_CONNECT));
+        assert!(page.inspector.is_none());
+        // Connected: `new DroneCANInspector(can).Show()`.
+        page.connected = true;
+        page.click_inspector();
+        assert!(page.inspector.is_some());
+        assert_eq!(page.inspector_opened, 1);
+        page.close_inspector();
+        assert!(page.inspector.is_none());
+        page.connected = false;
         page.click_stats();
         assert!(matches!(page.window, Some(OpenWindow::Stats(_))));
         let mut node = Node::new(Identity::default(), Instant::now());
@@ -6040,7 +6067,10 @@ mod tests {
     #[test]
     fn the_gui_script_names_facts_and_controls_this_page_has() {
         let script = include_str!("../../../../tests/gui/config-dronecan.gui");
-        let source = include_str!("dronecan.rs");
+        let source = concat!(
+            include_str!("dronecan.rs"),
+            include_str!("dronecan_inspector.rs")
+        );
         let mut facts = 0;
         let mut clicks = 0;
         for line in script.lines() {

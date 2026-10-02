@@ -629,7 +629,8 @@ pub const PANELS: &[Panel] = &[
         &[setup(276, "DroneCAN/UAVCAN", OPTIONAL, ALWAYS)],
         // C#: GCSViews/ConfigurationView/ConfigDroneCAN.cs:30-1751 and its Designer, over
         // ExtLibs/DroneCAN as crates/mp-dronecan; Controls/DroneCANParams.cs as its parameter
-        // window: 14 of the 15 wirings whole, the Inspector's click without its window
+        // window and Controls/DroneCANInspector.cs with DroneCANSubscriber.cs as its Inspector
+        // (config/dronecan_inspector.rs): the 15 wirings whole
         Partial(
             at("crates/mp-gui/src/config/dronecan.rs", "fn page"),
             "the interface list, Connect over MAVLinkCAN1/2 (CAN_FORWARD each second, CAN_FRAME
@@ -637,9 +638,10 @@ pub const PANELS: &[Panel] = &[
         //     adapter opened) and MCastCan1/2; node 127 heard by itself; the node grid, details and
         //     debug grid; the node menu's Parameters (the parameter window), Restart, Update and
         //     Update Beta (CubePilot's server, the manifest, a .bin or .apj), both passthroughs;
-        //     Filter, Stats, Check for Updates, Log, Exit SLCAN; not the Inspector's window
-        //     (Controls/DroneCANInspector.cs), nor the parameter window's Compare Params and Reset
-        //     to Default, which act on the autopilot",
+        //     Filter, Stats, the Inspector (every message heard field by field, Graph It, the
+        //     Subscriber), Check for Updates, Log, Exit SLCAN; not the parameter window's Compare
+        //     Params and Reset to Default, which act on the autopilot from the node's window
+        //     (for the owner's ruling)",
         ),
     ),
     panel(

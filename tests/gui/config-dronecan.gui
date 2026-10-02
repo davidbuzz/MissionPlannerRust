@@ -123,6 +123,9 @@ expect config.dronecan.window none
 # Inspector is not ported: the status line says so, and nothing opens.
 click dronecan-inspector
 expect config.dronecan.window none
+expect config.dronecan.inspector.window true
+click dronecan-inspector-close
+expect config.dronecan.inspector.window false
 
 # Disconnect: the bus stopped, the lists back.
 click dronecan-connect

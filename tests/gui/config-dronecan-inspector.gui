@@ -1,0 +1,110 @@
+# The DroneCAN page's Inspector (Controls/DroneCANInspector.cs) and its Subscriber
+# (Controls/DroneCANSubscriber.cs), over MAVLinkCAN1 to the SITL copter: the page's own node,
+# 127, is the only one on a forwarded bus SITL has no DroneCAN node on, and the Inspector hears
+# the node's NodeStatus as the C#'s hears its own sent messages (MessageReceived raised for
+# them). The tree: "ID 127", then "ID 127 - org.missionplanner ~nBps" (Update, :56-117); under
+# it the type's node, "uavcan_protocol_NodeStatus (r.r Hz, #341) ~nBps"; under that the fields
+# as PopulateMSG lays them out, with the .NET type (:119-200). A field selected enables Graph It
+# and Subscribe (:326-346); Graph It asks "Points of history?" and opens a graph of the field,
+# filling as messages come (:347-446); Subscribe opens the Subscriber, whose combo lists the
+# types heard and whose box gets each NodeStatus as JSON (DroneCANSubscriber.cs:88-131).
+#
+# Needs SITL copter on tcp:127.0.0.1:5760. Run as
+#   tools/gui-test.sh tests/gui/config-dronecan-inspector.gui -- tcp:127.0.0.1:5760
+
+env MP_CONFIG_XML $WORK/config.xml
+env MP_LOG_DIR $WORK
+screen params
+window 1600x1200
+budget 32
+
+expect vehicle.count > 0
+click raw-param-warning-again
+click raw-param-warning-ok
+
+click tab-setup
+click setup-page-ConfigOptional
+click setup-page-ConfigDroneCAN
+expect setup.page ConfigDroneCAN
+expect config.dronecan.active true
+expect config.dronecan.inspector.window false
+expect config.dronecan.inspector.opened 0
+
+# Inspector before a bus: "Please connect first".
+click dronecan-inspector
+expect config.dronecan.inspector.window false
+expect status Please connect first
+
+# MAVLinkCAN1, and the node up.
+click dronecan-interface
+click dronecan-interface-list-1
+expect config.dronecan.interface MAVLinkCAN1
+click dronecan-connect
+expect config.dronecan.connected true
+expect config.dronecan.bus MAVLinkCAN1
+expect config.dronecan.nodes 1
+expect config.dronecan.node.127.name org.missionplanner
+
+# The Inspector: the tree fills from the node's own NodeStatus.
+click dronecan-inspector
+expect config.dronecan.inspector.window true
+expect config.dronecan.inspector.opened 1
+expect config.dronecan.inspector.graphit false
+expect config.dronecan.inspector.subscribe false
+expect config.dronecan.inspector.history 50
+expect config.dronecan.inspector.prompt none
+expect config.dronecan.inspector.graphs 0
+expect config.dronecan.inspector.heard > 0
+expect config.dronecan.inspector.updates > 1
+expect config.dronecan.inspector.row.0 ~ ID 127 - org.missionplanner ~
+expect config.dronecan.inspector.row.0 ~ Bps
+click dronecan-inspector-toggle-127
+expect config.dronecan.inspector.row.1 ~ uavcan_protocol_NodeStatus (
+expect config.dronecan.inspector.row.1 ~ , #341) ~
+click dronecan-inspector-toggle-127-341
+expect config.dronecan.inspector.rows 7
+expect config.dronecan.inspector.type.127.341.uptime_sec UInt32
+expect config.dronecan.inspector.type.127.341.health Byte
+expect config.dronecan.inspector.type.127.341.vendor_specific_status_code UInt16
+expect config.dronecan.inspector.value.127.341.uptime_sec > 0
+
+# A field selected: Graph It and Subscribe enabled, the path as selectedmsgid.
+click dronecan-inspector-node-127-341-uptime_sec
+expect config.dronecan.inspector.graphit true
+expect config.dronecan.inspector.subscribe true
+expect config.dronecan.inspector.selected 127/341/uptime_sec
+
+# Graph It: the question, its default 50, a graph of uptime_sec filling at 1 Hz.
+click dronecan-inspector-graphit
+expect config.dronecan.inspector.prompt Points of history?
+click dronecan-inspector-points-ok
+expect config.dronecan.inspector.prompt none
+expect config.dronecan.inspector.graphs 1
+expect config.dronecan.inspector.graphit false
+expect config.dronecan.inspector.graph.0.curves uptime_sec
+within 6
+expect config.dronecan.inspector.graph.0.points > 1
+click dronecan-inspector-graph-0-close
+expect config.dronecan.inspector.graphs 0
+
+# Subscribe: the Subscriber, its combo filled within a second, NodeStatus chosen, its JSON.
+click dronecan-inspector-subscribe
+expect config.dronecan.subscriber.window true
+expect config.dronecan.subscriber.lines 100
+expect config.dronecan.subscriber.items uavcan_protocol_NodeStatus
+click dronecan-subscriber-type
+click dronecan-subscriber-type-0
+expect config.dronecan.subscriber.type uavcan_protocol_NodeStatus
+within 6
+expect config.dronecan.subscriber.text.lines > 6
+expect config.dronecan.subscriber.text ~ "uptime_sec":
+click dronecan-subscriber-lines-up
+expect config.dronecan.subscriber.lines 101
+click dronecan-subscriber-close
+expect config.dronecan.subscriber.window false
+
+# Closed, and the bus left.
+click dronecan-inspector-close
+expect config.dronecan.inspector.window false
+click dronecan-connect
+expect config.dronecan.connected false

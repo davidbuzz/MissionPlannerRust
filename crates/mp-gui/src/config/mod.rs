@@ -76,6 +76,8 @@ pub mod fftui;
 // ---- end FFT Setup ----
 // DroneCAN/UAVCAN (`config/dronecan.rs`, over `crates/mp-dronecan`).
 pub mod dronecan;
+// The DroneCAN page's Inspector and Subscriber windows.
+pub mod dronecan_inspector;
 // ---- Sik Radio ----
 pub mod sikradio;
 // ---- end Sik Radio ----

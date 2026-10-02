@@ -136,6 +136,8 @@ pub struct Focus {
     pub support_proxy: support_proxy::FocusHandles,
     /// Sik Radio's key boxes and its dialogs.
     pub sikradio: FocusHandle,
+    /// The DroneCAN Inspector's "Points of history?".
+    pub dronecan_prompt: FocusHandle,
 }
 
 impl Focus {
@@ -156,6 +158,7 @@ impl Focus {
             spectrogram: spectrogram::FocusHandles::new(cx),
             support_proxy: support_proxy::FocusHandles::new(cx),
             sikradio: cx.focus_handle(),
+            dronecan_prompt: cx.focus_handle(),
         }
     }
 }
@@ -176,6 +179,10 @@ pub fn record_facts(pages: &ExtraSetup, view: &TelemetryView) {
     spectrogram::record_facts(&pages.spectrogram);
     support_proxy::record_facts(&pages.support_proxy);
     super::dronecan::record_facts(&pages.dronecan);
+    super::dronecan_inspector::record_facts(
+        pages.dronecan.inspector.as_ref(),
+        pages.dronecan.inspector_opened,
+    );
     sikradio::record_facts(&pages.sikradio);
 }
 
@@ -418,6 +425,14 @@ impl MissionPlanner {
             .or_else(|| compass_mot::overlay(&pages.compass_mot, window, cx))
             .or_else(|| initial_params::overlay(&pages.initial_params, window, cx))
             .or_else(|| super::dronecan::overlay(&pages.dronecan, window, cx))
+            .or_else(|| {
+                super::dronecan_inspector::overlay(
+                    pages.dronecan.inspector.as_ref(),
+                    &focus.dronecan_prompt,
+                    window,
+                    cx,
+                )
+            })
             .or_else(|| sikradio::overlay(&pages.sikradio, &focus.sikradio, window, cx))
     }
 }
