@@ -1,0 +1,110 @@
+# SETUP's Advanced page's Spectrogram and the window it opens, ported from
+# Controls/SpectrogramUI.cs and ExtLibs/Utilities/Spectrogram.cs (`new SpectrogramUI().Show()`,
+# GCSViews/ConfigurationView/ConfigAdvanced.cs:119-122).
+#
+# The claims: the window opens as its Designer makes it - ACC1 in the combo, Min -80, Max -20,
+# three empty graphs X, Y and Z (SpectrogramUI.cs:25-48, SpectrogramUI.Designer.cs:30-188).
+# Update before Load Log is the C#'s null `file`, on the status line rather than its box (the
+# owner's ruling of 2026-09-25). Load Log reads testdata/dataflash.bin and draws nothing
+# (:50-64). ACC2 chosen from the list draws (SelectedIndexChanged) and the fixture has no ACC2,
+# so `acc1data[0]` throws - the status line again. The combo is a DropDown, so IMU typed into it
+# (no item selected, nothing drawn) and Update draw the fixture's IMU records - three IMUs read as
+# one series, 1365 of them: one 1024-sample window's worth, four columns a quarter window apart of
+# which two are drawn, AccX, AccY and AccZ in X, Y and Z, coloured from Min to Max
+# (Spectrogram.cs:171-247, 322-329). Max's up arrow is ValueChanged, a draw at -19, and more of
+# the image is at or above Max. The close box ends it, and the page stays.
+#
+# No vehicle: the page and the window ask nothing of one; the data directory is a scratch one, so
+# no link Mission Planner remembers is opened. Run from the repository root, where the log's path
+# is typed relative to, as
+#
+#   tools/gui-test.sh tests/gui/config-spectrogram.gui
+#
+# Not yet run: the budget is a guess, set by hand until a passing run records one.
+
+env XDG_DATA_HOME $WORK
+
+screen setup
+window 1600x1200
+budget 13
+
+click setup-page-ConfigAdvanced
+expect setup.page ConfigAdvanced
+expect config.advanced.buttons.enabled ~ Spectrogram
+expect config.spectrogram.window false
+
+# The constructor: the Designer's values, nothing loaded, three empty graphs.
+click advanced-BUT_spect
+expect config.spectrogram.window true
+expect config.spectrogram.opened 1
+expect config.spectrogram.sensor ACC1
+expect config.spectrogram.sensor.selected 0
+expect config.spectrogram.min -80
+expect config.spectrogram.max -20
+expect config.spectrogram.log none
+expect config.spectrogram.running none
+expect config.spectrogram.drawn false
+expect config.spectrogram.pane.0.title X
+expect config.spectrogram.pane.1.title Y
+expect config.spectrogram.pane.2.title Z
+
+# Update before Load Log: the C#'s null `file`, on the status line.
+click spect-but_redraw
+expect config.spectrogram.last Object reference not set to an instance of an object.
+expect status Object reference not set to an instance of an object.
+expect config.spectrogram.drawn false
+
+# Load Log: its dialog, the fixture typed; read, and nothing drawn.
+click spect-but_loadlog
+expect config.spectrogram.prompt Load Log
+type testdata/dataflash.bin
+expect config.spectrogram.prompt.text testdata/dataflash.bin
+click spect-open-ok
+expect config.spectrogram.prompt none
+expect config.spectrogram.log dataflash.bin
+expect config.spectrogram.last loaded
+expect config.spectrogram.drawn false
+
+# ACC2 from the list: SelectedIndexChanged draws, and the fixture has no ACC2.
+click spect-cmb_sensor-arrow
+expect config.spectrogram.sensor.list true
+click spect-cmb_sensor-1
+expect config.spectrogram.sensor.list false
+expect config.spectrogram.sensor ACC2
+expect config.spectrogram.sensor.selected 1
+expect config.spectrogram.last Index was outside the bounds of the array.
+expect status Index was outside the bounds of the array.
+expect config.spectrogram.drawn false
+
+# IMU typed into the combo: no item selected, nothing drawn; then Update.
+click spect-cmb_sensor
+key ctrl+u
+type IMU
+expect config.spectrogram.sensor IMU
+expect config.spectrogram.sensor.selected -1
+expect config.spectrogram.drawn false
+click spect-but_redraw
+expect config.spectrogram.last done
+expect config.spectrogram.drawn true
+expect config.spectrogram.drawn.sensor IMU
+expect config.spectrogram.columns 4
+expect config.spectrogram.rows 512
+expect config.spectrogram.windows 2
+expect config.spectrogram.freqmax 1882
+expect config.spectrogram.pane.0.field AccX
+expect config.spectrogram.pane.1.field AccY
+expect config.spectrogram.pane.2.field AccZ
+expect config.spectrogram.pane.0.hot 6
+expect config.spectrogram.pane.0.cold 24
+
+# Max's up arrow: ValueChanged, a draw at -19.
+click spect-num_max-up
+expect config.spectrogram.max -19
+expect config.spectrogram.last done
+expect config.spectrogram.pane.0.hot 4
+
+# The close box; the page stays.
+click spect-close
+expect config.spectrogram.window false
+expect setup.page ConfigAdvanced
+expect config.advanced.active true

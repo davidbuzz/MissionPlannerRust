@@ -22,7 +22,7 @@
 
 screen setup
 window 1600x1200
-budget 15
+budget 12
 # A config.xml of its own, so the "Points of history?" answer this script gives is not kept in
 # the settings of the machine running it.
 env MP_CONFIG_XML $WORK/config.xml
@@ -34,7 +34,7 @@ expect params.held > 1000
 expect config.inspector.window false
 click setup-page-ConfigAdvanced
 expect setup.page ConfigAdvanced
-expect config.advanced.buttons.enabled Warning Manager,MAVLink Inspector,Proximity,Mavlink Signing,FFT
+expect config.advanced.buttons.enabled Warning Manager,MAVLink Inspector,Proximity,Mavlink Signing,FFT,Spectrogram,Support Proxy
 
 # The constructor: nothing heard yet, Graph It disabled.
 click advanced-but_mavinspector

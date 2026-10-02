@@ -135,10 +135,13 @@ Vehicles: **any** is a connected vehicle whose parameter list is whole
         //     opens the FFT window (config/fftui.rs) and MAVLink Inspector the inspector
         //     (config/mavlink_inspector.rs: the tree of each system, component, message with its
         //     rate and bytes a second, and field with its value and .NET type, every 333 ms; Show
-        //     GCS Traffic; Graph It's history question and live graph of a field), 5 of the 13
-        //     wirings; the other eight dimmed - the MAVLink mirror, NMEA output, Follow Me,
-        //     parameter regeneration, moving base, log anonymiser, spectrogram and support proxy
-        //     windows they open are not ported |
+        //     GCS Traffic; Graph It's history question and live graph of a field), Spectrogram the
+        //     spectrogram window (config/spectrogram.rs: a log's IMU or ISBH samples drawn as
+        //     Spectrogram.cs's GenerateImage draws them) and Support Proxy the proxy
+        //     (config/support_proxy.rs: the link mirrored to a support engineer's server over
+        //     TCP or UDP, mp-link's mirror.rs), 7 of the 13 wirings; the other six dimmed - the
+        //     MAVLink mirror, NMEA output, Follow Me, parameter regeneration, moving base and
+        //     log anonymiser windows they open are not ported |
 | 346 | `ConfigTerminal` | Terminal | Advanced | always, Advanced view | 12 | dropped: ruled out of the port by the owner, 2026-09-25 (PLAN §12 D13) |
 | 351 | `ConfigREPL` | Script REPL | Advanced | connected, Advanced view | 4 | dropped: ruled out of the port by the owner, 2026-09-25 (PLAN §12 D13) |
 

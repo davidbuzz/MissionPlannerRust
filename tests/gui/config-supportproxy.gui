@@ -1,0 +1,114 @@
+# SETUP's Advanced page's Support Proxy, ported from Controls/SerialSupportProxy.cs
+# (`new SerialSupportProxy().Show()`, GCSViews/ConfigurationView/ConfigAdvanced.cs:124-127), and
+# the link's mirror it starts (MAVLinkInterface.cs:5463-5494, crates/mp-link/src/mirror.rs).
+#
+# The claims: with nothing kept, the window opens with UDP ticked, support.ardupilot.org and 1,
+# the number having the keyboard with its text selected, so the Support ID typed replaces it
+# (SerialSupportProxy.cs:17-47). Connect opens a stream to the server named - here
+# tests/gui/support-server.py on UDP 5799 - and makes it the mirror: Stop, the boxes disabled,
+# UDP, the server and the port kept under the names UdpSerialConnect keeps them by (:49-106;
+# CommsUDPSerialConnect.cs:74-79). The vehicle's packets reach the server, and the server answers
+# each relayed heartbeat with a ground station's heartbeat and a parameter request, which reach
+# the vehicle: what came back shows what went. Closing the window leaves the mirror running, and
+# the window opened again says Stop. Stop closes it. TCP to a port nobody listens on is "Error
+# Connecting" on the status line - not the C#'s box, the owner's ruling of 2026-09-25 - with the
+# server and port kept, as TcpSerial.Open keeps them before it connects (CommsTCPSerial.cs:142-145).
+#
+# Needs SITL copter on tcp:127.0.0.1:5760, the vehicle whose link is shared; the setup line starts
+# the support server. Run from the repository root as
+#
+#   tools/gui-test.sh tests/gui/config-supportproxy.gui -- tcp:127.0.0.1:5760
+#
+# Not yet run: the budget is a guess, set by hand until a passing run records one.
+
+env MP_CONFIG_XML $WORK/config.xml
+setup python3 tests/gui/support-server.py --work $WORK --port 5799
+
+screen setup
+window 1600x1200
+budget 15
+
+# The vehicle first: its packets are what the proxy relays.
+expect vehicle.count > 0
+click setup-page-ConfigAdvanced
+expect setup.page ConfigAdvanced
+expect config.advanced.buttons.enabled ~ Support Proxy
+expect config.supportproxy.window false
+expect config.supportproxy.mirror none
+
+# The constructor, nothing kept.
+click advanced-BUT_supportproxy
+expect config.supportproxy.window true
+expect config.supportproxy.opened 1
+expect config.supportproxy.button Connect
+expect config.supportproxy.host support.ardupilot.org
+expect config.supportproxy.port 1
+expect config.supportproxy.udp true
+expect config.supportproxy.tcp false
+expect config.supportproxy.host.enabled true
+expect config.supportproxy.port.enabled true
+expect config.supportproxy.editing port
+expect config.supportproxy.port.selected true
+
+# The Support ID typed over the selection, then the server.
+type 5799
+expect config.supportproxy.port 5799
+click proxy-TXT_host
+expect config.supportproxy.editing host
+key ctrl+u
+type 127.0.0.1
+expect config.supportproxy.host 127.0.0.1
+
+# Connect: the mirror open, Stop, the boxes disabled, and what was connected to kept.
+click proxy-BUT_connect
+expect config.supportproxy.mirror open
+expect config.supportproxy.mirror.protocol UDP
+expect config.supportproxy.opening none
+expect config.supportproxy.button Stop
+expect config.supportproxy.host.enabled false
+expect config.supportproxy.port.enabled false
+expect config.supportproxy.setting.SerialSupportProxy_UDP True
+expect config.supportproxy.setting.UDP_host_SerialSupportProxy 127.0.0.1
+expect config.supportproxy.setting.UDP_port_SerialSupportProxy 5799
+
+# Both ways: the server answers only what reached it.
+expect config.supportproxy.relayed.up > 0
+expect config.supportproxy.relayed.down > 0
+
+# Closed, the mirror goes on; opened again, Stop.
+click proxy-close
+expect config.supportproxy.window false
+expect config.supportproxy.mirror open
+click advanced-BUT_supportproxy
+expect config.supportproxy.opened 2
+expect config.supportproxy.button Stop
+expect config.supportproxy.host 127.0.0.1
+expect config.supportproxy.port 5799
+
+# Stop: closed, Connect, the boxes back.
+click proxy-BUT_connect
+expect config.supportproxy.mirror closed
+expect config.supportproxy.button Connect
+expect config.supportproxy.host.enabled true
+expect config.supportproxy.port.enabled true
+
+# TCP to a port nobody listens on: the status line, not a box; Connect still; TCP's server and
+# port kept, the protocol not.
+click proxy-rad_tcp
+expect config.supportproxy.tcp true
+click proxy-NUM_port
+key ctrl+u
+type 5798
+click proxy-BUT_connect
+expect status ~ Error Connecting
+expect config.supportproxy.opening none
+expect config.supportproxy.mirror none
+expect config.supportproxy.button Connect
+expect config.supportproxy.setting.TCP_host_SerialSupportProxy 127.0.0.1
+expect config.supportproxy.setting.TCP_port_SerialSupportProxy 5798
+expect config.supportproxy.setting.SerialSupportProxy_UDP True
+
+# The close box; the page stays.
+click proxy-close
+expect config.supportproxy.window false
+expect setup.page ConfigAdvanced

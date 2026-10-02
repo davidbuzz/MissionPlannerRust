@@ -34,6 +34,9 @@ pub mod warnings_manager;
 // The Advanced page's Proximity and Mavlink Signing windows.
 pub mod auth_keys;
 pub mod proximity;
+// The Advanced page's Spectrogram and Support Proxy windows.
+pub mod spectrogram;
+pub mod support_proxy;
 // ---- end Basic Tuning / Advanced ----
 // ---- Extended Tuning ----
 pub mod extended_tuning;

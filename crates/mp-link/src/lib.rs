@@ -84,6 +84,7 @@ pub mod gimbal_manager;
 pub mod inject;
 pub mod inspector;
 pub mod messages;
+pub mod mirror;
 pub mod mission_transfer;
 pub mod param_download;
 pub mod param_fetch;

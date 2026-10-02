@@ -16,7 +16,7 @@ use gpui::{AnyElement, Context, FocusHandle, Window, div, prelude::*};
 
 use super::{
     auth_keys, compass_mot, fft, gps_order, hw_ids, initial_params, mavlink_inspector, osd,
-    parachute, proximity, warnings_manager,
+    parachute, proximity, spectrogram, support_proxy, warnings_manager,
 };
 use crate::MissionPlanner;
 use crate::config::servo_output::{ERROR_TITLE, Message};
@@ -94,6 +94,11 @@ pub struct ExtraSetup {
     pub proximity: proximity::ProximityWindow,
     /// The signing keys window the Advanced page opens, and the key store (`config/auth_keys.rs`).
     pub auth_keys: auth_keys::AuthKeysWindow,
+    /// The spectrogram the Advanced page opens (`config/spectrogram.rs`).
+    pub spectrogram: spectrogram::SpectrogramWindow,
+    /// The Support Proxy the Advanced page opens, and the mirror it starts
+    /// (`config/support_proxy.rs`).
+    pub support_proxy: support_proxy::SupportProxy,
 }
 
 /// The keyboard focus of the pages' boxes: Parachute's number being typed into, and Initial
@@ -121,6 +126,10 @@ pub struct Focus {
     pub auth_keys: FocusHandle,
     /// The signing keys' Add questions.
     pub auth_keys_prompt: FocusHandle,
+    /// The spectrogram's boxes and Load Log's dialog.
+    pub spectrogram: spectrogram::FocusHandles,
+    /// The Support Proxy's server and number.
+    pub support_proxy: support_proxy::FocusHandles,
 }
 
 impl Focus {
@@ -138,6 +147,8 @@ impl Focus {
             proximity: cx.focus_handle(),
             auth_keys: cx.focus_handle(),
             auth_keys_prompt: cx.focus_handle(),
+            spectrogram: spectrogram::FocusHandles::new(cx),
+            support_proxy: support_proxy::FocusHandles::new(cx),
         }
     }
 }
@@ -155,6 +166,8 @@ pub fn record_facts(pages: &ExtraSetup, view: &TelemetryView) {
     warnings_manager::record_facts(&pages.warnings_manager);
     proximity::record_facts(&pages.proximity);
     auth_keys::record_facts(&pages.auth_keys);
+    spectrogram::record_facts(&pages.spectrogram);
+    support_proxy::record_facts(&pages.support_proxy);
 }
 
 impl MissionPlanner {
@@ -240,6 +253,16 @@ impl MissionPlanner {
         let number_focused = self.extra_focus.number.is_focused(window);
         let fft_number_focused = self.extra_focus.fft_number.is_focused(window);
         let text_focused = self.extra_focus.text.is_focused(window);
+        let spectrogram_focus = &self.extra_focus.spectrogram;
+        let spectrogram_focused = (
+            spectrogram_focus.number.is_focused(window),
+            spectrogram_focus.text.is_focused(window),
+        );
+        let proxy_focus = &self.extra_focus.support_proxy;
+        let proxy_focused = (
+            proxy_focus.number.is_focused(window),
+            proxy_focus.text.is_focused(window),
+        );
         let telemetry = &self.telemetry;
         let pages = &mut self.extra;
         pages
@@ -281,6 +304,17 @@ impl MissionPlanner {
             .then(|| telemetry.send_handle())
             .flatten();
         pages.auth_keys.tick(link.as_ref(), now);
+        // The spectrogram's reading and drawing, and the Support Proxy's stream and mirror: what
+        // the C# throws or boxes, on the status line.
+        let spectrogram_error = pages
+            .spectrogram
+            .tick(spectrogram_focused.0, spectrogram_focused.1);
+        let proxy_status = pages.support_proxy.tick(
+            telemetry,
+            &mut self.persisted,
+            proxy_focused.0,
+            proxy_focused.1,
+        );
         // The link errors the C# boxes go on the status line instead (the owner's ruling); the
         // page never draws them, since they leave its queue in the tick before the frame.
         let mut status = None;
@@ -310,6 +344,12 @@ impl MissionPlanner {
         }
         if fft_error.is_some() {
             status = fft_error;
+        }
+        if spectrogram_error.is_some() {
+            status = spectrogram_error;
+        }
+        if proxy_status.is_some() {
+            status = proxy_status;
         }
         if status.is_some() {
             self.file_status = status;
@@ -346,6 +386,10 @@ impl MissionPlanner {
                     window,
                     cx,
                 )
+            })
+            .or_else(|| spectrogram::overlay(&pages.spectrogram, &focus.spectrogram, window, cx))
+            .or_else(|| {
+                support_proxy::overlay(&pages.support_proxy, &focus.support_proxy, window, cx)
             })
             .or_else(|| parachute::overlay(&pages.parachute, window, cx))
             .or_else(|| osd::overlay(&pages.osd, window, cx))

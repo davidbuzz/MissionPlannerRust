@@ -12,7 +12,7 @@
 //! Follow Me, the parameter documentation regenerated from ArduPilot's source, the moving base, a
 //! log anonymised, the FFT and spectrogram plots, and the support proxy. Each is a form of its own
 //! in the C# (`Warnings/WarningsManager.cs`, `Controls/MAVLinkInspector.cs` and the rest, named at
-//! [`ROWS`]), a port of its own. Five are ported, and their buttons open them:
+//! [`ROWS`]), a port of its own. Seven are ported, and their buttons open them:
 //!
 //! * the Warning Manager's, `Warnings/WarningsManager.cs` (`config/warnings_manager.rs`),
 //!   `new WarningsManager().Show()`, over the warning engine's rules (`warnings.rs`), held with
@@ -27,7 +27,12 @@
 //!   `new ProximityControl(MainV2.comPort.MAV).Show()`, held likewise, and given the keyboard as
 //!   it opens, as a new form is activated, for its four keys;
 //! * the signing keys window, `Controls/AuthKeys.cs` (`config/auth_keys.rs`),
-//!   `new AuthKeys().Show()`, held likewise with the key store.
+//!   `new AuthKeys().Show()`, held likewise with the key store;
+//! * the spectrogram's, `Controls/SpectrogramUI.cs` (`config/spectrogram.rs`),
+//!   `new SpectrogramUI().Show()`, held there too;
+//! * the Support Proxy's, `Controls/SerialSupportProxy.cs` (`config/support_proxy.rs`),
+//!   `new SerialSupportProxy().Show()`, held there with the mirror it starts, which outlives it;
+//!   the form opens with its number having the keyboard (`NUM_port.Select()`).
 //!
 //! The others are not in this application, so their buttons are drawn dimmed, with the window
 //! each would open as the reason. Three of them stay that way by the owner's rulings (PLAN.md §12
@@ -49,8 +54,11 @@ use super::auth_keys::AuthKeysWindow;
 use super::fft::Fft;
 use super::mavlink_inspector::InspectorWindow;
 use super::proximity::ProximityWindow;
+use super::spectrogram::SpectrogramWindow;
+use super::support_proxy::SupportProxy;
 use super::warnings_manager::ManagerWindow;
 use crate::MissionPlanner;
+use crate::settings::Persisted;
 use crate::ui::{panel, theme};
 use crate::warnings::CustomWarning;
 
@@ -192,10 +200,11 @@ pub const ROWS: [Row; 13] = [
         "the FFT window (Controls/fftui.cs)", Some("config/fftui.rs")),
     row("BUT_spect", "Spectrogram", "BUT_spect_Click", "label13",
         "Plot a FFT from a log", (110.0, 18.0),
-        "the spectrogram window (Controls/SpectrogramUI.cs)", None),
+        "the spectrogram window (Controls/SpectrogramUI.cs)", Some("config/spectrogram.rs")),
     row("BUT_supportproxy", "Support Proxy", "BUT_supportproxy_Click", "label14",
         "Share connection with support engineer", (200.0, 18.0),
-        "the support proxy window (Controls/SerialSupportProxy.cs)", None),
+        "the support proxy window (Controls/SerialSupportProxy.cs)",
+        Some("config/support_proxy.rs")),
 ];
 
 /// Facts a UI test asserts on: whether the page shows, its text, the buttons and their labels in
@@ -264,7 +273,8 @@ pub fn open(button: &str, windows: Windows<'_>, now: std::time::Instant) -> bool
 /// `but_mavinspector_Click`, `new MAVLinkInspector(MainV2.comPort).Show()`, and `but_fft_Click`,
 /// `new fftui().Show()` - neither asking anything of the vehicle first. True when it did
 /// something. The Warning Manager needs the engine's rules: [`open`]; Proximity's and Mavlink
-/// Signing's are [`click_keys_or_proximity`].
+/// Signing's are [`click_keys_or_proximity`]; the Spectrogram's and Support Proxy's
+/// [`click_window`].
 /// `// C#: GCSViews/ConfigurationView/ConfigAdvanced.cs:27-30, 114-117`
 pub fn click(
     button: &str,
@@ -308,6 +318,30 @@ pub fn click_keys_or_proximity(
     }
 }
 
+/// The Spectrogram's and Support Proxy's buttons: `BUT_spect_Click`, `new SpectrogramUI()
+/// .Show()`, and `BUT_supportproxy_Click`, `new SerialSupportProxy().Show()`, whose constructor
+/// reads the settings - neither asking anything of the vehicle first. True when it did
+/// something.
+/// `// C#: GCSViews/ConfigurationView/ConfigAdvanced.cs:119-127`
+pub fn click_window(
+    button: &str,
+    spectrogram: &mut SpectrogramWindow,
+    proxy: &mut SupportProxy,
+    persisted: &Persisted,
+) -> bool {
+    match button {
+        "BUT_spect" => {
+            spectrogram.show();
+            true
+        }
+        "BUT_supportproxy" => {
+            proxy.show(persisted);
+            true
+        }
+        _ => false,
+    }
+}
+
 /// An absolutely placed box.
 fn at((x, y, width, height): (f32, f32, f32, f32)) -> Div {
     div()
@@ -318,9 +352,9 @@ fn at((x, y, width, height): (f32, f32, f32, f32)) -> Div {
         .h(px(height))
 }
 
-/// A button in its cell: Warning Manager's, MAVLink Inspector's, Proximity's, Mavlink Signing's
-/// and FFT's opening their windows, the others dimmed - the window each opens is not in this
-/// application (see `opens`).
+/// A button in its cell: Warning Manager's, MAVLink Inspector's, Proximity's, Mavlink Signing's,
+/// FFT's, Spectrogram's and Support Proxy's opening their windows, the others dimmed - the window
+/// each opens is not in this application (see `opens`).
 /// `// C#: GCSViews/ConfigurationView/ConfigAdvanced.cs:22-127`
 fn button(row: Row, y: f32, cx: &mut Context<MissionPlanner>) -> AnyElement {
     let (bx, by, bw, bh) = BUTTON_IN_CELL;
@@ -357,10 +391,20 @@ fn button(row: Row, y: f32, cx: &mut Context<MissionPlanner>) -> AnyElement {
                         &mut pages.auth_keys,
                         now,
                     )
+                    || click_window(
+                        row.button,
+                        &mut pages.spectrogram,
+                        &mut pages.support_proxy,
+                        &this.persisted,
+                    )
                 {
                     // A new form is activated: the proximity window takes its keys at once.
                     if row.button == "but_proximity" {
                         this.extra_focus.proximity.focus(window, cx);
+                    }
+                    // `NUM_port.Select()`: the Support Proxy's number has the keyboard.
+                    if row.button == "BUT_supportproxy" {
+                        this.extra_focus.support_proxy.number.focus(window, cx);
                     }
                     cx.notify();
                 }
@@ -374,7 +418,7 @@ fn button(row: Row, y: f32, cx: &mut Context<MissionPlanner>) -> AnyElement {
 }
 
 /// The page, as the `.resx` lays it out: Warning Manager, MAVLink Inspector, Proximity, Mavlink
-/// Signing and FFT opening their windows, every other button dimmed.
+/// Signing, FFT, Spectrogram and Support Proxy opening their windows, every other button dimmed.
 /// `// C#: GCSViews/ConfigurationView/ConfigAdvanced.Designer.cs:29-266; ConfigAdvanced.resx`
 pub fn page(cx: &mut Context<MissionPlanner>) -> AnyElement {
     let mut table = at(TABLE);
@@ -582,100 +626,203 @@ mod tests {
         assert_eq!(clicked, ["but_fft"]);
     }
 
+    /// The page's windows, held as the page's button closure holds them.
+    struct Pages {
+        fft: Fft,
+        inspector: InspectorWindow,
+        warnings: ManagerWindow,
+        rules: Vec<CustomWarning>,
+        proximity: ProximityWindow,
+        auth_keys: AuthKeysWindow,
+        spectrogram: SpectrogramWindow,
+        proxy: SupportProxy,
+    }
+
+    impl Pages {
+        /// Every window closed; a key store of its own, as the application's is read from the
+        /// user data directory; one rule for the Warning Manager to show.
+        fn new() -> Self {
+            Self {
+                fft: Fft::default(),
+                inspector: InspectorWindow::default(),
+                warnings: ManagerWindow::default(),
+                rules: vec![CustomWarning::on("alt")],
+                proximity: ProximityWindow::default(),
+                auth_keys: AuthKeysWindow {
+                    store: Some(super::super::auth_keys::KeyStore::default()),
+                    ..AuthKeysWindow::default()
+                },
+                spectrogram: SpectrogramWindow::default(),
+                proxy: SupportProxy::default(),
+            }
+        }
+
+        /// A button clicked, as the page clicks it.
+        fn click(&mut self, button: &str, persisted: &Persisted) -> bool {
+            let now = std::time::Instant::now();
+            let windows = Windows {
+                fft: &mut self.fft,
+                inspector: &mut self.inspector,
+                warnings: &mut self.warnings,
+                rules: &mut self.rules,
+            };
+            open(button, windows, now)
+                || click_keys_or_proximity(button, &mut self.proximity, &mut self.auth_keys, now)
+                || click_window(button, &mut self.spectrogram, &mut self.proxy, persisted)
+        }
+    }
+
     /// Warning Manager is `new WarningsManager().Show()`, which opens the manager over the
     /// engine's rules; FFT is `new fftui().Show()` - the FFT Setup page's handler word for word -
     /// so it opens the window that page opens; MAVLink Inspector is `new MAVLinkInspector(
-    /// MainV2.comPort).Show()`, which opens the inspector; Proximity and Mavlink Signing open
-    /// theirs; none needs a vehicle or a page shown first, and every other button does nothing.
-    /// `// C#: GCSViews/ConfigurationView/ConfigAdvanced.cs:22-30, 37-45, 114-117; ConfigFFT.cs:162-165`
+    /// MainV2.comPort).Show()`, which opens the inspector; Proximity, Mavlink Signing,
+    /// Spectrogram (`new SpectrogramUI().Show()`) and Support Proxy (`new SerialSupportProxy()
+    /// .Show()`) open theirs; none needs a vehicle or a page shown first, and every other button
+    /// does nothing.
+    /// `// C#: GCSViews/ConfigurationView/ConfigAdvanced.cs:22-30, 37-45, 114-127; ConfigFFT.cs:162-165`
     #[test]
-    fn the_three_ported_windows_open_and_the_others_nothing() {
+    fn the_ported_windows_open_and_the_others_nothing() {
         let now = std::time::Instant::now();
-        // A store of its own: the application's is read from the user data directory.
-        let keys = || AuthKeysWindow {
-            store: Some(super::super::auth_keys::KeyStore::default()),
-            ..AuthKeysWindow::default()
-        };
+        let persisted = Persisted::at(None);
         for row in ROWS {
-            let mut fft = Fft::default();
-            let mut inspector = InspectorWindow::default();
-            let mut warnings = ManagerWindow::default();
-            let mut rules = vec![CustomWarning::on("alt")];
-            let mut proximity = ProximityWindow::default();
-            let mut auth_keys = keys();
-            let windows = Windows {
-                fft: &mut fft,
-                inspector: &mut inspector,
-                warnings: &mut warnings,
-                rules: &mut rules,
-            };
-            let opened = open(row.button, windows, now)
-                || click_keys_or_proximity(row.button, &mut proximity, &mut auth_keys, now);
-            assert_eq!(opened, row.enabled(), "{}", row.button);
+            let mut windows = Pages::new();
+            assert_eq!(
+                windows.click(row.button, &persisted),
+                row.enabled(),
+                "{}",
+                row.button
+            );
             let fft_row = row.button == "but_fft";
             let inspector_row = row.button == "but_mavinspector";
             let warnings_row = row.button == "but_warningmanager";
             let proximity_row = row.button == "but_proximity";
             let keys_row = row.button == "but_signkey";
-            assert_eq!(fft.window.is_some(), fft_row, "{}", row.button);
-            assert_eq!(fft.opened, usize::from(fft_row));
-            assert!(!fft.is_active(), "the FFT Setup page is not shown by it");
-            assert_eq!(inspector.window.is_some(), inspector_row, "{}", row.button);
-            assert_eq!(inspector.opened, usize::from(inspector_row));
-            assert_eq!(warnings.window.is_some(), warnings_row, "{}", row.button);
-            assert_eq!(warnings.opened, usize::from(warnings_row));
+            let spectrogram_row = row.button == "BUT_spect";
+            let proxy_row = row.button == "BUT_supportproxy";
+            assert_eq!(windows.fft.window.is_some(), fft_row, "{}", row.button);
+            assert_eq!(windows.fft.opened, usize::from(fft_row));
+            assert!(
+                !windows.fft.is_active(),
+                "the FFT Setup page is not shown by it"
+            );
+            assert_eq!(
+                windows.inspector.window.is_some(),
+                inspector_row,
+                "{}",
+                row.button
+            );
+            assert_eq!(windows.inspector.opened, usize::from(inspector_row));
+            assert_eq!(
+                windows.warnings.window.is_some(),
+                warnings_row,
+                "{}",
+                row.button
+            );
+            assert_eq!(windows.warnings.opened, usize::from(warnings_row));
             if warnings_row {
-                assert_eq!(warnings.window.as_ref().map(|w| w.controls.len()), Some(1));
+                assert_eq!(
+                    windows.warnings.window.as_ref().map(|w| w.controls.len()),
+                    Some(1)
+                );
             }
-            assert_eq!(proximity.window.is_some(), proximity_row, "{}", row.button);
-            assert_eq!(proximity.opened, usize::from(proximity_row));
-            assert_eq!(auth_keys.window.is_some(), keys_row, "{}", row.button);
-            assert_eq!(auth_keys.opened, usize::from(keys_row));
+            assert_eq!(
+                windows.proximity.window.is_some(),
+                proximity_row,
+                "{}",
+                row.button
+            );
+            assert_eq!(windows.proximity.opened, usize::from(proximity_row));
+            assert_eq!(
+                windows.auth_keys.window.is_some(),
+                keys_row,
+                "{}",
+                row.button
+            );
+            assert_eq!(windows.auth_keys.opened, usize::from(keys_row));
+            assert_eq!(windows.spectrogram.window.is_some(), spectrogram_row);
+            assert_eq!(windows.spectrogram.opened, usize::from(spectrogram_row));
+            assert_eq!(windows.proxy.window.is_some(), proxy_row, "{}", row.button);
+            assert_eq!(windows.proxy.opened, usize::from(proxy_row));
             // `click` is the two that need nothing but themselves.
             let mut fft = Fft::default();
             let mut inspector = InspectorWindow::default();
             assert_eq!(
                 click(row.button, &mut fft, &mut inspector, now),
-                row.enabled() && !warnings_row && !proximity_row && !keys_row,
+                row.enabled()
+                    && !warnings_row
+                    && !proximity_row
+                    && !keys_row
+                    && !spectrogram_row
+                    && !proxy_row,
                 "{}",
                 row.button
             );
         }
         // A second click, a fresh window: the Designer's Magnitude unticked again.
-        let mut fft = Fft::default();
-        let mut inspector = InspectorWindow::default();
-        click("but_fft", &mut fft, &mut inspector, now);
-        if let Some(window) = fft.window.as_mut() {
+        let mut windows = Pages::new();
+        windows.click("but_fft", &persisted);
+        if let Some(window) = windows.fft.window.as_mut() {
             window.toggle_magnitude();
         }
-        click("but_fft", &mut fft, &mut inspector, now);
-        assert_eq!(fft.opened, 2);
-        assert!(fft.window.as_ref().is_some_and(|window| !window.magnitude));
+        windows.click("but_fft", &persisted);
+        assert_eq!(windows.fft.opened, 2);
+        assert!(
+            windows
+                .fft
+                .window
+                .as_ref()
+                .is_some_and(|window| !window.magnitude)
+        );
         // And the inspector's: "Show GCS Traffic" unticked and the history 50 again.
-        click("but_mavinspector", &mut fft, &mut inspector, now);
-        if let Some(window) = inspector.window.as_mut() {
+        windows.click("but_mavinspector", &persisted);
+        if let Some(window) = windows.inspector.window.as_mut() {
             window.toggle_gcs_traffic();
             window.history = 7;
         }
-        click("but_mavinspector", &mut fft, &mut inspector, now);
-        assert_eq!(inspector.opened, 2);
-        assert!(inspector.window.as_ref().is_some_and(|window| {
+        windows.click("but_mavinspector", &persisted);
+        assert_eq!(windows.inspector.opened, 2);
+        assert!(windows.inspector.window.as_ref().is_some_and(|window| {
             !window.gcs_traffic() && window.history == 50 && window.tree.is_empty()
         }));
         // And the proximity window's: the radius 5 m again.
-        let mut proximity = ProximityWindow::default();
-        let mut auth_keys = keys();
-        click_keys_or_proximity("but_proximity", &mut proximity, &mut auth_keys, now);
-        if let Some(window) = proximity.window.as_mut() {
+        windows.click("but_proximity", &persisted);
+        if let Some(window) = windows.proximity.window.as_mut() {
             window.key_press('+');
         }
-        click_keys_or_proximity("but_proximity", &mut proximity, &mut auth_keys, now);
-        assert_eq!(proximity.opened, 2);
+        windows.click("but_proximity", &persisted);
+        assert_eq!(windows.proximity.opened, 2);
         assert!(
-            proximity
+            windows
+                .proximity
                 .window
                 .as_ref()
                 .is_some_and(|window| window.screenradius == 500.0)
+        );
+        // The spectrogram's: ACC1 and -80 to -20 again, nothing loaded.
+        windows.click("BUT_spect", &persisted);
+        if let Some(window) = windows.spectrogram.window.as_mut() {
+            window.choose(5);
+            window.step(super::super::spectrogram::Edit::Max, 1.0);
+        }
+        windows.click("BUT_spect", &persisted);
+        assert_eq!(windows.spectrogram.opened, 2);
+        assert!(windows.spectrogram.window.as_ref().is_some_and(|window| {
+            window.sensor.value() == "ACC1"
+                && window.max.field.value() == "-20"
+                && window.log_name().is_none()
+        }));
+        // The proxy's: its constructor reads the settings - a TCP server kept.
+        let mut kept = Persisted::at(None);
+        kept.set("SerialSupportProxy_UDP", "False");
+        kept.set("TCP_host_SerialSupportProxy", "support.example");
+        windows.click("BUT_supportproxy", &kept);
+        assert_eq!(windows.proxy.opened, 1);
+        assert!(
+            windows
+                .proxy
+                .window
+                .as_ref()
+                .is_some_and(|window| !window.udp && window.host.value() == "support.example")
         );
         let enabled: Vec<&str> = ROWS
             .iter()
@@ -689,7 +836,9 @@ mod tests {
                 "but_mavinspector",
                 "but_proximity",
                 "but_signkey",
-                "but_fft"
+                "but_fft",
+                "BUT_spect",
+                "BUT_supportproxy"
             ]
         );
     }
