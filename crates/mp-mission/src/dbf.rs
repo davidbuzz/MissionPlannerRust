@@ -120,7 +120,15 @@ pub fn read(bytes: &[u8]) -> Result<Table, DbfError> {
     if fields.iter().map(|field| field.length).sum::<usize>() + 1 != record_length {
         return Err(DbfError::Malformed);
     }
-    let mut records = Vec::with_capacity(count);
+    // The header's count is the file's word for it, not the bytes': a table whose header claims
+    // a billion records it has not got must fail on the first missing record, not on allocating
+    // room for them all (the fuzzer found an 86-byte table that asked for 23 GB).
+    let possible = bytes
+        .len()
+        .saturating_sub(header_length)
+        .checked_div(record_length)
+        .unwrap_or(0);
+    let mut records = Vec::with_capacity(count.min(possible));
     let mut at = header_length;
     for _ in 0..count {
         let record = bytes
@@ -144,6 +152,25 @@ pub fn read(bytes: &[u8]) -> Result<Table, DbfError> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The fuzzer's finding (fuzz/artifacts/dbf_table, 2026-10-03): a header counting 989
+    /// million records in an 86-byte file. The read must fail at the records, not allocate for
+    /// the count.
+    #[test]
+    fn a_record_count_the_bytes_cannot_hold_fails_at_the_records() {
+        let mut bytes = vec![
+            0x03, 0x7e, 0x09, 0x18, 0x02, 0x00, 0x00, 0x3b, 0x41, 0x00, 0x0b, 0x00,
+        ];
+        bytes.resize(32, 0);
+        let mut descriptor = [0u8; 32];
+        descriptor[..2].copy_from_slice(b"ID");
+        descriptor[11] = b'N';
+        descriptor[16] = 10;
+        bytes.extend(descriptor);
+        bytes.push(0x0D);
+        bytes.extend(b"          1          2\x1a");
+        assert!(matches!(read(&bytes), Err(DbfError::Truncated)));
+    }
 
     /// A table as a shapefile writer lays one out.
     #[allow(clippy::cast_possible_truncation)] // test tables are small

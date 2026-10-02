@@ -119,3 +119,34 @@ above remain the regression check.
 CI runs a bounded pass of all five on every push (the `fuzz` job in `.github/workflows/ci.yml`),
 and uploads any crashing input as an artifact: a crash whose input is gone is a crash nobody can
 reproduce.
+
+## The readers added since, run 2026-10-03
+
+Eight targets for what the first soak did not reach - the parsers written after it - each 45 s on
+the same box, nightly + cargo-fuzz 0.13.2, from the seeds in `fuzz/seeds/<target>` (copies of the
+test data: `edge.bin` and the head of `dataflash.bin`, the synthetic and example logs, `route.kmz`
+and an SRTM tile, the fence, rally and polygon files, the three `.dbf`, a hand-written HEX, the
+peripheral manifest, a legacy list and a GitHub listing, SLCAN lines).
+
+| target | executions | exec/s | edges | peak RSS |
+|---|---:|---:|---:|---:|
+| `dataflash_bin` | 4,890 | 106 | 1,226 | 598 MB |
+| `loganalyzer_text` | 10,414 | 226 | 2,965 | 489 MB |
+| `zip_archive` | 876 | 19 | 1,303 | 330 MB |
+| `fence_file` | 480,612 | 10,448 | 502 | 523 MB |
+| `dbf_table` | 2,329 | - | - | out of memory, see below |
+| `intel_hex` | 1,002,892 | 21,802 | 212 | 76 MB |
+| `catalogue_text` | 1,700,748 | 36,972 | 2,871 | 556 MB |
+| `dronecan_slcan` | 690,594 | 15,012 | 753 | 570 MB |
+
+`dataflash_bin` and `zip_archive` are slow by nature - each execution converts a whole log to
+text, or inflates and deflates an archive - and `loganalyzer_text` runs seventeen checks over
+every input; the seconds are spent in the code under test, which is where they should be.
+
+**`dbf_table` found something in its first two seconds.** An 86-byte table whose header claimed
+989 million records (libFuzzer's `oom-df8062b3...`, kept as the unit test) made `read` allocate for the count
+before reading a record: 23 GB for a file of 86 bytes. The reader now sizes its allocation by what
+the bytes can hold and fails at the first missing record (`crates/mp-mission/src/dbf.rs`, with the
+input as a unit test); rerun for 60 s, 1,478,379 executions, clean.
+
+CI runs each of the eight a bounded slice beside the five above.

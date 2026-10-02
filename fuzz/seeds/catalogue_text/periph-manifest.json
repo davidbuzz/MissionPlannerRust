@@ -1,0 +1,38 @@
+{
+  "format-version": "1.0.0",
+  "firmware": [
+    {
+      "mav-autopilot": "ARDUPILOTMEGA",
+      "vehicletype": "AP_Periph",
+      "platform": "com.cubepilot.here4",
+      "git-sha": "b84ff44cb2a9893cf2af9045684bc07190cc3927",
+      "url": "https://github.com/CubePilot/GNSSPeriph-release/releases/download/v1.15.9/Here4_FW.zip",
+      "mav-type": "CAN_PERIPHERAL",
+      "mav-firmware-version-type": "OFFICIAL",
+      "mav-firmware-version-str": "V1.15.9",
+      "latest": 0,
+      "format": "zip",
+      "mav-firmware-version": "1.15.9",
+      "mav-firmware-version-major": "1",
+      "mav-firmware-version-minor": "15",
+      "mav-firmware-version-patch": "9",
+      "firmware-name": "Here4_FW.bin"
+    },
+    {
+      "mav-autopilot": "ARDUPILOTMEGA",
+      "vehicletype": "AP_Periph",
+      "platform": "com.cubepilot.herepro",
+      "git-sha": "963ee4169f8965df24941bdf36f649d4301821a7",
+      "url": "https://github.com/CubePilot/GNSSPeriph-release/releases/download/latest/HerePro_FW.bin",
+      "mav-type": "CAN_PERIPHERAL",
+      "mav-firmware-version-type": "OFFICIAL",
+      "mav-firmware-version-str": "V1.14.1",
+      "latest": 0,
+      "format": "bin",
+      "mav-firmware-version": "1.14.1",
+      "mav-firmware-version-major": "1",
+      "mav-firmware-version-minor": "14",
+      "mav-firmware-version-patch": "1"
+    }
+  ]
+}

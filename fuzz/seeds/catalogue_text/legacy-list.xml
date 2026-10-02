@@ -1,0 +1,9 @@
+<?xml version="1.0"?>
+<options>
+  <Firmware>
+    <url2560>https://firmware.ardupilot.org/Copter/stable/apm2/ArduCopter.hex</url2560>
+    <name>ArduCopter V3.2.1 Quad</name>
+    <desc>ArduCopter 3.2.1</desc>
+    <format_version>120</format_version>
+  </Firmware>
+</options>

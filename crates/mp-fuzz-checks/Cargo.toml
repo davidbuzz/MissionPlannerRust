@@ -15,3 +15,5 @@ mp-mavlink.workspace = true
 mp-mavlink-dialects.workspace = true
 mp-mission.workspace = true
 mp-log.workspace = true
+mp-dronecan.workspace = true
+mp-firmware.workspace = true

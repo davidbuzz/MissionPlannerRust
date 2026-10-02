@@ -18,10 +18,19 @@
 // reporting mechanism and there is nobody to hand an error to.
 #![allow(clippy::expect_used, clippy::missing_panics_doc)]
 
+use mp_dronecan::slcan::{Line, read_line};
+use mp_dronecan::transfer::Reassembler;
+use mp_firmware::flow::{Buttons, Dialogue, read_intel_hex};
+use mp_firmware::{github, legacy};
 use mp_log::TlogReader;
+use mp_log::analysis::{analyse_text, results};
+use mp_log::convert::{convert_bin, no_mode_names};
+use mp_log::dataflash::DataflashReader;
+use mp_log::zip;
 use mp_mavlink::{FrameDecoder, MAX_FRAME_LEN, parse};
 use mp_mavlink_dialects::all::{DIALECT, MavMessage};
-use mp_mission::{read_waypoints, write_waypoints};
+use mp_mission::fence_file::{read_fence, read_polygon, read_rally};
+use mp_mission::{dbf, read_waypoints, write_waypoints};
 
 /// Single-frame parsing.
 ///
@@ -175,6 +184,136 @@ pub fn message_decode(data: &[u8]) {
     }
 }
 
+/// A dataflash `.bin`.
+///
+/// What a failing card or a download cut short leaves: the reader must terminate, and never hand
+/// back more messages than there are bytes; the text conversion, which runs over every message a
+/// `.bin` has, must come out the other side.
+pub fn dataflash_bin(data: &[u8]) {
+    let mut reader = DataflashReader::new(data);
+    let mut messages = 0usize;
+    while reader.next_message().is_some() {
+        messages += 1;
+        assert!(messages <= data.len(), "reader is not making progress");
+    }
+    let _ = convert_bin(data, &no_mode_names);
+}
+
+/// The log analyzer over a `.log`'s text.
+///
+/// Its Python skips every line it cannot read and runs seventeen checks over what is left, each
+/// of which it lets raise; the port must not panic on any of it, and the XML it writes must be
+/// readable by the C#'s reader, or fail to be, without a panic either.
+pub fn loganalyzer_text(data: &[u8]) {
+    let text = String::from_utf8_lossy(data);
+    if let Ok(xml) = analyse_text(&text, "fuzz.log") {
+        let _ = results(&xml);
+    }
+}
+
+/// A zip archive.
+///
+/// KMZ files, SRTM tiles, firmware and updates all arrive as zips. The reader must terminate and
+/// read nothing outside the buffer; what it reads, written back, must read again the same.
+pub fn zip_archive(data: &[u8]) {
+    let Ok(entries) = zip::read(data) else {
+        return;
+    };
+    let stamp = zip::DosTime {
+        year: 2026,
+        month: 1,
+        day: 1,
+        hour: 0,
+        minute: 0,
+        second: 0,
+    };
+    let Ok(written) = zip::write(&entries, stamp) else {
+        return;
+    };
+    let reread = zip::read(&written).expect("our own archive must read");
+    assert_eq!(
+        reread.len(),
+        entries.len(),
+        "entry count changed on round trip"
+    );
+    for (before, after) in entries.iter().zip(reread.iter()) {
+        assert_eq!(
+            before.name, after.name,
+            "an entry's name changed on round trip"
+        );
+        assert_eq!(
+            before.data, after.data,
+            "an entry's data changed on round trip"
+        );
+    }
+}
+
+/// Fence, rally and polygon files.
+///
+/// Readers that never fail - each returns what it could read - must read anything without a
+/// panic.
+pub fn fence_file(data: &[u8]) {
+    let Ok(text) = std::str::from_utf8(data) else {
+        return;
+    };
+    let _ = read_fence(text);
+    let _ = read_rally(text);
+    let _ = read_polygon(text);
+}
+
+/// A shapefile's DBF table: the reader must terminate and index nothing outside the buffer.
+pub fn dbf_table(data: &[u8]) {
+    let _ = dbf::read(data);
+}
+
+/// A dialogue that answers every question Yes and shows nothing: what the Intel HEX reader's
+/// boxes meet under the fuzzer.
+struct Mute;
+
+impl Dialogue for Mute {
+    fn ask(&mut self, _text: &str, _caption: &str, _buttons: Buttons) -> bool {
+        true
+    }
+
+    fn show(&mut self, _text: &str, _caption: &str) {}
+
+    fn progress(&mut self, _percent: i32, _status: &str) {}
+}
+
+/// An Intel HEX firmware image: records, extended addresses and checksums from a file somebody
+/// downloaded. The reader must terminate, and write nowhere outside its image.
+pub fn intel_hex(data: &[u8]) {
+    let Ok(text) = std::str::from_utf8(data) else {
+        return;
+    };
+    let _ = read_intel_hex(text, &mut Mute);
+}
+
+/// The firmware catalogues: the legacy XML list, GitHub's directory JSON and its file JSON,
+/// each from a server that may answer anything.
+pub fn catalogue_text(data: &[u8]) {
+    let Ok(text) = std::str::from_utf8(data) else {
+        return;
+    };
+    let _ = legacy::parse_list(text);
+    let _ = github::parse_dir(text, "");
+    let _ = github::parse_file(text);
+}
+
+/// SLCAN lines into the DroneCAN transfer reassembler, and through it the DSDL decoders: every
+/// frame a bus delivers goes this way, and a line from an adapter is anything.
+pub fn dronecan_slcan(data: &[u8]) {
+    let Ok(text) = std::str::from_utf8(data) else {
+        return;
+    };
+    let mut reassembler = Reassembler::new();
+    for line in text.split(['\r', '\n']) {
+        if let Line::Frame(frame, id, payload) = read_line(line) {
+            let _ = reassembler.push(frame, id, &payload);
+        }
+    }
+}
+
 /// A named property: arbitrary bytes in, a panic if the property does not hold.
 pub type Target = (&'static str, fn(&[u8]));
 
@@ -188,4 +327,12 @@ pub const TARGETS: &[Target] = &[
     ("waypoint_file", waypoint_file),
     ("tlog_reader", tlog_reader),
     ("message_decode", message_decode),
+    ("dataflash_bin", dataflash_bin),
+    ("loganalyzer_text", loganalyzer_text),
+    ("zip_archive", zip_archive),
+    ("fence_file", fence_file),
+    ("dbf_table", dbf_table),
+    ("intel_hex", intel_hex),
+    ("catalogue_text", catalogue_text),
+    ("dronecan_slcan", dronecan_slcan),
 ];

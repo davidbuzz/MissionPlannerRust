@@ -4510,6 +4510,8 @@ dependencies = [
 name = "mp-fuzz-checks"
 version = "0.1.0"
 dependencies = [
+ "mp-dronecan",
+ "mp-firmware",
  "mp-log",
  "mp-mavlink",
  "mp-mavlink-dialects",

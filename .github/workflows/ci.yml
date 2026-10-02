@@ -145,6 +145,23 @@ jobs:
       # frame_parse reaches - so it gets a slice to match.
       - name: message_decode
         run: tools/fuzz.sh message_decode -max_total_time=180
+      # The readers added since: each a bounded slice, the two log readers the longest.
+      - name: dataflash_bin
+        run: tools/fuzz.sh dataflash_bin -max_total_time=60
+      - name: loganalyzer_text
+        run: tools/fuzz.sh loganalyzer_text -max_total_time=60
+      - name: zip_archive
+        run: tools/fuzz.sh zip_archive -max_total_time=30
+      - name: fence_file
+        run: tools/fuzz.sh fence_file -max_total_time=30
+      - name: dbf_table
+        run: tools/fuzz.sh dbf_table -max_total_time=30
+      - name: intel_hex
+        run: tools/fuzz.sh intel_hex -max_total_time=30
+      - name: catalogue_text
+        run: tools/fuzz.sh catalogue_text -max_total_time=30
+      - name: dronecan_slcan
+        run: tools/fuzz.sh dronecan_slcan -max_total_time=60
       # A crash leaves its input behind; without this the job fails and the input that caused it
       # is gone, which makes the failure unreproducible and therefore useless.
       - name: Keep any crashing input

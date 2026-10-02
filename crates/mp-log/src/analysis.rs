@@ -116,14 +116,25 @@ pub fn run_analyzer(log: &Path, xml: &Path) -> Result<String, AnalysisError> {
     // The Python reads bytes; a log that is not UTF-8 is read with its bad bytes replaced, which
     // counts those bytes differently in the size.
     let text = String::from_utf8_lossy(&bytes);
-    let mut data = logdata::DataflashLog::read(&text, &log.display().to_string(), true)
+    let written = analyse_text(&text, &log.display().to_string())
         .map_err(|_| AnalysisError::BadInputFile)?;
-    let ran = suite::run(&mut data);
-    let written = match suite::output_xml(&data, &ran) {
-        Ok(xml) | Err(xml) => xml,
-    };
     std::fs::write(xml, &written).map_err(|_| AnalysisError::BadInputFile)?;
     Ok(written)
+}
+
+/// The analyzer over a log's text, named `filename` in its XML: what `runner.exe` writes, or
+/// the Python's exception out of `DataflashLog.read`. The whole of the analysis without a file,
+/// which is what the fuzz target feeds.
+///
+/// # Errors
+///
+/// The text would not read as a log: `str(e)` of the exception.
+pub fn analyse_text(text: &str, filename: &str) -> Result<String, String> {
+    let mut data = logdata::DataflashLog::read(text, filename, true).map_err(|e| e.text)?;
+    let ran = suite::run(&mut data);
+    Ok(match suite::output_xml(&data, &ran) {
+        Ok(xml) | Err(xml) => xml,
+    })
 }
 
 /// Auto Analysis (`BUT_loganalysis`) for one file: a `.bin` is converted to a temporary `.log`

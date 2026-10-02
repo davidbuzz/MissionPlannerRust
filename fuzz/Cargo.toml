@@ -48,3 +48,59 @@ path = "fuzz_targets/message_decode.rs"
 test = false
 doc = false
 bench = false
+
+[[bin]]
+name = "dataflash_bin"
+path = "fuzz_targets/dataflash_bin.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "loganalyzer_text"
+path = "fuzz_targets/loganalyzer_text.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "zip_archive"
+path = "fuzz_targets/zip_archive.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fence_file"
+path = "fuzz_targets/fence_file.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "dbf_table"
+path = "fuzz_targets/dbf_table.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "intel_hex"
+path = "fuzz_targets/intel_hex.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "catalogue_text"
+path = "fuzz_targets/catalogue_text.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "dronecan_slcan"
+path = "fuzz_targets/dronecan_slcan.rs"
+test = false
+doc = false
+bench = false
