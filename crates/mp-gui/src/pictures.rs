@@ -95,7 +95,7 @@ macro_rules! embedded {
 /// `// C#: Properties/Resources.resx` (the file each resource names) and `Resources.Designer.cs`
 /// (the property each resource is); `ExtLibs/Controls/HUDT.resx` and `HUDT.Designer.cs` for the
 /// HUD's; `GCSViews/SITL.resx` for SITL's.
-pub const IMAGES: [Embedded; 68] = [
+pub const IMAGES: [Embedded; 69] = [
     embedded!("APM_airframes_001", "APM_airframes_001.png"),
     embedded!("APM_airframes_08", "APM_airframes_08.png"),
     embedded!("Antenna_Tracker_01", "Antenna_Tracker_01.png"),
@@ -173,6 +173,8 @@ pub const IMAGES: [Embedded; 68] = [
     embedded!("pixhawk2cube", "pixhawk2cube.jpg"),
     embedded!("prearm_green", "prearm_green.png"),
     embedded!("prearm_red", "prearm_red.png"),
+    // `Resources.quadicon`, the Proximity window's copter (`config/proximity.rs`).
+    embedded!("quadicon", "quadicon.png"),
     embedded!("redsinglecopter2", "redsinglecopter2.png"),
     // `MissionPlanner.Maps.Resources.rover`, the flight map's rover marker: `car.png` in
     // `ExtLibs/Maps/Resources.resx`, carried under the resource's name as the rest are.
@@ -888,7 +890,7 @@ mod tests {
         names.sort_unstable();
         names.dedup();
         assert_eq!(names.len(), IMAGES.len(), "a resource carried twice");
-        assert_eq!(total, 825_941, "the images embedded, in bytes");
+        assert_eq!(total, 831_774, "the images embedded, in bytes");
         assert!(decoded("no_such_resource").is_none());
     }
 
@@ -938,8 +940,9 @@ mod tests {
                         .any(|icon| icon.resource() == embedded.resource)
                     || crate::mapview::MarkerKind::ALL
                         .iter()
-                        .any(|kind| kind.icon().is_some_and(|(r, _)| r == embedded.resource)),
-                "{} is carried but no site, HUD picture or map marker shows it",
+                        .any(|kind| kind.icon().is_some_and(|(r, _)| r == embedded.resource))
+                    || embedded.resource == crate::config::proximity::QUAD_ICON,
+                "{} is carried but no site, HUD picture, map marker or the proximity window shows it",
                 embedded.resource
             );
         }

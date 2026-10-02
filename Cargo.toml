@@ -46,6 +46,10 @@ sha2 = "0.10"
 criterion = { version = "0.5", default-features = false, features = ["cargo_bench_support"] }
 proptest = "1"
 roxmltree = "0.20"
+# The signing keys' store, `authkeys.xml`: `Crypto.cs`'s Rijndael - AES-256, CBC, PKCS7. The
+# versions gpui's keyring (oo7) already compiles on Linux.
+aes = "0.8"
+cbc = "0.1"
 # The planner's Text entry reads glyph outlines from the font file (GDI+'s AddString stand-in).
 ttf-parser = "0.25"
 # The firmware container: JSON wrapping a base64 zlib stream. Pinned to what the tree already

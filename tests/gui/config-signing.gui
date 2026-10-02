@@ -1,0 +1,120 @@
+# The signing keys window, ported from Controls/AuthKeys.cs, which SETUP's Advanced page's
+# "Mavlink Signing" button opens (GCSViews/ConfigurationView/ConfigAdvanced.cs:37-40:
+# `new AuthKeys().Show()`), over the key store ExtLibs/ArduPilot/Mavlink/MAVAuthKeys.cs and the
+# link's MAVLink 2 signing (MAVLinkInterface.cs's generatePacket, setupSigning, CheckSignature).
+#
+# The claims: the window opens on the store - empty here, the data directory a scratch one - and
+# its label says "Using Key: None/Unknown, Signed Packets: 0" at the timer's first tick
+# (AuthKeys.cs:11-21, 135-152). Add makes an empty row, asks a name and then a pass phrase, says
+# how strong the phrase is - "Correct Horse 42!" scores 130, Strong - and at that box's OK stores
+# the SHA-256 of it under the name, saves authkeys.xml and fills the grid from the store again:
+# "bench" and its key in base64 (:53-118; MAVAuthKeys.cs:45-69). Use on that row sends
+# SETUP_SIGNING with the key to the vehicle and turns signing on (:44-51; MAVLinkInterface.cs:
+# 1529-1592); the vehicle, keyed, signs what it sends, and the link takes the key from its first
+# signed packet - the label then names "bench" and counts the signed packets (MAVLinkInterface.cs:
+# 5059-5089, 5501-5526). The vehicle accepting what the link now signs is shown by a parameter
+# written and its echo heard, then put back, on the Full Parameter List. Disable Signing sends
+# zeros and turns signing off (:130-133); the vehicle stops signing, and the label goes back to
+# "None/Unknown" and, a second later, 0. The close box ends the window.
+#
+# Needs SITL copter on tcp:127.0.0.1:5760 started from tools/sitl/params/copter.parm, and an
+# ArduPilot that takes SETUP_SIGNING on that link while disarmed. A run that stops between Use and
+# Disable Signing leaves SITL keyed: start it again with its storage wiped (-w). Run from the
+# repository root as
+#
+#   tools/gui-test.sh tests/gui/config-signing.gui -- tcp:127.0.0.1:5760
+#
+# Not yet run: the budget is a guess, set by hand until a passing run records one.
+
+# A data directory of its own, so the key store starts empty and the machine's is not touched;
+# a config.xml of its own, so the answers InputBox keeps are not kept in the machine's settings.
+env XDG_DATA_HOME $WORK
+env MP_CONFIG_XML $WORK/config.xml
+screen setup
+window 1600x1200
+budget 26
+
+# The vehicle first, and its parameters, which are fetched as it is heard: the SETUP list is
+# built again when they are in, and a click before that is a click the list may forget.
+expect vehicle.count > 0
+expect params.held > 1000
+expect config.authkeys.window false
+click setup-page-ConfigAdvanced
+expect setup.page ConfigAdvanced
+expect config.advanced.buttons.enabled Warning Manager,MAVLink Inspector,Proximity,Mavlink Signing,FFT
+
+# The constructor: the store, the grid from it, the timer.
+click advanced-but_signkey
+expect config.authkeys.window true
+expect config.authkeys.opened 1
+expect config.authkeys.store 0
+expect config.authkeys.rows 0
+expect config.authkeys.file false
+expect config.authkeys.label Using Key: None/Unknown, Signed Packets: 0
+expect config.authkeys.signing off
+
+# Add: the empty row, the name, the phrase, its strength, the key stored and saved.
+click authkeys-but_add
+expect config.authkeys.rows 1
+expect config.authkeys.prompt Name
+type bench
+click authkeys-prompt-ok
+expect config.authkeys.prompt Input Seed
+expect config.authkeys.row.0 bench|
+type Correct Horse 42!
+click authkeys-prompt-ok
+expect config.authkeys.prompt none
+expect config.authkeys.box Password Strength: 130 Strong
+expect config.authkeys.store 0
+click authkeys-box-ok
+expect config.authkeys.box none
+expect config.authkeys.store 1
+expect config.authkeys.store.names bench
+expect config.authkeys.rows 1
+expect config.authkeys.row.0 bench|oBPRD6pBgzO8Tbf6nQxJ5aCQaorJmv5BfT35Mr9oyDM=
+expect config.authkeys.file true
+
+# Use: SETUP_SIGNING with bench's key, signing on; the vehicle's signed packets teach the link the
+# key, and the label names it.
+click authkeys-use-0
+expect config.authkeys.signing on
+expect config.authkeys.label ~ Using Key: bench, Signed Packets:
+expect config.authkeys.signed > 0
+
+# The vehicle takes what is now signed: RTL_LOIT_TIME written and its echo heard, then put back.
+# The keys window is drawn modal over SETUP here (a written divergence: the C#'s is a form of
+# its own), so it is closed before the screen changes and opened again after.
+click authkeys-close
+expect config.authkeys.window false
+click tab-params
+click raw-param-warning-again
+click raw-param-warning-ok
+reveal params-tree param-group-RTL
+click param-group-RTL
+click param-RTL_LOIT_TIME
+expect params.selected.value 5000
+expect params.control range
+click param-options-up
+expect params.write.name RTL_LOIT_TIME
+expect params.write.outcome accepted
+expect params.selected.value 6000
+click param-options-down
+expect params.write.outcome accepted
+expect params.selected.value 5000
+
+# Back to the window, still open over SETUP: Disable Signing, zeros sent and signing off; the
+# vehicle stops signing, and the label forgets the key and, the next second, the packets.
+click tab-setup
+expect setup.page ConfigAdvanced
+click advanced-but_signkey
+expect config.authkeys.window true
+expect config.authkeys.opened 2
+expect config.authkeys.label ~ Using Key: bench
+click authkeys-but_disablesigning
+expect config.authkeys.signing off
+expect config.authkeys.label Using Key: None/Unknown, Signed Packets: 0
+
+# The close box; the page stays.
+click authkeys-close
+expect config.authkeys.window false
+expect setup.page ConfigAdvanced

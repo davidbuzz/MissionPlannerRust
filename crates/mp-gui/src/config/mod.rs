@@ -31,6 +31,9 @@ pub mod advanced;
 pub mod basic_tuning;
 pub mod mavlink_inspector;
 pub mod warnings_manager;
+// The Advanced page's Proximity and Mavlink Signing windows.
+pub mod auth_keys;
+pub mod proximity;
 // ---- end Basic Tuning / Advanced ----
 // ---- Extended Tuning ----
 pub mod extended_tuning;

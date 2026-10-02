@@ -90,6 +90,7 @@ pub mod param_fetch;
 mod protocols;
 pub mod requests;
 mod script_support;
+pub mod signing;
 pub mod testing;
 pub mod timeouts;
 pub mod tlog;
@@ -334,6 +335,9 @@ struct Shared {
     video_streams: Mutex<BTreeMap<(u8, u8, u8), mp_mavlink_dialects::all::VideoStreamInformation>>,
     /// `OnPacketReceived` and `OnPacketSent`'s subscribers (see [`inspector`]).
     packets: inspector::Subscribers,
+    /// Each vehicle's MAVLink 2 signing, the `setupSigning`s waiting, and `Mavlink2Signed` (see
+    /// [`signing`]): shared with every [`LinkSender`], which asks for a `setupSigning`.
+    signing: Arc<Mutex<signing::Signing>>,
 }
 
 /// A field the C#'s screens write into `MainV2.comPort.MAV.cs` from outside it.
@@ -358,6 +362,8 @@ pub struct LinkSender {
     inject_seq: Arc<AtomicU32>,
     /// The link's queue of `cs.Base` writes.
     bases: Arc<Mutex<Vec<(VehicleId, LatLngAlt)>>>,
+    /// The link's signing.
+    signing: Arc<Mutex<signing::Signing>>,
 }
 
 impl LinkSender {
@@ -393,6 +399,37 @@ impl LinkSender {
         if let Ok(mut bases) = self.bases.lock() {
             bases.push((target, position));
         }
+    }
+
+    /// `setupSigning(sysid, compid, userseed, key)`: `SETUP_SIGNING` sent to `target` twice -
+    /// `key` resized to 32 bytes, or the SHA-256 of `userseed`, with the time; zeros and 0 for an
+    /// empty seed and no key - then signing to it on, or off with its key forgotten. Queued for
+    /// the link thread, which does both in that order. What `signing` will be, as the C#'s call
+    /// returns it.
+    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:1529-1584`
+    pub fn setup_signing(&self, target: VehicleId, userseed: &str, key: Option<&[u8]>) -> bool {
+        let setup = signing::Setup::new(target, userseed, key);
+        if let Ok(mut signing) = self.signing.lock() {
+            signing.queue(setup);
+        }
+        !setup.clear
+    }
+
+    /// `MAVlist[sysid, compid]`'s signing: whether frames to it are signed, and the key its
+    /// packets last passed with (`MAV.signingKey`). `None` for a vehicle never heard or signed to.
+    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVState.cs:151-162`
+    #[must_use]
+    pub fn signing(&self, id: VehicleId) -> Option<signing::MavSigning> {
+        self.signing.lock().ok()?.vehicle(id)
+    }
+
+    /// `Mavlink2Signed`: signed packets read since the start of the current second.
+    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:418`
+    #[must_use]
+    pub fn signed_packets(&self) -> u32 {
+        self.signing
+            .lock()
+            .map_or(0, |signing| signing.signed_packets())
     }
 }
 
@@ -1127,6 +1164,7 @@ impl Link {
             compid: self.config.compid,
             inject_seq: Arc::clone(&self.shared.inject_seq),
             bases: Arc::clone(&self.shared.bases),
+            signing: Arc::clone(&self.shared.signing),
         }
     }
 
@@ -1194,7 +1232,7 @@ fn forget_finished_requests(held: &mut BTreeMap<RequestId, Request>) {
 
 /// Encodes a message from this link, numbers it, and writes it to the transport and recording.
 fn send_message(
-    packets: &inspector::Subscribers,
+    shared: &Shared,
     transport: &mut dyn Transport,
     recorder: Option<&mut tlog::TlogWriter>,
     stats: &mut LinkStats,
@@ -1223,7 +1261,7 @@ fn send_message(
     *tx_seq = tx_seq.wrapping_add(1);
     frame
         .get(..n)
-        .is_some_and(|bytes| send_frame(packets, transport, recorder, stats, bytes))
+        .is_some_and(|bytes| send_frame(shared, transport, recorder, stats, bytes))
 }
 
 /// Writes a frame to the transport and to the recording, if one is running.
@@ -1234,7 +1272,7 @@ fn send_message(
 /// Sends everything queued with [`Link::send`] and its senders, re-stamping each frame's
 /// sequence number here, where it is owned.
 fn drain_outbound(
-    packets: &inspector::Subscribers,
+    shared: &Shared,
     outbound: &std::sync::mpsc::Receiver<Vec<u8>>,
     tx_seq: &mut u8,
     transport: &mut dyn Transport,
@@ -1250,20 +1288,28 @@ fn drain_outbound(
         if let Some(fixed) = restamp_checksum(&bytes) {
             bytes = fixed;
         }
-        send_frame(packets, transport, recorder.as_deref_mut(), stats, &bytes);
+        send_frame(shared, transport, recorder.as_deref_mut(), stats, &bytes);
     }
 }
 
 /// Writes one frame, records it, and tells the packet subscribers it went: `generatePacket`'s
 /// write, `SaveToTlog`, then `OnPacketSent`, which the C# raises once the write has not thrown.
-/// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:1440-1461`
+/// A frame for a vehicle being signed to is signed first, so what is written, recorded and told
+/// is the signed frame, as the C#'s is (see [`signing`]).
+/// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:1384-1461`
 fn send_frame(
-    packets: &inspector::Subscribers,
+    shared: &Shared,
     transport: &mut dyn Transport,
     recorder: Option<&mut tlog::TlogWriter>,
     stats: &mut LinkStats,
     bytes: &[u8],
 ) -> bool {
+    let signed = shared
+        .signing
+        .lock()
+        .ok()
+        .and_then(|mut held| held.sign(bytes, signing::timestamp_now));
+    let bytes = signed.as_deref().unwrap_or(bytes);
     if transport.write_all(bytes).is_err() {
         return false;
     }
@@ -1274,8 +1320,8 @@ fn send_frame(
         // flight; the flight matters more.
         let _ = writer.write_frame(bytes);
     }
-    if packets.any() {
-        packets.sent(bytes);
+    if shared.packets.any() {
+        shared.packets.sent(bytes);
     }
     true
 }
@@ -1344,9 +1390,27 @@ fn run_link(
                         .unwrap_or(DateTime::MIN),
                 };
                 let arrived = Instant::now();
+                // `logreadmode`: a log's packets are not checked for their signatures. A new
+                // second starts `Mavlink2Signed` again. C#: MAVLinkInterface.cs:4938-4963, 5061
+                let logreadmode = matches!(transport.read_time(), ReadTime::Recorded(_));
+                if let Ok(mut held) = shared.signing.lock() {
+                    held.new_second(signing::utc_second());
+                }
                 if let Some(chunk) = buf.get(..n) {
                     decoder.push_and_drain(chunk, &DIALECT, |frame| {
                         shared.frames_received.fetch_add(1, Ordering::Relaxed);
+                        // A signed packet that passes neither its vehicle's key nor any in the
+                        // store is dropped here, before it is recorded or seen by anything.
+                        // C#: MAVLinkInterface.cs:5059-5089
+                        if frame.is_signed()
+                            && !logreadmode
+                            && !shared
+                                .signing
+                                .lock()
+                                .is_ok_and(|mut held| held.check_against_store(frame))
+                        {
+                            return;
+                        }
                         if let Some(writer) = recorder.as_mut() {
                             // Record the frame exactly as received, before any interpretation:
                             // a recording must not depend on our decoder understanding it.
@@ -1838,7 +1902,7 @@ fn run_link(
                 // `getDatastream` sends each one twice. C#: MAVLinkInterface.cs:3262-3263
                 for _ in 0..2 {
                     send_message(
-                        &shared.packets,
+                        shared,
                         transport.as_mut(),
                         recorder.as_mut(),
                         &mut stats,
@@ -1858,7 +1922,7 @@ fn run_link(
         protocols::tick(shared, Instant::now(), &mut protocol_starts, &mut protocol_sends);
         for message in protocol_sends.drain(..) {
             send_message(
-                &shared.packets,
+                shared,
                 transport.as_mut(),
                 recorder.as_mut(),
                 &mut stats,
@@ -1873,7 +1937,7 @@ fn run_link(
         ftp::tick(shared, Instant::now(), &mut ftp_sends);
         for (id, payload) in ftp_sends.drain(..) {
             send_message(
-                &shared.packets,
+                shared,
                 transport.as_mut(),
                 recorder.as_mut(),
                 &mut stats,
@@ -1915,7 +1979,7 @@ fn run_link(
                 Action::SendItems(items) => {
                     for item in items {
                         send_message(
-                            &shared.packets,
+                            shared,
                             transport.as_mut(),
                             recorder.as_mut(),
                             &mut stats,
@@ -1945,7 +2009,7 @@ fn run_link(
                 Action::Nothing => continue,
             };
             send_message(
-                &shared.packets,
+                shared,
                 transport.as_mut(),
                 recorder.as_mut(),
                 &mut stats,
@@ -1973,7 +2037,7 @@ fn run_link(
                 ParamAction::Nothing => {}
                 ParamAction::RequestList => {
                     send_message(
-                        &shared.packets,
+                        shared,
                         transport.as_mut(),
                         recorder.as_mut(),
                         &mut stats,
@@ -1987,7 +2051,7 @@ fn run_link(
                 ParamAction::RequestIndices(burst) => {
                     for index in burst.as_slice() {
                         send_message(
-                            &shared.packets,
+                            shared,
                             transport.as_mut(),
                             recorder.as_mut(),
                             &mut stats,
@@ -2005,7 +2069,7 @@ fn run_link(
         // TakeOff's Guided and then its take-off - reached the vehicle take-off first when the
         // queue was drained only at the end of the pass, and ArduCopter refused it (2026-09-26).
         drain_outbound(
-            &shared.packets,
+            shared,
             outbound,
             &mut tx_seq,
             transport.as_mut(),
@@ -2063,7 +2127,7 @@ fn run_link(
             };
             for message in messages.iter().flatten() {
                 send_message(
-                    &shared.packets,
+                    shared,
                     transport.as_mut(),
                     recorder.as_mut(),
                     &mut stats,
@@ -2130,7 +2194,7 @@ fn run_link(
                 tx_seq = tx_seq.wrapping_add(1);
                 if let Some(bytes) = frame.get(..n) {
                     send_frame(
-                        &shared.packets,
+                        shared,
                         transport.as_mut(),
                         recorder.as_mut(),
                         &mut stats,
@@ -2141,9 +2205,34 @@ fn run_link(
             last_heartbeat = Instant::now();
         }
 
+        // `setupSigning`s asked since the last pass: each `SETUP_SIGNING` sent twice, signed or not
+        // as the vehicle's state still says, then signing switched. C#: MAVLinkInterface.cs:1529-1584
+        let setups = shared
+            .signing
+            .lock()
+            .map(|mut held| held.take_setups())
+            .unwrap_or_default();
+        for setup in setups {
+            let message = setup.message(signing::timestamp_now());
+            for _ in 0..2 {
+                send_message(
+                    shared,
+                    transport.as_mut(),
+                    recorder.as_mut(),
+                    &mut stats,
+                    &config,
+                    &mut tx_seq,
+                    &message,
+                );
+            }
+            if let Ok(mut held) = shared.signing.lock() {
+                held.finish(&setup);
+            }
+        }
+
         // Outbound queue: what was queued during this pass.
         drain_outbound(
-            &shared.packets,
+            shared,
             outbound,
             &mut tx_seq,
             transport.as_mut(),

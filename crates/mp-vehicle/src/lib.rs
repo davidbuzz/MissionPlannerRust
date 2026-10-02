@@ -29,6 +29,7 @@ pub mod link_quality;
 pub mod modes;
 pub mod mode_lookup;
 pub mod onboard;
+pub mod proximity;
 pub mod rc;
 pub mod registry;
 pub mod sensors;

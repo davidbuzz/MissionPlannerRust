@@ -127,12 +127,16 @@ Vehicles: **any** is a connected vehicle whose parameter list is whole
 | 342 | `ConfigAdvanced` | Advanced |  | always, Advanced view | 13 | partial: `crates/mp-gui/src/config/advanced.rs` `fn page` - the text and the thirteen buttons with their labels at the table's places; Warning
         //     Manager opens the manager (config/warnings_manager.rs: a row per rule and per
         //     child over the engine's rules, warnings.rs, which checks them every 250 ms and
-        //     raises the HUD's message or a quick view's colour), FFT opens the FFT window
-        //     (config/fftui.rs) and MAVLink Inspector the inspector (config/mavlink_inspector.rs:
-        //     the tree of each system, component, message with its rate and bytes a second, and
-        //     field with its value and .NET type, every 333 ms; Show GCS Traffic; Graph It's
-        //     history question and live graph of a field), 3 of the 13 wirings; the other ten
-        //     dimmed - the proximity, signing keys, MAVLink mirror, NMEA output, Follow Me,
+        //     raises the HUD's message or a quick view's colour), Proximity the proximity window
+        //     (config/proximity.rs: the readings from DISTANCE_SENSOR and OBSTACLE_DISTANCE
+        //     drawn as Temp_Paint draws them, its keys), Mavlink Signing the keys window
+        //     (config/auth_keys.rs: the store authkeys.xml as Crypto.cs encrypts it, Add with
+        //     the strength score, Use and Disable Signing driving the link's setupSigning), FFT
+        //     opens the FFT window (config/fftui.rs) and MAVLink Inspector the inspector
+        //     (config/mavlink_inspector.rs: the tree of each system, component, message with its
+        //     rate and bytes a second, and field with its value and .NET type, every 333 ms; Show
+        //     GCS Traffic; Graph It's history question and live graph of a field), 5 of the 13
+        //     wirings; the other eight dimmed - the MAVLink mirror, NMEA output, Follow Me,
         //     parameter regeneration, moving base, log anonymiser, spectrogram and support proxy
         //     windows they open are not ported |
 | 346 | `ConfigTerminal` | Terminal | Advanced | always, Advanced view | 12 | dropped: ruled out of the port by the owner, 2026-09-25 (PLAN §12 D13) |

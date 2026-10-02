@@ -54,6 +54,10 @@ mp-georef.workspace = true
 # The Full Parameter List's Load Presaved: GitHubContent's JSON answers, and the file's base64
 # content inside one. Both already compiled for mp-firmware.
 base64.workspace = true
+# The signing keys' store, `authkeys.xml`, encrypted as `ExtLibs/Utilities/Crypto.cs` encrypts it
+# (config/auth_keys.rs).
+aes.workspace = true
+cbc.workspace = true
 # The Planner page's Video Device and Video Format, Start and Stop, and the frame under the HUD:
 # WebCamService.Capture's part, over V4L2 on Linux.
 mp-video.workspace = true

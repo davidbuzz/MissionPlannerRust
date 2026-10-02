@@ -12,7 +12,7 @@
 //! Follow Me, the parameter documentation regenerated from ArduPilot's source, the moving base, a
 //! log anonymised, the FFT and spectrogram plots, and the support proxy. Each is a form of its own
 //! in the C# (`Warnings/WarningsManager.cs`, `Controls/MAVLinkInspector.cs` and the rest, named at
-//! [`ROWS`]), a port of its own. Three are ported, and their buttons open them:
+//! [`ROWS`]), a port of its own. Five are ported, and their buttons open them:
 //!
 //! * the Warning Manager's, `Warnings/WarningsManager.cs` (`config/warnings_manager.rs`),
 //!   `new WarningsManager().Show()`, over the warning engine's rules (`warnings.rs`), held with
@@ -22,7 +22,12 @@
 //!   `new fftui().Show()`;
 //! * the MAVLink Inspector's, `Controls/MAVLinkInspector.cs` (`config/mavlink_inspector.rs`),
 //!   `new MAVLinkInspector(MainV2.comPort).Show()`, held with SETUP's other small pages
-//!   (`config/extra_setup.rs`).
+//!   (`config/extra_setup.rs`);
+//! * the proximity window, `Controls/ProximityControl.cs` (`config/proximity.rs`),
+//!   `new ProximityControl(MainV2.comPort.MAV).Show()`, held likewise, and given the keyboard as
+//!   it opens, as a new form is activated, for its four keys;
+//! * the signing keys window, `Controls/AuthKeys.cs` (`config/auth_keys.rs`),
+//!   `new AuthKeys().Show()`, held likewise with the key store.
 //!
 //! The others are not in this application, so their buttons are drawn dimmed, with the window
 //! each would open as the reason. Three of them stay that way by the owner's rulings (PLAN.md §12
@@ -40,8 +45,10 @@
 
 use gpui::{AnyElement, Context, Div, SharedString, div, prelude::*, px, rgb};
 
+use super::auth_keys::AuthKeysWindow;
 use super::fft::Fft;
 use super::mavlink_inspector::InspectorWindow;
+use super::proximity::ProximityWindow;
 use super::warnings_manager::ManagerWindow;
 use crate::MissionPlanner;
 use crate::ui::{panel, theme};
@@ -155,10 +162,10 @@ pub const ROWS: [Row; 13] = [
         Some("config/mavlink_inspector.rs")),
     row("but_proximity", "Proximity", "but_proximity_Click", "label4",
         "View the data from a 360 lidar", (152.0, 18.0),
-        "the proximity window (Controls/ProximityControl.cs)", None),
+        "the proximity window (Controls/ProximityControl.cs)", Some("config/proximity.rs")),
     row("but_signkey", "Mavlink Signing", "but_signkey_Click", "label5",
         "Enable mavlink signing to secure communication with the MAV", (307.0, 18.0),
-        "the signing keys window (Controls/AuthKeys.cs)", None),
+        "the signing keys window (Controls/AuthKeys.cs)", Some("config/auth_keys.rs")),
     row("BUT_outputMavlink", "Mavlink Mirror", "BUT_outputMavlink_Click", "label6",
         "Mavlink mirror to an external location. For Monitoring or control", (304.0, 18.0),
         "the MAVLink mirror window (Controls/SerialOutputPass.cs)", None),
@@ -243,7 +250,7 @@ pub struct Windows<'a> {
 
 /// A button clicked, as the page's buttons are: `but_warningmanager_Click`, `new
 /// WarningsManager().Show()` over the engine's rules, and the two [`click`] opens. True when it
-/// did something.
+/// did something. Proximity's and Mavlink Signing's are [`click_keys_or_proximity`].
 /// `// C#: GCSViews/ConfigurationView/ConfigAdvanced.cs:22-30, 114-117`
 pub fn open(button: &str, windows: Windows<'_>, now: std::time::Instant) -> bool {
     if button == "but_warningmanager" {
@@ -256,7 +263,8 @@ pub fn open(button: &str, windows: Windows<'_>, now: std::time::Instant) -> bool
 /// A button clicked, for the two windows that need nothing but themselves -
 /// `but_mavinspector_Click`, `new MAVLinkInspector(MainV2.comPort).Show()`, and `but_fft_Click`,
 /// `new fftui().Show()` - neither asking anything of the vehicle first. True when it did
-/// something. The Warning Manager needs the engine's rules: [`open`].
+/// something. The Warning Manager needs the engine's rules: [`open`]; Proximity's and Mavlink
+/// Signing's are [`click_keys_or_proximity`].
 /// `// C#: GCSViews/ConfigurationView/ConfigAdvanced.cs:27-30, 114-117`
 pub fn click(
     button: &str,
@@ -277,6 +285,29 @@ pub fn click(
     }
 }
 
+/// A button clicked, for two more whose windows are here - `but_signkey_Click`, `new AuthKeys()
+/// .Show()`, and `but_proximity_Click`, `new ProximityControl(MainV2.comPort.MAV).Show()` -
+/// neither asking anything of the vehicle first. True when it did something.
+/// `// C#: GCSViews/ConfigurationView/ConfigAdvanced.cs:37-45`
+pub fn click_keys_or_proximity(
+    button: &str,
+    proximity: &mut ProximityWindow,
+    auth_keys: &mut AuthKeysWindow,
+    now: std::time::Instant,
+) -> bool {
+    match button {
+        "but_signkey" => {
+            auth_keys.show(now);
+            true
+        }
+        "but_proximity" => {
+            proximity.show();
+            true
+        }
+        _ => false,
+    }
+}
+
 /// An absolutely placed box.
 fn at((x, y, width, height): (f32, f32, f32, f32)) -> Div {
     div()
@@ -287,8 +318,9 @@ fn at((x, y, width, height): (f32, f32, f32, f32)) -> Div {
         .h(px(height))
 }
 
-/// A button in its cell: Warning Manager's, MAVLink Inspector's and FFT's opening their windows,
-/// the others dimmed - the window each opens is not in this application (see `opens`).
+/// A button in its cell: Warning Manager's, MAVLink Inspector's, Proximity's, Mavlink Signing's
+/// and FFT's opening their windows, the others dimmed - the window each opens is not in this
+/// application (see `opens`).
 /// `// C#: GCSViews/ConfigurationView/ConfigAdvanced.cs:22-127`
 fn button(row: Row, y: f32, cx: &mut Context<MissionPlanner>) -> AnyElement {
     let (bx, by, bw, bh) = BUTTON_IN_CELL;
@@ -311,13 +343,25 @@ fn button(row: Row, y: f32, cx: &mut Context<MissionPlanner>) -> AnyElement {
             .on_click(cx.listener(move |this, _event, window, cx| {
                 window.blur(cx);
                 let pages = &mut this.extra;
+                let now = std::time::Instant::now();
                 let windows = Windows {
                     fft: &mut pages.fft,
                     inspector: &mut pages.inspector,
                     warnings: &mut pages.warnings_manager,
                     rules: &mut this.warnings.warnings,
                 };
-                if open(row.button, windows, std::time::Instant::now()) {
+                if open(row.button, windows, now)
+                    || click_keys_or_proximity(
+                        row.button,
+                        &mut pages.proximity,
+                        &mut pages.auth_keys,
+                        now,
+                    )
+                {
+                    // A new form is activated: the proximity window takes its keys at once.
+                    if row.button == "but_proximity" {
+                        this.extra_focus.proximity.focus(window, cx);
+                    }
                     cx.notify();
                 }
             }))
@@ -329,8 +373,8 @@ fn button(row: Row, y: f32, cx: &mut Context<MissionPlanner>) -> AnyElement {
     }
 }
 
-/// The page, as the `.resx` lays it out: Warning Manager, MAVLink Inspector and FFT opening their
-/// windows, every other button dimmed.
+/// The page, as the `.resx` lays it out: Warning Manager, MAVLink Inspector, Proximity, Mavlink
+/// Signing and FFT opening their windows, every other button dimmed.
 /// `// C#: GCSViews/ConfigurationView/ConfigAdvanced.Designer.cs:29-266; ConfigAdvanced.resx`
 pub fn page(cx: &mut Context<MissionPlanner>) -> AnyElement {
     let mut table = at(TABLE);
@@ -541,32 +585,38 @@ mod tests {
     /// Warning Manager is `new WarningsManager().Show()`, which opens the manager over the
     /// engine's rules; FFT is `new fftui().Show()` - the FFT Setup page's handler word for word -
     /// so it opens the window that page opens; MAVLink Inspector is `new MAVLinkInspector(
-    /// MainV2.comPort).Show()`, which opens the inspector; none needs a vehicle or a page shown
-    /// first, and every other button does nothing.
-    /// `// C#: GCSViews/ConfigurationView/ConfigAdvanced.cs:22-30, 114-117; ConfigFFT.cs:162-165`
+    /// MainV2.comPort).Show()`, which opens the inspector; Proximity and Mavlink Signing open
+    /// theirs; none needs a vehicle or a page shown first, and every other button does nothing.
+    /// `// C#: GCSViews/ConfigurationView/ConfigAdvanced.cs:22-30, 37-45, 114-117; ConfigFFT.cs:162-165`
     #[test]
     fn the_three_ported_windows_open_and_the_others_nothing() {
         let now = std::time::Instant::now();
+        // A store of its own: the application's is read from the user data directory.
+        let keys = || AuthKeysWindow {
+            store: Some(super::super::auth_keys::KeyStore::default()),
+            ..AuthKeysWindow::default()
+        };
         for row in ROWS {
             let mut fft = Fft::default();
             let mut inspector = InspectorWindow::default();
             let mut warnings = ManagerWindow::default();
             let mut rules = vec![CustomWarning::on("alt")];
+            let mut proximity = ProximityWindow::default();
+            let mut auth_keys = keys();
             let windows = Windows {
                 fft: &mut fft,
                 inspector: &mut inspector,
                 warnings: &mut warnings,
                 rules: &mut rules,
             };
-            assert_eq!(
-                open(row.button, windows, now),
-                row.enabled(),
-                "{}",
-                row.button
-            );
+            let opened = open(row.button, windows, now)
+                || click_keys_or_proximity(row.button, &mut proximity, &mut auth_keys, now);
+            assert_eq!(opened, row.enabled(), "{}", row.button);
             let fft_row = row.button == "but_fft";
             let inspector_row = row.button == "but_mavinspector";
             let warnings_row = row.button == "but_warningmanager";
+            let proximity_row = row.button == "but_proximity";
+            let keys_row = row.button == "but_signkey";
             assert_eq!(fft.window.is_some(), fft_row, "{}", row.button);
             assert_eq!(fft.opened, usize::from(fft_row));
             assert!(!fft.is_active(), "the FFT Setup page is not shown by it");
@@ -577,12 +627,16 @@ mod tests {
             if warnings_row {
                 assert_eq!(warnings.window.as_ref().map(|w| w.controls.len()), Some(1));
             }
+            assert_eq!(proximity.window.is_some(), proximity_row, "{}", row.button);
+            assert_eq!(proximity.opened, usize::from(proximity_row));
+            assert_eq!(auth_keys.window.is_some(), keys_row, "{}", row.button);
+            assert_eq!(auth_keys.opened, usize::from(keys_row));
             // `click` is the two that need nothing but themselves.
             let mut fft = Fft::default();
             let mut inspector = InspectorWindow::default();
             assert_eq!(
                 click(row.button, &mut fft, &mut inspector, now),
-                row.enabled() && !warnings_row,
+                row.enabled() && !warnings_row && !proximity_row && !keys_row,
                 "{}",
                 row.button
             );
@@ -608,6 +662,21 @@ mod tests {
         assert!(inspector.window.as_ref().is_some_and(|window| {
             !window.gcs_traffic() && window.history == 50 && window.tree.is_empty()
         }));
+        // And the proximity window's: the radius 5 m again.
+        let mut proximity = ProximityWindow::default();
+        let mut auth_keys = keys();
+        click_keys_or_proximity("but_proximity", &mut proximity, &mut auth_keys, now);
+        if let Some(window) = proximity.window.as_mut() {
+            window.key_press('+');
+        }
+        click_keys_or_proximity("but_proximity", &mut proximity, &mut auth_keys, now);
+        assert_eq!(proximity.opened, 2);
+        assert!(
+            proximity
+                .window
+                .as_ref()
+                .is_some_and(|window| window.screenradius == 500.0)
+        );
         let enabled: Vec<&str> = ROWS
             .iter()
             .filter(|row| row.enabled())
@@ -615,7 +684,13 @@ mod tests {
             .collect();
         assert_eq!(
             enabled,
-            ["but_warningmanager", "but_mavinspector", "but_fft"]
+            [
+                "but_warningmanager",
+                "but_mavinspector",
+                "but_proximity",
+                "but_signkey",
+                "but_fft"
+            ]
         );
     }
 

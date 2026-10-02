@@ -4522,7 +4522,9 @@ dependencies = [
 name = "mp-gui"
 version = "0.1.0"
 dependencies = [
+ "aes",
  "base64 0.22.1",
+ "cbc",
  "chrono",
  "flate2",
  "fluent-bundle",

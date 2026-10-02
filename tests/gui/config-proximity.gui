@@ -1,0 +1,83 @@
+# The proximity window, ported from Controls/ProximityControl.cs, which SETUP's Advanced page's
+# "Proximity" button opens (GCSViews/ConfigurationView/ConfigAdvanced.cs:42-45:
+# `new ProximityControl(MainV2.comPort.MAV).Show()`).
+#
+# The claims: the window opens on the vehicle shown, a copter, with its picture where Temp_Paint
+# puts it - 80 cm across, centred - and, the vehicle having proximity data (MAVState makes it
+# for every vehicle heard), a circle every half metre out to 5 m, each labelled 0.5m to 5.0m, and
+# eight spokes labelled 0 to 315 (ProximityControl.cs:91-146). The caption is
+# "Radius(+/-): 5m MAV size([/]): 0.8m" (:100). + and - take 50 cm off and put 50 cm on the
+# radius, ] and [ a centimetre on and off the picture (:56-85), the circles following. The close
+# box ends it, and a second click opens a fresh one at 5 m.
+#
+# SITL's copter sends no DISTANCE_SENSOR and no OBSTACLE_DISTANCE without a simulated proximity
+# sensor, so here the window draws no readings, and the script says so. The readings themselves -
+# a red 45-degree arc and a label for each of the eight orientations, a yellow arc as wide as its
+# increment for each OBSTACLE_DISTANCE angle, three seconds and a fifth of one kept - are held to
+# the C# by crates/mp-gui/src/config/proximity.rs's tests, from scripted messages applied to the
+# vehicle state as the link applies them (ExtLibs/ArduPilot/Proximity.cs:48-106). A SITL started
+# with PRX1_TYPE 10 (SITL proximity, a reboot after setting it) and a fence to see would send
+# them; this script does not set that up.
+#
+# Needs SITL copter on tcp:127.0.0.1:5760 started from tools/sitl/params/copter.parm. Run from the
+# repository root as
+#
+#   tools/gui-test.sh tests/gui/config-proximity.gui -- tcp:127.0.0.1:5760
+#
+# Not yet run: the budget is a guess, set by hand until a passing run records one.
+
+screen setup
+window 1600x1200
+budget 7
+
+# The vehicle first, and its parameters, which are fetched as it is heard: the SETUP list is
+# built again when they are in, and a click before that is a click the list may forget.
+expect vehicle.count > 0
+expect params.held > 1000
+expect config.proximity.window false
+click setup-page-ConfigAdvanced
+expect setup.page ConfigAdvanced
+expect config.advanced.buttons.enabled Warning Manager,MAVLink Inspector,Proximity,Mavlink Signing,FFT
+
+# The constructor: the vehicle shown, 5 m and 80 cm.
+click advanced-but_proximity
+expect config.proximity.window true
+expect config.proximity.opened 1
+expect config.proximity.vehicle 1.1
+expect config.proximity.caption Radius(+/-): 5m MAV size([/]): 0.8m
+expect config.proximity.screenradius 500
+expect config.proximity.mavsize 80
+# scale = (500 + 50) * 2 / 417, the form 430 wide and 391 + its 26-pixel caption high: a copter's
+# picture 30.3 pixels across about the client's centre (215, 195.5).
+expect config.proximity.quad 199.8,180.3,30.3
+expect config.proximity.circles ~ 19.0,37.9,56.9,75.8,94.8,113.7,132.7,151.6,170.6,189.5
+expect config.proximity.labels 0.5m,1.0m,1.5m,2.0m,2.5m,3.0m,3.5m,4.0m,4.5m,5.0m
+expect config.proximity.spokes 0,45,90,135,180,225,270,315
+# No proximity sensor on this SITL: nothing to draw.
+expect config.proximity.readings 0
+
+# The keys: + closer in, - further out, ] and [ the picture's size.
+key plus
+expect config.proximity.caption Radius(+/-): 4.5m MAV size([/]): 0.8m
+expect config.proximity.labels 0.5m,1.0m,1.5m,2.0m,2.5m,3.0m,3.5m,4.0m,4.5m
+key minus
+key minus
+expect config.proximity.caption Radius(+/-): 5.5m MAV size([/]): 0.8m
+expect config.proximity.labels 0.5m,1.0m,1.5m,2.0m,2.5m,3.0m,3.5m,4.0m,4.5m,5.0m,5.5m
+key bracketright
+expect config.proximity.caption Radius(+/-): 5.5m MAV size([/]): 0.81m
+key bracketleft
+key bracketleft
+expect config.proximity.mavsize 79
+expect config.proximity.caption Radius(+/-): 5.5m MAV size([/]): 0.79m
+
+# The close box; the page stays. A second click: a fresh form at 5 m.
+click proximity-close
+expect config.proximity.window false
+expect setup.page ConfigAdvanced
+click advanced-but_proximity
+expect config.proximity.window true
+expect config.proximity.opened 2
+expect config.proximity.caption Radius(+/-): 5m MAV size([/]): 0.8m
+click proximity-close
+expect config.proximity.window false

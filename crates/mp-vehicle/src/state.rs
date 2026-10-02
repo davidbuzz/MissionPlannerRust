@@ -458,6 +458,10 @@ pub struct VehicleState {
     pub terrain: Terrain,
     /// Rangefinders.
     pub rangefinder: Rangefinder,
+    /// `MAVState.Proximity`: the proximity sensors' readings, from `DISTANCE_SENSOR` and
+    /// `OBSTACLE_DISTANCE`, as `Controls/ProximityControl.cs` draws them (see
+    /// [`crate::proximity`]). `// C#: ExtLibs/ArduPilot/Mavlink/MAVState.cs:105-106, 326`
+    pub proximity: crate::proximity::Proximity,
     /// Absolute pressure from the first barometer, hectopascals (`press_abs`).
     pub press_abs: f32,
     /// The first barometer's temperature, centidegrees Celsius, as the wire sends it
@@ -914,6 +918,20 @@ impl VehicleState {
             }
             MavMessage::DistanceSensor(m) => {
                 self.apply_distance_sensor(m);
+                // `MAVState.Proximity`'s subscription to the same message.
+                // C#: ExtLibs/ArduPilot/Proximity.cs:33-34, 54-67
+                self.proximity.distance_sensor(m, self.datetime);
+                true
+            }
+            MavMessage::ObstacleDistance(m) => {
+                // C#: ExtLibs/ArduPilot/Proximity.cs:36-37, 68-103, with `cs.yaw` - degrees, 0
+                // to 360 (CurrentState.cs:274-284) - for a north-aligned one.
+                #[allow(clippy::cast_possible_truncation)] // `(float)`, as the C# stores it
+                let mut yaw = self.attitude.yaw.to_degrees().0 as f32;
+                if yaw < 0.0 {
+                    yaw += 360.0;
+                }
+                self.proximity.obstacle_distance(m, yaw, self.datetime);
                 true
             }
             MavMessage::Airspeed(m) => {

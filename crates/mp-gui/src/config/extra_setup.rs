@@ -15,8 +15,8 @@ use std::time::Instant;
 use gpui::{AnyElement, Context, FocusHandle, Window, div, prelude::*};
 
 use super::{
-    compass_mot, fft, gps_order, hw_ids, initial_params, mavlink_inspector, osd, parachute,
-    warnings_manager,
+    auth_keys, compass_mot, fft, gps_order, hw_ids, initial_params, mavlink_inspector, osd,
+    parachute, proximity, warnings_manager,
 };
 use crate::MissionPlanner;
 use crate::config::servo_output::{ERROR_TITLE, Message};
@@ -90,6 +90,10 @@ pub struct ExtraSetup {
     pub inspector: mavlink_inspector::InspectorWindow,
     /// The Warning Manager the Advanced page opens (`config/warnings_manager.rs`).
     pub warnings_manager: warnings_manager::ManagerWindow,
+    /// The proximity window the Advanced page opens (`config/proximity.rs`).
+    pub proximity: proximity::ProximityWindow,
+    /// The signing keys window the Advanced page opens, and the key store (`config/auth_keys.rs`).
+    pub auth_keys: auth_keys::AuthKeysWindow,
 }
 
 /// The keyboard focus of the pages' boxes: Parachute's number being typed into, and Initial
@@ -111,6 +115,12 @@ pub struct Focus {
     pub warnings_number: FocusHandle,
     /// The Warning Manager's message box being typed into.
     pub warnings_text: FocusHandle,
+    /// The proximity window, which takes its four keys.
+    pub proximity: FocusHandle,
+    /// The signing keys' grid, which takes Delete.
+    pub auth_keys: FocusHandle,
+    /// The signing keys' Add questions.
+    pub auth_keys_prompt: FocusHandle,
 }
 
 impl Focus {
@@ -125,6 +135,9 @@ impl Focus {
             inspector_prompt: cx.focus_handle(),
             warnings_number: cx.focus_handle(),
             warnings_text: cx.focus_handle(),
+            proximity: cx.focus_handle(),
+            auth_keys: cx.focus_handle(),
+            auth_keys_prompt: cx.focus_handle(),
         }
     }
 }
@@ -140,6 +153,8 @@ pub fn record_facts(pages: &ExtraSetup, view: &TelemetryView) {
     fft::record_facts(&pages.fft, view);
     mavlink_inspector::record_facts(&pages.inspector);
     warnings_manager::record_facts(&pages.warnings_manager);
+    proximity::record_facts(&pages.proximity);
+    auth_keys::record_facts(&pages.auth_keys);
 }
 
 impl MissionPlanner {
@@ -219,6 +234,8 @@ impl MissionPlanner {
     /// the timers, the calibration's statuses, and the writes.
     pub(crate) fn extra_setup_tick(&mut self, view: &TelemetryView, window: &Window) {
         let on_setup = self.screen == crate::Screen::Setup;
+        // `logreadmode`, for the proximity window's clock.
+        let replaying = self.fly_data.playback.playing();
         let now = Instant::now();
         let number_focused = self.extra_focus.number.is_focused(window);
         let fft_number_focused = self.extra_focus.fft_number.is_focused(window);
@@ -245,6 +262,25 @@ impl MissionPlanner {
         }
         // The MAVLink Inspector's subscriptions and timers, while it is open.
         pages.inspector.tick(telemetry, now);
+        // The proximity window's vehicle and clock; the key store, read at the first frame, and
+        // the signing window's timer.
+        let banner = telemetry.firmware_banner();
+        pages.proximity.tick(
+            view.vehicle,
+            |id| telemetry.vehicle_state(id),
+            |state| {
+                super::flight_modes::firmware_of(state.autopilot, state.vehicle_type, banner)
+                    == super::flight_modes::Firmware::ArduCopter2
+            },
+            replaying,
+        );
+        let link = pages
+            .auth_keys
+            .window
+            .is_some()
+            .then(|| telemetry.send_handle())
+            .flatten();
+        pages.auth_keys.tick(link.as_ref(), now);
         // The link errors the C# boxes go on the status line instead (the owner's ruling); the
         // page never draws them, since they leave its queue in the tick before the frame.
         let mut status = None;
@@ -297,6 +333,16 @@ impl MissionPlanner {
                     &pages.warnings_manager,
                     &focus.warnings_number,
                     &focus.warnings_text,
+                    window,
+                    cx,
+                )
+            })
+            .or_else(|| proximity::overlay(&pages.proximity, &focus.proximity, window, cx))
+            .or_else(|| {
+                auth_keys::overlay(
+                    &pages.auth_keys,
+                    &focus.auth_keys,
+                    &focus.auth_keys_prompt,
                     window,
                     cx,
                 )
