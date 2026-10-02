@@ -789,7 +789,7 @@ Every deliverable above must also satisfy:
 
 | Metric | Target | Measured (2026-09-24) |
 |---|---|---|
-| Cold start to connected UI | < 500 ms | unmeasured |
+| Cold start to connected UI | < 500 ms | **200 ms** to the third painted frame (median of 20 warm runs of the release build under `MP_SMOKE`, max 601), 465 ms process start to exit (max 1,230), on Xvfb with lavapipe, 2026-10-03 (`tools/cold-start.sh`; PLAN.md section 8.2) |
 | Idle CPU (connected, 10 Hz telemetry) | < 1 % of one core | unmeasured |
 | Packet-to-pixel latency (p99) | < 16 ms | **14.7 ms** (p50 9.8, max 18.4; 2 of 569 over) on the release build under a 200 Hz storm, 2026-09-26, with the link's 5 ms snapshot cadence; the frame alone is p99 3.8 ms |
 | Stick input to packet on the wire (p99) | < 5 ms | 0.152 ms on an in-process fake device; no real device attached |
