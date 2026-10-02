@@ -66,6 +66,9 @@ mod textfield;
 mod transponder;
 mod tuning;
 mod ui;
+// ---- Warning Manager ----
+mod warnings;
+// ---- end Warning Manager ----
 
 use std::time::Duration;
 
@@ -339,6 +342,8 @@ struct MissionPlanner {
     /// The primary flight display's inputs for this frame, and the clocks behind its banners.
     hud: hud::HudInputs,
     hud_timing: hud::Timing,
+    /// The custom warnings and the loop that checks them (`warnings.rs`).
+    warnings: warnings::WarningEngine,
     /// The parameter documentation fetch for the connected firmware.
     metadata: metadata::Fetch,
     /// The live tuning graph.
@@ -707,6 +712,9 @@ impl MissionPlanner {
         // `PluginLoader.LoadAll`, less `DisabledPlugins`. `// C#: MainV2.cs:3185-3196`
         let plugins = plugins_ui::Plugins::start(&persisted, cx);
         // ---- end row 96 ----
+        // `WarningEngine`'s `LoadConfig`, and speech as the settings left it.
+        // `// C#: MainV2.cs:1035-1036`
+        let warnings = warnings::WarningEngine::start(&persisted);
         let mut this = Self {
             telemetry,
             map: std::rc::Rc::new(std::cell::RefCell::new(map)),
@@ -761,6 +769,7 @@ impl MissionPlanner {
             joystick_focus: cx.focus_handle(),
             hud: hud::HudInputs::default(),
             hud_timing: hud::Timing::default(),
+            warnings,
             metadata: metadata::Fetch::default(),
             tuning: tuning::Tuning::new(),
             flight_modes: config::flight_modes::FlightModes::default(),
@@ -2703,6 +2712,8 @@ impl Render for MissionPlanner {
         // flown, notices a device that has gone, runs the Joystick page's timer and does the
         // button functions pressed. Once a frame, whether or not anything shows.
         self.joystick_tick(&view);
+        // The warning engine's pass, before the HUD's inputs: its messages are the HUD's.
+        self.warnings_tick(&view, window);
         self.hud = self.hud_inputs(&view);
         // What the HUD's menu has set: the Russian flag and the user's items.
         self.fly_data
@@ -3296,6 +3307,7 @@ impl Render for MissionPlanner {
             // ---- end Standard / Advanced Params, MAVFtp, Heli Setup ----
             // ---- SETUP's small pages (row 70) ----
             config::extra_setup::record_facts(&self.extra, &view);
+            warnings::record_facts(&self.warnings, self.hud.message.as_ref());
             // ---- end SETUP's small pages ----
             // ---- Firmware Legacy / Ateryx ----
             config::firmware_legacy::record_facts(

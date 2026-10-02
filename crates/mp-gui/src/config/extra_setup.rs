@@ -16,6 +16,7 @@ use gpui::{AnyElement, Context, FocusHandle, Window, div, prelude::*};
 
 use super::{
     compass_mot, fft, gps_order, hw_ids, initial_params, mavlink_inspector, osd, parachute,
+    warnings_manager,
 };
 use crate::MissionPlanner;
 use crate::config::servo_output::{ERROR_TITLE, Message};
@@ -87,6 +88,8 @@ pub struct ExtraSetup {
     pub fft: fft::Fft,
     /// The MAVLink Inspector the Advanced page opens (`config/mavlink_inspector.rs`).
     pub inspector: mavlink_inspector::InspectorWindow,
+    /// The Warning Manager the Advanced page opens (`config/warnings_manager.rs`).
+    pub warnings_manager: warnings_manager::ManagerWindow,
 }
 
 /// The keyboard focus of the pages' boxes: Parachute's number being typed into, and Initial
@@ -104,6 +107,10 @@ pub struct Focus {
     pub fft_prompt: FocusHandle,
     /// The MAVLink Inspector's "Points of history?".
     pub inspector_prompt: FocusHandle,
+    /// The Warning Manager's number box being typed into.
+    pub warnings_number: FocusHandle,
+    /// The Warning Manager's message box being typed into.
+    pub warnings_text: FocusHandle,
 }
 
 impl Focus {
@@ -116,6 +123,8 @@ impl Focus {
             fft_track: cx.focus_handle(),
             fft_prompt: cx.focus_handle(),
             inspector_prompt: cx.focus_handle(),
+            warnings_number: cx.focus_handle(),
+            warnings_text: cx.focus_handle(),
         }
     }
 }
@@ -130,6 +139,7 @@ pub fn record_facts(pages: &ExtraSetup, view: &TelemetryView) {
     initial_params::record_facts(&pages.initial_params);
     fft::record_facts(&pages.fft, view);
     mavlink_inspector::record_facts(&pages.inspector);
+    warnings_manager::record_facts(&pages.warnings_manager);
 }
 
 impl MissionPlanner {
@@ -281,6 +291,15 @@ impl MissionPlanner {
         fft::overlay(&pages.fft, &focus.fft_number, &focus.fft_prompt, window, cx)
             .or_else(|| {
                 mavlink_inspector::overlay(&pages.inspector, &focus.inspector_prompt, window, cx)
+            })
+            .or_else(|| {
+                warnings_manager::overlay(
+                    &pages.warnings_manager,
+                    &focus.warnings_number,
+                    &focus.warnings_text,
+                    window,
+                    cx,
+                )
             })
             .or_else(|| parachute::overlay(&pages.parachute, window, cx))
             .or_else(|| osd::overlay(&pages.osd, window, cx))

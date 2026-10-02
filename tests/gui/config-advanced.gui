@@ -13,11 +13,12 @@
 # the GYR and ACC graphs, as tests/gui/config-fft.gui has it from the FFT Setup page. The MAVLink
 # Inspector's, Controls/MAVLinkInspector.cs, is ported too, and its button is enabled; it lists
 # what a link carries, so tests/gui/config-mavlink-inspector.gui drives it with SITL and this
-# script does not click it. The other eleven are dimmed - the Warnings Manager, proximity,
-# signing keys, MAVLink mirror, NMEA output, Follow Me, parameter regeneration, moving base, log
-# anonymiser, spectrogram and support proxy windows are not in this application - and the script
-# clicks none of them; config/advanced.rs's tests hold the controls to the Designer and the .resx
-# and each handler to the window its row names.
+# script does not click it. So is the Warning Manager's, Warnings/WarningsManager.cs, whose rules
+# read a vehicle: tests/gui/config-warnings.gui drives it with SITL. The other ten are dimmed -
+# the proximity, signing keys, MAVLink mirror, NMEA output, Follow Me, parameter regeneration,
+# moving base, log anonymiser, spectrogram and support proxy windows are not in this application
+# - and the script clicks none of them; config/advanced.rs's tests hold the controls to the
+# Designer and the .resx and each handler to the window its row names.
 #
 # Run from the repository root, where the log's path is typed relative to.
 
@@ -39,8 +40,8 @@ expect config.advanced.text The following pages are for advanced configutation o
 expect config.advanced.buttons Warning Manager,MAVLink Inspector,Proximity,Mavlink Signing,Mavlink Mirror,NMEA,Follow Me,Param gen,Moving Base,Anon Log,FFT,Spectrogram,Support Proxy
 expect config.advanced.labels ~ Enable custom warnings based on a set of conditions|View decoded mavlink data
 expect config.advanced.labels ~ |Share connection with support engineer
-expect config.advanced.buttons.enabled MAVLink Inspector,FFT
-expect config.advanced.dimmed ~ but_warningmanager: the Warnings Manager window (Warnings/WarningsManager.cs) is not ported; but_proximity:
+expect config.advanced.buttons.enabled Warning Manager,MAVLink Inspector,FFT
+expect config.advanced.dimmed ~ but_proximity: the proximity window (Controls/ProximityControl.cs) is not ported; but_signkey:
 expect config.advanced.dimmed ~ but_anonlog: anonymising a log (ExtLibs/Utilities/Privacy.cs) is not ported; BUT_spect:
 expect config.fft.window false
 

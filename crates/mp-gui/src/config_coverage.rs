@@ -781,14 +781,17 @@ pub const PANELS: &[Panel] = &[
         // (:27-30, :114-117); each other is dimmed with the window it would open as the reason.
         Partial(
             at("crates/mp-gui/src/config/advanced.rs", "fn page"),
-            "the text and the thirteen buttons with their labels at the table's places; FFT
-        //     opens the FFT window (config/fftui.rs) and MAVLink Inspector the inspector
-        //     (config/mavlink_inspector.rs: the tree of each system, component, message with its
-        //     rate and bytes a second, and field with its value and .NET type, every 333 ms;
-        //     Show GCS Traffic; Graph It's history question and live graph of a field), 2 of the
-        //     13 wirings; the other eleven dimmed - the Warnings Manager, proximity, signing
-        //     keys, MAVLink mirror, NMEA output, Follow Me, parameter regeneration, moving base,
-        //     log anonymiser, spectrogram and support proxy windows they open are not ported",
+            "the text and the thirteen buttons with their labels at the table's places; Warning
+        //     Manager opens the manager (config/warnings_manager.rs: a row per rule and per
+        //     child over the engine's rules, warnings.rs, which checks them every 250 ms and
+        //     raises the HUD's message or a quick view's colour), FFT opens the FFT window
+        //     (config/fftui.rs) and MAVLink Inspector the inspector (config/mavlink_inspector.rs:
+        //     the tree of each system, component, message with its rate and bytes a second, and
+        //     field with its value and .NET type, every 333 ms; Show GCS Traffic; Graph It's
+        //     history question and live graph of a field), 3 of the 13 wirings; the other ten
+        //     dimmed - the proximity, signing keys, MAVLink mirror, NMEA output, Follow Me,
+        //     parameter regeneration, moving base, log anonymiser, spectrogram and support proxy
+        //     windows they open are not ported",
         ),
     ),
     panel(

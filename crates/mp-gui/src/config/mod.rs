@@ -30,6 +30,7 @@ pub mod rangefinder;
 pub mod advanced;
 pub mod basic_tuning;
 pub mod mavlink_inspector;
+pub mod warnings_manager;
 // ---- end Basic Tuning / Advanced ----
 // ---- Extended Tuning ----
 pub mod extended_tuning;

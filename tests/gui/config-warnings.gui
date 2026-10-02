@@ -1,0 +1,146 @@
+# The Warning Manager, ported from Warnings/WarningsManager.cs and Warnings/WarningControl.cs,
+# over the warning engine of ExtLibs/Utilities/Warnings/CustomWarning.cs and WarningEngine.cs
+# (crates/mp-gui/src/warnings.rs), which SETUP's Advanced page's "Warning Manager" opens
+# (ConfigAdvanced.cs:22-25).
+#
+# The claims: the engine starts with no warnings.xml in a fresh data directory and passes every
+# 250 ms (WarningEngine.cs:14-43, 85-132). The window opens with no rows. "+" adds a rule on the
+# first property offered - NONE, 0, the default message, ten seconds (WarningsManager.cs:63-76,
+# CustomWarning.cs:47-52). Its field, comparison and number chosen - satcount GT 5 - the rule
+# holds on SITL, whose GPS sees more than five, and its message "WARNING: satcount is <n>" is
+# raised and shown on the HUD as messageHigh (CustomWarning.cs:153-225, MainV2.cs:1037). A second
+# rule, alt LT 100, ticked "QuickPanel Coloring" - its message emptied and disabled, its repeat 0
+# and disabled, its colour enabled (WarningControl.cs:301-331) - and given Red, colours the quick
+# view bound to alt, quickView1, red with its number white, as SITL sits on the ground
+# (MainV2.cs:4786-4818). A child added under the first rule has its row under it, further in, its
+# message hidden; its "-" splices it out again (WarningsManager.cs:35-56, WarningControl.cs:
+# 257-299). Save writes warnings.xml into the data directory, read back with its two rules
+# (WarningEngine.cs:45-59). The close box leaves the rules, still checked.
+#
+# Needs SITL copter on tcp:127.0.0.1:5760 started from tools/sitl/params/copter.parm. Run from the
+# repository root as
+#
+#   tools/gui-test.sh tests/gui/config-warnings.gui -- tcp:127.0.0.1:5760
+#
+# Not yet run: the budget is a guess, set by hand until a passing run records one.
+
+screen setup
+window 1600x1200
+budget 25
+# A data directory of its own: no warnings.xml of the machine running it is read, and Save writes
+# into the scratch one.
+env XDG_DATA_HOME $WORK
+
+expect vehicle.count > 0
+expect warnings.load ok
+expect warnings.rules 0
+expect warnings.speech false
+expect warnings.passes > 0
+click setup-page-ConfigAdvanced
+expect setup.page ConfigAdvanced
+expect config.advanced.buttons.enabled Warning Manager,MAVLink Inspector,FFT
+
+# The form: no rules, so no rows.
+click advanced-but_warningmanager
+expect config.warnings.window true
+expect config.warnings.opened 1
+expect config.warnings.rows 0
+
+# "+": a rule on the first property offered, as the constructor makes it.
+click warnings-add
+expect config.warnings.rows 1
+expect warnings.rules 1
+expect config.warnings.row.0.field customfield0
+expect config.warnings.row.0.condition NONE
+expect config.warnings.row.0.trigger 0.00
+expect config.warnings.row.0.color NoColor
+expect config.warnings.row.0.color.enabled false
+expect config.warnings.row.0.text WARNING: {name} is {value}
+expect config.warnings.row.0.text.enabled true
+expect config.warnings.row.0.repeat 10
+expect config.warnings.row.0.coloring false
+expect config.warnings.row.0.addchild true
+
+# Its field: satcount, down the list.
+click warnings-0-source
+expect config.warnings.list warnings-0-source
+reveal warnings-0-source-list warnings-0-source-34  # satcount
+click warnings-0-source-34  # satcount
+expect config.warnings.list none
+expect config.warnings.row.0.field satcount
+click warnings-0-condition
+click warnings-0-condition-4  # GT
+expect config.warnings.row.0.condition GT
+click warnings-0-warning
+expect config.warnings.editing warnings-0-warning
+key ctrl+u
+type 5
+key Return
+expect config.warnings.row.0.trigger 5.00
+expect warnings.rule.0 satcount GT 5 SpeakAndText null 10 WARNING: {name} is {value}
+
+# SITL's GPS sees more than five: the message raised, and on the HUD.
+expect warnings.message ~ WARNING: satcount is
+expect warnings.messages > 0
+expect warnings.hud.message ~ WARNING: satcount is
+expect warnings.spoken none
+
+# A Coloring rule: alt below 100, red.
+click warnings-add
+expect config.warnings.rows 2
+click warnings-1-source
+reveal warnings-1-source-list warnings-1-source-26  # alt
+click warnings-1-source-26  # alt
+expect config.warnings.row.1.field alt
+click warnings-1-condition
+click warnings-1-condition-1  # LT
+expect config.warnings.row.1.condition LT
+click warnings-1-warning
+key ctrl+u
+type 100
+key Return
+expect config.warnings.row.1.trigger 100.00
+click warnings-1-type
+expect config.warnings.row.1.coloring true
+expect config.warnings.row.1.text.enabled false
+expect config.warnings.row.1.repeat 0
+expect config.warnings.row.1.repeat.enabled false
+expect config.warnings.row.1.color.enabled true
+expect config.warnings.row.1.addchild false
+click warnings-1-color
+click warnings-1-color-1  # Red
+expect config.warnings.row.1.color Red
+expect warnings.rule.1 ~ alt LT 100 Coloring Red 0
+
+# SITL on the ground: the quick view bound to alt is red, its number white.
+expect fly.quick.1 alt
+expect fly.quick.1.warning ff0000
+expect fly.quick.1.warning.number ffffff
+
+# A child under the first rule: its row under it, further in, its message hidden; "-" on it
+# joins the rule to its own child - none - and the rows are as they were.
+click warnings-0-addchild
+expect config.warnings.rows 3
+expect config.warnings.row.1.depth 1
+expect config.warnings.row.1.text.visible false
+expect config.warnings.row.1.condition NONE
+expect config.warnings.row.2.field alt
+click warnings-1-remove
+expect config.warnings.rows 2
+expect config.warnings.row.1.depth 0
+expect config.warnings.row.1.field alt
+expect warnings.rule.0 satcount GT 5 SpeakAndText null 10 WARNING: {name} is {value}
+
+# Save: warnings.xml in the scratch data directory, read back with its two rules.
+click warnings-save
+expect warnings.saved 1
+expect warnings.saved.rules 2
+expect warnings.file ~ warnings.xml
+
+# The close box: the form goes, the rules stay and are still checked.
+click warnings-close
+expect config.warnings.window false
+expect warnings.rules 2
+expect fly.quick.1.warning ff0000
+expect setup.page ConfigAdvanced
+expect config.advanced.active true

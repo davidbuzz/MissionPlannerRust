@@ -848,6 +848,10 @@ struct View {
     colour: u32,
     /// `numberColorBackup`: the Designer's `Color.Empty`, a view added its own colour.
     backup: Option<u32>,
+    /// `BackColor` as the warning engine's `QuickPanelColoring` set it, the number and the
+    /// description then black or white on it; `None` for the theme's, which "NoColor" puts
+    /// back with the number's own colour (`MainV2.cs:4786-4818`).
+    warning: Option<u32>,
 }
 
 /// The views in `tableLayoutPanelQuick.Controls` order, the table's size, the view whose chooser
@@ -886,6 +890,7 @@ impl Default for QuickViews {
                 field: (*name).to_owned(),
                 colour: *colour,
                 backup: None,
+                warning: None,
             })
             .collect();
         Self {
@@ -984,6 +989,37 @@ impl QuickViews {
     #[must_use]
     pub fn colour(&self, index: usize) -> Option<u32> {
         self.views.get(index).map(|view| view.colour)
+    }
+
+    /// View `index`'s background as the warning engine coloured it, if it has.
+    #[must_use]
+    pub fn warning(&self, index: usize) -> Option<u32> {
+        self.views.get(index).and_then(|view| view.warning)
+    }
+
+    /// `WarningEngine_QuickPanelColoring(name, color)`: the first view bound to `name` coloured -
+    /// "NoColor" taking the colour off, a `WarningColors` name putting it on. A colour name the
+    /// list does not hold, which only a hand-edited `warnings.xml` gives, and a `null` one colour
+    /// nothing here: the C#'s `Color.FromName` takes any of .NET's known colours, and throws in
+    /// `BackColor`'s setter - ending the engine's pass - for any other.
+    /// `// C#: MainV2.cs:4785-4824`
+    pub fn warning_colour(&mut self, name: &str, color: Option<&str>) {
+        let Some(view) = self
+            .views
+            .iter_mut()
+            .find(|view| !name.is_empty() && view.field == name)
+        else {
+            return;
+        };
+        match color {
+            Some(crate::warnings::NO_COLOR) => view.warning = None,
+            Some(color) => {
+                if let Some(rgb) = crate::warnings::color_rgb(color) {
+                    view.warning = Some(rgb);
+                }
+            }
+            None => {}
+        }
     }
 
     /// The first view named `quickView<name>`, as `Controls.Find` finds it.
@@ -1088,6 +1124,7 @@ impl QuickViews {
                 field: String::new(),
                 colour,
                 backup: Some(colour),
+                warning: None,
             });
         }
         if self.used.len().is_multiple_of(COLOURS.len()) {
@@ -1176,6 +1213,19 @@ impl QuickViews {
                 view.backup
                     .map_or_else(|| "none".to_owned(), |colour| format!("{colour:06x}")),
             ));
+            // The warning engine's colour, and the number's on it.
+            facts.push((
+                format!("{key}.warning"),
+                view.warning
+                    .map_or_else(|| "none".to_owned(), |colour| format!("{colour:06x}")),
+            ));
+            facts.push((
+                format!("{key}.warning.number"),
+                view.warning.map_or_else(
+                    || "none".to_owned(),
+                    |colour| format!("{:06x}", crate::warnings::readable_on(colour)),
+                ),
+            ));
             facts.push((
                 key,
                 if view.field.is_empty() {
@@ -1235,7 +1285,16 @@ pub fn page(
     let locked = crate::display_view::flag("lockQuickView");
     for (index, (column, row)) in cells.into_iter().enumerate() {
         let field = views.field(index).to_owned();
-        let colour = views.colour(index).unwrap_or(theme::TEXT);
+        // A view the warning engine coloured: its background, and the number and the
+        // description black or white on it. `// C#: MainV2.cs:4807-4815`
+        let warning = views.warning(index);
+        let (colour, desc_colour) = warning.map_or_else(
+            || (views.colour(index).unwrap_or(theme::TEXT), theme::TEXT),
+            |back| {
+                let ink = crate::warnings::readable_on(back);
+                (ink, ink)
+            },
+        );
         let desc = label(&field, views.units());
         let number = views
             .number(index, state)
@@ -1252,12 +1311,13 @@ pub fn page(
                 .border_1()
                 .border_color(rgb(theme::BORDER))
                 .rounded_sm()
+                .when_some(warning, |view, back| view.bg(rgb(back)))
                 .cursor_pointer()
                 .child(
                     gpui::canvas(
                         |_bounds, _window, _cx| (),
                         move |bounds, (), window, cx| {
-                            paint_view(&desc, &number, colour, bounds, window, cx);
+                            paint_view(&desc, desc_colour, &number, colour, bounds, window, cx);
                         },
                     )
                     .absolute()
@@ -1280,10 +1340,11 @@ pub fn page(
     grid.into_any_element()
 }
 
-/// One view painted as `OnPaintSurface` paints it: the description centred at the top, the
-/// number centred in what is left, in its colour.
+/// One view painted as `OnPaintSurface` paints it: the description centred at the top in
+/// `ForeColor`, the number centred in what is left, in its colour.
 fn paint_view(
     desc: &str,
+    desc_colour: u32,
     number: &str,
     colour: u32,
     bounds: gpui::Bounds<gpui::Pixels>,
@@ -1316,7 +1377,7 @@ fn paint_view(
                 text: desc.to_owned(),
                 at: (width / 2.0, 5.0),
                 size: DESC_SIZE,
-                colour: theme::TEXT,
+                colour: desc_colour,
                 align: Align::Centre,
             },
             Item::Label {
@@ -2031,5 +2092,45 @@ mod tests {
         ));
         assert_eq!(COLOURS[0], 0x0000ff);
         assert_eq!(COLOURS[15], 0x6495ed);
+    }
+
+    /// The warning engine's colouring: the first view bound to the property takes the colour,
+    /// with its number white on red and black on yellow; "NoColor" takes it off and the number
+    /// has its own colour again; a property no view shows, a name the list does not hold and a
+    /// `null` colour change nothing.
+    /// `// C#: MainV2.cs:4785-4824`
+    #[test]
+    fn the_warning_engine_colours_the_view_bound_to_its_property() {
+        let mut views = QuickViews::default();
+        views.open(3);
+        views.choose("alt");
+        assert_eq!(views.field(0), "alt");
+        assert_eq!(views.field(3), "alt");
+        views.warning_colour("alt", Some("Red"));
+        assert_eq!(views.warning(0), Some(0xff_00_00));
+        assert_eq!(views.warning(3), None, "the first only");
+        assert_eq!(
+            fact(&views, "fly.quick.1.warning").as_deref(),
+            Some("ff0000")
+        );
+        assert_eq!(
+            fact(&views, "fly.quick.1.warning.number").as_deref(),
+            Some("ffffff")
+        );
+        assert_eq!(fact(&views, "fly.quick.4.warning").as_deref(), Some("none"));
+        views.warning_colour("alt", Some("Yellow"));
+        assert_eq!(
+            fact(&views, "fly.quick.1.warning.number").as_deref(),
+            Some("000000")
+        );
+        views.warning_colour("alt", Some("Blue"));
+        views.warning_colour("alt", None);
+        views.warning_colour("satcount", Some("Red"));
+        views.warning_colour("", Some("Red"));
+        assert_eq!(views.warning(0), Some(0xff_ff_00));
+        views.warning_colour("alt", Some("NoColor"));
+        assert_eq!(views.warning(0), None);
+        assert_eq!(fact(&views, "fly.quick.1.warning").as_deref(), Some("none"));
+        assert_eq!(views.colour(0), Some(DEFAULTS[0].1), "its own colour kept");
     }
 }
