@@ -4,7 +4,7 @@ Generated from `crates/mp-gui/src/coverage.rs` by `cargo test -p mp-gui coverage
 
 | total | done | elsewhere | missing | plumbing | dropped |
 |---:|---:|---:|---:|---:|---:|
-| 136 | 112 | 1 | 3 | 18 | 2 |
+| 136 | 113 | 1 | 2 | 18 | 2 |
 
 | control | event | handler | text | ours |
 |---|---|---|---|---|
@@ -93,7 +93,7 @@ Generated from `crates/mp-gui/src/coverage.rs` by `cargo test -p mp-gui coverage
 | `myButton2` | Click | `BUT_quickrtl_Click` | RTL | done: `mode` |
 | `myButton3` | Click | `BUT_quickauto_Click` | Auto | done: `mode` |
 | `ON_btn` | Click | `ON_btn_Click` | ON (transponder) | done: `fly-xpdr-on` |
-| `onOffCameraOverlapToolStripMenuItem` | Click | `onOffCameraOverlapToolStripMenuItem_Click` | Camera Overlap | **missing** - drawn dimmed: it acts on the CAMERA_FEEDBACK photo markers, which the map does not draw |
+| `onOffCameraOverlapToolStripMenuItem` | Click | `onOffCameraOverlapToolStripMenuItem_Click` | Camera Overlap | done: `fly-cameraoverlap` |
 | `poiatcoordsToolStripMenuItem` | Click | `poiatcoordsToolStripMenuItem_Click` | Coords (POI) | done: `fly-poi-coords` |
 | `PointCameraCoordsToolStripMenuItem1` | Click | `PointCameraCoordsToolStripMenuItem1_Click` | Point Camera Coords | done: `fly-pointcameracoords` |
 | `pointCameraHereToolStripMenuItem` | Click | `pointCameraHereToolStripMenuItem_Click` | Point Camera Here | done: `fly-pointcamerahere` |

@@ -7,6 +7,7 @@
 
 #![allow(clippy::print_stderr)]
 
+mod camera_photos;
 mod config;
 mod config_coverage;
 mod connect;
@@ -3502,6 +3503,30 @@ impl Render for MissionPlanner {
                 .map(|aircraft| (aircraft.position, aircraft.is_stale(now)))
                 .collect();
             self.map.borrow_mut().set_traffic(&traffic);
+        }
+
+        // The camera's shots: `photosoverlay`'s photo markers and, with Camera Overlap checked,
+        // `kmlpolygons`' overlap count - the map loop's camera half, built again only when a
+        // shot, the toggle, CAM_MIN_INTERVAL or the fields of view have changed.
+        // `// C#: GCSViews/FlightData.cs:4001-4082`
+        {
+            let points = self.telemetry.camera_points();
+            let min_interval = view
+                .vehicle
+                .and_then(|id| self.telemetry.parameter_of(id, "CAM_MIN_INTERVAL"))
+                .map_or(0.0, |value| value / 1000.0);
+            let fov = camera_photos::fov(|key| self.persisted.get(key).map(str::to_owned));
+            let overlap = self.fly_data.camera_overlap;
+            self.fly_data.photos.refresh(
+                &points,
+                min_interval,
+                fov,
+                overlap,
+                &camera_photos::PlannerTerrain,
+            );
+            let mut map = self.map.borrow_mut();
+            map.set_photos(self.fly_data.photos.photos());
+            map.set_coverage(self.fly_data.photos.coverage());
         }
 
         // Keep a log download moving, write it out when it finishes and start the next of the

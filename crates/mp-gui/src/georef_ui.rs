@@ -687,7 +687,7 @@ pub fn run_job(
 
 /// `srtm.getAltitude`: the planner's own terrain lookup (`crate::srtm`), which the footprints
 /// in the KML and on the map are projected onto.
-struct PlannerTerrain;
+pub(crate) struct PlannerTerrain;
 
 impl Terrain for PlannerTerrain {
     fn altitude(&self, lat: f64, lng: f64) -> f64 {

@@ -97,6 +97,7 @@ pub mod testing;
 pub mod timeouts;
 pub mod tlog;
 pub mod traffic;
+pub mod camera_points;
 
 use std::collections::BTreeMap;
 use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering};
@@ -106,7 +107,7 @@ use std::time::{Duration, Instant};
 use mission_transfer::{Action, MissionTransfer};
 use mp_mavlink::{DecodeStats, FrameDecoder, Message as _, encode_v2};
 use mp_mavlink_dialects::all::{
-    CompassmotStatus, DIALECT, Heartbeat, MavCmd, MavMessage, MissionItem as MissionItemMessage,
+    CameraFeedback, CompassmotStatus, DIALECT, Heartbeat, MavCmd, MavMessage, MissionItem as MissionItemMessage,
     MissionItemInt as MissionItemIntMessage, MissionRequest, MissionRequestInt,
     MissionWritePartialList,
 };
@@ -315,6 +316,8 @@ struct Shared {
     ftp: Mutex<BTreeMap<VehicleId, mp_ftp::mavftp::MavFtp>>,
     /// `MAVState.fencepoints` for every vehicle (see [`fence_points`]).
     fence_points: Mutex<fence_points::FencePoints>,
+    /// `MAVState.camerapoints` for every vehicle (see [`camera_points`]).
+    camera_points: Mutex<camera_points::CameraPoints>,
     /// `MAVState.wps` and `MAVState.rallypoints` for every vehicle (see [`mission_points`]).
     mission_points: Mutex<mission_points::MissionPoints>,
     /// What the screens write into a vehicle's state, for the link thread to apply.
@@ -843,6 +846,17 @@ impl Link {
             .fence_points
             .lock()
             .map(|held| held.items(target))
+            .unwrap_or_default()
+    }
+
+    /// A vehicle's camera shots as the traffic on this link has shown them, oldest first:
+    /// `MAVState.camerapoints`, which the flight screen draws (see [`camera_points`]).
+    #[must_use]
+    pub fn camera_points(&self, target: VehicleId) -> Vec<CameraFeedback> {
+        self.shared
+            .camera_points
+            .lock()
+            .map(|held| held.points(target))
             .unwrap_or_default()
     }
 
@@ -1753,6 +1767,22 @@ fn run_link(
                                         let count = usize::from(data.count);
                                         if let Some(slice) = data.data.get(..count) {
                                             download.receive(data.ofs, slice);
+                                        }
+                                    }
+                                }
+                                // `CAMERA_FEEDBACK`: the shot onto the vehicle's list, and
+                                // `timesincelastshot` worked out from the list as the flight
+                                // screen's map loop works it out - here as the shot arrives.
+                                // C#: MAVLinkInterface.cs:5736-5745; GCSViews/FlightData.cs:4021-4038
+                                MavMessage::CameraFeedback(point) => {
+                                    if let Ok(mut held) = shared.camera_points.lock() {
+                                        held.observe(id, point);
+                                        let interval =
+                                            mp_vehicle::VehicleState::shot_interval(held.times(id));
+                                        if let Some(interval) = interval
+                                            && let Some(state) = registry.working_mut(id)
+                                        {
+                                            state.time_since_last_shot = interval;
                                         }
                                     }
                                 }

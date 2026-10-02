@@ -315,6 +315,10 @@ pub struct MapViewport {
     rally: Vec<WebMercator>,
     /// Other aircraft, with whether their report is recent enough to be trusted.
     traffic: Vec<(WebMercator, bool)>,
+    /// `photosoverlay`: the camera's shots.
+    photos: Vec<ProjectedPhoto>,
+    /// `kmlpolygons`' `GMapMarkerOverlapCount`, while Camera Overlap is on: each cell's count.
+    coverage: Option<Vec<(WebMercator, u32)>>,
     /// Where map imagery comes from, if any has been configured.
     tiles: Option<Arc<TileStore>>,
     /// Tiles already uploaded to the GPU, keyed so the `ImageId` stays stable.
@@ -497,6 +501,8 @@ impl MapViewport {
             fence: Vec::new(),
             rally: Vec::new(),
             traffic: Vec::new(),
+            photos: Vec::new(),
+            coverage: None,
             tiles: None,
             images: HashMap::new(),
             tiles_drawn: 0,
@@ -795,6 +801,35 @@ impl MapViewport {
             .iter()
             .map(|(position, stale)| (position.to_web_mercator(), *stale))
             .collect();
+    }
+
+    /// Replaces `photosoverlay`'s markers.
+    pub fn set_photos(&mut self, photos: &[PhotoMarker]) {
+        self.photos = photos
+            .iter()
+            .map(|photo| ProjectedPhoto {
+                at: photo.position.to_web_mercator(),
+                red: photo.below_min_interval,
+                footprint: photo
+                    .footprint
+                    .iter()
+                    .map(|corner| corner.to_web_mercator())
+                    .collect(),
+                draw_footprint: photo.draw_footprint,
+                tooltip: photo.tooltip.clone(),
+            })
+            .collect();
+    }
+
+    /// Replaces `kmlpolygons`' overlap count: its cells and their counts, or `None` while Camera
+    /// Overlap is off or no shot has come.
+    pub fn set_coverage(&mut self, cells: Option<&[(LatLon, u32)]>) {
+        self.coverage = cells.map(|cells| {
+            cells
+                .iter()
+                .map(|(at, count)| (at.to_web_mercator(), *count))
+                .collect()
+        });
     }
 
     /// Whether the map is following the vehicle rather than a view the user chose.
@@ -1555,6 +1590,8 @@ pub enum MarkerTag {
     Guided,
     /// The planner's "Tracker Home" marker.
     Tracker,
+    /// The flight map's `GMapMarkerPhoto`, by its place in `photosoverlay`.
+    Photo(u16),
 }
 
 impl MarkerTag {
@@ -1566,9 +1603,55 @@ impl MarkerTag {
             Self::Item(seq) => seq.to_string(),
             Self::Guided => "Guided Mode".to_owned(),
             Self::Tracker => "Tracker Home".to_owned(),
+            Self::Photo(index) => format!("Photo {index}"),
         }
     }
 }
+
+/// A `GMapMarkerPhoto`: one `CAMERA_FEEDBACK` on the flight map - the camera icon, red
+/// (`camera_icon`) when the shot came sooner after the one before than `CAM_MIN_INTERVAL`
+/// allows and green (`camera_icon_G`) otherwise - with its footprint, drawn for the last four
+/// shots and under the pointer, and its tooltip. `// C#: ExtLibs/Maps/GMapMarkerPhoto.cs`
+#[derive(Debug, Clone, PartialEq)]
+pub struct PhotoMarker {
+    /// `new PointLatLng(mark.lat / 1e7, mark.lng / 1e7)`.
+    pub position: LatLon,
+    /// `shotBellowMinInterval`.
+    pub below_min_interval: bool,
+    /// `footprintpoly`.
+    pub footprint: Vec<LatLon>,
+    /// `drawfootprint`.
+    pub draw_footprint: bool,
+    /// `ToolTipText`.
+    pub tooltip: String,
+}
+
+/// A photo marker as the map keeps it: projected.
+#[derive(Debug, Clone, PartialEq)]
+struct ProjectedPhoto {
+    at: WebMercator,
+    red: bool,
+    footprint: Vec<WebMercator>,
+    draw_footprint: bool,
+    tooltip: String,
+}
+
+/// `GMapMarkerPhoto`'s icon: `Offset = (-10, -10)`, `Size = 20 by 20`.
+const PHOTO_AREA: (f32, f32, f32, f32) = (-10.0, -10.0, 20.0, 20.0);
+/// `camera_icon_G`'s disc, and `camera_icon`'s.
+/// `// C#: Resources/camera-icon-G.png, Resources/camera-icon.png`
+const CAMERA_GREEN: u32 = 0x5d_db_38;
+/// See [`CAMERA_GREEN`].
+const CAMERA_RED: u32 = 0xb4_19_2d;
+/// `Pens.Crimson`, the footprint's outline. `// C#: ExtLibs/Maps/GMapMarkerPhoto.cs:62`
+const CRIMSON: u32 = 0xdc_14_3c;
+/// `GMapMarkerOverlapCount`'s colours by count, one and up: Purple, Blue, Aqua, Green, Yellow,
+/// Orange, Red, DarkRed - eight and more alike. `// C#: ExtLibs/Maps/GMapMarkerOverlapCount.cs:28-38`
+const OVERLAP_COLOURS: [u32; 8] = [
+    0x80_00_80, 0x00_00_ff, 0x00_ff_ff, 0x00_80_00, 0xff_ff_00, 0xff_a5_00, 0xff_00_00, 0x8b_00_00,
+];
+/// Their alpha, `Color.FromArgb(140, ...)`.
+const OVERLAP_ALPHA: u32 = 140;
 
 /// The radius `addpolygonmarker` gives a marker's `GMapMarkerRect`.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -1966,6 +2049,15 @@ impl MapViewport {
                 }
                 if within(screen, PIN_AREA) {
                     now.pins.push(tag);
+                }
+            }
+            // `GMapMarkerPhoto`: its 20 by 20 icon about the point.
+            for (index, photo) in self.photos.iter().enumerate() {
+                if let Some(screen) = self.screen_position(photo.at)
+                    && within(screen, PHOTO_AREA)
+                    && let Ok(index) = u16::try_from(index)
+                {
+                    now.pins.push(MarkerTag::Photo(index));
                 }
             }
         }
@@ -2807,6 +2899,47 @@ pub fn pin_outline_at(head: (f32, f32), radius: f32, tip: (f32, f32)) -> Vec<(f3
     points
 }
 
+/// A filled disc `width` across about `centre`, in a colour with its alpha (`0xRRGGBBAA`).
+fn paint_disc(window: &mut Window, centre: Point<Pixels>, width: f32, rgba: u32) {
+    let side = px(width);
+    window.paint_quad(quad(
+        Bounds {
+            origin: point(centre.x - side / 2.0, centre.y - side / 2.0),
+            size: size(side, side),
+        },
+        Corners::all(side / 2.0),
+        gpui::rgba(rgba),
+        gpui::Edges::all(px(0.0)),
+        gpui::rgba(rgba),
+        gpui::BorderStyle::default(),
+    ));
+}
+
+/// `camera_icon_G` or `camera_icon` at 20 by 20, centred on its point: a disc with a white
+/// camera on it. `// C#: ExtLibs/Maps/GMapMarkerPhoto.cs:15-16, 43-44, 66-70`
+fn paint_camera_icon(window: &mut Window, at: Point<Pixels>, disc: u32) {
+    let (left, top) = (at.x - px(10.0), at.y - px(10.0));
+    let box_at =
+        |window: &mut Window, dx: f32, dy: f32, w: f32, h: f32, radius: f32, colour: u32| {
+            window.paint_quad(quad(
+                Bounds {
+                    origin: point(left + px(dx), top + px(dy)),
+                    size: size(px(w), px(h)),
+                },
+                Corners::all(px(radius)),
+                rgb(colour),
+                gpui::Edges::all(px(0.0)),
+                rgb(colour),
+                gpui::BorderStyle::default(),
+            ));
+        };
+    box_at(window, 0.0, 0.0, 20.0, 20.0, 10.0, disc);
+    box_at(window, 7.0, 5.0, 6.0, 2.0, 0.5, 0xff_ff_ff);
+    box_at(window, 5.0, 7.0, 10.0, 8.0, 1.0, 0xff_ff_ff);
+    box_at(window, 7.0, 8.0, 6.0, 6.0, 3.0, disc);
+    box_at(window, 8.5, 9.5, 3.0, 3.0, 1.5, 0xff_ff_ff);
+}
+
 /// Paints `GMapMarkerRallyPt` with its point at `at`: `marker_02`, a purple pin whose head has a
 /// hole. The bitmap is drawn here as its shape: the dark edge, the purple inside it, and the hole
 /// as the dark ring it is ringed by - the C#'s shows the map through it.
@@ -3237,6 +3370,65 @@ fn paint_live(map: &mut MapViewport, bounds: Bounds<Pixels>, window: &mut Window
         }
     }
 
+    // `GMapMarkerOverlapCount` on `kmlpolygons`: a disc five metres wide at each cell, in the
+    // count's colour, those off the screen skipped; then the legend, eight discs of twenty down
+    // the map's left from (20, 100), 25 apart, each numbered in white.
+    // `// C#: ExtLibs/Maps/GMapMarkerOverlapCount.cs:42-97, 137-177`
+    if let Some(cells) = &map.coverage {
+        let m2pixel = map.metres_to_pixels().map_or(1.0, |(across, _)| across);
+        #[allow(clippy::cast_possible_truncation)] // pixels of a disc
+        let width = (5.0 * m2pixel) as f32;
+        let screen = Bounds {
+            origin,
+            size: size(px(w), px(h)),
+        };
+        for (at, count) in cells {
+            let centre = to_screen(*at);
+            if !screen.contains(&centre) {
+                continue;
+            }
+            let colour = OVERLAP_COLOURS
+                .get(usize::try_from(count.saturating_sub(1)).unwrap_or(7).min(7))
+                .copied()
+                .unwrap_or(0x8b_00_00);
+            paint_disc(window, centre, width, (colour << 8) | OVERLAP_ALPHA);
+        }
+        for (index, colour) in OVERLAP_COLOURS.iter().enumerate() {
+            #[allow(clippy::cast_precision_loss)] // eight discs
+            let centre = point(
+                origin.x + px(20.0),
+                origin.y + px(100.0 + index as f32 * 25.0),
+            );
+            paint_disc(window, centre, 20.0, (colour << 8) | OVERLAP_ALPHA);
+            let text = (index + 1).to_string();
+            let run = TextRun {
+                len: text.len(),
+                font: window.text_style().font(),
+                color: Hsla::from(rgb(0xff_ff_ff)),
+                background_color: None,
+                underline: None,
+                strikethrough: None,
+            };
+            let line = window.text_system().shape_line(
+                SharedString::from(text),
+                px(KML_LABEL_SIZE),
+                &[run],
+                None,
+            );
+            let _ = line.paint(
+                point(
+                    centre.x - line.width / 2.0,
+                    centre.y - px(KML_LABEL_SIZE * 1.2 / 2.0),
+                ),
+                px(KML_LABEL_SIZE * 1.2),
+                TextAlign::Left,
+                None,
+                window,
+                cx,
+            );
+        }
+    }
+
     // The planned mission: a dashed-looking track plus a marker per waypoint, drawn beneath the
     // flown path so the two are distinguishable where they overlap.
     if map.mission.len() > 1 {
@@ -3280,6 +3472,39 @@ fn paint_live(map: &mut MapViewport, bounds: Bounds<Pixels>, window: &mut Window
     // Rally points: `GMapMarkerRallyPt`, the purple pin `marker_02`, over the mission.
     for rally in &map.rally {
         paint_rally_pin(window, to_screen(*rally));
+    }
+
+    // `photosoverlay`: each `GMapMarkerPhoto` as its camera icon - red for a shot sooner than
+    // CAM_MIN_INTERVAL after the one before, green otherwise - and its crimson footprint for the
+    // last four shots and the one under the pointer, with the tooltip of that one.
+    // `// C#: ExtLibs/Maps/GMapMarkerPhoto.cs:65-77; GCSViews/FlightData.cs:4043-4062`
+    for (index, photo) in map.photos.iter().enumerate() {
+        let at = to_screen(photo.at);
+        paint_camera_icon(
+            window,
+            at,
+            if photo.red { CAMERA_RED } else { CAMERA_GREEN },
+        );
+        let hovered = u16::try_from(index)
+            .is_ok_and(|index| map.hovered.pins.contains(&MarkerTag::Photo(index)));
+        if (photo.draw_footprint || hovered) && photo.footprint.len() > 1 {
+            let mut builder = PathBuilder::stroke(px(1.0));
+            let mut corners = photo.footprint.iter();
+            if let Some(first) = corners.next() {
+                builder.move_to(to_screen(*first));
+                for corner in corners {
+                    builder.line_to(to_screen(*corner));
+                }
+                builder.line_to(to_screen(*first));
+            }
+            if let Ok(path) = builder.build() {
+                window.paint_path(path, Hsla::from(rgb(CRIMSON)));
+            }
+        }
+        if hovered {
+            paint_tooltip(window, cx, at, &photo.tooltip);
+            map.tooltips_drawn.push(photo.tooltip.clone());
+        }
     }
 
     // Other aircraft. Drawn last, over everything else, because a symbol that says where not to

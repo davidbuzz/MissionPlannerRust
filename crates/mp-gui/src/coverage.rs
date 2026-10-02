@@ -663,7 +663,7 @@ pub const FLIGHTDATA: &[Action] = &[
         "Click",
         "onOffCameraOverlapToolStripMenuItem_Click",
         "Camera Overlap",
-        Missing,
+        Done("fly-cameraoverlap"),
     ),
     row(
         "poiatcoordsToolStripMenuItem",
@@ -1003,11 +1003,6 @@ pub const FLIGHTDATA: &[Action] = &[
 pub const WHY_MISSING: &[(&str, &str, &str)] = &[
     ("startCameraToolStripMenuItem", "Click", VIDEO),
     (
-        "onOffCameraOverlapToolStripMenuItem",
-        "Click",
-        "drawn dimmed: it acts on the CAMERA_FEEDBACK photo markers, which the map does not draw",
-    ),
-    (
         "setAspectRatioToolStripMenuItem",
         "Click",
         "the owner's call: the C#'s 4:3 would reshape the column",
@@ -1236,7 +1231,7 @@ mod tests {
         );
         assert_eq!(
             (done, elsewhere, missing, plumbing, dropped),
-            (112, 1, 3, 18, 2)
+            (113, 1, 2, 18, 2)
         );
     }
 }

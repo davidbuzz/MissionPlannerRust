@@ -1453,6 +1453,14 @@ impl Telemetry {
         self.link.as_ref().map(Link::traffic).unwrap_or_default()
     }
 
+    /// `MAV.camerapoints`: the shown vehicle's camera shots, oldest first; none without one.
+    #[must_use]
+    pub fn camera_points(&self) -> Vec<mp_mavlink_dialects::all::CameraFeedback> {
+        self.target()
+            .map(|(link, id)| link.camera_points(id))
+            .unwrap_or_default()
+    }
+
     /// `getParamList`: the parameters fetched over MAVFTP first (`@PARAM/param.pck?withdefaults=1`)
     /// and over the `PARAM_REQUEST_LIST` stream when that will not do - the parameter screen's
     /// button, and the fetch on connecting.

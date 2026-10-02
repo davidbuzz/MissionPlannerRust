@@ -10351,7 +10351,10 @@ pub fn map_hover(this: &mut MissionPlanner, planning: bool, pointer: Option<(f32
 pub fn entered_row(entered: &[mapview::MarkerTag]) -> Option<u16> {
     entered.iter().rev().find_map(|tag| match tag {
         mapview::MarkerTag::Item(seq) => Some(*seq),
-        mapview::MarkerTag::Home | mapview::MarkerTag::Guided | mapview::MarkerTag::Tracker => None,
+        mapview::MarkerTag::Home
+        | mapview::MarkerTag::Guided
+        | mapview::MarkerTag::Tracker
+        | mapview::MarkerTag::Photo(_) => None,
     })
 }
 

@@ -2,10 +2,11 @@
 //! `ImageProjection.calc` it reaches, which the KML's ground overlays are placed by.
 //!
 //! `getboundingbox` always passes a roll and pitch of zero, so only `calc`'s "quick method" is
-//! reached: the four corners of the field of view at the photo's altitude, each pushed along its
-//! bearing until the line from the camera through it meets the terrain. The other branch - the
-//! full rotation matrix for a tilted camera - is not reachable from Geo Reference Images and is
-//! not ported.
+//! reached from it: the four corners of the field of view at the photo's altitude, each pushed
+//! along its bearing until the line from the camera through it meets the terrain. The other
+//! branch - the full rotation matrix for a tilted camera - is reached from the flight map's photo
+//! markers (`GMapMarkerPhoto`), whose shots carry the camera's roll, pitch and yaw, and is
+//! [`calc`].
 //!
 //! The field of view the form passes is its defaults, 200 by 130 degrees (`Georefimage.Designer.cs:
 //! 229-252`): half of 200 is past 90, so the "horizontal" tangent is negative and the corners
@@ -210,6 +211,153 @@ pub fn calc_quick(
     ]
 }
 
+/// `Vector3`, as far as the projection uses one: the operators `calc` and `Matrix3` reach.
+/// `// C#: ExtLibs/Utilities/Vector3.cs:196-247, 254-257`
+#[derive(Debug, Clone, Copy, PartialEq)]
+struct V3 {
+    x: f64,
+    y: f64,
+    z: f64,
+}
+
+impl V3 {
+    const fn new(x: f64, y: f64, z: f64) -> Self {
+        Self { x, y, z }
+    }
+
+    /// `operator *(Vector3, Vector3)`: the dot product.
+    fn dot(self, other: Self) -> f64 {
+        self.x * other.x + self.y * other.y + self.z * other.z
+    }
+
+    /// `operator %`: the cross product.
+    fn cross(self, other: Self) -> Self {
+        Self::new(
+            self.y * other.z - self.z * other.y,
+            self.z * other.x - self.x * other.z,
+            self.x * other.y - self.y * other.x,
+        )
+    }
+
+    /// `operator *(Vector3, double)`.
+    fn scaled(self, by: f64) -> Self {
+        Self::new(self.x * by, self.y * by, self.z * by)
+    }
+
+    fn plus(self, other: Self) -> Self {
+        Self::new(self.x + other.x, self.y + other.y, self.z + other.z)
+    }
+
+    fn minus(self, other: Self) -> Self {
+        Self::new(self.x - other.x, self.y - other.y, self.z - other.z)
+    }
+
+    /// `length()`.
+    fn length(self) -> f64 {
+        self.dot(self).sqrt()
+    }
+}
+
+/// `Matrix3`: three row vectors `a`, `b` and `c`, with the four members `ImageProjection.calc`
+/// uses - `from_euler`, `rotate`, `normalize` and the product with a vector. Its other members
+/// (`to_euler`, `from_euler312`, the transpose, the matrix product, `rotateXY`, `trace`) have
+/// their callers elsewhere and are not here.
+/// `// C#: ExtLibs/Utilities/Matrix3.cs:102-119, 185-190, 225-243, 281-291`
+#[derive(Debug, Clone, Copy, PartialEq)]
+struct Matrix3 {
+    a: V3,
+    b: V3,
+    c: V3,
+}
+
+impl Matrix3 {
+    /// `from_euler`: the rotation matrix of the Euler angles, radians.
+    fn from_euler(roll: f64, pitch: f64, yaw: f64) -> Self {
+        let (sp, cp) = pitch.sin_cos();
+        let (sr, cr) = roll.sin_cos();
+        let (sy, cy) = yaw.sin_cos();
+        Self {
+            a: V3::new(
+                cp * cy,
+                (sr * sp * cy) - (cr * sy),
+                (cr * sp * cy) + (sr * sy),
+            ),
+            b: V3::new(
+                cp * sy,
+                (sr * sp * sy) + (cr * cy),
+                (cr * sp * sy) - (sr * cy),
+            ),
+            c: V3::new(-sp, sr * cp, cr * cp),
+        }
+    }
+
+    /// `rotate`: the matrix turned by a small rotation `g` about the three axes - each row
+    /// crossed with `g` and added to itself.
+    fn rotate(&mut self, g: V3) {
+        self.a = self.a.plus(self.a.cross(g));
+        self.b = self.b.plus(self.b.cross(g));
+        self.c = self.c.plus(self.c.cross(g));
+    }
+
+    /// `normalize`: the rows made orthogonal and unit again.
+    fn normalize(&mut self) {
+        let error = self.a.dot(self.b);
+        let t0 = self.a.minus(self.b.scaled(0.5 * error));
+        let t1 = self.b.minus(self.a.scaled(0.5 * error));
+        let t2 = t0.cross(t1);
+        self.a = t0.scaled(1.0 / t0.length());
+        self.b = t1.scaled(1.0 / t1.length());
+        self.c = t2.scaled(1.0 / t2.length());
+    }
+
+    /// `operator *(Matrix3, Vector3)`.
+    fn times(self, v: V3) -> V3 {
+        V3::new(self.a.dot(v), self.b.dot(v), self.c.dot(v))
+    }
+}
+
+/// `ImageProjection.calc`: the ground under the four corners of an `hfov` by `vfov` field of
+/// view from `plla`, the camera rolled, pitched and turned by the degrees given. Level and
+/// unpitched, the quick method ([`calc_quick`]), in its order; otherwise each corner from the
+/// rotation matrix - the field's edges turned about the body's axes (`frontangle` and the rest
+/// take `P*0` and `R*0`: the attitude enters through the matrix alone), the point 10,000 along
+/// the camera's axis brought to the ground - top-left, top-right, bottom-right, bottom-left.
+/// The `addtomap` debug markers and the centre worked out for one are not here.
+/// `// C#: ExtLibs/Utilities/ImageProjection.cs:17-201`
+#[must_use]
+pub fn calc(
+    plla: Point,
+    roll: f64,
+    pitch: f64,
+    yaw: f64,
+    hfov: f64,
+    vfov: f64,
+    terrain: &dyn Terrain,
+) -> [Point; 4] {
+    if roll == 0.0 && pitch == 0.0 {
+        return calc_quick(plla, yaw, hfov, vfov, terrain);
+    }
+    let (front, back) = (vfov / 2.0, -vfov / 2.0);
+    let (left, right) = (hfov / 2.0, -hfov / 2.0);
+    let corner = |across: f64, along: f64| -> Point {
+        let mut dcm = Matrix3::from_euler(roll * DEG2RAD, pitch * DEG2RAD, yaw * DEG2RAD);
+        dcm.rotate(V3::new(across * DEG2RAD, 0.0, 0.0));
+        dcm.normalize();
+        dcm.rotate(V3::new(0.0, along * DEG2RAD, 0.0));
+        dcm.normalize();
+        let test = dcm.times(V3::new(0.0, 0.0, 10_000.0));
+        let bearing = test.y.atan2(test.x) * RAD2DEG;
+        let mut newpos = plla.newpos(bearing, (test.x * test.x + test.y * test.y).sqrt());
+        newpos.alt -= test.z;
+        calc_intersection(plla, newpos, terrain)
+    };
+    let tr = corner(right, front);
+    let tl = corner(left, front);
+    let bl = corner(left, back);
+    let br = corner(right, back);
+    [tl, tr, br, bl]
+}
+
 /// A `System.Drawing.RectangleF`: `X` is the least longitude, `Y` the least latitude.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct RectangleF {
@@ -330,5 +478,64 @@ mod tests {
             PointF { x: 1.0, y: 2.0 },
         );
         assert_eq!(parallel, PointF::default());
+    }
+}
+
+#[cfg(test)]
+mod calc_tests {
+    use super::*;
+
+    const CAMERA: Point = Point {
+        lat: -27.47,
+        lng: 153.025,
+        alt: 40.0,
+    };
+
+    /// `from_euler` is the C#'s: a quarter turn of yaw puts north along the body's y.
+    #[test]
+    fn the_matrix_is_the_csharps() {
+        let m = Matrix3::from_euler(0.0, 0.0, std::f64::consts::FRAC_PI_2);
+        let close = |v: V3, (x, y, z): (f64, f64, f64)| {
+            (v.x - x).abs() < 1e-12 && (v.y - y).abs() < 1e-12 && (v.z - z).abs() < 1e-12
+        };
+        assert!(close(m.a, (0.0, -1.0, 0.0)), "{:?}", m.a);
+        assert!(close(m.b, (1.0, 0.0, 0.0)), "{:?}", m.b);
+        assert!(close(m.c, (0.0, 0.0, 1.0)), "{:?}", m.c);
+        let mut n = m;
+        n.normalize();
+        assert!(close(n.a, (0.0, -1.0, 0.0)) && close(n.c, (0.0, 0.0, 1.0)));
+        let down = m.times(V3::new(0.0, 0.0, 10_000.0));
+        assert!(close(down, (0.0, 0.0, 10_000.0)));
+    }
+
+    /// Level and unpitched, `calc` is the quick method, corner for corner.
+    #[test]
+    fn a_level_camera_is_the_quick_method() {
+        let quick = calc_quick(CAMERA, 45.0, 63.0, 43.0, &Flat);
+        let full = calc(CAMERA, 0.0, 0.0, 45.0, 63.0, 43.0, &Flat);
+        assert_eq!(quick, full);
+    }
+
+    /// A camera pitched with no roll, looking north: four corners on the ground, in pairs
+    /// across the line of flight - the left corners west of the right ones and as far from it -
+    /// and all of them off the point under the camera.
+    #[test]
+    fn a_pitched_camera_puts_its_footprint_ahead_and_symmetric() {
+        let [tl, tr, br, bl] = calc(CAMERA, 0.0, -30.0, 0.0, 63.0, 43.0, &Flat);
+        for corner in [tl, tr, br, bl] {
+            // The crossing is found in single precision, as the C#'s `PointF`s find it.
+            assert!(corner.alt.abs() < 1e-3, "on the ground: {corner:?}");
+            assert!(
+                CAMERA.get_distance(corner) > 10.0,
+                "off the camera's point: {corner:?}"
+            );
+        }
+        // Symmetric about the line of flight (north): the left corners west, the right east,
+        // each pair the same distance either side.
+        assert!(tl.lng < CAMERA.lng && bl.lng < CAMERA.lng);
+        assert!(tr.lng > CAMERA.lng && br.lng > CAMERA.lng);
+        assert!(((CAMERA.lng - tl.lng) - (tr.lng - CAMERA.lng)).abs() < 1e-9);
+        // The front corners further along the pitch than the back ones.
+        assert!((tl.lat - CAMERA.lat).abs() > (bl.lat - CAMERA.lat).abs() || tl.lat != bl.lat);
     }
 }

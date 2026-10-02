@@ -2534,10 +2534,6 @@ fn list_chip(
         .into_any_element()
 }
 
-/// Why Camera Overlap is dimmed. `// C#: GCSViews/FlightData.cs:4003-4082, 4457-4471`
-const NO_PHOTOS: &str = "it shows or hides the overlap of the camera's photo footprints, and the \
-                         CAMERA_FEEDBACK photo markers, photosoverlay, are not drawn here";
-
 /// Which `ModifyandSet` a listener acts on.
 type Select = fn(&mut Actions) -> &mut ModifyAndSet;
 
@@ -2932,11 +2928,7 @@ impl Prompt {
     pub const fn is_file_dialog(self) -> bool {
         matches!(
             self,
-            Self::LoadLog
-                | Self::PoiSave
-                | Self::PoiLoad
-                | Self::SelectScript
-                | Self::RawSensorCsv
+            Self::LoadLog | Self::PoiSave | Self::PoiLoad | Self::SelectScript | Self::RawSensorCsv
         )
     }
 }
@@ -4485,6 +4477,11 @@ pub struct FlightData {
     pub ekf_open: bool,
     /// Whether the `Vibration` window is showing.
     pub vibration_open: bool,
+    /// `CameraOverlap`: the map menu's Camera Overlap, `CheckOnClick`.
+    /// `// C#: GCSViews/FlightData.cs:66, 4457-4471`
+    pub camera_overlap: bool,
+    /// `photosoverlay`'s markers and `kmlpolygons`' overlap count, as the map loop keeps them.
+    pub photos: crate::camera_photos::PhotoLayer,
     /// `MouseDownStart`: where the flight map was last pressed, and where that was in the window.
     /// `// C#: GCSViews/FlightData.cs:2956-2959`
     pub mouse_down_start: Option<(mp_units::LatLon, (f32, f32))>,
@@ -4810,6 +4807,8 @@ impl FlightData {
             logs: crate::logdownload::LogDownloader::default(),
             ekf_open: false,
             vibration_open: false,
+            camera_overlap: false,
+            photos: crate::camera_photos::PhotoLayer::default(),
             mouse_down_start: None,
             current_poi: None,
             hud_bounds: Rc::new(Cell::new(None)),
@@ -4875,6 +4874,8 @@ impl FlightData {
         self.logs.record_facts(listed);
         crate::facts::record("fly.ekf.open", self.ekf_open);
         crate::facts::record("fly.vibration.open", self.vibration_open);
+        crate::facts::record("fly.camera_overlap", self.camera_overlap);
+        self.photos.record_facts();
         let state = view.state.as_deref();
         crate::facts::record(
             "fly.ekf.values",
@@ -4970,7 +4971,11 @@ impl FlightData {
         crate::facts::record("fly.hud.gstreamer", self.gstreamer.is_running());
         crate::facts::record(
             "fly.hud.avi",
-            if self.avi.is_some() { "recording" } else { "none" },
+            if self.avi.is_some() {
+                "recording"
+            } else {
+                "none"
+            },
         );
         crate::facts::record(
             "fly.hud.avi.frames",
@@ -5826,8 +5831,7 @@ pub fn convert(kind: Conversion, log: &std::path::Path) -> Result<Converted, Str
             .map(|path| sized(vec![path]))
             .map_err(|err| format!("Error converting file {err}")),
         Conversion::LogAnalysis => {
-            let analysis =
-                mp_log::analysis::analyse(log, modes).map_err(|err| err.to_string())?;
+            let analysis = mp_log::analysis::analyse(log, modes).map_err(|err| err.to_string())?;
             Ok(Converted::Report(mp_log::analysis::report(&analysis)))
         }
     }
@@ -7226,7 +7230,13 @@ pub fn overlays(
         shown.push(customize_form(list, window, cx));
     }
     if let Some(menu) = data.menu {
-        shown.push(context_menu(menu, data.menu_sub, window, cx));
+        shown.push(context_menu(
+            menu,
+            data.menu_sub,
+            data.camera_overlap,
+            window,
+            cx,
+        ));
     }
     shown
 }
@@ -7671,7 +7681,8 @@ pub enum MenuEntry {
     SetHomeHere1,
     /// `takeOffToolStripMenuItem`.
     TakeOff,
-    /// `onOffCameraOverlapToolStripMenuItem`, dimmed: the photo footprints are not ported.
+    /// `onOffCameraOverlapToolStripMenuItem`, `CheckOnClick`: the photo footprints' overlap
+    /// count on the map or off it. `// C#: GCSViews/FlightData.cs:4457-4471`
     CameraOverlap,
     /// `jumpToTagToolStripMenuItem`.
     JumpToTag,
@@ -7757,7 +7768,6 @@ impl MenuEntry {
     pub const fn dimmed(self) -> Option<&'static str> {
         match self {
             Self::Undock => Some("one window: nothing to undock from"),
-            Self::CameraOverlap => Some(NO_PHOTOS),
             _ => None,
         }
     }
@@ -8389,7 +8399,16 @@ impl MissionPlanner {
                 self.fly_actions.ask(Prompt::TakeOff, &alt);
                 self.fly_focus.prompt.focus(window, cx);
             }
-            MenuEntry::CameraOverlap => {}
+            // `onOffCameraOverlapToolStripMenuItem_Click`: `CheckOnClick` has turned the box, and
+            // `CameraOverlap` follows it; unchecked, every photo marker comes off the overlay -
+            // the next map update puts them back - and the count goes with the next update.
+            // `// C#: GCSViews/FlightData.cs:4457-4471`
+            MenuEntry::CameraOverlap => {
+                self.fly_data.camera_overlap = !self.fly_data.camera_overlap;
+                if !self.fly_data.camera_overlap {
+                    self.fly_data.photos.clear();
+                }
+            }
             MenuEntry::JumpToTag => {
                 self.fly_actions.ask(Prompt::JumpToTag, "");
                 self.fly_focus.prompt.focus(window, cx);
@@ -8579,7 +8598,12 @@ impl MissionPlanner {
 /// `in_dropdown`: a row of an entry's drop-down, over which the drop-down stays open; over a
 /// row of the menu itself, the drop-down follows the pointer - open for an entry that has one,
 /// closed for one that has not - as WinForms' do.
-fn menu_row(entry: MenuEntry, in_dropdown: bool, cx: &mut Context<MissionPlanner>) -> AnyElement {
+fn menu_row(
+    entry: MenuEntry,
+    in_dropdown: bool,
+    checked: bool,
+    cx: &mut Context<MissionPlanner>,
+) -> AnyElement {
     let base = crate::probe::measured(entry.id(), div())
         .id(entry.id())
         .h(px(HUD_MENU_ROW))
@@ -8588,7 +8612,18 @@ fn menu_row(entry: MenuEntry, in_dropdown: bool, cx: &mut Context<MissionPlanner
         .items_center()
         .justify_between()
         .text_xs()
-        .child(entry.text())
+        // The check mark's column, as WinForms keeps one for a `CheckOnClick` entry's check.
+        .child(
+            div()
+                .flex()
+                .gap_1()
+                .child(
+                    div()
+                        .w(px(10.0))
+                        .child(if checked { "\u{2713}" } else { "" }),
+                )
+                .child(entry.text()),
+        )
         // `DropDownItems`: the arrow WinForms draws on an entry that has them, and the pointer
         // over the entry opens them beside it; over another entry, they close.
         .children(
@@ -8637,6 +8672,7 @@ fn close_menu(
 fn context_menu(
     (kind, (x, y)): (MenuKind, (f32, f32)),
     sub: Option<MenuEntry>,
+    camera_overlap: bool,
     window: &Window,
     cx: &mut Context<MissionPlanner>,
 ) -> AnyElement {
@@ -8648,7 +8684,14 @@ fn context_menu(
     let top = y.min(f32::from(size.height) - height).max(0.0);
     let rows = entries
         .iter()
-        .map(|entry| menu_row(*entry, false, cx))
+        .map(|entry| {
+            menu_row(
+                *entry,
+                false,
+                *entry == MenuEntry::CameraOverlap && camera_overlap,
+                cx,
+            )
+        })
         .collect();
     let id = match kind {
         MenuKind::Tabs => "fly-tabs-menu",
@@ -8670,7 +8713,7 @@ fn context_menu(
             let sub_top = sub_top.min(f32::from(size.height) - sub_height).max(0.0);
             let sub_rows = items
                 .iter()
-                .map(|entry| menu_row(*entry, true, cx))
+                .map(|entry| menu_row(*entry, true, false, cx))
                 .collect();
             Some(
                 div()
@@ -11573,10 +11616,7 @@ mod tests {
         }
         assert!(MenuEntry::Undock.dimmed().is_some(), "one window");
         assert!(MenuEntry::SetViewCount.dimmed().is_none());
-        assert!(
-            MenuEntry::CameraOverlap.dimmed().is_some(),
-            "no photo footprints"
-        );
+        assert!(MenuEntry::CameraOverlap.dimmed().is_none());
         assert!(MenuEntry::GoHere.dimmed().is_none());
         // Every entry has an id of its own.
         let mut ids: Vec<&str> = MenuKind::Map
