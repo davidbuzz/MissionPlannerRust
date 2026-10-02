@@ -1589,6 +1589,16 @@ pub trait Fetch {
         Ok(self.get(url).is_ok())
     }
 
+    /// `Download.PostAsync(uri, data)`: `data` posted as text, and a success's body.
+    /// `// C#: ExtLibs/Utilities/Download.cs:306-315`
+    ///
+    /// # Errors
+    /// Any failure, as text; a fetcher that does not post says so.
+    fn post(&self, url: &str, data: &str) -> Result<String, String> {
+        let _ = (url, data);
+        Err("this fetcher does not post".to_owned())
+    }
+
     /// A GET that says how far it has got as it reads: the bytes so far and, when the server
     /// said, the `Content-Length`. What the download loops of `Download.getFilefromNet` and
     /// `LookForPort` report their progress from.
@@ -1625,6 +1635,22 @@ impl Fetch for Http {
             .with_config()
             .limit(MAX_DOWNLOAD)
             .read_to_vec()
+            .map_err(|err| err.to_string())
+    }
+
+    /// `HttpClient.PostAsync(uri, new StringContent(data))`, `EnsureSuccessStatusCode` and the
+    /// body. `// C#: ExtLibs/Utilities/Download.cs:306-315`
+    fn post(&self, url: &str, data: &str) -> Result<String, String> {
+        let mut response = ureq::post(url)
+            .header("User-Agent", USER_AGENT)
+            .config()
+            .timeout_global(Some(TIMEOUT))
+            .build()
+            .send(data)
+            .map_err(|err| err.to_string())?;
+        response
+            .body_mut()
+            .read_to_string()
             .map_err(|err| err.to_string())
     }
 

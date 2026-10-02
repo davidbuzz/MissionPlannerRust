@@ -732,7 +732,11 @@ migration guide for existing Mission Planner users.
   and `Updater/Program.cs` (`headless-planner update-apply`, the swap and restart), driven from
   the HELP screen (`GCSViews/Help.cs`, ported) and `MainV2`'s once-a-day check; the channel's
   addresses are settings of `app.config`'s names, empty until one is published for this program.
-  Crash reporting, the installers and signing are not started.
+  Crash reporting is `Program.cs`'s `handleException` as a panic hook: the report (the C#'s
+  `postData` fields, the backtrace symbolicated by the release profile's debug info) written under
+  the data directory's `crash-reports/`, the next start asking "Report this Error???" and posting
+  it with the user's message to `CrashReportUrl` (`crash.rs`). The installers and signing are not
+  started.
 - **Tests:** none exist. Planned: `tests/package_smoke.rs` per OS installs the built artefact in a clean container/VM, launches it headless, connects to SITL, and uninstalls, asserting no leftover files; `tests/update.rs` exercises update and rollback between two signed builds; `tests/crash_report.rs` forces a crash and asserts a symbolicated report; `tests/migration.rs` runs first-run migration against a real Mission Planner data directory fixture and asserts settings, map cache and mission files are imported intact; `benches/cold_start.rs` gates the <500 ms target.
 
 ---

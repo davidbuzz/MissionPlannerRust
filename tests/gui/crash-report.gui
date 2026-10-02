@@ -1,0 +1,39 @@
+# Crash reports: Program.cs's handleException, ported in crates/mp-gui/src/crash.rs. A panic's
+# report is written under the data directory's crash-reports/ as it happens; the next start asks
+# the C#'s question about it - "An error has occurred ... Report this Error???" (Program.cs:802) -
+# Yes asks for a message in the "Message" InputBox (Program.cs:815-816) and posts the report where
+# CrashReportUrl says (Download.PostAsync, Program.cs:861), No puts the report away; the next
+# report is asked about in turn. Two reports are seeded here; the first is posted to
+# tests/gui/update-server.py, which keeps the body, the second dismissed.
+#
+# Needs no link: tools/gui-test.sh tests/gui/crash-report.gui
+
+env XDG_DATA_HOME $WORK
+setup mkdir -p "$WORK/MissionPlannerRust/crash-reports" && printf 'message=linux x86_64 0.1.0 0.1.0\nException panicked at crates/mp-gui/src/fly.rs:10:5: the first panic\nStack:    0: planner::fly::render\n             at crates/mp-gui/src/fly.rs:10:5\n   1: gpui::window::draw\nTargetSite crates/mp-gui/src/fly.rs:10:5 main\ndata \n' > "$WORK/MissionPlannerRust/crash-reports/2026-10-03T00-00-00.txt" && printf 'message=linux x86_64 0.1.0 0.1.0\nException panicked at crates/mp-gui/src/plan.rs:20:7: the second panic\nStack:    0: planner::plan::render\nTargetSite crates/mp-gui/src/plan.rs:20:7 main\ndata \n' > "$WORK/MissionPlannerRust/crash-reports/2026-10-03T00-00-01.txt"
+setup python3 tests/gui/update-server.py --work $WORK --port 5794
+setup printf '<?xml version="1.0" encoding="utf-8"?><Config><CrashReportUrl>http://127.0.0.1:5794/mail.php</CrashReportUrl></Config>' > "$WORK/MissionPlannerRust/config.xml"
+
+screen fly
+window 1600x1200
+budget 6
+
+# The first report's question, at start, over the flight screen.
+expect crash.flow question
+expect crash.pending 1
+expect crash.text ~ An error has occurred
+expect crash.text ~ Exception panicked at crates/mp-gui/src/fly.rs:10:5: the first panic
+expect crash.text ~ Report this Error???
+click crash-question-yes
+expect crash.flow message
+type it broke on the first click
+click crash-message-ok
+expect crash.posted 1
+expect crash.last report sent
+
+# The second is asked about next; No puts it away, and nothing is left to ask.
+expect crash.flow question
+expect crash.text ~ the second panic
+click crash-question-no
+expect crash.flow idle
+expect crash.pending 0
+expect crash.last dismissed

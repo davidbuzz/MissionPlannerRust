@@ -12,6 +12,7 @@ mod config_coverage;
 mod connect;
 mod coords;
 mod coverage;
+mod crash;
 // ---- Display view (row 71) ----
 mod display_view;
 // ---- end Display view ----
@@ -562,6 +563,10 @@ struct MissionPlanner {
     // ---- end SITL ----
     /// The HELP screen's page object (`GCSViews/Help.cs`), and the update it may be running.
     help: help::Help,
+    /// The crash reports the last runs left and the question about them (`Program.
+    /// handleException`), and the message box's keyboard.
+    crash: crash::Crash,
+    crash_focus: gpui::FocusHandle,
     // ---- row 96 ----
     /// The WebAssembly plugins (`PluginLoader.Plugins`) and what the window shows of them.
     plugins: plugins_ui::Plugins,
@@ -887,6 +892,8 @@ impl MissionPlanner {
             flight_modes_focus: cx.focus_handle(),
             // ---- end SITL ----
             help: help::Help::new(),
+            crash: crash::Crash::new(mp_settings::data_directory().as_deref()),
+            crash_focus: cx.focus_handle(),
             // ---- row 96 ----
             plugins,
             // ---- end row 96 ----
@@ -2941,6 +2948,7 @@ impl Render for MissionPlanner {
         // ---- end SITL ----
         // The HELP screen's update check and update: what their threads have said.
         self.help_tick(cx);
+        self.crash_tick();
         let banner = self.telemetry.firmware_banner().map(str::to_owned);
         let mav_type = view.state.as_ref().map_or(0, |state| state.vehicle_type);
         self.metadata.advance(banner.as_deref(), mav_type);
@@ -3375,6 +3383,7 @@ impl Render for MissionPlanner {
             // ---- SITL ----
             sitl::record_facts(&self.sitl, &self.persisted);
             help::record_facts(&self.help);
+            crash::record_facts(&self.crash);
             // ---- end SITL ----
             facts::publish();
             // The harness's work, which a normal run does not do, is not the frame's.
@@ -3851,6 +3860,8 @@ impl Render for MissionPlanner {
                     // The update's question, progress and boxes, on whatever screen is showing:
                     // the once-a-day check asks from the main thread, wherever the user is.
                     .children(help::overlay(self, window, cx))
+                    // A crash report from a last run: its question, on the main thread at start.
+                    .children(crash::overlay(self, window, cx))
                     .child(
                         div()
                             .flex()
@@ -4160,6 +4171,10 @@ fn main() {
     // `Program.CleanupFiles`: a new updater left beside the program by the last update, copied
     // into place. `// C#: Program.cs:614-626`
     help::cleanup_files();
+
+    // `Program`'s `UnhandledException` and `ThreadException` handlers: a panic's report, written
+    // for the next start to ask about. `// C#: Program.cs:80, 190, 717`
+    crash::install_hook(mp_settings::data_directory());
 
     // `ThreadPool.QueueUserWorkItem(BGLogMessagesMetaData)`: the log browser's field
     // descriptions, fetched and read in the background. `// C#: MainV2.cs:3299`

@@ -11,6 +11,7 @@ Serves what `Utilities/Update.cs` asks a channel for, over HTTP on 127.0.0.1:POR
   /beta/checksums.txt     the same one file
   /beta/Beta.zip          a zip holding update-probe.txt, as the beta channel is read
   /ChangeLog.txt, /beta/ChangeLog.txt  a line each
+  POST anything        a crash report's sink: the body kept in DIR as post-<ms>.txt, "ok" back
 
 Returns once listening, leaving itself serving in the background; goes when DIR does, which the
 harness removes after the run, or after five minutes.
@@ -30,6 +31,8 @@ import gui_background
 
 LIFETIME = 300.0
 PROBE = b"probe 2.0.0.0\n"
+# Where a POST's body is kept: the work directory, set by main.
+POSTED_DIR = "."
 
 
 def pages():
@@ -66,6 +69,17 @@ class Handler(http.server.BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
+    def do_POST(self):  # noqa: N802
+        """A crash report's sink, as the C#'s mail.php: the body read, 200 and "ok"."""
+        length = int(self.headers.get("Content-Length") or 0)
+        body = self.rfile.read(length)
+        with open(os.path.join(POSTED_DIR, f"post-{int(time.time() * 1000)}.txt"), "wb") as f:
+            f.write(body)
+        self.send_response(200)
+        self.send_header("Content-Length", "2")
+        self.end_headers()
+        self.wfile.write(b"ok")
+
     def do_HEAD(self):  # noqa: N802
         path = self.path.split("?", 1)[0]
         self.send_response(200 if path in self.PAGES else 404)
@@ -97,6 +111,8 @@ def main():
     parser.add_argument("--work", required=True)
     parser.add_argument("--port", type=int, default=5793)
     args = parser.parse_args()
+    global POSTED_DIR
+    POSTED_DIR = args.work
     if child is not None:
         run(child, args.work)
         return 0
