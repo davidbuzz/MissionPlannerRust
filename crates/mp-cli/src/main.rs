@@ -171,6 +171,16 @@ fn main() -> std::process::ExitCode {
                 std::process::ExitCode::from(2)
             }
         },
+        // `Updater.exe`: started by the planner once its update is downloaded, given the
+        // planner's path; waits for it to exit, moves the new files into place and starts it
+        // again. `// C#: Updater/Program.cs`
+        Some("update-apply") => match args.get(1) {
+            Some(planner) => update_apply(planner),
+            None => {
+                eprintln!("usage: headless-planner update-apply <planner>");
+                std::process::ExitCode::from(2)
+            }
+        },
         Some("fields") => match args.get(1) {
             Some(path) => logs::fields(path),
             None => {
@@ -211,6 +221,32 @@ fn main() -> std::process::ExitCode {
     }
 }
 
+/// `Updater.Main`: five seconds' grace, the `.new` files under this program's directory moved
+/// into place and the `.old` ones deleted, and the planner started again; "Update failed, please
+/// try it later." waits for a key, as the C#'s console does. `// C#: Updater/Program.cs:16-79`
+fn update_apply(planner: &str) -> std::process::ExitCode {
+    let Some(directory) = std::env::current_exe()
+        .ok()
+        .and_then(|exe| exe.parent().map(std::path::Path::to_path_buf))
+    else {
+        eprintln!("update-apply: this program's directory is unknown");
+        return std::process::ExitCode::FAILURE;
+    };
+    match mp_update::apply::run(
+        &directory,
+        std::path::Path::new(planner),
+        "headless-planner",
+        true,
+    ) {
+        Ok(()) => std::process::ExitCode::SUCCESS,
+        Err(why) => {
+            println!("{why}");
+            let _ = std::io::stdin().read_line(&mut String::new());
+            std::process::ExitCode::FAILURE
+        }
+    }
+}
+
 fn usage() {
     println!(
         "headless-planner - Mission Planner (Rust)\n\n\
@@ -234,6 +270,7 @@ fn usage() {
   headless-planner logs <url> [ID] [DIR]   list the vehicle's logs, or download one
   headless-planner ftp ls|get|put|rm|crc   the vehicle's files over MAVFTP (headless-planner ftp for more)\n  \
          headless-planner fields <log.bin>        list what a dataflash log can plot
+  headless-planner update-apply <planner>  the updater: the downloaded files moved into place, the planner restarted
   headless-planner kml <log> <out.kml>     export a flown path for Google Earth
   headless-planner magcal <log> [--ellipsoid] [--min-throttle N]
                               compass offsets fitted to a log's samples (MagCalib's Log Calibration)

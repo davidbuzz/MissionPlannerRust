@@ -24,6 +24,7 @@ mod gimbal_video;
 mod georef_ui;
 mod glyph_text;
 // ---- end Geo Reference ----
+mod help;
 mod hud;
 mod i18n;
 mod joystick;
@@ -178,6 +179,9 @@ enum Screen {
     /// `// C#: MainV2.cs:583, 872; MainV2.Designer.cs (MenuSimulation)`
     Sitl,
     // ---- end SITL ----
+    /// Help: `MainV2`'s HELP button, beside SIMULATION, `GCSViews/Help.cs`.
+    /// `// C#: MainV2.cs:4055-4058; MainV2.Designer.cs:75, 168-174`
+    Help,
     /// The vehicle's parameters.
     Params,
     /// Reviewing a dataflash log.
@@ -191,7 +195,7 @@ enum Screen {
 
 impl Screen {
     /// The tabs, in order.
-    const ALL: [Self; 7] = [
+    const ALL: [Self; 8] = [
         Self::Fly,
         Self::Plan,
         Self::Setup,
@@ -199,6 +203,7 @@ impl Screen {
         // ---- SITL ----
         Self::Sitl,
         // ---- end SITL ----
+        Self::Help,
         Self::Params,
         Self::Logs,
     ];
@@ -222,6 +227,7 @@ impl Screen {
             // ---- SITL ----
             "simulation" => Self::Sitl,
             // ---- end SITL ----
+            "help" => Self::Help,
             "params" => Self::Params,
             "logs" => Self::Logs,
             // Anything else, including nothing and a typo, opens on the flight screen. An operator
@@ -239,6 +245,7 @@ impl Screen {
             // ---- SITL ----
             Self::Sitl => "simulation",
             // ---- end SITL ----
+            Self::Help => "help",
             Self::Params => "params",
             Self::Logs => "logs",
         }
@@ -253,6 +260,7 @@ impl Screen {
             // ---- SITL ----
             Self::Sitl => "tab-simulation",
             // ---- end SITL ----
+            Self::Help => "tab-help",
             Self::Params => "tab-params",
             Self::Logs => "tab-logs",
         }
@@ -552,6 +560,8 @@ struct MissionPlanner {
     /// The Flight Modes page, for its Ctrl+S (`ProcessCmdKey`).
     flight_modes_focus: gpui::FocusHandle,
     // ---- end SITL ----
+    /// The HELP screen's page object (`GCSViews/Help.cs`), and the update it may be running.
+    help: help::Help,
     // ---- row 96 ----
     /// The WebAssembly plugins (`PluginLoader.Plugins`) and what the window shows of them.
     plugins: plugins_ui::Plugins,
@@ -876,6 +886,7 @@ impl MissionPlanner {
             sitl_focus: sitl::Focus::new(cx),
             flight_modes_focus: cx.focus_handle(),
             // ---- end SITL ----
+            help: help::Help::new(),
             // ---- row 96 ----
             plugins,
             // ---- end row 96 ----
@@ -889,6 +900,12 @@ impl MissionPlanner {
             this.sitl_activate();
         }
         // ---- end SITL ----
+        if this.screen == Screen::Help {
+            this.help.activate(&this.persisted);
+        }
+        // `MainV2`'s update check, once a day, on a thread of its own.
+        // `// C#: MainV2.cs:3661-3671`
+        this.help.startup_check(&mut this.persisted);
         // `SaveConfig` at the end of `MainV2`'s constructor, "to test we have write access" - and
         // Connect's, for the link opened above.
         // `// C#: MainV2.cs:1106-1107, 1841-1847`
@@ -1920,6 +1937,9 @@ impl MissionPlanner {
                 this.sitl_activate();
             }
             // ---- end SITL ----
+            if screen == Screen::Help {
+                this.help.activate(&this.persisted);
+            }
             // Remembered here rather than at exit: gpui gives no reliable hook for a
             // window closing, and a ground station is as likely to be killed as
             // closed.
@@ -1930,7 +1950,12 @@ impl MissionPlanner {
             match screen {
                 Screen::Fly => this.save_config(settings::SaveEvent::FlightData),
                 Screen::Plan => this.save_config(settings::SaveEvent::FlightPlanner),
-                Screen::Setup | Screen::Config | Screen::Sitl | Screen::Params | Screen::Logs => {}
+                Screen::Setup
+                | Screen::Config
+                | Screen::Sitl
+                | Screen::Help
+                | Screen::Params
+                | Screen::Logs => {}
             }
         }
     }
@@ -2914,6 +2939,8 @@ impl Render for MissionPlanner {
         // The SITL page: a box the focus left, a start's news and its connection, the probe.
         self.sitl_tick(window);
         // ---- end SITL ----
+        // The HELP screen's update check and update: what their threads have said.
+        self.help_tick(cx);
         let banner = self.telemetry.firmware_banner().map(str::to_owned);
         let mav_type = view.state.as_ref().map_or(0, |state| state.vehicle_type);
         self.metadata.advance(banner.as_deref(), mav_type);
@@ -3347,6 +3374,7 @@ impl Render for MissionPlanner {
             // ---- end Geo Reference ----
             // ---- SITL ----
             sitl::record_facts(&self.sitl, &self.persisted);
+            help::record_facts(&self.help);
             // ---- end SITL ----
             facts::publish();
             // The harness's work, which a normal run does not do, is not the frame's.
@@ -3777,6 +3805,7 @@ impl Render for MissionPlanner {
                 .children(sitl::view::overlay(self, window, cx))
                 .into_any_element(),
             // ---- end SITL ----
+            Screen::Help => help::screen(self, window, cx),
         };
 
         probe::measured("root", div())
@@ -3819,6 +3848,9 @@ impl Render for MissionPlanner {
                             .child(self.connection_controls(&view, cx)),
                     )
                     .children(self.connect_dialogs(window, cx))
+                    // The update's question, progress and boxes, on whatever screen is showing:
+                    // the once-a-day check asks from the main thread, wherever the user is.
+                    .children(help::overlay(self, window, cx))
                     .child(
                         div()
                             .flex()
@@ -4103,6 +4135,13 @@ fn main() {
         return;
     }
 
+    // `/update` and `/updatebeta`: the update alone, no window. `// C#: Program.cs:192-203`
+    if let Some(first) = raw.first()
+        && (first == "/update" || first == "/updatebeta")
+    {
+        std::process::exit(help::update_from_command_line(first == "/updatebeta"));
+    }
+
     let arguments = match parse_arguments(raw) {
         Ok(arguments) => arguments,
         Err(problem) => {
@@ -4117,6 +4156,10 @@ fn main() {
     // are left as they were.
     let imported = mp_settings::migrate::import_at_start();
     report_import(&imported);
+
+    // `Program.CleanupFiles`: a new updater left beside the program by the last update, copied
+    // into place. `// C#: Program.cs:614-626`
+    help::cleanup_files();
 
     // `ThreadPool.QueueUserWorkItem(BGLogMessagesMetaData)`: the log browser's field
     // descriptions, fetched and read in the background. `// C#: MainV2.cs:3299`

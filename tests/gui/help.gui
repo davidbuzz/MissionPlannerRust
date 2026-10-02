@@ -1,0 +1,61 @@
+# The HELP screen: GCSViews/Help.cs, Help.Designer.cs and Help.resx, ported in
+# crates/mp-gui/src/help.rs over crates/mp-update (Utilities/Update.cs, Updater/Program.cs).
+#
+# The claim: MainV2's HELP tab shows the help text with Check for Updates, Check for BETA Updates,
+# Show Console Window (restart) and the Change Log link (Help.resx); at startup, on a day already
+# checked with beta_updates on, MainV2 checks the beta channel (MainV2.cs:3661-3671), whose
+# 2.0.0.0 is above the program's 1.0.0.0, so "BETA Update Found" asks "Update Now" with the
+# ChangeLog (Update.cs:181-199) - No puts it away; Show Console Window writes showconsole
+# (Help.cs:50-53); Check for Updates against the stable channel at the program's own version says
+# "No update available." (Update.cs:200-203); Check for BETA Updates runs DoUpdate with no
+# question (Help.cs:66-82): the files the channel lists and the program has not got come down as
+# .new (Update.cs:219-440) and the updater is started with the planner's path (Update.cs:60-101) -
+# here named, not started, by the harness's door MP_UPDATE_DIR, which also puts the files under
+# $WORK rather than beside the program.
+#
+# Against tests/gui/update-server.py, a channel on 127.0.0.1:5793.
+#
+# Needs no link: tools/gui-test.sh tests/gui/help.gui
+
+env XDG_DATA_HOME $WORK
+env MP_UPDATE_DIR $WORK/install
+setup mkdir -p "$WORK/install" "$WORK/MissionPlannerRust" && printf '1.0.0.0\n' > "$WORK/install/version.txt"
+setup python3 tests/gui/update-server.py --work $WORK --port 5793
+setup printf '<?xml version="1.0" encoding="utf-8"?><Config><UpdateLocationVersion>http://127.0.0.1:5793/version.txt</UpdateLocationVersion><UpdateLocationMD5>http://127.0.0.1:5793/checksums.txt</UpdateLocationMD5><UpdateLocation>http://127.0.0.1:5793/files/</UpdateLocation><BetaUpdateLocationVersion>http://127.0.0.1:5793/beta/version.txt</BetaUpdateLocationVersion><BetaUpdateLocationMD5>http://127.0.0.1:5793/beta/checksums.txt</BetaUpdateLocationMD5><BetaUpdateLocationZip>http://127.0.0.1:5793/beta/Beta.zip</BetaUpdateLocationZip><update_check>%s</update_check><beta_updates>True</beta_updates></Config>' "$(date +%-m/%-d/%Y)" > "$WORK/MissionPlannerRust/config.xml"
+
+screen help
+window 1600x1200
+budget 6
+
+expect screen help
+
+# The startup check on the beta channel: 2.0.0.0 over the program's 1.0.0.0 asks the question.
+expect help.flow question
+expect help.question ~ BETA Update Found
+expect help.question ~ ChangeLog: http://127.0.0.1:5793/beta/ChangeLog.txt
+click help-question-no
+expect help.flow idle
+expect help.last update found
+
+# Show Console Window (restart): the setting, and nothing else here.
+expect help.console false
+click help-showconsole
+expect help.console true
+click help-showconsole
+expect help.console false
+
+# Check for Updates: the stable channel is at the program's version.
+click help-updatecheck
+expect help.flow message
+expect help.question No update available.
+click help-message-ok
+expect help.flow idle
+expect help.last up to date
+
+# Check for BETA Updates: no question; the one file the channel lists comes down as .new out of
+# the channel's zip, and the updater is named with the planner's path.
+click help-betaupdate
+expect help.last Starting Updater
+expect help.flow idle
+expect help.written 1
+expect help.restart ~ update-apply

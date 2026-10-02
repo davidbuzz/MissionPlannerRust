@@ -1,0 +1,19 @@
+[package]
+name = "mp-update"
+description = "Mission Planner's update check and updater: Utilities/Update.cs and Updater/Program.cs"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+# The network, as `Download`'s `HttpClient`: the `Fetch` trait the firmware code fetches through.
+mp-firmware.workspace = true
+# The zip the beta and master channels are read from (`GetNewFileZip`).
+mp-log.workspace = true
+# `CheckMD5`'s `Regex`.
+regex.workspace = true

@@ -68,6 +68,8 @@ mp-video.workspace = true
 # Install Firmware: the firmware catalogue and the board a USB device names, from the port list.
 # Its HTTP fetch also downloads Auto Analysis's LogAnalyzer, as the CLI's `headless-planner log` does with ureq.
 mp-firmware.workspace = true
+# The HELP screen's update check and update (`Utilities/Update.cs`).
+mp-update.workspace = true
 # The SITL page's GetDefaultConfig: `default_params_regex` over sim_vehicle.py, and vehicleinfo.py
 # read as the JSON tree Newtonsoft makes of it - in the file's order, which decides the vehicle
 # a frame is found under. Both already compiled for mp-firmware.

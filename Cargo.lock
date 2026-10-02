@@ -4468,6 +4468,7 @@ dependencies = [
  "mp-terrain",
  "mp-transport",
  "mp-units",
+ "mp-update",
  "mp-vehicle",
 ]
 
@@ -4564,6 +4565,7 @@ dependencies = [
  "mp-tiles",
  "mp-transport",
  "mp-units",
+ "mp-update",
  "mp-vehicle",
  "mp-video",
  "regex",
@@ -4744,6 +4746,15 @@ dependencies = [
  "criterion",
  "proptest",
  "thiserror 2.0.20",
+]
+
+[[package]]
+name = "mp-update"
+version = "0.1.0"
+dependencies = [
+ "mp-firmware",
+ "mp-log",
+ "regex",
 ]
 
 [[package]]

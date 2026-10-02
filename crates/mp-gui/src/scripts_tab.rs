@@ -1366,7 +1366,7 @@ pub fn serve_while_running(cx: &mut Context<MissionPlanner>) {
 
 /// `Process.Start(new ProcessStartInfo(path) { UseShellExecute = true })`: the desktop's
 /// association for the file.
-fn open_with_shell(path: &Path) -> Result<(), String> {
+pub(crate) fn open_with_shell(path: &Path) -> Result<(), String> {
     let mut command = if cfg!(target_os = "windows") {
         let mut command = std::process::Command::new("cmd");
         command.args(["/C", "start", ""]).arg(path);

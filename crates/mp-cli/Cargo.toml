@@ -22,6 +22,8 @@ mp-mavlink-dialects.workspace = true
 mp-transport.workspace = true
 mp-vehicle.workspace = true
 mp-firmware.workspace = true
+# `headless-planner update-apply`, the planner's updater (`Updater/Program.cs`).
+mp-update.workspace = true
 mp-kml.workspace = true
 mp-log.workspace = true
 # `headless-planner magcal`: MagCalib.cs's fit.
