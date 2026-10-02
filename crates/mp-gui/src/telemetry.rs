@@ -385,6 +385,14 @@ impl Telemetry {
         Some(Self::recording_path_in(&directory, &flight_stamp()))?
     }
 
+    /// Where flights are recorded, and the HUD's AVI goes: `MP_LOG_DIR` when set, else
+    /// [`Self::log_directory`]. `Settings.Instance.LogDir`, as `recordHudToAVIToolStripMenuItem`
+    /// reads it. `// C#: GCSViews/FlightData.cs:4663-4665`
+    #[must_use]
+    pub(crate) fn recording_directory() -> std::path::PathBuf {
+        std::env::var_os("MP_LOG_DIR").map_or_else(Self::log_directory, std::path::PathBuf::from)
+    }
+
     /// Where flights are recorded when nothing says otherwise.
     ///
     /// Mission Planner's `Settings.GetDefaultLogDir`: the user data directory plus `logs` - this

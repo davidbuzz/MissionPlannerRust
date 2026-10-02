@@ -975,6 +975,10 @@ pub enum Prompt {
     /// Message's `InputBox.Show("Enter Message", "Enter Message to be logged", ref txt)`.
     /// `// C#: GCSViews/FlightData.cs:1264`
     SendMessage,
+    /// Record Hud to AVI's `CustomMessageBox.Show("Output avi will be saved to the log folder")`,
+    /// no caption; the recording starts once it is answered. The C#'s box has OK alone; Cancel
+    /// here records nothing. `// C#: GCSViews/FlightData.cs:4657`
+    AviNotice,
     /// Point Camera Here's `InputBox.Show("Enter Alt", "Enter Target Alt (Relative to home)",
     /// ref alt)`. `// C#: GCSViews/FlightData.cs:4519-4522`
     PointCameraAlt,
@@ -1018,6 +1022,7 @@ impl Prompt {
         match self {
             Self::ConfirmAction(_) => "Action",
             Self::ResumeWarning => "Resume Mission",
+            Self::AviNotice => "",
             Self::ResumeAt => "Resume at",
             Self::FlyToCoords => "Enter Fly To Coords",
             Self::FlyToHereAlt { .. } | Self::TakeOff => "Enter Alt",
@@ -1071,6 +1076,7 @@ impl Prompt {
                     .to_owned()
             }
             Self::SendMessage => "Enter Message to be logged".to_owned(),
+            Self::AviNotice => "Output avi will be saved to the log folder".to_owned(),
             Self::PointCameraAlt => "Enter Target Alt (Relative to home)".to_owned(),
             Self::PointCameraCoords => {
                 "Please enter the coords 'lat;long;alt(abs)' or 'lat;long'".to_owned()
@@ -4035,6 +4041,11 @@ impl MissionPlanner {
                     self.fly_data.hud_settings.add_item(&name, &text);
                 }
             }
+            Prompt::AviNotice => {
+                if accepted {
+                    self.fly_start_avi();
+                }
+            }
             Prompt::SetHome => {
                 if let Some(point) = self.fly_data.pending_home.take() {
                     self.fly_press(&Report::default(), |_, target, _| {
@@ -4292,6 +4303,7 @@ impl MissionPlanner {
     /// DataFlash Logs page's conversion finishing.
     pub(crate) fn fly_tick(&mut self, view: &TelemetryView, window: &Window) {
         self.fly_data.playback.tick();
+        self.fly_avi_tick();
         // The Scripts tab: the run's output and end, and the requests its script has made.
         if let Some(status) =
             self.fly_data
@@ -4467,6 +4479,11 @@ pub struct FlightData {
     pub camera: Option<std::sync::Arc<gpui::RenderImage>>,
     /// The DataFlash Logs page's conversions.
     pub conversions: Conversions,
+    /// `aviwriter` and `vidrec`: Record Hud to AVI's writer, its file and its frame clock.
+    /// `// C#: GCSViews/FlightData.cs:65, 3378`
+    pub avi: Option<AviRecording>,
+    /// The last recording's file size once closed, for the facts.
+    pub avi_size: u64,
     /// The HUD's menu.
     pub hud_menu: HudMenu,
     /// What the HUD's menu has set.
@@ -4775,6 +4792,8 @@ impl FlightData {
             mouse_down_start: None,
             current_poi: None,
             hud_bounds: Rc::new(Cell::new(None)),
+            avi: None,
+            avi_size: 0,
             camera: None,
             conversions: Conversions::default(),
             hud_menu: HudMenu::default(),
@@ -4928,6 +4947,31 @@ impl FlightData {
             )
         };
         crate::facts::record("fly.hud.gstreamer", self.gstreamer.is_running());
+        crate::facts::record(
+            "fly.hud.avi",
+            if self.avi.is_some() { "recording" } else { "none" },
+        );
+        crate::facts::record(
+            "fly.hud.avi.frames",
+            self.avi.as_ref().map_or(0, |recording| recording.frames),
+        );
+        crate::facts::record(
+            "fly.hud.avi.text",
+            self.hud_settings.avi_entry.unwrap_or("Record Hud to AVI"),
+        );
+        crate::facts::record(
+            "fly.hud.avi.path",
+            self.avi.as_ref().map_or_else(
+                || "none".to_owned(),
+                |recording| {
+                    recording
+                        .path
+                        .file_name()
+                        .map_or_else(String::new, |name| name.to_string_lossy().into_owned())
+                },
+            ),
+        );
+        crate::facts::record("fly.hud.avi.size", self.avi_size);
         crate::facts::record(
             "fly.hud.gstreamer.pipeline",
             self.gstreamer.pipeline().unwrap_or("none"),
@@ -5771,6 +5815,22 @@ pub fn convert(kind: Conversion, log: &std::path::Path) -> Result<Converted, Str
 /// A conversion's outcome, with the log it was of.
 pub type Outcome = (Conversion, std::path::PathBuf, Result<Converted, String>);
 
+/// Record Hud to AVI, running: the writer on its file, the start for the writer's frame clock
+/// and the 40 ms clock of the frames (`vidrec`). `// C#: GCSViews/FlightData.cs:65, 3378, 3420-3431`
+#[derive(Debug)]
+pub struct AviRecording {
+    /// `aviwriter`.
+    pub writer: mp_video::avi::AviWriter,
+    /// The file.
+    pub path: std::path::PathBuf,
+    /// When the file was opened.
+    pub started: Instant,
+    /// When the next frame is due.
+    pub next_frame: Instant,
+    /// Frames written, for the facts.
+    pub frames: u32,
+}
+
 /// A conversion on its way: which, of what, and where its outcome arrives.
 type Running = (
     Conversion,
@@ -6438,6 +6498,11 @@ pub enum HudAction {
     /// `hereLinkVideoToolStripMenuItem`: the HereLink's address asked, then its RTSP stream
     /// played through `hudGStreamer`.
     HereLinkVideo,
+    /// `recordHudToAVIToolStripMenuItem`: any recording stopped, "Output avi will be saved to
+    /// the log folder", then a new AVI in the log folder taking the display's frames.
+    RecordAvi,
+    /// `stopRecordToolStripMenuItem`: the AVI closed with its index.
+    StopRecord,
     /// `gStreamerStopToolStripMenuItem`: `hudGStreamer.Stop()`.
     GStreamerStop,
 }
@@ -6449,7 +6514,12 @@ impl HudAction {
     pub const fn in_video_menu(self) -> bool {
         matches!(
             self,
-            Self::MjpegSource | Self::GStreamerSource | Self::HereLinkVideo | Self::GStreamerStop
+            Self::RecordAvi
+                | Self::StopRecord
+                | Self::MjpegSource
+                | Self::GStreamerSource
+                | Self::HereLinkVideo
+                | Self::GStreamerStop
         )
     }
 }
@@ -6470,9 +6540,6 @@ pub struct HudRow {
 /// Why Start Camera is dimmed.
 const NO_CAMERA: &str = "Start Camera, the capture opened in its default format, is not ported; \
                          the Planner page's Start opens the camera";
-
-/// Why Record Hud to AVI and Stop Record are dimmed.
-const NO_AVI: &str = "there is no AVI encoder here, the C#'s AviWriter";
 
 /// `contextMenuStripHud`, in the Designer's order, with each row's words from the `.resx`.
 /// `// C#: GCSViews/FlightData.Designer.cs:458-466, 525-566, GCSViews/FlightData.resx`
@@ -6541,14 +6608,14 @@ pub const HUD_VIDEO_MENU: [HudRow; 7] = [
         text: "Record Hud to AVI",
         id: "fly-hud-recordavi",
         // `// C#: GCSViews/FlightData.cs:4653-4672`
-        does: Err(NO_AVI),
+        does: Ok(HudAction::RecordAvi),
     },
     HudRow {
         control: "stopRecordToolStripMenuItem",
         text: "Stop Record",
         id: "fly-hud-stoprecord",
         // `// C#: GCSViews/FlightData.cs:5121-5137`
-        does: Err(NO_AVI),
+        does: Ok(HudAction::StopRecord),
     },
     HudRow {
         control: "setMJPEGSourceToolStripMenuItem",
@@ -6627,6 +6694,10 @@ pub struct HudSettings {
     pub icons: bool,
     /// `hud1.displayCellVoltage` with `hud1.batterycellcount`: the count while the line is on.
     pub cells: Option<i32>,
+    /// `recordHudToAVIToolStripMenuItem.Text` as the handlers set it: "Recording" while one
+    /// runs, "Start Recording" after a stop, the Designer's words before either.
+    /// `// C#: GCSViews/FlightData.cs:4667, 5123`
+    pub avi_entry: Option<&'static str>,
 }
 
 impl HudSettings {
@@ -6940,7 +7011,15 @@ fn hud_menu(
     if menu.video {
         let rows = HUD_VIDEO_MENU
             .iter()
-            .map(|row| hud_menu_row(row, row.text, false, false, cx))
+            .map(|row| {
+                // Record Hud to AVI reads "Recording" while one runs, "Start Recording" after.
+                let text = if row.does == Ok(HudAction::RecordAvi) {
+                    settings.avi_entry.unwrap_or(row.text)
+                } else {
+                    row.text
+                };
+                hud_menu_row(row, text, false, false, cx)
+            })
             .collect();
         // Beside the Video row, the menu's first: on its right, or on its left where the window
         // ends first, as a `ToolStripDropDown` opens.
@@ -7833,12 +7912,112 @@ impl MissionPlanner {
             }
             // `hudGStreamer.Stop()`. `// C#: GCSViews/FlightData.cs:3150-3153`
             HudAction::GStreamerStop => self.fly_data.gstreamer.stop(),
+            // Any recording stopped first, then the notice; the file opens on its OK.
+            // `// C#: GCSViews/FlightData.cs:4653-4672`
+            HudAction::RecordAvi => {
+                self.fly_stop_record();
+                return self.fly_hud_ask(Prompt::AviNotice, "");
+            }
+            HudAction::StopRecord => self.fly_stop_record(),
         }
         self.fly_data.hud_menu = HudMenu::default();
         false
     }
 
     /// A question asked from the HUD's menu, which closes.
+    /// Record Hud to AVI, its notice answered: the log folder made, a new writer on
+    /// `<log folder>/<yyyy-MM-dd HH-mm-ss>.avi`, the entry reading "Recording". A folder that
+    /// cannot be written is the C#'s Error box, here the status line.
+    /// `// C#: GCSViews/FlightData.cs:4659-4671`
+    fn fly_start_avi(&mut self) {
+        let directory = crate::telemetry::Telemetry::recording_directory();
+        let name = chrono::Local::now().format("%Y-%m-%d %H-%M-%S").to_string();
+        let path = directory.join(format!("{name}.avi"));
+        let mut writer = mp_video::avi::AviWriter::new();
+        let opened = std::fs::create_dir_all(&directory).and_then(|()| writer.start(&path));
+        match opened {
+            Ok(()) => {
+                let now = Instant::now();
+                self.fly_data.avi = Some(AviRecording {
+                    writer,
+                    path,
+                    started: now,
+                    next_frame: now,
+                    frames: 0,
+                });
+                self.fly_data.hud_settings.avi_entry = Some("Recording");
+            }
+            Err(why) => self.file_status = Some(format!("Error: {why}")),
+        }
+    }
+
+    /// Stop Record: the entry reads "Start Recording" whether or not one ran, and the file is
+    /// closed with its index; a close that fails is the C#'s Error box, here the status line.
+    /// `// C#: GCSViews/FlightData.cs:5121-5137`
+    fn fly_stop_record(&mut self) {
+        self.fly_data.hud_settings.avi_entry = Some("Start Recording");
+        if let Some(mut recording) = self.fly_data.avi.take() {
+            if let Err(why) = recording.writer.close() {
+                self.file_status = Some(format!("Error {why}"));
+            }
+            self.fly_data.avi_size = std::fs::metadata(&recording.path).map_or(0, |m| m.len());
+        }
+    }
+
+    /// The recording's clock, 25 frames a second: the display as it is drawn now, rasterised and
+    /// encoded, in as a frame, and the headers written again so a file cut short plays. A frame
+    /// that will not write is "Failed to write avi", the C#'s log line, on the status line.
+    /// `// C#: GCSViews/FlightData.cs:3420-3436`
+    fn fly_avi_tick(&mut self) {
+        let now = Instant::now();
+        let due = self
+            .fly_data
+            .avi
+            .as_ref()
+            .is_some_and(|recording| now >= recording.next_frame);
+        if !due {
+            return;
+        }
+        let (width, height) = self
+            .fly_data
+            .hud_bounds
+            .get()
+            .map_or((398.0, 258.0), |laid_out| {
+                (
+                    f32::from(laid_out.size.width),
+                    f32::from(laid_out.size.height),
+                )
+            });
+        let scene = hud_scene(
+            &self.hud,
+            self.fly_data.hud_settings.ground_colours(),
+            width,
+            height,
+        );
+        #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)] // sizes in pixels
+        let (w, h) = (width.max(1.0) as u32, height.max(1.0) as u32);
+        let Some(recording) = self.fly_data.avi.as_mut() else {
+            return;
+        };
+        recording.next_frame = now + Duration::from_millis(40);
+        let Some(jpeg) = crate::hud::frame_jpeg(&scene, w, h) else {
+            self.file_status = Some("Failed to write avi".to_owned());
+            return;
+        };
+        let elapsed = recording.started.elapsed();
+        let written = recording.writer.add(&jpeg, elapsed).and_then(|()| {
+            recording.writer.end(
+                i32::try_from(w).unwrap_or(i32::MAX),
+                i32::try_from(h).unwrap_or(i32::MAX),
+                25,
+            )
+        });
+        match written {
+            Ok(()) => recording.frames = recording.writer.frames(),
+            Err(_) => self.file_status = Some("Failed to write avi".to_owned()),
+        }
+    }
+
     fn fly_hud_ask(&mut self, prompt: Prompt, text: &str) -> bool {
         self.fly_actions.ask(prompt, text);
         self.fly_data.hud_menu = HudMenu::default();
@@ -11011,6 +11190,8 @@ mod tests {
         assert_eq!(
             live,
             [
+                "Record Hud to AVI",
+                "Stop Record",
                 "Set MJPEG source",
                 "Set GStreamer Source",
                 "HereLink Video",

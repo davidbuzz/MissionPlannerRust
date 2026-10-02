@@ -44,9 +44,11 @@ const SAMPLES: u8 = 16;
 
 /// A channel may differ by this much and the pixel still match: one sample of sixteen flipping
 /// on a black-white edge moves a channel by 16.
+#[cfg(test)]
 pub(super) const CHANNEL_TOLERANCE: u8 = 20;
 
 /// Two frames match while no more pixels than this differ.
+#[cfg(test)]
 pub(super) const PIXELS_TOLERATED: usize = 4;
 
 /// gpui's stroke miter limit: lyon's `StrokeOptions::DEFAULT_MITER_LIMIT`.
@@ -76,6 +78,7 @@ impl Image {
     }
 
     /// The pixel at `(x, y)`, if it is inside.
+    #[cfg(test)]
     pub fn pixel(&self, x: u32, y: u32) -> Option<[u8; 3]> {
         let at = self.offset(x, y)?;
         let rgb = self.pixels.get(at..at + 3)?;
@@ -556,6 +559,7 @@ fn glyph(character: char) -> [u8; 5] {
 }
 
 /// How two frames differ.
+#[cfg(test)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(super) struct Difference {
     /// Pixels with a channel more than [`CHANNEL_TOLERANCE`] away.
@@ -566,6 +570,7 @@ pub(super) struct Difference {
     pub region: Option<(u32, u32, u32, u32)>,
 }
 
+#[cfg(test)]
 impl Difference {
     /// Whether the frames match: few enough pixels differ.
     pub const fn matches(&self) -> bool {
@@ -578,6 +583,7 @@ impl Difference {
 /// # Errors
 ///
 /// The images are not the same size.
+#[cfg(test)]
 pub(super) fn compare(expected: &Image, actual: &Image) -> Result<Difference, String> {
     if (expected.width, expected.height) != (actual.width, actual.height) {
         return Err(format!(
@@ -617,6 +623,7 @@ pub(super) fn compare(expected: &Image, actual: &Image) -> Result<Difference, St
 
 /// A picture of the difference, for a person: the expected frame dimmed, with every differing
 /// pixel in magenta.
+#[cfg(test)]
 pub(super) fn difference_image(expected: &Image, actual: &Image) -> Image {
     let mut out = expected.clone();
     for (index, pixel) in out.pixels.chunks_exact_mut(3).enumerate() {

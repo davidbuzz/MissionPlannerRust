@@ -398,7 +398,6 @@ fn scale_channel(channel: u8, numerator: u16, denominator: u16) -> u8 {
 }
 
 /// A resource's pixels, straight RGBA, as [`decoded`] keeps them; for the HUD's rasteriser.
-#[cfg(test)]
 #[must_use]
 pub fn pixels(resource: &'static str) -> Option<Arc<RgbaImage>> {
     decoded(resource)

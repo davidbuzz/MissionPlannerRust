@@ -4,7 +4,7 @@ Generated from `crates/mp-gui/src/coverage.rs` by `cargo test -p mp-gui coverage
 
 | total | done | elsewhere | missing | plumbing | dropped |
 |---:|---:|---:|---:|---:|---:|
-| 136 | 109 | 1 | 6 | 18 | 2 |
+| 136 | 111 | 1 | 4 | 18 | 2 |
 
 | control | event | handler | text | ours |
 |---|---|---|---|---|
@@ -103,7 +103,7 @@ Generated from `crates/mp-gui/src/coverage.rs` by `cargo test -p mp-gui coverage
 | `quickView4` | DoubleClick | `quickView_DoubleClick` | quick view 4: choose its field | done: `fly-quick-4` |
 | `quickView5` | DoubleClick | `quickView_DoubleClick` | quick view 5: choose its field | done: `fly-quick-5` |
 | `quickView6` | DoubleClick | `quickView_DoubleClick` | quick view 6: choose its field | done: `fly-quick-6` |
-| `recordHudToAVIToolStripMenuItem` | Click | `recordHudToAVIToolStripMenuItem_Click` | Record Hud to AVI | **missing** - later: video (the camera, AVI) |
+| `recordHudToAVIToolStripMenuItem` | Click | `recordHudToAVIToolStripMenuItem_Click` | Record Hud to AVI | done: `fly-hud-recordavi` |
 | `russianHudToolStripMenuItem` | Click | `russianHudToolStripMenuItem_Click` | Russian Hud | done: `fly-hud-russian` |
 | `saveFileToolStripMenuItem` | Click | `saveFileToolStripMenuItem_Click` | Save File | done: `fly-poi-save` |
 | `scriptChecker` | Tick | `scriptChecker_Tick` | the script status timer | plumbing |
@@ -117,9 +117,9 @@ Generated from `crates/mp-gui/src/coverage.rs` by `cargo test -p mp-gui coverage
 | `showIconsToolStripMenuItem` | Click | `showIconsToolStripMenuItem_Click` | Show icons | done: `fly-hud-showicons` |
 | `Squawk_nud` | MouseWheel | `Squawk_nud_MouseWheel` | Squawk (transponder) | done: `fly-xpdr-squawk-box` |
 | `Squawk_nud` | ValueChanged | `Squawk_nud_ValueChanged` | Squawk (transponder) | done: `fly-xpdr-squawk` |
-| `startCameraToolStripMenuItem` | Click | `startCameraToolStripMenuItem_Click` | Start Camera | **missing** - later: video (the camera, AVI) |
+| `startCameraToolStripMenuItem` | Click | `startCameraToolStripMenuItem_Click` | Start Camera | **missing** - later: video (the camera) |
 | `STBY_btn` | Click | `STBY_btn_Click` | STBY (transponder) | done: `fly-xpdr-stby` |
-| `stopRecordToolStripMenuItem` | Click | `stopRecordToolStripMenuItem_Click` | Stop Record | **missing** - later: video (the camera, AVI) |
+| `stopRecordToolStripMenuItem` | Click | `stopRecordToolStripMenuItem_Click` | Stop Record | done: `fly-hud-stoprecord` |
 | `swapWithMapToolStripMenuItem` | Click | `swapWithMapToolStripMenuItem_Click` | Swap With Map | done: `fly-hud-swap` |
 | `tabControlactions` | DrawItem | `tabControl1_DrawItem` | the actions tabs | plumbing |
 | `tabControlactions` | SelectedIndexChanged | `tabControl1_SelectedIndexChanged` | the actions tabs | done: `fly-tabs` |

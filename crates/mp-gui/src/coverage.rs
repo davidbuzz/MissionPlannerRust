@@ -733,7 +733,7 @@ pub const FLIGHTDATA: &[Action] = &[
         "Click",
         "recordHudToAVIToolStripMenuItem_Click",
         "Record Hud to AVI",
-        Missing,
+        Done("fly-hud-recordavi"),
     ),
     row(
         "russianHudToolStripMenuItem",
@@ -846,7 +846,7 @@ pub const FLIGHTDATA: &[Action] = &[
         "Click",
         "stopRecordToolStripMenuItem_Click",
         "Stop Record",
-        Missing,
+        Done("fly-hud-stoprecord"),
     ),
     row(
         "swapWithMapToolStripMenuItem",
@@ -1006,9 +1006,7 @@ pub const WHY_MISSING: &[(&str, &str, &str)] = &[
         "Click",
         "later: RAW_Sensor is a window of its own; drawn dimmed in the Actions grid",
     ),
-    ("recordHudToAVIToolStripMenuItem", "Click", VIDEO),
     ("startCameraToolStripMenuItem", "Click", VIDEO),
-    ("stopRecordToolStripMenuItem", "Click", VIDEO),
     (
         "onOffCameraOverlapToolStripMenuItem",
         "Click",
@@ -1024,7 +1022,7 @@ pub const WHY_MISSING: &[(&str, &str, &str)] = &[
 
 /// Left for later: video.
 #[cfg(test)]
-const VIDEO: &str = "later: video (the camera, AVI)";
+const VIDEO: &str = "later: video (the camera)";
 
 /// How many rows are in each state: (done, elsewhere, missing, plumbing, dropped).
 #[must_use]
@@ -1243,7 +1241,7 @@ mod tests {
         );
         assert_eq!(
             (done, elsewhere, missing, plumbing, dropped),
-            (109, 1, 6, 18, 2)
+            (111, 1, 4, 18, 2)
         );
     }
 }

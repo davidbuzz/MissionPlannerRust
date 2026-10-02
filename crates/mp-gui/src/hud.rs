@@ -66,7 +66,6 @@ use mp_vehicle::units::DisplayUnits;
 #[cfg(test)]
 mod golden;
 /// A software rasteriser for a [`Scene`], so a frame can be drawn and compared without a window.
-#[cfg(test)]
 mod raster;
 
 mod colour {
@@ -3123,6 +3122,26 @@ fn tinted(colour: u32, alpha: f32) -> Hsla {
 }
 
 /// Paints a scene into a canvas whose top-left is `bounds.origin`.
+/// The display as Record Hud to AVI wants a frame of it: the scene drawn by the software
+/// rasteriser at the HUD's size and encoded as JPEG at quality 50, which is what `GrabScreenshot`
+/// reads back from OpenGL and `objBitmap.Save(streamjpg, ici, eps)` makes of it. The camera's
+/// picture under the display is not in the frame here (the C#'s read-back has it).
+/// `// C#: ExtLibs/Controls/HUD.cs:247-282, 3314-3323, 3349-3364`
+#[must_use]
+pub fn frame_jpeg(scene: &Scene, width: u32, height: u32) -> Option<Vec<u8>> {
+    let image = raster::render(scene, width, height);
+    let mut out = Vec::new();
+    image::codecs::jpeg::JpegEncoder::new_with_quality(&mut out, 50)
+        .encode(
+            &image.pixels,
+            width,
+            height,
+            image::ExtendedColorType::Rgb8,
+        )
+        .ok()?;
+    Some(out)
+}
+
 pub fn paint(scene: &Scene, bounds: Bounds<Pixels>, window: &mut Window, cx: &mut gpui::App) {
     for item in &scene.items {
         paint_item(item, bounds, window, cx);
@@ -3360,6 +3379,17 @@ fn label(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Record Hud to AVI's frame: the display at the flight screen's size, a JPEG.
+    #[test]
+    fn a_frame_for_the_avi_is_a_jpeg_of_the_display() {
+        let inputs = HudInputs::default();
+        let frame = frame_jpeg(&scene(&inputs, 398.0, 258.0), 398, 258).expect("a frame");
+        assert_eq!(frame.first(), Some(&0xFF));
+        assert_eq!(frame.get(1), Some(&0xD8));
+        assert!(frame.len() > 1000, "{} bytes", frame.len());
+        assert!(frame_jpeg(&scene(&inputs, 1.0, 1.0), 0, 0).is_none());
+    }
     use mp_mavlink_dialects::all::{AoaSsa as AoaSsaMessage, MavMessage};
 
     const CENTRE: (f32, f32) = (200.0, 150.0);

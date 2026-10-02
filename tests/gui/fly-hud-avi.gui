@@ -1,0 +1,46 @@
+# Record Hud to AVI and Stop Record, the HUD menu's Video drop-down: GCSViews/FlightData.cs
+# 4653-4672 and 5121-5137 over ExtLibs/Utilities/AviWriter.cs, ported in crates/mp-video/src/avi.rs
+# and crates/mp-gui/src/fly.rs.
+#
+# The claim: Record Hud to AVI says "Output avi will be saved to the log folder", then opens
+# <log folder>/<yyyy-MM-dd HH-mm-ss>.avi and the entry reads "Recording"; every 40 ms the HUD's
+# frame - the display drawn by the software rasteriser and encoded as JPEG at quality 50, as
+# GrabScreenshot's read-back is - goes in as a 00dc chunk and the headers are written again so a
+# partial file plays (FlightData.cs:3420-3431); Stop Record closes the file with its index and the
+# entry reads "Start Recording". No vehicle is needed: the HUD draws without one.
+#
+# Needs no link: tools/gui-test.sh tests/gui/fly-hud-avi.gui
+
+env MP_LOG_DIR $WORK/logs
+setup mkdir -p $WORK/logs
+
+screen fly
+window 1600x1200
+budget 7
+
+expect fly.hud.avi none
+expect fly.hud.avi.text Record Hud to AVI
+
+# Record: the notice, then the file open and frames going in.
+click hud@0.5x0.4:right
+expect fly.hud.menu true
+click fly-hud-video
+expect fly.hud.menu.video true
+click fly-hud-recordavi
+expect fly.hud.menu false
+expect fly.prompt Output avi will be saved to the log folder
+click fly-prompt-ok
+expect fly.prompt none
+expect fly.hud.avi recording
+expect fly.hud.avi.text Recording
+expect fly.hud.avi.path ~ .avi
+expect fly.hud.avi.frames > 5
+
+# Stop: the file closed, the entry's words the C#'s.
+click hud@0.5x0.4:right
+click fly-hud-video
+click fly-hud-stoprecord
+expect fly.hud.menu false
+expect fly.hud.avi none
+expect fly.hud.avi.text Start Recording
+expect fly.hud.avi.size > 8204
