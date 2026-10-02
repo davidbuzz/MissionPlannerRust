@@ -392,51 +392,61 @@ L11 mp-plugin-api  mp-plugin-host                  L12 xtask  mp-codegen
 
 ### 5.2 Current state — re-baselined honestly
 
-Measured on this tree on 2026-09-24: **211 commits, 23 crates plus `xtask`, 252,700 hand-written Rust
-LOC** (every `.rs` under `crates/`, tests included) plus **91,634 generated**, **2,708 tests** on
-`cargo test --workspace` (2,668 pass, 40 ignored: they need SITL, a window or the network), and
-**133 GUI scripts** under `tests/gui/`. The first baseline, 2026-09-23, was 82 commits, 13 crates,
-36,603 hand-written lines and 531 tests.
+Measured on this tree on 2026-10-03: **355 commits, 28 crates plus `xtask`, 422,325 hand-written Rust
+LOC** (every `.rs` under `crates/`, tests included) plus **99,215 generated**, **4,033 tests** on
+`cargo test --workspace` (47 ignored: they need SITL, a window or the network), and **202 GUI
+scripts** under `tests/gui/`. The baseline of 2026-09-24 was 211 commits, 23 crates, 252,700
+hand-written lines, 2,708 tests and 133 scripts; the first, 2026-09-23, 82 commits, 13 crates,
+36,603 lines and 531 tests.
 
-| Crate | Hand-written (`src/`, generated excluded) | Generated | Note |
+| Crate | Hand-written (`src/`, `tests/`, `benches/`; generated excluded) | Generated | Note |
 |---|---:|---:|---|
-| `mp-gui` | 131,231 | — | fly / plan / setup / config / params / log screens on gpui; every widget and screen in one crate - no `mp-ui`, no `mp-render` |
-| `mp-mission` | 15,485 | — | missions, fences, rally, the survey grids and GridUI, Clipper, UTM, shapefiles and dBase, KML to mission, circle survey, text |
-| `mp-log` | 12,127 | — | tlog and dataflash reading, the four conversions, `LogFile`'s index, the graph expressions, log params |
-| `mp-vehicle` | 8,672 | 190 | `CurrentState` whole, the snapshot bus, the clock, fence points, rates, health |
-| `mp-link` | 7,645 | — | the link engine: I/O thread, routing, requests with the C#'s retries, mission transfer, MAVFTP driving, recording, RTCM injection |
-| `mp-georef` | 7,006 | — | `georefimage.cs`: matching, every output file, EXIF |
-| `mp-firmware` | 5,176 | — | `.apj`, the px4 bootloader, board detection, both manifests, the pages' flows up to a board |
-| `mp-transport` | 4,867 | — | serial, TCP, UDP, UDP client, websocket, NTRIP, replay, test doubles, enumeration |
-| `mp-ftp` | 3,936 | — | log download and MAVFTP |
-| `mp-cli` | 3,866 | — | `headless-planner` |
-| `mp-tiles` | 3,438 | — | providers and versions, the C#'s cache, the store with its reader and fetch pool |
-| `mp-calibration` | 3,039 | — | accel, level, compass, radio, motor test, the 75 motor layouts |
-| `xtask` | 2,990 | — | the ledger; codegen for mavlink, param_meta and modes |
-| `mp-input` | 2,810 | — | joystick → RC channels |
-| `mp-params` | 2,542 | 46,786 | parameter values, the downloaded table, metadata, `pdef` fetching, `.param` files |
-| `mp-kml` | 2,417 | — | KML reading and writing, dataflash KML+GPX |
-| `mp-terrain` | 1,341 | — | `srtm.cs` |
-| `mp-mavlink` | 1,184 | — | framing, checksums, signing |
-| `mp-settings` | 1,101 | — | `Settings.cs`: directories and `config.xml` |
-| `mp-units` | 978 | — | typed units and geodesy |
-| `mp-script` | 539 | — | the `Script.cs` host API, the RustPython engine and the corpus scan; L3 since 2026-09-25, when the flight screen's Scripts tab began to run it (it was drawn at L11 beside the plugin host, which it is not) |
-| `mp-chart` | 383 | — | the min/max reduction |
-| `mp-fuzz-checks` | 191 | — | the fuzz properties on stable |
-| `mp-mavlink-dialects` | 16 | 44,658 | |
+| `mp-gui` | 249,000 | — | fly / plan / setup / config / params / log / simulation screens on gpui; every widget and screen in one crate - no `mp-ui`, no `mp-render` |
+| `mp-link` | 23,214 | — | the link engine: I/O thread, routing, requests with the C#'s retries, mission transfer, MAVFTP driving, recording, RTCM injection, the camera and gimbal protocols, signing, the mirror |
+| `mp-mission` | 19,280 | — | missions, fences, rally, the survey grids and GridUI, Clipper, UTM, shapefiles and dBase, KML to mission, circle survey, text, missionpck |
+| `mp-log` | 18,793 | — | tlog and dataflash reading, the four conversions, `LogFile`'s index, the graph expressions, log params, FFT2, the LogAnalyzer checks, the spectrogram's samples |
+| `mp-vehicle` | 13,615 | 190 | `CurrentState` whole, the snapshot bus, the clock, fence points, rates, health |
+| `mp-firmware` | 10,763 | — | `.apj`, the px4 bootloader, board detection, both manifests, the pages' flows to a board, signed firmware |
+| `mp-transport` | 9,578 | — | serial, TCP, UDP, UDP client, websocket, NTRIP, replay, test doubles, enumeration (SetupAPI on Windows) |
+| `mp-georef` | 8,822 | — | `georefimage.cs`: matching, every output file, EXIF, the footprint projection |
+| `mp-sikradio` | 5,879 | — | `Sikradio.cs`'s AT/RT session, settings, the SiK and RFD900x bootloaders, IHex, XModem |
+| `mp-plugin-host` | 5,495 | — | WebAssembly plugins on wasmtime's component model: the C#'s `Plugin` lifecycle as a WIT world, the four shipped plugins and seven examples |
+| `mp-tiles` | 5,349 | — | providers and versions, the C#'s cache, the store with its reader and fetch pool, prefetch, the Custom provider |
+| `mp-calibration` | 5,318 | — | accel, level, compass, radio, motor test, the 75 motor layouts, `MagCalib.cs`'s fit, live calibration |
+| `mp-input` | 5,208 | — | joystick → RC channels, the Joystick Setup page's model |
+| `mp-dronecan` | 5,195 | — | DroneCAN: node 127, the transfer layer, SLCAN, MAVLinkCAN, multicast, parameters, firmware update, the 27 decoded types |
+| `mp-ftp` | 5,030 | — | log download and MAVFTP |
+| `mp-cli` | 4,949 | — | `headless-planner` |
+| `mp-video` | 4,423 | — | V4L2 and Media Foundation capture, GStreamer pipelines, MJPEG streams, the AVI writer |
+| `mp-script` | 3,419 | — | the `Script.cs` host API, the RustPython engine, the CLR shim (`MAV`, `MainV2`, the screens), the corpus scan |
+| `mp-params` | 3,359 | 49,965 | parameter values, the downloaded table, metadata, `pdef` fetching, `.param` files, `param.pck` |
+| `mp-kml` | 2,749 | — | KML reading and writing, dataflash KML+GPX |
+| `mp-mavlink` | 2,666 | — | framing, checksums, signing |
+| `mp-terrain` | 2,437 | — | `srtm.cs`, the EGM96 geoid |
+| `mp-chart` | 1,855 | — | the min/max reduction and its pyramid |
+| `mp-units` | 1,842 | — | typed units and geodesy |
+| `mp-settings` | 1,760 | — | `Settings.cs`: directories, `config.xml`, the one-shot import |
+| `mp-update` | 1,243 | — | `Update.cs` and `Updater/Program.cs`: the version check, the download, the swap and restart |
+| `mp-mavlink-dialects` | 568 | 49,060 | |
+| `mp-fuzz-checks` | 516 | — | the fuzz properties on stable |
+| `xtask` | 6,771 | — | the ledger; codegen for mavlink, param_meta, modes and resx; the graph and dead-C# tests |
 
-What exists is the operator's application, wide and uneven: the telemetry spine with the C#'s
-retries, the map with the C#'s providers and cache, mission planning with 95 of the planner's 121
-actions and every grid bit-identical to the C#, the flight screen with 96 of its 136, 11 of 61
-configuration pages whole and 20 partial, calibration, firmware up to the point of touching a board,
-the log browser with 28 of its 37 wirings, geo-referencing, RTK injection, recording, and
-`config.xml` shared with the C# application. What does **not** exist: any run on Windows or macOS
-(no remote; the CI matrix has never executed), `mp-ui` and `mp-render`, the dispatcher and the
-per-file contract, the DSDL, `.resx` and screen-spec generators, i18n, video, 3D, DroneCAN,
-packaging, a scripting engine, and the mutation self-test. The ledger has 3,678 rows and 63 of them
-are past `ready` - 54 `tested`, 9 `ported`, 76,375 of 1,208,836 lines - after §13.6 row 72's
-re-entry of what the oracles and the coverage ledgers prove; `cargo xtask ledger status` counts
-retired lines only at `done`, which nothing has reached, because `done` needs the review gate.
+What exists is the operator's application, wide and now nearly even: the telemetry spine with the
+C#'s retries, the map with the C#'s providers and cache, mission planning with 107 of the planner's
+121 actions and every grid bit-identical to the C#, the flight screen with 113 of its 136, 41 of 61
+configuration pages whole and 6 partial, calibration, firmware flashed to the bench board from Linux
+and from the Windows VM, the log browser with all 37 wirings, geo-referencing, RTK injection,
+DroneCAN and Sik Radio against stand-ins, the warnings engine, the Scripts tab on RustPython with the
+C#'s objects handed to scripts, the WebAssembly plugin host, video capture on both desktops and
+GStreamer streams, the updater, crash reports and a Debian package, the HTTP server, and
+`config.xml` shared with the C# application. What does **not** exist: any run on macOS (no remote;
+the CI matrix has never executed; Windows has run in the owner's VM only), `mp-ui` and `mp-render`,
+the dispatcher and the per-file contract, the DSDL and screen-spec generators, i18n beyond the
+flight screen (held at the owner's word), 3D, speech, signing and the other installers, and the
+mutation self-test. The ledger has 3,678 rows: 196 past `ready` (187 `tested`, 9 `ported`, 117,472
+lines), 864 `dropped` with their reasons (149,229 lines) and 2,618 `ready`; `cargo xtask ledger
+status` counts retired lines only at `done`, which nothing has reached, because `done` needs the
+review gate.
 
 The crate graph has §5.1's layering for the crates that exist, and `xtask/tests/graph.rs` holds it
 there: every crate is placed in a layer and the test fails on a UI framework below L6, `mp-link`
@@ -943,6 +953,26 @@ with a single owner** (review-bound). `~930 G3 review-hours` is the number that 
 > flash. **Phases 7-12:** not started. §10.3's MVP cut line is met on Linux, bar the 10 M-point
 > review at 120 fps, which is unmeasured - and on Linux only.
 
+> **Where it stands, 2026-10-03.** **Phase 1 / M1:** clause 1 on SITL and on the bench board from
+> both desktops; 2 and 3 still CPU-side; 4 wired - `param.pck` over MAVFTP first, the stream as the
+> fallback, at connect; 5 the recording is byte-compatible and has not been opened in the C#; 6 half
+> (0 allocations proven; the window still repaints every 100 ms when idle, so "0 frames when
+> disconnected" is not met); 7 the flight screen's 46 strings only, held at the owner's word.
+> **Phase 3:** grids bit-identical; the 200-waypoint round trip over a lossy link not done.
+> **Phase 4:** 1 GB opens in 0.6 s; the 10 M-point scrub p99 3.41 ms CPU-side; 2,076 graph
+> expressions evaluate; the LogAnalyzer checks run in-process; the spectrogram drawn. **Phase 5:**
+> 41 of 61 panels whole, 6 partial, none schema-driven. **Phase 6:** the bench CubeOrange flashed
+> from Linux (2026-09-25) and Windows (2026-09-27); no three-board rig; SiK configured and its
+> bootloaders uploaded against a scripted stand-in, not real radios. **Phase 7:** capture on Linux
+> (V4L2) and Windows (Media Foundation), GStreamer, HereLink and MJPEG streams, the gimbal's video,
+> AVI recording; no 3D, no hardware decode. **Phase 8:** DroneCAN over SLCAN, MAVLinkCAN and
+> multicast against stand-ins, never a real bus; RTK injection; swarm dropped (D13); the joystick on
+> Linux only. **Phase 9:** the updater, crash reports and a `.deb`; i18n's first half; nothing signed,
+> no MSI, `.dmg` or AppImage. **Phase 10:** the WebAssembly plugin host with the four shipped plugins
+> and seven examples; the 19 scripts on RustPython behind the CLR shim. **Phase 11:** 196 of 3,678
+> rows past `ready`, 864 `dropped` with their reasons. **Phase 12:** not started - D22 chose
+> WebAssembly first.
+
 ### 10.1 M1 — "FIRST FLIGHT", the first falsifiable milestone
 
 **Target: end of Phase 1, week 14–18** (not week 10 — that estimate was off by ~3×; gpui ships no
@@ -1441,7 +1471,7 @@ recorded, not ported; ledger `ConfigFFT` Done. Owner's questions: "Run all imus 
 three instances as one interleaved series as the C# does, which peaks at a third of the rate - split by
 instance?; Advanced's FFT button could open the same window; Bins capped at 20); `nearest_point` in the log browser is still O(n)), the `loom`
 model of the publish path (D5; the snapshot bench and its eight-reader gate exist since 2026-09-24: publish p99 26.7 µs, load p99 899 ns, no allocation), the mutation self-test (D19), the
-figure from `benches/decode.rs` (D2; recorded 2026-09-24: 9.5 M frames/s framing and CRC on one core), the ≤ 1 ms transport bench (D3; `benches/latency.rs` since 2026-09-24: nothing measurable added over TCP, 116 ns over a pseudo-terminal, at p99), and everything of D15, D16, D20 and D21.
+figure from `benches/decode.rs` (D2; recorded 2026-09-24: 9.5 M frames/s framing and CRC on one core), the ≤ 1 ms transport bench (D3; `benches/latency.rs` since 2026-09-24: nothing measurable added over TCP, 116 ns over a pseudo-terminal, at p99), D15's speech and HIL and its Windows joystick reader, D16's kill switch and sandbox tests, D20's signing and the MSI, `.dmg` and AppImage, and D21's native host, not needed under D22 unless the WebAssembly host fails (D15, D16 and D20 themselves are largely built since: DELIVERABLES.md's rows, 2026-10-03).
 
 ## Appendix A — claims this plan refutes
 
