@@ -133,7 +133,7 @@ fn main() -> std::process::ExitCode {
                      headless-planner log bintolog <file.bin> [out.log]     Convert .Bin to .Log\n  \
                      headless-planner log dflogtokml <file> [dir]           Create KML + gpx\n  \
                      headless-planner log matlab <file> [out.mat]           Create Matlab file\n  \
-                     headless-planner log loganalysis <file> [dir]          Auto Analysis\n  \
+                     headless-planner log loganalysis <file> [out.xml]      Auto Analysis\n  \
                      headless-planner log fft <file> <MSG.Field> [size]     the FFT window's spectrum and peaks"
                 );
                 std::process::ExitCode::from(2)
@@ -229,7 +229,7 @@ fn usage() {
   headless-planner log bintolog <bin> [out]   Convert .Bin to .Log, as the DataFlash Logs page does
   headless-planner log dflogtokml <log> [dir] Create KML + gpx (.kmz, .gpx, waypoints, .param, RINEX)
   headless-planner log matlab <log> [out]     Create Matlab file (.mat)
-  headless-planner log loganalysis <log> [dir] Auto Analysis: run ArduPilot's LogAnalyzer, print its report
+  headless-planner log loganalysis <log> [xml] Auto Analysis: ArduPilot's LogAnalyzer checks on the log, its report printed
   headless-planner log fft <log> <MSG.Field> [size] the FFT window's averaged spectrum, its peaks in hz/rpm
   headless-planner logs <url> [ID] [DIR]   list the vehicle's logs, or download one
   headless-planner ftp ls|get|put|rm|crc   the vehicle's files over MAVFTP (headless-planner ftp for more)\n  \

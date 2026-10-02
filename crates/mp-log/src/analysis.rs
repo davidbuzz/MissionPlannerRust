@@ -1,34 +1,38 @@
-//! Auto Analysis: Mission Planner does not analyse a log itself. It runs ArduPilot's Python
-//! `LogAnalyzer`, packaged by py2exe as `runner.exe`, and shows what that writes.
+//! Auto Analysis: ArduPilot's `LogAnalyzer`, which Mission Planner runs as `runner.exe`, ported
+//! and run in-process.
 //!
 //! `BUT_loganalysis_Click` (`GCSViews/FlightData.cs:1311-1385`) converts a `.bin` to a temporary
 //! `.log` with `BinaryLog.ConvertBin`, then `LogAnalyzer.CheckLogFile` (`Utilities/LogAnalyzer.cs:
-//! 18-115`) downloads `LogAnalyzer64.zip` (or `LogAnalyzer.zip` on a 32-bit system) from
-//! firmware.ardupilot.org into `<data dir>/LogAnalyzer/` - every time, falling back to the copy
-//! already there when the download fails - extracts it, and runs
-//! `runner.exe -x "<log>.xml" -s "<log>"` there, waiting for it to finish. `LogAnalyzer.Results`
-//! reads the XML it wrote and `Controls.LogAnalyzer` shows it as text.
+//! 18-115`) downloads `LogAnalyzer64.zip` from firmware.ardupilot.org into
+//! `<data dir>/LogAnalyzer/`, extracts it and runs `runner.exe -x "<log>.xml" -s "<log>"` there -
+//! ArduPilot's Python `LogAnalyzer` packaged by py2exe, a Windows program - and
+//! `LogAnalyzer.Results` reads the XML it wrote, which `Controls.LogAnalyzer` shows as text.
 //!
-//! So this ports exactly that and no more: the download's URL and destination (the fetch itself is
-//! the caller's, as it owns the network), the extraction, the command line, the reading of the
-//! XML - quirks included - and the report text. The checks are the Python tool's; none of them is
-//! reimplemented here. `runner.exe` is a Windows program: on any other system it does not start,
-//! which is also what Mission Planner does there, and the error says so.
+//! The runner's source is in the C# tree (`LogAnalyzer/py2exe`: `DataflashLog.py`,
+//! `LogAnalyzer.py`, `VehicleType.py` and `tests/*.py`) and is ported under this module:
+//! [`logdata`] reads the `.log` as the Python does, [`checks`] are its seventeen tests, [`suite`]
+//! runs them and writes the XML `outputXML` writes, `<log>.xml` beside the log as `-x` names it.
+//! So the analysis runs on every platform with nothing fetched: the download, the zip and the
+//! process are what this port leaves out of `CheckLogFile`, and the "Failed to download
+//! LogAnalyzer" and "Failed to start LogAnalyzer" boxes with them. The XML is still written and
+//! read back with the C#'s own reading ([`results`]), quirks included, and shown as its text
+//! ([`report`]).
 //!
-//! `tests/analysis.rs` holds [`results`] and [`report`] to the C#'s own reading of the analyzer's
-//! example output, byte for byte.
-//! `// C#: GCSViews/FlightData.cs:1311-1385; Utilities/LogAnalyzer.cs; Controls/LogAnalyzer.cs`
+//! Held to the Python itself: `tests/analysis.rs` runs the port over the checked-in logs against
+//! the XML Python 2.7 wrote for the same text (`testdata/dataflash/golden/loganalysis`, made by
+//! `tools/loganalyzer-golden.sh`), and `report` to the C#'s reading of the analyzer's example
+//! output, byte for byte.
+//! `// C#: GCSViews/FlightData.cs:1311-1385; Utilities/LogAnalyzer.cs; Controls/LogAnalyzer.cs;
+//! LogAnalyzer/py2exe`
+
+mod checks;
+mod logdata;
+mod pyval;
+mod suite;
 
 use std::path::{Path, PathBuf};
 
 use crate::convert::{ModeName, convert_bin_file};
-
-/// What `CheckLogFile` downloads on a 64-bit system. `// C#: Utilities/LogAnalyzer.cs:42-44`
-pub const ANALYZER_URL_64: &str =
-    "https://firmware.ardupilot.org/Tools/MissionPlanner/LogAnalyzer/LogAnalyzer64.zip";
-/// What `CheckLogFile` downloads on a 32-bit system. `// C#: Utilities/LogAnalyzer.cs:48-50`
-pub const ANALYZER_URL_32: &str =
-    "https://firmware.ardupilot.org/Tools/MissionPlanner/LogAnalyzer/LogAnalyzer.zip";
 
 /// `Environment.NewLine`, which the report's header lines end with.
 const NEWLINE: &str = if cfg!(windows) { "\r\n" } else { "\n" };
@@ -39,13 +43,8 @@ pub enum AnalysisError {
     /// "File access issue: ..." - the `.bin` could not be converted.
     #[error("File access issue: {0}")]
     FileAccess(std::io::Error),
-    /// "Failed to download LogAnalyzer": no download, and no runner from before.
-    #[error("Failed to download LogAnalyzer")]
-    Download,
-    /// "Failed to start LogAnalyzer": the runner would not run - as on any system but Windows.
-    #[error("Failed to start LogAnalyzer: {0}")]
-    Start(std::io::Error),
-    /// "Bad input file": the runner wrote no XML.
+    /// "Bad input file": the analyzer wrote no XML - the log would not open or read (the Python
+    /// raises out of `DataflashLog.read`), or the XML could not be written.
     #[error("Bad input file")]
     BadInputFile,
     /// "Failed to load analyzer results" - the XML did not read.
@@ -94,87 +93,59 @@ pub struct TestResult {
     pub data: Option<String>,
 }
 
-/// The URL `CheckLogFile` fetches: by the bitness of the system, `Is64BitOperatingSystem`.
+/// Where the analyzer writes its XML: `<log>.xml`, the `-x` argument `CheckLogFile` passes.
+/// `// C#: Utilities/LogAnalyzer.cs:80-84`
 #[must_use]
-pub const fn analyzer_url() -> &'static str {
-    if cfg!(target_pointer_width = "64") {
-        ANALYZER_URL_64
-    } else {
-        ANALYZER_URL_32
-    }
-}
-
-/// Where the analyzer lives: `<data dir>/LogAnalyzer/`. `// C#: Utilities/LogAnalyzer.cs:26-27`
-#[must_use]
-pub fn analyzer_dir(data_dir: &Path) -> PathBuf {
-    data_dir.join("LogAnalyzer")
-}
-
-/// The command `CheckLogFile` runs: `runner.exe -x "<log>.xml" -s "<log>"`, in the analyzer's
-/// directory, its output collected. `// C#: Utilities/LogAnalyzer.cs:80-91`
-#[must_use]
-pub fn runner_command(dir: &Path, log: &Path) -> std::process::Command {
+pub fn xml_path_for(log: &Path) -> PathBuf {
     let mut xml = log.as_os_str().to_owned();
     xml.push(".xml");
-    let mut command = std::process::Command::new(dir.join("runner.exe"));
-    command
-        .arg("-x")
-        .arg(xml)
-        .arg("-s")
-        .arg(log)
-        .current_dir(dir)
-        .stdout(std::process::Stdio::piped())
-        .stderr(std::process::Stdio::piped());
-    command
+    PathBuf::from(xml)
 }
 
-/// `CheckLogFile`: makes sure the analyzer is there - `fetch(url, zip)` downloads it, returning
-/// whether it did, and a fresh download is extracted over the old - runs it on `log` and returns
-/// where it was told to write its XML, `<log>.xml`, whether or not it did.
+/// `runner.exe -x <xml> -s <log>`: reads `log` as `DataflashLog` reads it - `-s`, lines that will
+/// not read skipped - runs the checks and writes the analyzer's XML to `xml`, whose text is
+/// returned. A log that never names a known vehicle is written as far as the Python gets before
+/// it raises, the header cut at its duration.
 ///
 /// # Errors
 ///
-/// [`AnalysisError::Download`] when there is neither a download nor a runner from before, and
-/// [`AnalysisError::Start`] when the runner will not run.
-/// `// C#: Utilities/LogAnalyzer.cs:18-115`
-pub fn check_log_file(
-    log: &Path,
-    dir: &Path,
-    fetch: &mut dyn FnMut(&str, &Path) -> bool,
-) -> Result<PathBuf, AnalysisError> {
-    let runner = dir.join("runner.exe");
-    let zip = dir.join("LogAnalyzer.zip");
-    std::fs::create_dir_all(dir).map_err(|_| AnalysisError::Download)?;
-    if fetch(analyzer_url(), &zip) {
-        let data = std::fs::read(&zip).map_err(|_| AnalysisError::Download)?;
-        crate::zip::extract(&data, dir).map_err(|_| AnalysisError::Download)?;
-    } else if !runner.exists() {
-        return Err(AnalysisError::Download);
-    }
-    if !runner.exists() {
-        return Err(AnalysisError::Download);
-    }
-    // "until we are done": the output is only logged.
-    runner_command(dir, log)
-        .output()
-        .map_err(AnalysisError::Start)?;
-    let mut xml = log.as_os_str().to_owned();
-    xml.push(".xml");
-    Ok(PathBuf::from(xml))
+/// [`AnalysisError::BadInputFile`] when the log does not open or read, or the XML cannot be
+/// written: the runner then leaves no XML.
+pub fn run_analyzer(log: &Path, xml: &Path) -> Result<String, AnalysisError> {
+    let bytes = std::fs::read(log).map_err(|_| AnalysisError::BadInputFile)?;
+    // The Python reads bytes; a log that is not UTF-8 is read with its bad bytes replaced, which
+    // counts those bytes differently in the size.
+    let text = String::from_utf8_lossy(&bytes);
+    let mut data = logdata::DataflashLog::read(&text, &log.display().to_string(), true)
+        .map_err(|_| AnalysisError::BadInputFile)?;
+    let ran = suite::run(&mut data);
+    let written = match suite::output_xml(&data, &ran) {
+        Ok(xml) | Err(xml) => xml,
+    };
+    std::fs::write(xml, &written).map_err(|_| AnalysisError::BadInputFile)?;
+    Ok(written)
 }
 
 /// Auto Analysis (`BUT_loganalysis`) for one file: a `.bin` is converted to a temporary `.log`
-/// first, the analyzer is run on it ([`check_log_file`]), and what it wrote is read
-/// ([`results`]); the temporary `.log` is deleted afterwards, its `.xml` is not.
+/// first, the analyzer is run on it ([`run_analyzer`]) with its XML beside it, and what it wrote
+/// is read ([`results`]); the temporary `.log` is deleted afterwards, its `.xml` is not.
 ///
 /// # Errors
 ///
 /// Each of the button's message boxes: see [`AnalysisError`].
 /// `// C#: GCSViews/FlightData.cs:1311-1385`
-pub fn analyse(
+pub fn analyse(log: &Path, mode_name: ModeName<'_>) -> Result<Analysis, AnalysisError> {
+    analyse_to(log, None, mode_name)
+}
+
+/// [`analyse`], with the XML written to `xml` when one is named instead of beside the log.
+///
+/// # Errors
+///
+/// As [`analyse`].
+pub fn analyse_to(
     log: &Path,
-    dir: &Path,
-    fetch: &mut dyn FnMut(&str, &Path) -> bool,
+    xml: Option<&Path>,
     mode_name: ModeName<'_>,
 ) -> Result<Analysis, AnalysisError> {
     let is_bin = log.to_string_lossy().to_lowercase().ends_with(".bin");
@@ -191,10 +162,9 @@ pub fn analyse(
         None
     };
     let file = converted.as_deref().unwrap_or(log);
-    let outcome = check_log_file(file, dir, fetch).and_then(|xml| {
-        let text = std::fs::read_to_string(&xml).map_err(|_| AnalysisError::BadInputFile)?;
-        results(&text).map_err(AnalysisError::Results)
-    });
+    let xml = xml.map_or_else(|| xml_path_for(file), Path::to_path_buf);
+    let outcome =
+        run_analyzer(file, &xml).and_then(|text| results(&text).map_err(AnalysisError::Results));
     if let Some(temp) = converted {
         let _ = std::fs::remove_file(temp);
     }
@@ -431,17 +401,41 @@ mod tests {
     }
 
     #[test]
-    fn the_command_line_is_the_csharps() {
-        let command = runner_command(Path::new("/data/LogAnalyzer"), Path::new("/logs/a b.log"));
+    fn the_xml_goes_beside_the_log_and_a_missing_log_is_a_bad_input_file() {
         assert_eq!(
-            command.get_program(),
-            Path::new("/data/LogAnalyzer/runner.exe")
+            xml_path_for(Path::new("/logs/a b.log")),
+            PathBuf::from("/logs/a b.log.xml")
         );
-        let args: Vec<_> = command.get_args().collect();
-        assert_eq!(args, ["-x", "/logs/a b.log.xml", "-s", "/logs/a b.log"]);
-        assert_eq!(
-            command.get_current_dir(),
-            Some(Path::new("/data/LogAnalyzer"))
+        let missing =
+            std::env::temp_dir().join(format!("mp-log-missing-{}.log", std::process::id()));
+        let outcome = run_analyzer(&missing, &xml_path_for(&missing));
+        assert!(matches!(outcome, Err(AnalysisError::BadInputFile)));
+        assert!(!xml_path_for(&missing).exists());
+    }
+
+    /// A log that never names a vehicle: the XML is cut at its duration, as the Python's crash
+    /// leaves it, and the C#'s reading of it fails - "Failed to load analyzer results".
+    #[test]
+    fn an_unknown_vehicle_is_a_truncated_xml_that_fails_to_load() {
+        let dir = std::env::temp_dir().join(format!("mp-log-novehicle-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let log = dir.join("sub.log");
+        std::fs::write(
+            &log,
+            "FMT, 128, 89, FMT, BBnNZ, Type,Length,Name,Format,Columns\n\
+             FMT, 10, 10, MSG, QZ, TimeUS,Message\nMSG, 1, ArduSub V4.5.7 (1a2b3c4d)\n",
+        )
+        .unwrap();
+        let outcome = analyse(&log, &crate::convert::no_mode_names);
+        assert!(
+            matches!(outcome, Err(AnalysisError::Results(_))),
+            "{outcome:?}"
         );
+        let written = std::fs::read_to_string(xml_path_for(&log)).unwrap();
+        assert!(
+            written.ends_with("<duration>0:00:00</duration>\n"),
+            "{written}"
+        );
+        std::fs::remove_dir_all(&dir).unwrap();
     }
 }

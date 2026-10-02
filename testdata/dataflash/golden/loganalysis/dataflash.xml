@@ -1,0 +1,1097 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<loganalysis>
+<header>
+  <logfile>/w/logs/mpdf.log</logfile>
+  <sizekb>848.51953125</sizekb>
+  <sizelines>10888</sizelines>
+  <duration>0:00:18</duration>
+  <vehicletype>ArduCopter</vehicletype>
+  <firmwareversion>V4.2.2</firmwareversion>
+  <firmwarehash>4fcfa4b2</firmwarehash>
+  <hardwaretype></hardwaretype>
+  <freemem>0</freemem>
+  <skippedlines>0</skippedlines>
+</header>
+<params>
+  <param name="GPS_INJECT_TO" value="127.0" />
+  <param name="RC7_MAX" value="1900.0" />
+  <param name="ADSB_LOG" value="1.0" />
+  <param name="BATT7_MONITOR" value="0.0" />
+  <param name="BARO2_WCF_ENABLE" value="0.0" />
+  <param name="ADSB_LIST_MAX" value="25.0" />
+  <param name="FLTMODE1" value="0.0" />
+  <param name="FLTMODE3" value="0.0" />
+  <param name="FLTMODE2" value="0.0" />
+  <param name="FLTMODE5" value="0.0" />
+  <param name="FLTMODE4" value="0.0" />
+  <param name="FLTMODE6" value="0.0" />
+  <param name="INS_LOG_BAT_LGIN" value="20.0" />
+  <param name="EK3_MAG_EF_LIM" value="50.0" />
+  <param name="FS_CRASH_CHECK" value="1.0" />
+  <param name="ADSB_LEN_WIDTH" value="1.0" />
+  <param name="PILOT_SPEED_UP" value="250.0" />
+  <param name="BARO3_GND_PRESS" value="0.0" />
+  <param name="RC15_MIN" value="1100.0" />
+  <param name="COMPASS_DIA3_Y" value="0.0" />
+  <param name="COMPASS_DIA3_X" value="0.0" />
+  <param name="MOT_SLEW_UP_TIME" value="0.0" />
+  <param name="COMPASS_DIA3_Z" value="0.0" />
+  <param name="SERVO14_MIN" value="1100.0" />
+  <param name="INS_ACC3_CALTEMP" value="53.01056" />
+  <param name="DROP_CAMTHR" value="1100.0" />
+  <param name="WPNAV_TER_MARGIN" value="10.0" />
+  <param name="GPS_COM_PORT" value="1.0" />
+  <param name="GPS_GNSS_MODE" value="0.0" />
+  <param name="RC11_OPTION" value="0.0" />
+  <param name="EK3_WENC_VERR" value="0.1" />
+  <param name="SIMPLE" value="0.0" />
+  <param name="RNGFNDA_TYPE" value="0.0" />
+  <param name="SERVO1_MIN" value="1100.0" />
+  <param name="SERIAL6_BAUD" value="115200.0" />
+  <param name="EK3_RNG_I_GATE" value="500.0" />
+  <param name="SERVO1_FUNCTION" value="33.0" />
+  <param name="LOG_BACKEND_TYPE" value="1.0" />
+  <param name="SERVO2_FUNCTION" value="34.0" />
+  <param name="BARO_FLTR_RNG" value="0.0" />
+  <param name="AVOID_BEHAVE" value="0.0" />
+  <param name="FRSKY_UPLINK_ID" value="13.0" />
+  <param name="SERVO9_REVERSED" value="0.0" />
+  <param name="EK3_OGN_HGT_MASK" value="0.0" />
+  <param name="SERVO16_MIN" value="1100.0" />
+  <param name="SERVO15_MAX" value="1900.0" />
+  <param name="MNT_TYPE" value="0.0" />
+  <param name="SR4_EXT_STAT" value="0.0" />
+  <param name="EK3_ABIAS_P_NSE" value="0.003" />
+  <param name="SERVO13_REVERSED" value="0.0" />
+  <param name="RC3_MAX" value="1900.0" />
+  <param name="COMPASS_DEV_ID8" value="0.0" />
+  <param name="BRD_SBUS_OUT" value="0.0" />
+  <param name="COMPASS_DEV_ID3" value="0.0" />
+  <param name="COMPASS_DEV_ID2" value="94467.0" />
+  <param name="COMPASS_DEV_ID7" value="0.0" />
+  <param name="COMPASS_DEV_ID6" value="0.0" />
+  <param name="COMPASS_PRIO1_ID" value="590114.0" />
+  <param name="COMPASS_DEV_ID4" value="0.0" />
+  <param name="BATT6_MONITOR" value="0.0" />
+  <param name="SERVO3_MAX" value="1900.0" />
+  <param name="FORMAT_VERSION" value="120.0" />
+  <param name="BARO_PROBE_EXT" value="0.0" />
+  <param name="COMPASS_ENABLE" value="1.0" />
+  <param name="EK3_HRT_FILT" value="2.0" />
+  <param name="RC15_DZ" value="0.0" />
+  <param name="AUTO_OPTIONS" value="7.0" />
+  <param name="RTL_CONE_SLOPE" value="3.0" />
+  <param name="RC7_DZ" value="0.0" />
+  <param name="FENCE_RADIUS" value="300.0" />
+  <param name="GPS_SAVE_CFG" value="2.0" />
+  <param name="SR4_RAW_CTRL" value="0.0" />
+  <param name="INS_GYR1_CALTEMP" value="44.73988" />
+  <param name="SR3_POSITION" value="0.0" />
+  <param name="NTF_LED_LEN" value="1.0" />
+  <param name="SERVO14_FUNCTION" value="0.0" />
+  <param name="FS_EKF_THRESH" value="1.0" />
+  <param name="BRD_SER1_RTSCTS" value="2.0" />
+  <param name="GPS_AUTO_CONFIG" value="2.0" />
+  <param name="CAM_TRIGG_DIST" value="0.0" />
+  <param name="SR3_ADSB" value="0.0" />
+  <param name="OSD_TYPE" value="0.0" />
+  <param name="SERVO_BLH_TMOUT" value="0.0" />
+  <param name="CAN_D1_UC_ESC_OF" value="0.0" />
+  <param name="RC12_MAX" value="1900.0" />
+  <param name="FENCE_ACTION" value="1.0" />
+  <param name="RC13_DZ" value="0.0" />
+  <param name="EK3_GSF_RST_MAX" value="2.0" />
+  <param name="INS_GYR3_CALTEMP" value="49.55308" />
+  <param name="ATC_RAT_YAW_SMAX" value="0.0" />
+  <param name="FRAME_TYPE" value="1.0" />
+  <param name="RC9_MIN" value="1100.0" />
+  <param name="EK3_DRAG_MCOEF" value="0.0" />
+  <param name="LAND_REPOSITION" value="1.0" />
+  <param name="ATC_RAT_PIT_P" value="0.135" />
+  <param name="NTF_BUZZ_VOLUME" value="100.0" />
+  <param name="RC_OVERRIDE_TIME" value="3.0" />
+  <param name="VTX_ENABLE" value="0.0" />
+  <param name="EK3_RNG_M_NSE" value="0.5" />
+  <param name="GPS_MIN_DGPS" value="100.0" />
+  <param name="LOG_FILE_RATEMAX" value="0.0" />
+  <param name="SERVO_BLH_DEBUG" value="0.0" />
+  <param name="SERVO8_MAX" value="1900.0" />
+  <param name="INS_FAST_SAMPLE" value="7.0" />
+  <param name="RC4_OPTION" value="0.0" />
+  <param name="EK3_GLITCH_RAD" value="25.0" />
+  <param name="EK3_PRIMARY" value="0.0" />
+  <param name="STAT_RESET" value="208252400.0" />
+  <param name="GCS_PID_MASK" value="0.0" />
+  <param name="FENCE_TYPE" value="7.0" />
+  <param name="RTL_ALT" value="1500.0" />
+  <param name="SERIAL4_PROTOCOL" value="5.0" />
+  <param name="RTL_LOIT_TIME" value="5000.0" />
+  <param name="MOT_PWM_MIN" value="1000.0" />
+  <param name="SERIAL2_BAUD" value="57.0" />
+  <param name="EK3_GPS_CHECK" value="31.0" />
+  <param name="SERIAL5_BAUD" value="57.0" />
+  <param name="MOT_PWM_MAX" value="2000.0" />
+  <param name="RC12_DZ" value="0.0" />
+  <param name="SERVO11_FUNCTION" value="0.0" />
+  <param name="SERVO_SBUS_RATE" value="50.0" />
+  <param name="MOT_BAT_VOLT_MAX" value="0.0" />
+  <param name="RC16_DZ" value="0.0" />
+  <param name="ADSB_OPTIONS" value="0.0" />
+  <param name="INITIAL_MODE" value="0.0" />
+  <param name="SERIAL1_BAUD" value="57.0" />
+  <param name="INS_ACC2OFFS_Y" value="-0.04938578" />
+  <param name="STAT_FLTTIME" value="0.0" />
+  <param name="SERVO9_MIN" value="1100.0" />
+  <param name="RC10_TRIM" value="1500.0" />
+  <param name="ATC_RATE_R_MAX" value="0.0" />
+  <param name="ATC_THR_MIX_MAX" value="0.5" />
+  <param name="FRSKY_DNLINK1_ID" value="20.0" />
+  <param name="BRD_PWM_VOLT_SEL" value="0.0" />
+  <param name="EK3_SRC2_VELXY" value="0.0" />
+  <param name="BRD_ALT_CONFIG" value="0.0" />
+  <param name="LOG_FILE_MB_FREE" value="500.0" />
+  <param name="RC16_MAX" value="1900.0" />
+  <param name="ATC_THR_MIX_MAN" value="0.1" />
+  <param name="SERVO_DSHOT_RATE" value="0.0" />
+  <param name="FS_EKF_ACTION" value="1.0" />
+  <param name="MOT_THST_EXPO" value="0.65" />
+  <param name="SERVO_BLH_TEST" value="0.0" />
+  <param name="RC2_MAX" value="1900.0" />
+  <param name="EK3_RNG_USE_SPD" value="2.0" />
+  <param name="SERVO11_TRIM" value="1500.0" />
+  <param name="CAN_D1_UC_NTF_RT" value="20.0" />
+  <param name="INS_TCAL2_ENABLE" value="0.0" />
+  <param name="SERVO2_MAX" value="1900.0" />
+  <param name="RC15_TRIM" value="1500.0" />
+  <param name="RC8_REVERSED" value="0.0" />
+  <param name="RELAY_PIN" value="-1.0" />
+  <param name="RC5_REVERSED" value="0.0" />
+  <param name="TERRAIN_ENABLE" value="0.0" />
+  <param name="INS_LOG_BAT_OPT" value="0.0" />
+  <param name="SCR_USER2" value="0.0" />
+  <param name="ATC_RAT_PIT_I" value="0.135" />
+  <param name="EK3_MAGB_P_NSE" value="0.0001" />
+  <param name="MOT_SPIN_ARM" value="0.1" />
+  <param name="SERVO4_MIN" value="1100.0" />
+  <param name="SERVO5_FUNCTION" value="37.0" />
+  <param name="RC5_DZ" value="0.0" />
+  <param name="SERIAL0_PROTOCOL" value="2.0" />
+  <param name="ATC_RAT_PIT_D" value="0.0036" />
+  <param name="SERVO12_FUNCTION" value="0.0" />
+  <param name="CAN_D1_UC_SRV_RT" value="50.0" />
+  <param name="COMPASS_OFS3_Y" value="0.0" />
+  <param name="COMPASS_OFS3_X" value="0.0" />
+  <param name="SUPER_SIMPLE" value="0.0" />
+  <param name="COMPASS_OFS3_Z" value="0.0" />
+  <param name="PSC_ANGLE_MAX" value="0.0" />
+  <param name="SR3_RAW_CTRL" value="0.0" />
+  <param name="SERVO3_REVERSED" value="0.0" />
+  <param name="PHLD_BRAKE_RATE" value="8.0" />
+  <param name="BRD_VSERVO_MIN" value="0.0" />
+  <param name="SERVO6_REVERSED" value="0.0" />
+  <param name="COMPASS_SCALE3" value="0.0" />
+  <param name="COMPASS_SCALE2" value="0.0" />
+  <param name="DROP_ALTAHI" value="110.0" />
+  <param name="ACRO_OPTIONS" value="0.0" />
+  <param name="COMPASS_OFS2_X" value="-123.8821" />
+  <param name="COMPASS_OFS2_Y" value="148.4978" />
+  <param name="COMPASS_OFS2_Z" value="-16.08124" />
+  <param name="RC11_REVERSED" value="0.0" />
+  <param name="EFI_TYPE" value="0.0" />
+  <param name="RC1_MAX" value="1900.0" />
+  <param name="SERVO_ROB_POSMAX" value="4095.0" />
+  <param name="BRD_SAFETY_MASK" value="16128.0" />
+  <param name="TUNE_MAX" value="0.0" />
+  <param name="WPNAV_ACCEL" value="250.0" />
+  <param name="MOT_BOOST_SCALE" value="0.0" />
+  <param name="ATC_ANG_RLL_P" value="4.5" />
+  <param name="FRAME_CLASS" value="4.0" />
+  <param name="RC7_MIN" value="1100.0" />
+  <param name="GPS_NAVFILTER" value="8.0" />
+  <param name="FHLD_BRAKE_RATE" value="8.0" />
+  <param name="FENCE_MARGIN" value="2.0" />
+  <param name="SERVO_FTW_POLES" value="14.0" />
+  <param name="OA_TYPE" value="0.0" />
+  <param name="PSC_VELZ_FF" value="0.0" />
+  <param name="COMPASS_DIA2_Y" value="1.017144" />
+  <param name="COMPASS_DIA2_Z" value="0.9873692" />
+  <param name="EK3_GBIAS_P_NSE" value="0.001" />
+  <param name="ACRO_BAL_ROLL" value="1.0" />
+  <param name="AHRS_TRIM_Z" value="0.0" />
+  <param name="AHRS_TRIM_Y" value="-0.01761861" />
+  <param name="AHRS_TRIM_X" value="0.06177292" />
+  <param name="RC10_MAX" value="1900.0" />
+  <param name="COMPASS_DEV_ID" value="590114.0" />
+  <param name="SERVO_BLH_3DMASK" value="0.0" />
+  <param name="DISARM_DELAY" value="10.0" />
+  <param name="RALLY_TOTAL" value="0.0" />
+  <param name="INS_ACC2_CALTEMP" value="45.56367" />
+  <param name="CAM_RC_TYPE" value="0.0" />
+  <param name="EK3_SRC1_VELZ" value="3.0" />
+  <param name="EK3_FLOW_USE" value="1.0" />
+  <param name="RC8_MIN" value="1100.0" />
+  <param name="AVOID_BACKUP_SPD" value="0.75" />
+  <param name="EK3_SRC3_YAW" value="0.0" />
+  <param name="SERVO15_REVERSED" value="0.0" />
+  <param name="TUNE" value="0.0" />
+  <param name="INS_ACC_ID" value="3081250.0" />
+  <param name="RC13_OPTION" value="0.0" />
+  <param name="SR1_RAW_SENS" value="0.0" />
+  <param name="INS_LOG_BAT_LGCT" value="32.0" />
+  <param name="FENCE_ALT_MAX" value="100.0" />
+  <param name="SERVO12_REVERSED" value="0.0" />
+  <param name="EK3_VIS_VERR_MAX" value="0.9" />
+  <param name="PLND_ENABLED" value="0.0" />
+  <param name="INS_ACC3OFFS_X" value="-0.009702091" />
+  <param name="INS_ACC3OFFS_Y" value="0.14249" />
+  <param name="INS_ACC3OFFS_Z" value="0.1081693" />
+  <param name="BRD_SAFETYENABLE" value="1.0" />
+  <param name="RPM2_TYPE" value="0.0" />
+  <param name="EK3_SRC1_VELXY" value="3.0" />
+  <param name="MOT_BAT_IDX" value="0.0" />
+  <param name="ZIGZ_AUTO_ENABLE" value="0.0" />
+  <param name="FRSKY_DNLINK2_ID" value="7.0" />
+  <param name="SERVO8_TRIM" value="1500.0" />
+  <param name="CAN_P1_BITRATE" value="1000000.0" />
+  <param name="FHLD_FLOW_MAX" value="0.6" />
+  <param name="DROP_COPTER" value="1.0" />
+  <param name="MOT_HOVER_LEARN" value="2.0" />
+  <param name="SCR_ENABLE" value="1.0" />
+  <param name="RC7_OPTION" value="0.0" />
+  <param name="RSSI_TYPE" value="0.0" />
+  <param name="FRSKY_OPTIONS" value="0.0" />
+  <param name="RC10_REVERSED" value="0.0" />
+  <param name="SERIAL1_OPTIONS" value="0.0" />
+  <param name="SERVO16_TRIM" value="1500.0" />
+  <param name="INS_ENABLE_MASK" value="127.0" />
+  <param name="BATT8_MONITOR" value="0.0" />
+  <param name="CAM_MIN_INTERVAL" value="0.0" />
+  <param name="ADSB_ICAO_SPECL" value="0.0" />
+  <param name="COMPASS_ODI2_X" value="0.06594253" />
+  <param name="PILOT_ACCEL_Z" value="250.0" />
+  <param name="COMPASS_ODI2_Z" value="0.01041939" />
+  <param name="RNGFND3_TYPE" value="0.0" />
+  <param name="COMPASS_DEV_ID5" value="0.0" />
+  <param name="BRD_SAFETYOPTION" value="3.0" />
+  <param name="BRD_HEAT_TARG" value="45.0" />
+  <param name="INS_USE" value="1.0" />
+  <param name="PILOT_THR_FILT" value="0.0" />
+  <param name="SYSID_ENFORCE" value="0.0" />
+  <param name="SERVO5_MAX" value="1900.0" />
+  <param name="FLIGHT_OPTIONS" value="0.0" />
+  <param name="CHUTE_ENABLED" value="0.0" />
+  <param name="DROP_CAMYCH" value="11.0" />
+  <param name="EK3_EAS_I_GATE" value="400.0" />
+  <param name="SR0_RAW_SENS" value="1.0" />
+  <param name="CAM_FEEDBACK_POL" value="1.0" />
+  <param name="EK3_ACC_BIAS_LIM" value="1.0" />
+  <param name="ATC_RATE_P_MAX" value="0.0" />
+  <param name="PSC_VELZ_IMAX" value="1000.0" />
+  <param name="COMPASS_DIA2_X" value="0.9910092" />
+  <param name="AHRS_CUSTOM_ROLL" value="0.0" />
+  <param name="WP_YAW_BEHAVIOR" value="2.0" />
+  <param name="AVOID_ANGLE_MAX" value="1000.0" />
+  <param name="SYSID_THISMAV" value="1.0" />
+  <param name="EK3_VEL_I_GATE" value="500.0" />
+  <param name="AHRS_CUSTOM_YAW" value="0.0" />
+  <param name="AHRS_ORIENTATION" value="0.0" />
+  <param name="COMPASS_SCALE" value="0.0" />
+  <param name="FS_GCS_ENABLE" value="0.0" />
+  <param name="EK3_BCN_I_GTE" value="500.0" />
+  <param name="SCR_HEAP_SIZE" value="204800.0" />
+  <param name="CAM_RELAY_ON" value="1.0" />
+  <param name="SERVO12_MIN" value="1100.0" />
+  <param name="SR1_POSITION" value="0.0" />
+  <param name="RC12_REVERSED" value="0.0" />
+  <param name="CAN_LOGLEVEL" value="0.0" />
+  <param name="COMPASS_EXTERN2" value="1.0" />
+  <param name="COMPASS_EXTERN3" value="0.0" />
+  <param name="NTF_BUZZ_ON_LVL" value="1.0" />
+  <param name="EK3_ERR_THRESH" value="0.2" />
+  <param name="RC11_DZ" value="0.0" />
+  <param name="NTF_BUZZ_PIN" value="-1.0" />
+  <param name="LOG_MAV_RATEMAX" value="0.0" />
+  <param name="SERVO4_FUNCTION" value="36.0" />
+  <param name="COMPASS_PMOT_EN" value="0.0" />
+  <param name="PSC_ACCZ_D" value="0.0" />
+  <param name="RC1_REVERSED" value="0.0" />
+  <param name="MOT_SAFE_TIME" value="1.0" />
+  <param name="RC13_TRIM" value="1500.0" />
+  <param name="INS_HNTCH_ENABLE" value="0.0" />
+  <param name="GPS_POS1_Z" value="0.0" />
+  <param name="GPS_POS1_Y" value="0.0" />
+  <param name="GPS_POS1_X" value="0.0" />
+  <param name="PSC_ACCZ_I" value="1.0" />
+  <param name="BRD_SER2_RTSCTS" value="2.0" />
+  <param name="GPS_DRV_OPTIONS" value="0.0" />
+  <param name="SCHED_OPTIONS" value="0.0" />
+  <param name="INS_GYRO_FILTER" value="20.0" />
+  <param name="WPNAV_RADIUS" value="200.0" />
+  <param name="ATC_ACCEL_Y_MAX" value="27000.0" />
+  <param name="SR3_RAW_SENS" value="0.0" />
+  <param name="SR3_PARAMS" value="0.0" />
+  <param name="ATC_RAT_PIT_FF" value="0.0" />
+  <param name="RC14_TRIM" value="1500.0" />
+  <param name="RC4_TRIM" value="1500.0" />
+  <param name="GPS_MB1_TYPE" value="0.0" />
+  <param name="SR2_RAW_SENS" value="0.0" />
+  <param name="LOG_FILE_BUFSIZE" value="200.0" />
+  <param name="SERVO7_REVERSED" value="0.0" />
+  <param name="COMPASS_MOT3_Z" value="0.0" />
+  <param name="COMPASS_MOT3_Y" value="0.0" />
+  <param name="COMPASS_MOT3_X" value="0.0" />
+  <param name="SR4_EXTRA2" value="0.0" />
+  <param name="EK3_MAG_MASK" value="0.0" />
+  <param name="DROP_ENABLE" value="0.0" />
+  <param name="AVOID_BACKUP_DZ" value="0.1" />
+  <param name="RC5_MIN" value="1100.0" />
+  <param name="COMPASS_MOTCT" value="0.0" />
+  <param name="RC9_MAX" value="1900.0" />
+  <param name="WPNAV_RFND_USE" value="1.0" />
+  <param name="SERVO16_FUNCTION" value="0.0" />
+  <param name="ATC_RATE_Y_MAX" value="0.0" />
+  <param name="EK3_FLOW_DELAY" value="10.0" />
+  <param name="SERVO1_REVERSED" value="0.0" />
+  <param name="DROP_CAMFVY" value="48.0" />
+  <param name="ARMING_CHECK" value="0.0" />
+  <param name="EK3_VIS_VERR_MIN" value="0.1" />
+  <param name="EK3_RNG_USE_HGT" value="-1.0" />
+  <param name="INS_ACC2_ID" value="2883874.0" />
+  <param name="SERVO1_MAX" value="1900.0" />
+  <param name="GPS_DELAY_MS" value="0.0" />
+  <param name="INS_LOG_BAT_CNT" value="1024.0" />
+  <param name="RNGFND1_TYPE" value="0.0" />
+  <param name="COMPASS_AUTO_ROT" value="2.0" />
+  <param name="COMPASS_CUS_YAW" value="0.0" />
+  <param name="SR0_RAW_CTRL" value="0.0" />
+  <param name="FENCE_ENABLE" value="0.0" />
+  <param name="PSC_ACCZ_FLTT" value="0.0" />
+  <param name="ATC_RAT_PIT_SMAX" value="0.0" />
+  <param name="SERVO14_REVERSED" value="0.0" />
+  <param name="LAND_ALT_LOW" value="1000.0" />
+  <param name="SERVO13_TRIM" value="1500.0" />
+  <param name="BRD_BOOT_DELAY" value="0.0" />
+  <param name="INS_HNTC2_ENABLE" value="0.0" />
+  <param name="RC6_MAX" value="1900.0" />
+  <param name="PSC_ACCZ_FLTD" value="0.0" />
+  <param name="PSC_ACCZ_FLTE" value="20.0" />
+  <param name="SERVO15_FUNCTION" value="0.0" />
+  <param name="BATT4_MONITOR" value="0.0" />
+  <param name="RTL_OPTIONS" value="0.0" />
+  <param name="PSC_ACCZ_SMAX" value="0.0" />
+  <param name="SR1_EXT_STAT" value="0.0" />
+  <param name="GPS_RAW_DATA" value="0.0" />
+  <param name="FFT_ENABLE" value="0.0" />
+  <param name="RC6_REVERSED" value="0.0" />
+  <param name="EK3_SRC1_POSZ" value="1.0" />
+  <param name="ARMING_ACCTHRESH" value="0.75" />
+  <param name="EK3_BCN_M_NSE" value="1.0" />
+  <param name="SR4_EXTRA1" value="0.0" />
+  <param name="INS_ACCEL_FILTER" value="20.0" />
+  <param name="SR4_EXTRA3" value="0.0" />
+  <param name="ATC_RAT_YAW_FF" value="0.0" />
+  <param name="SERIAL6_PROTOCOL" value="22.0" />
+  <param name="DROP_DSTTGT" value="500.0" />
+  <param name="SRTL_POINTS" value="0.0" />
+  <param name="RC1_DZ" value="20.0" />
+  <param name="MOT_BAT_VOLT_MIN" value="0.0" />
+  <param name="INS_USE2" value="1.0" />
+  <param name="INS_USE3" value="1.0" />
+  <param name="RC1_OPTION" value="0.0" />
+  <param name="LOG_BITMASK" value="176126.0" />
+  <param name="BRD_RTC_TZ_MIN" value="0.0" />
+  <param name="SERVO10_MAX" value="1900.0" />
+  <param name="GPS_MIN_ELEV" value="-100.0" />
+  <param name="CAM_DURATION" value="10.0" />
+  <param name="BRD_IO_ENABLE" value="1.0" />
+  <param name="RCMAP_THROTTLE" value="3.0" />
+  <param name="BARO1_WCF_ENABLE" value="0.0" />
+  <param name="ATC_ANG_PIT_P" value="4.5" />
+  <param name="SERVO8_REVERSED" value="0.0" />
+  <param name="AVOID_ALT_MIN" value="0.0" />
+  <param name="WP_NAVALT_MIN" value="0.0" />
+  <param name="AHRS_GPS_MINSATS" value="6.0" />
+  <param name="BARO_ALT_OFFSET" value="0.0" />
+  <param name="GEN_TYPE" value="0.0" />
+  <param name="RC2_TRIM" value="1500.0" />
+  <param name="RC1_TRIM" value="1500.0" />
+  <param name="DROP_CMSZCH" value="12.0" />
+  <param name="RELAY_PIN2" value="-1.0" />
+  <param name="ESC_CALIBRATION" value="0.0" />
+  <param name="SERVO7_FUNCTION" value="39.0" />
+  <param name="RC7_REVERSED" value="0.0" />
+  <param name="COMPASS_ORIENT3" value="0.0" />
+  <param name="COMPASS_ORIENT2" value="0.0" />
+  <param name="PSC_VELZ_I" value="0.0" />
+  <param name="FHLD_XY_P" value="0.2" />
+  <param name="SR1_RAW_CTRL" value="0.0" />
+  <param name="ACRO_TRAINER" value="2.0" />
+  <param name="CAM_SERVO_OFF" value="1100.0" />
+  <param name="EK3_OGNM_TEST_SF" value="2.0" />
+  <param name="RC11_MAX" value="1900.0" />
+  <param name="EK3_SRC3_VELZ" value="0.0" />
+  <param name="PSC_VELZ_D" value="0.0" />
+  <param name="SERVO_BLH_TRATE" value="10.0" />
+  <param name="SERVO3_TRIM" value="1500.0" />
+  <param name="RC11_TRIM" value="1500.0" />
+  <param name="EK3_MAGE_P_NSE" value="0.001" />
+  <param name="EK3_WIND_P_NSE" value="0.2" />
+  <param name="PSC_VELZ_P" value="5.0" />
+  <param name="FHLD_XY_I" value="0.3" />
+  <param name="RC13_MIN" value="1100.0" />
+  <param name="RNGFND7_TYPE" value="0.0" />
+  <param name="SERVO6_FUNCTION" value="38.0" />
+  <param name="ATC_INPUT_TC" value="0.15" />
+  <param name="SR4_RC_CHAN" value="0.0" />
+  <param name="EK3_VELNE_M_NSE" value="0.3" />
+  <param name="RC12_OPTION" value="0.0" />
+  <param name="PSC_VELXY_FF" value="0.0" />
+  <param name="LOG_FILE_TIMEOUT" value="5.0" />
+  <param name="LOG_DISARMED" value="0.0" />
+  <param name="RC8_MAX" value="1900.0" />
+  <param name="RC2_OPTION" value="0.0" />
+  <param name="EK3_SRC2_YAW" value="0.0" />
+  <param name="RC1_MIN" value="1100.0" />
+  <param name="ACRO_Y_RATE" value="202.5" />
+  <param name="PSC_ACCZ_FF" value="0.0" />
+  <param name="FENCE_ALT_MIN" value="-10.0" />
+  <param name="EK3_SRC1_POSXY" value="3.0" />
+  <param name="RC3_TRIM" value="1500.0" />
+  <param name="SERVO13_MAX" value="1900.0" />
+  <param name="SERVO_BLH_RVMASK" value="0.0" />
+  <param name="RC8_OPTION" value="0.0" />
+  <param name="RC10_OPTION" value="0.0" />
+  <param name="ATC_RAT_YAW_P" value="0.18" />
+  <param name="ACRO_BAL_PITCH" value="1.0" />
+  <param name="SR2_RC_CHAN" value="0.0" />
+  <param name="SERVO10_REVERSED" value="0.0" />
+  <param name="SURFTRAK_MODE" value="1.0" />
+  <param name="SERVO2_MIN" value="1100.0" />
+  <param name="SERVO_GPIO_MASK" value="0.0" />
+  <param name="ATC_ANG_YAW_P" value="4.5" />
+  <param name="RC3_MIN" value="1100.0" />
+  <param name="ATC_RAT_YAW_D" value="0.0" />
+  <param name="THROW_MOT_START" value="0.0" />
+  <param name="COMPASS_ODI3_Y" value="0.0" />
+  <param name="COMPASS_ODI3_X" value="0.0" />
+  <param name="SR1_EXTRA1" value="0.0" />
+  <param name="ATC_RAT_YAW_I" value="0.018" />
+  <param name="SR3_EXTRA1" value="0.0" />
+  <param name="SR3_EXTRA3" value="0.0" />
+  <param name="SR3_EXTRA2" value="0.0" />
+  <param name="CAN_D2_PROTOCOL" value="0.0" />
+  <param name="SERVO10_FUNCTION" value="0.0" />
+  <param name="ADSB_EMIT_TYPE" value="14.0" />
+  <param name="ATC_THR_MIX_MIN" value="0.1" />
+  <param name="MOT_YAW_HEADROOM" value="200.0" />
+  <param name="SR0_RC_CHAN" value="1.0" />
+  <param name="RC14_MAX" value="1900.0" />
+  <param name="SERVO14_MAX" value="1900.0" />
+  <param name="RC8_TRIM" value="1500.0" />
+  <param name="BRD_RTC_TYPES" value="1.0" />
+  <param name="SERVO9_FUNCTION" value="0.0" />
+  <param name="GPS_AUTO_SWITCH" value="1.0" />
+  <param name="RC16_OPTION" value="0.0" />
+  <param name="FHLD_XY_FILT_HZ" value="5.0" />
+  <param name="SERVO_BLH_OTYPE" value="0.0" />
+  <param name="WPNAV_SPEED_UP" value="250.0" />
+  <param name="RC14_OPTION" value="0.0" />
+  <param name="SERVO8_FUNCTION" value="40.0" />
+  <param name="FRSKY_DNLINK_ID" value="27.0" />
+  <param name="EK3_POS_I_GATE" value="500.0" />
+  <param name="SERVO9_TRIM" value="1500.0" />
+  <param name="MOT_SPIN_MAX" value="0.95" />
+  <param name="INS_GYR2_ID" value="2883874.0" />
+  <param name="COMPASS_MOT2_Z" value="0.0" />
+  <param name="COMPASS_MOT2_X" value="0.0" />
+  <param name="COMPASS_MOT2_Y" value="0.0" />
+  <param name="SERIAL1_PROTOCOL" value="2.0" />
+  <param name="EK3_ENABLE" value="1.0" />
+  <param name="ATC_ACCEL_P_MAX" value="110000.0" />
+  <param name="SERVO13_FUNCTION" value="0.0" />
+  <param name="EK3_MAX_FLOW" value="2.5" />
+  <param name="MSP_OSD_NCELLS" value="0.0" />
+  <param name="SERIAL6_OPTIONS" value="0.0" />
+  <param name="STAT_RUNTIME" value="48808.0" />
+  <param name="EK3_GND_EFF_DZ" value="4.0" />
+  <param name="EK3_SRC3_VELXY" value="0.0" />
+  <param name="COMPASS_CUS_PIT" value="0.0" />
+  <param name="DROP_CAMXCH" value="10.0" />
+  <param name="MOT_SAFE_DISARM" value="0.0" />
+  <param name="COMPASS_CUS_ROLL" value="0.0" />
+  <param name="ARMING_RUDDER" value="2.0" />
+  <param name="SERVO_DSHOT_ESC" value="0.0" />
+  <param name="FOLL_ENABLE" value="0.0" />
+  <param name="SERVO7_MAX" value="1900.0" />
+  <param name="RNGFND_FILT" value="0.5" />
+  <param name="CAN_D1_UC_POOL" value="4096.0" />
+  <param name="SR2_PARAMS" value="0.0" />
+  <param name="EK3_SRC3_POSZ" value="1.0" />
+  <param name="EK3_BETA_MASK" value="0.0" />
+  <param name="BRD_HEAT_IMAX" value="70.0" />
+  <param name="EK2_ENABLE" value="0.0" />
+  <param name="WPNAV_SPEED_DN" value="150.0" />
+  <param name="EK3_YAW_M_NSE" value="0.5" />
+  <param name="RPM1_TYPE" value="0.0" />
+  <param name="INS_ACCSCAL_Z" value="0.9980497" />
+  <param name="INS_ACCSCAL_Y" value="1.025426" />
+  <param name="INS_ACCSCAL_X" value="0.9982893" />
+  <param name="SERIAL5_PROTOCOL" value="1.0" />
+  <param name="RC15_MAX" value="1900.0" />
+  <param name="RC_PROTOCOLS" value="1.0" />
+  <param name="FHLD_FILT_HZ" value="5.0" />
+  <param name="DEV_OPTIONS" value="0.0" />
+  <param name="GPS_POS2_X" value="0.0" />
+  <param name="GPS_POS2_Y" value="0.0" />
+  <param name="INS_TRIM_OPTION" value="1.0" />
+  <param name="SR3_RC_CHAN" value="0.0" />
+  <param name="SERIAL3_PROTOCOL" value="5.0" />
+  <param name="TCAL_ENABLED" value="0.0" />
+  <param name="GPS_DELAY_MS2" value="0.0" />
+  <param name="EK3_MAG_M_NSE" value="0.05" />
+  <param name="EK3_VELD_M_NSE" value="0.5" />
+  <param name="ATC_RAT_RLL_FLTD" value="20.0" />
+  <param name="ATC_RAT_RLL_FLTE" value="0.0" />
+  <param name="EK3_ACC_P_NSE" value="0.35" />
+  <param name="PSC_JERK_XY" value="5.0" />
+  <param name="SERIAL3_OPTIONS" value="0.0" />
+  <param name="ADSB_ICAO_ID" value="0.0" />
+  <param name="SERVO5_TRIM" value="1500.0" />
+  <param name="ATC_RAT_RLL_FLTT" value="20.0" />
+  <param name="WPNAV_JERK" value="1.0" />
+  <param name="SR2_EXT_STAT" value="0.0" />
+  <param name="STAT_BOOTCNT" value="12.0" />
+  <param name="EK3_GSF_RUN_MASK" value="3.0" />
+  <param name="BARO_PRIMARY" value="0.0" />
+  <param name="EK3_ALT_M_NSE" value="2.0" />
+  <param name="SERIAL_PASSTIMO" value="15.0" />
+  <param name="ADSB_LIST_ALT" value="0.0" />
+  <param name="GPS_RATE_MS2" value="200.0" />
+  <param name="RCMAP_YAW" value="4.0" />
+  <param name="RNGFND8_TYPE" value="0.0" />
+  <param name="RNGFND6_TYPE" value="0.0" />
+  <param name="LOIT_ANG_MAX" value="0.0" />
+  <param name="CAN_D1_UC_OPTION" value="0.0" />
+  <param name="MIS_TOTAL" value="7.0" />
+  <param name="BARO3_WCF_ENABLE" value="0.0" />
+  <param name="RELAY_DEFAULT" value="0.0" />
+  <param name="FS_THR_ENABLE" value="0.0" />
+  <param name="EK3_TERR_GRAD" value="0.1" />
+  <param name="BARO2_DEVID" value="721674.0" />
+  <param name="MOT_BAT_CURR_TC" value="5.0" />
+  <param name="RC5_TRIM" value="1500.0" />
+  <param name="PSC_JERK_Z" value="5.0" />
+  <param name="CAM_AUTO_ONLY" value="0.0" />
+  <param name="COMPASS_PRIO3_ID" value="0.0" />
+  <param name="AHRS_YAW_P" value="0.2" />
+  <param name="EK3_DRAG_BCOEF_Y" value="0.0" />
+  <param name="EK3_DRAG_BCOEF_X" value="0.0" />
+  <param name="BRD_HEAT_P" value="50.0" />
+  <param name="NTF_LED_TYPES" value="199.0" />
+  <param name="GPS_GNSS_MODE2" value="0.0" />
+  <param name="CAN_SLCAN_SERNUM" value="-1.0" />
+  <param name="PRX_TYPE" value="0.0" />
+  <param name="BRD_HEAT_I" value="0.07" />
+  <param name="ATC_ANG_LIM_TC" value="1.0" />
+  <param name="INS_ACC3_ID" value="3015690.0" />
+  <param name="CAM_FEEDBACK_PIN" value="-1.0" />
+  <param name="RALLY_LIMIT_KM" value="0.3" />
+  <param name="GPS_SBAS_MODE" value="2.0" />
+  <param name="RC16_REVERSED" value="0.0" />
+  <param name="INS_ACC3SCAL_Z" value="0.9965937" />
+  <param name="INS_ACC3SCAL_Y" value="0.9975719" />
+  <param name="INS_ACC3SCAL_X" value="0.9982489" />
+  <param name="GUID_OPTIONS" value="0.0" />
+  <param name="EK3_GYRO_P_NSE" value="0.015" />
+  <param name="SERVO4_MAX" value="1900.0" />
+  <param name="BRD_TYPE" value="3.0" />
+  <param name="ATC_RAT_RLL_I" value="0.135" />
+  <param name="GRIP_ENABLE" value="0.0" />
+  <param name="FENCE_TOTAL" value="0.0" />
+  <param name="BARO1_DEVID" value="721442.0" />
+  <param name="ATC_RAT_RLL_P" value="0.135" />
+  <param name="AVOID_DIST_MAX" value="5.0" />
+  <param name="RC6_MIN" value="1100.0" />
+  <param name="MOT_SPIN_MIN" value="0.15" />
+  <param name="LOIT_BRK_JERK" value="500.0" />
+  <param name="NTF_LED_BRIGHT" value="3.0" />
+  <param name="EK3_BCN_DELAY" value="50.0" />
+  <param name="INS_GYR3_ID" value="3015690.0" />
+  <param name="RC9_REVERSED" value="0.0" />
+  <param name="EK3_POSNE_M_NSE" value="0.5" />
+  <param name="ANGLE_MAX" value="3000.0" />
+  <param name="AVOID_ACCEL_MAX" value="3.0" />
+  <param name="GPS_RATE_MS" value="200.0" />
+  <param name="GPS_SBP_LOGMASK" value="-256.0" />
+  <param name="INS_TCAL1_ENABLE" value="0.0" />
+  <param name="SCR_DEBUG_OPTS" value="0.0" />
+  <param name="SR0_EXT_STAT" value="1.0" />
+  <param name="SERIAL2_OPTIONS" value="0.0" />
+  <param name="COMPASS_LEARN" value="0.0" />
+  <param name="INS_GYR3OFFS_Z" value="-0.001803588" />
+  <param name="INS_GYR3OFFS_Y" value="0.01279541" />
+  <param name="INS_GYR3OFFS_X" value="-0.05468868" />
+  <param name="BARO1_GND_PRESS" value="101710.7" />
+  <param name="SCR_DIR_DISABLE" value="0.0" />
+  <param name="COMPASS_ODI2_Y" value="-0.0140929" />
+  <param name="MOT_PWM_TYPE" value="0.0" />
+  <param name="BATT9_MONITOR" value="0.0" />
+  <param name="EK3_FLOW_M_NSE" value="0.25" />
+  <param name="ATC_RAT_YAW_IMAX" value="0.5" />
+  <param name="GPS_TYPE2" value="0.0" />
+  <param name="EK3_SRC1_YAW" value="1.0" />
+  <param name="RC12_MIN" value="1100.0" />
+  <param name="SERVO6_MAX" value="1900.0" />
+  <param name="PSC_VELZ_FLTD" value="5.0" />
+  <param name="PSC_VELZ_FLTE" value="5.0" />
+  <param name="PSC_VELXY_FLTD" value="5.0" />
+  <param name="PSC_VELXY_FLTE" value="5.0" />
+  <param name="RCMAP_PITCH" value="2.0" />
+  <param name="SERVO10_TRIM" value="1500.0" />
+  <param name="SERVO11_REVERSED" value="0.0" />
+  <param name="ARMING_MIS_ITEMS" value="0.0" />
+  <param name="BATT3_MONITOR" value="0.0" />
+  <param name="ARSPD_TYPE" value="0.0" />
+  <param name="BARO_GND_TEMP" value="0.0" />
+  <param name="MOT_THST_HOVER" value="0.35" />
+  <param name="FLOW_TYPE" value="0.0" />
+  <param name="AHRS_GPS_GAIN" value="1.0" />
+  <param name="ATC_RAT_RLL_D" value="0.0036" />
+  <param name="CIRCLE_RADIUS" value="1000.0" />
+  <param name="ACRO_Y_EXPO" value="0.0" />
+  <param name="GPS_POS2_Z" value="0.0" />
+  <param name="GPS_HDOP_GOOD" value="140.0" />
+  <param name="SERVO1_TRIM" value="1500.0" />
+  <param name="RC2_REVERSED" value="0.0" />
+  <param name="ACRO_THR_MID" value="0.0" />
+  <param name="RC12_TRIM" value="1500.0" />
+  <param name="CAN_D1_UC_SRV_BM" value="0.0" />
+  <param name="RC9_OPTION" value="0.0" />
+  <param name="SERVO_RATE" value="50.0" />
+  <param name="AHRS_GPS_USE" value="1.0" />
+  <param name="AHRS_CUSTOM_PIT" value="0.0" />
+  <param name="ATC_ACCEL_R_MAX" value="110000.0" />
+  <param name="PILOT_Y_EXPO" value="0.0" />
+  <param name="SCHED_DEBUG" value="0.0" />
+  <param name="SR0_PARAMS" value="0.0" />
+  <param name="AHRS_WIND_MAX" value="0.0" />
+  <param name="RC16_TRIM" value="1500.0" />
+  <param name="ATC_ANGLE_BOOST" value="1.0" />
+  <param name="LOG_FILE_DSRMROT" value="0.0" />
+  <param name="FS_OPTIONS" value="31.0" />
+  <param name="WPNAV_ACCEL_Z" value="100.0" />
+  <param name="ADSB_LIST_RADIUS" value="2000.0" />
+  <param name="NTF_LED_OVERRIDE" value="0.0" />
+  <param name="SERVO14_TRIM" value="1500.0" />
+  <param name="RTL_CLIMB_MIN" value="0.0" />
+  <param name="INS_ACC2OFFS_X" value="0.1221774" />
+  <param name="ATC_RAT_PIT_IMAX" value="0.5" />
+  <param name="INS_ACC2OFFS_Z" value="0.001286543" />
+  <param name="LAND_SPEED_HIGH" value="0.0" />
+  <param name="BATT_MONITOR" value="0.0" />
+  <param name="FHLD_XY_IMAX" value="3000.0" />
+  <param name="RC4_MIN" value="1100.0" />
+  <param name="RC5_OPTION" value="0.0" />
+  <param name="SERIAL5_OPTIONS" value="0.0" />
+  <param name="ADSB_RF_CAPABLE" value="0.0" />
+  <param name="AUTOTUNE_AGGR" value="0.1" />
+  <param name="FLTMODE_CH" value="5.0" />
+  <param name="EK3_SRC3_POSXY" value="0.0" />
+  <param name="BRD_SERIAL_NUM" value="0.0" />
+  <param name="SERVO_BLH_MASK" value="0.0" />
+  <param name="RC13_REVERSED" value="0.0" />
+  <param name="RC3_REVERSED" value="0.0" />
+  <param name="CAM_SERVO_ON" value="1300.0" />
+  <param name="SERVO16_MAX" value="1900.0" />
+  <param name="LOG_MAV_BUFSIZE" value="8.0" />
+  <param name="AHRS_COMP_BETA" value="0.1" />
+  <param name="SERVO2_REVERSED" value="0.0" />
+  <param name="EK3_NOAID_M_NSE" value="30.0" />
+  <param name="SR0_POSITION" value="1.0" />
+  <param name="TUNE_MIN" value="0.0" />
+  <param name="GPS_PRIMARY" value="0.0" />
+  <param name="COMPASS_AUTODEC" value="1.0" />
+  <param name="COMPASS_USE" value="1.0" />
+  <param name="MIS_RESTART" value="0.0" />
+  <param name="RC15_REVERSED" value="0.0" />
+  <param name="SERIAL_PASS1" value="0.0" />
+  <param name="SERIAL_PASS2" value="-1.0" />
+  <param name="RC14_MIN" value="1100.0" />
+  <param name="INS_GYRO_RATE" value="1.0" />
+  <param name="MOT_SPOOL_TIME" value="0.5" />
+  <param name="CAN_D1_UC_ESC_BM" value="0.0" />
+  <param name="RC_OPTIONS" value="32.0" />
+  <param name="WPNAV_SPEED" value="1000.0" />
+  <param name="SERIAL3_BAUD" value="38.0" />
+  <param name="RC4_MAX" value="1900.0" />
+  <param name="SYSID_MYGCS" value="255.0" />
+  <param name="PSC_POSXY_P" value="1.0" />
+  <param name="EK3_SRC2_VELZ" value="0.0" />
+  <param name="INS_GYR2OFFS_Z" value="-0.003455369" />
+  <param name="INS_GYR2OFFS_X" value="-0.009983283" />
+  <param name="INS_GYR2OFFS_Y" value="-0.00428836" />
+  <param name="COMPASS_MOT_Y" value="0.0" />
+  <param name="COMPASS_MOT_X" value="0.0" />
+  <param name="EK3_TAU_OUTPUT" value="25.0" />
+  <param name="COMPASS_MOT_Z" value="0.0" />
+  <param name="INS_GYROFFS_Y" value="-0.0136419" />
+  <param name="INS_GYROFFS_X" value="-0.001672446" />
+  <param name="INS_GYROFFS_Z" value="0.002873528" />
+  <param name="RC6_TRIM" value="1500.0" />
+  <param name="RC5_MAX" value="1900.0" />
+  <param name="COMPASS_EXTERNAL" value="0.0" />
+  <param name="AVD_ENABLE" value="0.0" />
+  <param name="INS_POS1_Z" value="0.0" />
+  <param name="INS_POS1_Y" value="0.0" />
+  <param name="INS_POS1_X" value="0.0" />
+  <param name="RNGFND9_TYPE" value="0.0" />
+  <param name="INS_LOG_BAT_MASK" value="0.0" />
+  <param name="RC9_DZ" value="0.0" />
+  <param name="ADSB_SQUAWK" value="1200.0" />
+  <param name="ATC_RAT_RLL_FF" value="0.0" />
+  <param name="SERVO7_TRIM" value="1500.0" />
+  <param name="SERVO4_TRIM" value="1500.0" />
+  <param name="SERVO_VOLZ_MASK" value="0.0" />
+  <param name="EK3_WIND_PSCALE" value="1.0" />
+  <param name="RC13_MAX" value="1900.0" />
+  <param name="NTF_BUZZ_TYPES" value="5.0" />
+  <param name="PILOT_SPEED_DN" value="0.0" />
+  <param name="SR0_EXTRA1" value="1.0" />
+  <param name="ACRO_RP_EXPO" value="0.3" />
+  <param name="RC2_MIN" value="1100.0" />
+  <param name="INS_POS2_X" value="0.0" />
+  <param name="INS_POS2_Y" value="0.0" />
+  <param name="INS_POS2_Z" value="0.0" />
+  <param name="SERVO_ROB_POSMIN" value="0.0" />
+  <param name="COMPASS_USE2" value="1.0" />
+  <param name="COMPASS_USE3" value="1.0" />
+  <param name="SERVO12_MAX" value="1900.0" />
+  <param name="EK3_SRC_OPTIONS" value="0.0" />
+  <param name="ATC_RAT_YAW_FLTT" value="20.0" />
+  <param name="CAM_MAX_ROLL" value="0.0" />
+  <param name="BCN_TYPE" value="0.0" />
+  <param name="SR1_RC_CHAN" value="0.0" />
+  <param name="SERVO3_MIN" value="1100.0" />
+  <param name="EK3_EAS_M_NSE" value="1.4" />
+  <param name="COMPASS_CAL_FIT" value="16.0" />
+  <param name="BRD_HEAT_LOWMGN" value="5.0" />
+  <param name="ATC_RAT_YAW_FLTE" value="2.5" />
+  <param name="ATC_RAT_YAW_FLTD" value="0.0" />
+  <param name="GPS_BLEND_TC" value="10.0" />
+  <param name="CAN_SLCAN_SDELAY" value="1.0" />
+  <param name="BRD_VBUS_MIN" value="4.3" />
+  <param name="BARO2_GND_PRESS" value="101646.9" />
+  <param name="SERVO_FTW_MASK" value="0.0" />
+  <param name="ACRO_RP_RATE" value="360.0" />
+  <param name="PSC_VELXY_I" value="1.0" />
+  <param name="INS_GYR_CAL" value="1.0" />
+  <param name="RC15_OPTION" value="0.0" />
+  <param name="CAN_D1_UC_NODE" value="10.0" />
+  <param name="SERVO15_MIN" value="1100.0" />
+  <param name="MSP_OPTIONS" value="0.0" />
+  <param name="EK3_HGT_DELAY" value="60.0" />
+  <param name="PSC_VELXY_D" value="0.5" />
+  <param name="SR1_EXTRA3" value="0.0" />
+  <param name="SR1_EXTRA2" value="0.0" />
+  <param name="INS_ACC1_CALTEMP" value="46.07738" />
+  <param name="PSC_VELXY_P" value="2.0" />
+  <param name="SR0_EXTRA2" value="1.0" />
+  <param name="SR0_EXTRA3" value="1.0" />
+  <param name="GND_EFFECT_COMP" value="1.0" />
+  <param name="BARO3_DEVID" value="0.0" />
+  <param name="BTN_ENABLE" value="0.0" />
+  <param name="COMPASS_ODI3_Z" value="0.0" />
+  <param name="GPS_CAN_NODEID1" value="113.0" />
+  <param name="GPS_CAN_NODEID2" value="0.0" />
+  <param name="SERIAL0_BAUD" value="115.0" />
+  <param name="ATC_RAT_RLL_IMAX" value="0.5" />
+  <param name="ADSB_OFFSET_LON" value="1.0" />
+  <param name="RC11_MIN" value="1100.0" />
+  <param name="FHLD_QUAL_MIN" value="10.0" />
+  <param name="INS_STILL_THRESH" value="2.5" />
+  <param name="DROP_CAMFVX" value="60.0" />
+  <param name="COMPASS_OFFS_MAX" value="1800.0" />
+  <param name="SERVO7_MIN" value="1100.0" />
+  <param name="EK3_SRC2_POSZ" value="1.0" />
+  <param name="AUTOTUNE_AXES" value="7.0" />
+  <param name="SR0_ADSB" value="0.0" />
+  <param name="RELAY_PIN3" value="-1.0" />
+  <param name="PILOT_THR_BHV" value="0.0" />
+  <param name="CAN_SLCAN_TIMOUT" value="0.0" />
+  <param name="INS_TCAL_OPTIONS" value="0.0" />
+  <param name="RELAY_PIN6" value="-1.0" />
+  <param name="RELAY_PIN5" value="-1.0" />
+  <param name="RELAY_PIN4" value="-1.0" />
+  <param name="SERVO_BLH_POLES" value="14.0" />
+  <param name="SERVO5_REVERSED" value="0.0" />
+  <param name="SR4_ADSB" value="0.0" />
+  <param name="RTL_SPEED" value="0.0" />
+  <param name="SERVO12_TRIM" value="1500.0" />
+  <param name="THROW_NEXTMODE" value="18.0" />
+  <param name="PSC_VELXY_IMAX" value="1000.0" />
+  <param name="AVOID_ENABLE" value="3.0" />
+  <param name="EK3_GSF_USE_MASK" value="3.0" />
+  <param name="RTL_ALT_FINAL" value="0.0" />
+  <param name="SERVO4_REVERSED" value="0.0" />
+  <param name="SERVO10_MIN" value="1100.0" />
+  <param name="RC6_DZ" value="0.0" />
+  <param name="BATT5_MONITOR" value="0.0" />
+  <param name="LGR_ENABLE" value="0.0" />
+  <param name="GPS_COM_PORT2" value="1.0" />
+  <param name="GPS_MB2_TYPE" value="0.0" />
+  <param name="SCR_USER4" value="0.0" />
+  <param name="RC16_MIN" value="1100.0" />
+  <param name="FS_VIBE_ENABLE" value="1.0" />
+  <param name="SERVO8_MIN" value="1100.0" />
+  <param name="AHRS_RP_P" value="0.2" />
+  <param name="RC4_REVERSED" value="0.0" />
+  <param name="GPS1_CAN_OVRIDE" value="0.0" />
+  <param name="PHLD_BRAKE_ANGLE" value="3000.0" />
+  <param name="LAND_SPEED" value="50.0" />
+  <param name="CAN_P1_DRIVER" value="1.0" />
+  <param name="AHRS_EKF_TYPE" value="3.0" />
+  <param name="CAM_TRIGG_TYPE" value="0.0" />
+  <param name="SERVO16_REVERSED" value="0.0" />
+  <param name="GPS2_CAN_OVRIDE" value="0.0" />
+  <param name="SPRAY_ENABLE" value="0.0" />
+  <param name="INS_TCAL3_ENABLE" value="0.0" />
+  <param name="SERVO3_FUNCTION" value="35.0" />
+  <param name="SR3_EXT_STAT" value="0.0" />
+  <param name="SRTL_ACCURACY" value="2.0" />
+  <param name="LOG_REPLAY" value="0.0" />
+  <param name="ADSB_OFFSET_LAT" value="4.0" />
+  <param name="SERVO_BLH_PORT" value="0.0" />
+  <param name="SERIAL4_OPTIONS" value="0.0" />
+  <param name="SCR_USER6" value="0.0" />
+  <param name="SCR_USER5" value="0.0" />
+  <param name="SERVO5_MIN" value="1100.0" />
+  <param name="SCR_USER3" value="0.0" />
+  <param name="RTL_ALT_TYPE" value="0.0" />
+  <param name="SCR_USER1" value="0.0" />
+  <param name="SCHED_LOOP_RATE" value="400.0" />
+  <param name="FS_THR_VALUE" value="975.0" />
+  <param name="BRD_SD_SLOWDOWN" value="0.0" />
+  <param name="COMPASS_DEC" value="0.0" />
+  <param name="SR1_ADSB" value="0.0" />
+  <param name="SERVO6_TRIM" value="1500.0" />
+  <param name="AUTOTUNE_MIN_D" value="0.001" />
+  <param name="RNGFND2_TYPE" value="0.0" />
+  <param name="MOT_BAT_CURR_MAX" value="0.0" />
+  <param name="CIRCLE_OPTIONS" value="1.0" />
+  <param name="EK3_CHECK_SCALE" value="100.0" />
+  <param name="RC4_DZ" value="20.0" />
+  <param name="SERIAL2_PROTOCOL" value="2.0" />
+  <param name="COMPASS_OFS_Z" value="250.0721" />
+  <param name="COMPASS_OFS_Y" value="-25.32261" />
+  <param name="COMPASS_OFS_X" value="184.9581" />
+  <param name="ADSB_RF_SELECT" value="1.0" />
+  <param name="FS_GCS_TIMEOUT" value="5.0" />
+  <param name="EK3_AFFINITY" value="0.0" />
+  <param name="SR2_ADSB" value="0.0" />
+  <param name="SERVO_BLH_AUTO" value="0.0" />
+  <param name="SERVO9_MAX" value="1900.0" />
+  <param name="ATC_RAT_RLL_SMAX" value="0.0" />
+  <param name="EK3_MAG_CAL" value="3.0" />
+  <param name="SERVO15_TRIM" value="1500.0" />
+  <param name="SR1_PARAMS" value="0.0" />
+  <param name="CAN_D1_PROTOCOL" value="1.0" />
+  <param name="RALLY_INCL_HOME" value="1.0" />
+  <param name="SERVO_FTW_RVMASK" value="0.0" />
+  <param name="RNGFND5_TYPE" value="0.0" />
+  <param name="INS_GYR_ID" value="3081250.0" />
+  <param name="PILOT_Y_RATE" value="202.5" />
+  <param name="ATC_SLEW_YAW" value="6000.0" />
+  <param name="WINCH_TYPE" value="0.0" />
+  <param name="SERVO6_MIN" value="1100.0" />
+  <param name="SR4_POSITION" value="0.0" />
+  <param name="CAN_P2_DRIVER" value="0.0" />
+  <param name="RC10_MIN" value="1100.0" />
+  <param name="INS_ACCOFFS_X" value="0.0399072" />
+  <param name="INS_ACCOFFS_Y" value="-0.0111529" />
+  <param name="INS_ACCOFFS_Z" value="0.09014609" />
+  <param name="EK3_IMU_MASK" value="7.0" />
+  <param name="EK3_YAW_I_GATE" value="300.0" />
+  <param name="RC14_DZ" value="0.0" />
+  <param name="RC14_REVERSED" value="0.0" />
+  <param name="SERVO2_TRIM" value="1500.0" />
+  <param name="CIRCLE_RATE" value="20.0" />
+  <param name="RC7_TRIM" value="1500.0" />
+  <param name="RC10_DZ" value="0.0" />
+  <param name="ATC_RAT_PIT_FLTE" value="0.0" />
+  <param name="ATC_RAT_PIT_FLTD" value="20.0" />
+  <param name="SERVO11_MIN" value="1100.0" />
+  <param name="BARO_EXT_BUS" value="-1.0" />
+  <param name="RC_SPEED" value="490.0" />
+  <param name="EK3_SRC2_POSXY" value="0.0" />
+  <param name="COMPASS_TYPEMASK" value="32.0" />
+  <param name="ATC_RAT_PIT_FLTT" value="20.0" />
+  <param name="PSC_POSZ_P" value="1.0" />
+  <param name="EK3_FLOW_I_GATE" value="300.0" />
+  <param name="GPS_BLEND_MASK" value="5.0" />
+  <param name="COMPASS_ORIENT" value="0.0" />
+  <param name="COMPASS_PRIO2_ID" value="94467.0" />
+  <param name="AVOID_MARGIN" value="2.0" />
+  <param name="ADSB_TYPE" value="1.0" />
+  <param name="PSC_ACCZ_P" value="0.5" />
+  <param name="PSC_ACCZ_IMAX" value="800.0" />
+  <param name="SID_AXIS" value="0.0" />
+  <param name="SRTL_OPTIONS" value="0.0" />
+  <param name="INS_POS3_Y" value="0.0" />
+  <param name="INS_POS3_X" value="0.0" />
+  <param name="INS_POS3_Z" value="0.0" />
+  <param name="SR2_EXTRA2" value="0.0" />
+  <param name="SR2_EXTRA3" value="0.0" />
+  <param name="SR2_EXTRA1" value="0.0" />
+  <param name="MOT_SLEW_DN_TIME" value="0.0" />
+  <param name="CAM_TYPE" value="0.0" />
+  <param name="SERVO13_MIN" value="1100.0" />
+  <param name="SR4_RAW_SENS" value="0.0" />
+  <param name="COMPASS_DIA_Z" value="1.0" />
+  <param name="COMPASS_DIA_Y" value="1.0" />
+  <param name="COMPASS_DIA_X" value="1.0" />
+  <param name="PILOT_TKOFF_ALT" value="0.0" />
+  <param name="SERVO11_MAX" value="1900.0" />
+  <param name="COMPASS_ODI_Z" value="0.0" />
+  <param name="COMPASS_ODI_Y" value="0.0" />
+  <param name="COMPASS_ODI_X" value="0.0" />
+  <param name="THROW_TYPE" value="0.0" />
+  <param name="GUID_TIMEOUT" value="3.0" />
+  <param name="EAHRS_TYPE" value="0.0" />
+  <param name="ATC_RATE_FF_ENAB" value="1.0" />
+  <param name="SERIAL4_BAUD" value="38.0" />
+  <param name="BATT2_MONITOR" value="0.0" />
+  <param name="RC9_TRIM" value="1500.0" />
+  <param name="COMPASS_OPTIONS" value="0.0" />
+  <param name="RCMAP_ROLL" value="1.0" />
+  <param name="EK3_DRAG_M_NSE" value="0.5" />
+  <param name="RC2_DZ" value="20.0" />
+  <param name="RC6_OPTION" value="0.0" />
+  <param name="SCR_VM_I_COUNT" value="100000.0" />
+  <param name="COMPASS_FLTR_RNG" value="0.0" />
+  <param name="LOIT_BRK_ACCEL" value="250.0" />
+  <param name="CAN_SLCAN_CPORT" value="0.0" />
+  <param name="INS_ACC2SCAL_Z" value="0.9991868" />
+  <param name="LOIT_ACC_MAX" value="500.0" />
+  <param name="INS_ACC2SCAL_X" value="0.9957693" />
+  <param name="INS_ACC2SCAL_Y" value="0.9990496" />
+  <param name="GPS_TYPE" value="9.0" />
+  <param name="THR_DZ" value="100.0" />
+  <param name="RNGFND4_TYPE" value="0.0" />
+  <param name="SR2_RAW_CTRL" value="0.0" />
+  <param name="EK3_MAG_I_GATE" value="300.0" />
+  <param name="DROP_ALTALO" value="100.0" />
+  <param name="EK3_HGT_I_GATE" value="500.0" />
+  <param name="RC3_OPTION" value="0.0" />
+  <param name="BRD_OPTIONS" value="1.0" />
+  <param name="LOIT_SPEED" value="1250.0" />
+  <param name="NTF_DISPLAY_TYPE" value="0.0" />
+  <param name="RC3_DZ" value="30.0" />
+  <param name="TELEM_DELAY" value="0.0" />
+  <param name="LOIT_BRK_DELAY" value="1.0" />
+  <param name="INS_ACC_BODYFIX" value="2.0" />
+  <param name="RC8_DZ" value="0.0" />
+  <param name="SR2_POSITION" value="0.0" />
+  <param name="SR4_PARAMS" value="0.0" />
+  <param name="MIS_OPTIONS" value="0.0" />
+  <param name="INS_GYR2_CALTEMP" value="44.19688" />
+  <param name="VISO_TYPE" value="0.0" />
+</params>
+<results>
+  <result>
+    <name>Autotune</name>
+    <status>UNKNOWN</status>
+    <message>No ATUN log data</message>
+  </result>
+  <result>
+    <name>Brownout</name>
+    <status>GOOD</status>
+    <message></message>
+  </result>
+  <result>
+    <name>Compass</name>
+    <status>WARN</status>
+    <message>WARN: Large compass offset params (X:184.96, Y:-25.32, Z:250.07)
+WARN: Large compass offset in MAG data (X:184.00, Y:-25.00, Z:250.00)
+mag_field interference within limits (16.23%)
+Max mag field length (552.83) &gt; recommended (550.00)
+</message>
+    <data>(test data will be embedded here at some point)</data>
+  </result>
+  <result>
+    <name>Dupe Log Data</name>
+    <status>GOOD</status>
+    <message></message>
+  </result>
+  <result>
+    <name>Empty</name>
+    <status>FAIL</status>
+    <message>Empty log? Throttle never above 20%</message>
+    <data>(test data will be embedded here at some point)</data>
+  </result>
+  <result>
+    <name>Event/Failsafe</name>
+    <status>GOOD</status>
+    <message></message>
+  </result>
+  <result>
+    <name>GPS</name>
+    <status>FAIL</status>
+    <message>Min satellites: 0, Max HDop: 99.68</message>
+    <data>(test data will be embedded here at some point)</data>
+  </result>
+  <result>
+    <name>IMU Mismatch</name>
+    <status>NA</status>
+  </result>
+  <result>
+    <name>Motor Balance</name>
+    <status>UNKNOWN</status>
+    <message>'OCTAQUAD/X'</message>
+  </result>
+  <result>
+    <name>NaNs</name>
+    <status>FAIL</status>
+    <message>Found NaN in CTUN.TAlt
+Found NaN in CTUN.DSAlt
+</message>
+    <data>(test data will be embedded here at some point)</data>
+  </result>
+  <result>
+    <name>OpticalFlow</name>
+    <status>FAIL</status>
+    <message>'FLOW_FXSCALER' not found</message>
+    <data>(test data will be embedded here at some point)</data>
+  </result>
+  <result>
+    <name>Parameters</name>
+    <status>FAIL</status>
+    <message>'MAG_ENABLE' not found</message>
+    <data>(test data will be embedded here at some point)</data>
+  </result>
+  <result>
+    <name>PM</name>
+    <status>GOOD</status>
+    <message></message>
+  </result>
+  <result>
+    <name>Pitch/Roll</name>
+    <status>GOOD</status>
+    <message></message>
+  </result>
+  <result>
+    <name>Thrust</name>
+    <status>GOOD</status>
+    <message></message>
+  </result>
+  <result>
+    <name>VCC</name>
+    <status>UNKNOWN</status>
+    <message>No CURR log data</message>
+  </result>
+  <result>
+    <name>Vibration</name>
+    <status>UNKNOWN</status>
+    <message>No stable LOITER log data found</message>
+  </result>
+</results>
+</loganalysis>

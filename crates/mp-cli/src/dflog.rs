@@ -9,9 +9,9 @@
 //! - `dflogtokml` - "Create KML + gpx" (`but_dflogtokml`): `.gpx`, waypoint, rally, `.param`,
 //!   RINEX and `.kmz` beside the log, or in the directory `out`.
 //! - `matlab` - "Create Matlab file" (`BUT_matlab`): `<log>-<lines>.mat` beside the log, or `out`.
-//! - `loganalysis` - "Auto Analysis" (`BUT_loganalysis`): downloads ArduPilot's analyzer into the
-//!   data directory's `LogAnalyzer` (or `out`), runs it, and prints its report. The analyzer is a
-//!   Windows program; anywhere else it does not start, as it does not for Mission Planner.
+//! - `loganalysis` - "Auto Analysis" (`BUT_loganalysis`): runs ArduPilot's LogAnalyzer checks,
+//!   ported (`mp_log::analysis`), on the log - a `.bin` converted first - writes the analyzer's
+//!   XML beside it (or to `out`), and prints Mission Planner's report of it.
 //!
 //! Flight modes are named as the application names them, from the firmware the log names.
 //! `// C#: GCSViews/FlightData.cs:1082-1098, 1135-1197, 1311-1385, 1387-1390`
@@ -25,24 +25,6 @@ use mp_log::convert::flight_mode_name;
 
 /// The verbs `headless-planner log` takes before a file.
 pub(crate) const VERBS: [&str; 4] = ["bintolog", "dflogtokml", "matlab", "loganalysis"];
-
-/// `Download.getFilefromNet(url, saveto)`: whether the file arrived.
-fn fetch(url: &str, to: &Path) -> bool {
-    println!("downloading {url}");
-    let Ok(mut response) = ureq::get(url).call() else {
-        return false;
-    };
-    // The analyzer is some tens of megabytes; a server that sends a gigabyte is not sending it.
-    let Ok(bytes) = response
-        .body_mut()
-        .with_config()
-        .limit(512 * 1024 * 1024)
-        .read_to_vec()
-    else {
-        return false;
-    };
-    std::fs::write(to, bytes).is_ok()
-}
 
 /// Runs `verb` on `file`.
 #[must_use]
@@ -116,13 +98,7 @@ fn matlab(path: &Path, out: Option<&str>) -> Result<(), String> {
 }
 
 fn analysis(path: &Path, out: Option<&str>) -> Result<(), String> {
-    let dir = match out {
-        Some(dir) => PathBuf::from(dir),
-        None => mp_log::analysis::analyzer_dir(
-            &mp_settings::data_directory().ok_or("no home directory to keep the analyzer in")?,
-        ),
-    };
-    let analysis = mp_log::analysis::analyse(path, &dir, &mut fetch, &flight_mode_name)
+    let analysis = mp_log::analysis::analyse_to(path, out.map(Path::new), &flight_mode_name)
         .map_err(|e| e.to_string())?;
     print!("{}", mp_log::analysis::report(&analysis));
     Ok(())

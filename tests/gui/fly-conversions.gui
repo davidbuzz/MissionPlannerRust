@@ -9,9 +9,10 @@
 # `GCSViews/FlightData.cs:1082-1098, 1135-1202, 1387-1390, Log/MatLabForms.cs:43-74,
 # GCSViews/FlightData.resx (tableLayoutPanel2.LayoutSettings), testdata/dataflash/golden/`
 #
-# Auto Analysis downloads ArduPilot's analyzer, which a test run does not do; its report is held
-# to the C#'s by fly::tests::auto_analysis_runs_the_analyzer_and_shows_its_report, with a
-# stand-in analyzer.
+# Auto Analysis runs ArduPilot's LogAnalyzer checks, ported into mp_log::analysis, on the log
+# converted to a temporary .log, and opens the LogAnalyzer window with the report - the header
+# from the log and a line a check, the last never shown (Utilities/LogAnalyzer.cs's reading);
+# the XML is held to Python 2's own by mp-log's tests/analysis.rs.
 #
 # Needs no link: tools/gui-test.sh tests/gui/fly-conversions.gui
 
@@ -20,7 +21,7 @@ setup mkdir -p $WORK/logs && cp testdata/dataflash.bin $WORK/logs/
 
 screen fly
 window 1600x1200
-budget 26
+budget 30
 
 # DataFlash Logs is the last header: bring it to the front of the row, then show its page.
 click fly-tabs-right
@@ -84,6 +85,26 @@ expect fly.logs.convert.running none
 expect fly.logs.convert.last matlab
 expect fly.logs.convert.error none
 expect fly.logs.convert.files dataflash.bin-11439.mat:1266584
+
+# Auto Analysis: the report window with the checks' findings on this log; Close puts it away.
+click fly-loganalysis
+expect fly.prompt *.log;*.bin
+type dataflash.bin
+click fly-prompt-ok
+expect fly.logs.convert.running none
+expect fly.logs.convert.last loganalysis
+expect fly.logs.convert.error none
+expect fly.logs.convert.files none
+expect fly.logs.convert.report ~ Vehicletype ArduCopter
+expect fly.logs.convert.report ~ Firmware Version V4.2.2
+expect fly.logs.convert.report ~ No of lines 10888
+expect fly.logs.convert.report ~ Test: Compass = WARN - WARN: Large compass offset params (X:184.96, Y:-25.32, Z:250.07)
+expect fly.logs.convert.report ~ Test: Empty = FAIL - Empty log? Throttle never above 20%
+expect fly.logs.convert.report ~ Test: GPS = FAIL - Min satellites: 0, Max HDop: 99.68
+expect fly.logs.convert.report ~ Test: VCC = UNKNOWN - No CURR log data
+expect status ~ Auto Analysis:
+click fly-loganalyzer-close
+expect fly.logs.convert.report none
 
 # A log that is not there is what the C#'s message box says, and nothing is written.
 click fly-matlab

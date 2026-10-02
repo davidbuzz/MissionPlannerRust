@@ -5729,9 +5729,8 @@ fn sized(paths: Vec<std::path::PathBuf>) -> Converted {
 }
 
 /// One conversion of `log`, as its button's handler runs it once the dialog has given it the
-/// file, with the application's flight mode names. `analyzer` is where Auto Analysis keeps
-/// ArduPilot's analyzer, and `fetch` downloads it (`Download.getFilefromNet`); the other three use
-/// neither.
+/// file, with the application's flight mode names. Auto Analysis runs ArduPilot's LogAnalyzer
+/// checks in-process (`mp_log::analysis`), so nothing is downloaded.
 ///
 /// # Errors
 ///
@@ -5739,12 +5738,7 @@ fn sized(paths: Vec<std::path::PathBuf>) -> Converted {
 /// "Error converting file" from Create Matlab File's, and Auto Analysis's boxes. Convert .Bin to
 /// .Log has no `catch`, and its failure is said as it is.
 /// `// C#: GCSViews/FlightData.cs:1091-1097, 1151-1198, 1319-1377, Log/MatLabForms.cs:59-72`
-pub fn convert(
-    kind: Conversion,
-    log: &std::path::Path,
-    analyzer: Option<&std::path::Path>,
-    fetch: &mut dyn FnMut(&str, &std::path::Path) -> bool,
-) -> Result<Converted, String> {
+pub fn convert(kind: Conversion, log: &std::path::Path) -> Result<Converted, String> {
     let modes = &mp_log::convert::flight_mode_name;
     match kind {
         Conversion::BinToLog => {
@@ -5767,21 +5761,11 @@ pub fn convert(
             .map(|path| sized(vec![path]))
             .map_err(|err| format!("Error converting file {err}")),
         Conversion::LogAnalysis => {
-            let dir = analyzer.ok_or("no home directory to keep the analyzer in")?;
             let analysis =
-                mp_log::analysis::analyse(log, dir, fetch, modes).map_err(|err| err.to_string())?;
+                mp_log::analysis::analyse(log, modes).map_err(|err| err.to_string())?;
             Ok(Converted::Report(mp_log::analysis::report(&analysis)))
         }
     }
-}
-
-/// `Download.getFilefromNet(url, saveto)`: whether the analyzer arrived.
-/// `// C#: Utilities/LogAnalyzer.cs:42-56`
-fn download(url: &str, to: &std::path::Path) -> bool {
-    use mp_firmware::manifest::Fetch as _;
-    mp_firmware::manifest::Http
-        .get(url)
-        .is_ok_and(|bytes| std::fs::write(to, bytes).is_ok())
 }
 
 /// A conversion's outcome, with the log it was of.
@@ -5815,12 +5799,7 @@ impl Conversions {
     /// Starts `kind` on `log` on a thread of its own, returning whether it started. The C#
     /// converts on the window's thread and the window waits until it is done; here the screen
     /// goes on, and the page's conversion buttons wait instead, so nothing starts while one runs.
-    pub fn start(
-        &mut self,
-        kind: Conversion,
-        log: std::path::PathBuf,
-        analyzer: Option<std::path::PathBuf>,
-    ) -> bool {
+    pub fn start(&mut self, kind: Conversion, log: std::path::PathBuf) -> bool {
         if self.running.is_some() {
             return false;
         }
@@ -5829,7 +5808,7 @@ impl Conversions {
         let spawned = std::thread::Builder::new()
             .name(format!("mp-convert-{}", kind.name()))
             .spawn(move || {
-                let outcome = convert(kind, &path, analyzer.as_deref(), &mut download);
+                let outcome = convert(kind, &path);
                 let _ = sender.send(outcome);
             });
         if spawned.is_err() {
@@ -7780,12 +7759,10 @@ impl MissionPlanner {
         if path.is_empty() || std::path::Path::new(path).is_dir() {
             return;
         }
-        let analyzer =
-            mp_settings::data_directory().map(|dir| mp_log::analysis::analyzer_dir(&dir));
         if self
             .fly_data
             .conversions
-            .start(kind, std::path::PathBuf::from(path), analyzer)
+            .start(kind, std::path::PathBuf::from(path))
         {
             self.file_status = Some(format!("{}: {path}", kind.text()));
         }
@@ -10814,10 +10791,10 @@ mod tests {
         let (dir, log) = scratch_log("convert", "dataflash.bin");
         let mut conversions = Conversions::default();
 
-        assert!(conversions.start(Conversion::BinToLog, log.clone(), None));
+        assert!(conversions.start(Conversion::BinToLog, log.clone()));
         assert_eq!(conversions.running(), Some(Conversion::BinToLog));
         assert!(
-            !conversions.start(Conversion::Matlab, log.clone(), None),
+            !conversions.start(Conversion::Matlab, log.clone()),
             "nothing starts while one runs"
         );
         let outcome = finish(&mut conversions);
@@ -10836,7 +10813,7 @@ mod tests {
             format!("Convert .Bin to .Log: {}", target.display())
         );
 
-        assert!(conversions.start(Conversion::DflogToKml, log.clone(), None));
+        assert!(conversions.start(Conversion::DflogToKml, log.clone()));
         let outcome = finish(&mut conversions);
         let Ok(Converted::Files(files)) = &outcome.2 else {
             panic!("Create KML + gpx failed: {:?}", outcome.2);
@@ -10880,7 +10857,7 @@ mod tests {
                 .any(|(name, size)| name == "dataflash.kmz" && *size > 0)
         );
 
-        assert!(conversions.start(Conversion::Matlab, log, None));
+        assert!(conversions.start(Conversion::Matlab, log));
         let outcome = finish(&mut conversions);
         let mat = dir.join("dataflash.bin-11439.mat");
         let golden = std::fs::metadata(testdata("dataflash/golden/matlab/dataflash.bin-11439.mat"))
@@ -10897,15 +10874,14 @@ mod tests {
             "mp-gui-convert-missing-{}/none.bin",
             std::process::id()
         ));
-        let mut no_fetch = |_: &str, _: &std::path::Path| false;
-        let kml = convert(Conversion::DflogToKml, &missing, None, &mut no_fetch);
+        let kml = convert(Conversion::DflogToKml, &missing);
         assert!(
             kml.as_ref()
                 .is_err_and(|why| why
                     .starts_with("Error processing file. Make sure the file is not in use.\n")),
             "{kml:?}"
         );
-        let mat = convert(Conversion::Matlab, &missing, None, &mut no_fetch);
+        let mat = convert(Conversion::Matlab, &missing);
         assert!(
             mat.as_ref()
                 .is_err_and(|why| why.starts_with("Error converting file ")),
@@ -10915,54 +10891,47 @@ mod tests {
         assert!(conversion_status(&outcome).starts_with("Error: Error converting file "));
     }
 
-    /// Auto Analysis downloads the analyzer - here the download fails, and the one from before is
-    /// used - runs it on the log converted to a temporary `.log`, and shows the report the C#'s
-    /// window shows. The stand-in analyzer is a script that writes the example output where it
-    /// is told to, so this runs where a script can be a program.
-    #[cfg(unix)]
+    /// Auto Analysis on the checked-in log: the analyzer's checks run in-process on the log
+    /// converted to a temporary `.log`, and the report is `Controls.LogAnalyzer`'s text of what
+    /// they wrote - the header from the log, a line a check, the last check never shown
+    /// (`LogAnalyzer.Results`). A log that is not there is the C#'s "Bad input file".
     #[test]
     fn auto_analysis_runs_the_analyzer_and_shows_its_report() {
-        use std::os::unix::fs::PermissionsExt;
         let (dir, log) = scratch_log("analysis", "flight.bin");
-        let analyzer = dir.join("LogAnalyzer");
-        std::fs::create_dir_all(&analyzer).expect("the analyzer's directory");
-        let runner = analyzer.join("runner.exe");
-        std::fs::write(
-            &runner,
-            format!(
-                "#!/bin/sh\ncp '{}' \"$2\"\n",
-                testdata("dataflash/example_output.xml").display()
-            ),
-        )
-        .expect("the stand-in runner");
-        std::fs::set_permissions(&runner, std::fs::Permissions::from_mode(0o755))
-            .expect("the runner made runnable");
-        let mut fetched = Vec::new();
-        let mut fetch = |url: &str, _: &std::path::Path| {
-            fetched.push(url.to_owned());
-            false
+        let outcome = convert(Conversion::LogAnalysis, &log);
+        let Ok(Converted::Report(report)) = &outcome else {
+            panic!("{outcome:?}");
         };
-        let outcome = convert(Conversion::LogAnalysis, &log, Some(&analyzer), &mut fetch);
-        assert_eq!(fetched, [mp_log::analysis::analyzer_url()]);
-        let golden =
-            std::fs::read_to_string(testdata("dataflash/golden/loganalysis/example_output.txt"))
-                .expect("the golden report");
-        assert_eq!(outcome, Ok(Converted::Report(golden)));
+        let lines: Vec<&str> = report.lines().collect();
+        assert!(
+            lines
+                .first()
+                .is_some_and(|line| line.starts_with("Log File ") && line.ends_with(".tmp.log")),
+            "{report}"
+        );
+        assert_eq!(lines.get(1), Some(&"Size (kb) 848.51953125"));
+        assert_eq!(lines.get(2), Some(&"No of lines 10888"));
+        assert_eq!(lines.get(3), Some(&"Duration 0:00:18"));
+        assert_eq!(lines.get(4), Some(&"Vehicletype ArduCopter"));
+        assert_eq!(lines.get(5), Some(&"Firmware Version V4.2.2"));
+        assert_eq!(lines.get(6), Some(&"Firmware Hash 4fcfa4b2"));
+        assert_eq!(lines.get(9), Some(&"Skipped Lines 0"));
+        assert!(report.contains(
+            "Test: Compass = WARN - WARN: Large compass offset params (X:184.96, Y:-25.32, Z:250.07)\n"
+        ));
+        assert!(report.contains("Test: Empty = FAIL - Empty log? Throttle never above 20%\r\n"));
+        assert!(report.contains("Test: GPS = FAIL - Min satellites: 0, Max HDop: 99.68\r\n"));
+        assert!(report.contains("Test: Motor Balance = UNKNOWN - 'OCTAQUAD/X'\r\n"));
+        assert!(report.contains("Test: VCC = UNKNOWN - No CURR log data\r\n"));
+        // Vibration is the last check, and `Results` never keeps the last.
+        assert!(!report.contains("Test: Vibration"), "{report}");
         let outcome = (Conversion::LogAnalysis, log.clone(), outcome);
         assert_eq!(
             conversion_status(&outcome),
             format!("Auto Analysis: {}", log.display())
         );
-
-        // No download and no analyzer from before: the C#'s "Failed to download LogAnalyzer".
-        std::fs::remove_file(&runner).expect("the runner removed");
-        let failed = convert(
-            Conversion::LogAnalysis,
-            &log,
-            Some(&analyzer),
-            &mut |_, _| false,
-        );
-        assert_eq!(failed, Err("Failed to download LogAnalyzer".to_owned()));
+        let failed = convert(Conversion::LogAnalysis, &dir.join("missing.log"));
+        assert_eq!(failed, Err("Bad input file".to_owned()));
         let _ = std::fs::remove_dir_all(&dir);
     }
 

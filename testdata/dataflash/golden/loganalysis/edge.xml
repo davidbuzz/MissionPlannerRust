@@ -1,0 +1,102 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<loganalysis>
+<header>
+  <logfile>/w/logs/edge.log</logfile>
+  <sizekb>53.388671875</sizekb>
+  <sizelines>333</sizelines>
+  <duration>0:00:00</duration>
+  <vehicletype>ArduPlane</vehicletype>
+  <firmwareversion>V4.5.7</firmwareversion>
+  <firmwarehash>1a2b3c4d</firmwarehash>
+  <hardwaretype></hardwaretype>
+  <freemem>0</freemem>
+  <skippedlines>0</skippedlines>
+</header>
+<params>
+</params>
+<results>
+  <result>
+    <name>Autotune</name>
+    <status>NA</status>
+  </result>
+  <result>
+    <name>Brownout</name>
+    <status>UNKNOWN</status>
+    <message>No CTUN log data</message>
+  </result>
+  <result>
+    <name>Compass</name>
+    <status>FAIL</status>
+    <message>'COMPASS_OFS_X' not found</message>
+    <data>(test data will be embedded here at some point)</data>
+  </result>
+  <result>
+    <name>Dupe Log Data</name>
+    <status>UNKNOWN</status>
+    <message>No ATT log data</message>
+  </result>
+  <result>
+    <name>Empty</name>
+    <status>GOOD</status>
+    <message></message>
+  </result>
+  <result>
+    <name>Event/Failsafe</name>
+    <status>GOOD</status>
+    <message></message>
+  </result>
+  <result>
+    <name>GPS</name>
+    <status>UNKNOWN</status>
+    <message>No GPS log data</message>
+  </result>
+  <result>
+    <name>IMU Mismatch</name>
+    <status>UNKNOWN</status>
+    <message>No IMU log data</message>
+  </result>
+  <result>
+    <name>Motor Balance</name>
+    <status>NA</status>
+  </result>
+  <result>
+    <name>NaNs</name>
+    <status>FAIL</status>
+    <message>Found NaN in EDGE.f
+</message>
+    <data>(test data will be embedded here at some point)</data>
+  </result>
+  <result>
+    <name>OpticalFlow</name>
+    <status>FAIL</status>
+    <message>'FLOW_FXSCALER' not found</message>
+    <data>(test data will be embedded here at some point)</data>
+  </result>
+  <result>
+    <name>Parameters</name>
+    <status>GOOD</status>
+    <message></message>
+  </result>
+  <result>
+    <name>PM</name>
+    <status>NA</status>
+  </result>
+  <result>
+    <name>Pitch/Roll</name>
+    <status>NA</status>
+  </result>
+  <result>
+    <name>Thrust</name>
+    <status>NA</status>
+  </result>
+  <result>
+    <name>VCC</name>
+    <status>UNKNOWN</status>
+    <message>No CURR log data</message>
+  </result>
+  <result>
+    <name>Vibration</name>
+    <status>NA</status>
+  </result>
+</results>
+</loganalysis>

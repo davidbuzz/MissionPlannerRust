@@ -28,9 +28,8 @@ mp-log.workspace = true
 mp-calibration.workspace = true
 mp-mission.workspace = true
 mp-units.workspace = true
-# `headless-planner log loganalysis`: where the analyzer lives, and the download of it.
+# The data directory and the settings the verbs read.
 mp-settings.workspace = true
-ureq.workspace = true
 # `headless-planner terrain`: srtm.getAltitude over the planner's terrain cache.
 mp-terrain.workspace = true
 # `headless-planner georef`: the Geo Reference Images form's buttons.

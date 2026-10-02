@@ -18,7 +18,7 @@
 //! Three of the flight screen's dataflash buttons live here, each a function the page calls with
 //! [`convert::flight_mode_name`] for its flight modes: "Convert .Bin to .Log"
 //! ([`convert::convert_bin_file`]), "Create Matlab file" ([`matlab::process_log_file`]) and
-//! "Auto Analysis" ([`analysis::analyse`], which runs ArduPilot's own analyzer). The fourth,
+//! "Auto Analysis" ([`analysis::analyse`], ArduPilot's LogAnalyzer checks, ported). The fourth,
 //! "Create KML + gpx", is `mp_kml::dflog::dflog_to_kml`, reading through [`dflogbuffer`]. All of
 //! them are held to Mission Planner's own output under `testdata/dataflash/golden`.
 

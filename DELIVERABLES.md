@@ -516,8 +516,9 @@ Dataflash (`.bin`/`.log`) and tlog parsing, log download, graphing, LogAnalyzer 
   and the field modifier; and D14's parse budget met - `mp_log::logfile::LogFile` opens a 1.07 GB
   log to its first plot in about 0.6 s (326.8 s before), gated by `benches/parse_1gb.rs` (row 51). The DataFlash Logs page's four conversions are ported and held to
   Mission Planner's own code under mono: `.BIN → .log` byte-identical, KML+GPX and `.mat`
-  identical but for a namespace order and a hash-table order, Auto Analysis as the C# runs it
-  (row 23); the page's buttons call them (row 28). Geo Reference Images' logic is `mp-georef`
+  identical but for a namespace order and a hash-table order, Auto Analysis with ArduPilot's
+  LogAnalyzer checks ported from the runner's Python and run in-process, held to Python 2.7 over
+  the same logs (row 23); the page's buttons call them (row 28). Geo Reference Images' logic is `mp-georef`
   (`georefimage.cs` and `GeoRefImageBase.cs`: the three matching modes, every output file and the
   EXIF geotags byte for byte to the real classes under mono over a SITL flight with camera
   messages, `tools/csharp-reference/GeorefOracle.cs`, row 49) and its form is inside this window (row 54).

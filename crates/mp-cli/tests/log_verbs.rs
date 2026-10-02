@@ -100,40 +100,30 @@ fn matlab_names_the_file_for_its_lines() {
     std::fs::remove_dir_all(&dir).unwrap();
 }
 
-/// The analyzer is a Windows program; here a script stands in for it, writing the analyzer's
-/// example output where it is told to, and the report printed is Mission Planner's text of it.
-#[cfg(unix)]
+/// `headless-planner log loganalysis`: the analyzer's checks on a checked-in log, the XML written
+/// where `out` says, and Mission Planner's report of it printed.
 #[test]
 fn loganalysis_prints_the_analyzers_report() {
-    use std::os::unix::fs::PermissionsExt;
-
     let dir = scratch("loganalysis");
-    let analyzer = dir.join("LogAnalyzer");
-    std::fs::create_dir_all(&analyzer).unwrap();
-    let runner = analyzer.join("runner.exe");
-    std::fs::write(
-        &runner,
-        format!(
-            "#!/bin/sh\ncp '{}' \"$2\"\n",
-            testdata("dataflash/example_output.xml").display()
-        ),
-    )
-    .unwrap();
-    std::fs::set_permissions(&runner, std::fs::Permissions::from_mode(0o755)).unwrap();
-    let log = dir.join("flight.log");
-    std::fs::write(
-        &log,
-        "FMT, 128, 89, FMT, BBnNZ, Type,Length,Name,Format,Columns\n",
-    )
-    .unwrap();
-
-    let output = headless_planner(&[Path::new("loganalysis"), &log, &analyzer]);
+    let xml = dir.join("report.xml");
+    let output = headless_planner(&[
+        Path::new("loganalysis"),
+        &testdata("dataflash/synthetic.log"),
+        &xml,
+    ]);
     assert!(output.status.success(), "{output:?}");
-    let golden =
-        std::fs::read_to_string(testdata("dataflash/golden/loganalysis/example_output.txt"))
-            .unwrap();
     let stdout = String::from_utf8(output.stdout).unwrap();
-    assert!(stdout.ends_with(&golden), "{stdout}");
+    assert!(stdout.contains("Vehicletype ArduCopter\n"), "{stdout}");
+    assert!(stdout.contains("Firmware Version V4.5.7\n"), "{stdout}");
+    assert!(
+        stdout.contains(
+            "Test: Dupe Log Data = UNKNOWN - range() step argument must not be zero\r\n"
+        ),
+        "{stdout}"
+    );
+    assert!(stdout.contains("Test: VCC = UNKNOWN - No CURR log data\r\n"), "{stdout}");
+    let written = std::fs::read_to_string(&xml).unwrap();
+    assert!(written.starts_with("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<loganalysis>\n"));
     std::fs::remove_dir_all(&dir).unwrap();
 }
 

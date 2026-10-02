@@ -4469,7 +4469,6 @@ dependencies = [
  "mp-transport",
  "mp-units",
  "mp-vehicle",
- "ureq",
 ]
 
 [[package]]
