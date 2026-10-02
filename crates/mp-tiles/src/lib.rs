@@ -23,7 +23,8 @@ pub use cache::{CacheError, CacheUsage, CachedTile, ImageFormat, TileCache};
 pub use fetch::{FetchError, TileFetcher};
 pub use policy::{Decision, FetchPolicy};
 pub use source::{
-    CSHARP_LIST, DEFAULT_PROVIDER, GOOGLE_SATELLITE_MAP, OPENSTREETMAP, OPENTOPOMAP, SOURCES,
+    CSHARP_LIST, CUSTOM, DEFAULT_PROVIDER, GOOGLE_SATELLITE_MAP, OPENSTREETMAP, OPENTOPOMAP,
+    SOURCES,
     TileSource, default_source, source_by_id, source_by_name,
 };
 pub use store::{DecodedTile, StoreStats, TileAnswer, TileStore};

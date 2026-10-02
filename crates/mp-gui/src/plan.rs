@@ -4713,6 +4713,9 @@ pub struct NameField<'a> {
 /// What the action panel shows besides the mission: `panel3`'s Grid box and status label, and
 /// `panel4`'s pointer read-out, with a MAVFTP transfer's words when one is going.
 pub struct ActionExtras<'a> {
+    /// `progressBarInjectCustomMap`'s value and maximum while Inject Custom Map runs; `None`
+    /// hides the bar, as `Visible = false` does.
+    pub inject: Option<(usize, usize)>,
     /// `chk_grid.Checked`.
     pub grid: bool,
     /// `lbl_status`: `None` before the map has painted, then whether tiles are still loading.
@@ -4874,6 +4877,47 @@ pub fn actions_panel(
         )
     };
 
+    // `BUT_InjectCustomMap` at (3, 68) of `panel3`, 115 by 23, reading "Cancel" while a run is on,
+    // and `progressBarInjectCustomMap` under it at (3, 97), 115 by 23, shown while it runs.
+    // `// C#: GCSViews/FlightPlanner.resx (BUT_InjectCustomMap, progressBarInjectCustomMap);
+    // GCSViews/FlightPlanner.cs:8416-8527`
+    let inject = {
+        let running = extras.inject.is_some();
+        let mut row = div().flex().items_center().gap_2().child(action(
+            "plan-inject",
+            if running {
+                crate::inject_map::CANCEL
+            } else {
+                crate::inject_map::BUTTON_TEXT
+            },
+            theme::TEXT,
+            true,
+            cx.listener(|this, _event: &(), window, cx| {
+                this.inject_map_clicked(window, cx);
+                cx.notify();
+            }),
+        ));
+        if let Some((value, maximum)) = extras.inject {
+            #[allow(clippy::cast_precision_loss)] // a count of files
+            let fraction = value as f32 / maximum.max(1) as f32;
+            row = row.child(
+                crate::probe::measured("plan-inject-bar", div())
+                    .w(px(115.0))
+                    .h(px(23.0))
+                    .border_1()
+                    .border_color(rgb(theme::BORDER))
+                    .bg(rgb(theme::BG))
+                    .child(
+                        div()
+                            .h_full()
+                            .w(gpui::relative(fraction))
+                            .bg(rgb(theme::OK)),
+                    ),
+            );
+        }
+        row
+    };
+
     panel(
         "mission",
         div()
@@ -4883,6 +4927,7 @@ pub fn actions_panel(
             .child(coords)
             .child(providers.child(grid))
             .child(status)
+            .child(inject)
             .child(
                 div()
                     .flex()
@@ -5953,6 +5998,7 @@ fn file_request(
         FileRequest::LoadKml(name) => refused = load_kml_mission(this, &name),
         FileRequest::LoadShpMission(name) => refused = load_shp_mission(this, &name),
         FileRequest::KmlOverlay(name) => refused = load_kml_overlay(this, &name),
+        FileRequest::InjectCustomMap(folder) => this.inject_map_begin(&folder),
     }
     if let Some((title, text)) = refused {
         this.plan_menus.say(title, text);
@@ -6016,7 +6062,8 @@ fn fence_file(
         | FileRequest::LoadAndAppend(_)
         | FileRequest::LoadKml(_)
         | FileRequest::LoadShpMission(_)
-        | FileRequest::KmlOverlay(_) => {}
+        | FileRequest::KmlOverlay(_)
+        | FileRequest::InjectCustomMap(_) => {}
     }
 }
 
@@ -7825,6 +7872,8 @@ pub enum PromptKind {
     ShpMissionLoadFile,
     /// Map Tool > KML Overlay's `OpenFileDialog`, filtered to `All Supported`.
     KmlOverlayFile,
+    /// Inject Custom Map's `FolderBrowserDialog`: the folder of tiles, typed.
+    InjectCustomMapFolder,
     /// KML Overlay's "Do you want to load this into the flight data screen?", Yes or No.
     KmlToFlightScreen,
     /// KML Overlay's "Zoom to the center or the loaded file?", Yes or No.
@@ -7924,6 +7973,8 @@ pub enum FileRequest {
     LoadShpMission(String),
     /// Map Tool > KML Overlay.
     KmlOverlay(String),
+    /// Inject Custom Map's folder.
+    InjectCustomMap(String),
 }
 
 /// The caption of the dialog standing in for `OpenFileDialog`: its own default.
@@ -8088,6 +8139,7 @@ impl Prompt {
                 | PromptKind::KmlLoadFile
                 | PromptKind::ShpMissionLoadFile
                 | PromptKind::KmlOverlayFile
+                | PromptKind::InjectCustomMapFolder
         )
     }
 
@@ -8416,6 +8468,18 @@ impl PlanMenus {
 
     fn tell(&mut self, title: &'static str, text: impl Into<String>) {
         self.prompt = Some(Prompt::message(title, text));
+    }
+
+    /// Inject Custom Map's `FolderBrowserDialog`, as the planner's file dialogs are asked: the
+    /// dialog's own caption, no words, the folder typed.
+    /// `// C#: GCSViews/FlightPlanner.cs:8428-8434`
+    pub fn ask_inject_folder(&mut self) {
+        self.ask(Prompt::input(
+            crate::inject_map::FOLDER_TITLE,
+            "",
+            "",
+            PromptKind::InjectCustomMapFolder,
+        ));
     }
 
     /// KML Overlay's first question, once its file is on the map.
@@ -9407,6 +9471,9 @@ impl PlanMenus {
             PromptKind::KmlLoadFile => return Some(FileRequest::LoadKml(value)),
             PromptKind::ShpMissionLoadFile => return Some(FileRequest::LoadShpMission(value)),
             PromptKind::KmlOverlayFile => return Some(FileRequest::KmlOverlay(value)),
+            PromptKind::InjectCustomMapFolder => {
+                return Some(FileRequest::InjectCustomMap(value));
+            }
             // Yes: the polygons and routes go onto the flight screen's map as well, then the
             // zoom question. `// C#: GCSViews/FlightPlanner.cs:4246-4262`
             PromptKind::KmlToFlightScreen => {

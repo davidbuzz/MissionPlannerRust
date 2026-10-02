@@ -4,14 +4,14 @@ Generated from `crates/mp-gui/src/planner_coverage.rs` by `cargo test -p mp-gui 
 
 | total | done | elsewhere | missing | plumbing | dropped |
 |---:|---:|---:|---:|---:|---:|
-| 121 | 105 | 0 | 4 | 12 | 0 |
+| 121 | 106 | 0 | 3 | 12 | 0 |
 
 Missing, by where the control sits:
 
 | group | missing |
 |---|---:|
 | Map Tool | 2 |
-| planning panel | 2 |
+| planning panel | 1 |
 
 | control | event | handler | text | ours |
 |---|---|---|---|---|
@@ -44,7 +44,7 @@ Missing, by where the control sits:
 | `Commands` | RowsRemoved | `Commands_RowsRemoved` | the waypoint grid | plumbing |
 | `Commands` | RowValidating | `Commands_RowValidating` | the waypoint grid | plumbing |
 | `BUT_Add` | Click | `BUT_Add_Click` | Add Below | done: `plan-add-below` |
-| `BUT_InjectCustomMap` | Click | `BUT_InjectCustomMap_Click` | Inject Custom Map | **missing** |
+| `BUT_InjectCustomMap` | Click | `BUT_InjectCustomMap_Click` | Inject Custom Map | done: `plan-inject` |
 | `chk_grid` | CheckedChanged | `chk_grid_CheckedChanged` | Grid | done: `plan-grid` |
 | `lnk_kml` | LinkClicked | `lnk_kml_LinkClicked` | View KML | **missing** |
 | `BUT_loadwpfile` | Click | `BUT_loadwpfile_Click` | Load File | done: `plan-load` |

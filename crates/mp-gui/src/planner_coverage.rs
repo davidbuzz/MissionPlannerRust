@@ -281,7 +281,7 @@ pub const FLIGHTPLANNER: &[Action] = &[
         "Click",
         "BUT_InjectCustomMap_Click",
         "Inject Custom Map",
-        Missing,
+        Done("plan-inject"),
     ),
     row(
         "chk_grid",
@@ -1348,7 +1348,7 @@ mod tests {
         );
         assert_eq!(
             (done, elsewhere, missing, plumbing, dropped),
-            (105, 0, 4, 12, 0)
+            (106, 0, 3, 12, 0)
         );
     }
 }

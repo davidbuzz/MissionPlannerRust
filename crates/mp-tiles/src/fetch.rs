@@ -255,9 +255,12 @@ mod tests {
         // `MaxZoom = null` (GoogleMapProvider.cs:24, BingMapProvider.cs:21), leaving the limit to
         // the map control's 24 (FlightPlanner.cs:188); the grid here stops at 22, so they get all
         // of it. A missing tile from them is a 404, which the policy backs off like any failure.
+        //
+        // Custom sets `MaxZoom = 22` (Custom.cs:22), the grid's top, and fetches nothing: its
+        // tiles are what Inject Custom Map put in the cache.
         use crate::source::{
-            BING_HYBRID_MAP, BING_MAP, BING_SATELLITE_MAP, GOOGLE_MAP, GOOGLE_SATELLITE_MAP,
-            GOOGLE_TERRAIN_MAP,
+            BING_HYBRID_MAP, BING_MAP, BING_SATELLITE_MAP, CUSTOM, GOOGLE_MAP,
+            GOOGLE_SATELLITE_MAP, GOOGLE_TERRAIN_MAP,
         };
         let unlimited_in_the_csharp = [
             &BING_MAP,
@@ -266,6 +269,7 @@ mod tests {
             &GOOGLE_MAP,
             &GOOGLE_SATELLITE_MAP,
             &GOOGLE_TERRAIN_MAP,
+            &CUSTOM,
         ];
         for source in crate::source::SOURCES {
             if unlimited_in_the_csharp.contains(&source) {

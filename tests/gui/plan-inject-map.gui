@@ -1,0 +1,36 @@
+# Inject Custom Map: the planning screen's BUT_InjectCustomMap, GCSViews/FlightPlanner.cs:8416-8527
+# over ExtLibs/Maps/Custom.cs, ported in crates/mp-gui/src/inject_map.rs with the Custom provider
+# in mp-tiles.
+#
+# The claim: the button asks for a folder; every jpg, jpeg and png under it whose path reads
+# Z<zoom>/<y>/<x>.<ext> is saved again as JPEG into the tile cache under Custom (a stray image is
+# skipped), the bar stepping once a file; at the end the map type is Custom and a box,
+# "Injecting Custom Map Results", counts the tiles by zoom and in all.
+#
+# Needs no link: tools/gui-test.sh tests/gui/plan-inject-map.gui
+
+env XDG_DATA_HOME $WORK
+env MP_TILE_CACHE $WORK/gmapcache
+setup mkdir -p "$WORK/MissionPlannerRust" && printf '<?xml version="1.0" encoding="utf-8"?><Config></Config>' > "$WORK/MissionPlannerRust/config.xml"
+setup python3 -c "from PIL import Image; import os; d='$WORK/tiles/Z15/18000'; os.makedirs(d); Image.new('RGB', (256, 256), (30, 120, 30)).save(d + '/30000.png'); Image.new('RGB', (256, 256), (120, 30, 30)).save(d + '/30001.jpg'); Image.new('RGB', (8, 8)).save('$WORK/tiles/stray.png')"
+
+# The map on, from its cache alone, so the map type can change to Custom.
+tiles offline
+screen plan
+window 1600x1200
+budget 5
+
+expect plan.inject.button Inject Custom Map
+click plan-inject
+expect plan.prompt Browse For Folder
+type $WORK/tiles
+key Return
+
+# The two tiles in, the stray skipped, the map on Custom, the box up.
+expect plan.prompt Injecting Custom Map Results
+expect plan.prompt.text ~ Zoom 15 : 2
+expect plan.prompt.text ~ 2 tiles loaded !
+expect plan.inject.button Inject Custom Map
+expect map.source custom
+click plan-prompt-ok
+expect plan.prompt none

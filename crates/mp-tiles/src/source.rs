@@ -74,10 +74,17 @@ pub struct TileSource {
 }
 
 impl TileSource {
-    /// The URL for one tile, or `None` if the provider does not serve that zoom.
+    /// Whether the provider fetches at all: `Custom` has no URL and serves its cache alone.
+    #[must_use]
+    pub const fn fetches(&self) -> bool {
+        !self.url.is_empty()
+    }
+
+    /// The URL for one tile, or `None` if the provider does not serve that zoom - or does not
+    /// fetch at all.
     #[must_use]
     pub fn url_for(&self, tile: TileId) -> Option<String> {
-        if tile.z > self.max_zoom {
+        if tile.z > self.max_zoom || !self.fetches() {
             return None;
         }
         let mut out = String::with_capacity(self.url.len() + 32);
@@ -333,6 +340,23 @@ pub const BING_HYBRID_MAP: TileSource = TileSource {
     ..BING_MAP
 };
 
+/// `Custom`: the provider Inject Custom Map fills - no URL, `GetTileImage` returns null, so a
+/// tile is what the cache holds and nothing else; `MaxZoom = 22`.
+/// `// C#: ExtLibs/Maps/Custom.cs:20-23, 45, 75-82`
+pub const CUSTOM: TileSource = TileSource {
+    id: "custom",
+    cache_name: "Custom",
+    label: "Custom",
+    url: "",
+    subdomains: &[],
+    servers: 0,
+    version: "",
+    correction: Correction::None,
+    referer: "",
+    max_zoom: 22,
+    attribution: "",
+};
+
 /// OpenTopoMap: contour lines and hillshading, which is what a pilot wants over terrain.
 ///
 /// **Not a Mission Planner provider.** Nothing in the C# fetches from opentopomap.org, so there is
@@ -400,6 +424,7 @@ pub const SOURCES: &[TileSource] = &[
     GOOGLE_MAP,
     GOOGLE_SATELLITE_MAP,
     GOOGLE_TERRAIN_MAP,
+    CUSTOM,
     OPENTOPOMAP,
     ESRI_WORLD_IMAGERY,
 ];
@@ -666,7 +691,7 @@ mod tests {
                 .collect::<Vec<_>>(),
             vec!["opentopo", "esri-imagery"]
         );
-        assert_eq!(ported.len(), 7);
+        assert_eq!(ported.len(), 8);
     }
 
     #[test]
@@ -916,10 +941,11 @@ mod tests {
     #[test]
     fn every_provider_carries_attribution() {
         // A map that shows someone else's data without saying whose is not one worth shipping,
-        // and for these providers it is also a licence breach.
+        // and for these providers it is also a licence breach. Custom fetches nothing: its tiles
+        // are the operator's own, put there by Inject Custom Map, and carry no one's notice.
         for source in SOURCES {
             assert!(
-                !source.attribution.is_empty(),
+                !source.attribution.is_empty() || !source.fetches(),
                 "{} has no attribution",
                 source.id
             );
@@ -928,7 +954,11 @@ mod tests {
             let tiled = source.url.contains("{z}")
                 && source.url.contains("{x}")
                 && source.url.contains("{y}");
-            assert!(tiled || source.url.contains("{q}"), "{}", source.id);
+            assert!(
+                !source.fetches() || tiled || source.url.contains("{q}"),
+                "{}",
+                source.id
+            );
         }
     }
 

@@ -29,6 +29,7 @@ mod glyph_text;
 mod help;
 mod hud;
 mod i18n;
+mod inject_map;
 mod joystick;
 mod logbrowse;
 mod logdownload;
@@ -320,6 +321,8 @@ struct MissionPlanner {
     persisted: settings::Persisted,
     /// The planning map's right-click menu and the dialogs it opens.
     plan_menus: plan::PlanMenus,
+    /// Inject Custom Map's run, while one is on.
+    inject_map: Option<inject_map::Injection>,
     /// Focus for those dialogs, which take the keyboard while they show.
     plan_prompt_focus: gpui::FocusHandle,
     /// The Survey (Grid) dialog the map menu's Auto WP opens.
@@ -769,6 +772,7 @@ impl MissionPlanner {
             },
             plan_name_focus: cx.focus_handle(),
             plan_menus: plan::PlanMenus::default(),
+            inject_map: None,
             plan_prompt_focus: cx.focus_handle(),
             survey: survey_ui::SurveyUi::new(cx),
             plan_home_focus: [cx.focus_handle(), cx.focus_handle(), cx.focus_handle()],
@@ -1175,7 +1179,9 @@ impl MissionPlanner {
             return;
         }
         let cache = TileCache::new(TileCache::default_root());
+        // A provider with no URL - Custom - is its cache and nothing else.
         let store = if std::env::var("MP_OFFLINE").is_ok()
+            || !source.fetches()
             || config::planner::cache_only(&self.persisted)
         {
             TileStore::offline(source, cache)
@@ -1457,6 +1463,52 @@ impl MissionPlanner {
             self.remember();
         }
         self.save_config(settings::SaveEvent::Connect);
+    }
+
+    /// `BUT_InjectCustomMap_Click`: while a run is on the button reads "Cancel" and stops it;
+    /// otherwise the folder dialog. `// C#: GCSViews/FlightPlanner.cs:8416-8445`
+    fn inject_map_clicked(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if let Some(job) = &self.inject_map {
+            job.cancel();
+            return;
+        }
+        self.plan_menus.ask_inject_folder();
+        self.plan_prompt_focus.focus(window, cx);
+    }
+
+    /// The folder named: `Directory.GetFiles` of its images, the run started over them, the bar
+    /// shown. An empty name is the dialog cancelled. `// C#: GCSViews/FlightPlanner.cs:8428-8447`
+    fn inject_map_begin(&mut self, folder: &str) {
+        let folder = folder.trim();
+        if folder.is_empty() {
+            return;
+        }
+        let files = inject_map::scan(std::path::Path::new(folder));
+        let cache = TileCache::new(TileCache::default_root());
+        self.inject_map = Some(inject_map::Injection::start(files, cache));
+    }
+
+    /// The run's end, on the frame: the button's text back, the bar hidden, the map type to
+    /// Custom - a new store, which is the memory cache cleared and the maps reloaded - and the
+    /// results box; the exception that ended it, if one did, on the status line.
+    /// `// C#: GCSViews/FlightPlanner.cs:8488-8527`
+    fn inject_map_tick(&mut self) {
+        if !self
+            .inject_map
+            .as_ref()
+            .is_some_and(inject_map::Injection::finished)
+        {
+            return;
+        }
+        let Some(mut job) = self.inject_map.take() else {
+            return;
+        };
+        job.join();
+        if let Some(why) = job.failure() {
+            self.file_status = Some(format!("Inject Custom Map: {why}"));
+        }
+        self.set_tile_source(&mp_tiles::source::CUSTOM);
+        self.plan_menus.say(inject_map::RESULTS_TITLE, job.results());
     }
 
     /// A question's OK (or Enter): the answer kept under its settings key and as `InputBox`
@@ -2160,6 +2212,7 @@ impl MissionPlanner {
                     },
                     self.tile_source_id(),
                     &plan::ActionExtras {
+                        inject: self.inject_map.as_ref().map(inject_map::Injection::progress),
                         grid: self.plan.grid(),
                         tiles_loading: {
                             let map = self.map.borrow();
@@ -3256,6 +3309,7 @@ impl Render for MissionPlanner {
                 facts::record(key, value);
             }
             plan::record_facts(&self.plan, &self.plan_menus);
+            inject_map::record_facts(self.inject_map.as_ref());
             connect::record_facts(&self.connect_box, view.connected);
             prefetch_ui::record_facts(&self.plan_menus);
             facts::record("plan.docking", self.plan_docking.name());
@@ -3533,6 +3587,8 @@ impl Render for MissionPlanner {
         // Log Downloader's batch. Driven from the render pass because that is the only thing
         // ticking; the link cannot write files and should not decide where they go.
         self.logs_tick();
+        // Inject Custom Map's run: its end switches the map to Custom and shows the results.
+        self.inject_map_tick();
 
         // Keep re-sending a forced arm until it takes, or until we give up. The parameter write
         // that disabled the checks may not have been applied when the first command arrived.
