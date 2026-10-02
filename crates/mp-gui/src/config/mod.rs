@@ -41,6 +41,8 @@ pub mod support_proxy;
 pub mod mavlink_mirror;
 pub mod nmea_output;
 pub mod serial_output;
+// The Advanced page's Param gen.
+pub mod param_gen;
 // ---- end Basic Tuning / Advanced ----
 // ---- Extended Tuning ----
 pub mod extended_tuning;

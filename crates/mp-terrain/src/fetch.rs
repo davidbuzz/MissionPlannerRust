@@ -73,6 +73,16 @@ pub trait Http: Send + Sync {
     ///
     /// No response: the connection failed, was reset, or timed out.
     fn get(&self, url: &str) -> Result<Vec<u8>, HttpError>;
+
+    /// The status and the body `url` answers with, for a caller that tells a 404 from a body:
+    /// `get` with 200, unless the client knows better.
+    ///
+    /// # Errors
+    ///
+    /// As `get`.
+    fn get_status(&self, url: &str) -> Result<(u16, Vec<u8>), HttpError> {
+        self.get(url).map(|body| (200, body))
+    }
 }
 
 /// The real client: `ureq`, blocking, on the queue thread.
@@ -105,16 +115,22 @@ impl UreqHttp {
 
 impl Http for UreqHttp {
     fn get(&self, url: &str) -> Result<Vec<u8>, HttpError> {
+        self.get_status(url).map(|(_, body)| body)
+    }
+
+    fn get_status(&self, url: &str) -> Result<(u16, Vec<u8>), HttpError> {
         let mut response = self
             .agent
             .get(url)
             .call()
             .map_err(|error| HttpError(format!("{url}: {error}")))?;
+        let status = response.status().as_u16();
         response
             .body_mut()
             .with_config()
             .limit(HTTP_MAX_BODY)
             .read_to_vec()
+            .map(|body| (status, body))
             .map_err(|error| HttpError(format!("{url}: {error}")))
     }
 }

@@ -1,0 +1,36 @@
+# The Advanced page's Param gen (ConfigAdvanced.cs:57-78, ExtLibs/Utilities/
+# ParameterMetaDataParser.cs): behind "Downloading updated data" every location's Parameters.cpp
+# is read with its groups' files, and ParameterMetaData.xml written in the user data directory,
+# a vehicle element each with a parameter element each. The harness names its own locations
+# through MP_PARAM_LOCATIONS, so the run reads the fixture under $WORK instead of GitHub: a
+# copter's file with two parameters and a group whose @Path file holds a third.
+#
+# Needs SITL copter on tcp:127.0.0.1:5760. Run as
+#   tools/gui-test.sh tests/gui/config-paramgen.gui -- tcp:127.0.0.1:5760
+
+env MP_CONFIG_XML $WORK/config.xml
+env XDG_DATA_HOME $WORK
+env MP_PARAM_LOCATIONS file://$WORK/src/ArduCopter/Parameters.cpp
+setup mkdir -p $WORK/src/ArduCopter $WORK/src/libraries/AP_Foo && { printf '// @Param: ACRO_RP_P\n// @DisplayName: Acro Roll and Pitch P gain\n// @Range: 1 10\n// @Param: ANGLE_MAX\n// @DisplayName: Angle Max\n// @Units: cdeg\n// @Group: FOO_\n// @Path: ../libraries/AP_Foo/AP_Foo.cpp\n'; for i in $(seq 1 12); do printf '// padding line to pass the blank template check\n'; done; } > $WORK/src/ArduCopter/Parameters.cpp && printf '// @Param: ENABLE\n// @DisplayName: Foo enable\n' > $WORK/src/libraries/AP_Foo/AP_Foo.cpp
+screen setup
+window 1600x1200
+budget 3
+
+expect vehicle.count > 0
+click setup-page-ConfigAdvanced
+expect setup.page ConfigAdvanced
+expect config.advanced.buttons.enabled ~ NMEA,Param gen,
+expect config.paramgen.running false
+expect config.paramgen.started 0
+expect config.paramgen.last none
+
+# The button: the dialogue, then the file.
+click advanced-BUT_paramgen
+expect config.paramgen.started 1
+within 20
+expect config.paramgen.running false
+expect config.paramgen.finished 1
+expect config.paramgen.last ok
+expect config.paramgen.vehicles ArduCopter2:3
+expect config.paramgen.read 2
+expect config.paramgen.file ~ ParameterMetaData.xml

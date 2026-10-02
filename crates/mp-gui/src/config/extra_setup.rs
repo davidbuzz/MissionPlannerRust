@@ -16,8 +16,8 @@ use gpui::{AnyElement, Context, FocusHandle, Window, div, prelude::*};
 
 use super::{
     auth_keys, compass_mot, fft, gps_order, hw_ids, initial_params, mavlink_inspector,
-    mavlink_mirror, nmea_output, osd, parachute, proximity, sikradio, spectrogram, support_proxy,
-    warnings_manager,
+    mavlink_mirror, nmea_output, osd, parachute, param_gen, proximity, sikradio, spectrogram,
+    support_proxy, warnings_manager,
 };
 use crate::MissionPlanner;
 use crate::config::servo_output::{ERROR_TITLE, Message};
@@ -108,6 +108,8 @@ pub struct ExtraSetup {
     pub mavlink_mirror: mavlink_mirror::MavlinkMirror,
     /// The NMEA output the Advanced page opens, and its thread (`config/nmea_output.rs`).
     pub nmea_output: nmea_output::NmeaOutput,
+    /// Param gen's run and its dialogue (`config/param_gen.rs`).
+    pub param_gen: param_gen::ParamGen,
 }
 
 /// The keyboard focus of the pages' boxes: Parachute's number being typed into, and Initial
@@ -197,6 +199,7 @@ pub fn record_facts(pages: &ExtraSetup, view: &TelemetryView) {
     sikradio::record_facts(&pages.sikradio);
     mavlink_mirror::record_facts(&pages.mavlink_mirror);
     nmea_output::record_facts(&pages.nmea_output);
+    param_gen::record_facts(&pages.param_gen);
 }
 
 impl MissionPlanner {
@@ -357,6 +360,7 @@ impl MissionPlanner {
         // The Mavlink Mirror's streams and mirrors, and the NMEA output's stream and thread.
         let mirror_status = pages.mavlink_mirror.tick(telemetry);
         let nmea_status = pages.nmea_output.tick(view.state.as_deref());
+        let paramgen_status = pages.param_gen.tick();
         // The link errors the C# boxes go on the status line instead (the owner's ruling); the
         // page never draws them, since they leave its queue in the tick before the frame.
         let mut status = None;
@@ -398,6 +402,9 @@ impl MissionPlanner {
         }
         if nmea_status.is_some() {
             status = nmea_status;
+        }
+        if paramgen_status.is_some() {
+            status = paramgen_status;
         }
         if status.is_some() {
             self.file_status = status;
@@ -460,6 +467,7 @@ impl MissionPlanner {
                 mavlink_mirror::overlay(&pages.mavlink_mirror, &focus.mirror_cell, window, cx)
             })
             .or_else(|| nmea_output::overlay(&pages.nmea_output, &focus.nmea_prompt, window, cx))
+            .or_else(|| param_gen::overlay(&pages.param_gen, window, cx))
     }
 }
 

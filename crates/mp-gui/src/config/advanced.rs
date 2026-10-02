@@ -55,6 +55,7 @@ use super::fft::Fft;
 use super::mavlink_inspector::InspectorWindow;
 use super::mavlink_mirror::MavlinkMirror;
 use super::nmea_output::NmeaOutput;
+use super::param_gen::ParamGen;
 use super::proximity::ProximityWindow;
 use super::spectrogram::SpectrogramWindow;
 use super::support_proxy::SupportProxy;
@@ -191,7 +192,8 @@ pub const ROWS: [Row; 13] = [
     row("BUT_paramgen", "Param gen", "BUT_paramgen_Click", "label9",
         "Regenerage the param info used inside mp", (214.0, 18.0),
         "regenerating the parameter documentation from ArduPilot's source \
-         (ExtLibs/Utilities/ParameterMetaDataParser.cs)", None),
+         (ExtLibs/Utilities/ParameterMetaDataParser.cs)",
+        Some("config/param_gen.rs")),
     row("BUT_movingbase", "Moving Base", "BUT_movingbase_Click", "label10",
         "Show an extra icon on the map of your current location.", (273.0, 18.0),
         "the moving base window (Controls/MovingBase.cs)", None),
@@ -322,6 +324,17 @@ pub fn click_keys_or_proximity(
     }
 }
 
+/// Param gen: `BUT_paramgen_Click`, the generation started behind its dialogue, writing into
+/// the user data directory. True when it did something.
+/// `// C#: GCSViews/ConfigurationView/ConfigAdvanced.cs:57-78`
+pub fn click_paramgen(button: &str, run: &mut ParamGen, data_dir: &std::path::Path) -> bool {
+    if button == "BUT_paramgen" {
+        run.start(data_dir);
+        return true;
+    }
+    false
+}
+
 /// The Mavlink Mirror's and NMEA's buttons: `BUT_outputMavlink_Click`, `new SerialOutputPass()
 /// .Show()`, and `BUT_outputnmea_Click`, `new SerialOutputNMEA().Show()` - the first reading
 /// its rows from the settings. True when it did something.
@@ -429,6 +442,12 @@ fn button(row: Row, y: f32, cx: &mut Context<MissionPlanner>) -> AnyElement {
                         &mut pages.mavlink_mirror,
                         &mut pages.nmea_output,
                         &this.persisted,
+                    )
+                    || click_paramgen(
+                        row.button,
+                        &mut pages.param_gen,
+                        // `Settings.GetUserDataDirectory()`.
+                        &mp_settings::user_data_directory().unwrap_or_else(std::env::temp_dir),
                     )
                 {
                     // A new form is activated: the proximity window takes its keys at once.
@@ -671,6 +690,7 @@ mod tests {
         proxy: SupportProxy,
         mirror: MavlinkMirror,
         nmea: NmeaOutput,
+        paramgen: ParamGen,
     }
 
     impl Pages {
@@ -691,6 +711,7 @@ mod tests {
                 proxy: SupportProxy::default(),
                 mirror: MavlinkMirror::default(),
                 nmea: NmeaOutput::default(),
+                paramgen: ParamGen::default(),
             }
         }
 
@@ -707,6 +728,7 @@ mod tests {
                 || click_keys_or_proximity(button, &mut self.proximity, &mut self.auth_keys, now)
                 || click_window(button, &mut self.spectrogram, &mut self.proxy, persisted)
                 || click_outputs(button, &mut self.mirror, &mut self.nmea, persisted)
+                || click_paramgen(button, &mut self.paramgen, &std::env::temp_dir())
         }
     }
 
@@ -739,6 +761,7 @@ mod tests {
             let proxy_row = row.button == "BUT_supportproxy";
             let mirror_row = row.button == "BUT_outputMavlink";
             let nmea_row = row.button == "BUT_outputnmea";
+            let paramgen_row = row.button == "BUT_paramgen";
             assert_eq!(windows.fft.window.is_some(), fft_row, "{}", row.button);
             assert_eq!(windows.fft.opened, usize::from(fft_row));
             assert!(
@@ -792,6 +815,9 @@ mod tests {
             assert_eq!(windows.mirror.opened, usize::from(mirror_row));
             assert_eq!(windows.nmea.window.is_some(), nmea_row, "{}", row.button);
             assert_eq!(windows.nmea.opened, usize::from(nmea_row));
+            assert_eq!(windows.paramgen.started, usize::from(paramgen_row));
+            // The run started reads GitHub: cancelled here, unseen.
+            windows.paramgen.cancel();
             // `click` is the two that need nothing but themselves.
             let mut fft = Fft::default();
             let mut inspector = InspectorWindow::default();
@@ -804,7 +830,8 @@ mod tests {
                     && !spectrogram_row
                     && !proxy_row
                     && !mirror_row
-                    && !nmea_row,
+                    && !nmea_row
+                    && !paramgen_row,
                 "{}",
                 row.button
             );
@@ -889,6 +916,7 @@ mod tests {
                 "but_signkey",
                 "BUT_outputMavlink",
                 "BUT_outputnmea",
+                "BUT_paramgen",
                 "but_fft",
                 "BUT_spect",
                 "BUT_supportproxy"

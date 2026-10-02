@@ -148,10 +148,13 @@ Vehicles: **any** is a connected vehicle whose parameter list is whole
         //     (config/support_proxy.rs: the link mirrored to a support engineer's server over
         //     TCP or UDP, mp-link's mirror.rs), Mavlink Mirror the grid of outputs
         //     (config/mavlink_mirror.rs: each row a mirror of the link started by Go, kept in the
-        //     serialpasslist setting) and NMEA the NMEA output (config/nmea_output.rs: GGA, GLL,
-        //     HDG, VTG, RMC and RPY to a port at the rate, the geoid from mp-terrain), 9 of the
-        //     13 wirings; the other four dimmed - the Follow Me, parameter regeneration, moving
-        //     base and log anonymiser windows they open are not ported |
+        //     serialpasslist setting), NMEA the NMEA output (config/nmea_output.rs: GGA, GLL,
+        //     HDG, VTG, RMC and RPY to a port at the rate, the geoid from mp-terrain) and Param
+        //     gen the run behind Downloading updated data (config/param_gen.rs:
+        //     ParameterMetaDataParser over every location's Parameters.cpp and its groups'
+        //     files, ParameterMetaData.xml written in the user data directory), 10 of the 13
+        //     wirings; the other three dimmed - the Follow Me, moving base and log anonymiser
+        //     windows they open are ruled out of scope |
 | 346 | `ConfigTerminal` | Terminal | Advanced | always, Advanced view | 12 | dropped: ruled out of the port by the owner, 2026-09-25 (PLAN §12 D13) |
 | 351 | `ConfigREPL` | Script REPL | Advanced | connected, Advanced view | 4 | dropped: ruled out of the port by the owner, 2026-09-25 (PLAN §12 D13) |
 
