@@ -692,14 +692,12 @@ pub const PANELS: &[Panel] = &[
         cv!("ConfigHWOptFlow"),
         Some(2),
         &[setup(301, "Optical Flow", OPTIONAL, ANY)],
-        // C#: GCSViews/ConfigurationView/ConfigHWOptFlow.cs:8-114
-        Partial(
-            at("crates/mp-gui/src/config/optical_flow.rs", "fn page"),
-            "the legacy FLOW_ENABLE page or the new-style one: FLOW_TYPE, the yaw in degrees,
-        //     the scalers and positions writing 300 ms after a change, the rover's height
-        //     override shown by the type's handler, the sensor picture (crate::pictures); a yaw
-        //     below -179 degrees is kept rather than written back as the C#'s Minimum does",
-        ),
+        // C#: GCSViews/ConfigurationView/ConfigHWOptFlow.cs:8-114, whole: the legacy FLOW_ENABLE
+        // page or the new-style one - FLOW_TYPE, the yaw in degrees, the scalers and positions
+        // writing 300 ms after a change, the rover's height override shown by the type's handler,
+        // the sensor picture (crate::pictures). One divergence, at its site: a yaw below -179
+        // degrees is kept rather than written back as the C#'s Minimum writes it.
+        Ours::Done(at("crates/mp-gui/src/config/optical_flow.rs", "fn page")),
     ),
     panel(
         "ConfigHWOSD",
@@ -987,16 +985,13 @@ pub const PANELS: &[Panel] = &[
         Some(0),
         &[config(221, "User Params", ANY)],
         // ---- GeoFence / rover Basic Tuning / User Params ----
-        // C#: GCSViews/ConfigurationView/ConfigUserDefined.cs:11-96
-        Partial(
-            at("crates/mp-gui/src/config/user_params.rs", "fn page"),
-            "the UserParams list (or the C#'s 22 RC option names), a row for each name the
-        //     vehicle has with a combo of its documented values writing it, Modify's multiline
-        //     InputBox saving the list and building the page again - Cancel included, as the
-        //     C#'s handler ignores the answer; a name without values is its label alone, as the
-        //     C# never adds its number; the InputBox's OK answer kept as
-        //     InputBoxParamsEnterParamNames",
-        ),
+        // C#: GCSViews/ConfigurationView/ConfigUserDefined.cs:11-96, whole: the UserParams list
+        // (or the C#'s 22 RC option names), a row for each name the vehicle has with a combo of
+        // its documented values writing it, Modify's multiline InputBox saving the list and
+        // building the page again - Cancel included, as the C#'s handler ignores the answer; a
+        // name without values is its label alone, as the C# never adds its number; the InputBox's
+        // OK answer kept as InputBoxParamsEnterParamNames.
+        Ours::Done(at("crates/mp-gui/src/config/user_params.rs", "fn page")),
         // ---- end GeoFence / rover Basic Tuning / User Params ----
     ),
     panel(
@@ -1918,7 +1913,7 @@ mod tests {
         );
         assert_eq!(
             (done, partial, missing, plumbing, dropped),
-            (39, 8, 0, 2, 12)
+            (41, 6, 0, 2, 12)
         );
         let by_group: Vec<usize> = [Some(Screen::Setup), Some(Screen::Config), None]
             .iter()

@@ -11,14 +11,14 @@ Generated from `crates/mp-gui/src/config_coverage.rs` by `cargo test -p mp-gui
 
 | panels | done | partial | missing | plumbing | dropped | wirings |
 |---:|---:|---:|---:|---:|---:|---:|
-| 61 | 39 | 8 | 0 | 2 | 12 | 569 |
+| 61 | 41 | 6 | 0 | 2 | 12 | 569 |
 
 | group | panels | done | partial | missing | plumbing | dropped | wirings | wirings
         // in missing panels |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
-| SETUP, `InitialSetup.HardwareConfig_Load` | 44 | 29 | 6 | 0 | 2 | 7 | 258 |
+| SETUP, `InitialSetup.HardwareConfig_Load` | 44 | 30 | 5 | 0 | 2 | 7 | 258 |
         //     0 |
-| CONFIG, `SoftwareConfig.SoftwareConfig_Load` | 13 | 10 | 2 | 0 | 0 | 1 | 277 |
+| CONFIG, `SoftwareConfig.SoftwareConfig_Load` | 13 | 11 | 1 | 0 | 0 | 1 | 277 |
         //     0 |
 | neither list | 4 | 0 | 0 | 0 | 0 | 4 | 34 |
         //     0 |
@@ -118,10 +118,7 @@ Vehicles: **any** is a connected vehicle whose parameter list is whole
 | 289 | `ConfigHWRangeFinder` | Range Finder | Optional Hardware | any | 2 | done: `crates/mp-gui/src/config/rangefinder.rs` `fn page` |
 | 293 | `ConfigHWAirspeed` | Airspeed | Optional Hardware | any | 1 | done: `crates/mp-gui/src/config/airspeed.rs` `fn page` |
 | 297 | `ConfigHWPX4Flow` | PX4Flow | Optional Hardware | always | 1 | dropped: ruled out of the port by the owner, 2026-09-25 (PLAN §12 D13) |
-| 301 | `ConfigHWOptFlow` | Optical Flow | Optional Hardware | any | 2 | partial: `crates/mp-gui/src/config/optical_flow.rs` `fn page` - the legacy FLOW_ENABLE page or the new-style one: FLOW_TYPE, the yaw in degrees,
-        //     the scalers and positions writing 300 ms after a change, the rover's height
-        //     override shown by the type's handler, the sensor picture (crate::pictures); a yaw
-        //     below -179 degrees is kept rather than written back as the C#'s Minimum does |
+| 301 | `ConfigHWOptFlow` | Optical Flow | Optional Hardware | any | 2 | done: `crates/mp-gui/src/config/optical_flow.rs` `fn page` |
 | 305 | `ConfigHWOSD` | OSD | Optional Hardware | any | 1 | done: `crates/mp-gui/src/config/osd.rs` `fn page` |
 | 309 | `ConfigMount` | Camera Gimbal | Optional Hardware | any | 5 | done: `crates/mp-gui/src/config/mount.rs` `fn page` |
 | 313 | `ConfigAntennaTracker` | Antenna tracker | Optional Hardware | tracker | 3 | dropped: ruled out of the port by the owner, 2026-09-25 (PLAN §12 D13) |
@@ -173,12 +170,7 @@ Vehicles: **any** is a connected vehicle whose parameter list is whole
 | 203 | `ConfigFriendlyParamsAdv` | Advanced Params |  | any, Custom view with Advanced Params and Advanced mode | no Designer | done: `crates/mp-gui/src/config/friendly_params.rs` `fn page` |
 | 208 | `ConfigOSD` | Onboard OSD |  | any with OSD parameters, not on Mono | 0 | done: `crates/mp-gui/src/config/onboard_osd_ui.rs` `fn page` |
 | 215 | `MavFTPUI` (`Controls/MavFTPUI.cs`, not a panel) | MAVFtp |  | any reporting MAVLink FTP | 16 | done: `crates/mp-gui/src/config/mavftp.rs` `fn page` |
-| 221 | `ConfigUserDefined` | User Params |  | any | 0 | partial: `crates/mp-gui/src/config/user_params.rs` `fn page` - the UserParams list (or the C#'s 22 RC option names), a row for each name the
-        //     vehicle has with a combo of its documented values writing it, Modify's multiline
-        //     InputBox saving the list and building the page again - Cancel included, as the
-        //     C#'s handler ignores the answer; a name without values is its label alone, as the
-        //     C# never adds its number; the InputBox's OK answer kept as
-        //     InputBoxParamsEnterParamNames |
+| 221 | `ConfigUserDefined` | User Params |  | any | 0 | done: `crates/mp-gui/src/config/user_params.rs` `fn page` |
 | 229 | `ConfigRawParams` | Full Parameter List |  | any, or disconnected | 22 | done: `crates/mp-gui/src/params.rs` `fn list_panel` |
 | 235 | `ConfigFlightModes` | Flight Modes |  | Ateryx | 8 | as at `GCSViews/InitialSetup.cs:228` |
 | 236 | `ConfigAteryxSensors` | Ateryx Zero Sensors |  | Ateryx | 3 | dropped: ruled out of the port by the owner, 2026-09-25 (PLAN §12 D13) |

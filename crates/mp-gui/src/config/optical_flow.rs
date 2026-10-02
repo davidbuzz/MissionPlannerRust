@@ -14,7 +14,6 @@
 //!
 //! What is not ported, and why:
 //!
-//! * `pictureBox2`'s image (`Resources.opticalflow`), a resource this application does not carry;
 //! * the yaw box's `Minimum = -179` holding a yaw below -179 degrees: the C# sets its bounds after
 //!   `setup` has attached the write, so a vehicle holding -179.5 has -179 written back the moment
 //!   the page opens. Here the value is shown as the vehicle holds it and nothing is written that

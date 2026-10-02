@@ -42,10 +42,10 @@
 | Utilities/httpserver.cs | The built-in HTTP server on 56781: network.kml for Google Earth (what the planner's View KML link opens), map.jpg, hud.html and the rest (1,483 lines, ledger state ready) | low | 1 |
 | crates/mp-gui/src/config/firmware_legacy.rs | Install Firmware Legacy: all 20 wirings since 2026-09-26, and since 2026-10-03 UploadFlash too - the page's flows go on to a px4-family board through mp_firmware::flow::upload_px4 as the manifest page's do (not while MP_FIRMWARE_DEVICE stands in for the machine; the other boards' uploads stop as not ported), the dimmed Upload row gone; recorded omissions: Ctrl+Q/Ctrl+P (no control of the page takes the keyboard) and Instance_DeviceChanged's probe; config-firmware-legacy.gui passed headless | low | 100 |
 | crates/mp-gui/src/config/adsb.rs | ADSB page: its five wirings, the bitmask narrowed to the parameter's type, Ctrl+S; config-adsb.gui passed headless | low | 100 |
-| crates/mp-gui/src/config/optical_flow.rs | Optical Flow: remaining wirings | low | 70 |
-| crates/mp-gui/src/config/user_params.rs | User Params page remainder | low | 80 |
+| crates/mp-gui/src/config/optical_flow.rs | Optical Flow: both its wirings and the whole page since 2026-09-26 (the legacy FLOW_ENABLE page or the new-style one, the sensor picture, the rover's height override); the one divergence - a yaw below -179 kept rather than written back - is at its site; the row was not moved when the page was finished; the coverage entry is Done since 2026-10-03 | low | 100 |
+| crates/mp-gui/src/config/user_params.rs | User Params: the whole page since 2026-09-26 (the list or the 22 RC option names, the combos writing their parameters, Modify's InputBox with the C#'s Cancel quirk kept); the row was not moved when the page was finished; the coverage entry is Done since 2026-10-03 | low | 100 |
 | crates/mp-gui/src/config | Antenna Tracker page (Antenna/TrackerUI.cs) | low | 1 |
-| crates/mp-gui/src/config | Mandatory and Optional Hardware heading panels' text | low | 50 |
+| crates/mp-gui/src/config | Mandatory and Optional Hardware heading panels' text: both sentences at label1's place since 2026-09-26 (setup.rs heading_page, ConfigMandatory.resx and ConfigOptional.resx); the row was not moved then | low | 100 |
 | crates/mp-log | ulog reading | low | 1 |
 | tools/sitl/wasm | Node bridge from the WASM SITL's SERIAL0 to tcp:5760 | low | 40 |
 | CI, macOS | First macOS run of the application | low | 5 |
