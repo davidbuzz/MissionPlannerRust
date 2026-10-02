@@ -36,9 +36,14 @@ WIN_ID="${2:?window id}"
 TARGET="${3:?control name}"
 BUTTON="${4:-1}"
 
-NAME="${TARGET%%@*}"
+# The "@" is a fraction's only when a fraction follows it: a name may carry one itself (the
+# MAVFtp page's "@SYS/" node, mavftp-node-@SYS/).
+NAME="$TARGET"
 FRACTION=""
-[ "$TARGET" != "$NAME" ] && FRACTION="${TARGET#*@}"
+if [[ "$TARGET" =~ ^(.*)@([0-9.]+[x,][0-9.]+)$ ]]; then
+    NAME="${BASH_REMATCH[1]}"
+    FRACTION="${BASH_REMATCH[2]}"
+fi
 
 # The probe file is written when a control moves, so it may not exist the instant the window maps.
 # The name is text, not a pattern (-F): a log field called MAV[0].flags has brackets in it.

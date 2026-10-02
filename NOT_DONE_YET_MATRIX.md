@@ -21,7 +21,7 @@
 | crates/mp-gui/src/config/advanced.rs | Advanced page: eight of its thirteen windows to port - Follow Me, Moving Base and Anon Log are ruled out of scope (the last 2026-10-02: beta and not interesting), FFT and the MAVLink Inspector are done; the Inspector merged 2026-09-27 (its tree, rates, GCS traffic and Graph It over a packet subscription on the link; config-mavlink-inspector.gui passed headless against the SITL) | med | 45 |
 | crates/mp-gui/src/config/friendly_params.rs | Standard Params page: the DropDown combo typed into (the exact-matching row, or none and the C#'s NullReferenceException text), Ctrl+S as Write Params, Refresh Params; config-standard-params.gui passed headless | med | 100 |
 | crates/mp-gui/src/config/friendly_params.rs | Advanced Params page: the track bar's thumb dragged and its keys (LargeChange and SmallChange 10), Ctrl+S; config-advanced-params.gui passed headless with the runner's new drag verb | med | 100 |
-| crates/mp-gui/src/config/mavftp.rs | MAVFtp page: remaining wirings of 16 | med | 60 |
+| crates/mp-gui/src/config/mavftp.rs | MAVFtp page: 16 of 16 wirings - the tree's and list's own selection, keys, delayed label edit, header drag and dividers from comctl32, Upload of several files, the context menu from the keyboard; Mount as Drive fails on the status line (no Dokan here); config-mavftp.gui passed headless | med | 100 |
 | crates/mp-gui/src/config | Sik Radio page (Radio/Sikradio.cs, 17 wirings) | med | 1 |
 | crates/mp-gui/src/config | DroneCAN/UAVCAN page (15 wirings) | med | 1 |
 | crates/mp-gui/src/config | Onboard OSD page body (ConfigOSD) | med | 5 |

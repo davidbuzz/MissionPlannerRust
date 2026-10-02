@@ -23,8 +23,8 @@ Generated from `crates/mp-gui/src/config_coverage.rs` by `cargo test -p mp-gui
 | neither list | 4 | 0 | 0 | 0 | 0 | 4 | 34 |
         //     0 |
 
-The lists also add 4 pages that are not in `ConfigurationView/` (`Sikradio`, `JoystickSetup`, `TrackerUI`, `MavFTPUI`): 0 done,
-        // 2 partial, 2 missing, 0 plumbing, 0 dropped. They are
+The lists also add 4 pages that are not in `ConfigurationView/` (`Sikradio`, `JoystickSetup`, `TrackerUI`, `MavFTPUI`): 1 done,
+        // 1 partial, 2 missing, 0 plumbing, 0 dropped. They are
         // in the lists below and not in the counts above.
 
 The largest missing panels, by wirings:
@@ -149,15 +149,7 @@ Vehicles: **any** is a connected vehicle whose parameter list is whole
 | 198 | `ConfigFriendlyParams` | Standard Params |  | any, Custom view with Standard Params | 1 | done: `crates/mp-gui/src/config/friendly_params.rs` `fn page` |
 | 203 | `ConfigFriendlyParamsAdv` | Advanced Params |  | any, Custom view with Advanced Params and Advanced mode | no Designer | done: `crates/mp-gui/src/config/friendly_params.rs` `fn page` |
 | 208 | `ConfigOSD` | Onboard OSD |  | any with OSD parameters, not on Mono | 0 | **missing** |
-| 215 | `MavFTPUI` (`Controls/MavFTPUI.cs`, not a panel) | MAVFtp |  | any reporting MAVLink FTP | 16 | partial: `crates/mp-gui/src/config/mavftp.rs` `fn page` - the tree of / and @SYS/ with @SYS selected and listed, a node's listing replacing its
-        //     children, the list's double click and column sort; Download Burst, Download,
-        //     Upload with its CRC check, Delete, Rename in place, New Folder and GetCRC32 behind
-        //     the progress window with its Cancel and the sessions' reset; dropped files uploaded;
-        //     the status strip's reports every 100 ms; Mount as Drive failing as the C# does
-        //     without Dokan, on the status line; the link's failures there too (the owner's
-        //     rulings); missing
-        //     the tree's and list's keys, several files in one Upload (the path is typed: there
-        //     is no platform dialog) and dragging the column headers |
+| 215 | `MavFTPUI` (`Controls/MavFTPUI.cs`, not a panel) | MAVFtp |  | any reporting MAVLink FTP | 16 | done: `crates/mp-gui/src/config/mavftp.rs` `fn page` |
 | 221 | `ConfigUserDefined` | User Params |  | any | 0 | partial: `crates/mp-gui/src/config/user_params.rs` `fn page` - the UserParams list (or the C#'s 22 RC option names), a row for each name the
         //     vehicle has with a combo of its documented values writing it, Modify's multiline
         //     InputBox saving the list and building the page again - Cancel included, as the

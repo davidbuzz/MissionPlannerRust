@@ -4,13 +4,18 @@
 # (SoftwareConfig.cs:211-216). Loading it lists "/" and "@SYS/", each a root of the tree - "/"
 # with no name, as Path.GetFileName("/") has it - selects the last, @SYS, and lists it
 # (MavFTPUI.cs:73-125, 151-203). Clicking the root lists it. The list's right-click menu makes a
-# folder (New Folder's InputBox, :515-546), a double click opens it (:587-605), Upload writes a file
-# into it and checks the vehicle's CRC of it (:381-448), GetCRC32 shows that CRC in a box
-# (:548-572), Download reads it back into a folder (:324-379), Rename renames it in place
-# (:482-513) and Delete removes it (:450-480). Each is proved by the list the vehicle gives after.
+# folder (New Folder's InputBox, :515-546), a double click opens it (:587-605), Upload writes two
+# files into it at once - the File name box takes several names in double quotes, as
+# OpenFileDialog's does with Multiselect - and checks the vehicle's CRC of each (:381-448),
+# GetCRC32 shows a CRC in a box (:548-572), Download reads a file back into a folder (:324-379),
+# Rename renames one in place (:482-513), a second click on a selected row renames another
+# (LabelEdit's delayed edit, ending in the same ListView1_AfterLabelEdit), the list's keys select
+# both and Delete removes them together (:450-480). Each is proved by the list the vehicle gives
+# after. The tree's keys move its selection and list nothing (the C# wires no AfterSelect); its
+# plus and the right button list a node and leave the selection (NodeMouseClick, :151-203).
 #
-# The scratch file is made in the run's scratch directory: the path boxes standing in for
-# OpenFileDialog and FolderBrowserDialog take its path typed, $WORK expanded by the runner.
+# The scratch files are made in the run's scratch directory: the path boxes standing in for
+# OpenFileDialog and FolderBrowserDialog take their paths typed, $WORK expanded by the runner.
 #
 # Needs SITL copter on tcp:127.0.0.1:5760 started from tools/sitl/params/copter.parm; its FTP root
 # is SITL's working directory. Run as
@@ -21,10 +26,10 @@
 # then puts "Failed to create directory" on the status line until a fresh SITL.
 
 env MP_CONFIG_XML $WORK/config.xml
-setup mkdir -p $WORK/mavftp/down && printf 'hello from the mavftp page\n' > $WORK/mavftp/hello.txt
+setup mkdir -p $WORK/mavftp/down && printf 'hello from the mavftp page\n' > $WORK/mavftp/hello.txt && printf 'second\n' > $WORK/mavftp/two.txt
 screen params
 window 1600x1200
-budget 28
+budget 41
 # RawParamWarning, on the Full Parameter List's Activate (ConfigRawParams.cs:92): "Show me
 # again?" unticked, so no later visit asks, and OK.
 # The vehicle first: a click before its first heartbeat is a click the screen may forget
@@ -53,6 +58,7 @@ expect config.mavftp.selected @SYS/
 expect config.mavftp.list ~ uarts.txt
 expect config.mavftp.item.uarts.txt.type File
 expect config.mavftp.dialog none
+expect config.mavftp.columns Name,Type,Size,Date modified
 
 # The root, and a folder made in it.
 click mavftp-node-/
@@ -75,18 +81,22 @@ expect config.mavftp.item.mprtest.type Directory
 # update - so Mission Planner ends on either, by timing, and so does this.
 expect config.mavftp.status ~ Ready
 
-# Into it, and a file uploaded there: its CRC agrees, or the status line would say so.
+# Into it, and two files uploaded there at once, each in double quotes: their CRCs agree, or the
+# status line would say so.
 doubleclick mavftp-item-mprtest
 expect config.mavftp.selected /mprtest
 expect config.mavftp.list.count 0
 click mavftp-list:right
 click mavftp-menu-upload
 expect config.mavftp.prompt Open
-type $WORK/mavftp/hello.txt
+type "$WORK/mavftp/hello.txt" "$WORK/mavftp/two.txt"
 key Return
 expect config.mavftp.dialog none
-expect config.mavftp.list hello.txt
+expect config.mavftp.list.count 2
+expect config.mavftp.list ~ hello.txt
+expect config.mavftp.list ~ two.txt
 expect config.mavftp.item.hello.txt.size 27B
+expect config.mavftp.item.two.txt.size 7B
 
 # GetCRC32: the box.
 click mavftp-item-hello.txt
@@ -106,7 +116,7 @@ key Return
 expect config.mavftp.dialog none
 expect config.mavftp.status ~ Ready
 
-# Renamed in place.
+# Renamed in place from the menu.
 click mavftp-item-hello.txt:right
 click mavftp-menu-rename
 expect config.mavftp.renaming hello.txt
@@ -114,13 +124,61 @@ key ctrl+u
 type renamed.txt
 key Return
 expect config.mavftp.renaming none
-expect config.mavftp.list renamed.txt
+expect config.mavftp.list ~ renamed.txt
 
-# Removed.
-click mavftp-item-renamed.txt:right
+# Renamed in place by a second click on the row once it is selected: the edit opens when the
+# double-click time has passed with no other click (LabelEdit = true).
+click mavftp-item-two.txt
+expect config.mavftp.selection two.txt
+settle 1
+click mavftp-item-two.txt
+expect config.mavftp.renaming two.txt
+key ctrl+u
+type second.txt
+key Return
+expect config.mavftp.renaming none
+expect config.mavftp.list ~ second.txt
+
+# The list's keys: Home selects the first row, Shift+End takes in the rest; the menu key opens
+# the menu and Escape closes it.
+click mavftp-item-second.txt
+expect config.mavftp.keys list
+key Home
+key shift+End
+expect config.mavftp.selection ~ renamed.txt
+expect config.mavftp.selection ~ second.txt
+key Menu
+expect config.mavftp.menu true
+key Escape
+expect config.mavftp.menu false
+
+# Both removed at once: the right button on a selected row keeps the selection.
+click mavftp-item-second.txt:right
+expect config.mavftp.selection ~ renamed.txt
 click mavftp-menu-delete
 expect config.mavftp.list.count 0
 expect config.mavftp.status ~ Ready
+
+# The tree's keys move its selection and list nothing.
+click mavftp-node-/
+expect config.mavftp.selected /
+expect config.mavftp.list ~ mprtest
+expect config.mavftp.keys tree
+key End
+expect config.mavftp.selected @SYS/
+expect config.mavftp.list ~ mprtest
+key Home
+expect config.mavftp.selected /
+
+# The right button on a node lists it and leaves the selection; the plus closes "/" and lists it.
+click mavftp-node-@SYS/:right
+expect config.mavftp.list ~ uarts.txt
+expect config.mavftp.selected /
+click mavftp-node-/-expand
+expect config.mavftp.tree /,@SYS/
+expect config.mavftp.list ~ mprtest
+click mavftp-node-/-expand
+expect config.mavftp.tree ~ /mprtest
 
 # Sorting: the root's list by name, then back.
 click mavftp-node-/

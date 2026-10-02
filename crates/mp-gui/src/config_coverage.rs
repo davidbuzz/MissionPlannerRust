@@ -1102,20 +1102,14 @@ pub const OTHER_PAGES: &[Panel] = &[
         &[config(215, "MAVFtp", "any reporting MAVLink FTP")],
         // ---- Standard / Advanced Params, MAVFtp, Heli Setup (row 71) ----
         // C#: Controls/MavFTPUI.cs:17-711 over the link's MAVFTP client: PopulateTreeView's two
-        // roots, NodeMouseClick's listing, the context menu's seven items, drag and drop, the
-        // column sort, the progress window with its Cancel, the status strip's reports.
-        Partial(
-            at("crates/mp-gui/src/config/mavftp.rs", "fn page"),
-            "the tree of / and @SYS/ with @SYS selected and listed, a node's listing replacing its
-        //     children, the list's double click and column sort; Download Burst, Download,
-        //     Upload with its CRC check, Delete, Rename in place, New Folder and GetCRC32 behind
-        //     the progress window with its Cancel and the sessions' reset; dropped files uploaded;
-        //     the status strip's reports every 100 ms; Mount as Drive failing as the C# does
-        //     without Dokan, on the status line; the link's failures there too (the owner's
-        //     rulings); missing
-        //     the tree's and list's keys, several files in one Upload (the path is typed: there
-        //     is no platform dialog) and dragging the column headers",
-        ),
+        // roots, NodeMouseClick from a node's text, its plus or minus, its row and the right
+        // button, the list's double click, column sort, header drag and dividers, the splitter,
+        // the context menu's seven items (and the menu key), Upload of several files, drag and
+        // drop, the delayed label edit, the tree's and list's keys and selection as comctl32 has
+        // them, the progress window with its Cancel, the status strip's reports; Mount as Drive
+        // failing without Dokan on the status line - divergences written in the module doc
+        // (the controls' type-ahead and the menu's keys but Escape are not ported).
+        Ours::Done(at("crates/mp-gui/src/config/mavftp.rs", "fn page")),
         // ---- end Standard / Advanced Params, MAVFtp, Heli Setup ----
     ),
 ];

@@ -6,20 +6,45 @@
 //! strip of a label and a progress bar, and "Mount as Drive" at the top right
 //! (`MavFTPUI.Designer.cs:29-235`). When the page is loaded it lists `/` and `@SYS/`, each a root
 //! of the tree with its subdirectories under it, selects the last one made - `@SYS` - and lists it
-//! (`PopulateTreeView`, `MavFTPUI.cs:73-140`). Clicking a directory in the tree lists it again,
-//! replacing its children, directories first and then files (`TreeView1_NodeMouseClick`,
-//! `:151-203`); a double click on a list row opens the directory of that name (`:587-605`); a
-//! column header sorts the list by it, a column of digits as numbers (`:300-322`).
+//! (`PopulateTreeView`, `MavFTPUI.cs:73-140`). A click on a node's text selects it and
+//! `TreeView1_NodeMouseClick` lists it again, replacing its children, directories first and then
+//! files (`:151-203`); WinForms raises that event for a click on any part of a node - its plus or
+//! minus, the rest of its row, the right button - so those list the node too, the selection
+//! staying where it was, and a node above the selection that is closed or listed takes it, as
+//! comctl32 moves it. A double click on a node's text opens or closes it. The tree's keys move
+//! its selection - Up, Down, Home, End, Page Up and Page Down through the nodes drawn, Left and
+//! Right closing and opening or going to the parent and the first child, Backspace to the parent,
+//! the keypad's +, - and * - and list nothing: the C# wires no `AfterSelect`.
 //!
-//! The list's right-click menu: Download Burst and Download (a burst read and a plain read, into
-//! a folder asked for, under the file's name, numbered when taken, `:324-379, 607-663`), Upload (a
-//! file asked for, written into the directory, then the vehicle's CRC of it checked against the
-//! file's, `:381-448`), Delete (`:450-480`), Rename (the row's name edited in place, `:482-513`),
-//! New Folder (an `InputBox`, `:515-546`) and GetCRC32 (a box with the vehicle's CRC, `:548-572`).
-//! Files dropped on the list are uploaded (`:279-298`). Each runs behind a
-//! `ProgressReporterDialogue` with a Cancel, which asks the command to stop and resets the
-//! vehicle's sessions. The page's `MAVFtp` reports its progress onto the status strip, at most
-//! every 100 ms (`:34-65`), and a transfer's window shows it too.
+//! The list is `MultiSelect`: a click selects a row alone, Control toggles one, Shift takes in
+//! the rows from the last one clicked, a press where there is no row selects nothing; its keys
+//! move and extend the selection likewise (Up, Down, Home, End, Page Up, Page Down, Control+Space).
+//! A double click on a row opens the directory of that name (`:587-605`). A column header sorts
+//! the list by its column, a column of digits as numbers (`:300-322`), and a header dragged to
+//! another place moves its column there (`AllowColumnReorder`); a header's divider dragged sizes
+//! its column, double-clicked fits it to its texts, until the next listing sizes them all again
+//! (`AutoResizeColumns`, `:196-202`); the splitter between the tree and the list drags, never
+//! nearer an edge than a panel's `MinSize`. `ListView1_MouseDown` is wired to an empty handler
+//! (`:574-577`): there is nothing of it to port.
+//!
+//! The list's right-click menu - or the menu key, or Shift+F10, which open it in the list's
+//! middle: Download Burst and Download (a burst read and a plain read, into a folder asked for,
+//! under the file's name, numbered when taken, `:324-379, 607-663`), Upload (the files asked for,
+//! each written into the directory, then the vehicle's CRC of it checked against the file's,
+//! `:381-448`), Delete (`:450-480`), Rename (the row's name edited in place, `:482-513`), New
+//! Folder (an `InputBox`, `:515-546`) and GetCRC32 (a box with the vehicle's CRC, `:548-572`). A
+//! second click on a row already selected edits its name too, once the double-click time has
+//! passed (`LabelEdit = true`), ending in the same `ListView1_AfterLabelEdit`; a name left as it
+//! was renames nothing (`e.Label == null`). Files dropped on the list are uploaded
+//! (`ListView1_DragEnter` lets only files in, `ListView1_DragDrop` uploads them, `:279-298,
+//! 579-585`). Each runs behind a `ProgressReporterDialogue` with a Cancel, which asks the command
+//! to stop and resets the vehicle's sessions. The page's `MAVFtp` reports its progress onto the
+//! status strip, at most every 100 ms (`:34-65`), and a transfer's window shows it too.
+//!
+//! What the two controls do of themselves - selection, keys, the delayed edit, the header's drag -
+//! is comctl32's, which WinForms' `TreeView` and `ListView` wrap: it is ported from Wine's
+//! reimplementation of it (`dlls/comctl32/treeview.c`, `listview.c`, `header.c`, named at each
+//! site) and from WinForms' own source (`TreeView.WndProc`, `Control.WmContextMenu`).
 //!
 //! The link has one MAVFTP client per vehicle (`mp_link::ftp`), which runs one request at a
 //! time: the page's commands run one after another on it, as `lock (_mavftp)` has them in the
@@ -34,14 +59,20 @@
 //!   questions keep their boxes;
 //! * `FolderBrowserDialog` and `OpenFileDialog` are boxes with a path typed into them, as the
 //!   application's other pages have them: there is no platform dialog here. The folder starts in
-//!   `Settings.GetUserDataDirectory()`, as `SelectedPath` does; the upload takes one file, where
-//!   the C#'s `Multiselect` dialog takes several;
+//!   `Settings.GetUserDataDirectory()`, as `SelectedPath` does; the upload's box takes several
+//!   names, each in double quotes, as the Windows dialog's File name box does with `Multiselect`,
+//!   and a name of no file is taken as Cancel, where the dialog would not close on it;
 //! * "Mount as Drive" mounts through Dokan, a Windows file-system driver that this platform does
 //!   not have: `Mount` fails, and the C#'s "Failed to mount" text, with the .NET message for the
 //!   missing driver, goes on the status line;
 //! * a listing another command is waiting behind starts when that command ends, not beside it;
-//! * the tree and the list take no keys: WinForms' arrow keys, and F2 for a rename, are not
-//!   wired; neither is `AllowColumnReorder`'s dragging of the headers;
+//! * the controls' type-ahead - letters typed moving the selection to a name starting with them -
+//!   is not ported: Windows does not document its rules, and Wine's comctl32, the reference here,
+//!   gives the tree and the list two different sets; the keys above reach every node and row.
+//!   F2 does nothing, as in Mission Planner: neither comctl32's list nor WinForms begins an edit
+//!   on it, and the C# wires no key;
+//! * the context menu takes no keys but Escape - its arrows, Enter and the `&Delete` and
+//!   `&Rename` mnemonics are not wired: no menu in this application takes the keyboard;
 //! * a crash of the C#'s - `SelectedItems[0]` with nothing selected, `SelectedNode.FullPath` with
 //!   no node - is the .NET exception's text on the status line, where Mission Planner's
 //!   unhandled-exception box shows it.
@@ -49,14 +80,15 @@
 // This module is internal to the binary; `pub` here documents intent rather than exporting API.
 #![allow(unreachable_pub)]
 
+use std::cell::{Cell, OnceCell};
 use std::cmp::Ordering;
 use std::collections::{BTreeSet, VecDeque};
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 
 use gpui::{
-    AnyElement, Context, ExternalPaths, FocusHandle, KeyDownEvent, MouseButton, SharedString,
-    Window, div, prelude::*, px, rgb,
+    AnyElement, Context, ExternalPaths, FocusHandle, KeyDownEvent, MouseButton, ScrollHandle,
+    SharedString, Window, div, prelude::*, px, relative, rgb,
 };
 use mp_link::FtpError;
 use mp_link::mavftp::{FtpFileInfo, FtpOutcome, FtpRequest, Progress, RW_SIZE, crc_crc32};
@@ -94,6 +126,19 @@ pub const READY: &str = "Ready";
 /// How often the page's `Progress` handler lets a report onto the status strip.
 /// `// C#: Controls/MavFTPUI.cs:44-49`
 pub const REPORT_EVERY: Duration = Duration::from_millis(100);
+
+/// `SystemInformation.DoubleClickTime`'s default: a click on a row already selected edits its
+/// name when no second click follows within it (`LabelEdit = true`; comctl32's delayed edit,
+/// `SetTimer(..., GetDoubleClickTime(), LISTVIEW_DelayedEditItem)`).
+pub const DOUBLE_CLICK_TIME: Duration = Duration::from_millis(500);
+
+/// The rows the list shows at once under its header - comctl32's count per column in details
+/// view, the client height over a row's, which Page Up and Page Down move by.
+pub const LIST_PAGE: usize = 29;
+
+/// The nodes the tree shows at once - `TVM_GETVISIBLECOUNT`, the client height over a node's -
+/// which Page Up and Page Down move by.
+pub const TREE_PAGE: usize = 32;
 
 /// `ProgressReporterDialogue`'s cancel message, `doWorkArgs.ErrorMessage`.
 /// `// C#: Controls/MavFTPUI.cs:340`
@@ -189,6 +234,78 @@ pub fn modified_string(modified_utc: Option<u32>) -> String {
 #[must_use]
 pub fn file_name(path: &str) -> &str {
     path.rsplit(['/', '\\']).next().unwrap_or(path)
+}
+
+/// `OpenFileDialog.FileNames` from its File name box with `Multiselect = true`: several names,
+/// each in double quotes, as the Windows dialog takes them; a line with no quotes is one name.
+/// `// C#: Controls/MavFTPUI.cs:383-392`
+#[must_use]
+pub fn file_names(text: &str) -> Vec<PathBuf> {
+    if text.contains('"') {
+        text.split('"')
+            .skip(1)
+            .step_by(2)
+            .filter(|name| !name.trim().is_empty())
+            .map(PathBuf::from)
+            .collect()
+    } else {
+        let name = text.trim();
+        if name.is_empty() {
+            Vec::new()
+        } else {
+            vec![PathBuf::from(name)]
+        }
+    }
+}
+
+/// The keys held through a click or a key: `Control.ModifierKeys`, as the list and the tree read
+/// them.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct Mods {
+    /// Control.
+    pub control: bool,
+    /// Shift.
+    pub shift: bool,
+}
+
+impl Mods {
+    /// The keys of a gpui event.
+    #[must_use]
+    pub const fn of(modifiers: gpui::Modifiers) -> Self {
+        Self {
+            control: modifiers.control,
+            shift: modifiers.shift,
+        }
+    }
+}
+
+/// The page's control that has the keyboard: the one clicked last.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Control {
+    /// `treeView1`.
+    Tree,
+    /// `listView1`.
+    List,
+}
+
+/// Where `contextMenuStrip1` opens.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum MenuAt {
+    /// At the pointer, in the window.
+    Pointer(f32, f32),
+    /// From the keyboard - the menu key, or Shift+F10 - in the list's middle, as
+    /// `Control.WmContextMenu` places a menu the keyboard opened (`Width / 2, Height / 2`).
+    Middle,
+}
+
+/// What a press on the page's edges drags.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Dragged {
+    /// `splitContainer1`'s splitter, between the tree and the list.
+    Splitter,
+    /// The divider at a column's right edge in the header: the column, by its index in
+    /// `Columns`.
+    Divider(usize),
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -309,6 +426,34 @@ fn full_path(nodes: &[Node], path: &str) -> Option<String> {
         }
     }
     None
+}
+
+/// The tags' paths of the nodes the tree draws, in order: comctl32's list items, which the keys
+/// move through.
+fn visible_paths(nodes: &[Node]) -> Vec<String> {
+    let mut drawn = Vec::new();
+    visible(nodes, 0, &mut drawn);
+    drawn.into_iter().map(|(_, node)| node.path).collect()
+}
+
+/// `TreeNode.Parent`'s tag path; none for a root.
+fn parent_path(nodes: &[Node], path: &str) -> Option<String> {
+    for node in nodes {
+        if node.children.iter().any(|child| child.path == path) {
+            return Some(node.path.clone());
+        }
+        if let Some(parent) = parent_path(&node.children, path) {
+            return Some(parent);
+        }
+    }
+    None
+}
+
+/// Whether a node with this tag path is anywhere under `node`: comctl32's `TREEVIEW_IsChildOf`.
+fn is_below(node: &Node, path: &str) -> bool {
+    node.children
+        .iter()
+        .any(|child| child.path == path || is_below(child, path))
 }
 
 /// A `ListViewItem`: the name, its three sub-items, and the directory it was listed from - the
@@ -519,10 +664,19 @@ enum Step {
     SelectLastRoot,
     /// `TreeView1_NodeMouseClick(SelectedNode)`: the list cleared and the node listed.
     Click,
+    /// `TreeView1_NodeMouseClick` for the node a click was on - `e.Node` - selected or not.
+    ClickNode(String),
     /// Requests on the link.
     Work(Work),
     /// GetCRC32's box, once its window has closed.
     CrcBox { name: String },
+}
+
+impl Step {
+    /// Whether it puts a request on the link, and so waits for the one there.
+    const fn uses_link(&self) -> bool {
+        matches!(self, Self::Work(_) | Self::Click | Self::ClickNode(_))
+    }
 }
 
 /// The progress window.
@@ -604,6 +758,32 @@ pub struct MavFtp {
     items: Vec<Item>,
     /// `SelectedItems`, by index.
     selected: BTreeSet<usize>,
+    /// comctl32's `nFocusedItem`: the row the keys move from.
+    focused: Option<usize>,
+    /// comctl32's `nSelectionMark`: where a Shift range starts.
+    mark: Option<usize>,
+    /// A click on a row already selected: the row, and when its name is edited if no second
+    /// click has come.
+    edit_due: Option<(usize, Instant)>,
+    /// The edit that timer opened wants the keyboard, once the page is drawn.
+    edit_focus: Cell<bool>,
+    /// Which control has the keyboard.
+    keys_to: Option<Control>,
+    /// The tree's and the list's keyboard focus, made when the page is first drawn.
+    keys: OnceCell<FocusHandle>,
+    /// The rows' scroll position: the top row, for Page Up and Page Down, and a row the keys
+    /// reach brought into view.
+    scroll: ScrollHandle,
+    /// `ColumnHeader.DisplayIndex`: the columns in the order the header shows them.
+    column_order: [usize; 4],
+    /// `splitContainer1.SplitterDistance`: the tree's width, where the splitter was dragged.
+    splitter: f32,
+    /// The columns' widths as a divider's drag or double click left them, until the next
+    /// listing sizes them again (`AutoResizeColumns` ends `NodeMouseClick`); none, sized so.
+    widths: Option<[f32; 4]>,
+    /// The splitter or a header's divider being dragged: what, where it was pressed, and the
+    /// distance or the width then.
+    drag: Option<(Dragged, f32, f32)>,
     /// `Sorting` and the column the sorter reads, once a header is clicked.
     sort: Option<(usize, bool)>,
     /// `toolStripStatusLabel1.Text`.
@@ -617,7 +797,7 @@ pub struct MavFtp {
     /// The report last seen, so each is taken once.
     last_report: Option<Progress>,
     /// The context menu, while it is open: where.
-    menu: Option<(f32, f32)>,
+    menu: Option<MenuAt>,
     /// A row's name being edited: its index and the text.
     renaming: Option<(usize, TextField)>,
     /// The box asking for a name, a folder or a file.
@@ -649,6 +829,17 @@ impl Default for MavFtp {
             last_root: None,
             items: Vec::new(),
             selected: BTreeSet::new(),
+            focused: None,
+            mark: None,
+            edit_due: None,
+            edit_focus: Cell::new(false),
+            keys_to: None,
+            keys: OnceCell::new(),
+            scroll: ScrollHandle::new(),
+            column_order: [0, 1, 2, 3],
+            splitter: SPLITTER.0,
+            widths: None,
+            drag: None,
             sort: None,
             status: STATUS_START.to_owned(),
             bar_value: 0,
@@ -725,8 +916,102 @@ impl MavFtp {
 
     /// Where the context menu is open.
     #[must_use]
-    pub const fn menu(&self) -> Option<(f32, f32)> {
+    pub const fn menu(&self) -> Option<MenuAt> {
         self.menu
+    }
+
+    /// The row the keys move from.
+    #[must_use]
+    pub const fn focused(&self) -> Option<usize> {
+        self.focused
+    }
+
+    /// The control with the keyboard.
+    #[must_use]
+    pub const fn keys_to(&self) -> Option<Control> {
+        self.keys_to
+    }
+
+    /// The columns in the order the header shows them.
+    #[must_use]
+    pub const fn column_order(&self) -> [usize; 4] {
+        self.column_order
+    }
+
+    /// The tree's width: `SplitterDistance`.
+    #[must_use]
+    pub const fn splitter(&self) -> f32 {
+        self.splitter
+    }
+
+    /// The list's left edge and width, right of the splitter.
+    #[must_use]
+    pub fn list_bounds(&self) -> (f32, f32) {
+        let left = self.splitter + SPLITTER.1;
+        (left, PAGE_SIZE.0 - left)
+    }
+
+    /// The columns' widths, by their index in `Columns`: a drag's, or `AutoResizeColumns`' in the
+    /// list's client area, inside its border.
+    #[must_use]
+    pub fn column_widths(&self) -> [f32; 4] {
+        self.widths
+            .unwrap_or_else(|| column_widths(&self.items, self.list_bounds().1 - 2.0))
+    }
+
+    /// The splitter or a divider pressed, at `at` across the window.
+    pub fn begin_drag(&mut self, what: Dragged, at: f32) {
+        self.close_menu_and_rename();
+        let start = match what {
+            Dragged::Splitter => self.splitter,
+            Dragged::Divider(column) => self.column_widths().get(column).copied().unwrap_or(0.0),
+        };
+        self.drag = Some((what, at, start));
+    }
+
+    /// The pointer moved with the button down: the splitter follows it, never nearer an edge than
+    /// a panel's `MinSize`; a divider likewise, a column never under nothing (comctl32's
+    /// `HEADER_MouseMove`, `iNewWidth < 0`). Whether something is being dragged.
+    pub fn drag_to(&mut self, at: f32) -> bool {
+        let Some((what, from, start)) = self.drag else {
+            return false;
+        };
+        let moved = at - from;
+        match what {
+            Dragged::Splitter => {
+                let most = PAGE_SIZE.0 - PANEL_MIN - SPLITTER.1;
+                self.splitter = (start + moved).round().clamp(PANEL_MIN, most);
+            }
+            Dragged::Divider(column) => {
+                let mut widths = self.column_widths();
+                if let Some(width) = widths.get_mut(column) {
+                    *width = (start + moved).round().max(0.0);
+                }
+                self.widths = Some(widths);
+            }
+        }
+        true
+    }
+
+    /// The button let go.
+    pub fn end_drag(&mut self) {
+        self.drag = None;
+    }
+
+    /// A divider double-clicked: the column as wide as its widest text, the header's left out -
+    /// comctl32's list answers `HDN_DIVIDERDBLCLICK` with `LVSCW_AUTOSIZE`.
+    pub fn fit_column(&mut self, column: usize) {
+        let mut widths = self.column_widths();
+        let longest = self
+            .items
+            .iter()
+            .map(|item| item.column(column).chars().count())
+            .max()
+            .unwrap_or(0);
+        if let Some(width) = widths.get_mut(column) {
+            *width = text_width(longest);
+        }
+        self.widths = Some(widths);
     }
 
     /// The row being renamed, and the text.
@@ -752,11 +1037,7 @@ impl MavFtp {
     /// Whether a command runs, or waits to.
     #[must_use]
     pub fn busy(&self) -> bool {
-        self.running.is_some()
-            || self
-                .steps
-                .iter()
-                .any(|step| matches!(step, Step::Work(_) | Step::Click))
+        self.running.is_some() || self.steps.iter().any(Step::uses_link)
     }
 
     /// The message box showing.
@@ -800,6 +1081,7 @@ impl MavFtp {
         self.commit_rename();
         self.active = false;
         self.menu = None;
+        self.drag = None;
     }
 
     /// `PopulateTreeView`: `/` and `@SYS/` listed, each a root; the last selected and listed.
@@ -843,48 +1125,374 @@ impl MavFtp {
         ]);
     }
 
-    /// A node clicked: selected, and `TreeView1_NodeMouseClick` for it.
-    /// `// C#: Controls/MavFTPUI.cs:151-203`
-    pub fn click_node(&mut self, path: &str) {
+    /// Whether a click on the tree reaches a node: the tree enabled - `treeView1.Enabled` is false
+    /// while `PopulateTreeView` lists - and the node there. The tree takes the keyboard.
+    fn tree_takes(&mut self, path: &str) -> bool {
         self.close_menu_and_rename();
         if !self.tree_enabled || find(&self.tree, path).is_none() {
+            return false;
+        }
+        self.keys_to = Some(Control::Tree);
+        true
+    }
+
+    /// A node's text clicked: comctl32 selects it, and `TreeView1_NodeMouseClick` lists it.
+    /// `// C#: Controls/MavFTPUI.cs:151-203`
+    pub fn click_node(&mut self, path: &str) {
+        if !self.tree_takes(path) {
             return;
         }
         self.selected_node = Some(path.to_owned());
-        self.steps.push_back(Step::Click);
+        self.steps.push_back(Step::ClickNode(path.to_owned()));
     }
 
-    /// A node's plus or minus: expanded or collapsed.
-    pub fn toggle_node(&mut self, path: &str) {
-        self.close_menu_and_rename();
-        if !self.tree_enabled {
+    /// A click on the rest of a node's row - its indent, or right of its text - or with the right
+    /// button anywhere on it: WinForms raises `NodeMouseClick` for a click on any part of a node
+    /// (`TreeView.WndProc`'s `WM_LBUTTONUP` and `NM_RCLICK`, which hit-test the row), and the C#
+    /// lists that node whatever the button. comctl32 selects only on the node's text, so
+    /// `SelectedNode` stays where it was: the list shows one directory while Upload, Download,
+    /// Rename, New Folder and GetCRC32 name `SelectedNode`'s, as in Mission Planner.
+    /// `// C#: Controls/MavFTPUI.cs:151-203`
+    pub fn click_node_row(&mut self, path: &str) {
+        if self.tree_takes(path) {
+            self.steps.push_back(Step::ClickNode(path.to_owned()));
+        }
+    }
+
+    /// A node's plus or minus: comctl32 expands or collapses it on the press, then
+    /// `NodeMouseClick` lists it, the selection staying as it was. A second click within the
+    /// double-click time only toggles it again: WinForms raises no `NodeMouseClick` for the
+    /// second click of a double click (`doubleclickFired`).
+    /// `// C#: Controls/MavFTPUI.cs:151-203`
+    pub fn toggle_node(&mut self, path: &str, clicks: usize) {
+        if !self.tree_takes(path) {
             return;
         }
-        if let Some(node) = find_mut(&mut self.tree, path) {
-            node.expanded = !node.expanded;
+        self.toggle(path);
+        if clicks < 2 {
+            self.steps.push_back(Step::ClickNode(path.to_owned()));
         }
     }
 
-    /// A row clicked: it alone selected, or with Control, toggled in the selection.
-    pub fn click_item(&mut self, index: usize, control: bool) {
+    /// A node's text double-clicked: the first click selected and listed it; the second toggles
+    /// it, comctl32's `TREEVIEW_LButtonDoubleClick`, and lists nothing.
+    pub fn double_click_node(&mut self, path: &str) {
+        if self.tree_takes(path) {
+            self.toggle(path);
+        }
+    }
+
+    /// comctl32's `TREEVIEW_Toggle`: an open node closed, a closed one opened.
+    fn toggle(&mut self, path: &str) {
+        if find(&self.tree, path).is_some_and(|node| node.expanded) {
+            self.collapse(path);
+        } else {
+            self.expand(path);
+        }
+    }
+
+    /// comctl32's `TREEVIEW_Expand`: a node with children opened.
+    fn expand(&mut self, path: &str) {
+        if let Some(node) = find_mut(&mut self.tree, path)
+            && !node.children.is_empty()
+        {
+            node.expanded = true;
+        }
+    }
+
+    /// comctl32's `TREEVIEW_ExpandAll`: a node and every node under it opened.
+    fn expand_all(&mut self, path: &str) {
+        fn open(node: &mut Node) {
+            if !node.children.is_empty() {
+                node.expanded = true;
+            }
+            for child in &mut node.children {
+                open(child);
+            }
+        }
+        if let Some(node) = find_mut(&mut self.tree, path) {
+            open(node);
+        }
+    }
+
+    /// comctl32's `TREEVIEW_Collapse`: an open node closed; a node selected under it gives the
+    /// selection to it (with no `AfterSelect`, so the list stays).
+    fn collapse(&mut self, path: &str) {
+        let Some(node) = find_mut(&mut self.tree, path) else {
+            return;
+        };
+        if node.children.is_empty() || !node.expanded {
+            return;
+        }
+        node.expanded = false;
+        let hidden = self
+            .selected_node
+            .as_deref()
+            .is_some_and(|selected| is_below(node, selected));
+        if hidden {
+            self.selected_node = Some(path.to_owned());
+        }
+    }
+
+    /// A key with the tree holding the keyboard: comctl32's `TREEVIEW_KeyDown` - Up, Down, Home,
+    /// End, Page Up and Page Down move the selection through the nodes drawn, Left closes a node
+    /// or goes to its parent, Right opens one or goes to its first child, Backspace goes to the
+    /// parent, the keypad's +, - and * open, close and open everything under. With Control the
+    /// view scrolls and the selection stays. `SelectedNode` changes with no `NodeMouseClick` -
+    /// the C# wires no `AfterSelect` - so the list stays as it was, as in Mission Planner.
+    /// Whether the key was the tree's.
+    pub fn tree_key(&mut self, key: &str, mods: Mods) -> bool {
+        if !matches!(
+            key,
+            "up" | "down"
+                | "home"
+                | "end"
+                | "pageup"
+                | "pagedown"
+                | "left"
+                | "right"
+                | "backspace"
+                | "add"
+                | "subtract"
+                | "multiply"
+        ) {
+            return false;
+        }
+        let Some(current) = self.selected_node.clone() else {
+            return true;
+        };
+        if !self.tree_enabled || mods.control {
+            return true;
+        }
+        let order = visible_paths(&self.tree);
+        let at = order.iter().position(|path| *path == current);
+        let first = self.tree.first().map(|node| node.path.clone());
+        let (expanded, has_children, first_child) =
+            find(&self.tree, &current).map_or((false, false, None), |node| {
+                (
+                    node.expanded,
+                    !node.children.is_empty(),
+                    node.children.first().map(|child| child.path.clone()),
+                )
+            });
+        let next = match key {
+            // `TREEVIEW_GetPrevListItem`, or the first root when there is none.
+            "up" => at
+                .and_then(|i| i.checked_sub(1))
+                .and_then(|i| order.get(i).cloned())
+                .or(first),
+            "down" => at.and_then(|i| order.get(i + 1).cloned()),
+            "home" => first,
+            "end" => order.last().cloned(),
+            // `TREEVIEW_GetListItem(item, -/+TREEVIEW_GetVisibleCount)`, stopping at the ends.
+            "pageup" => at.and_then(|i| order.get(i.saturating_sub(TREE_PAGE)).cloned()),
+            "pagedown" => at.and_then(|i| {
+                order
+                    .get((i + TREE_PAGE).min(order.len().saturating_sub(1)))
+                    .cloned()
+            }),
+            "left" if expanded => {
+                self.collapse(&current);
+                None
+            }
+            "left" | "backspace" => parent_path(&self.tree, &current),
+            "right" if has_children && !expanded => {
+                self.expand(&current);
+                None
+            }
+            "right" => first_child,
+            "add" => {
+                self.expand(&current);
+                None
+            }
+            "subtract" => {
+                self.collapse(&current);
+                None
+            }
+            _ => {
+                self.expand_all(&current);
+                None
+            }
+        };
+        if let Some(next) = next {
+            self.selected_node = Some(next);
+        }
+        true
+    }
+
+    /// A row clicked with the left button: comctl32's `LISTVIEW_LButtonDown` and
+    /// `LISTVIEW_LButtonUp` for a `MultiSelect` list (the default) - Control toggles the row,
+    /// Shift selects from the mark to it, both add that range; a plain click selects it alone,
+    /// and when it was selected already its name is edited once the double-click time has passed
+    /// with no second click (`LabelEdit = true`, with `FullRowSelect` anywhere on the row), the
+    /// edit ending in `ListView1_AfterLabelEdit`. The list takes the keyboard.
+    /// `// C#: Controls/MavFTPUI.Designer.cs (listView1.LabelEdit, FullRowSelect)`
+    pub fn click_item(&mut self, index: usize, mods: Mods, now: Instant) {
         self.close_menu_and_rename();
+        self.keys_to = Some(Control::List);
         if index >= self.items.len() {
             return;
         }
-        if control {
-            if !self.selected.remove(&index) {
-                self.selected.insert(index);
+        match (mods.control, mods.shift) {
+            (true, true) => {
+                self.add_range(index);
+                self.focused = Some(index);
             }
-        } else {
+            (true, false) => {
+                if !self.selected.remove(&index) {
+                    self.selected.insert(index);
+                }
+                self.focused = Some(index);
+                self.mark = Some(index);
+            }
+            (false, true) => self.group_select(index),
+            (false, false) => {
+                let was_selected = self.selected.contains(&index);
+                self.select_only(index);
+                if was_selected {
+                    self.edit_due = Some((index, now + DOUBLE_CLICK_TIME));
+                }
+            }
+        }
+    }
+
+    /// The left button on the list where there is no row: comctl32 deselects everything, unless
+    /// Control or Shift is held (`LISTVIEW_LButtonDown`). The list takes the keyboard.
+    pub fn click_list(&mut self, mods: Mods) {
+        self.close_menu_and_rename();
+        self.keys_to = Some(Control::List);
+        if !mods.control && !mods.shift {
             self.selected.clear();
-            self.selected.insert(index);
+        }
+    }
+
+    /// comctl32's `LISTVIEW_SetSelection`: the row alone selected, focused, and the mark.
+    fn select_only(&mut self, index: usize) {
+        self.selected.clear();
+        self.selected.insert(index);
+        self.focused = Some(index);
+        self.mark = Some(index);
+    }
+
+    /// comctl32's `LISTVIEW_SetGroupSelection`: the mark to the row selected and nothing else - the
+    /// row alone, and the mark, when there is none - and the row focused.
+    fn group_select(&mut self, index: usize) {
+        match self.mark {
+            Some(mark) => self.selected = (mark.min(index)..=mark.max(index)).collect(),
+            None => {
+                self.mark = Some(index);
+                self.selected = BTreeSet::from([index]);
+            }
+        }
+        self.focused = Some(index);
+    }
+
+    /// comctl32's `LISTVIEW_AddGroupSelection`: the mark to the row added to the selection.
+    fn add_range(&mut self, index: usize) {
+        let mark = self.mark.unwrap_or(index);
+        self.selected.extend(mark.min(index)..=mark.max(index));
+    }
+
+    /// A key with the list holding the keyboard: comctl32's `LISTVIEW_KeyDown` in details view -
+    /// Up, Down, Home, End, Page Up and Page Down move to a row and select it alone; with Shift
+    /// from the mark to it; with Control they move the focus only, and Control+Space toggles the
+    /// focused row (`LISTVIEW_KeySelection`). The row is brought into view. Left and Right move
+    /// nothing in details view. Whether the key was the list's.
+    pub fn list_key(&mut self, key: &str, mods: Mods) -> bool {
+        let count = self.items.len();
+        let top = self.top_row();
+        let last_shown = top + LIST_PAGE - 1;
+        let target = match key {
+            "space" => self.focused,
+            "home" => (count > 0).then_some(0),
+            "end" => count.checked_sub(1),
+            "up" => self.focused.and_then(|row| row.checked_sub(1)),
+            "down" => match self.focused {
+                None => (count > 0).then_some(0),
+                Some(row) => (row + 1 < count).then_some(row + 1),
+            },
+            "pageup" => Some(if self.focused == Some(top) {
+                top.saturating_sub(LIST_PAGE - 1)
+            } else {
+                top
+            }),
+            "pagedown" => {
+                let row = if self.focused == Some(last_shown) {
+                    last_shown + LIST_PAGE - 1
+                } else {
+                    last_shown
+                };
+                count.checked_sub(1).map(|end| row.min(end))
+            }
+            "left" | "right" => None,
+            _ => return false,
+        };
+        let space = key == "space";
+        if let Some(row) = target
+            && row < count
+            && (Some(row) != self.focused || space)
+        {
+            if !mods.shift && !mods.control {
+                self.select_only(row);
+            } else if mods.shift {
+                self.group_select(row);
+            } else {
+                if space && !self.selected.remove(&row) {
+                    self.selected.insert(row);
+                    self.mark = Some(row);
+                }
+                self.focused = Some(row);
+            }
+            // `LISTVIEW_EnsureVisible`.
+            self.scroll.scroll_to_item(row);
+        }
+        true
+    }
+
+    /// The top row shown: the rows' scroll position over a row's height.
+    fn top_row(&self) -> usize {
+        let offset = -f32::from(self.scroll.offset().y);
+        #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+        let row = (offset.max(0.0) / LIST_ROW).floor() as usize;
+        row
+    }
+
+    /// A key with the page holding the keyboard: to the tree or the list, whichever was clicked
+    /// last. While the menu is open it has the keys: Escape closes it. The menu key or
+    /// Shift+F10 on the list opens `contextMenuStrip1` in the list's middle (`WM_CONTEXTMENU`
+    /// from the keyboard, `Control.WmContextMenu`). Nothing while a box or a window is over the
+    /// page, or a name is being edited. Whether the key was taken.
+    pub fn key(&mut self, key: &str, mods: Mods) -> bool {
+        if self.renaming.is_some()
+            || self.prompt.is_some()
+            || !self.messages.is_empty()
+            || self.dialog().is_some()
+        {
+            return false;
+        }
+        if self.menu.is_some() {
+            if key == "escape" {
+                self.menu = None;
+            }
+            return true;
+        }
+        match self.keys_to {
+            Some(Control::Tree) => self.tree_key(key, mods),
+            Some(Control::List) if key == "menu" || (key == "f10" && mods.shift) => {
+                self.menu = Some(MenuAt::Middle);
+                true
+            }
+            Some(Control::List) => self.list_key(key, mods),
+            None => false,
         }
     }
 
     /// `ListView1_MouseDoubleClick`: the selected node expanded, and the child named as the first
-    /// selected row selected and listed.
+    /// selected row selected and listed. A double click cancels the edit its first click armed
+    /// (comctl32's `LISTVIEW_LButtonDblClk`).
     /// `// C#: Controls/MavFTPUI.cs:587-605`
     pub fn double_click(&mut self) {
+        self.edit_due = None;
         let Some(first) = self
             .selected
             .first()
@@ -912,7 +1520,8 @@ impl MavFtp {
     }
 
     /// A column header clicked: the order flipped - from `None`, which is not `Descending`, to
-    /// `Descending` first - and the rows sorted by it.
+    /// `Descending` first - and the rows sorted by it. The column is the header's own, wherever
+    /// a drag has put it (`ColumnClickEventArgs.Column` is the index in `Columns`).
     /// `// C#: Controls/MavFTPUI.cs:300-322`
     pub fn click_column(&mut self, column: usize) {
         self.close_menu_and_rename();
@@ -921,38 +1530,75 @@ impl MavFtp {
         self.sort_items();
     }
 
-    /// The rows in the sorter's order; the selection follows its rows.
+    /// `AllowColumnReorder`: a header dragged and let go on a divider - `divider` counts the
+    /// headers left of it, as shown: before the header under the pointer, or after it on its
+    /// right half - moves there, and the rows show their cells in the new order. comctl32's
+    /// `HEADER_SetHotDivider` and `HEADER_LButtonUp`: the new place is the divider's, one less
+    /// when that is right of where the header was. A drag sorts nothing.
+    /// `// C#: Controls/MavFTPUI.Designer.cs (listView1.AllowColumnReorder = true)`
+    pub fn drop_column(&mut self, column: usize, divider: usize) {
+        let mut order = self.column_order.to_vec();
+        let Some(from) = order.iter().position(|shown| *shown == column) else {
+            return;
+        };
+        let last = order.len() - 1;
+        let to = if divider > last {
+            last
+        } else if divider > from {
+            divider - 1
+        } else {
+            divider
+        };
+        order.remove(from);
+        order.insert(to, column);
+        for (slot, shown) in self.column_order.iter_mut().zip(order) {
+            *slot = shown;
+        }
+    }
+
+    /// The rows in the sorter's order; the selection, the focus and the mark follow their rows,
+    /// as comctl32's `LISTVIEW_SortItems` keeps them.
     fn sort_items(&mut self) {
         let Some((column, descending)) = self.sort else {
             return;
         };
-        let mut rows: Vec<(Item, bool)> = self
-            .items
-            .drain(..)
-            .enumerate()
-            .map(|(index, item)| (item, self.selected.contains(&index)))
-            .collect();
-        rows.sort_by(|a, b| compare(a.0.column(column), b.0.column(column), descending));
-        self.selected = rows
-            .iter()
-            .enumerate()
-            .filter(|(_, (_, selected))| *selected)
-            .map(|(index, _)| index)
-            .collect();
-        self.items = rows.into_iter().map(|(item, _)| item).collect();
+        let mut rows: Vec<(usize, Item)> = self.items.drain(..).enumerate().collect();
+        rows.sort_by(|a, b| compare(a.1.column(column), b.1.column(column), descending));
+        let moved = |old: usize| rows.iter().position(|(was, _)| *was == old);
+        self.selected = self.selected.iter().filter_map(|old| moved(*old)).collect();
+        self.focused = self.focused.and_then(moved);
+        self.mark = self.mark.and_then(moved);
+        self.edit_due = self
+            .edit_due
+            .and_then(|(row, due)| moved(row).map(|row| (row, due)));
+        self.items = rows.into_iter().map(|(_, item)| item).collect();
     }
 
-    /// A right-click on the list: the row under it selected if it is not, and the menu opened.
-    pub fn open_menu(&mut self, row: Option<usize>, at: (f32, f32)) {
+    /// The right button on the list: comctl32's `LISTVIEW_RButtonDown` - a row focused, and
+    /// selected alone unless it is selected already or Control or Shift is held; where there is
+    /// no row, nothing selected - then `contextMenuStrip1` at the pointer. The list takes the
+    /// keyboard.
+    pub fn open_menu(&mut self, row: Option<usize>, mods: Mods, at: (f32, f32)) {
         self.commit_rename();
-        if let Some(index) = row
-            && !self.selected.contains(&index)
-            && index < self.items.len()
-        {
-            self.selected.clear();
-            self.selected.insert(index);
+        self.keys_to = Some(Control::List);
+        match row.filter(|index| *index < self.items.len()) {
+            Some(index) => {
+                self.focused = Some(index);
+                if !mods.control && !mods.shift && !self.selected.contains(&index) {
+                    self.select_only(index);
+                }
+            }
+            None => self.selected.clear(),
         }
-        self.menu = Some(at);
+        self.menu = Some(MenuAt::Pointer(at.0, at.1));
+    }
+
+    /// The right button on the header: the header is the list's child window, which takes the
+    /// press itself, so the selection stays; its `WM_CONTEXTMENU` reaches the list's
+    /// `ContextMenuStrip`, at the pointer.
+    pub fn open_menu_on_header(&mut self, at: (f32, f32)) {
+        self.commit_rename();
+        self.menu = Some(MenuAt::Pointer(at.0, at.1));
     }
 
     /// The menu closed without a choice.
@@ -988,12 +1634,7 @@ impl MavFtp {
             Menu::Rename => {
                 // `listView1.SelectedItems[0].BeginEdit()`. `// C#: Controls/MavFTPUI.cs:482-485`
                 match self.selected.first().copied() {
-                    Some(index) => {
-                        let name = self.items.get(index).map_or("", |item| item.name.as_str());
-                        let mut field = TextField::new("");
-                        field.set(name);
-                        self.renaming = Some((index, field));
-                    }
+                    Some(index) => self.begin_edit(index),
                     None => self.status_line.push_back(NO_SELECTION.to_owned()),
                 }
             }
@@ -1008,10 +1649,20 @@ impl MavFtp {
         }
     }
 
-    /// "Mount as Drive": unmounted, so the mount point asked for.
+    /// `ListViewItem.BeginEdit`: the row's name in an edit box over it.
+    fn begin_edit(&mut self, index: usize) {
+        self.edit_due = None;
+        let name = self.items.get(index).map_or("", |item| item.name.as_str());
+        let mut field = TextField::new("");
+        field.set(name);
+        self.renaming = Some((index, field));
+    }
+
+    /// "Mount as Drive": unmounted, so the mount point asked for. The button takes the keyboard.
     /// `// C#: Controls/MavFTPUI.cs:673-697`
     pub fn press_mount(&mut self) {
         self.close_menu_and_rename();
+        self.keys_to = None;
         self.prompt = Some(Prompt::Mount(InputBox::new(
             MOUNT_TITLE,
             MOUNT_PROMPT,
@@ -1071,8 +1722,15 @@ impl MavFtp {
             Prompt::Mount(_) => {}
             Prompt::Folder(_, burst) => self.download(ok.then(|| PathBuf::from(answer)), burst),
             Prompt::Open(_) => {
-                if ok {
-                    self.upload(&[PathBuf::from(answer)]);
+                // `ofd.FileNames`, each uploaded; the directory is listed again whatever the
+                // answer (`MavFTPUI.cs:402-403` is outside the `if`). A name that is not a file
+                // is as Cancel: the dialog does not close on it (`CheckFileExists`).
+                // `// C#: Controls/MavFTPUI.cs:381-404`
+                let files = if ok { file_names(&answer) } else { Vec::new() };
+                if files.iter().all(|file| file.is_file()) {
+                    self.upload(&files);
+                } else {
+                    self.upload(&[]);
                 }
             }
         }
@@ -1217,7 +1875,8 @@ impl MavFtp {
     }
 
     /// The edit ended with a label: `ListView1_AfterLabelEdit`, the row renamed behind the window
-    /// and the directory listed again.
+    /// and the directory listed again. A name left as it was is `e.Label == null` - comctl32
+    /// passes no text for it (`LISTVIEW_EndEditLabelT`) - and the C# returns at once.
     /// `// C#: Controls/MavFTPUI.cs:487-513`
     pub fn commit_rename(&mut self) {
         let Some((index, field)) = self.renaming.take() else {
@@ -1227,6 +1886,9 @@ impl MavFtp {
         let Some(text) = self.items.get(index).map(|item| item.name.clone()) else {
             return;
         };
+        if label == text {
+            return;
+        }
         let Some(node) = self.selected_full_path() else {
             self.status_line.push_back(NULL_REFERENCE.to_owned());
             return;
@@ -1343,6 +2005,30 @@ impl MavFtp {
         }
         self.follow(port, now);
         self.run_steps(port, now);
+        self.edit_when_due(now);
+    }
+
+    /// comctl32's `LISTVIEW_DelayedEditItem`: the double-click time has passed since a click on a
+    /// row already selected, with no second click - the row's name is edited if it is still
+    /// selected and the list still has the keyboard (and nothing is over the page).
+    fn edit_when_due(&mut self, now: Instant) {
+        let Some((row, due)) = self.edit_due else {
+            return;
+        };
+        if now < due {
+            return;
+        }
+        self.edit_due = None;
+        if self.keys_to == Some(Control::List)
+            && self.selected.contains(&row)
+            && self.renaming.is_none()
+            && self.menu.is_none()
+            && self.prompt.is_none()
+            && self.dialog().is_none()
+        {
+            self.begin_edit(row);
+            self.edit_focus.set(true);
+        }
     }
 
     /// The request on the link: its reports onto the strip and the window, and when it has
@@ -1558,12 +2244,21 @@ impl MavFtp {
 
     /// `NodeMouseClick` after `GetDirectories`: the node's children made again from the listing's
     /// directories, the rows the directories, then the files - from the node's listing, or a
-    /// listing of its own when the node has none.
+    /// listing of its own when the node has none. `Nodes.Clear()` deleting the selected node, or
+    /// one it is under, gives the selection to the node listed: comctl32's `TREEVIEW_DeleteItem`
+    /// selects a deleted item's next sibling or else its parent, and the children go last first.
     /// `// C#: Controls/MavFTPUI.cs:157-203, 235-276`
     fn listed(&mut self, path: &str, entries: Option<Vec<FtpFileInfo>>) {
         let Some(node) = find_mut(&mut self.tree, path) else {
             return;
         };
+        if self
+            .selected_node
+            .as_deref()
+            .is_some_and(|selected| is_below(node, selected))
+        {
+            self.selected_node = Some(path.to_owned());
+        }
         let dirs = entries.as_deref().map(directories).unwrap_or_default();
         if let Some(entries) = entries {
             node.cache = Some(entries);
@@ -1600,8 +2295,11 @@ impl MavFtp {
         }
     }
 
-    /// `GetFiles`' rows: every entry that is not a directory.
+    /// `GetFiles`' rows: every entry that is not a directory. Then
+    /// `AutoResizeColumns(HeaderSize)`: widths a drag left go.
+    /// `// C#: Controls/MavFTPUI.cs:182-202`
     fn add_files(&mut self, path: &str, entries: &[FtpFileInfo]) {
+        self.widths = None;
         for file in entries.iter().filter(|entry| !entry.is_directory) {
             self.items.push(Item {
                 name: file.name.clone(),
@@ -1635,11 +2333,11 @@ impl MavFtp {
             let Some(step) = self.steps.front() else {
                 return;
             };
-            if matches!(step, Step::Work(_) | Step::Click) && self.running.is_some() {
+            if step.uses_link() && self.running.is_some() {
                 return;
             }
             // A command another page runs on the vehicle is waited for.
-            if matches!(step, Step::Work(_) | Step::Click)
+            if step.uses_link()
                 && let Some(vehicle) = self.vehicle
                 && matches!(port.progress(vehicle), Some((true, _)))
             {
@@ -1655,25 +2353,11 @@ impl MavFtp {
                 Step::ClearTree => self.tree.clear(),
                 Step::SelectLastRoot => self.selected_node.clone_from(&self.last_root),
                 Step::Click => {
-                    // `listView1.Items.Clear()`, then the node's `GetDirectories`.
-                    self.items.clear();
-                    self.selected.clear();
-                    self.renaming = None;
-                    let Some(node) = self.selected_node.clone() else {
-                        continue;
-                    };
-                    self.start_work(
-                        port,
-                        Work::listing(
-                            false,
-                            Call {
-                                request: FtpRequest::List { path: node.clone() },
-                                then: Then::Listed { node },
-                            },
-                        ),
-                        now,
-                    );
+                    if let Some(node) = self.selected_node.clone() {
+                        self.start_listing(port, node, now);
+                    }
                 }
+                Step::ClickNode(node) => self.start_listing(port, node, now),
                 Step::Work(work) => self.start_work(port, work, now),
                 Step::CrcBox { name } => {
                     self.messages
@@ -1681,6 +2365,33 @@ impl MavFtp {
                 }
             }
         }
+    }
+
+    /// `TreeView1_NodeMouseClick` for a node: `e.Node == null` returns at once (a node no longer
+    /// in the tree likewise); else `listView1.Items.Clear()` - its selection, focus and mark
+    /// with it - and the node's `GetDirectories`.
+    /// `// C#: Controls/MavFTPUI.cs:151-166`
+    fn start_listing<P: FtpPort>(&mut self, port: &P, node: String, now: Instant) {
+        if find(&self.tree, &node).is_none() {
+            return;
+        }
+        self.items.clear();
+        self.selected.clear();
+        self.focused = None;
+        self.mark = None;
+        self.edit_due = None;
+        self.renaming = None;
+        self.start_work(
+            port,
+            Work::listing(
+                false,
+                Call {
+                    request: FtpRequest::List { path: node.clone() },
+                    then: Then::Listed { node },
+                },
+            ),
+            now,
+        );
     }
 
     /// A command's first request started, behind its window if it has one.
@@ -1806,6 +2517,29 @@ pub fn record_facts(page: &MavFtp) {
             .collect::<Vec<_>>()
             .join(","),
     );
+    record(
+        "config.mavftp.focused",
+        page.focused()
+            .and_then(|index| page.items().get(index))
+            .map_or("none", |item| item.name.as_str()),
+    );
+    record(
+        "config.mavftp.keys",
+        match page.keys_to() {
+            Some(Control::Tree) => "tree",
+            Some(Control::List) => "list",
+            None => "none",
+        },
+    );
+    record(
+        "config.mavftp.columns",
+        page.column_order()
+            .iter()
+            .filter_map(|column| COLUMNS.get(*column))
+            .map(|(text, _)| *text)
+            .collect::<Vec<_>>()
+            .join(","),
+    );
     record("config.mavftp.menu", page.menu().is_some());
     record(
         "config.mavftp.prompt",
@@ -1862,8 +2596,19 @@ const CHAR: f32 = 6.0;
 /// `// C#: Controls/MavFTPUI.Designer.cs (contextMenuStrip1.Size, *ToolStripMenuItem.Size)`
 const MENU_ROW: (f32, f32) = (133.0, 22.0);
 
+/// `SplitContainer.Panel1MinSize` and `Panel2MinSize`'s default: how near an edge the splitter
+/// goes.
+const PANEL_MIN: f32 = 25.0;
+
+/// A column wide enough for a text of so many characters, and its margins.
+fn text_width(chars: usize) -> f32 {
+    #[allow(clippy::cast_precision_loss)]
+    let text = chars as f32 * CHAR;
+    text + 12.0
+}
+
 /// `AutoResizeColumns(HeaderSize)`: each column as wide as its header or its widest text, the
-/// last filling the rest.
+/// last - `Columns`' last, wherever the header shows it - filling the rest.
 fn column_widths(items: &[Item], width: f32) -> [f32; 4] {
     let mut widths = [0.0_f32; 4];
     for (column, (header, _)) in COLUMNS.iter().enumerate() {
@@ -1873,10 +2618,8 @@ fn column_widths(items: &[Item], width: f32) -> [f32; 4] {
             .max()
             .unwrap_or(0)
             .max(header.chars().count());
-        #[allow(clippy::cast_precision_loss)]
-        let text = longest as f32 * CHAR + 12.0;
         if let Some(slot) = widths.get_mut(column) {
-            *slot = text;
+            *slot = text_width(longest);
         }
     }
     let used: f32 = widths.iter().take(3).sum();
@@ -1897,7 +2640,16 @@ fn folder_icon() -> AnyElement {
         .into_any_element()
 }
 
-/// The tree, left of the splitter.
+/// The keyboard to the page's tree and list: the handle the page is drawn with.
+fn focus_keys(this: &MissionPlanner, window: &mut Window, cx: &mut Context<MissionPlanner>) {
+    if let Some(keys) = this.software_pages2.mavftp.keys.get() {
+        keys.focus(window, cx);
+    }
+}
+
+/// The tree, left of the splitter. A node's row: its plus or minus, its text, and the rest of the
+/// row, each clicked as `treeView1` takes it (`MavFtp::toggle_node`, `click_node`,
+/// `click_node_row`); the right button anywhere on the row is `NodeMouseClick` too.
 fn tree_panel(page: &MavFtp, cx: &mut Context<MissionPlanner>) -> AnyElement {
     let mut nodes = Vec::new();
     visible(page.tree(), 0, &mut nodes);
@@ -1907,14 +2659,25 @@ fn tree_panel(page: &MavFtp, cx: &mut Context<MissionPlanner>) -> AnyElement {
         .absolute()
         .left(px(0.0))
         .top(px(0.0))
-        .w(px(SPLITTER.0))
+        .w(px(page.splitter()))
         .h(px(PAGE_SIZE.1 - STATUS_HEIGHT))
         .overflow_y_scroll()
         .flex()
         .flex_col()
         .border_1()
         .border_color(rgb(theme::BORDER))
-        .bg(rgb(theme::BG));
+        .bg(rgb(theme::BG))
+        // A press where there is no node: the tree takes the keyboard, nothing more.
+        .on_mouse_down(
+            MouseButton::Left,
+            cx.listener(|this, _event, window, cx| {
+                let page = &mut this.software_pages2.mavftp;
+                if page.tree_enabled() {
+                    page.keys_to = Some(Control::Tree);
+                    focus_keys(this, window, cx);
+                }
+            }),
+        );
     for (depth, node) in nodes {
         let id = format!("mavftp-node-{}", node.path);
         let selected = page.selected_node() == Some(node.path.as_str());
@@ -1932,15 +2695,20 @@ fn tree_panel(page: &MavFtp, cx: &mut Context<MissionPlanner>) -> AnyElement {
                 .text_color(rgb(theme::DIM))
                 .cursor_pointer()
                 .child(if node.expanded { "−" } else { "+" })
-                .on_click(cx.listener(move |this, _event, _window, cx| {
-                    this.software_pages2.mavftp.toggle_node(&path);
-                    cx.notify();
-                }))
+                .on_click(
+                    cx.listener(move |this, event: &gpui::ClickEvent, window, cx| {
+                        let clicks = event.click_count();
+                        this.software_pages2.mavftp.toggle_node(&path, clicks);
+                        focus_keys(this, window, cx);
+                        cx.stop_propagation();
+                        cx.notify();
+                    }),
+                )
                 .into_any_element()
         };
         let path = node.path.clone();
         let label = crate::probe::measured(id.clone(), div())
-            .id(SharedString::from(id))
+            .id(SharedString::from(id.clone()))
             .flex()
             .items_center()
             .gap_1()
@@ -1953,46 +2721,168 @@ fn tree_panel(page: &MavFtp, cx: &mut Context<MissionPlanner>) -> AnyElement {
             .child(folder_icon())
             .child(node.text.clone())
             .when(enabled, |label| {
-                label
-                    .cursor_pointer()
-                    .on_click(cx.listener(move |this, _event, _window, cx| {
-                        this.software_pages2.mavftp.click_node(&path);
+                label.cursor_pointer().on_click(cx.listener(
+                    move |this, event: &gpui::ClickEvent, window, cx| {
+                        let page = &mut this.software_pages2.mavftp;
+                        if event.click_count() == 2 {
+                            page.double_click_node(&path);
+                        } else {
+                            page.click_node(&path);
+                        }
+                        focus_keys(this, window, cx);
+                        cx.stop_propagation();
                         cx.notify();
-                    }))
+                    },
+                ))
             });
+        let row_path = node.path.clone();
+        let right_path = node.path.clone();
         tree = tree.child(
             div()
+                .id(SharedString::from(format!("{id}-row")))
                 .flex()
                 .items_center()
+                .flex_shrink_0()
                 .pl(px(indent))
                 .h(px(TREE_ROW))
                 .child(expander)
-                .child(label),
+                .child(label)
+                .on_click(
+                    cx.listener(move |this, event: &gpui::ClickEvent, window, cx| {
+                        if event.click_count() < 2 {
+                            this.software_pages2.mavftp.click_node_row(&row_path);
+                        }
+                        focus_keys(this, window, cx);
+                        cx.notify();
+                    }),
+                )
+                .on_mouse_down(
+                    MouseButton::Right,
+                    cx.listener(move |this, _event, window, cx| {
+                        this.software_pages2.mavftp.click_node_row(&right_path);
+                        focus_keys(this, window, cx);
+                        cx.stop_propagation();
+                        cx.notify();
+                    }),
+                ),
         );
     }
     tree.into_any_element()
 }
 
-/// The list, right of the splitter: the headers, the rows, the rename box.
-fn list_panel(
-    page: &MavFtp,
-    rename: &FocusHandle,
-    window: &Window,
-    cx: &mut Context<MissionPlanner>,
-) -> AnyElement {
-    let left = SPLITTER.0 + SPLITTER.1;
-    let width = PAGE_SIZE.0 - left;
-    let widths = column_widths(page.items(), width);
+/// What a header carries while it is dragged: its column, and its text for the ghost.
+#[derive(Debug, Clone)]
+struct ColumnDrag {
+    column: usize,
+    text: SharedString,
+}
+
+/// The header drawn under the pointer while it is dragged, as comctl32's header drags an image
+/// of itself (`ImageList_BeginDrag`).
+struct ColumnGhost(SharedString);
+
+impl Render for ColumnGhost {
+    fn render(&mut self, _window: &mut Window, _cx: &mut Context<Self>) -> impl IntoElement {
+        div()
+            .px_1()
+            .h(px(LIST_ROW))
+            .text_xs()
+            .text_color(rgb(theme::TEXT))
+            .bg(rgb(theme::PANEL))
+            .border_1()
+            .border_color(rgb(theme::ACCENT))
+            .opacity(0.8)
+            .child(self.0.clone())
+    }
+}
+
+/// One half of a header, where a dragged header can be let go: the divider before the header,
+/// or after it on its right half (comctl32's `HEADER_SetHotDivider`), lit while a header is
+/// over it.
+fn drop_half(divider: usize, right: bool, cx: &mut Context<MissionPlanner>) -> impl IntoElement {
+    div()
+        .absolute()
+        .top(px(0.0))
+        .h_full()
+        .w(relative(0.5))
+        .left(relative(if right { 0.5 } else { 0.0 }))
+        .drag_over::<ColumnDrag>(move |style, _drag, _window, _cx| {
+            if right {
+                style.border_r_2().border_color(rgb(theme::ACCENT))
+            } else {
+                style.border_l_2().border_color(rgb(theme::ACCENT))
+            }
+        })
+        .on_drop(cx.listener(move |this, drag: &ColumnDrag, _window, cx| {
+            this.software_pages2
+                .mavftp
+                .drop_column(drag.column, divider);
+            cx.notify();
+        }))
+}
+
+/// A column's divider, at its right edge: pressed and dragged it sizes the column (comctl32's
+/// `HEADER_LButtonDown` on `HHT_ONDIVIDER`, then `HEADER_MouseMove`), double-clicked it fits it
+/// to its texts (`HDN_DIVIDERDBLCLICK`).
+fn divider(column: usize, cx: &mut Context<MissionPlanner>) -> impl IntoElement {
+    let id = format!("mavftp-divider-{column}");
+    crate::probe::measured(id.clone(), div())
+        .id(SharedString::from(id))
+        .absolute()
+        .top(px(0.0))
+        .right(px(0.0))
+        .h_full()
+        .w(px(5.0))
+        .cursor(gpui::CursorStyle::ResizeLeftRight)
+        .on_mouse_down(
+            MouseButton::Left,
+            cx.listener(move |this, event: &gpui::MouseDownEvent, _window, cx| {
+                let page = &mut this.software_pages2.mavftp;
+                if event.click_count == 2 {
+                    page.fit_column(column);
+                } else {
+                    page.begin_drag(Dragged::Divider(column), f32::from(event.position.x));
+                }
+                cx.stop_propagation();
+                cx.notify();
+            }),
+        )
+}
+
+/// The header, its columns in the order shown: a click sorts by the column
+/// (`ListView1_ColumnClick`), a drag moves it (`AllowColumnReorder`), its divider sizes it, the
+/// right button opens the list's menu.
+fn header_strip(page: &MavFtp, widths: [f32; 4], cx: &mut Context<MissionPlanner>) -> AnyElement {
     let mut header = div()
         .flex()
+        .flex_shrink_0()
         .h(px(LIST_ROW))
         .border_b_1()
-        .border_color(rgb(theme::BORDER));
-    for (column, ((text, _), w)) in COLUMNS.iter().zip(widths).enumerate() {
+        .border_color(rgb(theme::BORDER))
+        .on_mouse_down(
+            MouseButton::Right,
+            cx.listener(|this, event: &gpui::MouseDownEvent, _window, cx| {
+                let at = (f32::from(event.position.x), f32::from(event.position.y));
+                this.software_pages2.mavftp.open_menu_on_header(at);
+                cx.stop_propagation();
+                cx.notify();
+            }),
+        );
+    for (shown, column) in page.column_order().into_iter().enumerate() {
+        let Some((text, _)) = COLUMNS.get(column) else {
+            continue;
+        };
+        let w = widths.get(column).copied().unwrap_or(0.0);
         let id = format!("mavftp-col-{column}");
+        let drag = ColumnDrag {
+            column,
+            text: SharedString::from(*text),
+        };
         header = header.child(
             crate::probe::measured(id.clone(), div())
                 .id(SharedString::from(id))
+                .relative()
+                .flex_shrink_0()
                 .w(px(w))
                 .px_1()
                 .text_xs()
@@ -2003,13 +2893,43 @@ fn list_panel(
                 .border_color(rgb(theme::BORDER))
                 .cursor_pointer()
                 .child(*text)
-                .on_click(cx.listener(move |this, _event, _window, cx| {
+                .child(drop_half(shown, false, cx))
+                .child(drop_half(shown + 1, true, cx))
+                .child(divider(column, cx))
+                .on_drag(drag, |drag, _offset, _window, cx| {
+                    let text = drag.text.clone();
+                    cx.new(|_| ColumnGhost(text))
+                })
+                .on_click(cx.listener(move |this, _event, window, cx| {
                     this.software_pages2.mavftp.click_column(column);
+                    focus_keys(this, window, cx);
+                    cx.stop_propagation();
                     cx.notify();
                 })),
         );
     }
-    let mut rows = div().flex().flex_col();
+    header.into_any_element()
+}
+
+/// The list, right of the splitter: the header, then the rows under it - which scroll, the
+/// header staying - with the name being edited in place.
+fn list_panel(
+    page: &MavFtp,
+    rename: &FocusHandle,
+    window: &Window,
+    cx: &mut Context<MissionPlanner>,
+) -> AnyElement {
+    let (left, width) = page.list_bounds();
+    let height = PAGE_SIZE.1 - STATUS_HEIGHT;
+    let widths = page.column_widths();
+    let order = page.column_order();
+    let mut rows = div()
+        .id("mavftp-rows")
+        .flex()
+        .flex_col()
+        .h(px(height - LIST_ROW))
+        .overflow_y_scroll()
+        .track_scroll(&page.scroll);
     let renaming = page.renaming();
     for (index, item) in page.items().iter().enumerate() {
         let id = format!("mavftp-item-{}", item.name);
@@ -2017,6 +2937,7 @@ fn list_panel(
         let mut row = crate::probe::measured(id.clone(), div())
             .id(SharedString::from(id))
             .flex()
+            .flex_shrink_0()
             .items_center()
             .h(px(LIST_ROW))
             .text_xs()
@@ -2024,48 +2945,59 @@ fn list_panel(
             .text_color(rgb(theme::TEXT))
             .when(selected, |row| row.bg(rgb(theme::ACCENT)))
             .on_click(
-                cx.listener(move |this, event: &gpui::ClickEvent, _window, cx| {
+                cx.listener(move |this, event: &gpui::ClickEvent, window, cx| {
                     let page = &mut this.software_pages2.mavftp;
                     if event.click_count() == 2 {
                         page.double_click();
                     } else {
-                        page.click_item(index, event.modifiers().control);
+                        page.click_item(index, Mods::of(event.modifiers()), Instant::now());
                     }
+                    focus_keys(this, window, cx);
+                    cx.stop_propagation();
                     cx.notify();
                 }),
             )
             .on_mouse_down(
                 MouseButton::Right,
-                cx.listener(move |this, event: &gpui::MouseDownEvent, _window, cx| {
+                cx.listener(move |this, event: &gpui::MouseDownEvent, window, cx| {
                     let at = (f32::from(event.position.x), f32::from(event.position.y));
-                    this.software_pages2.mavftp.open_menu(Some(index), at);
+                    let mods = Mods::of(event.modifiers);
+                    this.software_pages2.mavftp.open_menu(Some(index), mods, at);
+                    focus_keys(this, window, cx);
                     cx.stop_propagation();
                     cx.notify();
                 }),
             );
-        for (column, w) in widths.iter().enumerate() {
+        for column in order {
+            let w = widths.get(column).copied().unwrap_or(0.0);
             let cell = div()
-                .w(px(*w))
+                .w(px(w))
+                .flex_shrink_0()
                 .px_1()
                 .overflow_hidden()
                 .flex()
                 .items_center();
             let cell = if column == 0 {
                 match renaming {
-                    Some((editing, field)) if editing == index => {
-                        cell.child(crate::textfield::text_field(
-                            "mavftp-rename-value",
-                            field,
-                            rename,
-                            rename.is_focused(window),
-                            px(w - 8.0),
-                            cx.listener(|this, event: &KeyDownEvent, _window, cx| {
-                                if this.software_pages2.mavftp.rename_key(event) {
-                                    cx.notify();
-                                }
-                            }),
-                        ))
-                    }
+                    // The edit box takes its own clicks: one in it places the caret and does
+                    // not end the edit, as a click on the row would.
+                    Some((editing, field)) if editing == index => cell.child(
+                        div()
+                            .id("mavftp-rename-box")
+                            .on_click(|_event, _window, cx| cx.stop_propagation())
+                            .child(crate::textfield::text_field(
+                                "mavftp-rename-value",
+                                field,
+                                rename,
+                                rename.is_focused(window),
+                                px(w - 8.0),
+                                cx.listener(|this, event: &KeyDownEvent, _window, cx| {
+                                    if this.software_pages2.mavftp.rename_key(event) {
+                                        cx.notify();
+                                    }
+                                }),
+                            )),
+                    ),
                     _ => cell
                         .gap_1()
                         .children(item.directory.then(folder_icon))
@@ -2078,27 +3010,59 @@ fn list_panel(
         }
         rows = rows.child(row);
     }
+    // The columns as wide as they are: wider than the list, it scrolls across, header and rows.
+    let across = widths.iter().sum::<f32>().max(width - 2.0);
     crate::probe::measured("mavftp-list", div())
         .id("mavftp-list")
         .absolute()
         .left(px(left))
         .top(px(0.0))
         .w(px(width))
-        .h(px(PAGE_SIZE.1 - STATUS_HEIGHT))
-        .overflow_y_scroll()
+        .h(px(height))
+        .overflow_hidden()
         .border_1()
         .border_color(rgb(theme::BORDER))
         .bg(rgb(theme::BG))
-        .child(header)
-        .child(rows)
+        .child(
+            div()
+                .id("mavftp-across")
+                .size_full()
+                .overflow_x_scroll()
+                .child(
+                    div()
+                        .flex()
+                        .flex_col()
+                        .w(px(across))
+                        .h_full()
+                        .child(header_strip(page, widths, cx))
+                        .child(rows),
+                ),
+        )
+        // Where there is no row: the selection cleared, and a double click is the C#'s, which
+        // reads the selection.
+        .on_click(cx.listener(|this, event: &gpui::ClickEvent, window, cx| {
+            let page = &mut this.software_pages2.mavftp;
+            if event.click_count() == 2 {
+                page.double_click();
+            } else {
+                page.click_list(Mods::of(event.modifiers()));
+            }
+            focus_keys(this, window, cx);
+            cx.notify();
+        }))
         .on_mouse_down(
             MouseButton::Right,
-            cx.listener(|this, event: &gpui::MouseDownEvent, _window, cx| {
+            cx.listener(|this, event: &gpui::MouseDownEvent, window, cx| {
                 let at = (f32::from(event.position.x), f32::from(event.position.y));
-                this.software_pages2.mavftp.open_menu(None, at);
+                let mods = Mods::of(event.modifiers);
+                this.software_pages2.mavftp.open_menu(None, mods, at);
+                focus_keys(this, window, cx);
                 cx.notify();
             }),
         )
+        // `ListView1_DragEnter` lets only files in (`DataFormats.FileDrop`, `DragDropEffects.Copy`,
+        // else `None`): gpui offers the list a drop of paths alone. `ListView1_DragDrop` uploads
+        // each. `// C#: Controls/MavFTPUI.cs:279-298, 579-585`
         .on_drop(cx.listener(|this, paths: &ExternalPaths, _window, cx| {
             this.software_pages2.mavftp.upload(paths.paths());
             cx.notify();
@@ -2149,19 +3113,22 @@ fn status_strip(page: &MavFtp) -> AnyElement {
         .into_any_element()
 }
 
-/// The keyboard to the box a handler opened: an `InputBox`'s text, or the name being edited.
+/// The keyboard to the box a handler opened: an `InputBox`'s text, or the name being edited;
+/// else back to the list, as a `ContextMenuStrip` gives it back when it closes.
 fn take_focus(this: &MissionPlanner, window: &mut Window, cx: &mut Context<MissionPlanner>) {
     let page = &this.software_pages2.mavftp;
     if page.prompt().is_some() {
         this.software2_focus.prompt.focus(window, cx);
     } else if page.renaming().is_some() {
         this.software2_focus.rename.focus(window, cx);
+    } else if page.keys_to().is_some() {
+        focus_keys(this, window, cx);
     }
 }
 
-/// The context menu, where it was opened: over the page, as a `ContextMenuStrip` is its own
-/// window.
-fn context_menu((x, y): (f32, f32), cx: &mut Context<MissionPlanner>) -> AnyElement {
+/// The context menu, where it was opened - at the pointer, or in the list's middle from the
+/// keyboard - over the page, as a `ContextMenuStrip` is its own window.
+fn context_menu(page: &MavFtp, at: MenuAt, cx: &mut Context<MissionPlanner>) -> AnyElement {
     let mut menu = crate::probe::measured("mavftp-menu", div())
         .id("mavftp-menu")
         .w(px(MENU_ROW.0))
@@ -2196,14 +3163,28 @@ fn context_menu((x, y): (f32, f32), cx: &mut Context<MissionPlanner>) -> AnyElem
                 })),
         );
     }
-    gpui::deferred(
-        gpui::anchored()
-            .position(gpui::point(px(x), px(y)))
-            .snap_to_window()
-            .child(menu),
-    )
-    .with_priority(1)
-    .into_any_element()
+    match at {
+        MenuAt::Pointer(x, y) => gpui::deferred(
+            gpui::anchored()
+                .position(gpui::point(px(x), px(y)))
+                .snap_to_window()
+                .child(menu),
+        )
+        .with_priority(1)
+        .into_any_element(),
+        // `new Point(Width / 2, Height / 2)` of the list: anchored where a box placed there sits.
+        MenuAt::Middle => {
+            let (left, width) = page.list_bounds();
+            div()
+                .absolute()
+                .left(px(left + width / 2.0))
+                .top(px((PAGE_SIZE.1 - STATUS_HEIGHT) / 2.0))
+                .child(
+                    gpui::deferred(gpui::anchored().snap_to_window().child(menu)).with_priority(1),
+                )
+                .into_any_element()
+        }
+    }
 }
 
 /// The page, laid out as `MavFTPUI.Designer.cs` lays it out.
@@ -2217,12 +3198,49 @@ pub fn page(
     if !page.is_active() {
         return div().into_any_element();
     }
+    // The name the edit timer opened takes the keyboard, once the box is drawn.
+    if page.edit_focus.take() {
+        cx.defer_in(window, |this, window, cx| {
+            this.software2_focus.rename.focus(window, cx);
+        });
+    }
+    let keys = page.keys.get_or_init(|| cx.focus_handle());
     let (mx, my, mw, mh) = MOUNT;
     let body = div()
         .relative()
         .w(px(PAGE_SIZE.0))
         .h(px(PAGE_SIZE.1))
+        // The tree's and the list's keys: whichever was clicked last takes them.
+        .track_focus(keys)
+        .on_key_down(cx.listener(|this, event: &KeyDownEvent, _window, cx| {
+            let stroke = &event.keystroke;
+            let mods = Mods::of(stroke.modifiers);
+            if this.software_pages2.mavftp.key(&stroke.key, mods) {
+                cx.stop_propagation();
+                cx.notify();
+            }
+        }))
+        // The splitter or a divider follows the pointer while the button is down.
+        .on_mouse_move(
+            cx.listener(|this, event: &gpui::MouseMoveEvent, _window, cx| {
+                let page = &mut this.software_pages2.mavftp;
+                if event.pressed_button == Some(MouseButton::Left) {
+                    if page.drag_to(f32::from(event.position.x)) {
+                        cx.notify();
+                    }
+                } else {
+                    page.end_drag();
+                }
+            }),
+        )
+        .on_mouse_up(
+            MouseButton::Left,
+            cx.listener(|this, _event: &gpui::MouseUpEvent, _window, _cx| {
+                this.software_pages2.mavftp.end_drag();
+            }),
+        )
         .child(tree_panel(page, cx))
+        .child(splitter(page, cx))
         .child(list_panel(page, rename, window, cx))
         .child(status_strip(page))
         .child(super::optional::button(
@@ -2236,8 +3254,30 @@ pub fn page(
             },
             cx,
         ))
-        .children(page.menu().map(|at| context_menu(at, cx)));
+        .children(page.menu().map(|at| context_menu(page, at, cx)));
     panel(TITLE, body).into_any_element()
+}
+
+/// `splitContainer1`'s splitter, between the tree and the list: pressed, it follows the pointer.
+fn splitter(page: &MavFtp, cx: &mut Context<MissionPlanner>) -> AnyElement {
+    crate::probe::measured("mavftp-splitter", div())
+        .id("mavftp-splitter")
+        .absolute()
+        .left(px(page.splitter()))
+        .top(px(0.0))
+        .w(px(SPLITTER.1))
+        .h(px(PAGE_SIZE.1 - STATUS_HEIGHT))
+        .cursor(gpui::CursorStyle::ResizeLeftRight)
+        .on_mouse_down(
+            MouseButton::Left,
+            cx.listener(|this, event: &gpui::MouseDownEvent, _window, cx| {
+                this.software_pages2
+                    .mavftp
+                    .begin_drag(Dragged::Splitter, f32::from(event.position.x));
+                cx.stop_propagation();
+            }),
+        )
+        .into_any_element()
 }
 
 /// The progress window, the box asking, or a message box, over the whole window.
@@ -2446,13 +3486,34 @@ mod tests {
         page.items().iter().map(|item| item.name.as_str()).collect()
     }
 
-    fn select(page: &mut MavFtp, name: &str) {
-        let index = page
-            .items()
+    fn row(page: &MavFtp, name: &str) -> usize {
+        page.items()
             .iter()
             .position(|item| item.name == name)
-            .expect("the row");
-        page.click_item(index, false);
+            .expect("the row")
+    }
+
+    fn select(page: &mut MavFtp, name: &str) {
+        let index = row(page, name);
+        page.click_item(index, Mods::default(), Instant::now());
+    }
+
+    const SHIFT: Mods = Mods {
+        control: false,
+        shift: true,
+    };
+
+    const CONTROL: Mods = Mods {
+        control: true,
+        shift: false,
+    };
+
+    fn selected_names(page: &MavFtp) -> Vec<&str> {
+        page.selection()
+            .iter()
+            .filter_map(|index| page.items().get(*index))
+            .map(|item| item.name.as_str())
+            .collect()
     }
 
     fn scratch(name: &str) -> PathBuf {
@@ -2591,7 +3652,8 @@ mod tests {
         page.click_node("/APM");
         settle(&mut page, &bench);
         select(&mut page, "param.pck");
-        page.open_menu(None, (0.0, 0.0));
+        let param = row(&page, "param.pck");
+        page.open_menu(Some(param), Mods::default(), (0.0, 0.0));
         page.choose(Menu::Download);
         assert_eq!(page.status(), "Download ");
         assert_eq!(page.prompt().map(|p| p.input().title), Some(BROWSE_TITLE));
@@ -2686,7 +3748,7 @@ mod tests {
             dir: "/APM".to_owned(),
         });
         let last = page.items().len() - 1;
-        page.click_item(last, false);
+        page.click_item(last, Mods::default(), Instant::now());
         page.choose(Menu::Delete);
         settle(&mut page, &bench);
         let line = page.take_status_line().expect("a status line");
@@ -2833,8 +3895,8 @@ mod tests {
             .expect("OK's box")
             .remember(&mut settings);
         assert_eq!(settings.get(&mount_key), Some("M%3A%5C"));
-        select(&mut page, "param.pck");
-        page.open_menu(None, (0.0, 0.0));
+        let param = row(&page, "param.pck");
+        page.open_menu(Some(param), Mods::default(), (0.0, 0.0));
         page.choose(Menu::Download);
         page.type_prompt(&scratch("answered").display().to_string());
         page.close_prompt(true);
@@ -2880,6 +3942,500 @@ mod tests {
         assert_eq!(file_name("/"), "");
         assert_eq!(file_name("@SYS/uarts.txt"), "uarts.txt");
         assert_eq!(modified_string(None), "");
+    }
+
+    /// The pages the keys move by are the page's geometry: the list's client height under the
+    /// header over a row's, the tree's over a node's.
+    #[test]
+    fn the_keys_pages_are_the_geometry() {
+        let rows = (PAGE_SIZE.1 - STATUS_HEIGHT - LIST_ROW) / LIST_ROW;
+        let nodes = (PAGE_SIZE.1 - STATUS_HEIGHT) / TREE_ROW;
+        #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+        let (rows, nodes) = (rows.floor() as usize, nodes.floor() as usize);
+        assert_eq!(LIST_PAGE, rows);
+        assert_eq!(TREE_PAGE, nodes);
+    }
+
+    /// The File name box takes several names in double quotes, as `OpenFileDialog` does with
+    /// `Multiselect`; a line without quotes is one name, spaces and all.
+    #[test]
+    fn file_names_are_the_dialogs() {
+        assert_eq!(
+            file_names("\"/a/one.txt\" \"/b/two words.txt\""),
+            [
+                PathBuf::from("/a/one.txt"),
+                PathBuf::from("/b/two words.txt")
+            ]
+        );
+        assert_eq!(
+            file_names("  /c/a file.lua "),
+            [PathBuf::from("/c/a file.lua")]
+        );
+        assert!(file_names("   ").is_empty());
+        assert!(file_names("\"\" \" \"").is_empty());
+    }
+
+    /// Upload takes every file named; Cancel, or a name of no file, uploads nothing and the
+    /// directory is listed again all the same (`MavFTPUI.cs:402-403` is outside the `if`).
+    #[test]
+    fn upload_takes_several_files_and_lists_again_on_cancel() {
+        let bench = Bench::new(vehicle());
+        let mut page = loaded(&bench);
+        page.click_node("/APM");
+        settle(&mut page, &bench);
+        let folder = scratch("several");
+        let one = folder.join("one.lua");
+        let two = folder.join("two words.lua");
+        std::fs::write(&one, b"print(1)").expect("a file");
+        std::fs::write(&two, b"print(2)").expect("a file");
+        page.choose(Menu::Upload);
+        page.type_prompt(&format!("\"{}\" \"{}\"", one.display(), two.display()));
+        page.close_prompt(true);
+        settle(&mut page, &bench);
+        {
+            let vehicle = bench.vehicle.borrow();
+            assert_eq!(
+                vehicle.files.get("/APM/one.lua").map(Vec::as_slice),
+                Some(&b"print(1)"[..])
+            );
+            assert_eq!(
+                vehicle.files.get("/APM/two words.lua").map(Vec::as_slice),
+                Some(&b"print(2)"[..])
+            );
+        }
+        assert!(names(&page).contains(&"one.lua"));
+        assert!(names(&page).contains(&"two words.lua"));
+        assert!(page.take_status_line().is_none(), "both CRCs agree");
+        for (ok, text) in [
+            (false, String::new()),
+            (true, "/no/such/file.lua".to_owned()),
+        ] {
+            let before = bench.started.borrow().len();
+            page.choose(Menu::Upload);
+            page.type_prompt(&text);
+            page.close_prompt(ok);
+            settle(&mut page, &bench);
+            let started = bench.started.borrow();
+            let since: Vec<&FtpRequest> = started.iter().skip(before).collect();
+            assert_eq!(
+                since,
+                [&FtpRequest::List {
+                    path: "/APM".to_owned()
+                }],
+                "listed again, nothing written"
+            );
+        }
+        let _ = std::fs::remove_dir_all(&folder);
+    }
+
+    /// A node's plus or minus toggles it and lists it, and so does the right button anywhere on
+    /// a node's row: `NodeMouseClick` with the node clicked, `SelectedNode` left where it was. The
+    /// second click of a double click on the plus toggles it back and lists nothing.
+    #[test]
+    fn the_plus_and_the_right_button_list_a_node_and_leave_the_selection() {
+        let bench = Bench::new(vehicle());
+        let mut page = loaded(&bench);
+        assert_eq!(page.selected_node(), Some("@SYS/"));
+        page.toggle_node("/", 1);
+        assert!(page.tree().first().is_some_and(|node| node.expanded));
+        settle(&mut page, &bench);
+        assert_eq!(names(&page), ["APM", "@SYS"]);
+        assert_eq!(page.selected_node(), Some("@SYS/"), "the selection stays");
+        assert_eq!(page.keys_to(), Some(Control::Tree));
+        let before = bench.started.borrow().len();
+        page.toggle_node("/", 2);
+        settle(&mut page, &bench);
+        assert!(page.tree().first().is_some_and(|node| !node.expanded));
+        assert_eq!(bench.started.borrow().len(), before, "no listing");
+        page.toggle_node("/", 1);
+        settle(&mut page, &bench);
+        page.click_node_row("/APM");
+        settle(&mut page, &bench);
+        assert_eq!(names(&page), ["LOGS", "scripts", "param.pck"]);
+        assert_eq!(page.selected_node(), Some("@SYS/"));
+        // Upload, Download and the rest go where `SelectedNode` is, as the C#'s do.
+        assert_eq!(page.selected_full_path().as_deref(), Some("@SYS"));
+        // Delete reads the row's tag: the directory listed.
+        assert!(page.items().iter().all(|item| item.dir == "/APM"));
+    }
+
+    /// The text of a node double-clicked: the first click selects and lists it, the second only
+    /// toggles it.
+    #[test]
+    fn a_double_click_on_a_node_toggles_it() {
+        let bench = Bench::new(vehicle());
+        let mut page = loaded(&bench);
+        page.click_node("/");
+        settle(&mut page, &bench);
+        let before = bench.started.borrow().len();
+        page.double_click_node("/");
+        settle(&mut page, &bench);
+        assert!(page.tree().first().is_some_and(|node| node.expanded));
+        assert_eq!(bench.started.borrow().len(), before, "no listing");
+        page.double_click_node("/");
+        assert!(page.tree().first().is_some_and(|node| !node.expanded));
+    }
+
+    /// A node closed or listed while the selection is under it takes the selection: comctl32's
+    /// `TREEVIEW_Collapse`, and `Nodes.Clear()` deleting the selected node.
+    #[test]
+    fn closing_or_listing_a_node_above_the_selection_selects_it() {
+        let bench = Bench::new(vehicle());
+        let mut page = loaded(&bench);
+        page.click_node("/");
+        settle(&mut page, &bench);
+        select(&mut page, "APM");
+        page.double_click();
+        settle(&mut page, &bench);
+        assert_eq!(page.selected_node(), Some("/APM"));
+        page.toggle_node("/", 1);
+        assert_eq!(page.selected_node(), Some("/"), "closed: the node above");
+        settle(&mut page, &bench);
+        // Open again, the selection under it, and the node listed by the right button.
+        page.toggle_node("/", 1);
+        settle(&mut page, &bench);
+        page.click_node("/APM");
+        settle(&mut page, &bench);
+        assert_eq!(page.selected_node(), Some("/APM"));
+        page.click_node_row("/");
+        settle(&mut page, &bench);
+        assert_eq!(page.selected_node(), Some("/"), "listed: the node above");
+    }
+
+    /// The tree's keys move the selection through the nodes drawn and open and close them, and
+    /// list nothing: the C# wires no `AfterSelect`.
+    #[test]
+    fn the_trees_keys_move_the_selection_and_list_nothing() {
+        let bench = Bench::new(vehicle());
+        let mut page = loaded(&bench);
+        page.click_node("@SYS/");
+        settle(&mut page, &bench);
+        let listed = names(&page).join(",");
+        let before = bench.started.borrow().len();
+        let none = Mods::default();
+        let press = |page: &mut MavFtp, key: &str| {
+            assert!(page.key(key, none), "{key} is the tree's");
+            page.selected_node().map(str::to_owned)
+        };
+        assert_eq!(press(&mut page, "up").as_deref(), Some("/"));
+        assert_eq!(
+            press(&mut page, "up").as_deref(),
+            Some("/"),
+            "the first stays"
+        );
+        assert_eq!(press(&mut page, "right").as_deref(), Some("/"), "opened");
+        assert!(page.tree().first().is_some_and(|node| node.expanded));
+        assert_eq!(press(&mut page, "right").as_deref(), Some("/APM"));
+        assert_eq!(press(&mut page, "down").as_deref(), Some("/@SYS"));
+        assert_eq!(press(&mut page, "end").as_deref(), Some("@SYS/"));
+        assert_eq!(press(&mut page, "pageup").as_deref(), Some("/"));
+        assert_eq!(press(&mut page, "pagedown").as_deref(), Some("@SYS/"));
+        assert_eq!(press(&mut page, "home").as_deref(), Some("/"));
+        assert_eq!(press(&mut page, "down").as_deref(), Some("/APM"));
+        assert_eq!(
+            press(&mut page, "left").as_deref(),
+            Some("/"),
+            "to the parent"
+        );
+        assert_eq!(press(&mut page, "left").as_deref(), Some("/"), "closed");
+        assert!(page.tree().first().is_some_and(|node| !node.expanded));
+        assert_eq!(press(&mut page, "add").as_deref(), Some("/"));
+        assert!(page.tree().first().is_some_and(|node| node.expanded));
+        assert_eq!(press(&mut page, "subtract").as_deref(), Some("/"));
+        assert!(page.tree().first().is_some_and(|node| !node.expanded));
+        assert_eq!(press(&mut page, "multiply").as_deref(), Some("/"));
+        assert!(page.tree().first().is_some_and(|node| node.expanded));
+        assert_eq!(press(&mut page, "down").as_deref(), Some("/APM"));
+        assert_eq!(press(&mut page, "backspace").as_deref(), Some("/"));
+        assert_eq!(
+            press(&mut page, "backspace").as_deref(),
+            Some("/"),
+            "a root"
+        );
+        // With Control the view scrolls; the selection stays.
+        let control = Mods {
+            control: true,
+            shift: false,
+        };
+        assert!(page.key("down", control));
+        assert_eq!(page.selected_node(), Some("/"));
+        assert!(!page.key("x", none), "not the tree's");
+        settle(&mut page, &bench);
+        assert_eq!(bench.started.borrow().len(), before, "nothing listed");
+        assert_eq!(names(&page).join(","), listed);
+    }
+
+    /// Clicks select as a `MultiSelect` list does: alone, with Shift from the mark, with Control
+    /// toggled, with both added; a press where there is no row clears the selection; the right
+    /// button selects a row alone unless it is selected already.
+    #[test]
+    fn clicks_select_as_the_list_does() {
+        let bench = Bench::new(vehicle());
+        let mut page = loaded(&bench);
+        page.click_node("/APM");
+        settle(&mut page, &bench);
+        assert_eq!(names(&page), ["LOGS", "scripts", "param.pck"]);
+        let now = Instant::now();
+        page.click_item(0, Mods::default(), now);
+        page.click_item(2, SHIFT, now);
+        assert_eq!(selected_names(&page), ["LOGS", "scripts", "param.pck"]);
+        page.click_item(1, CONTROL, now);
+        assert_eq!(selected_names(&page), ["LOGS", "param.pck"]);
+        let both = Mods {
+            control: true,
+            shift: true,
+        };
+        page.click_item(2, both, now);
+        assert_eq!(selected_names(&page), ["LOGS", "scripts", "param.pck"]);
+        page.click_item(2, SHIFT, now);
+        assert_eq!(
+            selected_names(&page),
+            ["scripts", "param.pck"],
+            "from the mark"
+        );
+        page.click_list(CONTROL);
+        assert_eq!(
+            selected_names(&page),
+            ["scripts", "param.pck"],
+            "Control keeps"
+        );
+        page.click_list(Mods::default());
+        assert!(page.selection().is_empty());
+        page.click_item(0, Mods::default(), now);
+        page.click_item(1, CONTROL, now);
+        page.open_menu(Some(1), Mods::default(), (0.0, 0.0));
+        assert_eq!(
+            selected_names(&page),
+            ["LOGS", "scripts"],
+            "selected already"
+        );
+        page.close_menu();
+        page.open_menu(Some(2), Mods::default(), (0.0, 0.0));
+        assert_eq!(selected_names(&page), ["param.pck"]);
+        assert_eq!(page.focused(), Some(2));
+        page.close_menu();
+        page.open_menu(None, Mods::default(), (0.0, 0.0));
+        assert!(page.selection().is_empty());
+        assert_eq!(page.menu(), Some(MenuAt::Pointer(0.0, 0.0)));
+        page.close_menu();
+        // The header's right button leaves the selection.
+        page.click_item(1, Mods::default(), now);
+        page.open_menu_on_header((5.0, 5.0));
+        assert_eq!(selected_names(&page), ["scripts"]);
+        assert!(page.menu().is_some());
+    }
+
+    /// The list's keys: a row selected alone, with Shift from the mark, with Control the focus
+    /// alone moved and Control+Space toggling; Left and Right move nothing.
+    #[test]
+    fn the_lists_keys_select_as_the_list_does() {
+        let bench = Bench::new(vehicle());
+        let mut page = loaded(&bench);
+        page.click_node("/APM");
+        settle(&mut page, &bench);
+        page.click_item(0, Mods::default(), Instant::now());
+        let none = Mods::default();
+        assert!(page.key("down", none));
+        assert_eq!(selected_names(&page), ["scripts"]);
+        assert!(page.key("down", SHIFT));
+        assert_eq!(selected_names(&page), ["scripts", "param.pck"]);
+        assert_eq!(page.focused(), Some(2));
+        assert!(page.key("down", none), "the last row: nothing moves");
+        assert_eq!(selected_names(&page), ["scripts", "param.pck"]);
+        assert!(page.key("home", none));
+        assert_eq!(selected_names(&page), ["LOGS"]);
+        assert!(page.key("down", CONTROL));
+        assert_eq!(page.focused(), Some(1));
+        assert_eq!(selected_names(&page), ["LOGS"], "the focus alone");
+        assert!(page.key("space", CONTROL));
+        assert_eq!(selected_names(&page), ["LOGS", "scripts"]);
+        assert!(page.key("space", CONTROL));
+        assert_eq!(selected_names(&page), ["LOGS"]);
+        assert!(page.key("end", none));
+        assert_eq!(selected_names(&page), ["param.pck"]);
+        assert!(page.key("pageup", none));
+        assert_eq!(selected_names(&page), ["LOGS"], "to the top row");
+        assert!(page.key("pagedown", none));
+        assert_eq!(
+            selected_names(&page),
+            ["param.pck"],
+            "to the last row there is"
+        );
+        assert!(page.key("up", none));
+        assert_eq!(selected_names(&page), ["scripts"]);
+        assert!(page.key("left", none) && page.key("right", none));
+        assert_eq!(selected_names(&page), ["scripts"]);
+        assert!(!page.key("x", none), "not the list's");
+        // Sorted, the focus and the mark stay with their rows.
+        page.click_column(0);
+        assert_eq!(names(&page), ["scripts", "param.pck", "LOGS"]);
+        assert_eq!(page.focused(), Some(0));
+        assert!(page.key("down", SHIFT));
+        assert_eq!(selected_names(&page), ["scripts", "param.pck"]);
+    }
+
+    /// The menu key and Shift+F10 open the list's menu in its middle; while it is open it has
+    /// the keys, and Escape closes it. Nothing takes keys while a box is over the page.
+    #[test]
+    fn the_menu_key_opens_the_menu_and_boxes_hold_the_keys() {
+        let bench = Bench::new(vehicle());
+        let mut page = loaded(&bench);
+        page.click_node("/APM");
+        settle(&mut page, &bench);
+        page.click_item(0, Mods::default(), Instant::now());
+        assert!(page.key("menu", Mods::default()));
+        assert_eq!(page.menu(), Some(MenuAt::Middle));
+        assert!(page.key("down", Mods::default()));
+        assert_eq!(selected_names(&page), ["LOGS"], "the menu has the keys");
+        assert!(page.key("escape", Mods::default()));
+        assert_eq!(page.menu(), None);
+        assert!(page.key("f10", SHIFT));
+        assert_eq!(page.menu(), Some(MenuAt::Middle));
+        page.choose(Menu::NewFolder);
+        assert!(!page.key("down", Mods::default()), "the box has the keys");
+        page.close_prompt(false);
+        settle(&mut page, &bench);
+        // The tree has no menu.
+        page.click_node("/APM");
+        settle(&mut page, &bench);
+        assert!(!page.key("menu", Mods::default()));
+        assert_eq!(page.menu(), None);
+    }
+
+    /// A click on a row already selected edits its name once the double-click time has passed;
+    /// a second click within it - a double click - does not, nor does a first click, nor a row
+    /// no longer selected.
+    #[test]
+    fn a_second_click_on_a_selected_row_edits_its_name() {
+        let bench = Bench::new(vehicle());
+        let mut page = loaded(&bench);
+        page.click_node("/APM");
+        settle(&mut page, &bench);
+        let view = view();
+        let t0 = Instant::now();
+        let param = row(&page, "param.pck");
+        page.click_item(param, Mods::default(), t0);
+        page.tick(&bench, &view, true, t0 + DOUBLE_CLICK_TIME * 2);
+        assert!(page.renaming().is_none(), "a first click");
+        page.click_item(param, Mods::default(), t0);
+        page.tick(&bench, &view, true, t0 + DOUBLE_CLICK_TIME / 2);
+        assert!(page.renaming().is_none(), "not yet");
+        page.tick(&bench, &view, true, t0 + DOUBLE_CLICK_TIME);
+        assert_eq!(
+            page.renaming()
+                .map(|(_, field)| field.value().to_owned())
+                .as_deref(),
+            Some("param.pck")
+        );
+        assert!(page.edit_focus.take(), "the edit box takes the keyboard");
+        // Escape: the edit ends with no label.
+        page.renaming = None;
+        page.click_item(param, Mods::default(), t0);
+        page.double_click();
+        page.tick(&bench, &view, true, t0 + DOUBLE_CLICK_TIME * 2);
+        assert!(page.renaming().is_none(), "a double click");
+        page.click_item(param, Mods::default(), t0);
+        page.click_item(0, Mods::default(), t0);
+        page.tick(&bench, &view, true, t0 + DOUBLE_CLICK_TIME * 2);
+        assert!(page.renaming().is_none(), "no longer selected");
+    }
+
+    /// A name left as it was renames nothing: `e.Label` is null and the C# returns.
+    #[test]
+    fn an_unchanged_name_renames_nothing() {
+        let bench = Bench::new(vehicle());
+        let mut page = loaded(&bench);
+        page.click_node("/APM");
+        settle(&mut page, &bench);
+        select(&mut page, "param.pck");
+        page.choose(Menu::Rename);
+        let before = bench.started.borrow().len();
+        page.commit_rename();
+        settle(&mut page, &bench);
+        assert_eq!(bench.started.borrow().len(), before);
+        assert!(page.renaming().is_none());
+    }
+
+    /// A header dragged to a divider moves there, as comctl32's header moves it; the rows follow,
+    /// and a click still sorts by the header's own column.
+    #[test]
+    fn a_header_dragged_moves_its_column() {
+        let mut page = MavFtp::default();
+        page.drop_column(3, 0);
+        assert_eq!(page.column_order(), [3, 0, 1, 2]);
+        page.drop_column(3, 4);
+        assert_eq!(page.column_order(), [0, 1, 2, 3], "to the end");
+        page.drop_column(0, 2);
+        assert_eq!(
+            page.column_order(),
+            [1, 0, 2, 3],
+            "one less right of where it was"
+        );
+        page.drop_column(0, 1);
+        assert_eq!(
+            page.column_order(),
+            [1, 0, 2, 3],
+            "its own divider: no move"
+        );
+        page.drop_column(2, 0);
+        assert_eq!(page.column_order(), [2, 1, 0, 3]);
+        let bench = Bench::new(vehicle());
+        let mut page = loaded(&bench);
+        page.click_node("/APM");
+        settle(&mut page, &bench);
+        page.drop_column(0, 4);
+        page.click_column(0);
+        assert_eq!(names(&page), ["scripts", "param.pck", "LOGS"], "by Name");
+    }
+
+    /// The splitter follows the pointer, never nearer an edge than a panel's `MinSize`; the list
+    /// sits right of it.
+    #[test]
+    fn the_splitter_drags_within_the_panels_minimum() {
+        let mut page = MavFtp::default();
+        assert_eq!(page.splitter(), 208.0, "the Designer's SplitterDistance");
+        assert_eq!(page.list_bounds(), (212.0, 676.0));
+        page.begin_drag(Dragged::Splitter, 500.0);
+        assert!(page.drag_to(560.0));
+        assert_eq!(page.splitter(), 268.0);
+        assert_eq!(page.list_bounds(), (272.0, 616.0));
+        page.drag_to(-1000.0);
+        assert_eq!(page.splitter(), PANEL_MIN);
+        page.drag_to(5000.0);
+        assert_eq!(page.splitter(), PAGE_SIZE.0 - PANEL_MIN - SPLITTER.1);
+        page.end_drag();
+        assert!(!page.drag_to(0.0), "let go");
+        assert_eq!(page.splitter(), PAGE_SIZE.0 - PANEL_MIN - SPLITTER.1);
+    }
+
+    /// A divider dragged sizes its column, never under nothing; double-clicked it fits the column
+    /// to its texts; the next listing sizes every column again.
+    #[test]
+    fn a_divider_sizes_its_column_until_the_next_listing() {
+        let bench = Bench::new(vehicle());
+        let mut page = loaded(&bench);
+        page.click_node("/APM");
+        settle(&mut page, &bench);
+        let auto = page.column_widths();
+        let name = auto.first().copied().expect("Name");
+        let first = |page: &MavFtp| page.column_widths().first().copied();
+        page.begin_drag(Dragged::Divider(0), 300.0);
+        page.drag_to(340.0);
+        assert_eq!(first(&page), Some(name + 40.0));
+        assert_eq!(
+            page.column_widths().get(1..),
+            auto.get(1..),
+            "the others stay"
+        );
+        page.drag_to(-1000.0);
+        assert_eq!(first(&page), Some(0.0));
+        page.end_drag();
+        // "param.pck", the longest name: nine characters.
+        page.fit_column(0);
+        assert_eq!(first(&page), Some(text_width(9)));
+        page.click_node("/APM");
+        settle(&mut page, &bench);
+        assert_eq!(page.column_widths(), auto, "AutoResizeColumns");
     }
 
     #[test]

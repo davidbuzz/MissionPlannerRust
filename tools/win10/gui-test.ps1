@@ -216,7 +216,15 @@ function Wait-Publishes([int]$count) {
 # running, 60 ms apart - a tab strip moves as a vehicle connects. gui-click.sh waits for the whole probe to be still for 300 ms; on Windows some control
 # moves every frame and that wait always ran its full 1.2 s.
 function Resolve-Control([string]$target) {
-    $name, $fraction = $target -split '@', 2
+    # The "@" is a fraction's only when a fraction follows it: a name may carry one itself (the
+    # MAVFtp page's "@SYS/" node, mavftp-node-@SYS/).
+    if ($target -match '^(.*)@([0-9.]+[x,][0-9.]+)$') {
+        $name = $Matches[1]
+        $fraction = $Matches[2]
+    } else {
+        $name = $target
+        $fraction = $null
+    }
     $deadline = (Get-Date).AddMilliseconds(10000)
     $entry = $null
     do {
