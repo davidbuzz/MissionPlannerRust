@@ -16,6 +16,9 @@ pub struct TcpTransport {
     open: bool,
 }
 
+/// How long a TCP connect may take before it is a failure.
+pub const CONNECT_TIMEOUT: Duration = Duration::from_secs(5);
+
 impl TcpTransport {
     /// Connects to a remote endpoint.
     pub fn connect(host: &str, port: u16) -> Result<Self, OpenError> {
@@ -33,7 +36,11 @@ impl TcpTransport {
     }
 
     fn from_addr(addr: SocketAddr) -> Result<Self, OpenError> {
-        let stream = TcpStream::connect(addr)
+        // Bounded where the C#'s `new TcpClient(host, port)` waits the operating system's time
+        // (a minute or more for a host that drops the SYN): a link opening this again every
+        // second while its peer is away (`mp_link`'s reconnection) must stay stoppable, and a
+        // connection that is not up in five seconds is not coming up.
+        let stream = TcpStream::connect_timeout(&addr, CONNECT_TIMEOUT)
             .map_err(|e| OpenError::io(format!("connecting to {addr}"), e))?;
         Self::wrap(stream)
     }

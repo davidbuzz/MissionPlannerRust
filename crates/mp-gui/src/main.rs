@@ -3238,8 +3238,16 @@ impl Render for MissionPlanner {
             facts::record("link.frames", view.frames);
             // What the link was opened on and why it is not open, for a script that finds no
             // vehicle: `MainV2.comPort.BaseStream.PortName` and `OpenBg`'s exception.
-            facts::record("link.target", &view.target);
+                        facts::record("link.target", &view.target);
             facts::record("link.error", self.telemetry.error().unwrap_or("none"));
+            // A transport that closed under the link, and the link's tries to open it again.
+            facts::record("link.reconnecting", view.reconnecting);
+            facts::record("link.reconnects", view.reconnects);
+            facts::record("link.reconnect.attempts", view.reconnect_attempts);
+            facts::record(
+                "link.reconnect.error",
+                view.reconnect_error.as_deref().unwrap_or("none"),
+            );
             facts::record("params.held", view.parameters.len());
             facts::record("params.expected", view.parameters_expected);
             facts::record("params.fetch", &view.parameters_fetch);
@@ -3714,6 +3722,23 @@ impl Render for MissionPlanner {
         } else if !view.connected && view.target.is_empty() {
             (
                 "no link - start with a url, e.g. tcp:127.0.0.1:5760".to_owned(),
+                theme::WARN,
+            )
+                } else if view.reconnecting {
+            // The transport went: the link keeps the vehicle and opens it again every second,
+            // and this line is the whole of what the operator is told - no box (the owner's
+            // ruling, PLAN.md section 12 D23).
+            (
+                match &view.reconnect_error {
+                    Some(err) => format!(
+                        "{}  -  reconnecting, try {}: {err}",
+                        view.target, view.reconnect_attempts
+                    ),
+                    None => format!(
+                        "{}  -  reconnecting, try {}",
+                        view.target, view.reconnect_attempts
+                    ),
+                },
                 theme::WARN,
             )
         } else if view.connected && view.frames > 0 {

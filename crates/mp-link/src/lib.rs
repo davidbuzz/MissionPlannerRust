@@ -76,6 +76,7 @@
 #![forbid(unsafe_code)]
 
 pub mod camera;
+pub mod camera_points;
 pub mod commands;
 pub mod current_settings;
 pub mod fence_points;
@@ -97,7 +98,6 @@ pub mod testing;
 pub mod timeouts;
 pub mod tlog;
 pub mod traffic;
-pub mod camera_points;
 
 use std::collections::BTreeMap;
 use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering};
@@ -107,9 +107,9 @@ use std::time::{Duration, Instant};
 use mission_transfer::{Action, MissionTransfer};
 use mp_mavlink::{DecodeStats, FrameDecoder, Message as _, encode_v2};
 use mp_mavlink_dialects::all::{
-    CameraFeedback, CompassmotStatus, DIALECT, Heartbeat, MavCmd, MavMessage, MissionItem as MissionItemMessage,
-    MissionItemInt as MissionItemIntMessage, MissionRequest, MissionRequestInt,
-    MissionWritePartialList,
+    CameraFeedback, CompassmotStatus, DIALECT, Heartbeat, MavCmd, MavMessage,
+    MissionItem as MissionItemMessage, MissionItemInt as MissionItemIntMessage, MissionRequest,
+    MissionRequestInt, MissionWritePartialList,
 };
 use mp_mission::{MISSION_TYPE_MISSION, MissionItem, WireItem};
 use mp_params::{ParamTable, ParamType, ParamValue, decode_param_id};
@@ -163,6 +163,26 @@ const AIRSPEED_MIN_PARAMS: [&str; 2] = ["AIRSPEED_MIN", "ARSPD_FBW_MIN"];
 /// The default snapshot cadence, [`LinkConfig::publish_interval`]: shorter than a frame of
 /// any display up to 200 Hz.
 pub const DEFAULT_PUBLISH_INTERVAL: Duration = Duration::from_millis(5);
+
+/// How a link gets a transport back once the one it had closed under it: `mp_transport::open`
+/// of the same URL, or a test's factory. `None` for a link over an in-memory double or a replay,
+/// which end as they always did.
+///
+/// The owner's ruling (PLAN.md section 12 D23, 2026-10-03): a link that was connected stays
+/// connected - a vehicle or SITL rebooting, a TCP peer resetting, a serial device vanishing - and
+/// is opened again, aggressively, with nothing asked. Mission Planner's own main link does not do
+/// this: `MainV2`'s serial reader idles on a closed `BaseStream` and the connect button shows
+/// the loss (`MainV2.cs:2456-2490`); only its mirror, NMEA, CoT and moving-base `TcpSerial`
+/// streams reconnect (`CommsTCPSerial.cs:86-87, 330-355`, `autoReconnect`, five seconds
+/// between tries, the settings' host and port asked for again with `reconnectnoprompt`).
+pub type Reopen = Box<dyn FnMut() -> Result<Box<dyn Transport>, mp_transport::OpenError> + Send>;
+
+/// How long the link waits between two tries to open its transport again. The C#'s
+/// `doAutoReconnect` waits five seconds; the owner asked for aggression.
+pub const RECONNECT_INTERVAL: Duration = Duration::from_secs(1);
+
+/// How often, while waiting between tries, the thread looks for a close.
+const RECONNECT_POLL: Duration = Duration::from_millis(50);
 
 /// How the link should behave.
 #[derive(Debug, Clone)]
@@ -324,6 +344,15 @@ struct Shared {
     state_writes: Mutex<Vec<(VehicleId, StateWrite)>>,
     stats: Mutex<LinkStats>,
     running: AtomicBool,
+    /// Whether the link thread is between transports: the one it had closed under it, the next
+    /// not yet open (`reopen_transport`).
+    reconnecting: AtomicBool,
+    /// How many fresh transports have taken over since the link opened.
+    reconnects: AtomicU32,
+    /// How many opens have been tried since the transport closed; 0 once one has succeeded.
+    reconnect_attempts: AtomicU32,
+    /// Why the last try failed, while reconnecting.
+    reconnect_error: Mutex<Option<String>>,
     frames_received: AtomicU64,
     /// `inject_seq_no`, the GPS injection's sequence number, one per link: shared with every
     /// [`LinkSender`], which is what injects.
@@ -490,12 +519,36 @@ impl Link {
     /// Opens a link from a URL such as `udp:14550`, `tcp:127.0.0.1:5760` or `file:flight.tlog`.
     pub fn connect(url: &str, config: LinkConfig) -> Result<Self, LinkError> {
         let transport = mp_transport::open(url)?;
-        Ok(Self::from_transport(transport, config))
+        // A replay ends with its file, and a listening link waits for its peer by its nature -
+        // opening either again would not be a reconnection. Everything else is opened again by
+        // its URL whenever it closes under the link (`reopen_transport`).
+        let reopen: Option<Reopen> = match url.parse::<mp_transport::LinkUrl>() {
+            Ok(mp_transport::LinkUrl::File { .. } | mp_transport::LinkUrl::TcpListen { .. }) => {
+                None
+            }
+            _ => {
+                let url = url.to_owned();
+                Some(Box::new(move || mp_transport::open(&url)))
+            }
+        };
+        Ok(Self::from_transport_reopening(transport, config, reopen))
     }
 
-    /// Runs a link over an already-open transport. Used by tests with in-memory doubles.
+    /// Runs a link over an already-open transport. Used by tests with in-memory doubles; such a
+    /// link ends when its transport closes.
     #[must_use]
     pub fn from_transport(transport: Box<dyn Transport>, config: LinkConfig) -> Self {
+        Self::from_transport_reopening(transport, config, None)
+    }
+
+    /// Runs a link over an already-open transport, with `reopen` to get another when that one
+    /// closes under it (none: the link ends then).
+    #[must_use]
+    pub fn from_transport_reopening(
+        transport: Box<dyn Transport>,
+        config: LinkConfig,
+        reopen: Option<Reopen>,
+    ) -> Self {
         let shared = Arc::new(Shared::default());
         shared.running.store(true, Ordering::Release);
         let description = transport.description().to_owned();
@@ -510,7 +563,7 @@ impl Link {
         let thread_config = config.clone();
         let thread = std::thread::Builder::new()
             .name("mp-link".to_owned())
-            .spawn(move || run_link(transport, thread_config, &thread_shared, &rx))
+            .spawn(move || run_link(transport, thread_config, &thread_shared, &rx, reopen))
             .ok();
 
         Self {
@@ -1147,6 +1200,35 @@ impl Link {
         self.shared.running.load(Ordering::Acquire)
     }
 
+    /// Whether the transport has closed under the link and the next is not yet open. The link
+    /// is still running: what it knew - vehicles, parameters, messages - it keeps.
+    #[must_use]
+    pub fn reconnecting(&self) -> bool {
+        self.shared.reconnecting.load(Ordering::Acquire)
+    }
+
+    /// How many fresh transports have taken over since the link opened.
+    #[must_use]
+    pub fn reconnects(&self) -> u32 {
+        self.shared.reconnects.load(Ordering::Acquire)
+    }
+
+    /// How many opens have been tried since the transport closed, while reconnecting.
+    #[must_use]
+    pub fn reconnect_attempts(&self) -> u32 {
+        self.shared.reconnect_attempts.load(Ordering::Acquire)
+    }
+
+    /// Why the last try to open the transport again failed, while reconnecting.
+    #[must_use]
+    pub fn reconnect_error(&self) -> Option<String> {
+        self.shared
+            .reconnect_error
+            .lock()
+            .ok()
+            .and_then(|error| error.clone())
+    }
+
     /// `MAVlist[id].Camera`: the component's camera as it stands, if the C# makes one for it.
     #[must_use]
     pub fn camera(&self, id: VehicleId) -> Option<camera::Camera> {
@@ -1163,7 +1245,10 @@ impl Link {
     #[must_use]
     pub fn video_streams(
         &self,
-    ) -> Vec<((u8, u8, u8), mp_mavlink_dialects::all::VideoStreamInformation)> {
+    ) -> Vec<(
+        (u8, u8, u8),
+        mp_mavlink_dialects::all::VideoStreamInformation,
+    )> {
         self.shared
             .video_streams
             .lock()
@@ -1375,11 +1460,68 @@ fn send_frame(
 }
 
 /// The link thread.
+/// The transport closed under the link: closed for good, then opened again through `reopen`,
+/// once a second, until one opens or the link is closed. True with the fresh transport in place
+/// and the shared description its; false when there is no `reopen` or the link was closed while
+/// waiting. The frame decoder resyncs on the new bytes; the vehicles, parameters, requests and
+/// recording the thread holds are untouched, so to everything above the link the vehicle only
+/// went quiet.
+fn reopen_transport(
+    reopen: &mut Option<Reopen>,
+    shared: &Shared,
+    transport: &mut Box<dyn Transport>,
+) -> bool {
+    let Some(open) = reopen.as_mut() else {
+        return false;
+    };
+    transport.close();
+    shared.reconnecting.store(true, Ordering::Release);
+    shared.reconnect_attempts.store(0, Ordering::Release);
+    let give_up = |shared: &Shared| {
+        shared.reconnecting.store(false, Ordering::Release);
+        false
+    };
+    loop {
+        if !shared.running.load(Ordering::Acquire) {
+            return give_up(shared);
+        }
+        shared.reconnect_attempts.fetch_add(1, Ordering::AcqRel);
+        match open() {
+            Ok(fresh) => {
+                *transport = fresh;
+                if let Ok(mut description) = shared.description.lock() {
+                    *description = transport.description().to_owned();
+                }
+                if let Ok(mut error) = shared.reconnect_error.lock() {
+                    *error = None;
+                }
+                shared.reconnects.fetch_add(1, Ordering::AcqRel);
+                shared.reconnect_attempts.store(0, Ordering::Release);
+                shared.reconnecting.store(false, Ordering::Release);
+                return true;
+            }
+            Err(err) => {
+                if let Ok(mut error) = shared.reconnect_error.lock() {
+                    *error = Some(err.to_string());
+                }
+                let until = Instant::now() + RECONNECT_INTERVAL;
+                while Instant::now() < until {
+                    if !shared.running.load(Ordering::Acquire) {
+                        return give_up(shared);
+                    }
+                    std::thread::sleep(RECONNECT_POLL);
+                }
+            }
+        }
+    }
+}
+
 fn run_link(
     mut transport: Box<dyn Transport>,
     config: LinkConfig,
     shared: &Arc<Shared>,
     outbound: &std::sync::mpsc::Receiver<Vec<u8>>,
+    mut reopen: Option<Reopen>,
 ) {
     let mut decoder = FrameDecoder::new();
     let mut registry = VehicleRegistry::new();
@@ -1416,6 +1558,9 @@ fn run_link(
         match transport.read(&mut buf) {
             Ok(0) => {
                 if !transport.is_open() {
+                    if reopen_transport(&mut reopen, shared, &mut transport) {
+                        continue;
+                    }
                     break;
                 }
                 // A blocking transport has already spent its timeout here. One that returns
@@ -1934,7 +2079,12 @@ fn run_link(
                     });
                 }
             }
-            Err(_) => break,
+            Err(_) => {
+                if reopen_transport(&mut reopen, shared, &mut transport) {
+                    continue;
+                }
+                break;
+            }
         }
 
         // What the screens wrote into a vehicle's state since the last pass.
@@ -1997,7 +2147,12 @@ fn run_link(
 
         // The cameras and gimbal managers started two seconds after their heartbeat, and the
         // camera information requests' answers followed up (see `protocols`).
-        protocols::tick(shared, Instant::now(), &mut protocol_starts, &mut protocol_sends);
+        protocols::tick(
+            shared,
+            Instant::now(),
+            &mut protocol_starts,
+            &mut protocol_sends,
+        );
         for message in protocol_sends.drain(..) {
             send_message(
                 shared,

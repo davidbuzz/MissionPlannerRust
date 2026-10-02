@@ -1,0 +1,39 @@
+# A connected link stays connected (the owner's ruling, PLAN.md section 12 D23, 2026-10-03): when
+# the vehicle hangs up - a SITL rebooted, a radio gone - the link keeps what it knew and opens its
+# transport again every second, with no dialog box, and is connected again once the vehicle is
+# back. Mission Planner's own main link does not reconnect (its mirror streams do,
+# CommsTCPSerial.cs doAutoReconnect); crates/mp-link/src/lib.rs reopen_transport is the ruling.
+#
+# The claim: against tests/gui/dropping-vehicle.py - heartbeats, then the socket shut three
+# seconds in and its listener closed, then listening again after a second and a half - the planner's link reports
+# reconnecting with the DISCONNECT button still up and no prompt, then a reconnection, the same
+# vehicle still listed and frames flowing again.
+#
+# Run from the repository root:
+#   tools/gui-test.sh tests/gui/link-reconnect.gui -- tcp:127.0.0.1:5795
+setup python3 tests/gui/dropping-vehicle.py --work $WORK --port 5795
+screen fly
+window 1600x1200
+budget 6
+
+expect vehicle.count >= 1
+expect link.button DISCONNECT
+expect link.reconnecting false
+expect link.reconnects 0
+
+# Three seconds in the vehicle hangs up and stops listening: the link says so, tries once a
+# second and is refused, keeps its button, asks nothing.
+expect link.reconnecting true
+expect link.reconnect.attempts >= 1
+expect link.button DISCONNECT
+expect fly.prompt none
+expect vehicle.count >= 1
+
+# A second and a half later the vehicle listens again: the link is back on the same vehicle.
+expect link.reconnects >= 1
+expect link.reconnecting false
+expect link.reconnect.error none
+expect vehicle.connected true
+expect vehicle.count >= 1
+expect link.button DISCONNECT
+expect fly.prompt none

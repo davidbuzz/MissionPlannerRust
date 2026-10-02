@@ -64,6 +64,16 @@ pub struct TelemetryView {
     pub target: String,
     /// Whether the link thread is alive.
     pub connected: bool,
+    /// Whether the link's transport has closed under it and the next is not yet open: the link
+    /// is kept, its vehicles with it, and opened again every second with nothing asked (the
+    /// owner's ruling, PLAN.md section 12 D23; `mp_link::Reopen`).
+    pub reconnecting: bool,
+    /// How many fresh transports have taken over since the link opened.
+    pub reconnects: u32,
+    /// How many opens have been tried since the transport closed, while reconnecting.
+    pub reconnect_attempts: u32,
+    /// Why the last try failed, while reconnecting.
+    pub reconnect_error: Option<String>,
     /// The vehicle being displayed, if one has been heard from.
     pub vehicle: Option<VehicleId>,
     /// The latest state snapshot for that vehicle.
@@ -145,6 +155,10 @@ impl TelemetryView {
         Self {
             target: target.into(),
             connected: false,
+            reconnecting: false,
+            reconnects: 0,
+            reconnect_attempts: 0,
+            reconnect_error: None,
             vehicle: None,
             state: None,
             frames: 0,
@@ -609,6 +623,10 @@ impl Telemetry {
         TelemetryView {
             target: link.description(),
             connected: link.is_running(),
+            reconnecting: link.reconnecting(),
+            reconnects: link.reconnects(),
+            reconnect_attempts: link.reconnect_attempts(),
+            reconnect_error: link.reconnect_error(),
             vehicle: primary.as_ref().map(|(id, _)| *id),
             state: primary.map(|(_, handle)| handle.load()),
             frames: link.frames_received(),
