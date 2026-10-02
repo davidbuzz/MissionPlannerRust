@@ -1,11 +1,24 @@
 ---
 name: delegate-to-opus-subagents
-description: NONE now - Buzz, 2026-09-27: "pls stop using subagents"; the two running then were finished and their work used, no more started (the order was three, six, none, three, six, none, two, none)
+description: NONE new since 2026-10-02 ~21:50 local - Buzz: "when each of these current subagents is finished it job, dont create new ones"; the six running then finish and are merged (the order was three, six, none, three, six, none, two, none, six, none)
 metadata:
   type: feedback
 ---
 
-**STOP (current): "pls stop using subagents. when the current agents are done working, use their
+**STOP (current), 2026-10-02 ~21:50 local: "when each of these current subagents is finished it
+job, dont create new ones."** - Buzz. The six running then (DroneCAN/UAVCAN page, MAVFtp
+remainder, Sik Radio, Warning Manager, Spectrogram + Support Proxy, Proximity + MAVLink Signing)
+finish, their worktrees are reviewed, applied to main as patches, verified and committed by the
+coordinator; after them, no Agent tool for coding, reviews or searches until he says otherwise.
+Order so far: three → six → none → three → six → none → two → none → six → none (this).
+
+**SIX (2026-10-02 morning, stopped the same day): "pls allow use of up-to 6 Opus subagents for writing the code"** - Buzz,
+2026-10-02. Lifts the stop of 2026-09-27. Agents write code; the coordinator still
+integrates, verifies and commits. All the "How to apply" rules below hold. With six at once the
+target directory is shared (`<scratchpad>/cargo-agent.sh`: the build lock, 3 jobs, the memory
+cgroup) - six private target directories would fill the disk (26 GB each on 2026-09-27).
+
+**STOP (2026-09-27, lifted 2026-10-02): "pls stop using subagents. when the current agents are done working, use their
 work but dont make more."** - Buzz, 2026-09-27. No Agent tool for coding, reviews or searches;
 the two agents running then (Legacy Force Bootloader, MAVLink Inspector) were let finish and their
 work reviewed and merged. Work items go through this session alone. Ask before starting one again.

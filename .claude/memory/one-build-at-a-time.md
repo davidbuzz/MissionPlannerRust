@@ -67,3 +67,16 @@ more memory per job than a debug build.
   minus a margin (never more than available), so pressure and kills land on the build, not VS
   Code. Never a host build while the VM builds, and never a VM build while the host builds - one
   or the other, checked before starting either.
+
+**With agents on the lock (2026-10-02):** six agents' builds queue on the same lock and a 10-minute
+background job of the coordinator's starves (two GUI runs were killed waiting). So agents build
+through `<scratchpad>/cargo-agent.sh`, which first waits while `<scratchpad>/coordinator-wants-lock`
+exists; the coordinator runs its builds and tests through `<scratchpad>/mine.sh <command>`, which
+raises that flag, takes the lock, and drops the flag after. GUI runs hold the lock for the build
+only, then run the scripts without it (`gui-bugs5.sh`'s shape).
+
+**A process started under the lock keeps it (2026-10-02):** `flock FILE CMD` hands the lock's
+descriptor to CMD and everything CMD starts; the Xvfb that `tools/gui-headless.sh` started inside
+a locked GUI run held the build lock for an hour after the run ended, and every build on the
+machine waited on a display server. Start long-lived helpers outside the lock, or with the
+descriptors closed (`3>&- ... 9>&-`, as gui-headless.sh now does); `lsof <lock>` names the holder.

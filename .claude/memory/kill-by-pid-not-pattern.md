@@ -46,3 +46,10 @@ does not help when the literal appears elsewhere in the same command. Now the SI
 stopped through scratchpad helpers that record the PIDs: `sitl-up.sh` (start-sitl.sh detached,
 waits for "sitl ready", writes `sitl.pids`) and `sitl-down.sh` (kills exactly those).
 
+
+**Wait loops too (2026-10-02):** `while pgrep -f "diag2.sh"; do sleep 3; done` inside a helper
+script never ended, because the script was launched from a Bash tool call whose text *wrote* the
+helper with a heredoc - so the wrapper shell's command line carried `diag2.sh` for as long as the
+helper ran. A loop that waits on a pattern is the same trap as a kill by one. Wait on a PID
+(`while kill -0 $pid`), a flag file the job touches when done, or a line in its output file;
+and write helper scripts in a call of their own, not the call that runs them.

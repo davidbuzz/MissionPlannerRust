@@ -1,6 +1,6 @@
 ---
 name: work-the-matrix-in-priority-order
-description: Buzz (2026-09-26) - do the remaining work in NOT_DONE_YET_MATRIX.md's priority order, every "high" row to 100% before any "med" row, then med the same way
+description: Buzz (2026-09-26) - do the remaining work in NOT_DONE_YET_MATRIX.md's priority order, every "high" row to 100% before any "med" row; within med, his order of 2026-10-02 - Standard/Advanced Params, DroneCAN, MAVFtp, Sik Radio
 metadata:
   type: feedback
 ---
@@ -13,6 +13,10 @@ priority with its progress figures refreshed.
 **Why:** the matrix is his view of what is not done; PLAN.md §13's queue and the D-list are the
 long form. He wants the high rows finished, not touched, before anything of lower priority
 starts.
+
+**The order within "med" (Buzz, 2026-10-02):** "prioritise: Standard Params and Advanced Params,
+DroneCAN/UAVCAN (15), MAVFtp, Sik Radio (17 wirings)" - those four rows in that order, before the
+Advanced page's remaining windows (Warning Manager and the rest) and the other med rows.
 
 **How to apply:** take the matrix's rows top-down (urgent, then high, then med, low; `not`
 rows are never worked). A high row is left only at 100 - the item ported, tested, its script
