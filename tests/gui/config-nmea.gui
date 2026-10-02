@@ -1,0 +1,64 @@
+# The Advanced page's NMEA output (Controls/SerialOutputNMEA.cs): the port combo with the
+# serial ports and the four network kinds, the baud, the rate (5hz to start), Connect. "UDP
+# Client" chosen, Connect asks the transport's two questions - the host and the port, their
+# defaults (CommsUDPSerialConnect.cs:136-146) - then the thread writes the sentences to
+# 127.0.0.1:14550 at the rate, nothing listening there: GGA, GLL, HDG, VTG, RMC and RPY each
+# round (SerialOutputNMEA.cs:124-230). The rate changed to 1hz takes; Stop ends the thread; the
+# form closed and opened again reads Connect.
+#
+# Needs SITL copter on tcp:127.0.0.1:5760. Run as
+#   tools/gui-test.sh tests/gui/config-nmea.gui -- tcp:127.0.0.1:5760
+
+env MP_CONFIG_XML $WORK/config.xml
+screen setup
+window 1600x1200
+budget 17
+
+expect vehicle.count > 0
+click setup-page-ConfigAdvanced
+expect setup.page ConfigAdvanced
+expect config.advanced.buttons.enabled ~ Mavlink Mirror,NMEA,
+expect config.nmea.window false
+click advanced-BUT_outputnmea
+expect config.nmea.window true
+expect config.nmea.opened 1
+expect config.nmea.button Connect
+expect config.nmea.ratetext 5hz
+expect config.nmea.rate 5
+expect config.nmea.baud 4800
+expect config.nmea.running false
+
+# UDP Client: the port list's last item, whatever this machine's serial ports.
+click nmea-CMB_serialport
+reveal nmea-CMB_serialport-list nmea-CMB_serialport-UDP-Client
+click nmea-CMB_serialport-UDP-Client
+expect config.nmea.port UDP Client
+click nmea-BUT_connect
+expect config.nmea.prompt remote host
+click nmea-prompt-ok
+expect config.nmea.prompt remote Port
+click nmea-prompt-ok
+expect config.nmea.prompt none
+expect config.nmea.button Stop
+within 6
+expect config.nmea.running true
+within 6
+expect config.nmea.written > 12
+expect config.nmea.last ~ $GPRPY,
+
+# The rate: 1hz.
+click nmea-CMB_updaterate
+click nmea-CMB_updaterate-3
+expect config.nmea.ratetext 1hz
+expect config.nmea.rate 1
+
+# Stop, and the form again.
+click nmea-BUT_connect
+expect config.nmea.running false
+expect config.nmea.button Connect
+click nmea-close
+expect config.nmea.window false
+click advanced-BUT_outputnmea
+expect config.nmea.opened 2
+expect config.nmea.ratetext 1hz
+click nmea-close

@@ -15,8 +15,9 @@ use std::time::Instant;
 use gpui::{AnyElement, Context, FocusHandle, Window, div, prelude::*};
 
 use super::{
-    auth_keys, compass_mot, fft, gps_order, hw_ids, initial_params, mavlink_inspector, osd,
-    parachute, proximity, sikradio, spectrogram, support_proxy, warnings_manager,
+    auth_keys, compass_mot, fft, gps_order, hw_ids, initial_params, mavlink_inspector,
+    mavlink_mirror, nmea_output, osd, parachute, proximity, sikradio, spectrogram, support_proxy,
+    warnings_manager,
 };
 use crate::MissionPlanner;
 use crate::config::servo_output::{ERROR_TITLE, Message};
@@ -103,6 +104,10 @@ pub struct ExtraSetup {
     pub dronecan: super::dronecan::DroneCan,
     /// Sik Radio (`config/sikradio.rs`).
     pub sikradio: sikradio::SikRadio,
+    /// The Mavlink Mirror the Advanced page opens, and its mirrors (`config/mavlink_mirror.rs`).
+    pub mavlink_mirror: mavlink_mirror::MavlinkMirror,
+    /// The NMEA output the Advanced page opens, and its thread (`config/nmea_output.rs`).
+    pub nmea_output: nmea_output::NmeaOutput,
 }
 
 /// The keyboard focus of the pages' boxes: Parachute's number being typed into, and Initial
@@ -138,6 +143,10 @@ pub struct Focus {
     pub sikradio: FocusHandle,
     /// The DroneCAN Inspector's "Points of history?".
     pub dronecan_prompt: FocusHandle,
+    /// The Mavlink Mirror's grid cell being typed into.
+    pub mirror_cell: FocusHandle,
+    /// The NMEA output's questions.
+    pub nmea_prompt: FocusHandle,
 }
 
 impl Focus {
@@ -159,6 +168,8 @@ impl Focus {
             support_proxy: support_proxy::FocusHandles::new(cx),
             sikradio: cx.focus_handle(),
             dronecan_prompt: cx.focus_handle(),
+            mirror_cell: cx.focus_handle(),
+            nmea_prompt: cx.focus_handle(),
         }
     }
 }
@@ -184,6 +195,8 @@ pub fn record_facts(pages: &ExtraSetup, view: &TelemetryView) {
         pages.dronecan.inspector_opened,
     );
     sikradio::record_facts(&pages.sikradio);
+    mavlink_mirror::record_facts(&pages.mavlink_mirror);
+    nmea_output::record_facts(&pages.nmea_output);
 }
 
 impl MissionPlanner {
@@ -341,6 +354,9 @@ impl MissionPlanner {
             proxy_focused.0,
             proxy_focused.1,
         );
+        // The Mavlink Mirror's streams and mirrors, and the NMEA output's stream and thread.
+        let mirror_status = pages.mavlink_mirror.tick(telemetry);
+        let nmea_status = pages.nmea_output.tick(view.state.as_deref());
         // The link errors the C# boxes go on the status line instead (the owner's ruling); the
         // page never draws them, since they leave its queue in the tick before the frame.
         let mut status = None;
@@ -376,6 +392,12 @@ impl MissionPlanner {
         }
         if proxy_status.is_some() {
             status = proxy_status;
+        }
+        if mirror_status.is_some() {
+            status = mirror_status;
+        }
+        if nmea_status.is_some() {
+            status = nmea_status;
         }
         if status.is_some() {
             self.file_status = status;
@@ -434,6 +456,10 @@ impl MissionPlanner {
                 )
             })
             .or_else(|| sikradio::overlay(&pages.sikradio, &focus.sikradio, window, cx))
+            .or_else(|| {
+                mavlink_mirror::overlay(&pages.mavlink_mirror, &focus.mirror_cell, window, cx)
+            })
+            .or_else(|| nmea_output::overlay(&pages.nmea_output, &focus.nmea_prompt, window, cx))
     }
 }
 

@@ -20,10 +20,12 @@
 # and tests/gui/config-signing.gui drive them with SITL and this script does not click them. So
 # are the spectrogram's (Controls/SpectrogramUI.cs) and the support proxy's
 # (Controls/SerialSupportProxy.cs), which tests/gui/config-spectrogram.gui and
-# tests/gui/config-supportproxy.gui drive. The other six are dimmed - the MAVLink mirror, NMEA
-# output, Follow Me, parameter regeneration, moving base and log anonymiser windows are not in
-# this application - and the script clicks none of them; config/advanced.rs's tests hold the
-# controls to the Designer and the .resx and each handler to the window its row names.
+# tests/gui/config-supportproxy.gui drive; and the Mavlink Mirror's (Controls/SerialOutputPass.cs)
+# and the NMEA output's (Controls/SerialOutputNMEA.cs), which tests/gui/config-mirror.gui and
+# tests/gui/config-nmea.gui drive. The other four are dimmed - the Follow Me, parameter
+# regeneration, moving base and log anonymiser windows are not in this application - and the
+# script clicks none of them; config/advanced.rs's tests hold the controls to the Designer and
+# the .resx and each handler to the window its row names.
 #
 # Run from the repository root, where the log's path is typed relative to.
 
@@ -45,8 +47,8 @@ expect config.advanced.text The following pages are for advanced configutation o
 expect config.advanced.buttons Warning Manager,MAVLink Inspector,Proximity,Mavlink Signing,Mavlink Mirror,NMEA,Follow Me,Param gen,Moving Base,Anon Log,FFT,Spectrogram,Support Proxy
 expect config.advanced.labels ~ Enable custom warnings based on a set of conditions|View decoded mavlink data
 expect config.advanced.labels ~ |Share connection with support engineer
-expect config.advanced.buttons.enabled Warning Manager,MAVLink Inspector,Proximity,Mavlink Signing,FFT,Spectrogram,Support Proxy
-expect config.advanced.dimmed ~ BUT_outputMavlink:
+expect config.advanced.buttons.enabled Warning Manager,MAVLink Inspector,Proximity,Mavlink Signing,Mavlink Mirror,NMEA,FFT,Spectrogram,Support Proxy
+expect config.advanced.dimmed ~ BUT_follow_me:
 expect config.advanced.dimmed ~ is not ported; but_anonlog: anonymising a log (ExtLibs/Utilities/Privacy.cs) is not ported
 expect config.fft.window false
 

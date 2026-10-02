@@ -34,7 +34,7 @@ expect params.held > 1000
 expect config.inspector.window false
 click setup-page-ConfigAdvanced
 expect setup.page ConfigAdvanced
-expect config.advanced.buttons.enabled Warning Manager,MAVLink Inspector,Proximity,Mavlink Signing,FFT,Spectrogram,Support Proxy
+expect config.advanced.buttons.enabled Warning Manager,MAVLink Inspector,Proximity,Mavlink Signing,Mavlink Mirror,NMEA,FFT,Spectrogram,Support Proxy
 
 # The constructor: nothing heard yet, Graph It disabled.
 click advanced-but_mavinspector

@@ -809,11 +809,14 @@ pub const PANELS: &[Panel] = &[
         //     rate and bytes a second, and field with its value and .NET type, every 333 ms; Show
         //     GCS Traffic; Graph It's history question and live graph of a field), Spectrogram the
         //     spectrogram window (config/spectrogram.rs: a log's IMU or ISBH samples drawn as
-        //     Spectrogram.cs's GenerateImage draws them) and Support Proxy the proxy
+        //     Spectrogram.cs's GenerateImage draws them), Support Proxy the proxy
         //     (config/support_proxy.rs: the link mirrored to a support engineer's server over
-        //     TCP or UDP, mp-link's mirror.rs), 7 of the 13 wirings; the other six dimmed - the
-        //     MAVLink mirror, NMEA output, Follow Me, parameter regeneration, moving base and
-        //     log anonymiser windows they open are not ported",
+        //     TCP or UDP, mp-link's mirror.rs), Mavlink Mirror the grid of outputs
+        //     (config/mavlink_mirror.rs: each row a mirror of the link started by Go, kept in the
+        //     serialpasslist setting) and NMEA the NMEA output (config/nmea_output.rs: GGA, GLL,
+        //     HDG, VTG, RMC and RPY to a port at the rate, the geoid from mp-terrain), 9 of the
+        //     13 wirings; the other four dimmed - the Follow Me, parameter regeneration, moving
+        //     base and log anonymiser windows they open are not ported",
         ),
     ),
     panel(

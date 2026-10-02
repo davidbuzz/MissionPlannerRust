@@ -53,6 +53,8 @@ use gpui::{AnyElement, Context, Div, SharedString, div, prelude::*, px, rgb};
 use super::auth_keys::AuthKeysWindow;
 use super::fft::Fft;
 use super::mavlink_inspector::InspectorWindow;
+use super::mavlink_mirror::MavlinkMirror;
+use super::nmea_output::NmeaOutput;
 use super::proximity::ProximityWindow;
 use super::spectrogram::SpectrogramWindow;
 use super::support_proxy::SupportProxy;
@@ -176,10 +178,12 @@ pub const ROWS: [Row; 13] = [
         "the signing keys window (Controls/AuthKeys.cs)", Some("config/auth_keys.rs")),
     row("BUT_outputMavlink", "Mavlink Mirror", "BUT_outputMavlink_Click", "label6",
         "Mavlink mirror to an external location. For Monitoring or control", (304.0, 18.0),
-        "the MAVLink mirror window (Controls/SerialOutputPass.cs)", None),
+        "the MAVLink mirror window (Controls/SerialOutputPass.cs)",
+        Some("config/mavlink_mirror.rs")),
     row("BUT_outputnmea", "NMEA", "BUT_outputnmea_Click", "label7",
         "Output the MAV location as a NMEA string", (213.0, 18.0),
-        "the NMEA output window (Controls/SerialOutputNMEA.cs)", None),
+        "the NMEA output window (Controls/SerialOutputNMEA.cs)",
+        Some("config/nmea_output.rs")),
     row("BUT_follow_me", "Follow Me", "BUT_follow_me_Click", "label8",
         "Use an external NMEA gps and send guided mode waypoints to the MAV based on that location",
         (304.0, 31.0),
@@ -318,6 +322,29 @@ pub fn click_keys_or_proximity(
     }
 }
 
+/// The Mavlink Mirror's and NMEA's buttons: `BUT_outputMavlink_Click`, `new SerialOutputPass()
+/// .Show()`, and `BUT_outputnmea_Click`, `new SerialOutputNMEA().Show()` - the first reading
+/// its rows from the settings. True when it did something.
+/// `// C#: GCSViews/ConfigurationView/ConfigAdvanced.cs:32-35, 47-50`
+pub fn click_outputs(
+    button: &str,
+    mirror: &mut MavlinkMirror,
+    nmea: &mut NmeaOutput,
+    persisted: &Persisted,
+) -> bool {
+    match button {
+        "BUT_outputMavlink" => {
+            mirror.show(persisted);
+            true
+        }
+        "BUT_outputnmea" => {
+            nmea.show();
+            true
+        }
+        _ => false,
+    }
+}
+
 /// The Spectrogram's and Support Proxy's buttons: `BUT_spect_Click`, `new SpectrogramUI()
 /// .Show()`, and `BUT_supportproxy_Click`, `new SerialSupportProxy().Show()`, whose constructor
 /// reads the settings - neither asking anything of the vehicle first. True when it did
@@ -395,6 +422,12 @@ fn button(row: Row, y: f32, cx: &mut Context<MissionPlanner>) -> AnyElement {
                         row.button,
                         &mut pages.spectrogram,
                         &mut pages.support_proxy,
+                        &this.persisted,
+                    )
+                    || click_outputs(
+                        row.button,
+                        &mut pages.mavlink_mirror,
+                        &mut pages.nmea_output,
                         &this.persisted,
                     )
                 {
@@ -636,6 +669,8 @@ mod tests {
         auth_keys: AuthKeysWindow,
         spectrogram: SpectrogramWindow,
         proxy: SupportProxy,
+        mirror: MavlinkMirror,
+        nmea: NmeaOutput,
     }
 
     impl Pages {
@@ -654,6 +689,8 @@ mod tests {
                 },
                 spectrogram: SpectrogramWindow::default(),
                 proxy: SupportProxy::default(),
+                mirror: MavlinkMirror::default(),
+                nmea: NmeaOutput::default(),
             }
         }
 
@@ -669,6 +706,7 @@ mod tests {
             open(button, windows, now)
                 || click_keys_or_proximity(button, &mut self.proximity, &mut self.auth_keys, now)
                 || click_window(button, &mut self.spectrogram, &mut self.proxy, persisted)
+                || click_outputs(button, &mut self.mirror, &mut self.nmea, persisted)
         }
     }
 
@@ -699,6 +737,8 @@ mod tests {
             let keys_row = row.button == "but_signkey";
             let spectrogram_row = row.button == "BUT_spect";
             let proxy_row = row.button == "BUT_supportproxy";
+            let mirror_row = row.button == "BUT_outputMavlink";
+            let nmea_row = row.button == "BUT_outputnmea";
             assert_eq!(windows.fft.window.is_some(), fft_row, "{}", row.button);
             assert_eq!(windows.fft.opened, usize::from(fft_row));
             assert!(
@@ -743,6 +783,15 @@ mod tests {
             assert_eq!(windows.spectrogram.opened, usize::from(spectrogram_row));
             assert_eq!(windows.proxy.window.is_some(), proxy_row, "{}", row.button);
             assert_eq!(windows.proxy.opened, usize::from(proxy_row));
+            assert_eq!(
+                windows.mirror.window.is_some(),
+                mirror_row,
+                "{}",
+                row.button
+            );
+            assert_eq!(windows.mirror.opened, usize::from(mirror_row));
+            assert_eq!(windows.nmea.window.is_some(), nmea_row, "{}", row.button);
+            assert_eq!(windows.nmea.opened, usize::from(nmea_row));
             // `click` is the two that need nothing but themselves.
             let mut fft = Fft::default();
             let mut inspector = InspectorWindow::default();
@@ -753,7 +802,9 @@ mod tests {
                     && !proximity_row
                     && !keys_row
                     && !spectrogram_row
-                    && !proxy_row,
+                    && !proxy_row
+                    && !mirror_row
+                    && !nmea_row,
                 "{}",
                 row.button
             );
@@ -836,6 +887,8 @@ mod tests {
                 "but_mavinspector",
                 "but_proximity",
                 "but_signkey",
+                "BUT_outputMavlink",
+                "BUT_outputnmea",
                 "but_fft",
                 "BUT_spect",
                 "BUT_supportproxy"

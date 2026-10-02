@@ -733,6 +733,7 @@ pub fn input_box(
         "fft-rate-box" => ("fft-rate-ok", "fft-rate-cancel", "fft-rate-value"),
         // ---- end FFT Setup ----
         // The MAVLink Inspector's "Points of history?".
+        "nmea-prompt-box" => ("nmea-prompt-ok", "nmea-prompt-cancel", "nmea-prompt-value"),
         "dronecan-inspector-points-box" => (
             "dronecan-inspector-points-ok",
             "dronecan-inspector-points-cancel",

@@ -37,6 +37,10 @@ pub mod proximity;
 // The Advanced page's Spectrogram and Support Proxy windows.
 pub mod spectrogram;
 pub mod support_proxy;
+// The Advanced page's Mavlink Mirror and NMEA output windows, and what they share.
+pub mod mavlink_mirror;
+pub mod nmea_output;
+pub mod serial_output;
 // ---- end Basic Tuning / Advanced ----
 // ---- Extended Tuning ----
 pub mod extended_tuning;

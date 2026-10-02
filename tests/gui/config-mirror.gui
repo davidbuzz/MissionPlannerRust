@@ -1,0 +1,61 @@
+# The Advanced page's Mavlink Mirror (Controls/SerialOutputPass.cs): only its grid shows - the
+# port and baud combos, Connect and "Write access" are Visible = False in the .resx. A row is
+# typed into the new row: Type UDP, Direction Outbound, Port 14560, Host/Baud 127.0.0.1, Write
+# unticked; each cell edit saves the rows to the serialpasslist setting as JSON arrays
+# (:140-153); Go starts a mirror of the link's packets to 127.0.0.1:14560 and the Go cell reads
+# Started (:177-258); the form closed and opened again reads the rows from the setting with the
+# started row still Started (:155-170).
+#
+# Needs SITL copter on tcp:127.0.0.1:5760. Run as
+#   tools/gui-test.sh tests/gui/config-mirror.gui -- tcp:127.0.0.1:5760
+
+env MP_CONFIG_XML $WORK/config.xml
+screen setup
+window 1600x1200
+budget 13
+
+expect vehicle.count > 0
+click setup-page-ConfigAdvanced
+expect setup.page ConfigAdvanced
+expect config.mirror.window false
+click advanced-BUT_outputMavlink
+expect config.mirror.window true
+expect config.mirror.opened 1
+expect config.mirror.rows 0
+expect config.mirror.mirrors 0
+
+# The new row's cells: Type, Direction, Port, Host/Baud.
+click mirror-cell-0-0
+expect config.mirror.rows 1
+click mirror-list-2
+expect config.mirror.row.0 ~ ["UDP","","","","False","Go"]
+click mirror-cell-0-1
+click mirror-list-1
+expect config.mirror.row.0 ~ ["UDP","Outbound","","","False","Go"]
+click mirror-cell-0-2
+expect config.mirror.editing 0.2
+type 14560
+key Return
+expect config.mirror.editing none
+click mirror-cell-0-3
+type 127.0.0.1
+key Return
+expect config.mirror.row.0 ["UDP","Outbound","14560","127.0.0.1","False","Go"]
+
+# Go: the mirror, started.
+click mirror-cell-0-5
+expect config.mirror.mirrors 1
+expect config.mirror.row.0 ["UDP","Outbound","14560","127.0.0.1","False","Started"]
+within 6
+expect config.mirror.open 1
+within 6
+expect config.mirror.relayed.up > 0
+
+# Closed and opened again: the row and its Started from the setting and the class.
+click mirror-close
+expect config.mirror.window false
+click advanced-BUT_outputMavlink
+expect config.mirror.opened 2
+expect config.mirror.rows 1
+expect config.mirror.row.0 ["UDP","Outbound","14560","127.0.0.1","False","Started"]
+click mirror-close

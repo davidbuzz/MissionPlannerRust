@@ -29,6 +29,8 @@
 //!   a missing one with a valid altitude of 0 sourced "ASCII".
 
 mod fetch;
+/// The EGM96 geoid undulation (`ExtLibs/GeoidHeightsDotNet`), for the NMEA output's GGA.
+pub mod geoid;
 mod srtm;
 
 pub use fetch::{Http, HttpError, UreqHttp};
