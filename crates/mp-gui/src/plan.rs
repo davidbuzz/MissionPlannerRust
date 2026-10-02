@@ -4939,9 +4939,11 @@ pub fn actions_panel(
             .flex_col()
             .gap_2()
             .child(coords)
-            .child(providers.child(grid).child(kml_link))
-            .child(status)
-            .child(inject)
+            // `panel5`, the Mission box - Read WPs, Write WPs, Write Fast, Save WP File, Load WP
+            // File - straight after `panel4`'s read-out, as `flowLayoutPanel1` flows them; the
+            // map type, grid, status and inject rows this panel also carries come after, so a
+            // strip that cuts the panel short cuts those and never the buttons (the owner's
+            // report, 2026-10-03). `// C#: GCSViews/FlightPlanner.resx (panel4, panel5)`
             .child(
                 div()
                     .flex()
@@ -5012,6 +5014,9 @@ pub fn actions_panel(
                         }),
                     )),
             )
+            .child(providers.child(grid).child(kml_link))
+            .child(status)
+            .child(inject)
             .child(
                 div()
                     .flex()

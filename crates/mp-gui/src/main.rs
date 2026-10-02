@@ -32,6 +32,8 @@ mod hud;
 mod i18n;
 mod inject_map;
 mod joystick;
+mod layout_guard;
+
 mod logbrowse;
 mod logdownload;
 mod mapview;
@@ -2324,7 +2326,7 @@ impl MissionPlanner {
     /// The planning screen by its docking: the panels' column beside the map (`FP_docking`
     /// "Right"), or - after Switch Docking - `panelWaypoints` at the right, half the window wide,
     /// and `panelAction`'s panels in a row along the bottom (120 high in the C#; these panels are
-    /// taller, so the row scrolls sideways). The menus and dialogs go over either.
+    /// taller, so the row is as high as the tallest of them and scrolls sideways). The menus and dialogs go over either.
     /// `// C#: GCSViews/FlightPlanner.cs:6762-6778`
     fn plan_screen(
         &self,
@@ -2388,12 +2390,16 @@ impl MissionPlanner {
                                     )),
                             ),
                     )
-                    .child(
+                                        .child(
+                        // As high as its tallest panel, up to half the window, so a panel is
+                        // never cut: the strip was a fixed 240 px and the Mission box is 414,
+                        // which put Read WPs and Write WPs below the window's bottom edge (the
+                        // owner's report, 2026-10-03; `layout_guard` holds it now).
                         div()
                             .id("plan-action")
                             .flex()
                             .flex_shrink_0()
-                            .h(px(240.0))
+                            .max_h(gpui::relative(0.5))
                             .gap_2()
                             .overflow_x_scroll()
                             .children(
@@ -3352,7 +3358,10 @@ impl Render for MissionPlanner {
                     Some(Err(why)) => format!("failed: {why}"),
                 },
             );
-            connect::record_facts(&self.connect_box, view.connected);
+                        connect::record_facts(&self.connect_box, view.connected);
+            // The important controls of this screen that are not wholly on screen - the owner's
+            // self-test of 2026-10-03, read by every GUI run (`layout_guard`).
+            layout_guard::record_facts(self.screen);
             prefetch_ui::record_facts(&self.plan_menus);
             facts::record("plan.docking", self.plan_docking.name());
             // The map's zoom and centre, its radius circles and what the pointer is over, and the

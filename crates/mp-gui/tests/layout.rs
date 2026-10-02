@@ -29,6 +29,11 @@ struct Rect {
     y: f32,
     width: f32,
     height: f32,
+    /// Whether the application found the control's paint clipped: not wholly inside the window
+    /// and the boxes above it (`src/probe.rs`).
+    clipped: bool,
+    /// Whether the application names it as one that must never be hidden (`src/layout_guard.rs`).
+    important: bool,
 }
 
 impl Rect {
@@ -54,21 +59,30 @@ impl Drop for Running {
 
 /// Runs the GUI at a given size on a given screen and returns what it measured.
 fn measure(width: u32, height: u32, screen: &str) -> BTreeMap<String, Rect> {
+    // The application writes Mission Planner's config.xml on starting; a measurement must not
+    // rewrite the settings of the Mission Planner installed on this machine.
+    let config = std::env::temp_dir().join("headless-planner-layout-config.xml");
+    measure_with(width, height, screen, &config)
+}
+
+/// Runs the GUI at a given size on a given screen with a given `config.xml`, and returns what it
+/// measured. Offline, with a data directory of its own, so no tile is fetched and no saved link
+/// is opened.
+fn measure_with(width: u32, height: u32, screen: &str, config: &Path) -> BTreeMap<String, Rect> {
     let probe: PathBuf = std::env::temp_dir().join(format!(
         "headless-planner-layout-{width}x{height}-{screen}.json"
     ));
     let _ = std::fs::remove_file(&probe);
+    let home = std::env::temp_dir().join("headless-planner-layout-home");
+    let _ = std::fs::create_dir_all(&home);
 
     let child = Command::new(env!("CARGO_BIN_EXE_planner"))
         .env("MP_PROBE", &probe)
         .env("MP_WINDOW", format!("{width}x{height}"))
         .env("MP_SCREEN", screen)
-        // The application writes Mission Planner's config.xml on starting; a measurement must not
-        // rewrite the settings of the Mission Planner installed on this machine.
-        .env(
-            "MP_CONFIG_XML",
-            std::env::temp_dir().join("headless-planner-layout-config.xml"),
-        )
+        .env("MP_OFFLINE", "1")
+        .env("XDG_DATA_HOME", &home)
+        .env("MP_CONFIG_XML", config)
         .env(
             "DISPLAY",
             std::env::var("DISPLAY").unwrap_or_else(|_| ":0".to_owned()),
@@ -127,6 +141,7 @@ fn read(path: &Path) -> BTreeMap<String, Rect> {
         else {
             continue;
         };
+        let flag = |key: &str| rest.contains(&format!("\"{key}\": true"));
         out.insert(
             name.to_owned(),
             Rect {
@@ -134,6 +149,8 @@ fn read(path: &Path) -> BTreeMap<String, Rect> {
                 y,
                 width,
                 height,
+                clipped: flag("clipped"),
+                important: flag("important"),
             },
         );
     }
@@ -209,6 +226,73 @@ fn the_flight_screens_left_column_fits_without_scrolling() {
         lowest.1.bottom(),
         column.bottom()
     );
+}
+
+/// The owner's self-test of 2026-10-03: on every screen, every control the application names as
+/// important (`src/layout_guard.rs`) is wholly on screen at the size the window opens at - the
+/// planner's Mission box had scrolled Read WPs, Write WPs and the file buttons below the window.
+/// The application judges the clipping itself, from gpui's content mask; this reads its verdict
+/// and demands that it found something to judge.
+#[test]
+#[ignore = "opens a window; needs a display"]
+fn no_important_control_is_hidden_on_any_screen() {
+    let mut hidden = Vec::new();
+    for screen in ["fly", "plan", "setup", "config", "simulation", "params"] {
+        let measured = measure(1600, 1200, screen);
+        let important: Vec<_> = measured.iter().filter(|(_, rect)| rect.important).collect();
+        assert!(
+            important.len() >= 2,
+            "{screen}: only {} important controls measured; the connect box alone is two",
+            important.len()
+        );
+        for (name, rect) in important {
+            if rect.clipped {
+                hidden.push(format!(
+                    "{screen}: {name} at {:.0},{:.0} {:.0}x{:.0} is clipped",
+                    rect.x, rect.y, rect.width, rect.height
+                ));
+            }
+        }
+    }
+    assert!(
+        hidden.is_empty(),
+        "important controls hidden:\n  {}",
+        hidden.join("\n  ")
+    );
+}
+
+/// The owner's case, as he found it: the planner docked Bottom (`FP_docking`), where the Mission
+/// box sat in a strip too short for it.
+#[test]
+#[ignore = "opens a window; needs a display"]
+fn the_planners_mission_buttons_are_on_screen_when_docked_bottom() {
+    let config = std::env::temp_dir().join("headless-planner-layout-bottom-config.xml");
+    std::fs::write(
+        &config,
+        "<?xml version=\"1.0\" encoding=\"utf-8\"?><Config><FP_docking>Bottom</FP_docking></Config>",
+    )
+    .unwrap();
+    let measured = measure_with(1600, 1200, "plan", &config);
+    let root = measured.get("root").copied().expect("the root is measured");
+    for name in [
+        "plan-read",
+        "plan-write",
+        "plan-writefast",
+        "plan-save",
+        "plan-load",
+    ] {
+        let rect = measured
+            .get(name)
+            .copied()
+            .unwrap_or_else(|| panic!("{name} is measured"));
+        assert!(
+            !rect.clipped && rect.bottom() <= root.bottom(),
+            "{name} ends at {:.0}, the window at {:.0}, clipped {}",
+            rect.bottom(),
+            root.bottom(),
+            rect.clipped
+        );
+    }
 }
 
 #[test]

@@ -1,0 +1,33 @@
+# The planner's Mission box keeps Read WPs, Write WPs, Write Fast, Save and Load on screen (the
+# owner's report, 2026-10-03: they had scrolled off the bottom), in both dockings - panelAction at
+# the right of the map, and along the bottom after Switch Docking, where a fixed 240 px strip had
+# cut the 414 px box short. crates/mp-gui/src/layout_guard.rs names them important, the probe
+# judges each one's clipping from gpui's content mask, and `layout.hidden` counts the clipped:
+# every GUI run ends by demanding 0 (tools/gui-test.sh), this one asks along the way too.
+#
+# Run from the repository root:
+#   tools/gui-test.sh tests/gui/plan-mission-visible.gui
+env XDG_DATA_HOME $WORK
+setup mkdir -p "$WORK/MissionPlannerRust" && printf '<?xml version="1.0" encoding="utf-8"?><Config></Config>' > "$WORK/MissionPlannerRust/config.xml"
+screen plan
+window 1600x1200
+budget 4
+
+expect plan.docking Right
+expect layout.hidden 0
+expect layout.hidden.names none
+expect plan-write below main-connect
+
+# Docked along the bottom: the strip is as high as the Mission box, the buttons under the map.
+click map@0.45x0.40:right
+click menu-switchDocking
+expect plan.docking Bottom
+expect plan-write below map
+expect layout.hidden 0
+expect layout.hidden.names none
+
+# And back.
+click map@0.45x0.40:right
+click menu-switchDocking
+expect plan.docking Right
+expect layout.hidden 0

@@ -58,8 +58,20 @@ pub fn enabled() -> bool {
 }
 
 /// The positions recorded, each with the frame it was last measured in.
-fn registry() -> &'static Mutex<BTreeMap<String, (Rect, u64)>> {
-    static REGISTRY: OnceLock<Mutex<BTreeMap<String, (Rect, u64)>>> = OnceLock::new();
+/// One control as last measured: where it was laid out, the frame that saw it, and whether all
+/// of it could be seen - inside the window and inside every box that clips it, which is the
+/// content mask in force where it was laid out.
+#[derive(Debug, Clone, Copy, PartialEq)]
+struct Measured {
+    rect: Rect,
+    seen: u64,
+    clipped: bool,
+    /// What could be seen where it was laid out: the content mask cut to the window.
+    visible: Rect,
+}
+
+fn registry() -> &'static Mutex<BTreeMap<String, Measured>> {
+    static REGISTRY: OnceLock<Mutex<BTreeMap<String, Measured>>> = OnceLock::new();
     REGISTRY.get_or_init(|| Mutex::new(BTreeMap::new()))
 }
 
@@ -89,28 +101,115 @@ pub fn begin_frame() {
 }
 
 /// Drops every control not measured in the frame `finished`; whether anything went.
-fn retire(registry: &mut BTreeMap<String, (Rect, u64)>, finished: u64) -> bool {
+fn retire(registry: &mut BTreeMap<String, Measured>, finished: u64) -> bool {
     let before = registry.len();
-    registry.retain(|_, (_, seen)| *seen >= finished);
+    registry.retain(|_, measured| measured.seen >= finished);
     registry.len() != before
 }
 
 /// Records where a control was laid out.
-fn record(name: &str, rect: Rect) {
+fn record(name: &str, rect: Rect, visible: Rect) {
+    let clipped = !within(rect, visible);
     let now = frame().load(Ordering::SeqCst);
     if let Ok(mut registry) = registry().lock() {
         // Only rewrite the file when something moved. A UI that repaints ten times a second would
         // otherwise rewrite it ten times a second, and a script reading it could catch a partial
         // write.
         if let Some(entry) = registry.get_mut(name)
-            && entry.0 == rect
+            && entry.rect == rect
+            && entry.clipped == clipped
         {
-            entry.1 = now;
+            entry.seen = now;
+            entry.visible = visible;
             return;
         }
-        registry.insert(name.to_owned(), (rect, now));
+        registry.insert(
+            name.to_owned(),
+            Measured {
+                rect,
+                seen: now,
+                clipped,
+                visible,
+            },
+        );
     }
     write();
+}
+
+/// Whether two rectangles overlap at all.
+fn overlaps(a: Rect, b: Rect) -> bool {
+    a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.y + b.height && b.y < a.y + a.height
+}
+
+/// The smallest rectangle holding all of `rects`.
+fn union(rects: &[Rect]) -> Rect {
+    let left = rects.iter().map(|r| r.x).fold(f32::INFINITY, f32::min);
+    let top = rects.iter().map(|r| r.y).fold(f32::INFINITY, f32::min);
+    let right = rects
+        .iter()
+        .map(|r| r.x + r.width)
+        .fold(f32::NEG_INFINITY, f32::max);
+    let bottom = rects
+        .iter()
+        .map(|r| r.y + r.height)
+        .fold(f32::NEG_INFINITY, f32::max);
+    Rect {
+        x: left,
+        y: top,
+        width: right - left,
+        height: bottom - top,
+    }
+}
+
+/// Where a control is, judged from its children against what could be seen: the children that
+/// reach into the visible box are the control as drawn - the map's canvas, a button's label - and
+/// their union is its rectangle, which is clipped when any of them is cut by the edge. A child
+/// placed wholly beyond the box is not the control: a marker the map lays at an off-screen
+/// coordinate, which the pane clips without anyone seeing it, must neither widen the map's
+/// rectangle (the harness clicks at fractions of it) nor count as the map being hidden. Only
+/// when no child reaches in is the control itself hidden, and then its rectangle is where it
+/// would have been. (`judge` returns the rectangle; `record` reads the clipping from it.)
+fn judge(children: &[Rect], visible: Rect) -> Rect {
+    let drawn: Vec<Rect> = children
+        .iter()
+        .copied()
+        .filter(|child| overlaps(*child, visible))
+        .collect();
+    if drawn.is_empty() {
+        union(children)
+    } else {
+        union(&drawn)
+    }
+}
+
+/// Whether `inner` lies within `outer`, to half a pixel: what a layout rounds to.
+fn within(inner: Rect, outer: Rect) -> bool {
+    const TOLERANCE: f32 = 0.5;
+    inner.x + TOLERANCE >= outer.x
+        && inner.y + TOLERANCE >= outer.y
+        && inner.x + inner.width <= outer.x + outer.width + TOLERANCE
+        && inner.y + inner.height <= outer.y + outer.height + TOLERANCE
+}
+
+/// Whether a control's paint was clipped - not wholly inside the window and the boxes above it -
+/// or `None` for one not measured.
+#[must_use]
+pub fn clipped(name: &str) -> Option<bool> {
+    registry()
+        .lock()
+        .ok()
+        .and_then(|registry| registry.get(name).map(|measured| measured.clipped))
+}
+
+/// Where a control was laid out and what could be seen there, for saying why it was clipped;
+/// `None` for one not measured.
+#[must_use]
+pub fn placement(name: &str) -> Option<(Rect, Rect)> {
+    registry().lock().ok().and_then(|registry| {
+        registry
+            .get(name)
+            .map(|measured| (measured.rect, measured.visible))
+    })
 }
 
 /// Writes the registry out.
@@ -125,14 +224,28 @@ fn write() {
     };
 
     let mut out = String::from("{\n");
-    for (index, (name, (rect, _))) in registry.iter().enumerate() {
+    for (index, (name, measured)) in registry.iter().enumerate() {
         if index > 0 {
             out.push_str(",\n");
         }
+        let rect = measured.rect;
         let (cx, cy) = rect.centre();
+        // `clipped`: the control was not wholly on screen - inside `visible_*`, what could be
+        // seen where it was laid out; `important`: one `layout_guard` says must be
+        // (`tests/layout.rs` reads them).
+        let seen = measured.visible;
         out.push_str(&format!(
-            "  \"{name}\": {{ \"x\": {:.1}, \"y\": {:.1}, \"width\": {:.1}, \"height\": {:.1}, \"centre_x\": {cx:.1}, \"centre_y\": {cy:.1} }}",
-            rect.x, rect.y, rect.width, rect.height
+            "  \"{name}\": {{ \"x\": {:.1}, \"y\": {:.1}, \"width\": {:.1}, \"height\": {:.1}, \"centre_x\": {cx:.1}, \"centre_y\": {cy:.1}, \"clipped\": {}, \"important\": {}, \"visible_x\": {:.1}, \"visible_y\": {:.1}, \"visible_width\": {:.1}, \"visible_height\": {:.1} }}",
+            rect.x,
+            rect.y,
+            rect.width,
+            rect.height,
+            measured.clipped,
+            crate::layout_guard::is_important(name),
+            seen.x,
+            seen.y,
+            seen.width,
+            seen.height
         ));
     }
     out.push_str("\n}\n");
@@ -161,32 +274,40 @@ pub fn measured(name: impl Into<String>, element: Div) -> Div {
         return element;
     }
     let name = name.into();
-    element.on_children_prepainted(move |children, _window, _cx| {
+    element.on_children_prepainted(move |children, window, _cx| {
         // Runs inside a frame, and is harness work a normal run does not do - a file rewritten
         // whenever something moves - so a storm measurement leaves it out of the frame's cost.
         let started = std::time::Instant::now();
-        let Some(first) = children.first() else {
+        if children.is_empty() {
             return;
-        };
-        let mut left = f32::from(first.origin.x);
-        let mut top = f32::from(first.origin.y);
-        let mut right = left + f32::from(first.size.width);
-        let mut bottom = top + f32::from(first.size.height);
-        for child in children.iter().skip(1) {
-            left = left.min(f32::from(child.origin.x));
-            top = top.min(f32::from(child.origin.y));
-            right = right.max(f32::from(child.origin.x) + f32::from(child.size.width));
-            bottom = bottom.max(f32::from(child.origin.y) + f32::from(child.size.height));
         }
-        record(
-            &name,
-            Rect {
-                x: left,
-                y: top,
-                width: right - left,
-                height: bottom - top,
-            },
-        );
+        // What can be seen of anything laid out here: the window, cut down by every scrolling
+        // or clipping box above this element - gpui's content mask as those boxes' prepaint
+        // left it.
+        let mask = window.content_mask().bounds;
+        let viewport = window.viewport_size();
+        let seen_left = f32::from(mask.origin.x).max(0.0);
+        let seen_top = f32::from(mask.origin.y).max(0.0);
+        let seen_right =
+            (f32::from(mask.origin.x) + f32::from(mask.size.width)).min(f32::from(viewport.width));
+        let seen_bottom = (f32::from(mask.origin.y) + f32::from(mask.size.height))
+            .min(f32::from(viewport.height));
+        let visible = Rect {
+            x: seen_left,
+            y: seen_top,
+            width: seen_right - seen_left,
+            height: seen_bottom - seen_top,
+        };
+        let rects: Vec<Rect> = children
+            .iter()
+            .map(|child| Rect {
+                x: f32::from(child.origin.x),
+                y: f32::from(child.origin.y),
+                width: f32::from(child.size.width),
+                height: f32::from(child.size.height),
+            })
+            .collect();
+        record(&name, judge(&rects, visible), visible);
         crate::storm::exclude(started.elapsed());
     })
 }
@@ -198,7 +319,7 @@ pub fn snapshot() -> BTreeMap<String, Rect> {
         .lock()
         .map(|r| {
             r.iter()
-                .map(|(name, (rect, _))| (name.clone(), *rect))
+                .map(|(name, measured)| (name.clone(), measured.rect))
                 .collect()
         })
         .unwrap_or_default()
@@ -207,6 +328,9 @@ pub fn snapshot() -> BTreeMap<String, Rect> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A 1600 by 1200 window, the one the application opens.
+    const WINDOW: Rect = bounds(0.0, 0.0, 1600.0, 1200.0);
 
     const fn bounds(x: f32, y: f32, width: f32, height: f32) -> Rect {
         Rect {
@@ -230,7 +354,7 @@ mod tests {
 
     #[test]
     fn recording_keeps_the_bounds_it_was_given() {
-        record("test-control", bounds(10.0, 20.0, 30.0, 40.0));
+        record("test-control", bounds(10.0, 20.0, 30.0, 40.0), WINDOW);
         let found = snapshot();
         let rect = found.get("test-control").copied().expect("recorded");
         assert_eq!(rect.x, 10.0);
@@ -243,12 +367,21 @@ mod tests {
     /// frame - a closed menu's entry - goes, so a script cannot click where it used to be.
     #[test]
     fn a_control_not_measured_in_the_last_frame_leaves_the_registry() {
+        let measured = |rect: Rect, seen: u64| Measured {
+            rect,
+            seen,
+            clipped: false,
+            visible: WINDOW,
+        };
         let mut registry = BTreeMap::new();
         registry.insert(
             "closed-menu-entry".to_owned(),
-            (bounds(1.0, 1.0, 2.0, 2.0), 1),
+            measured(bounds(1.0, 1.0, 2.0, 2.0), 1),
         );
-        registry.insert("still-drawn".to_owned(), (bounds(3.0, 3.0, 2.0, 2.0), 2));
+        registry.insert(
+            "still-drawn".to_owned(),
+            measured(bounds(3.0, 3.0, 2.0, 2.0), 2),
+        );
         assert!(retire(&mut registry, 2));
         assert_eq!(registry.keys().collect::<Vec<_>>(), ["still-drawn"]);
         assert!(!retire(&mut registry, 2), "nothing more to drop");
@@ -263,10 +396,68 @@ mod tests {
         }
     }
 
+    /// The children that reach into the visible box are the control; one laid wholly beyond it
+    /// is not, unless nothing else is drawn - then the control is hidden where it would have been.
+    #[test]
+    fn a_control_is_judged_by_the_children_it_draws_in_view() {
+        let canvas = bounds(417.0, 171.0, 1183.0, 719.0);
+        let off_screen_marker = bounds(2030.0, 400.0, 9.0, 9.0);
+        let pane = bounds(416.0, 170.0, 1184.0, 748.0);
+        assert_eq!(
+            judge(&[canvas, off_screen_marker], pane),
+            canvas,
+            "the marker is not the map"
+        );
+        assert!(within(judge(&[canvas, off_screen_marker], pane), pane));
+        // The Mission box's button below the window: nothing drawn, the control hidden where it is.
+        let button = bounds(34.0, 1242.0, 110.0, 23.0);
+        assert_eq!(judge(&[button], WINDOW), button);
+        assert!(!within(judge(&[button], WINDOW), WINDOW));
+        // A label straddling the edge: drawn, and cut.
+        let straddling = bounds(1550.0, 100.0, 100.0, 20.0);
+        assert_eq!(judge(&[straddling], WINDOW), straddling);
+        assert!(!within(judge(&[straddling], WINDOW), WINDOW));
+        assert_eq!(
+            union(&[bounds(0.0, 0.0, 10.0, 10.0), bounds(5.0, 5.0, 10.0, 10.0)]),
+            bounds(0.0, 0.0, 15.0, 15.0)
+        );
+    }
+
+    /// A control whose rectangle sticks out of what can be seen is clipped; one inside, to half a
+    /// pixel, is not.
+    #[test]
+    fn a_control_outside_the_visible_box_is_clipped() {
+        let visible = bounds(0.0, 0.0, 1600.0, 1200.0);
+        assert!(within(bounds(10.0, 20.0, 30.0, 40.0), visible));
+        assert!(
+            within(bounds(0.0, 0.0, 1600.4, 1200.4), visible),
+            "half a pixel is rounding"
+        );
+        assert!(
+            !within(bounds(34.0, 1242.0, 110.0, 23.0), visible),
+            "below the window"
+        );
+        assert!(
+            !within(bounds(-1.0, 0.0, 10.0, 10.0), visible),
+            "off the left"
+        );
+        assert!(
+            !within(bounds(1500.0, 0.0, 200.0, 10.0), visible),
+            "past the right"
+        );
+        record("clipped-control", bounds(34.0, 1242.0, 110.0, 23.0), WINDOW);
+        assert_eq!(clipped("clipped-control"), Some(true));
+        assert_eq!(
+            placement("clipped-control"),
+            Some((bounds(34.0, 1242.0, 110.0, 23.0), WINDOW))
+        );
+        assert_eq!(clipped("never-measured"), None);
+    }
+
     #[test]
     fn a_moved_control_replaces_its_earlier_position() {
-        record("moving-control", bounds(0.0, 0.0, 10.0, 10.0));
-        record("moving-control", bounds(5.0, 5.0, 10.0, 10.0));
+        record("moving-control", bounds(0.0, 0.0, 10.0, 10.0), WINDOW);
+        record("moving-control", bounds(5.0, 5.0, 10.0, 10.0), WINDOW);
         let found = snapshot();
         let rect = found.get("moving-control").copied().expect("recorded");
         assert_eq!((rect.x, rect.y), (5.0, 5.0));
