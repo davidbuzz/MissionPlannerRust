@@ -323,6 +323,8 @@ struct MissionPlanner {
     plan_menus: plan::PlanMenus,
     /// Inject Custom Map's run, while one is on.
     inject_map: Option<inject_map::Injection>,
+    /// What View KML's last click did: the URL opened, or why it was not.
+    kml_link: Option<Result<(), String>>,
     /// Focus for those dialogs, which take the keyboard while they show.
     plan_prompt_focus: gpui::FocusHandle,
     /// The Survey (Grid) dialog the map menu's Auto WP opens.
@@ -773,6 +775,7 @@ impl MissionPlanner {
             plan_name_focus: cx.focus_handle(),
             plan_menus: plan::PlanMenus::default(),
             inject_map: None,
+            kml_link: None,
             plan_prompt_focus: cx.focus_handle(),
             survey: survey_ui::SurveyUi::new(cx),
             plan_home_focus: [cx.focus_handle(), cx.focus_handle(), cx.focus_handle()],
@@ -1463,6 +1466,20 @@ impl MissionPlanner {
             self.remember();
         }
         self.save_config(settings::SaveEvent::Connect);
+    }
+
+    /// `lnk_kml_LinkClicked`: `Process.Start("http://127.0.0.1:56781/network.kml")`, the desktop's
+    /// browser on the built-in server's Google Earth network link; "Failed to open url ..." when
+    /// it cannot be - on the status line, the owner's rule. The server (`Utilities/httpserver.cs`)
+    /// is its own row: until it is here the browser finds nothing at the address, as it does when
+    /// the C#'s server is not running. `// C#: GCSViews/FlightPlanner.cs:4318-4328`
+    fn view_kml_clicked(&mut self) {
+        let result =
+            scripts_tab::open_with_shell(std::path::Path::new(plan::NETWORK_KML_URL));
+        if result.is_err() {
+            self.file_status = Some(format!("Failed to open url {}", plan::NETWORK_KML_URL));
+        }
+        self.kml_link = Some(result);
     }
 
     /// `BUT_InjectCustomMap_Click`: while a run is on the button reads "Cancel" and stops it;
@@ -3310,6 +3327,14 @@ impl Render for MissionPlanner {
             }
             plan::record_facts(&self.plan, &self.plan_menus);
             inject_map::record_facts(self.inject_map.as_ref());
+            facts::record(
+                "plan.kml.link",
+                match &self.kml_link {
+                    None => "none".to_owned(),
+                    Some(Ok(())) => format!("opened {}", plan::NETWORK_KML_URL),
+                    Some(Err(why)) => format!("failed: {why}"),
+                },
+            );
             connect::record_facts(&self.connect_box, view.connected);
             prefetch_ui::record_facts(&self.plan_menus);
             facts::record("plan.docking", self.plan_docking.name());

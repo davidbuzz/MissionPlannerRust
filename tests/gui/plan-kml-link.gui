@@ -1,0 +1,19 @@
+# View KML: the planning screen's lnk_kml, GCSViews/FlightPlanner.cs:4318-4328 - Process.Start of
+# http://127.0.0.1:56781/network.kml, the built-in HTTP server's Google Earth network link (the
+# server itself is Utilities/httpserver.cs, its own row), and "Failed to open url ..." when the
+# desktop cannot open it - on the status line here.
+#
+# The desktop's opener is not launched under the harness: MP_OPEN_WITH_SHELL_LOG names a file the
+# planner appends what it would have opened to, and the fact says what the click did.
+#
+# Needs no link: tools/gui-test.sh tests/gui/plan-kml-link.gui
+
+env MP_OPEN_WITH_SHELL_LOG $WORK/opened.txt
+
+screen plan
+window 1600x1200
+budget 2
+
+expect plan.kml.link none
+click plan-kml
+expect plan.kml.link opened http://127.0.0.1:56781/network.kml

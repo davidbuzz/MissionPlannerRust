@@ -4800,6 +4800,20 @@ pub fn actions_panel(
                 cx.notify();
             }))
     };
+    // `lnk_kml` at (62, 3) of `panel3`, beside the Grid box: "View KML", a `LinkLabel`.
+    // `// C#: GCSViews/FlightPlanner.resx (lnk_kml); GCSViews/FlightPlanner.cs:4318-4328`
+    let kml_link = crate::probe::measured("plan-kml", div())
+        .id("plan-kml")
+        .whitespace_nowrap()
+        .text_xs()
+        .text_color(rgb(theme::ACCENT))
+        .cursor_pointer()
+        .hover(|style| style.underline())
+        .child("View KML")
+        .on_click(cx.listener(|this, _event, _window, cx| {
+            this.view_kml_clicked();
+            cx.notify();
+        }));
     // `lbl_status` at (4, 46) of `panel3`: "Status" until the map loads tiles, then
     // `MainMap_OnTileLoadStart`'s "Status: loading tiles..." and `OnTileLoadComplete`'s
     // "Status: loaded tiles".
@@ -4925,7 +4939,7 @@ pub fn actions_panel(
             .flex_col()
             .gap_2()
             .child(coords)
-            .child(providers.child(grid))
+            .child(providers.child(grid).child(kml_link))
             .child(status)
             .child(inject)
             .child(
@@ -7976,6 +7990,10 @@ pub enum FileRequest {
     /// Inject Custom Map's folder.
     InjectCustomMap(String),
 }
+
+/// What `lnk_kml` opens: the built-in HTTP server's network link for Google Earth.
+/// `// C#: GCSViews/FlightPlanner.cs:4322`
+pub const NETWORK_KML_URL: &str = "http://127.0.0.1:56781/network.kml";
 
 /// The caption of the dialog standing in for `OpenFileDialog`: its own default.
 pub const OPEN_FILE: &str = "Open";

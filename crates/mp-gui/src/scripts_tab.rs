@@ -1365,8 +1365,19 @@ pub fn serve_while_running(cx: &mut Context<MissionPlanner>) {
 }
 
 /// `Process.Start(new ProcessStartInfo(path) { UseShellExecute = true })`: the desktop's
-/// association for the file.
+/// association for the file. Under the harness, `MP_OPEN_WITH_SHELL_LOG` names a file the path is
+/// appended to instead, so a test can see what would have opened without a browser or an editor
+/// coming up on the test display.
 pub(crate) fn open_with_shell(path: &Path) -> Result<(), String> {
+    if let Some(log) = std::env::var_os("MP_OPEN_WITH_SHELL_LOG") {
+        use std::io::Write as _;
+        return std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(log)
+            .and_then(|mut file| writeln!(file, "{}", path.display()))
+            .map_err(|err| err.to_string());
+    }
     let mut command = if cfg!(target_os = "windows") {
         let mut command = std::process::Command::new("cmd");
         command.args(["/C", "start", ""]).arg(path);

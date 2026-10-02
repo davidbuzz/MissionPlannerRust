@@ -295,7 +295,7 @@ pub const FLIGHTPLANNER: &[Action] = &[
         "LinkClicked",
         "lnk_kml_LinkClicked",
         "View KML",
-        Missing,
+        Done("plan-kml"),
     ),
     row(
         "BUT_loadwpfile",
@@ -1348,7 +1348,7 @@ mod tests {
         );
         assert_eq!(
             (done, elsewhere, missing, plumbing, dropped),
-            (106, 0, 3, 12, 0)
+            (107, 0, 2, 12, 0)
         );
     }
 }
