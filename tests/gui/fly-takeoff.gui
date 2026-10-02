@@ -59,10 +59,15 @@ expect fly.ack MAV_CMD_NAV_TAKEOFF: accepted
 expect vehicle.armed true
 
 # The box offers what was last given.
+# Asked once a session (the owner's ruling, PLAN.md section 12 D24, 2026-10-03): the second
+# TakeOff asks nothing and takes off at the height the first was given - which ArduCopter,
+# already airborne, refuses ("can't takeoff again"); the C# would ask again.
+expect fly.takeoff.remembered 8
+expect fly.takeoff.sent 1
 click takeoff
-expect fly.prompt.value 8
-click fly-prompt-cancel
 expect fly.prompt none
+expect fly.takeoff.sent 2
+expect fly.sent ~ MAV_CMD_NAV_TAKEOFF 0,0,0,0,0,0,8
 
 # Down again, and left in Stabilize, as the next test finds a fresh SITL: Land is not a mode a
 # copter arms in, and a vehicle left there fails every later arming check.

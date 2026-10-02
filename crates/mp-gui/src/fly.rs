@@ -122,13 +122,7 @@ pub fn actions_panel(
             theme::ACCENT,
             has_vehicle,
             cx.listener(|this, _event: &(), window, cx| {
-                let alt = this
-                    .persisted
-                    .get("takeoff_alt")
-                    .unwrap_or(TAKEOFF_ALT_DEFAULT)
-                    .to_owned();
-                this.fly_actions.ask(Prompt::TakeOff, &alt);
-                this.fly_focus.prompt.focus(window, cx);
+                this.fly_takeoff_pressed(window, cx);
                 cx.notify();
             }),
         ))
@@ -2184,6 +2178,26 @@ pub fn ack_line(messages: &[LogMessage], command_id: u16, after: u64) -> Option<
 
 // --- The tab's state ------------------------------------------------------------------------------
 
+/// What a press of TakeOff does.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum TakeoffPress {
+    /// "Enter Takeoff Alt", offering this: the first press of the session.
+    Ask(String),
+    /// Take off at the session's answer, asking nothing.
+    Go(String),
+}
+
+/// The first TakeOff of a session asks, offering `Settings.Instance["takeoff_alt", "5"]`; every
+/// later one takes off at the answer the first was given (the owner's ruling, PLAN.md section 12
+/// D24: the C# asks at every press, `FlightData.cs:5294`).
+#[must_use]
+pub fn takeoff_press(session: Option<&str>, saved: Option<&str>) -> TakeoffPress {
+    match session {
+        Some(alt) => TakeoffPress::Go(alt.to_owned()),
+        None => TakeoffPress::Ask(saved.unwrap_or(TAKEOFF_ALT_DEFAULT).to_owned()),
+    }
+}
+
 /// Everything the Actions tab holds between presses.
 ///
 /// Focus handles are not here: they can only be made from a running application, and keeping
@@ -2216,6 +2230,14 @@ pub struct Actions {
     pub prompt_field: TextField,
     /// `MAV.GuidedMode`.
     pub guided: GuidedMode,
+    /// The take-off altitude the operator gave this session, asked for no second time: TakeOff
+    /// puts "Enter Takeoff Alt" once while the application runs and every later TakeOff - on
+    /// this vehicle or another - takes off with that answer (the owner's ruling, PLAN.md section
+    /// 12 D24, 2026-10-03; the C# asks every time, `FlightData.cs:5294-5297`). The answer is
+    /// still saved as `takeoff_alt` for the next session's box, as the C# saves it.
+    pub takeoff_alt_session: Option<String>,
+    /// How many take-offs have been sent: a fact.
+    pub takeoffs_sent: u32,
     /// `Settings.Instance["guided_alt"]` and `["guided_alt_frame"]`. For this session: the
     /// settings file is not this module's to extend.
     pub guided_alt_setting: Option<String>,
@@ -2244,6 +2266,8 @@ impl Default for Actions {
             setwp_selected: 0,
             setwp_open: false,
             action_selected: 0,
+            takeoff_alt_session: None,
+            takeoffs_sent: 0,
             action_open: false,
             mount_selected: 0,
             mount_open: false,
@@ -2327,6 +2351,12 @@ impl Actions {
     pub fn record_facts(&self, view: &TelemetryView) {
         crate::facts::record("fly.sent", &self.last_sent);
         crate::facts::record("fly.ack", self.ack(&view.messages));
+        // The session's take-off altitude, and how many take-offs have gone (D24).
+        crate::facts::record(
+            "fly.takeoff.remembered",
+            self.takeoff_alt_session.as_deref().unwrap_or("none"),
+        );
+        crate::facts::record("fly.takeoff.sent", self.takeoffs_sent);
         crate::facts::record(
             "fly.prompt",
             self.prompt.map_or_else(|| "none".to_owned(), Prompt::text),
@@ -4234,6 +4264,21 @@ impl MissionPlanner {
     /// wire and the take-off is the link's request, sent on its next pass, so the vehicle hears
     /// Guided first. ArduCopter takes off only in Guided, which is why the C# sets it.
     /// `// C#: GCSViews/FlightData.cs:5290-5315`
+    /// TakeOff pressed, on the Actions grid or the map's menu: the question once a session, the
+    /// remembered answer after ([`takeoff_press`]).
+    fn fly_takeoff_pressed(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        match takeoff_press(
+            self.fly_actions.takeoff_alt_session.as_deref(),
+            self.persisted.get("takeoff_alt"),
+        ) {
+            TakeoffPress::Ask(alt) => {
+                self.fly_actions.ask(Prompt::TakeOff, &alt);
+                self.fly_focus.prompt.focus(window, cx);
+            }
+            TakeoffPress::Go(alt) => self.fly_takeoff(&alt),
+        }
+    }
+
     fn fly_takeoff(&mut self, text: &str) {
         let view = self.telemetry.view();
         let Some(target) = view.vehicle else {
@@ -4242,6 +4287,9 @@ impl MissionPlanner {
         let sends = takeoff_plan(text, target, family(&view)).map(|(altitude, mut sends)| {
             self.persisted
                 .set("takeoff_alt", mp_mission::dotnet::general_f32(altitude));
+            // An answer that parsed is the session's: no second question (D24).
+            self.fly_actions.takeoff_alt_session = Some(text.trim().to_owned());
+            self.fly_actions.takeoffs_sent += 1;
             sends.push(commands::takeoff(target, altitude));
             sends
         });
@@ -8390,15 +8438,7 @@ impl MissionPlanner {
             // `takeOffToolStripMenuItem_Click`: the Actions grid's TakeOff button, which this
             // application has as well.
             // `// C#: GCSViews/FlightData.cs:5290-5315`
-            MenuEntry::TakeOff => {
-                let alt = self
-                    .persisted
-                    .get("takeoff_alt")
-                    .unwrap_or(TAKEOFF_ALT_DEFAULT)
-                    .to_owned();
-                self.fly_actions.ask(Prompt::TakeOff, &alt);
-                self.fly_focus.prompt.focus(window, cx);
-            }
+            MenuEntry::TakeOff => self.fly_takeoff_pressed(window, cx),
             // `onOffCameraOverlapToolStripMenuItem_Click`: `CheckOnClick` has turned the box, and
             // `CameraOverlap` follows it; unchecked, every photo marker comes off the overlay -
             // the next map update puts them back - and the count goes with the next update.
@@ -10131,6 +10171,27 @@ mod tests {
         assert_eq!(Prompt::TakeOff.title(), "Enter Alt");
         assert_eq!(Prompt::TakeOff.text(), "Enter Takeoff Alt");
         assert!(Prompt::TakeOff.takes_text());
+        // Asked once a session (D24): nothing remembered asks, offering the saved height or 5;
+        // a remembered answer goes without asking, whatever is saved.
+        assert_eq!(
+            takeoff_press(None, None),
+            TakeoffPress::Ask(TAKEOFF_ALT_DEFAULT.to_owned())
+        );
+        assert_eq!(
+            takeoff_press(None, Some("12")),
+            TakeoffPress::Ask("12".to_owned())
+        );
+        assert_eq!(
+            takeoff_press(Some("8"), Some("12")),
+            TakeoffPress::Go("8".to_owned())
+        );
+        let mut actions = Actions::default();
+        assert!(actions.takeoff_alt_session.is_none());
+        actions.takeoff_alt_session = Some("8".to_owned());
+        assert_eq!(
+            takeoff_press(actions.takeoff_alt_session.as_deref(), None),
+            TakeoffPress::Go("8".to_owned())
+        );
         assert_eq!(TAKEOFF_ALT_DEFAULT, "5");
     }
 
