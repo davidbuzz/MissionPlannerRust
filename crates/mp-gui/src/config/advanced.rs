@@ -22,7 +22,9 @@
 //!   (`config/extra_setup.rs`).
 //!
 //! The others are not in this application, so their buttons are drawn dimmed, with the window
-//! each would open as the reason.
+//! each would open as the reason. Three of them stay that way by the owner's rulings (PLAN.md §12
+//! D13): Follow Me and Moving Base (2026-09-25), and Anon Log (2026-10-02, "beta and not
+//! interesting"). The rest are owed.
 //!
 //! What differs: `Show()` makes a modeless form, and a second click a second form beside the
 //! first; each window here is drawn over SETUP, modal, and a second click replaces it with a
@@ -168,6 +170,7 @@ pub const ROWS: [Row; 13] = [
     row("BUT_movingbase", "Moving Base", "BUT_movingbase_Click", "label10",
         "Show an extra icon on the map of your current location.", (273.0, 18.0),
         "the moving base window (Controls/MovingBase.cs)", None),
+    // Out of scope: the owner's ruling of 2026-10-02 (PLAN.md §12 D13).
     row("but_anonlog", "Anon Log", "but_anonlog_Click", "label11",
         "Scramble lat/lng in bin or tlog", (149.0, 18.0),
         "anonymising a log (ExtLibs/Utilities/Privacy.cs)", None),
