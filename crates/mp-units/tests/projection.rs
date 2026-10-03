@@ -106,8 +106,11 @@ fn position(lat: &str, lng: &str) -> LatLon {
 }
 
 /// Bit equality that reads as the C# does: -0.0 is not 0.0, and the test says which differed.
+/// The oracle's value to the bit where the oracle ran, and within [`mp_units::GOLDEN_ULPS`] or
+/// [`mp_units::GOLDEN_ABS`] of it elsewhere (up to eight ulps on the owner's Mac, 2026-10-03, from
+/// Apple's libm in the Web Mercator inverse).
 fn same_bits(ours: f64, theirs: f64) -> bool {
-    ours.to_bits() == theirs.to_bits()
+    mp_units::golden_match(ours, theirs)
 }
 
 /// GMap's whole pixel for a Web Mercator coordinate at a map size, `MercatorProjection.cs:67-68`:

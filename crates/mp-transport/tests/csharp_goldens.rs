@@ -617,11 +617,19 @@ fn the_udp_client_reads_writes_and_counts_as_the_csharps_does() {
     );
 
     // The C# waits for 200 bytes and gets 140 when its timeout ends; this crate's read gives
-    // what has arrived, so the same 140 come in two reads, in the same order.
+    // what has arrived, so the same 140 come in the same order, in two reads on Linux - the rest
+    // of the first datagram, then the second - and in one elsewhere, where `bytes_to_read` has
+    // already taken both datagrams into the buffer (its FIONREAD counts every queued byte) and the
+    // read after finds nothing before its timeout (the owner's Mac, 2026-10-03).
     let first = client.read(&mut buf).unwrap();
     let second = client.read(&mut buf[first..]).unwrap();
     let n = first + second;
-    assert_eq!((first, second), (90, 50));
+    let split = if cfg!(any(target_os = "linux", target_os = "android")) {
+        (90, 50)
+    } else {
+        (140, 0)
+    };
+    assert_eq!((first, second), split);
     assert_eq!(
         result("read 200"),
         format!(

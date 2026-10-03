@@ -224,7 +224,10 @@ fn udp_is_named_by_its_own_address_and_then_the_peer_it_last_heard_from() {
 }
 
 /// A real serial port: the slave side of a pseudo-terminal, as in `hotplug.rs`.
-#[cfg(all(unix, feature = "serial"))]
+// Linux only: macOS's pseudo-terminals refuse the slave's second open by path with ENOTTY ("Not a
+// typewriter"; the owner's Mac and the hosted runner, 2026-10-03), so the port never opens and the
+// test fails for the harness's sake, not the transport's, whose serial path the Linux run holds.
+#[cfg(all(target_os = "linux", feature = "serial"))]
 #[test]
 fn serial_is_named_by_its_path_and_the_baud_rate_it_runs_at() {
     use serialport::{SerialPort, TTYPort};

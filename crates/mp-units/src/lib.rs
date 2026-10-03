@@ -39,6 +39,56 @@ pub mod tiles;
 pub use geodesy::{Bearing, LatLon, LatLonAlt, PositionError, WebMercator};
 pub use tiles::{TileId, tiles_for_view, zoom_for_span};
 
+/// How far apart two doubles are in units in the last place: the number of representable values
+/// between them, `0` for equal values (so for `0.0` and `-0.0`), `u64::MAX` when either is NaN.
+#[must_use]
+pub fn ulps_apart(a: f64, b: f64) -> u64 {
+    if a.is_nan() || b.is_nan() {
+        return u64::MAX;
+    }
+    if a == b {
+        return 0;
+    }
+    // The bit pattern, reflected for negatives so that the line of patterns is in numeric order
+    // and the distance across zero counts the values on both sides.
+    fn ordered(x: f64) -> i128 {
+        let magnitude = i128::from(x.to_bits() & 0x7fff_ffff_ffff_ffff);
+        if x.is_sign_negative() {
+            -magnitude
+        } else {
+            magnitude
+        }
+    }
+    u64::try_from((ordered(a) - ordered(b)).unsigned_abs()).unwrap_or(u64::MAX)
+}
+
+/// How far, in ulps, a value computed here may lie from the same value in a golden file written by
+/// Mission Planner's own code; [`GOLDEN_ABS`] is the same allowance as a difference, and
+/// [`golden_match`] applies whichever is the looser.
+///
+/// The goldens under `testdata/` were made by running Mission Planner's C# headless under mono on
+/// Linux, so their sines, cosines, arctangents, exponentials and powers are glibc's. On Linux the
+/// port reproduces them to the bit and is held to that: both allowances are zero. Apple's libm
+/// returns the last bit of those functions differently in places, and a result composed of several
+/// of them drifts by a few more: on the owner's Mac (2026-10-03) a UTM coordinate differed by one
+/// ulp, a Web Mercator inverse (`atan`, `exp`) by eight, and a corridor latitude of 6.5e-4 degrees
+/// by 4e-19, four of its own ulps, the error being the computation's at the scale of its inputs,
+/// not of its result. Elsewhere, then, the hold is sixteen ulps or 1e-14 - a nanometre of latitude,
+/// a hundredth of a picometre of UTM - and the tests still report where identity holds.
+pub const GOLDEN_ULPS: u64 = if cfg!(target_os = "linux") { 0 } else { 16 };
+
+/// See [`GOLDEN_ULPS`].
+pub const GOLDEN_ABS: f64 = if cfg!(target_os = "linux") { 0.0 } else { 1e-14 };
+
+/// Whether `ours` is `theirs` within [`GOLDEN_ULPS`] or [`GOLDEN_ABS`]: equality where the goldens
+/// were made, and the documented allowance elsewhere. A NaN matches nothing.
+#[must_use]
+// Where the goldens were made the allowance is zero, and clippy sees `<= 0`: that case is the point.
+#[allow(clippy::absurd_extreme_comparisons)]
+pub fn golden_match(ours: f64, theirs: f64) -> bool {
+    ulps_apart(ours, theirs) <= GOLDEN_ULPS || (ours - theirs).abs() <= GOLDEN_ABS
+}
+
 /// Angle in degrees.
 #[derive(Debug, Clone, Copy, PartialEq, PartialOrd, Default)]
 pub struct Degrees(pub f64);
@@ -139,6 +189,44 @@ impl MetresPerSecond {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn ulps_count_the_values_between_two_doubles() {
+        assert_eq!(super::ulps_apart(1.0, 1.0), 0);
+        assert_eq!(super::ulps_apart(0.0, -0.0), 0);
+        assert_eq!(super::ulps_apart(1.0, 1.0 + f64::EPSILON), 1);
+        assert_eq!(super::ulps_apart(1.0 + f64::EPSILON, 1.0), 1);
+        assert_eq!(super::ulps_apart(-1.0, -1.0 - f64::EPSILON), 1);
+        // Across zero every subnormal on both sides is counted, 2^52 of them each.
+        assert_eq!(
+            super::ulps_apart(f64::MIN_POSITIVE, -f64::MIN_POSITIVE),
+            1 << 53
+        );
+        assert_eq!(super::ulps_apart(f64::NAN, 1.0), u64::MAX);
+        // What the Mac returned for a golden UTM point against what glibc wrote.
+        assert_eq!(
+            super::ulps_apart(17.400_000_000_014_856, 17.400_000_000_014_852),
+            1
+        );
+        assert_eq!(super::ulps_apart(1.0, 2.0), 1 << 52);
+    }
+
+    #[test]
+    fn a_golden_match_is_equality_where_the_goldens_were_made() {
+        assert!(super::golden_match(1.0, 1.0));
+        assert!(super::golden_match(-0.0, 0.0));
+        assert!(!super::golden_match(f64::NAN, f64::NAN));
+        assert!(!super::golden_match(1.0, 1.1));
+        if cfg!(target_os = "linux") {
+            assert!(!super::golden_match(1.0, 1.0 + f64::EPSILON));
+            assert!(!super::golden_match(0.0, 1e-300));
+        } else {
+            assert!(super::golden_match(1.0, 1.0 + f64::EPSILON));
+            assert!(super::golden_match(-0.0006515212629328473, -0.0006515212629328477));
+            assert!(super::golden_match(-30.000000150439007, -30.00000015043898));
+            assert!(!super::golden_match(30.0, 30.0 + 1e-12));
+        }
+    }
+
     use super::*;
 
     #[test]

@@ -25,7 +25,8 @@ generated; `.rs` files under `crates/`, tests included), **4,033 tests** on `car
 (47 ignored: they need SITL, a window, or the network), **202 GUI scripts** under `tests/gui/`,
 across 355 commits. Linux first, and Windows since 2026-09-26 in the owner's Windows 10 VM - built
 there, run against SITL, the whole GUI suite run there on 2026-09-27, the bench board flashed from
-it (`win10_vm_setup.md`); macOS has run nothing here. The repository has been public at
+it (`win10_vm_setup.md`); macOS since 2026-10-03 on a borrowed Apple Silicon machine - built, the
+whole test suite run there and a release binary made (`DEV_MACOS.md`). The repository has been public at
 https://github.com/davidbuzz/MissionPlannerRust since 2026-10-03, where the three-OS workflow runs.
 
 | Working today | |
@@ -80,7 +81,8 @@ on 2026-09-26 when the desktop's session-failed screen took every click, and use
 Quick page's scripts. `sitl-launch.gui` (the SIMULATION tab's copter picture starting a simulator and the
 application flying it) needs port 5760 free and is skipped by a suite whose SITL holds it.
 
-**Not yet**: a run on macOS; on Windows the planner has been built, run against SITL, put through the whole GUI suite and used to flash the bench board in the owner's Windows 10 VM (2026-09-26 and 27, `win10_vm_setup.md`), but no release is built there, the unit tests have not been run there, and the repository has no remote, so the three-OS CI matrix has never executed - the columns in `DELIVERABLES.md` say so; a joystick latency histogram from a real device
+**Not yet**: the planner's window opened on a macOS desktop (built, tested and released there over SSH,
+`DEV_MACOS.md`, CI's macOS job runs the smoke step); on Windows the planner has been built, run against SITL, put through the whole GUI suite and used to flash the bench board in the owner's Windows 10 VM (2026-09-26 and 27, `win10_vm_setup.md`), but no release is built there, the unit tests have not been run there, and the repository has no remote, so the three-OS CI matrix has never executed - the columns in `DELIVERABLES.md` say so; a joystick latency histogram from a real device
 (none is attached to this machine); i18n beyond the flight screen (its 46 tab and button texts read the
 `.ftl` files generated from the `.resx`, in the culture that config.xml's `language` names; every other screen's
 words are still in the code, held at the owner's word); packaging beyond the Debian package - signing, the AppImage, the MSI and the `.dmg` are not started; speech (`Utilities/Speech.cs`). `PLAN.md` §13.6 is the queue, re-prioritised on 2026-09-24, and says what
@@ -169,7 +171,8 @@ copied into it once and left untouched where they were; the tile cache, terrain,
 parameter metadata are not copied, and are fetched or recorded again. Map tiles go to the same
 place's `gmapcache`. `MP_NO_RECORD` turns recording off.
 
-Requires a recent stable Rust (see `rust-toolchain.toml`).
+Requires a recent stable Rust (see `rust-toolchain.toml`). `DEV_MACOS.md` is the same process on a
+Mac, with what it measured, through to the release binary.
 
 ## Layout
 

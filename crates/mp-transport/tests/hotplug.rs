@@ -177,7 +177,10 @@ fn a_tcp_peer_that_goes_away_is_end_of_stream_and_the_same_url_reconnects() {
 /// A real serial port: the slave side of a pseudo-terminal, opened through `SerialTransport` by a
 /// stable, by-id-shaped symlink. Dropping the master is the board being unplugged; removing and
 /// re-pointing the link is what udev does as it goes and comes back.
-#[cfg(all(unix, feature = "serial"))]
+// Linux only: macOS's pseudo-terminals refuse the slave's second open by path with ENOTTY ("Not a
+// typewriter"; the owner's Mac and the hosted runner, 2026-10-03), so the port never opens and the
+// test fails for the harness's sake, not the transport's, whose serial path the Linux run holds.
+#[cfg(all(target_os = "linux", feature = "serial"))]
 mod pty {
     use std::io::Write;
     use std::path::{Path, PathBuf};

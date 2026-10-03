@@ -64,9 +64,27 @@ use mp_units::LatLon;
 
 /// Cases held to the invariants rather than point for point, each with the reason.
 ///
-/// Empty: every case matches the C#. Add a case here only with the tie it breaks differently,
-/// named, and never to make a failure go away.
+/// Empty where the goldens were made: on glibc's libm every case matches the C#. Add a case here
+/// only with the tie it breaks differently, named, and never to make a failure go away.
+#[cfg(target_os = "linux")]
 const TIE_BREAKS: &[(&str, &str)] = &[];
+
+/// Off glibc, Apple's libm returns the last bit of a sine or an arctangent differently in places
+/// (the owner's Mac, 2026-10-03: 163 of the 180 cases still bit-identical, every other point
+/// within 3e-14 degrees), and two triangles decide a lane against the polygon in that bit - the
+/// lane lands about 60 m along, as `Grid.cs` itself would land it there. They are held to the
+/// invariants on that platform; every other case is held point for point, as on Linux.
+#[cfg(not(target_os = "linux"))]
+const TIE_BREAKS: &[(&str, &str)] = &[
+    (
+        "sao_triangle_a137",
+        "point 20, a lane start, is decided by the last bit of the libm (Apple's: 2026-10-03)",
+    ),
+    (
+        "sao_triangle_a90",
+        "point 4, a lane start, is decided by the last bit of the libm (Apple's: 2026-10-03)",
+    ),
+];
 
 /// §7.2 class C: the per-point tolerance.
 const DEGREES: f64 = 1e-7;

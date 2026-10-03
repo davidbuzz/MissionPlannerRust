@@ -31,7 +31,9 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y libxkbcommon-x11-dev libxcb-shape0-dev libxcb-xfixes0-dev \
             libwayland-dev libasound2-dev libudev-dev libfontconfig1-dev xvfb \
-            libclang-dev linux-libc-dev  # mp-video: v4l2-sys-mit runs bindgen at build time (PLAN §13.6 row 84)
+            libclang-dev linux-libc-dev \
+            mesa-vulkan-drivers  # lavapipe, the software Vulkan device the smoke step draws with
+          # mp-video: v4l2-sys-mit runs bindgen at build time (PLAN §13.6 row 84), hence libclang.
       # The tree is not kept rustfmt-clean (the owner's choice, 2026-10-03: rustfmt on a crate root
       # rewrites every module it declares), so the check reports and does not fail the build.
       - run: cargo fmt --all -- --check
@@ -60,9 +62,15 @@ jobs:
         run: cargo build -p mp-gui
       - name: Window opens and paints (Linux)
         if: runner.os == 'Linux'
-        env: { MP_SMOKE: "1", MP_NO_TILES: "1", MP_NO_RECORD: "1" }
-        # A runner has no display, so one is supplied. llvmpipe does the rendering, which is slow
-        # and entirely sufficient: the question is whether the backend comes up, not how fast.
+        # A runner has no display, so one is supplied, and no GPU, so Mesa's lavapipe is named as
+        # the Vulkan device, as tools/gui-headless.sh names it: without an ICD the first run
+        # (2026-10-03) ended with "Failed to create surface for any enabled backend". Software
+        # rendering is slow and entirely sufficient: the question is whether the backend comes up.
+        env:
+          MP_SMOKE: "1"
+          MP_NO_TILES: "1"
+          MP_NO_RECORD: "1"
+          VK_ICD_FILENAMES: /usr/share/vulkan/icd.d/lvp_icd.json
         run: xvfb-run -a --server-args="-screen 0 1600x1200x24" ./target/debug/planner
       # Named separately from macOS only because of the extension; the runner has a desktop
       # session, and Direct3D 11 falls back to WARP, the software rasteriser, where there is no

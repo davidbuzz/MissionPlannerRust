@@ -471,6 +471,12 @@ pub(crate) fn to_utm(utmzone: i32, hemisphere_lat: f64, lat: f64, lng: f64) -> (
 mod tests {
     use super::*;
 
+    /// Mission Planner's value to the bit where its goldens were made, and within
+    /// [`mp_units::GOLDEN_ULPS`] of it elsewhere (one ulp on the owner's Mac, 2026-10-03).
+    fn to_the_bit(ours: f64, theirs: f64) -> bool {
+        mp_units::golden_match(ours, theirs)
+    }
+
     /// Every point of `testdata/projection/points.txt` through `new utmpos(point)` and
     /// `ToLLA()` under mono, as `tools/csharp-reference/regen-projection.sh` printed them
     /// (`testdata/projection/golden/utm.csv`, G17): the zone and both metres bit for bit, and
@@ -496,28 +502,24 @@ mod tests {
 
             let ours = UtmPos::from_lat_lng(lat, lng);
             assert_eq!(ours.zone, zone, "zone of ({lat}, {lng})");
-            assert_eq!(
-                ours.x.to_bits(),
-                x.to_bits(),
+            assert!(
+                to_the_bit(ours.x, x),
                 "x of ({lat}, {lng}): {} vs {x}",
                 ours.x
             );
-            assert_eq!(
-                ours.y.to_bits(),
-                y.to_bits(),
+            assert!(
+                to_the_bit(ours.y, y),
                 "y of ({lat}, {lng}): {} vs {y}",
                 ours.y
             );
 
             let (our_lat, our_lng) = ours.to_lla().unwrap_or_else(|| panic!("ToLLA of {line}"));
-            assert_eq!(
-                our_lat.to_bits(),
-                back_lat.to_bits(),
+            assert!(
+                to_the_bit(our_lat, back_lat),
                 "ToLLA lat of {line}: {our_lat}"
             );
-            assert_eq!(
-                our_lng.to_bits(),
-                back_lng.to_bits(),
+            assert!(
+                to_the_bit(our_lng, back_lng),
                 "ToLLA lng of {line}: {our_lng}"
             );
             compared += 1;
@@ -576,8 +578,18 @@ mod tests {
         ];
         for ((lat, lng), (x, y, zone), (back_lat, back_lng)) in oracle {
             let utm = UtmPos::from_lat_lng(lat, lng);
-            assert_eq!((utm.x, utm.y, utm.zone), (x, y, zone), "{lat},{lng}");
-            assert_eq!(utm.to_lla(), Some((back_lat, back_lng)), "{lat},{lng}");
+            assert_eq!(utm.zone, zone, "{lat},{lng}");
+            assert!(
+                to_the_bit(utm.x, x) && to_the_bit(utm.y, y),
+                "{lat},{lng}: {},{} vs {x},{y}",
+                utm.x,
+                utm.y
+            );
+            let (our_lat, our_lng) = utm.to_lla().unwrap_or_else(|| panic!("ToLLA of {lat},{lng}"));
+            assert!(
+                to_the_bit(our_lat, back_lat) && to_the_bit(our_lng, back_lng),
+                "{lat},{lng} back: {our_lat},{our_lng} vs {back_lat},{back_lng}"
+            );
         }
     }
 

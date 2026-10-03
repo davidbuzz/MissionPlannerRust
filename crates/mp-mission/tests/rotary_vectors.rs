@@ -230,7 +230,8 @@ fn lng_difference(a: f64, b: f64) -> f64 {
     d.min(360.0 - d)
 }
 
-/// Why `ours` is not `theirs` bit for bit, or `None` if it is.
+/// Why `ours` is not `theirs` to the bit - [`mp_units::golden_match`], equality where the goldens
+/// were made - or `None` if it is.
 fn bit_mismatch(ours: &[GridPoint], theirs: &[GridPoint]) -> Option<String> {
     if ours.len() != theirs.len() {
         return Some(format!(
@@ -241,9 +242,9 @@ fn bit_mismatch(ours: &[GridPoint], theirs: &[GridPoint]) -> Option<String> {
     }
     for (index, (a, b)) in ours.iter().zip(theirs).enumerate() {
         if a.tag != b.tag
-            || a.lat.to_bits() != b.lat.to_bits()
-            || a.lng.to_bits() != b.lng.to_bits()
-            || a.alt.to_bits() != b.alt.to_bits()
+            || !mp_units::golden_match(a.lat, b.lat)
+            || !mp_units::golden_match(a.lng, b.lng)
+            || !mp_units::golden_match(a.alt, b.alt)
         {
             return Some(format!(
                 "point {index}: {:?} {:?},{:?} alt {:?} where Mission Planner has {:?} {:?},{:?} \
@@ -324,7 +325,11 @@ fn the_rotary_matches_mission_planner_bit_for_bit() {
             writeln!(report, "{}: {why}", golden.name).unwrap();
         }
     }
-    println!("{strict} rotary cases, {points} points, compared bit for bit");
+    println!(
+        "{strict} rotary cases, {points} points, compared to within {} ulps or {:e}",
+        mp_units::GOLDEN_ULPS,
+        mp_units::GOLDEN_ABS
+    );
     assert!(
         report.is_empty(),
         "differs from Grid.CreateRotary:\n{report}"

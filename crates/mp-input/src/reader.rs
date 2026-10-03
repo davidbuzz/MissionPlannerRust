@@ -776,6 +776,25 @@ mod tests {
         fn is_silent_for(&self, window: Duration) -> bool {
             self.frames.recv_timeout(window).is_err()
         }
+
+        /// Everything that arrives until `quiet` passes with nothing, within `PATIENCE`.
+        ///
+        /// A fixed window counts frames correctly on a machine that runs the reader's thread on
+        /// time, and one short on a machine that does not: the hosted macOS runner (2026-10-03)
+        /// delivered a 50 ms cadence up to 90 ms late, and the last release of a run fell outside
+        /// `during(RESEND * 8)`. Waiting for the reader to fall silent collects the run whole
+        /// either way, and still ends within `PATIENCE`.
+        fn until_quiet(&self, quiet: Duration) -> Vec<Frame> {
+            let deadline = Instant::now() + PATIENCE;
+            let mut frames = Vec::new();
+            while let Some(left) = deadline.checked_duration_since(Instant::now()) {
+                match self.frames.recv_timeout(quiet.min(left)) {
+                    Ok((_, frame)) => frames.push(frame),
+                    Err(_) => break,
+                }
+            }
+            frames
+        }
     }
 
     /// Channel 1 on axis 0, so a test can move one number and watch it.
@@ -1069,7 +1088,7 @@ mod tests {
         for step in 0..50 {
             feed.send(Ok(axis(step * 600))).expect("feed");
         }
-        let frames = wire.during(RESEND * 8);
+        let frames = wire.until_quiet(RESEND * 6);
         // A resend already in the sink when the switch was thrown may land first; after the first
         // release there must be nothing but releases.
         let first_release = frames
@@ -1132,7 +1151,7 @@ mod tests {
         let _ = wire.next();
         assert!(!reader.set_enabled(false));
         let releases = wire
-            .during(RESEND * (u32::from(RELEASE_REPEATS) + 4))
+            .until_quiet(RESEND * 6)
             .into_iter()
             .filter(|frame| frame.cause == Cause::Release)
             .count();
@@ -1192,6 +1211,20 @@ mod tests {
     /// How late past its deadline a held frame may go out, on a busy machine.
     const SLACK: Duration = Duration::from_millis(10);
 
+    /// The worst overshoot of three short sleeps: what the scheduler adds to a timed wait here,
+    /// now.
+    fn wake_up_lateness() -> Duration {
+        (0..3)
+            .map(|_| {
+                let asked = Duration::from_millis(5);
+                let started = Instant::now();
+                thread::sleep(asked);
+                started.elapsed().saturating_sub(asked)
+            })
+            .max()
+            .unwrap_or(Duration::ZERO)
+    }
+
     /// Enabled, the switch-on frame taken, and far enough past it that the next change is
     /// isolated - nothing sent within `MIN_INTERVAL` - and so goes out at once.
     fn flying_and_quiet(reader: &StickReader, wire: &Wire) {
@@ -1229,9 +1262,14 @@ mod tests {
             gap >= MIN_INTERVAL,
             "sent {gap:?} after the first, inside the floor"
         );
+        // How late this machine wakes a thread right now, measured the way the reader waits out
+        // the floor: `SLACK` on a quiet machine, more on a loaded one (the hosted macOS runner
+        // held a frame 108 ms on 2026-10-03). The hold must still end as soon as the machine lets
+        // it - within a few of its own wake-up delays past the floor.
+        let slack = SLACK.max(wake_up_lateness() * 4);
         assert!(
-            gap <= MIN_INTERVAL + SLACK,
-            "held {gap:?}, well past the floor"
+            gap <= MIN_INTERVAL + slack,
+            "held {gap:?}, well past the floor (slack {slack:?})"
         );
         // Exactly one: nothing else carrying the second position, and no change after it.
         let after = wire.during(RESEND);

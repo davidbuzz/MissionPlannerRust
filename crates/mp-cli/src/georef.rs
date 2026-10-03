@@ -245,6 +245,24 @@ mod tests {
 
     struct Offline;
 
+    /// A file with every CRLF made LF, for comparing what was written here with a golden. The
+    /// goldens were written by the C# under mono on Linux, where `Environment.NewLine` is LF; the
+    /// port ends lines with the platform's, as the C# does, so on Windows they are CRLF (the hosted
+    /// runner, 2026-10-03). Both sides go through this, because the goldens themselves carry CRLF
+    /// inside `location.jxl`'s FieldBook block, which the C# writes from a literal that has them
+    /// (the owner's Mac, 2026-10-03, when only the written side was normalised).
+    fn lf(written: Vec<u8>) -> Vec<u8> {
+        let mut out = Vec::with_capacity(written.len());
+        let mut bytes = written.into_iter().peekable();
+        while let Some(byte) = bytes.next() {
+            if byte == b'\r' && bytes.peek() == Some(&b'\n') {
+                continue;
+            }
+            out.push(byte);
+        }
+        out
+    }
+
     impl mp_terrain::Http for Offline {
         fn get(&self, _url: &str) -> Result<Vec<u8>, mp_terrain::HttpError> {
             Err(mp_terrain::HttpError("offline".to_owned()))
@@ -313,8 +331,8 @@ mod tests {
             "loglocation.csv",
         ] {
             assert_eq!(
-                std::fs::read(photos.join(name)).unwrap(),
-                std::fs::read(golden.join(name)).unwrap(),
+                lf(std::fs::read(photos.join(name)).unwrap()),
+                lf(std::fs::read(golden.join(name)).unwrap()),
                 "{name}"
             );
         }
@@ -350,12 +368,12 @@ mod tests {
         assert_eq!(code, ExitCode::SUCCESS);
         let golden = testdata("georef/golden/time-tlog");
         assert_eq!(
-            std::fs::read(photos.join("location.txt")).unwrap(),
-            std::fs::read(golden.join("location.txt")).unwrap()
+            lf(std::fs::read(photos.join("location.txt")).unwrap()),
+            lf(std::fs::read(golden.join("location.txt")).unwrap())
         );
         assert_eq!(
-            std::fs::read(photos.join("camera.tlog.xml")).unwrap(),
-            std::fs::read(golden.join("camera.tlog.xml")).unwrap()
+            lf(std::fs::read(photos.join("camera.tlog.xml")).unwrap()),
+            lf(std::fs::read(golden.join("camera.tlog.xml")).unwrap())
         );
 
         let (photos, log, srtm) = setup("estimate", "camera.bin");
