@@ -12,7 +12,7 @@ env MP_CONFIG_XML $WORK/config.xml
 env XDG_DATA_HOME $WORK
 screen fly
 window 1600x1200
-budget 58
+budget 52
 # A first budget, set by hand until a passing run records one.
 
 # The Actions grid is on the Actions page, tabActions; the strip opens on Quick, as

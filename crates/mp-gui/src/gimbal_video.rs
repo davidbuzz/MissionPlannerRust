@@ -2281,7 +2281,13 @@ pub fn map_place(
             }
         }
         (Shown::Mini, Some(control)) => {
-            place = place.child(div().flex().flex_1().child(map));
+            // `min_w(0)` is load-bearing: a flex item's minimum is otherwise its content's
+            // width, and the strip under the map is a nowrap line whose full width - a long
+            // status, a fetch's URL - then became this wrapper's minimum, the pane's and the
+            // map's: 1622 px in a 1184 px column, the map's right 438 px and its follow button
+            // off the window and the vehicle drawn off centre (the layout guard found it,
+            // 2026-10-03; main.rs's `map_status` had the same fix one level down).
+            place = place.child(div().flex().flex_1().min_w(px(0.0)).child(map));
             if let Some(resized) = resized {
                 let (x, y, w, h) = resized.video;
                 place = place.child(
@@ -2297,7 +2303,7 @@ pub fn map_place(
         }
         _ => {
             if video.map_visible {
-                place = place.child(div().flex().flex_1().child(map));
+                place = place.child(div().flex().flex_1().min_w(px(0.0)).child(map));
             }
         }
     }
