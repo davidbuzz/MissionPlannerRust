@@ -1,7 +1,7 @@
 # How much of the Zed ecosystem are we using?
 
 As of 2026-09-26 (main at `a72f272`). "Zed" here is the Zed code editor
-([zed-industries/zed](https://github.com/zed-industries/zed)), cloned read-only in `references/zed`,
+([zed-industries/zed](https://github.com/zed-industries/zed)), a read-only clone of it kept outside this repository,
 and one of the models this port was built on: DELIVERABLES.md sets the goal - Mission Planner
 reimplemented "extremely fast, multi-platform, GPU-accelerated end to end" - and names the stack
 "Zed's ecosystem". The question: what do we take from Zed **explicitly** - named in our manifests
@@ -85,7 +85,7 @@ Of 1,024 packages in `Cargo.lock`, 26 come from Zed's repositories: 20 from the 
 
 ### Not a dependency, but named: the reference clone
 
-`references/zed` (121 MB, 245 crates, at the same `62e5991`) is a read-only checkout for reading
+That clone (121 MB, 245 crates, at the same `62e5991`) is a read-only checkout, outside the repository, for reading
 gpui's source. It is never built. The plan's findings about gpui's renderers (PLAN.md §2.1) come
 from reading it.
 

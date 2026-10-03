@@ -33,8 +33,8 @@ jobs:
       - run: cargo fmt --all -- --check
       - run: cargo clippy --workspace --all-targets
       - run: cargo test --workspace
-      # The porting ledger: one row per C# file, every row well-formed. The C# tree is not
-      # checked out here, so this validates the CSV on its own and says so; a row whose state
+            # The porting ledger: one row per C# file, every row well-formed. MP_SRC names no C# tree
+      # here, so this validates the CSV on its own and says so; a row whose state
       # claims evidence that does not exist still fails.
       - run: cargo xtask ledger check
 
@@ -180,11 +180,11 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with: { components: rustfmt }
       - uses: Swatinem/rust-cache@v2
-      # Only runs where the reference tree is present. Generated code is committed, so the risk is
-      # that it stops matching the definitions it claims to come from.
+            # Only runs where MP_SRC names a clone of https://github.com/ArduPilot/MissionPlanner. Generated code is
+      # committed, so the risk is that it stops matching the definitions it claims to come from.
       - name: Check regeneration
         run: |
-          if [ -d references/missionplanner ]; then
+                    if [ -n "${MP_SRC:-}" ] && [ -d "$MP_SRC" ]; then
             cargo run -p xtask -- verify-mavlink all
             cargo run -p xtask -- codegen all --check
           else

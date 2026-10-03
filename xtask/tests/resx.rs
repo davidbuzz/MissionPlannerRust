@@ -46,15 +46,11 @@ fn repo() -> PathBuf {
 }
 
 fn tree() -> Option<PathBuf> {
-    let tree = repo().join("references/missionplanner");
-    if tree.is_dir() {
-        Some(tree)
-    } else {
-        println!(
-            "https://github.com/ArduPilot/MissionPlanner is absent from references/missionplanner (it is gitignored); the tree tests are skipped"
-        );
-        None
+    let tree = xtask::upstream::tree();
+    if tree.is_none() {
+        println!("{}; the tree tests are skipped", xtask::upstream::absent());
     }
+    tree
 }
 
 /// The .NET string with `{n}`, `{n:format}` and `{n,align}` replaced by what the bundle is given

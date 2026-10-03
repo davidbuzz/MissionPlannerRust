@@ -3087,7 +3087,7 @@ mod tests {
                 "GCSViews/ConfigurationView/ConfigRawParams.Designer.cs",
             ),
         ) else {
-            eprintln!("SKIP: https://github.com/ArduPilot/MissionPlanner is not checked out at references/missionplanner here");
+            eprintln!("SKIP: MP_SRC does not name a clone of https://github.com/ArduPilot/MissionPlanner");
             return;
         };
         let values = crate::config_coverage::source::resx(&resx);
@@ -3861,7 +3861,7 @@ mod tests {
     fn the_warning_is_the_strings_resx() {
         let Some(strings) = crate::config_coverage::source::csharp("ExtLibs/Strings/Strings.resx")
         else {
-            eprintln!("SKIP: https://github.com/ArduPilot/MissionPlanner is not checked out at references/missionplanner here");
+            eprintln!("SKIP: MP_SRC does not name a clone of https://github.com/ArduPilot/MissionPlanner");
             return;
         };
         let values = crate::config_coverage::source::resx(&strings);

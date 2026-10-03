@@ -364,8 +364,12 @@ mod tests {
     /// The shipped copies are the reference tree's, byte for byte.
     #[test]
     fn the_shipped_files_are_mission_planners() {
-        let reference = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("../../references/missionplanner/graphs");
+                // `MP_SRC` names a clone of https://github.com/ArduPilot/MissionPlanner.
+        let Some(tree) = std::env::var_os("MP_SRC") else {
+            eprintln!("skipped: MP_SRC is not set");
+            return;
+        };
+        let reference = std::path::PathBuf::from(tree).join("graphs");
         if !reference.is_dir() {
             eprintln!("skipped: the C# tree is not checked out here");
             return;

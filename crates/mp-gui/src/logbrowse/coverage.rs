@@ -527,10 +527,8 @@ mod tests {
         include_str!("export.rs"),
     ];
 
-    fn designer() -> Option<String> {
-        let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("../../references/missionplanner/Log/LogBrowse.designer.cs");
-        std::fs::read_to_string(path).ok()
+        fn designer() -> Option<String> {
+        crate::config_coverage::source::csharp("Log/LogBrowse.designer.cs")
     }
 
     /// `this.X.Y += new Z(this.H);` → (X, Y, H); `this.Y += ...` is the form itself.

@@ -19,8 +19,9 @@ WORK=$(mktemp -d)
 trap 'rm -rf "$WORK"' EXIT
 
 mkdir -p "$WORK/la" "$WORK/logs" "$WORK/out"
-cp "$ROOT"/references/missionplanner/LogAnalyzer/py2exe/*.py "$WORK/la/"
-cp -r "$ROOT"/references/missionplanner/LogAnalyzer/py2exe/tests "$WORK/la/"
+MP="${MP_SRC:?MP_SRC must name a clone of https://github.com/ArduPilot/MissionPlanner (commit efb0801)}"
+cp "$MP"/LogAnalyzer/py2exe/*.py "$WORK/la/"
+cp -r "$MP"/LogAnalyzer/py2exe/tests "$WORK/la/"
 sed -i "s|testScripts = glob.glob(dirName + '/tests/\*.py')|testScripts = sorted(glob.glob(dirName + '/tests/*.py'))|" "$WORK/la/LogAnalyzer.py"
 grep -q "sorted(glob.glob" "$WORK/la/LogAnalyzer.py"
 

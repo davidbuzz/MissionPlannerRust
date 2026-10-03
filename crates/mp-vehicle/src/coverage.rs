@@ -3113,9 +3113,10 @@ mod tests {
         include_str!("registry.rs"),
     ];
 
+        /// `MP_SRC` names a clone of https://github.com/ArduPilot/MissionPlanner.
     fn current_state() -> Option<String> {
-        let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("../../references/missionplanner/ExtLibs/ArduPilot/CurrentState.cs");
+        let tree = std::env::var_os("MP_SRC")?;
+        let path = std::path::PathBuf::from(tree).join("ExtLibs/ArduPilot/CurrentState.cs");
         std::fs::read_to_string(path).ok()
     }
 

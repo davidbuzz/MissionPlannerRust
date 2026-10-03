@@ -3005,11 +3005,8 @@ mod tests {
             .join(name)
     }
 
-    fn csharp(path: &str) -> Option<String> {
-        let path = Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("../../references/missionplanner")
-            .join(path);
-        std::fs::read_to_string(path).ok()
+        fn csharp(path: &str) -> Option<String> {
+        crate::config_coverage::source::csharp(path)
     }
 
     fn scratch(name: &str) -> PathBuf {

@@ -1893,10 +1893,9 @@ mod tests {
             let (x, y, width, height) = spec.at;
             assert!(x + width <= PAGE.0 && y + height <= PAGE.1, "{spec:?}");
         }
-        let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join(
-            "../../references/missionplanner/GCSViews/ConfigurationView/ConfigRadioInput.resx",
-        );
-        let Ok(resx) = std::fs::read_to_string(path) else {
+                let Some(resx) = crate::config_coverage::source::csharp(
+            "GCSViews/ConfigurationView/ConfigRadioInput.resx",
+        ) else {
             return;
         };
         let names = [

@@ -5,7 +5,7 @@ controlled; the per-project memory directory holds symlinks to them.
 
 **CRITICAL:**
 - [NOT IN THE C#, NOT IN SCOPE](not-in-the-csharp-not-in-scope.md) — never invent a feature Mission Planner does not have; ask instead
-- [Port from the C# source](port-from-the-csharp-source.md) — https://github.com/ArduPilot/MissionPlanner is the spec; read the .cs, never recall it
+- [Port from the C# source](port-from-the-csharp-source.md) — https://github.com/ArduPilot/MissionPlanner is the spec, the clone `MP_SRC` names (never its path in the repo); read the .cs, never recall it
 - [No callers, no port](no-callers-no-port.md) — a .cs file or function nobody calls is recorded out of scope, never ported (Buzz, 2026-09-25)
 - [Match the original layout](match-the-original-layout.md) — Buzz is the oracle on look and feel; default to MP's arrangement, read it from the .resx
 - [Mode buttons kept](mode-buttons-kept.md) — the flight screen's own mode buttons panel stays over the C#'s CMB_modes drop-down (Buzz, 2026-09-26)

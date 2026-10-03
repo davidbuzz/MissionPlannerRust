@@ -54,16 +54,14 @@ fn repo() -> PathBuf {
 }
 
 fn tree() -> Option<PathBuf> {
-    let tree = repo().join("references/missionplanner");
-    if tree.is_dir() {
-        Some(tree)
-    } else {
+    let tree = xtask::upstream::tree();
+    if tree.is_none() {
         println!(
-            "https://github.com/ArduPilot/MissionPlanner is absent from references/missionplanner (it is gitignored); D16's reasons are not \
-             re-derived, only the rows' form is checked"
+            "{}; D16's reasons are not re-derived, only the rows' form is checked",
+            xtask::upstream::absent()
         );
-        None
     }
+    tree
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

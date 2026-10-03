@@ -290,7 +290,8 @@ pub fn run(args: &[String], repo: &Path) -> Result<()> {
     };
     // `repo_root()` is `xtask/..`; resolve it so every path this prints is one a person can read.
     let repo = repo.canonicalize().unwrap_or_else(|_| repo.to_path_buf());
-    let mut tree = repo.join("references/missionplanner");
+        // The C# tree `MP_SRC` names; without it, `check` reads the CSV alone and `refresh` says so.
+    let mut tree = crate::upstream::tree().unwrap_or_else(|| PathBuf::from("MP_SRC (unset)"));
     let mut ledger = repo.join("ledger/ledger.csv");
     let mut repo = repo;
     let mut flags = flags.iter();
@@ -334,10 +335,10 @@ fn usage() {
 /// Creates or updates the ledger from the C# tree.
 fn refresh(tree: &Path, ledger: &Path) -> Result<()> {
     if !tree.is_dir() {
-        bail!(
-            "C# tree not found at {}\nThe reference tree is git-excluded; clone Mission Planner \
-             https://github.com/ArduPilot/MissionPlanner into references/missionplanner to refresh the ledger.",
-            tree.display()
+                bail!(
+            "C# tree not found at {}\n{}",
+            tree.display(),
+            crate::upstream::absent()
         );
     }
     let measured = scan(tree)?;

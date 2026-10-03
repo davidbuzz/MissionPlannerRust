@@ -400,8 +400,13 @@ fn an_empty_listing_lists_nothing() {
 // Cross-checks against the C# source, when the tree is present.
 // ---------------------------------------------------------------------------------------------
 
+/// `MP_SRC` names a clone of https://github.com/ArduPilot/MissionPlanner.
 fn csharp(relative: &str) -> Option<String> {
-    let path = repo().join("references/missionplanner").join(relative);
+    let Some(tree) = std::env::var_os("MP_SRC") else {
+        println!("MP_SRC not set; cross-check skipped");
+        return None;
+    };
+    let path = PathBuf::from(tree).join(relative);
     match std::fs::read_to_string(&path) {
         Ok(text) => Some(text),
         Err(_) => {

@@ -23,7 +23,7 @@ set -euo pipefail
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
 ROOT="$(cd "$HERE/../.." && pwd)"
-MP="${MP_SRC:-$ROOT/references/missionplanner}"
+MP="${MP_SRC:?MP_SRC must name a clone of https://github.com/ArduPilot/MissionPlanner (commit efb0801)}"
 DATA="$ROOT/testdata/grid"
 
 [ -f "$MP/ExtLibs/Utilities/Grid.cs" ] || {

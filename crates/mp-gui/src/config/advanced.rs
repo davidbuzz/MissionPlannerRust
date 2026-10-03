@@ -653,10 +653,9 @@ mod tests {
                 .and_then(|name| name.strip_suffix(".cs"))
                 .expect("a .cs");
             assert!(body.contains(stem), "{} does not use {stem}", row.handler);
-            assert!(
+                        assert!(
                 crate::config_coverage::source::csharp_root()
-                    .join(file)
-                    .exists(),
+                    .is_some_and(|root| root.join(file).exists()),
                 "{file}"
             );
         }

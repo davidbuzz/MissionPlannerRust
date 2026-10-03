@@ -1560,11 +1560,8 @@ pub fn chooser(
 mod tests {
     use super::*;
 
-    fn csharp(path: &str) -> Option<String> {
-        let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("../../references/missionplanner")
-            .join(path);
-        std::fs::read_to_string(path).ok()
+        fn csharp(path: &str) -> Option<String> {
+        crate::config_coverage::source::csharp(path)
     }
 
     /// Every row of the table that is held, numeric and a property has a reader, and nothing

@@ -1454,14 +1454,18 @@ pub(crate) mod source {
         Path::new(env!("CARGO_MANIFEST_DIR")).join("../..")
     }
 
-    /// The C# tree.
-    pub(crate) fn csharp_root() -> PathBuf {
-        workspace().join("references/missionplanner")
+        /// The C# tree: the clone of https://github.com/ArduPilot/MissionPlanner (commit efb0801) that
+    /// `MP_SRC` names, when it is set and is a directory. The clone is no part of this
+    /// repository, and nothing here says where it is.
+    pub(crate) fn csharp_root() -> Option<PathBuf> {
+        std::env::var_os("MP_SRC")
+            .map(PathBuf::from)
+            .filter(|tree| tree.is_dir())
     }
 
-    /// A C# file, relative to the tree, or `None` when the tree is not checked out.
+    /// A C# file, relative to the tree, or `None` when the tree is not here.
     pub(crate) fn csharp(path: &str) -> Option<String> {
-        std::fs::read_to_string(csharp_root().join(path)).ok()
+        std::fs::read_to_string(csharp_root()?.join(path)).ok()
     }
 
     /// Every `<data name="K"><value>V</value>` in a `.resx`.
@@ -1679,7 +1683,11 @@ mod tests {
     /// listed.
     #[test]
     fn the_panels_are_the_directorys() {
-        let directory = csharp_root().join("GCSViews/ConfigurationView");
+                let Some(root) = csharp_root() else {
+            eprintln!("skipped: MP_SRC does not name the C# tree");
+            return;
+        };
+        let directory = root.join("GCSViews/ConfigurationView");
         let Ok(entries) = std::fs::read_dir(&directory) else {
             eprintln!("skipped: the C# tree is not checked out here");
             return;

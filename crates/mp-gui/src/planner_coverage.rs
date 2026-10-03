@@ -1054,11 +1054,8 @@ mod tests {
         include_str!("coords.rs"),
     ];
 
-    fn reference(name: &str) -> Option<String> {
-        let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("../../references/missionplanner/GCSViews")
-            .join(name);
-        std::fs::read_to_string(path).ok()
+        fn reference(name: &str) -> Option<String> {
+        crate::config_coverage::source::csharp(&format!("GCSViews/{name}"))
     }
 
     /// `this.X.Y += new Z(this.H);` → (X, Y, H). `this.Y += ...` is the form itself, named

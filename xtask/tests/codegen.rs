@@ -40,15 +40,11 @@ fn repo() -> PathBuf {
 }
 
 fn tree() -> Option<PathBuf> {
-    let tree = repo().join("references/missionplanner");
-    if tree.is_dir() {
-        Some(tree)
-    } else {
-        println!(
-            "https://github.com/ArduPilot/MissionPlanner is absent from references/missionplanner (it is gitignored); the regeneration is skipped"
-        );
-        None
+    let tree = xtask::upstream::tree();
+    if tree.is_none() {
+        println!("{}; the regeneration is skipped", xtask::upstream::absent());
     }
+    tree
 }
 
 /// The generated source as the xtask leaves it on disk: written and run through

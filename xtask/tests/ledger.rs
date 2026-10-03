@@ -776,11 +776,10 @@ fn status_reports_retired_lines_in_the_plan_shape() {
 /// The committed ledger, against the real C# tree when this machine has it.
 #[test]
 fn the_real_ledger_passes_check() {
-    let repo = Path::new(env!("CARGO_MANIFEST_DIR")).join("..");
-    if !repo.join("references/missionplanner").is_dir() {
+        if xtask::upstream::tree().is_none() {
         println!(
-            "https://github.com/ArduPilot/MissionPlanner is absent from references/missionplanner (it is gitignored): checking \
-             ledger/ledger.csv's internal consistency only"
+            "{}: checking ledger/ledger.csv's internal consistency only",
+            xtask::upstream::absent()
         );
     }
     let out = Command::new(env!("CARGO_BIN_EXE_xtask"))

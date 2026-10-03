@@ -14,7 +14,7 @@ it is work that ships nothing, and a DoD written against a dead library (D14's `
 simply wrong until somebody looked for callers.
 
 **How to apply:** before porting a `.cs` file or a function, grep the C# tree for its callers
-(`grep -rn "ClassName\|methodName" references/missionplanner --include=*.cs`, minus its own file and
+(`grep -rn "ClassName\|methodName" "$MP_SRC" --include=*.cs`, minus its own file and
 tests). None found → do not port; write it into the out-of-scope record with the reason "no callers
 in the C# tree as of the reference commit" - the ledger (`ledger/ledger.csv`) row's status, and
 PLAN.md §12 D13's list where it is a page or a library. If a DoD names it, correct the DoD to name

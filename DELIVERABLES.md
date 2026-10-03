@@ -8,7 +8,7 @@
 wgpu on Linux and web, Direct3D 11 on Windows, Metal on macOS), with the platform crates `gpui_linux` /
 `gpui_windows` / `gpui_macos` selected in `crates/mp-gui/Cargo.toml` (and `gpui_web` as the wasm option).
 The crates.io 0.2.2 release was left on 2026-09-23 (commit `feaa408`): an older snapshot on the blade
-renderer with no web backend. Reference clone: [references/zed](references/zed).
+renderer with no web backend. Source: <https://github.com/zed-industries/zed>.
 
 **Licence:** the port is a derivative of GPLv3 Mission Planner → the workspace ships **GPL-3.0-only** (its
 `COPYING.txt` grants no later version). `gpui` (Apache-2.0) is inbound-compatible; every crate's licence is in

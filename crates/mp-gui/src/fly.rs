@@ -8901,13 +8901,8 @@ mod tests {
     }
 
     /// A file from the C# tree, when it is checked out here.
-    fn csharp(path: &str) -> Option<String> {
-        std::fs::read_to_string(
-            std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-                .join("../../references/missionplanner")
-                .join(path),
-        )
-        .ok()
+        fn csharp(path: &str) -> Option<String> {
+        crate::config_coverage::source::csharp(path)
     }
 
     /// The members of a C# enum, as `(name, value)`; value is `None` for an enum that lists

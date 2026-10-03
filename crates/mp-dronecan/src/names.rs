@@ -559,8 +559,13 @@ mod tests {
     /// The rows are the file's, in its order, when the C# tree is checked out.
     #[test]
     fn the_table_is_messages_cs() {
-        let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("../../references/missionplanner/ExtLibs/DroneCAN/canard_dsdlc/messages.cs");
+                // `MP_SRC` names a clone of https://github.com/ArduPilot/MissionPlanner.
+        let Some(tree) = std::env::var_os("MP_SRC") else {
+            eprintln!("skipped: MP_SRC is not set");
+            return;
+        };
+        let path = std::path::PathBuf::from(tree)
+            .join("ExtLibs/DroneCAN/canard_dsdlc/messages.cs");
         let Ok(text) = std::fs::read_to_string(&path) else {
             eprintln!("skipped: the C# tree is not checked out");
             return;

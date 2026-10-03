@@ -1,6 +1,6 @@
 ---
 name: port-from-the-csharp-source
-description: The C# tree at https://github.com/ArduPilot/MissionPlanner is the spec; read the .cs file before implementing
+description: The C# tree - a clone of https://github.com/ArduPilot/MissionPlanner (efb0801) that MP_SRC names, outside the repository - is the spec; read the .cs file before implementing
 metadata:
   node_type: memory
   type: project
@@ -8,16 +8,22 @@ metadata:
   modified: 2026-09-23T00:00:00.000Z
 ---
 
-**This project is a reimplementation of Mission Planner's C# code, and that code is here.**
-`references/missionplanner` is a full read-only clone of https://github.com/ArduPilot/MissionPlanner (the directory was
-named `referneces` until 2026-09-25, when Buzz renamed it). It is gitignored, so it does not appear
-in `git status` and is easy to forget exists. `references/zed` is the gpui tree, the same way.
+**This project is a reimplementation of Mission Planner's C# code, and that code is on this
+machine.** Buzz keeps a full read-only clone of https://github.com/ArduPilot/MissionPlanner (commit
+efb0801) outside the codebase, and the environment variable `MP_SRC` names it: set for cargo in
+`~/.cargo/config.toml`'s `[env]` on this machine, exported by the chain scripts for the tools
+(`MP_SRC=$(grep MP_SRC ~/.cargo/config.toml | cut -d'"' -f2)` in a shell). Nothing in the
+repository says where the clone is - Buzz, 2026-10-03: the clone's directory is not part of the
+codebase and must not be referred to by anything, anywhere - so code that needs the tree reads
+`MP_SRC` and, without it, skips or says what to set (`xtask::upstream`, mp-gui's
+`config_coverage::source::csharp_root`). zed's source sits beside it the same way, for reading
+gpui. Both are easy to forget exist: neither shows in `git status`.
 
 Before writing any feature that Mission Planner already has, **find and read the `.cs` file**:
 
 ```sh
-find references/missionplanner -name "ParamFile.cs"
-grep -rn "SaveParamFile" --include=*.cs references/missionplanner/
+find "$MP_SRC" -name "ParamFile.cs"
+grep -rn "SaveParamFile" --include=*.cs "$MP_SRC"
 ```
 
 **Why:** on 2026-09-23 I implemented `.param` file save/load having concluded the C# source was

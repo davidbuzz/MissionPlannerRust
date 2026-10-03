@@ -1118,10 +1118,8 @@ mod tests {
         include_str!("gauge.rs"),
     ];
 
-    fn designer() -> Option<String> {
-        let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("../../references/missionplanner/GCSViews/FlightData.Designer.cs");
-        std::fs::read_to_string(path).ok()
+        fn designer() -> Option<String> {
+        crate::config_coverage::source::csharp("GCSViews/FlightData.Designer.cs")
     }
 
     /// `this.X.Y += new Z(this.H);` → (X, Y, H). `this.Y += ...` is the form itself, named

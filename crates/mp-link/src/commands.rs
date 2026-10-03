@@ -899,12 +899,15 @@ mod tests {
     /// The two constants, read out of the C# file itself when the tree is present.
     #[test]
     fn the_magic_values_are_mission_planners_own() {
-        let path = concat!(
-            env!("CARGO_MANIFEST_DIR"),
-            "/../../references/missionplanner/ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs"
-        );
-        let Ok(source) = std::fs::read_to_string(path) else {
-            eprintln!("skipped: no C# tree at {path}");
+                // `MP_SRC` names a clone of https://github.com/ArduPilot/MissionPlanner.
+        let Some(tree) = std::env::var_os("MP_SRC") else {
+            eprintln!("skipped: MP_SRC is not set");
+            return;
+        };
+        let path = std::path::PathBuf::from(tree)
+            .join("ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs");
+        let Ok(source) = std::fs::read_to_string(&path) else {
+            eprintln!("skipped: no C# tree at {}", path.display());
             return;
         };
         assert!(source.contains("const float magic_force_arm_value = 2989.0f;"));

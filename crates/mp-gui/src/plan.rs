@@ -16879,10 +16879,8 @@ mod terrain_tests {
     /// section, read from the C# tree when it is present.
     #[test]
     fn the_alt_column_is_the_one_mavcmd_xml_heads_alt() {
-        let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("../../references/missionplanner/mavcmd.xml");
-        let Ok(xml) = std::fs::read_to_string(&path) else {
-            println!("skipped: {} is not here", path.display());
+                let Some(xml) = crate::config_coverage::source::csharp("mavcmd.xml") else {
+            println!("skipped: MP_SRC does not name the C# tree");
             return;
         };
         let number = |name: &str| -> u16 {

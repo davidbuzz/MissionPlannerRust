@@ -20,12 +20,12 @@
 
 //! Repository automation entry point: `cargo xtask <command>`.
 
-use xtask::{codegen, ledger, licence};
+use xtask::{codegen, ledger, licence, upstream};
 
 use std::collections::HashMap;
 use std::path::PathBuf;
 
-use anyhow::{Context, Result, bail};
+use anyhow::{Context, Result, anyhow, bail};
 
 fn main() {
     if let Err(err) = run() {
@@ -123,9 +123,10 @@ fn licences(check_only: bool) -> Result<()> {
 /// the shipping C# assembly. This is the gate that proves our mavgen reimplementation is right.
 fn verify_mavlink(dialect: Option<&str>) -> Result<()> {
     let root = repo_root();
-    let dialect = dialect.unwrap_or("all");
-    let xml = root
-        .join("references/missionplanner/ExtLibs/Mavlink/message_definitions")
+        let dialect = dialect.unwrap_or("all");
+    let xml = upstream::tree()
+        .ok_or_else(|| anyhow!(upstream::absent()))?
+        .join("ExtLibs/Mavlink/message_definitions")
         .join(format!("{dialect}.xml"));
     if !xml.exists() {
         bail!("dialect not found: {}", xml.display());
@@ -206,16 +207,13 @@ fn verify_mavlink(dialect: Option<&str>) -> Result<()> {
 /// Regenerates the dialect crate from the XML definitions.
 fn codegen_mavlink(dialect: Option<&str>, check_only: bool) -> Result<()> {
     let root = repo_root();
-    let dialect = dialect.unwrap_or("all");
-    let xml = root
-        .join("references/missionplanner/ExtLibs/Mavlink/message_definitions")
+        let dialect = dialect.unwrap_or("all");
+    let xml = upstream::tree()
+        .ok_or_else(|| anyhow!(upstream::absent()))?
+        .join("ExtLibs/Mavlink/message_definitions")
         .join(format!("{dialect}.xml"));
     if !xml.exists() {
-        bail!(
-            "dialect not found: {}\nThe reference tree is git-excluded; clone Mission Planner \
-             https://github.com/ArduPilot/MissionPlanner into references/missionplanner to regenerate.",
-            xml.display()
-        );
+        bail!("dialect not found: {}", xml.display());
     }
 
     let parsed = codegen::mavlink::parse_dialect(&xml)?;
@@ -333,13 +331,11 @@ fn dump_tlog(path: Option<&str>) -> Result<()> {
 /// Regenerates the flight mode tables.
 fn codegen_modes() -> Result<()> {
     let root = repo_root();
-    let metadata = root.join("references/missionplanner/ParameterMetaDataBackup.xml");
+        let metadata = upstream::tree()
+        .ok_or_else(|| anyhow!(upstream::absent()))?
+        .join("ParameterMetaDataBackup.xml");
     if !metadata.exists() {
-        bail!(
-            "parameter metadata not found at {}\nThe reference tree is git-excluded; clone \
-             https://github.com/ArduPilot/MissionPlanner into references/missionplanner to regenerate.",
-            metadata.display()
-        );
+        bail!("parameter metadata not found at {}", metadata.display());
     }
 
     let source = codegen::modes::generate(&metadata)?;
@@ -365,7 +361,9 @@ fn codegen_modes() -> Result<()> {
 /// Regenerates parameter metadata.
 fn codegen_param_meta() -> Result<()> {
     let root = repo_root();
-    let metadata = root.join("references/missionplanner/ParameterMetaDataBackup.xml");
+        let metadata = upstream::tree()
+        .ok_or_else(|| anyhow!(upstream::absent()))?
+        .join("ParameterMetaDataBackup.xml");
     if !metadata.exists() {
         bail!("parameter metadata not found at {}", metadata.display());
     }
@@ -400,14 +398,7 @@ fn codegen_param_meta() -> Result<()> {
 /// missing, or is there and would not be generated.
 fn codegen_resx(check_only: bool) -> Result<()> {
     let root = repo_root();
-    let tree = root.join("references/missionplanner");
-    if !tree.is_dir() {
-        bail!(
-            "{} is absent (it is gitignored): clone https://github.com/ArduPilot/MissionPlanner into references/missionplanner \
-             to regenerate.",
-            tree.display()
-        );
-    }
+        let tree = upstream::tree().ok_or_else(|| anyhow!(upstream::absent()))?;
     let out_dir = root.join("assets/i18n");
     let keymap = match std::fs::read_to_string(out_dir.join("keymap.toml")) {
         Ok(text) => codegen::resx::Keymap::parse(&text)?,

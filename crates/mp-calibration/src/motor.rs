@@ -630,8 +630,12 @@ mod tests {
     /// in the file's order. Skipped when the C# tree is not checked out.
     #[test]
     fn the_table_is_the_csharps_file() {
-        let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("../../references/missionplanner/APMotorLayout.json");
+                // `MP_SRC` names a clone of https://github.com/ArduPilot/MissionPlanner.
+        let Some(tree) = std::env::var_os("MP_SRC") else {
+            eprintln!("MP_SRC not set; skipped");
+            return;
+        };
+        let path = std::path::PathBuf::from(tree).join("APMotorLayout.json");
         let Ok(text) = std::fs::read_to_string(&path) else {
             eprintln!("{} not present; skipped", path.display());
             return;

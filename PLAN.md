@@ -4,7 +4,7 @@
 the gpui sourcing in §2.3, §3 and §12 D2 brought up to date, the roadmap's standing noted under §10,
 R17 added). Supersedes `DELIVERABLES.md` (kept as the deliverable catalogue; this document is the plan).
 **Upstream pin:** ArduPilot Mission Planner `efb080190de0bf091f9aab982c8848a124de7588` (2026-09-17).
-**Reference trees are READ-ONLY:** `references/` holds read-only clones of https://github.com/ArduPilot/MissionPlanner (the C# original) and of zed (`references/zed`).
+**The upstream sources are READ-ONLY:** the clone of https://github.com/ArduPilot/MissionPlanner (the C# original) that `MP_SRC` names, and zed's, are read and never edited; neither is part of this repository.
 
 Everything in this document that is a number was measured on this box in this session, or is marked
 `UNVERIFIED`. Where two prior analyses disagreed, the disagreement is resolved by an experiment and
@@ -529,7 +529,7 @@ stable toolchain.
 | `themegen`/`assetgen`/`datagen` | `*.mpsystheme`, `Resources/` (216 files), `mavcmd.xml`, `dataflashlog.xml`, `APMotorLayout.json`, `SerialOptionRules.json` | statics + assets | `mavcmd`/`dataflashlog` labels route through the **FTL key space** — they are translatable |
 | `extract-resx-images` | 55 real binary entries (not the 480 boilerplate `Bitmap1`/`Icon1` headers) | PNG/ICO | one-shot; mono never a build dep |
 
-**Critical:** `codegen/` holds **copies** of the inputs, not symlinks — `references/` is gitignored,
+**Critical:** `codegen/` holds **copies** of the inputs, not symlinks — the upstream clone is outside the repository,
 so a symlink makes the repo unbuildable for anyone else. `codegen/PROVENANCE.md` pins the upstream
 SHA.
 
@@ -1494,7 +1494,7 @@ Recorded so they are not re-asserted.
 | "`Primitive` has an escape hatch" | **FALSE** | closed 8-variant enum; `paint_surface` macOS-only; `wgpu_renderer.rs:1545` is `PrimitiveBatch::Surfaces(_surfaces) => {}` |
 | "`tsdownsample` crate" | **DOES NOT EXIST** | not on crates.io |
 | "`evalexpr` for the expression engine" | **LICENCE BLOCKER** | 13.1.0 is AGPL-3.0-only |
-| "The C# source is not on this machine" | **FALSE, and it cost real rework** | the C# source (https://github.com/ArduPilot/MissionPlanner) is cloned read-only under `references/`, gitignored so it never appears in `git status`. `ExtLibs/Utilities/ParamFile.cs` was reconstructed from memory and got the skip-list length, the side it applies to, and the number format all wrong |
+| "The C# source is not on this machine" | **FALSE, and it cost real rework** | the C# source (https://github.com/ArduPilot/MissionPlanner) is a clone outside the repository that `MP_SRC` names, so it never appears in `git status`. `ExtLibs/Utilities/ParamFile.cs` was reconstructed from memory and got the skip-list length, the side it applies to, and the number format all wrong |
 | "`ARMING_CHECK` → `ARMING_OPTIONS`" | **WRONG NAME, AND THE SENSE IS INVERTED** | 4.7 SITL reports `ARMING_SKIPCHK` and `ARMING_OPTIONS` as separate parameters and no `ARMING_CHECK`. `ARMING_CHECK` was checks-to-run; `ARMING_SKIPCHK` is checks-to-skip, so "all off" went from `0` to `-1` |
 | "`frame_parse` fuzzes the MAVLink parser" | **TRUE BUT NEARLY EMPTY** | it reaches 90 coverage edges and never calls a message decoder. Seeding the corpus with 145 real frames changed nothing, which is what proved it. `message_decode` reaches 13,473 |
 | "Compiling on `windows-latest` proves the Windows build works" | **FALSE** | nothing in CI ran a graphics backend on any platform. D3D11 device creation, swap-chain and shader compilation had never executed |

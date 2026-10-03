@@ -1084,7 +1084,9 @@ mod tests {
             eprintln!("skipped: the C# tree is not checked out here");
             return;
         };
-        let root = crate::config_coverage::source::csharp_root();
+        let Some(root) = crate::config_coverage::source::csharp_root() else {
+            return;
+        };
         let resources: Vec<&str> = crate::hud::Icon::ALL
             .iter()
             .map(|icon| icon.resource())
@@ -1381,7 +1383,9 @@ mod tests {
             eprintln!("skipped: the C# tree is not checked out here");
             return;
         };
-        let root = crate::config_coverage::source::csharp_root();
+        let Some(root) = crate::config_coverage::source::csharp_root() else {
+            return;
+        };
         let view = "GCSViews/ConfigurationView";
         // A Designer's path in the tree: under `ConfigurationView` unless it names its own.
         let path = |designer: &str| {
