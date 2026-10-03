@@ -3367,7 +3367,7 @@ mod tests {
     #[test]
     fn every_public_member_has_exactly_one_row_in_order() {
         let Some(source) = current_state() else {
-            eprintln!("skipped: the C# tree is not checked out here");
+            eprintln!("skipped: MP_SRC does not name a clone of https://github.com/ArduPilot/MissionPlanner");
             return;
         };
         let declared = members(&source);

@@ -1006,7 +1006,7 @@ mod tests {
         let Some(designer) = crate::config_coverage::source::csharp(
             "GCSViews/ConfigurationView/ConfigInitialParams.Designer.cs",
         ) else {
-            eprintln!("skipped: the C# tree is not checked out");
+            eprintln!("skipped: MP_SRC does not name a clone of https://github.com/ArduPilot/MissionPlanner");
             return;
         };
         for text in [TMOTOR, SUGGESTED, CALCULATE, TUNING_URL, READ_IT, CHEMISTRY] {

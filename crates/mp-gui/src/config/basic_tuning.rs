@@ -1416,7 +1416,7 @@ mod tests {
     fn every_designer_control_is_drawn() {
         let Some(designer) = csharp("GCSViews/ConfigurationView/ConfigArduplane.Designer.cs")
         else {
-            eprintln!("skipped: the C# tree is not checked out");
+            eprintln!("skipped: MP_SRC does not name a clone of https://github.com/ArduPilot/MissionPlanner");
             return;
         };
         let made: BTreeSet<&str> = designer
@@ -1444,7 +1444,7 @@ mod tests {
     fn every_wiring_is_handled() {
         let Some(designer) = csharp("GCSViews/ConfigurationView/ConfigArduplane.Designer.cs")
         else {
-            eprintln!("skipped: the C# tree is not checked out");
+            eprintln!("skipped: MP_SRC does not name a clone of https://github.com/ArduPilot/MissionPlanner");
             return;
         };
         for spec in BOXES {
@@ -1469,7 +1469,7 @@ mod tests {
     #[test]
     fn every_place_and_text_is_the_resx() {
         let Some(text) = csharp("GCSViews/ConfigurationView/ConfigArduplane.resx") else {
-            eprintln!("skipped: the C# tree is not checked out");
+            eprintln!("skipped: MP_SRC does not name a clone of https://github.com/ArduPilot/MissionPlanner");
             return;
         };
         let values = resx(&text);
@@ -1503,7 +1503,7 @@ mod tests {
     #[test]
     fn every_box_is_set_up_as_activate_sets_it_up() {
         let Some(source) = csharp("GCSViews/ConfigurationView/ConfigArduplane.cs") else {
-            eprintln!("skipped: the C# tree is not checked out");
+            eprintln!("skipped: MP_SRC does not name a clone of https://github.com/ArduPilot/MissionPlanner");
             return;
         };
         let body = source

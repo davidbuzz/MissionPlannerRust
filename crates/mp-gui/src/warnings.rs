@@ -1241,7 +1241,7 @@ mod tests {
         assert_eq!(color_rgb("NoColor"), None);
         assert_eq!(color_rgb("Blue"), None);
         let Some(source) = csharp("ExtLibs/Utilities/Warnings/CustomWarning.cs") else {
-            eprintln!("skipped: the C# tree is not checked out");
+            eprintln!("skipped: MP_SRC does not name a clone of https://github.com/ArduPilot/MissionPlanner");
             return;
         };
         let start = source.find("enum WarningColors").expect("WarningColors");
@@ -1440,7 +1440,7 @@ mod tests {
     #[test]
     fn the_fields_are_the_ones_currentstate_declares() {
         let Some(source) = csharp("ExtLibs/ArduPilot/CurrentState.cs") else {
-            eprintln!("skipped: the C# tree is not checked out");
+            eprintln!("skipped: MP_SRC does not name a clone of https://github.com/ArduPilot/MissionPlanner");
             return;
         };
         let mut fields: Vec<&str> = Vec::new();
@@ -1482,7 +1482,7 @@ mod tests {
             csharp("ExtLibs/Utilities/Warnings/WarningEngine.cs"),
             csharp("MainV2.cs"),
         ) else {
-            eprintln!("skipped: the C# tree is not checked out");
+            eprintln!("skipped: MP_SRC does not name a clone of https://github.com/ArduPilot/MissionPlanner");
             return;
         };
         assert!(warning.contains(&format!("string _text = \"{DEFAULT_TEXT}\";")));

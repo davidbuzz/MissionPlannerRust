@@ -2309,7 +2309,7 @@ mod tests {
             .expect("an id the enum lacks");
         assert_eq!(component_text(unnamed), format!("Comp {unnamed} {unnamed}"));
         let Some(source) = csharp("ExtLibs/Mavlink/Mavlink.cs") else {
-            eprintln!("skipped: the C# tree is not checked out");
+            eprintln!("skipped: MP_SRC does not name a clone of https://github.com/ArduPilot/MissionPlanner");
             return;
         };
         let start = source.find("public enum MAV_COMPONENT").expect("the enum");
@@ -2335,7 +2335,7 @@ mod tests {
     #[test]
     fn every_message_s_fields_are_its_csharp_struct_s() {
         let Some(source) = csharp("ExtLibs/Mavlink/Mavlink.cs") else {
-            eprintln!("skipped: the C# tree is not checked out");
+            eprintln!("skipped: MP_SRC does not name a clone of https://github.com/ArduPilot/MissionPlanner");
             return;
         };
         let dotnet = |ty: &str| {
@@ -3032,7 +3032,7 @@ mod tests {
     #[test]
     fn the_designer_s_words_and_places_are_these() {
         let Some(source) = csharp("Controls/MAVLinkInspector.cs") else {
-            eprintln!("skipped: the C# tree is not checked out");
+            eprintln!("skipped: MP_SRC does not name a clone of https://github.com/ArduPilot/MissionPlanner");
             return;
         };
         let has = |line: &str| assert!(source.contains(line), "{line}");

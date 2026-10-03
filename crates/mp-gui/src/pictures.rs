@@ -1027,7 +1027,7 @@ mod tests {
             );
         }
         let Some(resx) = csharp("GCSViews/SITL.resx") else {
-            eprintln!("skipped: the C# tree is not checked out here");
+            eprintln!("skipped: MP_SRC does not name a clone of https://github.com/ArduPilot/MissionPlanner");
             return;
         };
         let values = crate::config_coverage::source::resx(&resx);
@@ -1055,7 +1055,7 @@ mod tests {
     fn heli_setups_designer_has_no_picture() {
         let Some(designer) = csharp("GCSViews/ConfigurationView/ConfigTradHeli4.Designer.cs")
         else {
-            eprintln!("skipped: the C# tree is not checked out here");
+            eprintln!("skipped: MP_SRC does not name a clone of https://github.com/ArduPilot/MissionPlanner");
             return;
         };
         for line in designer.lines() {
@@ -1081,7 +1081,7 @@ mod tests {
             csharp("ExtLibs/Controls/HUDT.Designer.cs"),
             csharp("ExtLibs/Controls/HUDT.resx"),
         ) else {
-            eprintln!("skipped: the C# tree is not checked out here");
+            eprintln!("skipped: MP_SRC does not name a clone of https://github.com/ArduPilot/MissionPlanner");
             return;
         };
         let Some(root) = crate::config_coverage::source::csharp_root() else {
@@ -1380,7 +1380,7 @@ mod tests {
             csharp("Properties/Resources.Designer.cs"),
             csharp("Properties/Resources.resx"),
         ) else {
-            eprintln!("skipped: the C# tree is not checked out here");
+            eprintln!("skipped: MP_SRC does not name a clone of https://github.com/ArduPilot/MissionPlanner");
             return;
         };
         let Some(root) = crate::config_coverage::source::csharp_root() else {

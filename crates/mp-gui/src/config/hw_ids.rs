@@ -426,7 +426,7 @@ mod tests {
         let Some(designer) = crate::config_coverage::source::csharp(
             "GCSViews/ConfigurationView/ConfigHWIDs.Designer.cs",
         ) else {
-            eprintln!("skipped: the C# tree is not checked out");
+            eprintln!("skipped: MP_SRC does not name a clone of https://github.com/ArduPilot/MissionPlanner");
             return;
         };
         for (name, _) in COLUMNS {
@@ -445,7 +445,7 @@ mod tests {
     fn the_device_type_names_are_the_enums() {
         let Some(device) = crate::config_coverage::source::csharp("ExtLibs/Utilities/Device.cs")
         else {
-            eprintln!("skipped: the C# tree is not checked out");
+            eprintln!("skipped: MP_SRC does not name a clone of https://github.com/ArduPilot/MissionPlanner");
             return;
         };
         let body = |name: &str| -> Vec<(u32, String)> {

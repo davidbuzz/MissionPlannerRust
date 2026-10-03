@@ -2141,7 +2141,7 @@ mod tests {
     fn the_text_is_the_designers() {
         let Some(designer) = crate::config_coverage::source::csharp("Controls/fftui.Designer.cs")
         else {
-            eprintln!("skipped: the C# tree is not checked out");
+            eprintln!("skipped: MP_SRC does not name a clone of https://github.com/ArduPilot/MissionPlanner");
             return;
         };
         for run in Run::ALL {

@@ -1076,7 +1076,7 @@ mod tests {
             ),
             crate::config_coverage::source::csharp("Controls/DefaultSettings.resx"),
         ) else {
-            eprintln!("skipped: the C# tree is not checked out");
+            eprintln!("skipped: MP_SRC does not name a clone of https://github.com/ArduPilot/MissionPlanner");
             return;
         };
         let values = crate::config_coverage::source::resx(&resx);
@@ -1169,7 +1169,7 @@ mod tests {
             crate::config_coverage::source::csharp("ExtLibs/ArduPilot/Frame.cs"),
             crate::config_coverage::source::csharp("ExtLibs/ArduPilot/motor_frame_type.cs"),
         ) else {
-            eprintln!("skipped: the C# tree is not checked out");
+            eprintln!("skipped: MP_SRC does not name a clone of https://github.com/ArduPilot/MissionPlanner");
             return;
         };
         for (name, member) in [

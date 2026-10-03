@@ -3104,7 +3104,7 @@ mod tests {
     #[test]
     fn the_controls_are_where_the_resx_puts_them() {
         let Some(resx) = csharp("GeoRef/georefimage.resx") else {
-            eprintln!("skipped: the C# tree is not checked out here");
+            eprintln!("skipped: MP_SRC does not name a clone of https://github.com/ArduPilot/MissionPlanner");
             return;
         };
         let data = resx_data(&resx);
@@ -3171,7 +3171,7 @@ mod tests {
     #[test]
     fn the_numbers_boxes_and_wirings_are_the_designers() {
         let Some(designer) = csharp("GeoRef/Georefimage.Designer.cs") else {
-            eprintln!("skipped: the C# tree is not checked out here");
+            eprintln!("skipped: MP_SRC does not name a clone of https://github.com/ArduPilot/MissionPlanner");
             return;
         };
         for num in Num::ALL {

@@ -1867,7 +1867,7 @@ mod tests {
     fn every_call_and_its_conditions_are_the_csharps() {
         for list in List::ALL {
             let Some(source) = csharp(list.source()) else {
-                eprintln!("skipped: the C# tree is not checked out here");
+                eprintln!("skipped: MP_SRC does not name a clone of https://github.com/ArduPilot/MissionPlanner");
                 return;
             };
             let calls = calls(&source, list.handler());
@@ -1946,7 +1946,7 @@ mod tests {
     #[test]
     fn the_display_view_is_mission_planners_advanced_view() {
         let Some(main) = csharp("MainV2.cs") else {
-            eprintln!("skipped: the C# tree is not checked out here");
+            eprintln!("skipped: MP_SRC does not name a clone of https://github.com/ArduPilot/MissionPlanner");
             return;
         };
         assert!(main.contains(": new DisplayView().Advanced();"));

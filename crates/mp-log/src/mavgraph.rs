@@ -366,12 +366,12 @@ mod tests {
     fn the_shipped_files_are_mission_planners() {
                 // `MP_SRC` names a clone of https://github.com/ArduPilot/MissionPlanner.
         let Some(tree) = std::env::var_os("MP_SRC") else {
-            eprintln!("skipped: MP_SRC is not set");
+            eprintln!("skipped: MP_SRC does not name a clone of https://github.com/ArduPilot/MissionPlanner");
             return;
         };
         let reference = std::path::PathBuf::from(tree).join("graphs");
         if !reference.is_dir() {
-            eprintln!("skipped: the C# tree is not checked out here");
+            eprintln!("skipped: MP_SRC does not name a clone of https://github.com/ArduPilot/MissionPlanner");
             return;
         }
         for (name, shipped) in SHIPPED {

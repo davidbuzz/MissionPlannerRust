@@ -685,7 +685,7 @@ mod tests {
         let Some(designer) = crate::config_coverage::source::csharp(
             "GCSViews/ConfigurationView/ConfigSecureAP.Designer.cs",
         ) else {
-            eprintln!("skipped: the C# tree is not checked out");
+            eprintln!("skipped: MP_SRC does not name a clone of https://github.com/ArduPilot/MissionPlanner");
             return;
         };
         let has = |line: &str| {
@@ -733,7 +733,7 @@ mod tests {
         let Some(source) =
             crate::config_coverage::source::csharp("GCSViews/ConfigurationView/ConfigSecureAP.cs")
         else {
-            eprintln!("skipped: the C# tree is not checked out");
+            eprintln!("skipped: MP_SRC does not name a clone of https://github.com/ArduPilot/MissionPlanner");
             return;
         };
         for filter in [KEY_FILTER, BL_FILTER, APJ_FILTER, PEM_FILTER] {

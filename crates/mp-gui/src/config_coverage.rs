@@ -1684,12 +1684,12 @@ mod tests {
     #[test]
     fn the_panels_are_the_directorys() {
                 let Some(root) = csharp_root() else {
-            eprintln!("skipped: MP_SRC does not name the C# tree");
+            eprintln!("skipped: MP_SRC does not name a clone of https://github.com/ArduPilot/MissionPlanner");
             return;
         };
         let directory = root.join("GCSViews/ConfigurationView");
         let Ok(entries) = std::fs::read_dir(&directory) else {
-            eprintln!("skipped: the C# tree is not checked out here");
+            eprintln!("skipped: MP_SRC does not name a clone of https://github.com/ArduPilot/MissionPlanner");
             return;
         };
         let mut files: Vec<String> = entries
@@ -1733,7 +1733,7 @@ mod tests {
     #[test]
     fn the_wiring_counts_are_the_designers() {
         if csharp(Screen::Setup.source()).is_none() {
-            eprintln!("skipped: the C# tree is not checked out here");
+            eprintln!("skipped: MP_SRC does not name a clone of https://github.com/ArduPilot/MissionPlanner");
             return;
         }
         for panel in PANELS.iter().chain(OTHER_PAGES) {
@@ -1749,7 +1749,7 @@ mod tests {
     fn the_lists_are_the_csharps_in_its_order() {
         for screen in Screen::ALL {
             let Some(source) = csharp(screen.source()) else {
-                eprintln!("skipped: the C# tree is not checked out here");
+                eprintln!("skipped: MP_SRC does not name a clone of https://github.com/ArduPilot/MissionPlanner");
                 return;
             };
             let calls = calls(&source, screen.handler());
@@ -1796,7 +1796,7 @@ mod tests {
             csharp("GCSViews/InitialSetup.resx"),
             csharp("ExtLibs/Strings/Strings.resx"),
         ) else {
-            eprintln!("skipped: the C# tree is not checked out here");
+            eprintln!("skipped: MP_SRC does not name a clone of https://github.com/ArduPilot/MissionPlanner");
             return;
         };
         let setup_resx = resx(&setup_resx);
@@ -1833,7 +1833,7 @@ mod tests {
     #[test]
     fn the_screens_are_mainv2s() {
         let (Some(resx_text), Some(main)) = (csharp("MainV2.resx"), csharp("MainV2.cs")) else {
-            eprintln!("skipped: the C# tree is not checked out here");
+            eprintln!("skipped: MP_SRC does not name a clone of https://github.com/ArduPilot/MissionPlanner");
             return;
         };
         let texts = resx(&resx_text);

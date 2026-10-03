@@ -3264,7 +3264,7 @@ mod tests {
         let Some(designer) = crate::config_coverage::source::csharp(
             "GCSViews/ConfigurationView/ConfigFirmwareManifest.Designer.cs",
         ) else {
-            eprintln!("skipped: the C# tree is not checked out");
+            eprintln!("skipped: MP_SRC does not name a clone of https://github.com/ArduPilot/MissionPlanner");
             return;
         };
         for picture in PICTURES {

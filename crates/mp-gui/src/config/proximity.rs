@@ -928,7 +928,7 @@ mod tests {
     #[test]
     fn the_numbers_are_the_csharps() {
         let Some(source) = csharp("Controls/ProximityControl.cs") else {
-            eprintln!("skipped: the C# tree is not checked out");
+            eprintln!("skipped: MP_SRC does not name a clone of https://github.com/ArduPilot/MissionPlanner");
             return;
         };
         assert!(source.contains("this.ClientSize = new System.Drawing.Size(430, 391);"));

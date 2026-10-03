@@ -1595,7 +1595,7 @@ mod tests {
     #[test]
     fn the_fields_left_out_are_the_ones_the_class_declares_as_fields() {
         let Some(source) = csharp("ExtLibs/ArduPilot/CurrentState.cs") else {
-            eprintln!("skipped: the C# tree is not checked out here");
+            eprintln!("skipped: MP_SRC does not name a clone of https://github.com/ArduPilot/MissionPlanner");
             return;
         };
         let mut fields: Vec<&str> = Vec::new();
@@ -1630,7 +1630,7 @@ mod tests {
     #[test]
     fn the_views_start_bound_as_the_designer_binds_them() {
         let Some(designer) = csharp("GCSViews/FlightData.Designer.cs") else {
-            eprintln!("skipped: the C# tree is not checked out here");
+            eprintln!("skipped: MP_SRC does not name a clone of https://github.com/ArduPilot/MissionPlanner");
             return;
         };
         for (index, (name, _)) in DEFAULTS.iter().enumerate() {
@@ -1697,7 +1697,7 @@ mod tests {
     #[test]
     fn the_units_table_is_the_csharps_getters() {
         let Some(source) = csharp("ExtLibs/ArduPilot/CurrentState.cs") else {
-            eprintln!("skipped: the C# tree is not checked out here");
+            eprintln!("skipped: MP_SRC does not name a clone of https://github.com/ArduPilot/MissionPlanner");
             return;
         };
         let lines: Vec<&str> = source.lines().collect();
@@ -2124,7 +2124,7 @@ mod tests {
     #[test]
     fn the_sixteen_colours_are_the_csharps() {
         let Some(source) = csharp("GCSViews/FlightData.cs") else {
-            eprintln!("skipped: the C# tree is not checked out here");
+            eprintln!("skipped: MP_SRC does not name a clone of https://github.com/ArduPilot/MissionPlanner");
             return;
         };
         assert!(source.contains(

@@ -901,7 +901,7 @@ mod tests {
     fn the_magic_values_are_mission_planners_own() {
                 // `MP_SRC` names a clone of https://github.com/ArduPilot/MissionPlanner.
         let Some(tree) = std::env::var_os("MP_SRC") else {
-            eprintln!("skipped: MP_SRC is not set");
+            eprintln!("skipped: MP_SRC does not name a clone of https://github.com/ArduPilot/MissionPlanner");
             return;
         };
         let path = std::path::PathBuf::from(tree)

@@ -561,13 +561,13 @@ mod tests {
     fn the_table_is_messages_cs() {
                 // `MP_SRC` names a clone of https://github.com/ArduPilot/MissionPlanner.
         let Some(tree) = std::env::var_os("MP_SRC") else {
-            eprintln!("skipped: MP_SRC is not set");
+            eprintln!("skipped: MP_SRC does not name a clone of https://github.com/ArduPilot/MissionPlanner");
             return;
         };
         let path = std::path::PathBuf::from(tree)
             .join("ExtLibs/DroneCAN/canard_dsdlc/messages.cs");
         let Ok(text) = std::fs::read_to_string(&path) else {
-            eprintln!("skipped: the C# tree is not checked out");
+            eprintln!("skipped: MP_SRC does not name a clone of https://github.com/ArduPilot/MissionPlanner");
             return;
         };
         let rows: Vec<String> = text

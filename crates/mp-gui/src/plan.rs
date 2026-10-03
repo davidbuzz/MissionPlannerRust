@@ -16880,7 +16880,7 @@ mod terrain_tests {
     #[test]
     fn the_alt_column_is_the_one_mavcmd_xml_heads_alt() {
                 let Some(xml) = crate::config_coverage::source::csharp("mavcmd.xml") else {
-            println!("skipped: MP_SRC does not name the C# tree");
+            println!("skipped: MP_SRC does not name a clone of https://github.com/ArduPilot/MissionPlanner");
             return;
         };
         let number = |name: &str| -> u16 {

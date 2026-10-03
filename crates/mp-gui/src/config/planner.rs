@@ -5059,7 +5059,7 @@ mod tests {
         let Some(text) =
             crate::config_coverage::source::csharp("GCSViews/ConfigurationView/ConfigPlanner.resx")
         else {
-            eprintln!("skipped: the C# tree is not checked out");
+            eprintln!("skipped: MP_SRC does not name a clone of https://github.com/ArduPilot/MissionPlanner");
             return;
         };
         let resx = crate::config_coverage::source::resx(&text);

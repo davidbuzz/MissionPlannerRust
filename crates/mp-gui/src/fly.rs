@@ -8959,7 +8959,7 @@ mod tests {
     #[test]
     fn the_action_list_is_the_csharp_enum() {
         let Some(source) = csharp("GCSViews/FlightData.cs") else {
-            eprintln!("skipped: the C# tree is not checked out here");
+            eprintln!("skipped: MP_SRC does not name a clone of https://github.com/ArduPilot/MissionPlanner");
             return;
         };
         let names: Vec<String> = csharp_enum(&source, "public enum actions")
@@ -8974,7 +8974,7 @@ mod tests {
     #[test]
     fn the_generic_path_finds_what_enum_parse_finds() {
         let Some(source) = csharp("ExtLibs/Mavlink/Mavlink.cs") else {
-            eprintln!("skipped: the C# tree is not checked out here");
+            eprintln!("skipped: MP_SRC does not name a clone of https://github.com/ArduPilot/MissionPlanner");
             return;
         };
         let mav_cmd = csharp_enum(&source, "public enum MAV_CMD: ushort");
@@ -10468,7 +10468,7 @@ mod tests {
     #[test]
     fn the_strip_is_the_designers_pages_in_the_designers_order() {
         let Some(designer) = csharp("GCSViews/FlightData.Designer.cs") else {
-            eprintln!("skipped: the C# tree is not checked out here");
+            eprintln!("skipped: MP_SRC does not name a clone of https://github.com/ArduPilot/MissionPlanner");
             return;
         };
         let ours: Vec<String> = Page::ALL
@@ -10482,7 +10482,7 @@ mod tests {
     #[test]
     fn each_header_is_the_pages_text_in_the_resx() {
         let Some(resx) = csharp("GCSViews/FlightData.resx") else {
-            eprintln!("skipped: the C# tree is not checked out here");
+            eprintln!("skipped: MP_SRC does not name a clone of https://github.com/ArduPilot/MissionPlanner");
             return;
         };
         for page in Page::ALL {
@@ -10500,7 +10500,7 @@ mod tests {
     fn the_page_at_start_is_the_designers_selected_index() {
         assert_eq!(Pages::default().selected(), DEFAULT_PAGE);
         let Some(designer) = csharp("GCSViews/FlightData.Designer.cs") else {
-            eprintln!("skipped: the C# tree is not checked out here");
+            eprintln!("skipped: MP_SRC does not name a clone of https://github.com/ArduPilot/MissionPlanner");
             return;
         };
         let index: usize = designer
@@ -11029,7 +11029,7 @@ mod tests {
     #[test]
     fn the_conversion_buttons_are_the_designers() {
         let Some(resx) = csharp("GCSViews/FlightData.resx") else {
-            eprintln!("skipped: the C# tree is not checked out here");
+            eprintln!("skipped: MP_SRC does not name a clone of https://github.com/ArduPilot/MissionPlanner");
             return;
         };
         let layout = resx
@@ -11264,7 +11264,7 @@ mod tests {
             csharp("GCSViews/FlightData.Designer.cs"),
             csharp("GCSViews/FlightData.resx"),
         ) else {
-            eprintln!("skipped: the C# tree is not checked out here");
+            eprintln!("skipped: MP_SRC does not name a clone of https://github.com/ArduPilot/MissionPlanner");
             return;
         };
         let items = |header: &str| -> Vec<String> {
@@ -11523,7 +11523,7 @@ mod tests {
         let (Some(source), Some(poi)) =
             (csharp("GCSViews/FlightData.cs"), csharp("Utilities/POI.cs"))
         else {
-            eprintln!("skipped: the C# tree is not checked out here");
+            eprintln!("skipped: MP_SRC does not name a clone of https://github.com/ArduPilot/MissionPlanner");
             return;
         };
         for prompt in [
@@ -11593,7 +11593,7 @@ mod tests {
             csharp("GCSViews/FlightData.Designer.cs"),
             csharp("GCSViews/FlightData.resx"),
         ) else {
-            eprintln!("skipped: the C# tree is not checked out here");
+            eprintln!("skipped: MP_SRC does not name a clone of https://github.com/ArduPilot/MissionPlanner");
             return;
         };
         let control = |entry: MenuEntry| match entry {
@@ -12053,7 +12053,7 @@ mod tests {
             assert_eq!(prompt.buttons(), ("OK", "Cancel"));
         }
         let Some(source) = csharp("GCSViews/FlightData.cs") else {
-            eprintln!("skipped: the C# tree is not checked out here");
+            eprintln!("skipped: MP_SRC does not name a clone of https://github.com/ArduPilot/MissionPlanner");
             return;
         };
         for prompt in [Prompt::MjpegUrl, Prompt::GStreamerUrl, Prompt::HereLinkIp] {

@@ -1201,7 +1201,7 @@ mod tests {
     #[test]
     fn the_lists_are_the_csharps() {
         let Some(source) = csharp("GCSViews/ConfigurationView/ConfigTradHeli4.cs") else {
-            eprintln!("skipped: the C# tree is not checked out");
+            eprintln!("skipped: MP_SRC does not name a clone of https://github.com/ArduPilot/MissionPlanner");
             return;
         };
         let mut ours = Vec::new();
@@ -1230,7 +1230,7 @@ mod tests {
     fn the_servo_table_is_the_designers() {
         let Some(designer) = csharp("GCSViews/ConfigurationView/ConfigTradHeli4.Designer.cs")
         else {
-            eprintln!("skipped: the C# tree is not checked out");
+            eprintln!("skipped: MP_SRC does not name a clone of https://github.com/ArduPilot/MissionPlanner");
             return;
         };
         for (text, x) in SERVO_HEADERS {

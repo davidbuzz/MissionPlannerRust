@@ -1118,7 +1118,7 @@ mod tests {
     #[test]
     fn every_designer_wiring_has_exactly_one_row() {
         let Some(designer) = reference("FlightPlanner.Designer.cs") else {
-            eprintln!("skipped: the C# tree is not checked out here");
+            eprintln!("skipped: MP_SRC does not name a clone of https://github.com/ArduPilot/MissionPlanner");
             return;
         };
         let mut wired = wirings(&designer);
@@ -1162,7 +1162,7 @@ mod tests {
     #[test]
     fn a_labelled_control_carries_its_resx_text() {
         let Some(resx) = reference("FlightPlanner.resx") else {
-            eprintln!("skipped: the C# tree is not checked out here");
+            eprintln!("skipped: MP_SRC does not name a clone of https://github.com/ArduPilot/MissionPlanner");
             return;
         };
         let texts = resx_texts(&resx);
@@ -1264,7 +1264,7 @@ mod tests {
             reference("FlightPlanner.Designer.cs"),
             reference("FlightPlanner.resx"),
         ) else {
-            eprintln!("skipped: the C# tree is not checked out here");
+            eprintln!("skipped: MP_SRC does not name a clone of https://github.com/ArduPilot/MissionPlanner");
             return;
         };
         let texts = resx_texts(&resx);
@@ -1310,7 +1310,7 @@ mod tests {
             reference("FlightPlanner.Designer.cs"),
             reference("FlightPlanner.resx"),
         ) else {
-            eprintln!("skipped: the C# tree is not checked out here");
+            eprintln!("skipped: MP_SRC does not name a clone of https://github.com/ArduPilot/MissionPlanner");
             return;
         };
         let texts = resx_texts(&resx);

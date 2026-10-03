@@ -5984,7 +5984,7 @@ mod tests {
             csharp(&format!("{dir}/ConfigHWCompass2.Designer.cs")),
             csharp(&format!("{dir}/ConfigHWCompass2.cs")),
         ) else {
-            eprintln!("skipped: the C# tree is not checked out");
+            eprintln!("skipped: MP_SRC does not name a clone of https://github.com/ArduPilot/MissionPlanner");
             return;
         };
         assert!(cs.contains("private async void BUT_MagCalibrationLog_Click("));

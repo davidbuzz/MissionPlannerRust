@@ -812,7 +812,7 @@ mod tests {
     #[test]
     fn the_default_list_is_the_csharps() {
         let Some(source) = csharp("GCSViews/ConfigurationView/ConfigUserDefined.cs") else {
-            eprintln!("skipped: the C# tree is not checked out");
+            eprintln!("skipped: MP_SRC does not name a clone of https://github.com/ArduPilot/MissionPlanner");
             return;
         };
         let start = source.find("Options { get; set; }").expect("Options");

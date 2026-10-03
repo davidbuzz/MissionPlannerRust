@@ -1217,7 +1217,7 @@ mod tests {
     fn every_designer_control_is_drawn() {
         let Some(designer) = csharp("GCSViews/ConfigurationView/ConfigArdurover.Designer.cs")
         else {
-            eprintln!("skipped: the C# tree is not checked out");
+            eprintln!("skipped: MP_SRC does not name a clone of https://github.com/ArduPilot/MissionPlanner");
             return;
         };
         let made: BTreeSet<&str> = designer
@@ -1247,7 +1247,7 @@ mod tests {
     #[test]
     fn every_control_is_where_the_resx_puts_it() {
         let Some(text) = csharp("GCSViews/ConfigurationView/ConfigArdurover.resx") else {
-            eprintln!("skipped: the C# tree is not checked out");
+            eprintln!("skipped: MP_SRC does not name a clone of https://github.com/ArduPilot/MissionPlanner");
             return;
         };
         let values = resx(&text);
@@ -1332,7 +1332,7 @@ mod tests {
     #[test]
     fn activate_binds_what_the_csharp_binds() {
         let Some(source) = csharp("GCSViews/ConfigurationView/ConfigArdurover.cs") else {
-            eprintln!("skipped: the C# tree is not checked out");
+            eprintln!("skipped: MP_SRC does not name a clone of https://github.com/ArduPilot/MissionPlanner");
             return;
         };
         let squashed: String = source.split_whitespace().collect();

@@ -1497,7 +1497,7 @@ mod tests {
             csharp("Warnings/WarningsManager.Designer.cs"),
             csharp("Warnings/WarningControl.cs"),
         ) else {
-            eprintln!("skipped: the C# tree is not checked out");
+            eprintln!("skipped: MP_SRC does not name a clone of https://github.com/ArduPilot/MissionPlanner");
             return;
         };
         let has = |source: &str, line: String| assert!(source.contains(&line), "{line}");

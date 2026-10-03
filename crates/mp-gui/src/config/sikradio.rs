@@ -4503,7 +4503,7 @@ mod tests {
             crate::config_coverage::source::csharp("Radio/Sikradio.resx"),
             crate::config_coverage::source::csharp("Radio/Sikradio.Designer.cs"),
         ) else {
-            eprintln!("skipped: the C# tree is not checked out");
+            eprintln!("skipped: MP_SRC does not name a clone of https://github.com/ArduPilot/MissionPlanner");
             return;
         };
         let values = crate::config_coverage::source::resx(&resx);
@@ -4592,7 +4592,7 @@ mod tests {
     fn the_designer_wires_seventeen_events() {
         let Some(designer) = crate::config_coverage::source::csharp("Radio/Sikradio.Designer.cs")
         else {
-            eprintln!("skipped: the C# tree is not checked out");
+            eprintln!("skipped: MP_SRC does not name a clone of https://github.com/ArduPilot/MissionPlanner");
             return;
         };
         let wired: Vec<String> = designer

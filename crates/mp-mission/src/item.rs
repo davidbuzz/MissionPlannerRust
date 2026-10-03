@@ -200,7 +200,7 @@ mod tests {
     #[test]
     fn the_location_commands_are_the_ones_mavlink_cs_marks() {
         let Some(marked) = has_location_in_the_c_sharp() else {
-            eprintln!("skipped: the C# tree is not checked out here");
+            eprintln!("skipped: MP_SRC does not name a clone of https://github.com/ArduPilot/MissionPlanner");
             return;
         };
         assert_eq!(

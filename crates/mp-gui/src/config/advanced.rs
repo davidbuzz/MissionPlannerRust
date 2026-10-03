@@ -546,7 +546,7 @@ mod tests {
     #[test]
     fn every_designer_control_is_drawn() {
         let Some(designer) = csharp("GCSViews/ConfigurationView/ConfigAdvanced.Designer.cs") else {
-            eprintln!("skipped: the C# tree is not checked out");
+            eprintln!("skipped: MP_SRC does not name a clone of https://github.com/ArduPilot/MissionPlanner");
             return;
         };
         let made: BTreeSet<&str> = designer
@@ -567,7 +567,7 @@ mod tests {
     #[test]
     fn every_wiring_is_a_button_here() {
         let Some(designer) = csharp("GCSViews/ConfigurationView/ConfigAdvanced.Designer.cs") else {
-            eprintln!("skipped: the C# tree is not checked out");
+            eprintln!("skipped: MP_SRC does not name a clone of https://github.com/ArduPilot/MissionPlanner");
             return;
         };
         for row in ROWS {
@@ -585,7 +585,7 @@ mod tests {
     #[test]
     fn every_place_and_text_is_the_resx() {
         let Some(text) = csharp("GCSViews/ConfigurationView/ConfigAdvanced.resx") else {
-            eprintln!("skipped: the C# tree is not checked out");
+            eprintln!("skipped: MP_SRC does not name a clone of https://github.com/ArduPilot/MissionPlanner");
             return;
         };
         let values = resx(&text);
@@ -632,7 +632,7 @@ mod tests {
     #[test]
     fn every_handler_opens_what_its_row_says() {
         let Some(source) = csharp("GCSViews/ConfigurationView/ConfigAdvanced.cs") else {
-            eprintln!("skipped: the C# tree is not checked out");
+            eprintln!("skipped: MP_SRC does not name a clone of https://github.com/ArduPilot/MissionPlanner");
             return;
         };
         for row in ROWS {
@@ -960,7 +960,7 @@ mod tests {
             csharp("GCSViews/ConfigurationView/ConfigAdvanced.cs"),
             csharp("GCSViews/ConfigurationView/ConfigFFT.cs"),
         ) else {
-            eprintln!("skipped: the C# tree is not checked out");
+            eprintln!("skipped: MP_SRC does not name a clone of https://github.com/ArduPilot/MissionPlanner");
             return;
         };
         let body = |source: &str| {

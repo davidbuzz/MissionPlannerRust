@@ -534,7 +534,7 @@ mod tests {
     #[test]
     fn the_table_is_the_csharps() {
         let Some(source) = csharp("ExtLibs/Utilities/DisplayView.cs") else {
-            eprintln!("skipped: the C# tree is not checked out here");
+            eprintln!("skipped: MP_SRC does not name a clone of https://github.com/ArduPilot/MissionPlanner");
             return;
         };
         let mut order = Vec::new();

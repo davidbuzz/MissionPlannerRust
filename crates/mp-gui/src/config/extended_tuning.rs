@@ -2464,7 +2464,7 @@ mod tests {
     #[test]
     fn every_control_is_where_the_resx_puts_it() {
         let Some(text) = csharp("ConfigArducopter.resx") else {
-            eprintln!("skipped: the C# tree is not checked out");
+            eprintln!("skipped: MP_SRC does not name a clone of https://github.com/ArduPilot/MissionPlanner");
             return;
         };
         let resx = crate::config_coverage::source::resx(&text);
@@ -2530,7 +2530,7 @@ mod tests {
     #[test]
     fn every_designer_control_is_drawn() {
         let Some(designer) = csharp("ConfigArducopter.Designer.cs") else {
-            eprintln!("skipped: the C# tree is not checked out");
+            eprintln!("skipped: MP_SRC does not name a clone of https://github.com/ArduPilot/MissionPlanner");
             return;
         };
         let mut declared = Vec::new();
@@ -2581,7 +2581,7 @@ mod tests {
     #[test]
     fn every_wiring_is_handled_or_is_the_hidden_buttons() {
         let Some(designer) = csharp("ConfigArducopter.Designer.cs") else {
-            eprintln!("skipped: the C# tree is not checked out");
+            eprintln!("skipped: MP_SRC does not name a clone of https://github.com/ArduPilot/MissionPlanner");
             return;
         };
         let wired = wirings(&designer);
@@ -2646,7 +2646,7 @@ mod tests {
     #[test]
     fn activate_binds_the_names_the_csharp_tries_in_order() {
         let Some(source) = csharp("ConfigArducopter.cs") else {
-            eprintln!("skipped: the C# tree is not checked out");
+            eprintln!("skipped: MP_SRC does not name a clone of https://github.com/ArduPilot/MissionPlanner");
             return;
         };
         let lines: Vec<&str> = source.lines().collect();
@@ -2727,7 +2727,7 @@ mod tests {
     #[test]
     fn the_controls_order_is_the_designers() {
         let Some(designer) = csharp("ConfigArducopter.Designer.cs") else {
-            eprintln!("skipped: the C# tree is not checked out");
+            eprintln!("skipped: MP_SRC does not name a clone of https://github.com/ArduPilot/MissionPlanner");
             return;
         };
         let mut top = Vec::new();
@@ -2765,7 +2765,7 @@ mod tests {
         let Some(source) =
             crate::config_coverage::source::csharp("ExtLibs/Utilities/paramchanges47.cs")
         else {
-            eprintln!("skipped: the C# tree is not checked out");
+            eprintln!("skipped: MP_SRC does not name a clone of https://github.com/ArduPilot/MissionPlanner");
             return;
         };
         let entries: Vec<(String, String)> = source

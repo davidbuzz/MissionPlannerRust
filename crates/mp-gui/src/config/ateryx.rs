@@ -1334,7 +1334,7 @@ mod tests {
     #[test]
     fn every_designer_control_is_drawn() {
         let Some(designer) = csharp("GCSViews/ConfigurationView/ConfigAteryx.Designer.cs") else {
-            eprintln!("skipped: the C# tree is not checked out");
+            eprintln!("skipped: MP_SRC does not name a clone of https://github.com/ArduPilot/MissionPlanner");
             return;
         };
         let made: BTreeSet<&str> = designer
@@ -1364,7 +1364,7 @@ mod tests {
     #[test]
     fn every_wiring_is_handled() {
         let Some(designer) = csharp("GCSViews/ConfigurationView/ConfigAteryx.Designer.cs") else {
-            eprintln!("skipped: the C# tree is not checked out");
+            eprintln!("skipped: MP_SRC does not name a clone of https://github.com/ArduPilot/MissionPlanner");
             return;
         };
         for (name, _, _, handler) in BUTTONS {
@@ -1397,7 +1397,7 @@ mod tests {
     #[test]
     fn every_place_and_text_is_the_resx() {
         let Some(text) = csharp("GCSViews/ConfigurationView/ConfigAteryx.resx") else {
-            eprintln!("skipped: the C# tree is not checked out");
+            eprintln!("skipped: MP_SRC does not name a clone of https://github.com/ArduPilot/MissionPlanner");
             return;
         };
         let values = resx(&text);

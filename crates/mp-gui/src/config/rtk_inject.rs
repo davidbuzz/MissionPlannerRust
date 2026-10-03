@@ -5837,7 +5837,7 @@ mod tests {
     fn the_crc24q_table_is_the_csharps() {
         let Some(source) = crate::config_coverage::source::csharp("ExtLibs/Utilities/rtcm3.cs")
         else {
-            eprintln!("skipped: the C# tree is not checked out");
+            eprintln!("skipped: MP_SRC does not name a clone of https://github.com/ArduPilot/MissionPlanner");
             return;
         };
         let start = source.find("crc24qtab =").expect("the table");
@@ -6585,7 +6585,7 @@ mod tests {
                 "GCSViews/ConfigurationView/ConfigSerialInjectGPS.Designer.cs",
             ),
         ) else {
-            eprintln!("skipped: the C# tree is not checked out");
+            eprintln!("skipped: MP_SRC does not name a clone of https://github.com/ArduPilot/MissionPlanner");
             return;
         };
         let values = crate::config_coverage::source::resx(&resx);
@@ -6744,7 +6744,7 @@ mod tests {
         let Some(designer) = crate::config_coverage::source::csharp(
             "GCSViews/ConfigurationView/ConfigSerialInjectGPS.Designer.cs",
         ) else {
-            eprintln!("skipped: the C# tree is not checked out");
+            eprintln!("skipped: MP_SRC does not name a clone of https://github.com/ArduPilot/MissionPlanner");
             return;
         };
         let mut wired: Vec<&str> = designer
@@ -6792,7 +6792,7 @@ mod tests {
         let Some(source) = crate::config_coverage::source::csharp(
             "GCSViews/ConfigurationView/ConfigSerialInjectGPS.cs",
         ) else {
-            eprintln!("skipped: the C# tree is not checked out");
+            eprintln!("skipped: MP_SRC does not name a clone of https://github.com/ArduPilot/MissionPlanner");
             return;
         };
         let start = source
