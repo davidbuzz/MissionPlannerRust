@@ -107,11 +107,15 @@ headless under mono (`tools/csharp-reference/`), and its output is the reference
   `gmapcache/TileDBv3/en/<provider>/<z>/<y>/<x>.jpg` layout — reads back byte for byte and
   decodes (`crates/mp-tiles/tests/tilecache.rs`; the test says so and skips where no such cache
   exists).
-- **Eleven harnesses** under `tools/csharp-reference/` run the C#'s own code under mono - the
-  MAVLink reference dump, the survey grids and `GridUI`, the four log conversions, projection,
-  `CurrentState`, the UDP client, websocket and NTRIP transports, MAVFTP, SRTM, geo-referencing, the
-  planner's handlers - with the goldens under `testdata/`; eight `regen*.sh` scripts regenerate
-  them, and `MpFtp.cs` and `PlannerOracle.cs` give their build and run lines in their headers.
+- **Ten harnesses** under `tools/csharp-reference/`, this repository's own C# with no line of Mission
+  Planner's source in them, run the C#'s compiled code under mono - the MAVLink reference dump, the
+  survey grids, the three log conversions, projection, `CurrentState`, the UDP client, websocket and
+  NTRIP transports, MAVFTP, SRTM, geo-referencing, the planner's handlers - with the goldens under
+  `testdata/`; eight `regen*.sh` scripts regenerate them, and `MpFtp.cs` and `PlannerOracle.cs` give
+  their build and run lines in their headers. Two goldens stand as written at efb0801 and are carried
+  over unchanged: the Survey (Grid) dialog's (`testdata/grid/golden/accept`) and the log analyzer's
+  report, whose oracles were Mission Planner's own `GridUI.cs` and `LogAnalyzer.cs` code re-hosted,
+  and were deleted on 2026-10-03.
 
 Run it yourself: `tools/csharp-reference/regen.sh` regenerates the corpora, `cargo test` compares.
 

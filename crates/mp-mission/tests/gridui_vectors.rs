@@ -22,7 +22,8 @@
 //!
 //! `testdata/grid/golden/accept/<case>.csv` is `Grid/GridUI.cs`'s logic - the constructor,
 //! `domainUpDown1_ValueChanged` with `doCalc`, the handlers each control raises, and
-//! `BUT_Accept_Click` - run by `tools/csharp-reference/MpGridUi.cs` over a polygon from
+//! `BUT_Accept_Click` - run by the grid oracle's former `accept` verb (GridUI.cs's code re-hosted,
+//! deleted on 2026-10-03; the goldens stand as written at efb0801) over a polygon from
 //! `testdata/grid/cases.txt`, with the operator's changes applied in order. Each case here opens
 //! [`mp_mission::gridui::Dialog`] over the same polygon, makes the same changes through the same
 //! controls, and presses Accept, then compares everything the golden recorded:

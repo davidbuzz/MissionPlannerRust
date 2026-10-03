@@ -1,3 +1,28 @@
+// Copyright (C) 2026 David "Buzz" Bussenschutt
+//
+// This file is part of MissionPlannerRust, a Rust implementation derived from
+// Mission Planner (Copyright (C) 2010-2024 Michael Oborne and contributors,
+// https://github.com/ArduPilot/MissionPlanner); NOTICE records the changes.
+//
+// MissionPlannerRust is free software: you can redistribute it and/or modify
+// it under the terms of the GNU General Public License as published by the
+// Free Software Foundation, version 3 of the License.
+//
+// MissionPlannerRust is distributed in the hope that it will be useful, but
+// WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
+// or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for
+// more details.
+//
+// You should have received a copy of the GNU General Public License along with
+// MissionPlannerRust. If not, see <https://www.gnu.org/licenses/>.
+//
+// SPDX-License-Identifier: GPL-3.0-only
+
+// Not taken from Mission Planner: this file is MissionPlannerRust's own, and carries no line of
+// Mission Planner's source. It is temporary plumbing - it runs Mission Planner's compiled code
+// under mono and records what it does, so the port's completeness and fidelity can be checked
+// against the original - and it goes when the port is complete.
+
 // Headless survey-grid oracle: the `grid`, `corridor` and `rotary` verbs of PLAN.md §7.1, for §13.3
 // item 3, §13.4 item 8 and Deliverable 11.
 //
@@ -19,10 +44,11 @@
 //   rotary <name> <polygon> [<parameter>=<value> ...]      run by the rotary verb
 //   path <name> <x>,<y> <x>,<y> ...                        ClipperLib.IntPoint coordinates
 //   offset <name> <path>[+<path>...] <delta>[/<delta>...]  run by the offset verb
-//   accept <name> <polygon> [<control>=<value> ...]        run by the accept verb
 // Each verb runs its own directive and passes over the others; a name is a case of one verb only.
-// The accept verb is the Survey (Grid) dialog, Grid/GridUI.cs, and lives in MpGridUi.cs; it takes
-// camerasBuiltin.xml as a fourth argument (`mono MpGrid.exe accept <cases.txt> <outdir> <xml>`).
+// `accept` lines are the Survey (Grid) dialog's cases: their oracle, which was GridUI.cs's own code
+// re-hosted without its form, was deleted on 2026-10-03 (this repository carries no line of Mission
+// Planner's source), so every verb passes over them and testdata/grid/golden/accept stands as it
+// wrote it at efb0801.
 //
 // The offset verb is ClipperLib itself (ExtLibs/Utilities/clipper.cs), the offset CreateRotary
 // insets with (Grid.cs:248-257): one ClipperOffset built as Grid.cs builds it, every path added
@@ -81,18 +107,14 @@ public static class MpGrid
     {
         // Parsing and formatting must not depend on the machine's locale.
         System.Threading.Thread.CurrentThread.CurrentCulture = Inv;
-        if ((args.Length != 3 && !(args.Length == 4 && args[0] == "accept"))
-            || (args[0] != "grid" && args[0] != "corridor" && args[0] != "rotary" && args[0] != "offset"
-                && args[0] != "accept"))
+        if (args.Length != 3
+            || (args[0] != "grid" && args[0] != "corridor" && args[0] != "rotary" && args[0] != "offset"))
         {
             Console.Error.WriteLine("usage: MpGrid grid|corridor|rotary|offset <cases.txt> <outdir>");
-            Console.Error.WriteLine("       MpGrid accept <cases.txt> <outdir> <camerasBuiltin.xml>");
             return 2;
         }
         try
         {
-            if (args[0] == "accept")
-                builtinCameras = args[3];
             return RunCases(args[0], args[1], args[2]);
         }
         catch (Exception ex)
@@ -103,15 +125,10 @@ public static class MpGrid
         }
     }
 
-    // The accept verb's camerasBuiltin.xml, which GridUI's constructor reads (GridUI.cs:125).
-    static string builtinCameras;
-
     static int RunCases(string verb, string casesPath, string outDir)
     {
         // The directive this verb runs.
         string directive = verb == "grid" ? "case" : verb;
-        if (verb == "accept")
-            MpGridUi.WriteCameras(builtinCameras, Path.Combine(outDir, "cameras.csv"));
         var polygons = new Dictionary<string, List<PointLatLngAlt>>();
         var paths = new Dictionary<string, List<ClipperLib.IntPoint>>();
         var names = new HashSet<string>();
@@ -180,18 +197,8 @@ public static class MpGrid
             }
             else if (words[0] == "accept")
             {
-                // The Survey (Grid) dialog over a polygon, run by the accept verb (MpGridUi.cs).
-                if (words.Length < 3)
-                    throw new FormatException(where + ": accept needs a name and a polygon");
-                if (!names.Add(words[1]))
-                    throw new FormatException(where + ": case " + words[1] + " defined twice");
-                List<PointLatLngAlt> poly;
-                if (!polygons.TryGetValue(words[2], out poly))
-                    throw new FormatException(where + ": unknown polygon " + words[2]);
-                if (verb != "accept")
-                    continue;
-                MpGridUi.RunCase(words, Copy(poly), where, Path.Combine(outDir, words[1] + ".csv"), builtinCameras);
-                count++;
+                // The Survey (Grid) dialog's cases: no verb here runs them (see the header).
+                continue;
             }
             else if (words[0] == "case" || words[0] == "corridor" || words[0] == "rotary")
             {
@@ -275,7 +282,7 @@ public static class MpGrid
 
         // GridUI.cs:104 stores the angle in a NumericUpDown, so it passes through decimal on its way
         // to CreateGrid (GridUI.cs:611).
-        double resolvedAngle = angle ?? (double)(decimal)((GetAngleOfLongestSide(polygon) + 360) % 360);
+        double resolvedAngle = angle ?? (double)(decimal)((LongestSideBearing(polygon) + 360) % 360);
 
         // A static that CreateGrid reads for startpos=Point (Grid.cs:580). It persists between
         // calls, so every case sets it rather than inheriting the previous case's.
@@ -501,7 +508,7 @@ public static class MpGrid
     {
         if (value != null)
             return double.Parse(value, Inv);
-        return (double)(decimal)((GetAngleOfLongestSide(polygon) + 360) % 360);
+        return (double)(decimal)((LongestSideBearing(polygon) + 360) % 360);
     }
 
     static void WritePoints(StringBuilder sb, List<PointLatLngAlt> result, string outPath)
@@ -514,26 +521,26 @@ public static class MpGrid
         File.WriteAllText(outPath, sb.ToString(), new UTF8Encoding(false));
     }
 
-    // GridUI.cs:1015-1033, verbatim apart from being static: the bearing of the polygon's longest
-    // side, which the dialog proposes as the initial grid angle.
-    static double GetAngleOfLongestSide(List<PointLatLngAlt> list)
+    // The angle the dialog proposes before the operator touches it: the bearing of the polygon's
+    // longest side, each corner taken with the corner before it (the first with the last), measured
+    // with PointLatLngAlt's own distance and bearing so the number is the one the dialog shows.
+    // Written here; the dialog's own method is private to its form.
+    static double LongestSideBearing(List<PointLatLngAlt> polygon)
     {
-        if (list.Count == 0)
-            return 0;
-        double angle = 0;
-        double maxdist = 0;
-        PointLatLngAlt last = list[list.Count - 1];
-        foreach (var item in list)
+        double bearing = 0;
+        double longest = 0;
+        for (int i = 0; i < polygon.Count; i++)
         {
-            if (item.GetDistance(last) > maxdist)
+            PointLatLngAlt from = polygon[(i + polygon.Count - 1) % polygon.Count];
+            PointLatLngAlt to = polygon[i];
+            double length = to.GetDistance(from);
+            if (length > longest)
             {
-                angle = item.GetBearing(last);
-                maxdist = item.GetDistance(last);
+                longest = length;
+                bearing = to.GetBearing(from);
             }
-            last = item;
         }
-
-        return (angle + 360) % 360;
+        return (bearing + 360) % 360;
     }
 
     static PointLatLngAlt ParseLatLng(string text, string where)

@@ -21,7 +21,8 @@
 #        matlab/<log>.bin-<n>.mat matlab: MatLab.ProcessLog, and matlab/resync/ likewise
 #        edge.log, kml/edge/, matlab/edge/   all three for edge.bin, which the harness writes
 #        kml/synthetic/, matlab/synthetic/   both for the hand-written synthetic.log
-#        loganalysis/example_output.txt   LogAnalyzer.Results and the report text
+#        loganalysis/example_output.txt   carried over as it stands: the report's oracle was the
+#                                 application's own LogAnalyzer code, deleted 2026-10-03
 #
 # block_plane_0.dae goes beside MpLog.exe, which is Settings.GetRunningDirectory() for the harness,
 # because that is where writeKML looks for the model it puts in the .kmz (LogOutput.cs:1130-1152) and
@@ -127,7 +128,7 @@ mono "$OUT/MpLog.exe" dflogtokml "$TMP/kml/edge/edge.bin" "$META" >/dev/null
 mono "$OUT/MpLog.exe" matlab "$TMP/matlab/edge/edge.bin" "$META" >/dev/null
 rm "$TMP/kml/edge/edge.bin" "$TMP/matlab/edge/edge.bin"
 cp "$MP/LogAnalyzer/py2exe/example_output.xml" "$DATA/example_output.xml"
-mono "$OUT/MpLog.exe" loganalysis "$DATA/example_output.xml" "$TMP/loganalysis/example_output.txt"
+cp -a "$DATA/golden/loganalysis/." "$TMP/loganalysis/"
 rmdir "$TMP/tmp" 2>/dev/null || rm -rf "$TMP/tmp"
 rm -rf "$DATA/golden"
 mv "$TMP" "$DATA/golden"

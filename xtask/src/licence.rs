@@ -61,6 +61,29 @@ pub const HEADER: &str = "\
 /// The SPDX identifier of the work, as every manifest declares it.
 pub const LICENCE: &str = "GPL-3.0-only";
 
+/// What every C# file in the tree says after [`HEADER`] (the owner, 2026-10-03): it is this
+/// repository's own, carries no line of Mission Planner's source, and is temporary plumbing that
+/// runs Mission Planner's compiled code to check the port against it.
+pub const PLUMBING: &str = "\
+// Not taken from Mission Planner: this file is MissionPlannerRust's own, and carries no line of\n\
+// Mission Planner's source. It is temporary plumbing - it runs Mission Planner's compiled code\n\
+// under mono and records what it does, so the port's completeness and fidelity can be checked\n\
+// against the original - and it goes when the port is complete.\n";
+
+/// Every `.cs` file git tracks under `root`: the oracle harnesses and fixtures.
+pub fn csharp_files(root: &Path) -> Result<Vec<PathBuf>> {
+    tracked(root, "*.cs")
+}
+
+/// Whether a C# source opens with [`HEADER`], a blank line, [`PLUMBING`] and a blank line.
+#[must_use]
+pub fn has_plumbing_header(text: &str) -> bool {
+    text.strip_prefix(HEADER)
+        .and_then(|rest| rest.strip_prefix('\n'))
+        .and_then(|rest| rest.strip_prefix(PLUMBING))
+        .is_some_and(|rest| rest.starts_with('\n'))
+}
+
 /// The record of third-party material, at the repository's root.
 pub const THIRD_PARTY: &str = "THIRD_PARTY_LICENSES";
 
@@ -73,8 +96,13 @@ pub const TABLE_END: &str = "<!-- END crates -->";
 
 /// Every `.rs` file git tracks under `root`, as git lists them.
 pub fn rust_files(root: &Path) -> Result<Vec<PathBuf>> {
+    tracked(root, "*.rs")
+}
+
+/// Every file git tracks under `root` that matches `pattern`.
+fn tracked(root: &Path, pattern: &str) -> Result<Vec<PathBuf>> {
     let output = Command::new("git")
-        .args(["ls-files", "-z", "--", "*.rs"])
+        .args(["ls-files", "-z", "--", pattern])
         .current_dir(root)
         .output()
         .context("running git ls-files")?;

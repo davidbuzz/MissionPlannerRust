@@ -1,4 +1,29 @@
-// Headless dataflash-log oracle: the `bintolog`, `dflogtokml`, `matlab` and `loganalysis` verbs, for
+// Copyright (C) 2026 David "Buzz" Bussenschutt
+//
+// This file is part of MissionPlannerRust, a Rust implementation derived from
+// Mission Planner (Copyright (C) 2010-2024 Michael Oborne and contributors,
+// https://github.com/ArduPilot/MissionPlanner); NOTICE records the changes.
+//
+// MissionPlannerRust is free software: you can redistribute it and/or modify
+// it under the terms of the GNU General Public License as published by the
+// Free Software Foundation, version 3 of the License.
+//
+// MissionPlannerRust is distributed in the hope that it will be useful, but
+// WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
+// or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for
+// more details.
+//
+// You should have received a copy of the GNU General Public License along with
+// MissionPlannerRust. If not, see <https://www.gnu.org/licenses/>.
+//
+// SPDX-License-Identifier: GPL-3.0-only
+
+// Not taken from Mission Planner: this file is MissionPlannerRust's own, and carries no line of
+// Mission Planner's source. It is temporary plumbing - it runs Mission Planner's compiled code
+// under mono and records what it does, so the port's completeness and fidelity can be checked
+// against the original - and it goes when the port is complete.
+
+// Headless dataflash-log oracle: the `bintolog`, `dflogtokml` and `matlab` verbs, for
 // Deliverable 14 and the flight screen's DataFlash Logs page (GCSViews/FlightData.cs:1082-1098, 1135-1197,
 // 1311-1385, 1387-1390).
 //
@@ -12,7 +37,6 @@
 // Run:    mono MpLog.exe bintolog    <log.bin> <out.log> <ParameterMetaDataBackup.xml>
 //         mono MpLog.exe dflogtokml  <log> <ParameterMetaDataBackup.xml>
 //         mono MpLog.exe matlab      <log> <ParameterMetaDataBackup.xml>
-//         mono MpLog.exe loganalysis <analyzer.xml> <out.txt>
 //         mono MpLog.exe mkedge      <out.bin>
 //
 // bintolog     BinaryLog.ConvertBin(in, out), what but_bintolog_Click runs per file
@@ -26,13 +50,10 @@
 //              carries DateTime.Now and SharpZipLib's deflate, neither of which is the format.
 // matlab       MatLab.ProcessLog(<log>), what MatLabForms.ProcessLog runs per file
 //              (Log/MatLabForms.cs:61-66), writing <log>-<lines>.mat beside it.
-// loganalysis  the analyzer's report as the button shows it: LogAnalyzer.Results(<xml>) and then the
-//              text Controls.LogAnalyzer puts in its text box. Utilities/LogAnalyzer.cs and
-//              Controls/LogAnalyzer.cs are in the WinForms application, not ExtLibs, so the two
-//              pieces that do no I/O but read the XML and build the text are copied here verbatim,
-//              with their lines cited; what they are run against is .NET's own XmlReader, which is
-//              the part that has to be exact. CheckLogFile - download LogAnalyzer64.zip, extract it,
-//              run runner.exe - is not an oracle's business.
+// The analyzer's report (the former loganalysis verb) is no longer produced here: its reader and
+// text were Utilities/LogAnalyzer.cs's and Controls/LogAnalyzer.cs's own code, which live in the
+// WinForms application and cannot run headless, and this repository carries no line of Mission
+// Planner's source (2026-10-03). testdata/dataflash/golden/loganalysis stands as written at efb0801.
 //
 // BinaryLog names a flight mode through the static event BinaryLog.onFlightMode, which the
 // application wires in MainV2.cs:3394-3418 to ArduPilot.Common.getModesList (ExtLibs/ArduPilot/
@@ -95,12 +116,6 @@ public static class MpLog
                 File.WriteAllBytes(args[1], MkEdge());
                 return 0;
             }
-            if (args.Length == 3 && args[0] == "loganalysis")
-            {
-                var text = Report(Results(args[1]));
-                File.WriteAllText(args[2], text, new UTF8Encoding(false));
-                return 0;
-            }
         }
         catch (Exception ex)
         {
@@ -111,7 +126,6 @@ public static class MpLog
         Console.Error.WriteLine("usage: MpLog bintolog <log.bin> <out.log> <ParameterMetaDataBackup.xml>");
         Console.Error.WriteLine("       MpLog dflogtokml <log> <ParameterMetaDataBackup.xml>");
         Console.Error.WriteLine("       MpLog matlab <log> <ParameterMetaDataBackup.xml>");
-        Console.Error.WriteLine("       MpLog loganalysis <analyzer.xml> <out.txt>");
         Console.Error.WriteLine("       MpLog mkedge <out.bin>");
         return 2;
     }
@@ -419,160 +433,5 @@ public static class MpLog
         File.WriteAllText(kmz + ".entries", listing.ToString(), new UTF8Encoding(false));
         File.Delete(kmz);
         return 0;
-    }
-
-    // --- Utilities/LogAnalyzer.cs:117-240, verbatim but for the logger ---------------------------
-
-    public class analysis
-    {
-        public string logfile;
-        public string sizekb;
-        public string sizelines;
-        public string duration;
-        public string vehicletype;
-        public string firmwareversion;
-        public string firmwarehash;
-        public string hardwaretype;
-        public string freemem;
-        public string skippedlines;
-
-        public List<result> results = new List<result>();
-    }
-
-    public class result
-    {
-        public string name;
-        public string status;
-        public string message;
-        public string data;
-    }
-
-    public static analysis Results(string xmlfile)
-    {
-        analysis answer = new analysis();
-
-        using (XmlReader reader = XmlReader.Create(xmlfile))
-        {
-            while (!reader.EOF)
-            {
-                if (reader.ReadToFollowing("header"))
-                {
-                    var subtree = reader.ReadSubtree();
-
-                    while (subtree.Read())
-                    {
-                        subtree.MoveToElement();
-                        if (subtree.IsStartElement())
-                        {
-                            try
-                            {
-                                switch (subtree.Name.ToLower())
-                                {
-                                    case "logfile":
-                                        answer.logfile = subtree.ReadString();
-                                        break;
-                                    case "sizekb":
-                                        answer.sizekb = subtree.ReadString();
-                                        break;
-                                    case "sizelines":
-                                        answer.sizelines = subtree.ReadString();
-                                        break;
-                                    case "duration":
-                                        answer.duration = subtree.ReadString();
-                                        break;
-                                    case "vehicletype":
-                                        answer.vehicletype = subtree.ReadString();
-                                        break;
-                                    case "firmwareversion":
-                                        answer.firmwareversion = subtree.ReadString();
-                                        break;
-                                    case "firmwarehash":
-                                        answer.firmwarehash = subtree.ReadString();
-                                        break;
-                                    case "hardwaretype":
-                                        answer.hardwaretype = subtree.ReadString();
-                                        break;
-                                    case "freemem":
-                                        answer.freemem = subtree.ReadString();
-                                        break;
-                                    case "skippedlines":
-                                        answer.skippedlines = subtree.ReadString();
-                                        break;
-                                }
-                            }
-                            catch (Exception ex)
-                            {
-                                Console.Error.WriteLine(ex);
-                            }
-                        }
-                    }
-                }
-                // params - later
-                if (reader.ReadToFollowing("results"))
-                {
-                    var subtree = reader.ReadSubtree();
-
-                    result res = null;
-
-                    while (subtree.Read())
-                    {
-                        subtree.MoveToElement();
-                        if (subtree.IsStartElement())
-                        {
-                            switch (subtree.Name.ToLower())
-                            {
-                                case "result":
-                                    if (res != null && res.name != "")
-                                        answer.results.Add(res);
-                                    res = new result();
-                                    break;
-                                case "name":
-                                    res.name = subtree.ReadString();
-                                    break;
-                                case "status":
-                                    res.status = subtree.ReadString();
-                                    break;
-                                case "message":
-                                    res.message = subtree.ReadString();
-                                    break;
-                                case "data":
-                                    res.data = subtree.ReadString();
-                                    break;
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        return answer;
-    }
-
-    // --- Controls/LogAnalyzer.cs:12-31, verbatim but for the text box ---------------------------
-
-    static string Report(analysis analysis)
-    {
-        var start = String.Format(@"Log File {0}
-Size (kb) {1}
-No of lines {2}
-Duration {3}
-Vehicletype {4}
-Firmware Version {5}
-Firmware Hash {6}
-Hardware Type {7}
-Free Mem {8}
-Skipped Lines {9}
-", analysis.logfile, analysis.sizekb, analysis.sizelines, analysis.duration, analysis.vehicletype,
-            analysis.firmwareversion, analysis.firmwarehash, analysis.hardwaretype, analysis.freemem,
-            analysis.skippedlines).Replace("\n", Environment.NewLine);
-
-        var text = start;
-
-        foreach (var item in analysis.results)
-        {
-            text += "Test: " + item.name + " = " + item.status + " - " + item.message + "\r\n";
-        }
-
-        return text;
     }
 }

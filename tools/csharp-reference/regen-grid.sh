@@ -12,9 +12,9 @@
 #   4. run every directive of testdata/grid/cases.txt through its verb: `case` lines as
 #      golden/<case>.csv, `corridor` lines as golden/corridor/<case>.csv, `rotary` lines as
 #      golden/rotary/<case>.csv and `offset` lines - ClipperLib's offset on its own, for
-#      crates/mp-mission/src/clipper.rs - as golden/offset/<case>.csv; `accept` lines - the
-#      Survey (Grid) dialog, MpGridUi.cs, for crates/mp-mission/tests/gridui_vectors.rs - as
-#      golden/accept/<case>.csv, with the camera list as golden/accept/cameras.csv.
+#      crates/mp-mission/src/clipper.rs - as golden/offset/<case>.csv. golden/accept, the Survey
+#      (Grid) dialog's cases for crates/mp-mission/tests/gridui_vectors.rs, is carried over as it
+#      stands: its oracle was GridUI.cs's own code re-hosted and was deleted on 2026-10-03.
 #
 # The build is cached per Mission Planner commit ($MP_ORACLE_CACHE, default ~/.cache). Requires
 # mono 6.12 (mono, msbuild, mcs), rsync, and the NuGet packages the csproj restores - from the
@@ -53,22 +53,20 @@ fi
 
 # GMap.NET.Core and System.Memory are referenced only so mcs can resolve PointLatLngAlt's
 # overloads; CS1685 is mono's own Span clashing with System.Memory's, which nothing here uses.
-# ProjNET and GeoAPI are for MpGridUi.cs's calcpolygonarea, which projects with them directly.
 mcs -nologo -nowarn:1685 -out:"$OUT/MpGrid.exe" \
     -r:"$OUT/MissionPlanner.Utilities.dll" -r:"$OUT/GMap.NET.Core.dll" -r:"$OUT/System.Memory.dll" \
-    -r:"$OUT/ProjNET.dll" -r:"$OUT/GeoAPI.dll" -r:"$OUT/GeoAPI.CoordinateSystems.dll" \
-    -r:System.Xml.dll -r:"$NS" "$HERE/MpGrid.cs" "$HERE/MpGridUi.cs"
+    -r:System.Xml.dll -r:"$NS" "$HERE/MpGrid.cs"
 
 # Write to a scratch directory and swap it in, so a failed run leaves the old goldens untouched.
 TMP="$(mktemp -d "$DATA/.golden.XXXXXX")"
 trap 'rm -rf "$TMP"' EXIT
-mkdir "$TMP/corridor" "$TMP/rotary" "$TMP/offset" "$TMP/accept"
+mkdir "$TMP/corridor" "$TMP/rotary" "$TMP/offset"
 mono "$OUT/MpGrid.exe" grid "$DATA/cases.txt" "$TMP"
 mono "$OUT/MpGrid.exe" corridor "$DATA/cases.txt" "$TMP/corridor"
 mono "$OUT/MpGrid.exe" rotary "$DATA/cases.txt" "$TMP/rotary"
 mono "$OUT/MpGrid.exe" offset "$DATA/cases.txt" "$TMP/offset"
-# The Survey (Grid) dialog, over the camera list Mission Planner ships beside its executable.
-mono "$OUT/MpGrid.exe" accept "$DATA/cases.txt" "$TMP/accept" "$MP/camerasBuiltin.xml"
+# The Survey (Grid) dialog's goldens stand as written at efb0801 (their oracle is gone, see above).
+cp -a "$DATA/golden/accept" "$TMP/accept"
 rm -rf "$DATA/golden"
 mv "$TMP" "$DATA/golden"
 chmod 755 "$DATA/golden" "$DATA/golden/corridor" "$DATA/golden/rotary" "$DATA/golden/offset" \

@@ -30,8 +30,9 @@
 //! `loadsettings` reads and `savesettings` writes, and the mission items `BUT_Accept_Click` hands
 //! the planner, call by call.
 //!
-//! `tests/gridui_vectors.rs` holds all of it to the dialog's own code run under mono
-//! (`tools/csharp-reference/MpGridUi.cs`, the `accept` verb): every control, the calculated text
+//! `tests/gridui_vectors.rs` holds all of it to the dialog's own code run under mono (the grid
+//! oracle's `accept` verb; its file, GridUI.cs's code re-hosted, was deleted on 2026-10-03 and
+//! `testdata/grid/golden/accept` stands as it wrote it): every control, the calculated text
 //! boxes, the thirteen Stats labels, the grid's shape and every call to the bit.
 //!
 //! Metric only, as the rest of this application: `CurrentState.multiplierdist` and

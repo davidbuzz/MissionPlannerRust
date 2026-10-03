@@ -25,9 +25,9 @@ kind and compares. PLAN.md §13.3 item 3 and §13.4 item 8, DELIVERABLES.md D11.
 2. builds `ExtLibs/Utilities/MissionPlanner.Utilities.csproj` there with mono's `msbuild` - the
    project PLAN.md §7.1 showed builds on Linux. `Grid.cs`, `clipper.cs`, `utmpos.cs`,
    `PointLatLngAlt.cs`, `Rect.cs` and the ProjNet they use all build in it, so nothing is stubbed;
-3. compiles `tools/csharp-reference/MpGrid.cs` and `MpGridUi.cs` against the result with `mcs`;
-4. runs its `grid`, `corridor`, `rotary`, `offset` and `accept` verbs over `cases.txt`, each picking
-   out its own directive, and swaps the output in as `golden/`.
+3. compiles `tools/csharp-reference/MpGrid.cs` against the result with `mcs`;
+4. runs its `grid`, `corridor`, `rotary` and `offset` verbs over `cases.txt`, each picking out its
+   own directive, carries `golden/accept` over as it stands, and swaps the output in as `golden/`.
 
 The first run restores NuGet packages (from the network, or `~/.nuget/packages`) and builds: 15 s
 from a cold cache with the packages already local. Later runs reuse the build and take about a
@@ -107,8 +107,10 @@ every node of the `PolyTree`, depth first.
 
 40 cases of `Grid/GridUI.cs`, the dialog the planner's Auto WP > Survey (Grid) opens. `GridUI` is a
 WinForms form - its constructor needs the form's controls, a GMap control and `MainV2` - so it
-cannot run headless; `tools/csharp-reference/MpGridUi.cs` is its code for everything that is not
-the map, statement for statement, with each control a field holding what the control holds (a
+cannot run headless; the oracle that wrote `golden/accept` was its code for everything that is not
+the map, statement for statement - which is why that oracle was deleted on 2026-10-03 (this
+repository carries no line of Mission Planner's source) and the goldens stand as it wrote them at
+efb0801 - with each control a field holding what the control holds (a
 `NumericUpDown`'s `decimal` with its Designer range, a `TextBox`'s text) and raising the events the
 Designer wires. Its arithmetic is the C#'s own: `decimal`, `float` and `double` as the dialog mixes
 them, .NET's formatting of the Stats labels, the real `Grid.CreateGrid`, `CreateCorridor` and

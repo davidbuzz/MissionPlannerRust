@@ -26,7 +26,7 @@
 
 use std::path::{Path, PathBuf};
 
-use xtask::licence::{self, CLARIFIED, HEADER, LICENCE};
+use xtask::licence::{self, CLARIFIED, HEADER, LICENCE, PLUMBING};
 
 fn repo() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("..")
@@ -56,6 +56,32 @@ fn every_rust_file_opens_with_the_header() {
         licence::rust_files(&root).unwrap().len() > 500,
         "git ls-files found too few Rust files to be the repository"
     );
+}
+
+/// Every C# file in the tree is this repository's own plumbing and says so (the owner,
+/// 2026-10-03): the licence header, then the plumbing statement; and none of them carries the
+/// markers the copied sections once wore.
+#[test]
+fn every_csharp_file_is_our_own_plumbing_and_says_so() {
+    let root = repo();
+    let files = licence::csharp_files(&root).unwrap();
+    assert!(!files.is_empty(), "no C# files tracked; drop this test with them");
+    for file in &files {
+        let text = std::fs::read_to_string(file).unwrap();
+        let name = file.strip_prefix(&root).unwrap_or(file).display().to_string();
+        assert!(
+            licence::has_plumbing_header(&text),
+            "{name} does not open with the licence header and the plumbing statement"
+        );
+        for marker in ["verbatim", "copied here", "statement for statement", "lifted from"] {
+            assert!(
+                !text.to_lowercase().contains(marker),
+                "{name} says `{marker}`: a C# file here carries no line of Mission Planner's source"
+            );
+        }
+    }
+    assert!(PLUMBING.contains("carries no line of"));
+    assert!(PLUMBING.contains("Mission Planner's compiled code"));
 }
 
 /// The header is the owner's form: his copyright, the product's name, the derivation with

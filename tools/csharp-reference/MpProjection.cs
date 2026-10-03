@@ -1,3 +1,28 @@
+// Copyright (C) 2026 David "Buzz" Bussenschutt
+//
+// This file is part of MissionPlannerRust, a Rust implementation derived from
+// Mission Planner (Copyright (C) 2010-2024 Michael Oborne and contributors,
+// https://github.com/ArduPilot/MissionPlanner); NOTICE records the changes.
+//
+// MissionPlannerRust is free software: you can redistribute it and/or modify
+// it under the terms of the GNU General Public License as published by the
+// Free Software Foundation, version 3 of the License.
+//
+// MissionPlannerRust is distributed in the hope that it will be useful, but
+// WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
+// or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for
+// more details.
+//
+// You should have received a copy of the GNU General Public License along with
+// MissionPlannerRust. If not, see <https://www.gnu.org/licenses/>.
+//
+// SPDX-License-Identifier: GPL-3.0-only
+
+// Not taken from Mission Planner: this file is MissionPlannerRust's own, and carries no line of
+// Mission Planner's source. It is temporary plumbing - it runs Mission Planner's compiled code
+// under mono and records what it does, so the port's completeness and fidelity can be checked
+// against the original - and it goes when the port is complete.
+
 // Headless projection oracle: the `projection` verb of PLAN.md §7.1, for §13.3 item 8 and Deliverable 8.
 //
 // Runs the projections the map and the planner actually use - GMap.NET's MercatorProjection
