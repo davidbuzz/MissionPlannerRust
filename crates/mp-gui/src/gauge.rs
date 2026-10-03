@@ -1,16 +1,21 @@
-//! The `AGauge` dials: the Gauges page's speed dial, `Gspeed`, with two needles, airspeed and
+//! The round dials: the Gauges page's speed dial, `Gspeed`, with two needles, airspeed and
 //! ground speed, over a scale from 0 to its maximum - 60 until a double click asks for another -
 //! and the RAW Sensor window's roll, pitch and yaw dials, each with one needle.
 //!
-//! `AGauge` draws in a 150-pixel square scaled to the control: the coloured bands of its ranges,
-//! the base arc, a major line and a number every step, the minor lines between with the middle
-//! one longer when there is one, the caption, and each needle as three shaded triangles about
-//! the centre over a cap. The C# draws its dial face from a `BackgroundImage` in the `.resx`;
-//! the face is not drawn here, under the palette ruling, and the scale and needles are drawn on
-//! the page's own background - in white where the Designer has them black, which the dark
-//! background would swallow.
-//! `// C#: ExtLibs/Controls/AGauge.cs:1499-1987, GCSViews/FlightData.Designer.cs:1464-1607,
-//! Controls/RAW_Sensor.Designer.cs:405-547, 609-750, 752-893`
+//! Ported from the behaviour of `ExtLibs/Controls/AGauge.cs` alone, none of its code: Mission
+//! Planner draws these dials with `AGauge` (A.J. Bauer, 2007, with Michael Oborne's changes), a
+//! control under the Code Project Open License, which the GPL does not admit. The port of
+//! 2026-09-25 transliterated its painting, and the owner had it rewritten (2026-10-03). What is
+//! here is written from what the control shows and from the two pages' Designers, which are
+//! Mission Planner's own: a dial drawn in a 150-pixel square and scaled to its control, with the coloured
+//! bands of its ranges, the arc its scale sits on, a line and a number at every major step, the
+//! minor lines between them with the middle one longer when their count is odd, a caption, and a
+//! shaded needle on a cap for each value, pointing where the value falls between the scale's start
+//! and its end. The face image the Designer's `BackgroundImage` gives the control is not drawn,
+//! under the palette ruling, and the scale and needles are drawn on the page's own background -
+//! in white where the Designer has them black, which the dark background would swallow.
+//! `// C#: GCSViews/FlightData.Designer.cs:1464-1607, Controls/RAW_Sensor.Designer.cs:405-547,
+//! 609-750, 752-893`
 //!
 //! Galt, Gheading and Gvspeed, the Gauges page's other dials, are not ported.
 
@@ -19,8 +24,8 @@
 
 use crate::hud::{Align, Item, Scene};
 
-/// `basesize`: the square every `AGauge` draws in before it is scaled to its size.
-/// `// C#: ExtLibs/Controls/AGauge.cs:2010`
+/// The square every dial is set out in before it is scaled to its control: the Designers give
+/// each dial's `Center` as (75, 75) and its radii within 75.
 pub const BASE_SIZE: f32 = 150.0;
 
 /// The font the gauge inherits, Microsoft Sans Serif 8.25pt, in pixels at 96 dpi.
@@ -37,7 +42,7 @@ const LIGHT_GREEN: u32 = 0x90_ee_90;
 /// `Color.LightSteelBlue`.
 const LIGHT_STEEL_BLUE: u32 = 0xb0_c4_de;
 
-/// `AGauge.NeedleColorEnum`, the needles' shading.
+/// `NeedlesColor1`: which colour a needle is shaded in.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum NeedleColour {
     /// `Gray`.
@@ -46,24 +51,34 @@ pub enum NeedleColour {
     Red,
 }
 
+impl NeedleColour {
+    /// The needle's two shades, lit and shadowed, and the colour of the ring round its cap.
+    const fn shades(self) -> (u32, u32, u32) {
+        match self {
+            Self::Gray => (0xc8_c8_c8, 0x70_70_70, GRAY),
+            Self::Red => (0xff_50_50, 0xb0_00_00, 0xff_00_00),
+        }
+    }
+}
+
 /// One needle: its value, its length, its width, its shading and its cap's colour.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Needle {
     /// `Value0` to `Value3`, as bound.
     pub value: f32,
-    /// `NeedlesRadius`.
+    /// `NeedlesRadius`: the tip's distance from the centre.
     pub radius: f32,
-    /// `NeedlesWidth`.
+    /// `NeedlesWidth`: half the needle's width at the centre is twice this, and the cap's radius
+    /// three times it.
     pub width: f32,
     /// `NeedlesColor1`.
     pub colour: NeedleColour,
-    /// `NeedlesColor2`.
+    /// `NeedlesColor2`, the cap's.
     pub cap: u32,
 }
 
 /// `RangesEnabled[i]`: a coloured band between two radii from one value of the scale to another,
 /// drawn under the scale when its end is past its start.
-/// `// C#: ExtLibs/Controls/AGauge.cs:1588-1614`
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Band {
     /// `RangesStartValue`.
@@ -131,8 +146,8 @@ const SPEED_MIN: f32 = 0.0;
 
 impl SpeedGauge {
     /// The two needles the Designer enables: airspeed, gray and two wide, and ground speed, red
-    /// and one wide, both 50 long with white caps. Each value is held to the scale, as the
-    /// `Value` setters hold it. `// C#: ExtLibs/Controls/AGauge.cs:240-250`
+    /// and one wide, both 50 long with white caps. Each value is held to the scale, as the control
+    /// holds the values it is given. `// C#: GCSViews/FlightData.Designer.cs:1464-1607`
     #[must_use]
     pub fn needles(&self, airspeed: f32, groundspeed: f32) -> [Needle; 2] {
         let held = |value: f32| value.max(SPEED_MIN).min(self.max);
@@ -155,9 +170,9 @@ impl SpeedGauge {
     }
 
     /// `MaxValue = float.Parse(max)`: the maximum changed where the text is a number above the
-    /// minimum, and left as it was otherwise; text that is not a number throws in the C#, which
-    /// has no `catch` here, and is .NET's message. `// C#: GCSViews/FlightData.cs:3140-3148,
-    /// ExtLibs/Controls/AGauge.cs:446-462`
+    /// minimum, and left as it was otherwise, as the control leaves a maximum that is not above
+    /// its minimum; text that is not a number throws in the C#, which has no `catch` here, and is
+    /// .NET's message. `// C#: GCSViews/FlightData.cs:3140-3148`
     pub fn set_max(&mut self, text: &str) -> Result<(), &'static str> {
         let value =
             crate::fly::dotnet_float(text).ok_or("Input string was not in a correct format.")?;
@@ -192,7 +207,6 @@ impl SpeedGauge {
     }
 
     /// The dial drawn `size` pixels square: the scale, the caption and the needles.
-    /// `// C#: ExtLibs/Controls/AGauge.cs:1499-1987`
     #[must_use]
     pub fn scene(&self, size: f32, needles: &[Needle]) -> Scene {
         self.dial().scene(size, needles)
@@ -287,9 +301,50 @@ pub const fn yaw_dial() -> Dial {
     raw_dial(0.0, 359.0, 270.0, 45.0, 2, "Yaw", &YAW_BANDS)
 }
 
+/// `Center`, in the base square: every dial here has it at (75, 75).
+const CENTRE: (f32, f32) = (75.0, 75.0);
+
+/// A point of the drawn dial: `radius` from the centre towards `degrees`, clockwise from east,
+/// scaled to the control.
+fn at(scale: f32, radius: f32, degrees: f32) -> (f32, f32) {
+    let (sin, cos) = degrees.to_radians().sin_cos();
+    (
+        (CENTRE.0 + radius * cos) * scale,
+        (CENTRE.1 + radius * sin) * scale,
+    )
+}
+
+/// An arc as a polyline: a vertex every three degrees or so, and both ends exactly.
+fn arc(scale: f32, radius: f32, from: f32, sweep: f32) -> Vec<(f32, f32)> {
+    #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)] // a count of degrees
+    let steps = ((sweep.abs() / 3.0).ceil() as usize).max(1);
+    #[allow(clippy::cast_precision_loss)] // small counts
+    (0..=steps)
+        .map(|step| at(scale, radius, from + sweep * step as f32 / steps as f32))
+        .collect()
+}
+
+/// A circle as a polygon.
+fn circle((x, y): (f32, f32), radius: f32) -> Vec<(f32, f32)> {
+    (0..36)
+        .map(|step| {
+            #[allow(clippy::cast_precision_loss)]
+            let angle = step as f32 * std::f32::consts::TAU / 36.0;
+            (x + radius * angle.cos(), y + radius * angle.sin())
+        })
+        .collect()
+}
+
+/// A scale number as `float.ToString()` writes it: "0", "10", "12.5".
+fn number_text(value: f32) -> String {
+    value.to_string()
+}
+
+/// How far past the scale's end a line's value may fall through rounding and still be drawn.
+const SLACK: f32 = 1e-3;
+
 impl Dial {
-    /// A value held to the scale, as the `Value` setters hold it.
-    /// `// C#: ExtLibs/Controls/AGauge.cs:240-250`
+    /// A value held to the scale, as the control holds the values it is given.
     #[must_use]
     pub fn held(&self, value: f32) -> f32 {
         value.max(self.min).min(self.max)
@@ -308,231 +363,150 @@ impl Dial {
         }
     }
 
-    /// Where a value of the scale points, in degrees clockwise from east.
+    /// Where a value of the scale points, in degrees clockwise from east: the scale's minimum at
+    /// the arc's start, its maximum at the arc's end, and every value between in proportion.
     fn angle_of(&self, value: f32) -> f32 {
         self.arc_start + (value - self.min) * self.arc_sweep / (self.max - self.min)
     }
 
-    /// The dial drawn `size` pixels square: the bands, the base arc, the scale, the caption and
-    /// the needles. `// C#: ExtLibs/Controls/AGauge.cs:1499-1987`
+    /// The dial drawn `size` pixels square, bottom to top: the bands, the base arc, the scale
+    /// with its numbers, the caption and the needles.
     #[must_use]
     pub fn scene(&self, size: f32, needles: &[Needle]) -> Scene {
         let scale = size / BASE_SIZE;
         let mut scene = Scene::default();
-        let span = self.max - self.min;
-        let at = |radius: f32, degrees: f32| {
-            let radians = degrees.to_radians();
-            (
-                (CENTRE.0 + radius * radians.cos()) * scale,
-                (CENTRE.1 + radius * radians.sin()) * scale,
-            )
-        };
-        // An arc as points, one every five degrees and the end.
-        let arc = |radius: f32, from: f32, sweep: f32| -> Vec<(f32, f32)> {
-            let sweep = sweep.min(360.0);
-            #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)] // whole steps
-            let steps = ((sweep / 5.0).ceil() as usize).max(1);
-            #[allow(clippy::cast_precision_loss)] // small counts
-            (0..=steps)
-                .map(|step| at(radius, from + sweep * step as f32 / steps as f32))
-                .collect()
-        };
-        // `AddPie` outer, `AddPie` inner reversed, `FillPie` clipped to the two: the band.
         for band in self.bands {
-            if band.to <= band.from {
-                continue;
-            }
-            let from = self.angle_of(band.from);
-            let sweep = (band.to - band.from) * self.arc_sweep / span;
-            let mut points = arc(band.outer, from, sweep);
-            let mut inner = arc(band.inner, from, sweep);
-            inner.reverse();
-            points.append(&mut inner);
-            scene.items.push(Item::Fill {
-                points,
-                colour: band.colour,
-                alpha: 1.0,
-            });
+            self.band(&mut scene, scale, band);
         }
-        // `DrawArc` with the base arc's pen.
         if let Some((radius, width, colour)) = self.base_arc {
             scene.items.push(Item::Stroke {
-                points: arc(radius, self.arc_start, self.arc_sweep),
+                points: arc(scale, radius, self.arc_start, self.arc_sweep),
                 width: width * scale,
                 colour,
                 alpha: 1.0,
             });
         }
-        let line = |scene: &mut Scene,
-                    (inner, outer, width): (f32, f32, f32),
-                    colour: u32,
-                    degrees: f32| {
-            scene.items.push(Item::Stroke {
-                points: vec![at(inner, degrees), at(outer, degrees)],
-                width: width * scale,
-                colour,
-                alpha: 1.0,
-            });
-        };
+        self.scale_lines(&mut scene, scale);
+        let (caption, (x, y)) = self.cap;
+        scene.items.push(Item::Label {
+            text: caption.to_owned(),
+            at: (x * scale, y * scale),
+            size: FONT * scale,
+            colour: self.colours.2,
+            align: Align::Left,
+        });
+        for needle in needles {
+            self.needle(&mut scene, scale, needle);
+        }
+        scene
+    }
+
+    /// A band: the ring between its radii from where its first value points to where its last
+    /// does, filled in its colour; nothing when its last value is not past its first.
+    fn band(&self, scene: &mut Scene, scale: f32, band: &Band) {
+        if band.to <= band.from {
+            return;
+        }
+        let from = self.angle_of(band.from);
+        let sweep = self.angle_of(band.to) - from;
+        let mut outline = arc(scale, band.outer, from, sweep);
+        outline.extend(arc(scale, band.inner, from + sweep, -sweep));
+        scene.items.push(Item::Fill {
+            points: outline,
+            colour: band.colour,
+            alpha: 1.0,
+        });
+    }
+
+    /// A radial line between two radii where `value` points.
+    fn line(
+        &self,
+        scene: &mut Scene,
+        scale: f32,
+        (inner, outer, width): (f32, f32, f32),
+        colour: u32,
+        value: f32,
+    ) {
+        let degrees = self.angle_of(value);
+        scene.items.push(Item::Stroke {
+            points: vec![at(scale, inner, degrees), at(scale, outer, degrees)],
+            width: width * scale,
+            colour,
+            alpha: 1.0,
+        });
+    }
+
+    /// The scale: a major line and its number at the minimum and every major step after it, and
+    /// after each major line the minor lines, spaced evenly to the next major step, the middle one
+    /// the longer inter line when their count is odd. A scale whose span is no whole number of
+    /// steps - roll's 359 in steps of 30 - ends with the minor lines past its last major, as far
+    /// as they fall within it.
+    fn scale_lines(&self, scene: &mut Scene, scale: f32) {
         let (major_colour, minor_colour, numbers_colour) = self.colours;
-        // `(m_MaxValue - m_MinValue) / m_ScaleLinesMajorStepValue * (MinorNumOf + 1)` minor
-        // steps across the sweep.
-        let minor_step =
-            self.arc_sweep / ((span / self.major_step) * (f32::from(self.minor_count) + 1.0));
-        let mut count = 0.0f32;
-        while count <= span {
-            let major = self.arc_start + count * self.arc_sweep / span;
-            line(&mut scene, self.major, major_colour, major);
-            if count < span {
-                for minor in 1..=self.minor_count {
-                    let degrees = major + f32::from(minor) * minor_step;
-                    // With an odd count, the middle one is the longer "inter" line.
-                    let middle = self.minor_count % 2 == 1 && self.minor_count / 2 + 1 == minor;
-                    if middle {
-                        line(&mut scene, self.inter, major_colour, degrees);
-                    } else {
-                        line(&mut scene, self.minor, minor_colour, degrees);
-                    }
-                }
-            }
-            // The number, centred on its point at the numbers' radius.
-            let (x, y) = at(self.numbers_radius, major);
+        let between = f32::from(self.minor_count) + 1.0;
+        let middle = (self.minor_count % 2 == 1).then_some(self.minor_count.div_ceil(2));
+        let mut value = self.min;
+        while value <= self.max + SLACK {
+            self.line(scene, scale, self.major, major_colour, value);
+            let (x, y) = at(scale, self.numbers_radius, self.angle_of(value));
             scene.items.push(Item::Label {
-                text: number_text(self.min + count),
+                text: number_text(value),
                 at: (x, y - FONT * scale / 2.0),
                 size: FONT * scale,
                 colour: numbers_colour,
                 align: Align::Centre,
             });
-            count += self.major_step;
+            for step in 1..=self.minor_count {
+                let minor = value + f32::from(step) * self.major_step / between;
+                if minor > self.max + SLACK {
+                    break;
+                }
+                if middle == Some(step) {
+                    self.line(scene, scale, self.inter, major_colour, minor);
+                } else {
+                    self.line(scene, scale, self.minor, minor_colour, minor);
+                }
+            }
+            value += self.major_step;
         }
-        scene.items.push(Item::Label {
-            text: self.cap.0.to_owned(),
-            at: (self.cap.1.0 * scale, self.cap.1.1 * scale),
-            size: FONT * scale,
-            colour: numbers_colour,
-            align: Align::Left,
-        });
-        for needle in needles {
-            self.needle(&mut scene, needle, scale);
-        }
-        scene
     }
 
-    /// A needle of type 0: its cap, three shaded triangles about the centre, and two lines in
-    /// the cap's colour. `// C#: ExtLibs/Controls/AGauge.cs:1818-1946`
-    fn needle(&self, scene: &mut Scene, needle: &Needle, scale: f32) {
-        #[allow(clippy::cast_possible_truncation)] // `(Int32)(...) % 360`
-        let brush_angle = (self.angle_of(needle.value) as i32 % 360) as f32;
-        let angle = f64::from(brush_angle).to_radians();
-        #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
-        let subcol = (((brush_angle + 225.0) % 180.0) * 100.0 / 180.0) as i32;
-        #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
-        let subcol2 = (((brush_angle + 135.0) % 180.0) * 100.0 / 180.0) as i32;
-        let grey = |level: i32| {
-            let level = u32::try_from(level.clamp(0, 255)).unwrap_or(0);
-            (level << 16) | (level << 8) | level
-        };
-        let rgb = |r: i32, g: i32, b: i32| {
-            let byte = |v: i32| u32::try_from(v.clamp(0, 255)).unwrap_or(0);
-            (byte(r) << 16) | (byte(g) << 8) | byte(b)
-        };
-        let (mut brush1, mut brush2, brush3, mut brush4, outline) = match needle.colour {
-            NeedleColour::Gray => (
-                grey(80 + subcol),
-                grey(180 - subcol),
-                grey(((80 + subcol2) + 255) % 255),
-                grey(((180 - subcol2) + 255) % 255),
-                0x80_80_80,
-            ),
-            NeedleColour::Red => (
-                rgb(145 + subcol, subcol, subcol),
-                rgb(245 - subcol, 100 - subcol, 100 - subcol),
-                rgb(145 + subcol2, subcol2, subcol2),
-                rgb(245 - subcol2, 100 - subcol2, 100 - subcol2),
-                0xff_00_00,
-            ),
-        };
-        if (((brush_angle + 225.0) % 360.0) / 180.0).floor() == 0.0 {
-            std::mem::swap(&mut brush1, &mut brush2);
-        }
-        if (((brush_angle + 135.0) % 360.0) / 180.0).floor() == 0.0 {
-            brush4 = brush3;
-        }
-        let radius = f64::from(needle.radius);
-        let width = f64::from(needle.width);
-        let (cx, cy) = (f64::from(CENTRE.0), f64::from(CENTRE.1));
-        let point = |along: f64, across: f64, turn: f64| {
-            #[allow(clippy::cast_possible_truncation)] // the C#'s `(Single)`
-            let point = (
-                ((cx + along * angle.cos() + across * (angle + turn).cos()) as f32) * scale,
-                ((cy + along * angle.sin() + across * (angle + turn).sin()) as f32) * scale,
-            );
-            point
-        };
-        let half = std::f64::consts::FRAC_PI_2;
-        // `m_NeedleRadius / 20` and `/ 5`: integer divisions in the C#, the radius an `int`.
-        #[allow(clippy::cast_possible_truncation)]
-        let whole = needle.radius as i32;
-        let (tail, fifth) = (f64::from(whole / 20), f64::from(whole / 5));
-        let tip = point(radius, 0.0, 0.0);
-        let back = point(-tail, 0.0, 0.0);
-        let side_a = point(-fifth, width * 2.0, half);
-        let side_b = point(-fifth, width * 2.0, -half);
-        let fill = |scene: &mut Scene, points: Vec<(f32, f32)>, colour: u32| {
+    /// A needle: a two-tone pointer from a short tail through the centre to its tip at its
+    /// length, lit on one side and shadowed on the other, with a cap over the centre - a disc in
+    /// the cap's colour ringed in the needle's.
+    fn needle(&self, scene: &mut Scene, scale: f32, needle: &Needle) {
+        let degrees = self.angle_of(needle.value);
+        let tip = at(scale, needle.radius, degrees);
+        let tail = at(scale, needle.radius / 10.0, degrees + 180.0);
+        let shoulder = needle.width * 2.0;
+        let left = at(scale, shoulder, degrees - 90.0);
+        let right = at(scale, shoulder, degrees + 90.0);
+        let (lit, shadow, ring) = needle.colour.shades();
+        for (side, colour) in [(left, lit), (right, shadow)] {
             scene.items.push(Item::Fill {
-                points,
+                points: vec![tip, side, tail],
                 colour,
                 alpha: 1.0,
             });
-        };
-        // The cap under the needle: `FillEllipse` in the cap's colour, then its outline.
-        #[allow(clippy::cast_possible_truncation)] // the centre, 75
-        let centre = (cx as f32 * scale, cy as f32 * scale);
-        let cap = circle(centre, needle.width * 3.0 * scale);
-        fill(scene, cap.clone(), needle.cap);
-        let mut ring = cap;
-        if let Some(&first) = ring.first() {
-            ring.push(first);
         }
-        scene.items.push(Item::Stroke {
-            points: ring,
-            width: 1.0,
-            colour: outline,
+        let centre = at(scale, 0.0, 0.0);
+        let cap = circle(centre, needle.width * 3.0 * scale);
+        scene.items.push(Item::Fill {
+            points: cap.clone(),
+            colour: needle.cap,
             alpha: 1.0,
         });
-        fill(scene, vec![tip, back, side_a], brush1);
-        fill(scene, vec![tip, back, side_b], brush2);
-        let inner = point(-(tail - 1.0), 0.0, 0.0);
-        fill(scene, vec![inner, side_a, side_b], brush4);
-        for end in [back, tip] {
-            scene.items.push(Item::Stroke {
-                points: vec![centre, end],
-                width: 1.0,
-                colour: needle.cap,
-                alpha: 1.0,
-            });
+        let mut outline = cap;
+        if let Some(&first) = outline.first() {
+            outline.push(first);
         }
+        scene.items.push(Item::Stroke {
+            points: outline,
+            width: 1.0,
+            colour: ring,
+            alpha: 1.0,
+        });
     }
-}
-
-/// `Center`, in the base square: every dial here has it at (75, 75).
-const CENTRE: (f32, f32) = (75.0, 75.0);
-
-/// A scale number as `float.ToString()` writes it: "0", "10", "12.5".
-fn number_text(value: f32) -> String {
-    value.to_string()
-}
-
-/// A circle as a polygon.
-fn circle((x, y): (f32, f32), radius: f32) -> Vec<(f32, f32)> {
-    (0..24)
-        .map(|step| {
-            #[allow(clippy::cast_precision_loss)]
-            let angle = step as f32 * std::f32::consts::TAU / 24.0;
-            (x + radius * angle.cos(), y + radius * angle.sin())
-        })
-        .collect()
 }
 
 /// `tabPage1_Resize`: a page narrower than its height's half, or wider than nearly twice it, puts
@@ -569,6 +543,43 @@ mod tests {
                 _ => None,
             })
             .collect()
+    }
+
+        /// The strokes that are radial lines - two points - as (length, width), whole pixels.
+    fn lines(scene: &Scene) -> Vec<(u32, u32)> {
+        scene
+            .items
+            .iter()
+            .filter_map(|item| match item {
+                Item::Stroke { points, width, .. } if points.len() == 2 => {
+                    let (dx, dy) = (points[1].0 - points[0].0, points[1].1 - points[0].1);
+                    #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+                    Some((dx.hypot(dy).round() as u32, width.round() as u32))
+                }
+                _ => None,
+            })
+            .collect()
+    }
+
+    fn fills(scene: &Scene) -> usize {
+        scene
+            .items
+            .iter()
+            .filter(|item| matches!(item, Item::Fill { .. }))
+            .count()
+    }
+
+        /// The first needle's tip: the first point of the first three-cornered fill (a band's outline
+    /// and a cap have many more corners).
+    fn first_tip(scene: &Scene) -> (f32, f32) {
+        scene
+            .items
+            .iter()
+            .find_map(|item| match item {
+                Item::Fill { points, .. } if points.len() == 3 => points.first().copied(),
+                _ => None,
+            })
+            .expect("a needle")
     }
 
     /// The Designer's dial: 0 to 60 in tens, and the caption.
@@ -612,7 +623,7 @@ mod tests {
         assert!((gauge.max - 25.0).abs() < f32::EPSILON);
     }
 
-    /// The needles are held to the scale, as the C#'s value setters hold them.
+    /// The needles are held to the scale, as the control holds its values.
     #[test]
     fn the_needles_stay_on_the_scale() {
         let gauge = SpeedGauge::default();
@@ -623,14 +634,93 @@ mod tests {
             (air.colour, ground.colour),
             (NeedleColour::Gray, NeedleColour::Red)
         );
-        // Drawn: three triangles, a cap and its ring, and two lines each.
+        // Drawn: two shaded halves and a cap each, and a ring round each cap.
         let scene = gauge.scene(130.0, &[air, ground]);
-        let fills = scene
+        assert_eq!(fills(&scene), 2 * 3);
+        let rings = scene
             .items
             .iter()
-            .filter(|item| matches!(item, Item::Fill { .. }))
+            .filter(|item| matches!(item, Item::Stroke { points, .. } if points.len() > 2))
             .count();
-        assert_eq!(fills, 2 * 4);
+        assert_eq!(rings, 2);
+    }
+
+    /// A needle points where its value falls on the scale: the yaw dial's 0 is straight up, its
+    /// 90 to the right; the speed dial's maximum is at the arc's end, down and to the right.
+    #[test]
+    fn a_needle_points_at_its_value() {
+        let yaw = yaw_dial();
+        let up = first_tip(&yaw.scene(150.0, &[yaw.raw_needle(0.0)]));
+        assert!((up.0 - 75.0).abs() < 0.01 && (up.1 - 25.0).abs() < 0.01, "{up:?}");
+        let right = first_tip(&yaw.scene(150.0, &[yaw.raw_needle(90.0)]));
+        assert!(
+            (right.0 - 125.0).abs() < 0.5 && (right.1 - 75.0).abs() < 0.5,
+            "{right:?}"
+        );
+        let speed = SpeedGauge::default();
+        let [_, ground] = speed.needles(0.0, 60.0);
+        let end = first_tip(&speed.scene(150.0, &[ground]));
+        assert!(end.0 > 100.0 && end.1 > 100.0, "{end:?}");
+        // At twice the size, twice as far out.
+        let far = first_tip(&yaw.scene(300.0, &[yaw.raw_needle(90.0)]));
+        assert!((far.0 - 250.0).abs() < 1.0 && (far.1 - 150.0).abs() < 1.0, "{far:?}");
+    }
+
+    /// The RAW Sensor dials' bands come first, under everything, one fill each where the end is
+    /// past the start, then the base arc.
+    #[test]
+    fn the_bands_lie_under_the_scale() {
+        let scene = roll_dial().scene(150.0, &[]);
+        assert!(
+            matches!(&scene.items[..3], [Item::Fill { .. }, Item::Fill { .. }, Item::Fill { .. }]),
+            "three bands first"
+        );
+        assert!(
+            matches!(&scene.items[3], Item::Stroke { points, colour, .. } if points.len() > 100 && *colour == GRAY),
+            "then the gray base arc"
+        );
+        assert_eq!(fills(&yaw_dial().scene(150.0, &[])), 1);
+        // A band whose end is not past its start is not drawn.
+        let mut dial = yaw_dial();
+        dial.bands = &[Band {
+            from: 90.0,
+            to: 90.0,
+            inner: 50.0,
+            outer: 60.0,
+            colour: LIGHT_GREEN,
+        }];
+        assert_eq!(fills(&dial.scene(150.0, &[])), 0);
+    }
+
+    /// The pitch dial's nine minor lines between majors: the middle one is the longer inter line,
+    /// 50 to 60 like a major but one wide; the others 50 to 55.
+    #[test]
+    fn the_middle_minor_line_is_the_longer_inter_line() {
+                let drawn = lines(&pitch_dial().scene(150.0, &[]));
+        let majors = drawn.iter().filter(|&&line| line == (10, 2)).count();
+        let inters = drawn.iter().filter(|&&line| line == (10, 1)).count();
+        let minors = drawn.iter().filter(|&&line| line == (5, 1)).count();
+        // -90 to 89 in twenties: nine majors, nine inter lines and 72 minor lines, the last
+        // major's nine minors running to 88.
+        assert_eq!((majors, inters, minors), (9, 9, 72));
+                assert_eq!(drawn.len(), 9 + 9 + 72);
+    }
+
+    /// A scale that is no whole number of steps runs its minor lines on past the last major:
+    /// roll's -180 to 179 in thirties has twelve majors and the five minors after 150 as well.
+    #[test]
+    fn the_scale_runs_to_its_end() {
+        let scene = roll_dial().scene(150.0, &[]);
+        let numbers: Vec<&str> = labels(&scene);
+        assert_eq!(numbers.len(), 12 + 1, "{numbers:?}");
+        assert_eq!(numbers[0], "-180");
+        assert_eq!(numbers[11], "150");
+        assert_eq!(numbers[12], "Roll");
+                let drawn = lines(&scene);
+        assert_eq!(drawn.len(), 12 + 12 * 5);
+        // The yaw dial: eight majors, two minors each, the last pair past 315.
+        let yaw = lines(&yaw_dial().scene(150.0, &[]));
+        assert_eq!(yaw.len(), 8 + 8 * 2);
     }
 
     /// `tabPage1_Resize`'s places: this column's page is tall and under 500 wide, so the speed

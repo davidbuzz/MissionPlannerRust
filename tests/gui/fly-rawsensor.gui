@@ -14,7 +14,7 @@
 
 screen fly
 window 1600x1200
-budget 18
+budget 19
 
 # The button is on the Actions page of the tab control under the HUD.
 click fly-tab-actions
