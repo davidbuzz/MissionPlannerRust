@@ -80,3 +80,10 @@ descriptor to CMD and everything CMD starts; the Xvfb that `tools/gui-headless.s
 a locked GUI run held the build lock for an hour after the run ended, and every build on the
 machine waited on a display server. Start long-lived helpers outside the lock, or with the
 descriptors closed (`3>&- ... 9>&-`, as gui-headless.sh now does); `lsof <lock>` names the holder.
+
+**Killing a build (2026-10-03):** `kill <cargo pid>` leaves its rustc children running as
+orphans, and they inherit the `flock` descriptor, so the lock stays held until the last of them
+finishes (a Windows-target rustpython_vm ran five more minutes); kill the rustc PIDs too
+(`pgrep -f "rust[c] .*--target x86_64-pc-windows-gnu"`) when the lock is wanted now. Chains
+launched from a Claude shell died with VS Code's crash while queued on the lock; a running cargo
+survived it. Check the chain logs for their DONE lines after any restart, never assume.

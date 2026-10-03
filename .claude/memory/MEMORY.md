@@ -36,4 +36,5 @@ controlled; the per-project memory directory holds symlinks to them.
 - [Passwords remembered, plain](passwords-remembered-plain.md) — InputBox password answers are kept like any other; plain text boxes are fine for now
 - [Never edit a running script](never-edit-a-running-script.md) — bash reads scripts incrementally; a runner edited mid-suite breaks the test running at that moment
 - [VM work shows on its console](vm-work-shows-on-its-console.md) — every VM job through tools/win10/vm-run.sh into the visible "Claude at work" window, never bare SSH; Buzz watches (2026-09-26)
+- [tridge-mac](tridge-mac.md) — the borrowed Mac for the macOS build: ssh tridge-mac, ~/MissionPlannerRust, the mpr-*.sh scripts, LZMA_API_STATIC=1, no window over SSH (2026-10-03)
 - [Windows VM tiny10](windows-vm-tiny10.md) — ssh -p 2222 user@localhost (PowerShell), share /home/buzz/vmshare = S:, host is 10.0.2.2 from the guest; snapshot before installs
