@@ -290,8 +290,10 @@ pub fn run(args: &[String], repo: &Path) -> Result<()> {
     };
     // `repo_root()` is `xtask/..`; resolve it so every path this prints is one a person can read.
     let repo = repo.canonicalize().unwrap_or_else(|_| repo.to_path_buf());
-        // The C# tree `MP_SRC` names; without it, `check` reads the CSV alone and `refresh` says so.
-    let mut tree = crate::upstream::tree().unwrap_or_else(|| PathBuf::from("MP_SRC (unset)"));
+            // The C# tree `MP_SRC` names; without it (unset, or naming no directory), `check` reads the
+    // CSV alone and `refresh` says what to set - the stand-in path is that sentence.
+    let mut tree = crate::upstream::tree()
+        .unwrap_or_else(|| PathBuf::from(format!("({})", crate::upstream::absent())));
     let mut ledger = repo.join("ledger/ledger.csv");
     let mut repo = repo;
     let mut flags = flags.iter();
