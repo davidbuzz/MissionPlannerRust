@@ -269,7 +269,7 @@ fn update_apply(planner: &str) -> std::process::ExitCode {
 
 fn usage() {
     println!(
-        "headless-planner - Mission Planner (Rust)\n\n\
+        "headless-planner - MissionPlannerRust\n\n\
          usage:\n  \
          headless-planner watch <url> [seconds]   connect and display live telemetry\n  \
          headless-planner record <url> <file> [s] record telemetry to a .tlog\n  \

@@ -1,6 +1,6 @@
 [Desktop Entry]
 Type=Application
-Name=Mission Planner (Rust)
+Name=MissionPlannerRust
 Comment=Ground station for ArduPilot vehicles: flight data, planning, setup and configuration
 Exec=planner
 Icon=planner

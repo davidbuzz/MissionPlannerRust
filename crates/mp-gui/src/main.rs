@@ -20,12 +20,19 @@
 
 //! `planner` - the graphical front end.
 //!
-//! Built on gpui, Zed's GPU-accelerated UI framework (DELIVERABLES.md D6/D7).
+//! Built on gpui, Zed's GPU-accelerated UI framework (DELIVERABLES.md Deliverable 6/Deliverable 7).
 //!
 //! Run with a link URL to connect, or with no arguments for a disconnected shell:
 //!   planner tcp:127.0.0.1:5760
 
 #![allow(clippy::print_stderr)]
+
+
+/// The product's name, as the owner has it (2026-10-03): the window's title and the header over
+/// the screen buttons both carry it. Mission Planner shows its own name and version there
+/// (`MainV2.cs:815, 1739`); this application is not Mission Planner, and its title says which it
+/// is - which is also how the GUI runner tells our window from a real Mission Planner's.
+pub const PRODUCT_NAME: &str = "MissionPlannerRust";
 
 mod camera_photos;
 mod config;
@@ -172,7 +179,7 @@ use telemetry::{Telemetry, TelemetryView};
 use ui::{action, theme};
 
 /// How often to repaint. 10 Hz is plenty for numeric readouts and keeps an idle GCS cheap; the
-/// map and HUD (D7-D9) will drive their own higher-rate rendering.
+/// map and HUD (Deliverable 7-Deliverable 9) will drive their own higher-rate rendering.
 const REFRESH: Duration = Duration::from_millis(100);
 
 /// The mission file name used when nothing has been typed.
@@ -682,7 +689,7 @@ impl MissionPlanner {
         .detach();
 
         // No timer for the sticks. They are read and sent on threads of their own in `mp_input`
-        // (D15's 5 ms from stick to wire is not reachable from a timer on this executor, and a
+        // (Deliverable 15's 5 ms from stick to wire is not reachable from a timer on this executor, and a
         // slow frame must not become a control problem); the screen only keeps the reader
         // pointed at the vehicle, once a frame in `render`.
 
@@ -3363,7 +3370,7 @@ impl Render for MissionPlanner {
                 "coverage.flightplanner.total",
                 planner_coverage::FLIGHTPLANNER.len(),
             );
-            // And Mission Planner's setup and configuration panels (D12), from their ledger.
+            // And Mission Planner's setup and configuration panels (Deliverable 12), from their ledger.
             for (key, value) in config_coverage::facts() {
                 facts::record(key, value);
             }
@@ -4026,7 +4033,7 @@ impl Render for MissionPlanner {
                                     .flex()
                                     .flex_col()
                                     .pb_2()
-                                    .child(div().text_xl().child("Mission Planner"))
+                                                                        .child(div().text_xl().child(PRODUCT_NAME))
                                     .child(
                                         div()
                                             .text_xs()
@@ -4386,7 +4393,7 @@ fn main() {
         let options = WindowOptions {
             window_bounds: Some(WindowBounds::Windowed(bounds)),
             titlebar: Some(TitlebarOptions {
-                title: Some(SharedString::from("Mission Planner (Rust)")),
+                                title: Some(SharedString::from(PRODUCT_NAME)),
                 ..Default::default()
             }),
             ..Default::default()
@@ -4435,6 +4442,24 @@ fn main() {
 
 #[cfg(test)]
 mod tests {
+
+    /// The window's title and the header say which program this is: the owner's product name,
+    /// one word, never Mission Planner's own - the GUI runner tells our window from a real
+    /// Mission Planner's by it (tools/gui-test.sh's WINDOW_TITLE).
+    #[test]
+    fn the_product_name_is_the_owners_and_not_mission_planners() {
+        assert_eq!(super::PRODUCT_NAME, "MissionPlannerRust");
+        assert!(!super::PRODUCT_NAME.contains(' '));
+        let runner = std::fs::read_to_string(
+            std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../tools/gui-test.sh"),
+        )
+        .expect("the GUI runner");
+        assert!(
+            runner.contains(&format!("WINDOW_TITLE=\"{}\"", super::PRODUCT_NAME)),
+            "the runner looks for the window by another title"
+        );
+    }
+
     /// The connect-time fetch runs unless the whole announced table is held: nothing held and
     /// no count, a few names read one by one, or a table short of the count all fetch; the full
     /// table does not.

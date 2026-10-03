@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Launches a GUI binary, waits for its window, screenshots it, and leaves it up for a while.
 #
-# Screenshots are the progress report for GUI work (DELIVERABLES.md D6/D7): each deliverable that
+# Screenshots are the progress report for GUI work (DELIVERABLES.md Deliverable 6/D7): each deliverable that
 # changes what the user sees gets one, committed under docs/progress/.
 #
 # usage: tools/screenshot.sh <output-name> [seconds-visible] [-- <binary args>]
@@ -43,7 +43,7 @@ shift 2 2>/dev/null || shift 1
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 OUT="$ROOT/docs/progress/$NAME.png"
 BIN="$ROOT/target/debug/planner"
-WINDOW_TITLE="Mission Planner"
+WINDOW_TITLE="MissionPlannerRust"
 
 [ -x "$BIN" ] || { echo "binary not built: $BIN" >&2; exit 1; }
 : "${DISPLAY:=:0}"
@@ -143,7 +143,7 @@ for _ in $(seq 1 60); do
 done
 if [ -z "$WIN_ID" ]; then
     echo "no visible window owned by pid $APP_PID appeared" >&2
-    echo "refusing to match '$WINDOW_TITLE' by title alone: the real Mission Planner uses that" >&2
+        echo "refusing to match '$WINDOW_TITLE' by title alone: only a window of our own process is ours" >&2
     echo "title, and this script has already clicked into it once by doing so" >&2
     exit 1
 fi

@@ -10,7 +10,7 @@ became of it.
 
 Linux: the Debian package `tools/package.sh deb` writes installs `planner` (the graphical
 application) and `headless-planner` (the same over the command line) into `/usr/bin`, with a
-desktop entry under *Mission Planner (Rust)*. It needs a Vulkan driver (`mesa-vulkan-drivers`
+desktop entry under *MissionPlannerRust*. It needs a Vulkan driver (`mesa-vulkan-drivers`
 answers for any GPU, in software when it must). Windows and macOS: build from source for now
 (`cargo build --release`); the installers are not made yet.
 

@@ -102,7 +102,7 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 # The debug binary, as every script runs against; MP_GUI_BIN names another, such as a release
 # build for a measurement whose number the debug build cannot stand for (tests/gui/storm.gui).
 BIN="${MP_GUI_BIN:-$ROOT/target/debug/planner}"
-WINDOW_TITLE="Mission Planner"
+WINDOW_TITLE="MissionPlannerRust"
 [ -x "$BIN" ] || { echo "binary not built: $BIN" >&2; exit 1; }
 : "${DISPLAY:=:0}"
 export DISPLAY
@@ -318,9 +318,10 @@ xdotool mousemove "${SHOT_AT%%,*}" "${SHOT_AT##*,}" 2>/dev/null
 
 # Starts the application and waits for its window, then activates it and moves it where the
 # pointer waits. Once before the steps, and again for each `restart`.
-# Finds the application's window: the one owned by the process this script started. The real
-# Mission Planner shares our title, and a test that drives it instead of us is worse than a test
-# that does not run. Tries for up to `$1` half-seconds.
+# Finds the application's window: the one owned by the process this script started, with our
+# title (MissionPlannerRust since 2026-10-03; until then it was Mission Planner's own, and a test
+# that drives a real Mission Planner instead of us is worse than a test that does not run, so the
+# owner check stays). Tries for up to `$1` half-seconds.
 find_window() {
     WIN_ID=""
     for _ in $(seq 1 "${1:-60}"); do
