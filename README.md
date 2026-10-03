@@ -1,5 +1,11 @@
 # Mission Planner, in Rust
 
+![The flight screen: the HUD, the quick view, and the vehicle on the map over a recorded flight](docs/readme/flight-screen.png)
+
+![The plan screen: the mission box, the drawing tools and the map](docs/readme/plan-screen.png)
+
+*Both taken on 2026-10-03 from the current build, replaying a recorded flight (`testdata/mavlink/autotest.tlog`).*
+
 A complete, file-by-file reimplementation of [ArduPilot Mission
 Planner](https://github.com/ArduPilot/MissionPlanner) — 3,678 C# files, 1,208,836 lines, ~93
 projects — as a Rust application that is **fast**, **multi-platform** and **GPU-accelerated**.
