@@ -1,3 +1,23 @@
+// Copyright (C) 2026 David "Buzz" Bussenschutt
+//
+// This file is part of MissionPlannerRust, a Rust implementation derived from
+// Mission Planner (Copyright (C) 2010-2024 Michael Oborne and contributors,
+// https://github.com/ArduPilot/MissionPlanner); NOTICE records the changes.
+//
+// MissionPlannerRust is free software: you can redistribute it and/or modify
+// it under the terms of the GNU General Public License as published by the
+// Free Software Foundation, version 3 of the License.
+//
+// MissionPlannerRust is distributed in the hope that it will be useful, but
+// WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
+// or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for
+// more details.
+//
+// You should have received a copy of the GNU General Public License along with
+// MissionPlannerRust. If not, see <https://www.gnu.org/licenses/>.
+//
+// SPDX-License-Identifier: GPL-3.0-only
+
 //! `TransferCRC.cs`: CRC-16-CCITT (polynomial 0x1021, from 0xFFFF, no reflection), which a
 //! multi-frame transfer carries in its first two bytes, computed over the data type's 64-bit
 //! signature, little-endian, and then the payload.

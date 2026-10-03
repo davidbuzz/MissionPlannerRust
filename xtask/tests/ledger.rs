@@ -1,3 +1,23 @@
+// Copyright (C) 2026 David "Buzz" Bussenschutt
+//
+// This file is part of MissionPlannerRust, a Rust implementation derived from
+// Mission Planner (Copyright (C) 2010-2024 Michael Oborne and contributors,
+// https://github.com/ArduPilot/MissionPlanner); NOTICE records the changes.
+//
+// MissionPlannerRust is free software: you can redistribute it and/or modify
+// it under the terms of the GNU General Public License as published by the
+// Free Software Foundation, version 3 of the License.
+//
+// MissionPlannerRust is distributed in the hope that it will be useful, but
+// WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
+// or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for
+// more details.
+//
+// You should have received a copy of the GNU General Public License along with
+// MissionPlannerRust. If not, see <https://www.gnu.org/licenses/>.
+//
+// SPDX-License-Identifier: GPL-3.0-only
+
 //! `cargo xtask ledger`, driven as a person or CI would drive it: through the binary, over a
 //! small C# tree each test writes for itself.
 //!
@@ -586,7 +606,7 @@ fn done_row(f: &Fixture) {
     put(&f.repo().join("crates/mp-gui/Cargo.toml"), "[package]\n");
     put(
         &f.repo().join("crates/mp-gui/src/flight_data.rs"),
-        "//! Ported from GCSViews/FlightData.cs @ efb0801 (GPL-3.0-or-later)\n",
+        "//! Ported from GCSViews/FlightData.cs @ efb0801 (GPL-3.0-only)\n",
     );
     put(&f.repo().join("crates/mp-gui/tests/flight_data.rs"), "\n");
     f.edit(

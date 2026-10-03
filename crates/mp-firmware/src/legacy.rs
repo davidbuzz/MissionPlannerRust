@@ -1,7 +1,27 @@
+// Copyright (C) 2026 David "Buzz" Bussenschutt
+//
+// This file is part of MissionPlannerRust, a Rust implementation derived from
+// Mission Planner (Copyright (C) 2010-2024 Michael Oborne and contributors,
+// https://github.com/ArduPilot/MissionPlanner); NOTICE records the changes.
+//
+// MissionPlannerRust is free software: you can redistribute it and/or modify
+// it under the terms of the GNU General Public License as published by the
+// Free Software Foundation, version 3 of the License.
+//
+// MissionPlannerRust is distributed in the hope that it will be useful, but
+// WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
+// or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for
+// more details.
+//
+// You should have received a copy of the GNU General Public License along with
+// MissionPlannerRust. If not, see <https://www.gnu.org/licenses/>.
+//
+// SPDX-License-Identifier: GPL-3.0-only
+
 //! The legacy firmware catalogue: `firmware2.xml`, the history of it, and which vehicle picture
 //! each of its entries labels.
 //!
-//! Ported from `Utilities/Firmware.cs` @ efb0801 (GPL-3.0-or-later) - `software`, `getFWList`,
+//! Ported from `Utilities/Firmware.cs` @ efb0801 (GPL-3.0-only) - `software`, `getFWList`,
 //! `getAPMVersion`, `GetAPMVERSIONFile`, the static constructor's `niceNames` and `getUrl` - with
 //! `updateDisplayName` from `GCSViews/ConfigurationView/ConfigFirmware.cs`, the Install Firmware
 //! Legacy page that reads them. What happens once an entry is chosen is `crate::flow`.

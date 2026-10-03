@@ -1,3 +1,23 @@
+// Copyright (C) 2026 David "Buzz" Bussenschutt
+//
+// This file is part of MissionPlannerRust, a Rust implementation derived from
+// Mission Planner (Copyright (C) 2010-2024 Michael Oborne and contributors,
+// https://github.com/ArduPilot/MissionPlanner); NOTICE records the changes.
+//
+// MissionPlannerRust is free software: you can redistribute it and/or modify
+// it under the terms of the GNU General Public License as published by the
+// Free Software Foundation, version 3 of the License.
+//
+// MissionPlannerRust is distributed in the hope that it will be useful, but
+// WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
+// or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for
+// more details.
+//
+// You should have received a copy of the GNU General Public License along with
+// MissionPlannerRust. If not, see <https://www.gnu.org/licenses/>.
+//
+// SPDX-License-Identifier: GPL-3.0-only
+
 //! Emits Rust source from a parsed MAVLink dialect.
 //!
 //! Output is deterministic: identical input produces byte-identical output, so `--check` in CI is
@@ -102,7 +122,9 @@ fn doc_lines(text: &str, indent: &str) -> String {
 
 /// Emits the whole dialect module.
 pub fn emit_dialect(dialect: &Dialect) -> String {
-    let mut out = String::with_capacity(2 * 1024 * 1024);
+        let mut out = String::with_capacity(2 * 1024 * 1024);
+    out.push_str(crate::licence::HEADER);
+    out.push('\n');
 
     out.push_str(&format!(
         "//! Generated from the MAVLink XML definitions for the `{}` dialect.\n\

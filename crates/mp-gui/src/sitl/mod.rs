@@ -1,5 +1,25 @@
+// Copyright (C) 2026 David "Buzz" Bussenschutt
+//
+// This file is part of MissionPlannerRust, a Rust implementation derived from
+// Mission Planner (Copyright (C) 2010-2024 Michael Oborne and contributors,
+// https://github.com/ArduPilot/MissionPlanner); NOTICE records the changes.
+//
+// MissionPlannerRust is free software: you can redistribute it and/or modify
+// it under the terms of the GNU General Public License as published by the
+// Free Software Foundation, version 3 of the License.
+//
+// MissionPlannerRust is distributed in the hope that it will be useful, but
+// WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
+// or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for
+// more details.
+//
+// You should have received a copy of the GNU General Public License along with
+// MissionPlannerRust. If not, see <https://www.gnu.org/licenses/>.
+//
+// SPDX-License-Identifier: GPL-3.0-only
+
 //! The SITL screen - MainV2's SIMULATION - ported from `GCSViews/SITL.cs`, `SITL.Designer.cs` and
-//! `SITL.resx` @ efb0801 (GPL-3.0-or-later), PLAN.md §13.6 row 78 under the owner's ruling D14.
+//! `SITL.resx` @ efb0801 (GPL-3.0-only), PLAN.md §13.6 row 78 under the owner's ruling D14.
 //!
 //! The page: a map with the home marker to drag (`groupBox1`); the heading and the version to
 //! download (`groupBox3`); the speed-up, the model, an extra command line, Wipe and the swarm

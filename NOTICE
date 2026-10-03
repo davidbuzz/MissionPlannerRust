@@ -1,0 +1,69 @@
+MissionPlannerRust
+==================
+
+Copyright (C) 2026 David "Buzz" Bussenschutt
+
+MissionPlannerRust is free software, licensed under the GNU General Public
+License version 3 (the file LICENSE; SPDX GPL-3.0-only). It is legally
+derived-from or translated-from Mission Planner, the ground control station
+for ArduPilot:
+
+    Mission Planner
+    Copyright (C) 2010-2024 Michael Oborne and contributors
+    https://github.com/ArduPilot/MissionPlanner
+    GNU General Public License version 3 (its COPYING.txt is the licence
+    text; nothing in its tree grants a later version, so neither does this)
+
+MissionPlannerRust is not Mission Planner. Mission Planner's authors did not
+write it, do not maintain it and are not responsible for it; questions about
+it go to its own repository, not to theirs.
+
+What was changed (GNU GPL version 3, section 5(a))
+--------------------------------------------------
+
+The whole program was written again in Rust, from September 2026 on, by
+David "Buzz" Bussenschutt, from Mission Planner's C# source, file by file:
+
+- The language, the toolkit and the libraries. C#, .NET and Windows Forms
+  are replaced by Rust and the gpui framework (Zed Industries, Apache-2.0),
+  drawing the map, the HUD, the charts and the overlays on the GPU; the C#
+  tree's GMap.NET, ZedGraph, IronPython, BouncyCastle, GStreamer bindings,
+  zlib.net, 7zip and the rest are replaced by Rust crates, listed with their
+  licences in THIRD_PARTY_LICENSES. One `cargo build` makes the Linux,
+  Windows and macOS binaries.
+
+- The behaviour is kept from the C# wherever it was ported: each Rust module
+  names the C# file and lines it follows (`// C#: <file>:<lines>`), and
+  ledger/ledger.csv records every C# file's state - ported, with what was
+  left out, or dropped, with the reason. Where the port departs from the C#
+  on purpose, the departure is written at its site and ruled in PLAN.md
+  section 12: among them, error-containing dialog boxes have been removed,  
+  a dropped link is reconnected without a dialog, the take-off 
+  altitude is asked once a session, an error the window can show
+  as state gets no message box, and the user-data directory is
+  MissionPlannerRust rather than Mission Planner's.
+
+- Left out: Android and iOS, legacy hardware (APM1/2, Solo, VRBrain),
+  Windows shell integration, and the features PLAN.md section 12 D13 lists;
+  Mission Planner's product photographs (not its to license); the AGauge
+  control (Code Project Open License, not admitted by the GPL), whose dials
+  are written anew from their behaviour; and the CPOL-licensed Matrix.cs,
+  Kalman3D.cs and NetDFULib, which are not carried.
+
+- The texts of Mission Planner's forms (its .resx files) are carried as
+  Fluent files under assets/i18n, its drawn images under assets/images, and
+  its data files (cameras, PIDs, graph definitions, firmware history) under
+  the crates that read them.
+
+The git history of this repository is the full record of the changes, with
+their dates. it contains *zero* lines of code in-common with the original.
+
+Third parties
+-------------
+
+THIRD_PARTY_LICENSES lists the code and data that reached this work through
+Mission Planner's tree (Clipper, ProjNet, GeoUtility, GeoidHeightsDotNet,
+mono's serial port listing, the PX4 uploader, libcanard, the MAVLink
+definitions, ArduPilot's parameter metadata, LogAnalyzer and OSD font,
+RFDesign's RFDLib, GMap.NET) with their notices, the programs whose behaviour
+is reproduced, and every Rust crate the binaries are built from.

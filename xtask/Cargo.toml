@@ -15,7 +15,10 @@ anyhow.workspace = true
 mp-mavlink.workspace = true
 mp-mavlink-dialects.workspace = true
 roxmltree.workspace = true
+# `licences` reads `cargo metadata` for THIRD_PARTY_LICENSES's crate table.
+serde_json.workspace = true
 sha2.workspace = true
+
 # codegen-resx parses every .ftl it generates back before writing it.
 fluent-syntax.workspace = true
 

@@ -1,3 +1,23 @@
+// Copyright (C) 2026 David "Buzz" Bussenschutt
+//
+// This file is part of MissionPlannerRust, a Rust implementation derived from
+// Mission Planner (Copyright (C) 2010-2024 Michael Oborne and contributors,
+// https://github.com/ArduPilot/MissionPlanner); NOTICE records the changes.
+//
+// MissionPlannerRust is free software: you can redistribute it and/or modify
+// it under the terms of the GNU General Public License as published by the
+// Free Software Foundation, version 3 of the License.
+//
+// MissionPlannerRust is distributed in the hope that it will be useful, but
+// WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
+// or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for
+// more details.
+//
+// You should have received a copy of the GNU General Public License along with
+// MissionPlannerRust. If not, see <https://www.gnu.org/licenses/>.
+//
+// SPDX-License-Identifier: GPL-3.0-only
+
 //! The crate graph, held to PLAN.md §5.1's layers over what `cargo metadata` says it is.
 //!
 //! §5.1 is the pivot insurance: everything below the gpui boundary has to survive a change of UI
@@ -47,8 +67,8 @@ use serde_json::Value;
 const LAYERS: &[(u8, &[&str])] = &[
     // L0. Not yet: mp-math, mp-time, mp-bus.
     (0, &["mp-units", "mp-settings"]),
-    // L1. Not yet: mp-dronecan, mp-gnss, mp-adsb, mp-cot.
-    (1, &["mp-mavlink", "mp-mavlink-dialects"]),
+        // L1. Not yet: mp-gnss, mp-adsb, mp-cot.
+    (1, &["mp-mavlink", "mp-mavlink-dialects", "mp-dronecan"]),
     // L2. Not yet: mp-transport-ble, mp-platform, mp-platform-linux, mp-platform-windows,
     // mp-platform-macos.
     (2, &["mp-transport"]),
@@ -121,10 +141,20 @@ const UNNAMED: &[(&str, u8, &str)] = &[
         11,
         "the plugins the host loads (PLAN.md §13.6 row 96): the C#'s four real plugins and its examples on the WIT world, built for wasm32, a member so they type-check natively",
     ),
-    (
+        (
         "mp-log",
         4,
         "§5.1's mp-log-tlog and mp-log-dataflash, unsplit, with LogBrowse's plot extraction",
+    ),
+    (
+        "mp-sikradio",
+        3,
+        "the SiK radio's AT/RT session, settings and bootloader uploads (Radio/Sikradio.cs, SikRadio/RFDLib): a device protocol over a port, as mp-firmware holds the autopilot's bootloader",
+    ),
+    (
+        "mp-update",
+        4,
+        "Utilities/Update.cs and Updater/Program.cs: the application's self-update, the release fetched through mp-firmware's downloader and unpacked with mp-log's zip, a service mp-gui and mp-cli run",
     ),
     (
         "mp-tiles",

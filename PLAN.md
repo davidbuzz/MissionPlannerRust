@@ -220,7 +220,7 @@ project, and it is why §10 front-loads UI-free work.
 | Plugins | `wasmtime 48` component host, capability-gated per MAVLink msgid | In-process dylib | high | — |
 | i18n | `fluent 0.17` + `i18n-embed-fl 0.10` (compile-checked `fl!()`) | `.resx` (of 30,916 English entries only ~2,634 are language) | high | — |
 | Expression eval | Own compiled evaluator over column handles | `evalexpr 13.1.0` — **AGPL-3.0-only**, must never enter | high | — |
-| Licence | GPL-3.0-or-later | Anything else (`COPYING.txt` is verbatim GPLv3; the port is a derivative work) | high | Nothing. Note: consuming Apache-2.0 gpui permanently forecloses GPLv2 |
+| Licence | GPL-3.0-only (the owner, 2026-10-03: `COPYING.txt` is verbatim GPLv3 with no later-version grant, so the derivative cannot add one; the header on every `.rs` is `xtask::licence::HEADER`, NOTICE the §5(a) statement, THIRD_PARTY_LICENSES the record) | Anything else (the port is a derivative work) | high | Nothing. Note: consuming Apache-2.0 gpui permanently forecloses GPLv2 |
 
 ---
 
@@ -570,7 +570,7 @@ evidence, sha256, omissions, notes
 ### 6.4 The per-file agent contract — five artifacts or the unit does not advance
 
 1. **The port**, headed
-   `//! Ported from <path> @ efb0801… (GPL-3.0-or-later)` plus a §5(a) change notice, with
+      `//! Ported from <path> @ efb0801… (GPL-3.0-only)` under the licence header every `.rs` opens with (`xtask::licence::HEADER`; NOTICE is the §5(a) change notice), with
    `// C#: <path>:<line>` on non-obvious transliterations.
    *(GPLv3 §5(a) obligation is real and cannot be inherited: grepping every non-vendored logic
    directory for "GNU General Public"/"GPL" returns **exactly one file** — `AP_GeodesicGrid.cs`. The

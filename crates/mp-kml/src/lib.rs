@@ -1,7 +1,27 @@
+// Copyright (C) 2026 David "Buzz" Bussenschutt
+//
+// This file is part of MissionPlannerRust, a Rust implementation derived from
+// Mission Planner (Copyright (C) 2010-2024 Michael Oborne and contributors,
+// https://github.com/ArduPilot/MissionPlanner); NOTICE records the changes.
+//
+// MissionPlannerRust is free software: you can redistribute it and/or modify
+// it under the terms of the GNU General Public License as published by the
+// Free Software Foundation, version 3 of the License.
+//
+// MissionPlannerRust is distributed in the hope that it will be useful, but
+// WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
+// or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for
+// more details.
+//
+// You should have received a copy of the GNU General Public License along with
+// MissionPlannerRust. If not, see <https://www.gnu.org/licenses/>.
+//
+// SPDX-License-Identifier: GPL-3.0-only
+
 //! Writing missions and flown paths as KML.
 //!
 //! Ported from `Log/MavlinkLogBase.cs:132-330` and `GCSViews/FlightPlanner.cs` @ efb0801
-//! (GPL-3.0-or-later).
+//! (GPL-3.0-only).
 //!
 //! This is how a flight is handed to somebody without a ground station: a `.kml` opens in Google
 //! Earth, in QGIS, and in every GIS tool anyone is likely to have. Mission Planner writes one

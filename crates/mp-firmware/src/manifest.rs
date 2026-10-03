@@ -1,6 +1,26 @@
+// Copyright (C) 2026 David "Buzz" Bussenschutt
+//
+// This file is part of MissionPlannerRust, a Rust implementation derived from
+// Mission Planner (Copyright (C) 2010-2024 Michael Oborne and contributors,
+// https://github.com/ArduPilot/MissionPlanner); NOTICE records the changes.
+//
+// MissionPlannerRust is free software: you can redistribute it and/or modify
+// it under the terms of the GNU General Public License as published by the
+// Free Software Foundation, version 3 of the License.
+//
+// MissionPlannerRust is distributed in the hope that it will be useful, but
+// WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
+// or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for
+// more details.
+//
+// You should have received a copy of the GNU General Public License along with
+// MissionPlannerRust. If not, see <https://www.gnu.org/licenses/>.
+//
+// SPDX-License-Identifier: GPL-3.0-only
+
 //! The firmware catalogue: ArduPilot's `manifest.json.gz` and the choices made from it.
 //!
-//! Ported from `ExtLibs/ArduPilot/APFirmware.cs` @ efb0801 (GPL-3.0-or-later), with the parts of
+//! Ported from `ExtLibs/ArduPilot/APFirmware.cs` @ efb0801 (GPL-3.0-only), with the parts of
 //! `GCSViews/ConfigurationView/ConfigFirmwareManifest.cs` (`LookForPort`) and
 //! `test/FirmwareSelection.xaml.cs` that decide which firmware a board gets. Nothing here writes to
 //! a board: this module answers "which file", never "put it there".

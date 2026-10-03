@@ -1,7 +1,27 @@
+// Copyright (C) 2026 David "Buzz" Bussenschutt
+//
+// This file is part of MissionPlannerRust, a Rust implementation derived from
+// Mission Planner (Copyright (C) 2010-2024 Michael Oborne and contributors,
+// https://github.com/ArduPilot/MissionPlanner); NOTICE records the changes.
+//
+// MissionPlannerRust is free software: you can redistribute it and/or modify
+// it under the terms of the GNU General Public License as published by the
+// Free Software Foundation, version 3 of the License.
+//
+// MissionPlannerRust is distributed in the hope that it will be useful, but
+// WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
+// or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for
+// more details.
+//
+// You should have received a copy of the GNU General Public License along with
+// MissionPlannerRust. If not, see <https://www.gnu.org/licenses/>.
+//
+// SPDX-License-Identifier: GPL-3.0-only
+
 //! `.fen`, `.ral` and `.poly` files: the formats Mission Planner saves fences, rally points and
 //! the drawn polygon in.
 //!
-//! Ported from `GCSViews/FlightPlanner.cs` @ efb0801 (GPL-3.0-or-later) - the writers at 5970,
+//! Ported from `GCSViews/FlightPlanner.cs` @ efb0801 (GPL-3.0-only) - the writers at 5970,
 //! 6038 and 5892, the readers at 4349, 4419 and 4528.
 //!
 //! The `.poly` is the `.fen` without its return point: `#saved by Mission Planner <version>`, then

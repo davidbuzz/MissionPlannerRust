@@ -1,6 +1,26 @@
+// Copyright (C) 2026 David "Buzz" Bussenschutt
+//
+// This file is part of MissionPlannerRust, a Rust implementation derived from
+// Mission Planner (Copyright (C) 2010-2024 Michael Oborne and contributors,
+// https://github.com/ArduPilot/MissionPlanner); NOTICE records the changes.
+//
+// MissionPlannerRust is free software: you can redistribute it and/or modify
+// it under the terms of the GNU General Public License as published by the
+// Free Software Foundation, version 3 of the License.
+//
+// MissionPlannerRust is distributed in the hope that it will be useful, but
+// WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
+// or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for
+// more details.
+//
+// You should have received a copy of the GNU General Public License along with
+// MissionPlannerRust. If not, see <https://www.gnu.org/licenses/>.
+//
+// SPDX-License-Identifier: GPL-3.0-only
+
 //! Repository automation entry point: `cargo xtask <command>`.
 
-use xtask::{codegen, ledger};
+use xtask::{codegen, ledger, licence};
 
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -21,7 +41,9 @@ fn run() -> Result<()> {
         Some("dump-tlog") => dump_tlog(args.get(1).map(String::as_str)),
         Some("codegen-modes") => codegen_modes(),
         Some("codegen-param-meta") => codegen_param_meta(),
-        Some("codegen-resx") => codegen_resx(args.iter().any(|a| a == "--check")),
+                Some("codegen-resx") => codegen_resx(args.iter().any(|a| a == "--check")),
+        Some("licences") => licences(args.iter().any(|a| a == "--check")),
+
         Some("ledger") => ledger::run(args.get(1..).unwrap_or_default(), &repo_root()),
         Some("codegen") => {
             let check = args.iter().any(|a| a == "--check");
@@ -52,7 +74,8 @@ fn usage() {
          codegen-modes             regenerate flight mode tables from the parameter metadata\n  \
          codegen-param-meta        regenerate parameter descriptions, ranges and enumerations\n  \
          codegen-resx [--check]    regenerate assets/i18n from the .resx files: the .ftl per culture, the key map, the zero-loss report\n  \
-         ledger <init|check|status> the porting ledger: one row per C# file (PLAN.md §6.2)\n  \
+                  ledger <init|check|status> the porting ledger: one row per C# file (PLAN.md §6.2)\n  \
+         licences [--check]        name the Rust files without the licence header; rewrite (or check) THIRD_PARTY_LICENSES's crate table\n  \
          verify-mavlink [dialect]  check generated MAVLink metadata against the C# reference\n  \
          help                      show this message"
     );
@@ -61,6 +84,40 @@ fn usage() {
 fn repo_root() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("..")
 }
+
+/// The licence record: every tracked Rust file without the header is named, and the crate table
+/// in THIRD_PARTY_LICENSES is rewritten from `cargo metadata` - or, with `--check`, left alone and
+/// the command fails when either is out of order.
+fn licences(check_only: bool) -> Result<()> {
+    let root = repo_root();
+    let missing = licence::without_header(&root)?;
+    for file in &missing {
+        println!(
+            "no licence header: {}",
+            file.strip_prefix(&root).unwrap_or(file).display()
+        );
+    }
+    let current = licence::update_third_party(&root, check_only)?;
+    if check_only {
+        if !missing.is_empty() || !current {
+            bail!(
+                "the licence record is out of order ({} file(s) without the header{}); run `cargo xtask licences`",
+                missing.len(),
+                if current { "" } else { ", the crate table stale" }
+            );
+        }
+        println!("licences in order");
+    } else if current {
+        println!("{}'s crate table is current", licence::THIRD_PARTY);
+    } else {
+        println!("{}'s crate table rewritten", licence::THIRD_PARTY);
+    }
+    if !missing.is_empty() {
+        bail!("{} Rust file(s) lack the licence header", missing.len());
+    }
+    Ok(())
+}
+
 
 /// Parses the XML definitions and compares the derived metadata against the table dumped from
 /// the shipping C# assembly. This is the gate that proves our mavgen reimplementation is right.

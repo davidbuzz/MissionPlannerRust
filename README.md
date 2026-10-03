@@ -214,5 +214,14 @@ references/            read-only upstream sources (git-excluded)
 
 ## Licence
 
-GPL-3.0-or-later, inherited from Mission Planner. Inbound dependencies are restricted to
-GPLv3-compatible licences, enforced by `cargo-deny`.
+GNU General Public License version 3 only (`LICENSE`; SPDX `GPL-3.0-only`), Copyright (C) 2026
+David "Buzz" Bussenschutt. MissionPlannerRust is legally derived-from or translated-from Mission
+Planner (Copyright (C) 2010-2024 Michael Oborne and contributors, GPL version 3, whose
+`COPYING.txt` grants no later version), and `NOTICE` says what was changed. Every Rust file opens with the
+licence header (`xtask/src/licence.rs` holds it; `xtask/tests/licences.rs` fails on a file
+without it). `THIRD_PARTY_LICENSES` records the code and data that reached this work through
+Mission Planner's tree (Clipper, ProjNet, GeoUtility, the EGM96 geoid, the PX4 uploader,
+libcanard, MAVLink, ArduPilot's metadata and LogAnalyzer, GMap.NET, ...) with their notices, and
+every crate the binaries are built from with its licence - a table `cargo xtask licences` writes
+from `cargo metadata` and the test keeps current. Inbound dependencies are restricted to
+GPLv3-compatible licences by `deny.toml`, checked by that test and by `cargo-deny`.

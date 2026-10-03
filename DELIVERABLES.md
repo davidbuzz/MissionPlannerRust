@@ -10,8 +10,9 @@ wgpu on Linux and web, Direct3D 11 on Windows, Metal on macOS), with the platfor
 The crates.io 0.2.2 release was left on 2026-09-23 (commit `feaa408`): an older snapshot on the blade
 renderer with no web backend. Reference clone: [references/zed](references/zed).
 
-**Licence:** the port is a derivative of GPLv3 Mission Planner → the workspace ships **GPLv3**.
-`gpui` (Apache-2.0) is inbound-compatible. Per-crate licences from `zed` must be checked individually.
+**Licence:** the port is a derivative of GPLv3 Mission Planner → the workspace ships **GPL-3.0-only** (its
+`COPYING.txt` grants no later version). `gpui` (Apache-2.0) is inbound-compatible; every crate's licence is in
+`THIRD_PARTY_LICENSES` and held to `deny.toml` by `xtask/tests/licences.rs`; NOTICE is the §5(a) statement.
 
 ## Summary
 
@@ -102,8 +103,8 @@ logs/geo → render → ui-kit → screens → app → extensions → tools), wi
   with one codegen unit and the dev profile optimises dependencies; MSRV 1.95.0 and edition 2024 are
   pinned; `cargo xtask` is an alias in `.cargo/config.toml`. **Not yet:** the three-OS CI matrix has
   never run (no remote); no PGO hook; the build budgets measured 2026-10-03 by `tools/build-budget.sh` (16 jobs, the dependencies fetched, nothing else building): cold `cargo check --workspace` 237 s - **over the 90 s asked for**, the dependencies' own checking being most of it (the 2.6 GB check directory is theirs); incremental 4.6 s with a leaf of mp-gui touched and 5.1 s with mp-units (L0) touched, at the 5 s line; attribution
-  is not generated (no `about.toml`); `cargo-deny` runs from the workflow and no test wraps it.
-- **Tests:** `xtask/tests/graph.rs` (exists: the layer rules, no upward edge, no cycle, each rule proven able to fail); `xtask/tests/licences.rs` not yet; the build budget is `tools/build-budget.sh`, not a test - a cold check of the workspace inside `cargo test` would be four minutes under the target directory's lock, so the figures are measured by the script and recorded here; no proc-macro crate exists, so no `trybuild`; the CI matrix builds all three OSes on every PR once there is a remote for it to run on.
+  is NOTICE and THIRD_PARTY_LICENSES (2026-10-03, the owner's licensing decisions: GPL-3.0-only, his header on every `.rs`, the product photographs and the CPOL AGauge code out), the crate table written by `cargo xtask licences` from `cargo metadata`; `xtask/tests/licences.rs` holds every dependency's licence to `deny.toml`'s list as cargo-deny reads an SPDX expression, and `cargo-deny` itself runs from the workflow.
+- **Tests:** `xtask/tests/graph.rs` (exists: the layer rules, no upward edge, no cycle, each rule proven able to fail); `xtask/tests/licences.rs` (exists: the header on every tracked Rust file, GPL-3.0-only in both manifests and no Rust file claiming or-later, every dependency admitted by `deny.toml`, the SPDX reader, the crate table current, NOTICE and THIRD_PARTY_LICENSES naming what is carried); the build budget is `tools/build-budget.sh`, not a test - a cold check of the workspace inside `cargo test` would be four minutes under the target directory's lock, so the figures are measured by the script and recorded here; no proc-macro crate exists, so no `trybuild`; the CI matrix builds all three OSes on every PR once there is a remote for it to run on.
 
 ### D2. MAVLink protocol crate
 Generated message set (common + ardupilotmega + all dialects Mission Planner ships), MAVLink v1/v2,
