@@ -981,7 +981,10 @@ fn a_command_never_acknowledged_is_sent_four_times_with_rising_confirmation() {
 /// only one command goes out.
 #[test]
 fn in_progress_then_accepted_is_accepted_without_a_resend() {
-    let t = ProtocolTimeouts::default().faster(10);
+    // Halved, not divided by ten: each `IN_PROGRESS` comes three-fifths of a timeout after the
+    // last, and at a tenth that left 80 ms before the link gave up - less than the hosted macOS
+    // runner stalled a sleeping thread (CI run 37125541254, 2026-10-03, timed out). Halved, 400 ms.
+    let t = ProtocolTimeouts::default().faster(2);
     let (link, mut peer) = link(t);
     let step = t.command.timeout * 3 / 5;
 
@@ -2663,7 +2666,10 @@ fn get_wp_asks_a_mission_int_vehicle_with_request_int_and_scales_only_location_c
 #[test]
 fn set_wp_total_counts_four_times_then_times_out_and_the_first_request_ends_it() {
     const TOTALS: [&str; 3] = ["WP_TOTAL", "CMD_TOTAL", "MIS_TOTAL"];
-    let t = ProtocolTimeouts::default().faster(40);
+    // Halved, not divided by forty: at a fortieth the count was resent every 17.5 ms, and on the
+    // hosted macOS runner (CI run 37125541254, 2026-10-03) a resend came before the request that
+    // ends the exchange had been read, so the answering vehicle ran twice. Halved, 350 ms apart.
+    let t = ProtocolTimeouts::default().faster(2);
     let (link, mut peer) = link(t);
     peer.send_all(&[
         param_value("WP_TOTAL", 3.0, PARAM_TYPE_INT32, 0, 3),
@@ -2706,10 +2712,13 @@ fn set_wp_total_counts_four_times_then_times_out_and_the_first_request_ends_it()
 
     let before = peer.sent(counted).len();
     let answered = link.set_wp_total(VEHICLE, 5, MISSION_TYPE_MISSION);
+    // The vehicle answers the first count; a count the link sends after it has been answered is
+    // the claim below's failure, counted there, not a second run of the vehicle's answer.
+    let mut answering = true;
     drive(
         &mut peer,
         |peer, message| {
-            if counted(&message).is_some() {
+            if counted(&message).is_some() && std::mem::take(&mut answering) {
                 peer.send_all(&[
                     mission_request_float(2),
                     MavMessage::MissionRequest(MissionRequest {
