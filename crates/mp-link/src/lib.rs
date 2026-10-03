@@ -2417,8 +2417,14 @@ fn run_link(
             stats.publishes += 1;
             last_publish = Instant::now();
 
-            // Expose handles for any newly discovered vehicle.
-            expose_handles(shared, &registry, known.keys());
+            // Expose a handle for each vehicle whose heartbeat has been heard: the C# lists a
+            // component on its first packet in MAVList's hidden list and moves it to the visible
+            // one on its first heartbeat (MAVList.cs:29, 107-110, `MAVDetected`), and nothing is
+            // asked of a vehicle before that - OpenBg waits for two heartbeats before the
+            // connection counts as made (MAVLinkInterface.cs:816). A parameter list requested
+            // before the heartbeat was decoded by the wrong rule, the autopilot being unknown
+            // (CI's SITL run, 2026-10-03: BATT_CAPACITY read as 1,162,756,096).
+            expose_handles(shared, &registry, detected.iter());
         }
 
         // Heartbeat, so the vehicle does not declare GCS failsafe.
@@ -2514,7 +2520,7 @@ fn run_link(
     registry.publish_all();
     // And every vehicle's handle, or a link that ended before its first publish - a short
     // recording played unpaced - would leave the vehicles it heard unreachable.
-    expose_handles(shared, &registry, known.keys());
+    expose_handles(shared, &registry, detected.iter());
     stats.decode = *decoder.stats();
     if let Ok(mut shared_stats) = shared.stats.lock() {
         *shared_stats = stats;
