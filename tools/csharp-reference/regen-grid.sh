@@ -4,7 +4,7 @@
 # §13.4 item 8 and crates/mp-mission/tests/{grid,corridor,rotary}_vectors.rs.
 #
 # Unlike regen.sh this builds from the pinned source tree, not a downloaded binary distribution:
-#   1. copy references/missionplanner/ExtLibs out of tree, so the reference tree stays read-only;
+#   1. copy https://github.com/ArduPilot/MissionPlanner/tree/efb0801/ExtLibs out of tree, so the reference tree stays read-only;
 #   2. msbuild ExtLibs/Utilities/MissionPlanner.Utilities.csproj under mono - the project §7.1
 #      proved builds on Linux, and the one Grid.cs, clipper.cs, utmpos.cs and PointLatLngAlt.cs live
 #      in, so no WinForms stub is needed;

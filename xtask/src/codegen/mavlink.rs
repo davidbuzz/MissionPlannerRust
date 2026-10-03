@@ -20,7 +20,7 @@
 
 //! Generates Rust from the MAVLink XML message definitions.
 //!
-//! Source of truth: `references/missionplanner/ExtLibs/Mavlink/message_definitions/*.xml`, the
+//! Source of truth: https://github.com/ArduPilot/MissionPlanner/tree/efb0801/ExtLibs/Mavlink/message_definitions, the
 //! same files the C# build generates from. We reimplement mavgen's layout rules rather than
 //! shelling out to Python so the build has no external toolchain dependency.
 //!

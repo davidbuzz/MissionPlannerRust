@@ -24,7 +24,7 @@ row, has no oracle to be checked against, and has to be maintained forever by so
 wonder what it was for. It also makes the completeness claim unfalsifiable — "3,678 of 3,678" means
 nothing if the Rust side has grown things the C# never had.
 
-**How to apply:** before building anything, find it in `references/missionplanner`. If it is not
+**How to apply:** before building anything, find it in https://github.com/ArduPilot/MissionPlanner. If it is not
 there, it is not in scope — say so and do the thing that is, rather than building the adjacent
 thing that was easier. Two legitimate exceptions, and neither is a feature:
 

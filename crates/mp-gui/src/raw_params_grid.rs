@@ -3087,7 +3087,7 @@ mod tests {
                 "GCSViews/ConfigurationView/ConfigRawParams.Designer.cs",
             ),
         ) else {
-            eprintln!("SKIP: references/missionplanner is not checked out here");
+            eprintln!("SKIP: https://github.com/ArduPilot/MissionPlanner is not checked out at references/missionplanner here");
             return;
         };
         let values = crate::config_coverage::source::resx(&resx);
@@ -3861,7 +3861,7 @@ mod tests {
     fn the_warning_is_the_strings_resx() {
         let Some(strings) = crate::config_coverage::source::csharp("ExtLibs/Strings/Strings.resx")
         else {
-            eprintln!("SKIP: references/missionplanner is not checked out here");
+            eprintln!("SKIP: https://github.com/ArduPilot/MissionPlanner is not checked out at references/missionplanner here");
             return;
         };
         let values = crate::config_coverage::source::resx(&strings);

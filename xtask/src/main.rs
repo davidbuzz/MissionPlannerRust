@@ -213,7 +213,7 @@ fn codegen_mavlink(dialect: Option<&str>, check_only: bool) -> Result<()> {
     if !xml.exists() {
         bail!(
             "dialect not found: {}\nThe reference tree is git-excluded; clone Mission Planner \
-             into references/missionplanner to regenerate.",
+             https://github.com/ArduPilot/MissionPlanner into references/missionplanner to regenerate.",
             xml.display()
         );
     }
@@ -337,7 +337,7 @@ fn codegen_modes() -> Result<()> {
     if !metadata.exists() {
         bail!(
             "parameter metadata not found at {}\nThe reference tree is git-excluded; clone \
-             Mission Planner into references/missionplanner to regenerate.",
+             https://github.com/ArduPilot/MissionPlanner into references/missionplanner to regenerate.",
             metadata.display()
         );
     }
@@ -403,7 +403,7 @@ fn codegen_resx(check_only: bool) -> Result<()> {
     let tree = root.join("references/missionplanner");
     if !tree.is_dir() {
         bail!(
-            "{} is absent (it is gitignored): clone Mission Planner into references/missionplanner \
+            "{} is absent (it is gitignored): clone https://github.com/ArduPilot/MissionPlanner into references/missionplanner \
              to regenerate.",
             tree.display()
         );

@@ -51,7 +51,7 @@ fn tree() -> Option<PathBuf> {
         Some(tree)
     } else {
         println!(
-            "references/missionplanner is absent (it is gitignored); the tree tests are skipped"
+            "https://github.com/ArduPilot/MissionPlanner is absent from references/missionplanner (it is gitignored); the tree tests are skipped"
         );
         None
     }

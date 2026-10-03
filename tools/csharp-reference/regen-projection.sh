@@ -5,7 +5,7 @@
 #
 # The build is regen-grid.sh's, step for step and in the same cache, so whichever script runs first
 # builds ExtLibs/Utilities once for both:
-#   1. copy references/missionplanner/ExtLibs out of tree, so the reference tree stays read-only;
+#   1. copy https://github.com/ArduPilot/MissionPlanner/tree/efb0801/ExtLibs out of tree, so the reference tree stays read-only;
 #   2. msbuild ExtLibs/Utilities/MissionPlanner.Utilities.csproj under mono - it references
 #      GMap.NET.Core, so MercatorProjection comes out beside PointLatLngAlt and ProjNet;
 #   3. mcs MpProjection.cs against the result;

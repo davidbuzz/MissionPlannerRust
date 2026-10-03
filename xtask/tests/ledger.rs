@@ -779,7 +779,7 @@ fn the_real_ledger_passes_check() {
     let repo = Path::new(env!("CARGO_MANIFEST_DIR")).join("..");
     if !repo.join("references/missionplanner").is_dir() {
         println!(
-            "references/missionplanner is absent (it is gitignored): checking \
+            "https://github.com/ArduPilot/MissionPlanner is absent from references/missionplanner (it is gitignored): checking \
              ledger/ledger.csv's internal consistency only"
         );
     }

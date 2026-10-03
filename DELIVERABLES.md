@@ -1,6 +1,6 @@
 # Mission Planner → Rust: 21 Core Deliverables
 
-**Goal:** a file-complete, code-complete reimplementation of [ArduPilot Mission Planner](references/missionplanner)
+**Goal:** a file-complete, code-complete reimplementation of [ArduPilot Mission Planner](https://github.com/ArduPilot/MissionPlanner)
 (C# / .NET Framework 4.7.2 / WinForms — 3,678 `.cs` files, 1,208,836 LOC, ~93 `.csproj`) in Rust, that is
 **extremely fast**, **multi-platform** (Windows / Linux / macOS), and **GPU-accelerated** end to end.
 

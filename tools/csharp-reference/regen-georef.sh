@@ -4,7 +4,7 @@
 #
 # The build is regen-grid.sh's, step for step and in the same cache, so whichever script runs first
 # builds ExtLibs/Utilities once for all of them:
-#   1. copy references/missionplanner/ExtLibs out of tree, so the reference tree stays read-only;
+#   1. copy https://github.com/ArduPilot/MissionPlanner/tree/efb0801/ExtLibs out of tree, so the reference tree stays read-only;
 #   2. msbuild ExtLibs/Utilities/MissionPlanner.Utilities.csproj under mono - GeoRefImageBase.cs,
 #      ImageProjection.cs, srtm.cs, DFLogBuffer.cs are all in it, with MetaDataExtractor, SharpKml,
 #      ExifLibNet and MAVLink beside it;

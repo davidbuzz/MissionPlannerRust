@@ -336,7 +336,7 @@ fn refresh(tree: &Path, ledger: &Path) -> Result<()> {
     if !tree.is_dir() {
         bail!(
             "C# tree not found at {}\nThe reference tree is git-excluded; clone Mission Planner \
-             into references/missionplanner to refresh the ledger.",
+             https://github.com/ArduPilot/MissionPlanner into references/missionplanner to refresh the ledger.",
             tree.display()
         );
     }

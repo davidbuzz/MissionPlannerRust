@@ -1,6 +1,6 @@
 ---
 name: port-from-the-csharp-source
-description: The C# tree at references/missionplanner is the spec; read the .cs file before implementing
+description: The C# tree at https://github.com/ArduPilot/MissionPlanner is the spec; read the .cs file before implementing
 metadata:
   node_type: memory
   type: project
@@ -9,7 +9,7 @@ metadata:
 ---
 
 **This project is a reimplementation of Mission Planner's C# code, and that code is here.**
-`references/missionplanner` is a full read-only clone of the upstream tree (the directory was
+`references/missionplanner` is a full read-only clone of https://github.com/ArduPilot/MissionPlanner (the directory was
 named `referneces` until 2026-09-25, when Buzz renamed it). It is gitignored, so it does not appear
 in `git status` and is easy to forget exists. `references/zed` is the gpui tree, the same way.
 

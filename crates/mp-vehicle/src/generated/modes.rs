@@ -22,7 +22,7 @@
 //!
 //! DO NOT EDIT. Regenerate with `cargo xtask codegen modes`.
 //!
-//! Source: `references/missionplanner/ParameterMetaDataBackup.xml`, the same file the C#
+//! Source: https://github.com/ArduPilot/MissionPlanner/blob/efb0801/ParameterMetaDataBackup.xml, the same file the C#
 //! application reads at runtime. Mode numbers are vehicle-specific: mode 4 is Guided on a
 //! copter and ACRO on a plane, so a lookup without the vehicle type is not just imprecise,
 //! it is wrong.

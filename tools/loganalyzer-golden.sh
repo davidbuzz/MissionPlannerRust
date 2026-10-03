@@ -1,6 +1,6 @@
 #!/bin/bash
 # The goldens for mp_log::analysis: ArduPilot's LogAnalyzer - the Python 2 source Mission Planner
-# ships as runner.exe, in references/missionplanner/LogAnalyzer/py2exe - run by Python 2.7 in a
+# ships as runner.exe, in https://github.com/ArduPilot/MissionPlanner/tree/efb0801/LogAnalyzer/py2exe - run by Python 2.7 in a
 # container over the text the port's own "Convert .Bin to .Log" makes of each checked-in .bin, and
 # over the text logs as they are. The runner lists its tests folder by name (NTFS), so the copy run
 # here sorts the glob. The runner reads a log in Windows text mode, where "\r\n" is one byte, so

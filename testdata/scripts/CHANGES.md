@@ -4,7 +4,7 @@ The nineteen scripts here are Mission Planner's `Scripts/*.py` at the reference 
 IronPython 2.7 runs. This port's engine is RustPython, Python 3 (PLAN.md §12 D20, the owner's
 ruling of 2026-09-25: "use RustPython, and make mods to the example/included scripts to work with
 it"). Each change is mechanical and recorded here; nothing else in a script was touched, and the
-originals stay in `references/missionplanner/Scripts/`. Every file parses under CPython 3 as well
+originals stay in https://github.com/ArduPilot/MissionPlanner/tree/efb0801/Scripts/. Every file parses under CPython 3 as well
 as under the engine, which `crates/mp-script/tests/stock_scripts.rs` checks by running each one.
 
 ## The Python 2 forms changed, 2026-09-25

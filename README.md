@@ -83,7 +83,7 @@ words are still in the code, held at the owner's word); packaging beyond the Deb
 ## Verification
 
 The port is checked against the original rather than against our reading of it. **The C# source is
-in the tree** at `references/missionplanner` and is the specification — a behaviour is ported by
+in the tree** (https://github.com/ArduPilot/MissionPlanner, cloned read-only under `references/`) and is the specification — a behaviour is ported by
 reading the `.cs` file, not by recalling what it probably does. The C# implementation also runs
 headless under mono (`tools/csharp-reference/`), and its output is the reference:
 

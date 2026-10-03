@@ -13,7 +13,7 @@ which every map in the application draws with, and `PointLatLngAlt`'s `GetDistan
 `rsync`. It builds exactly as `regen-grid.sh` does, into the same cache, so whichever runs first
 builds for both:
 
-1. copies `ExtLibs` out of `references/missionplanner` into a cache directory keyed on the Mission
+1. copies `ExtLibs` out of the Mission Planner clone (https://github.com/ArduPilot/MissionPlanner) into a cache directory keyed on the Mission
    Planner commit (`~/.cache/mp-csharp-reference/<sha>`, or `$MP_ORACLE_CACHE/<sha>`), so the
    reference tree is never written to;
 2. builds `ExtLibs/Utilities/MissionPlanner.Utilities.csproj` there with mono's `msbuild`. It

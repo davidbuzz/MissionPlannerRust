@@ -20,7 +20,7 @@ kind and compares. PLAN.md §13.3 item 3 and §13.4 item 8, DELIVERABLES.md D11.
 `tools/csharp-reference/regen-grid.sh`, which needs mono 6.12 (`mono`, `msbuild`, `mcs`) and
 `rsync`:
 
-1. copies `ExtLibs` out of `references/missionplanner` into a cache directory keyed on the Mission
+1. copies `ExtLibs` out of the Mission Planner clone (https://github.com/ArduPilot/MissionPlanner) into a cache directory keyed on the Mission
    Planner commit (`~/.cache/mp-csharp-reference/<sha>`), so the reference tree is never written to;
 2. builds `ExtLibs/Utilities/MissionPlanner.Utilities.csproj` there with mono's `msbuild` - the
    project PLAN.md §7.1 showed builds on Linux. `Grid.cs`, `clipper.cs`, `utmpos.cs`,

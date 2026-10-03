@@ -28,7 +28,7 @@
 //! out by hand from the C#'s format strings, so the two sources of truth check each other.
 //!
 //! The DLL is the one shipped with Mission Planner (the copy in `~/Downloads` on the machine that
-//! made the fixture), not one built from `references/missionplanner`. Its versions, referers and
+//! made the fixture), not one built from https://github.com/ArduPilot/MissionPlanner. Its versions, referers and
 //! list agree with the tree's source at the lines `source.rs` cites.
 
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::indexing_slicing)]

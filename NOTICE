@@ -56,7 +56,7 @@ David "Buzz" Bussenschutt, from Mission Planner's C# source, file by file:
   the crates that read them.
 
 The git history of this repository is the full record of the changes, with
-their dates. it contains *zero* lines of code in-common with the original.
+their dates, it contains *zero* lines of code in-common with the original.
 
 Third parties
 -------------

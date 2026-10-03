@@ -35,7 +35,7 @@
 //! designer half, a cycle inside a dead library), never by one outside it. Test trees
 //! (`MissionPlannerTests/`, `Tests/`, `*.Tests/`) are not callers that ship and do not count.
 //!
-//! Every reason is re-derived from `references/missionplanner` when this machine has it, so a
+//! Every reason is re-derived from the clone of https://github.com/ArduPilot/MissionPlanner when this machine has it, so a
 //! reference update that brings a caller back, or compiles a removed file, fails here. Without the
 //! tree only the rows' form is checked.
 
@@ -59,7 +59,7 @@ fn tree() -> Option<PathBuf> {
         Some(tree)
     } else {
         println!(
-            "references/missionplanner is absent (it is gitignored); D16's reasons are not \
+            "https://github.com/ArduPilot/MissionPlanner is absent from references/missionplanner (it is gitignored); D16's reasons are not \
              re-derived, only the rows' form is checked"
         );
         None

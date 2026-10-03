@@ -184,7 +184,7 @@ pub fn generate(metadata_path: &Path, section_name: &str) -> Result<String> {
          //!\n\
          //! DO NOT EDIT. Regenerate with `cargo xtask codegen-param-meta`.\n\
          //!\n\
-         //! Source: `references/missionplanner/ParameterMetaDataBackup.xml`, which ArduPilot\n\
+         //! Source: https://github.com/ArduPilot/MissionPlanner/blob/efb0801/ParameterMetaDataBackup.xml, which ArduPilot\n\
          //! generates from its own source comments. {} parameters.\n\n\
          // These are ranges and defaults copied from firmware documentation, not computed\n\
          // constants: a parameter whose range happens to be -3.142 to 3.142 is expressing\n\

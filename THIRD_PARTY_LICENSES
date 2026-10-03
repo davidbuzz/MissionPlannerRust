@@ -7,8 +7,8 @@ programs whose behaviour it reproduces, and the Rust crates its binaries are bui
 licence asks for its notice to travel with the code, the notice is here, verbatim; the GNU
 licences' texts are LICENSE and <https://www.gnu.org/licenses/>.
 
-Each entry names where the material sits in Mission Planner's tree (paths under
-`references/missionplanner`, commit `efb0801`) and where in this one.
+Each entry names where the material sits in ( the original ) Mission Planner's tree (paths under
+https://github.com/ArduPilot/MissionPlanner, commit `efb0801`) and where in this one.
 
 ## 1. Mission Planner
 

@@ -59,7 +59,7 @@ const COMPARE_DIGITS: i32 = 7;
 /// Mission Planner saved *contains* these - and `loadParamFile` is where they are skipped. An
 /// earlier version of this had the list on save and seven entries long, reconstructed from memory
 /// while believing the C# source was not on this machine. It is, at
-/// `references/missionplanner/`, and reading it corrected the length, the side and the number
+/// https://github.com/ArduPilot/MissionPlanner, and reading it corrected the length, the side and the number
 /// format all at once.
 pub const NOT_LOADED: &[&str] = &[
     "SYSID_SW_MREV",

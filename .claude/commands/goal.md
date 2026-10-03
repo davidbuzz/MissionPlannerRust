@@ -1,6 +1,6 @@
 # The goal, as it stands on 2026-10-02
 
-You are continuing the port of Mission Planner (C#, `references/missionplanner`) to Rust
+You are continuing the port of Mission Planner (C#, https://github.com/ArduPilot/MissionPlanner) to Rust
 (`crates/`, a gpui application: `target/debug/planner`). The owner is Buzz; he is the oracle on
 look and feel and on scope.
 
