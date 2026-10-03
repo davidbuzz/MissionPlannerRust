@@ -19,8 +19,8 @@ generated; `.rs` files under `crates/`, tests included), **4,033 tests** on `car
 (47 ignored: they need SITL, a window, or the network), **202 GUI scripts** under `tests/gui/`,
 across 355 commits. Linux first, and Windows since 2026-09-26 in the owner's Windows 10 VM - built
 there, run against SITL, the whole GUI suite run there on 2026-09-27, the bench board flashed from
-it (`win10_vm_setup.md`); macOS has never run anything. The repository has no remote, so the
-three-OS CI matrix has never run.
+it (`win10_vm_setup.md`); macOS has run nothing here. The repository has been public at
+https://github.com/davidbuzz/MissionPlannerRust since 2026-10-03, where the three-OS workflow runs.
 
 | Working today | |
 |---|---|
@@ -85,8 +85,8 @@ words are still in the code, held at the owner's word); packaging beyond the Deb
 The port is checked against the original rather than against our reading of it. **The C# source is
 the specification** - https://github.com/ArduPilot/MissionPlanner at commit efb0801, a clone of which the
 environment variable `MP_SRC` names; it is not part of this repository - and a behaviour is ported by
-reading the `.cs` file, not by recalling what it probably does. The C# implementation also runs
-headless under mono (`tools/csharp-reference/`), and its output is the reference:
+reading the `.cs` file, not by recalling what it probably does. The C# implementation's own output,
+recorded by running its code headless under mono, is the reference:
 
 - **35,750 frames** of a real ArduPilot flight decode identically to Mission Planner's own
   `MAVLink.dll` — msgid, sequence, ids, payload length, CRC and raw bytes.
@@ -107,24 +107,15 @@ headless under mono (`tools/csharp-reference/`), and its output is the reference
   `gmapcache/TileDBv3/en/<provider>/<z>/<y>/<x>.jpg` layout — reads back byte for byte and
   decodes (`crates/mp-tiles/tests/tilecache.rs`; the test says so and skips where no such cache
   exists).
-- **Ten harnesses** under `tools/csharp-reference/`, this repository's own C# with no line of Mission
-  Planner's source in them, run the C#'s compiled code under mono - the MAVLink reference dump, the
-  survey grids, the three log conversions, projection, `CurrentState`, the UDP client, websocket and
-  NTRIP transports, MAVFTP, SRTM, geo-referencing, the planner's handlers - with the goldens under
-  `testdata/`; eight `regen*.sh` scripts regenerate them, and `MpFtp.cs` and `PlannerOracle.cs` give
-  their build and run lines in their headers. Two goldens stand as written at efb0801 and are carried
-  over unchanged: the Survey (Grid) dialog's (`testdata/grid/golden/accept`) and the log analyzer's
-  report, whose oracles were Mission Planner's own `GridUI.cs` and `LogAnalyzer.cs` code re-hosted,
-  and were deleted on 2026-10-03.
 
-Run it yourself: `tools/csharp-reference/regen.sh` regenerates the corpora, `cargo test` compares.
+Run it yourself: `cargo test` compares against the recorded corpora under `testdata/`.
 
-Beyond the differential corpus: thirteen `cargo-fuzz` targets with committed seed corpora (the first five at 34 million executions clean at their last short run, eight more since 2026-10-03 for the readers written after the first soak, each run 45 s; the 24-hour soak of `frame_parse` and `message_decode` ended
-clean on 2026-09-24 16:01Z after 30.7 and 4.1 billion executions; `fuzz/README.md` has the numbers); a bounded pass over the same properties
-on stable in every `cargo test --workspace`; and a smoke test that opens a window and paints,
+Beyond the differential corpus: a smoke test that opens a window and paints,
+
 written into the CI workflow for Linux, Windows and macOS and run on Linux here — the only thing
-that exercises a graphics backend rather than merely compiling it. The workflow itself has never
-run: there is no remote.
+that exercises a graphics backend rather than merely compiling it. The workflow runs on GitHub -
+the repository is public at https://github.com/davidbuzz/MissionPlannerRust since 2026-10-03 - and
+its first runs are being worked through.
 
 The UI is driven and **checked**, not photographed. `tools/gui-test.sh` runs a script of clicks
 and keystrokes against the real binary and asserts on what the application says it believes:
@@ -203,14 +194,11 @@ crates/
   mp-terrain           srtm.cs: SRTM tiles, the download queue, getAltitude, proved against the C# DLL
   mp-georef            georefimage.cs: photos matched to a log by time, CAM or TRIG, every output byte for byte to the C#
   mp-video             V4L2 capture, GStreamer pipelines and MJPEG streams for the HUD's camera frame
-  mp-fuzz-checks       the fuzz properties, so they compile on stable too
   mp-cli               `headless-planner`
   mp-gui               `planner`, built on gpui
 xtask/                 codegen and repository invariants
 assets/i18n/           the .ftl per culture, generated from Mission Planner's .resx, with the key map and the zero-loss report
-fuzz/                  libfuzzer targets and their committed seed corpora
 tests/gui/              click-and-assert UI tests, run by tools/gui-test.sh
-tools/csharp-reference headless C# reference for differential testing
 testdata/              golden corpora
 
 ```
