@@ -19,7 +19,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
-                with: { components: "clippy, rustfmt", targets: wasm32-unknown-unknown }
+        with:
+          components: clippy, rustfmt
+          targets: wasm32-unknown-unknown
       - uses: Swatinem/rust-cache@v2
       # gpui's X11 backend needs these to link; a machine that can run X11 software can still
       # fail to link it, because the bare .so symlinks live in the -dev packages.
@@ -30,7 +32,7 @@ jobs:
           sudo apt-get install -y libxkbcommon-x11-dev libxcb-shape0-dev libxcb-xfixes0-dev \
             libwayland-dev libasound2-dev libudev-dev xvfb \
             libclang-dev linux-libc-dev  # mp-video: v4l2-sys-mit runs bindgen at build time (PLAN §13.6 row 84)
-            # The tree is not kept rustfmt-clean (the owner's choice, 2026-10-03: rustfmt on a crate root
+      # The tree is not kept rustfmt-clean (the owner's choice, 2026-10-03: rustfmt on a crate root
       # rewrites every module it declares), so the check reports and does not fail the build.
       - run: cargo fmt --all -- --check
         continue-on-error: true
@@ -69,11 +71,11 @@ jobs:
       - name: Window opens and paints (Windows)
         if: runner.os == 'Windows'
         env: { MP_SMOKE: "1", MP_NO_TILES: "1", MP_NO_RECORD: "1" }
-                run: ./target/debug/planner.exe
+        run: ./target/debug/planner.exe
       - name: Window opens and paints (macOS)
         if: runner.os == 'macOS'
         env: { MP_SMOKE: "1", MP_NO_TILES: "1", MP_NO_RECORD: "1" }
-                run: ./target/debug/planner
+        run: ./target/debug/planner
 
 
   cross-compile:
@@ -82,7 +84,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
-        with: { targets: x86_64-pc-windows-gnu, wasm32-unknown-unknown }
+        with:
+          targets: x86_64-pc-windows-gnu, wasm32-unknown-unknown
       - uses: Swatinem/rust-cache@v2
       # The core stays portable whether or not anyone is currently building for these targets.
       # Checking it here is cheaper than discovering it at release time.
@@ -185,7 +188,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
-        with: { components: rustfmt }
+        with:
+          components: rustfmt
       - uses: Swatinem/rust-cache@v2
                   # Only runs where MP_SRC names a clone of https://github.com/ArduPilot/MissionPlanner.
       # Generated code is committed, so the risk is that it stops matching the definitions it
