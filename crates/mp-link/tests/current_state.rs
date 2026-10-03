@@ -347,17 +347,22 @@ fn time_in_air_and_distance_count_each_second_while_armed() {
     assert_eq!(held.time_in_air, 0.0);
     assert_eq!(held.dist_traveled, 0.0);
 
-    // Armed: 1e-5 degrees north - 1.11 m - a tick, 11 m a second, for 3.5 seconds.
+    // Armed: 1e-5 degrees north - 1.11 m - a tick, 11 m a second, for 3.5 seconds of ticks - or
+    // longer where the machine stretches the sleeps (the hosted macOS runner, 2026-10-03, took
+    // about six seconds over them and counted six), so the count is held to the time that passed.
+    let armed_at = Instant::now();
     for _ in 0..35 {
         tick(&mut peer, true, north);
         north += 100;
     }
     std::thread::sleep(Duration::from_millis(100));
     let held = state(&link, VEHICLE).unwrap();
-    // Three or four second marks passed; the first one only takes the position.
+    let armed_for = armed_at.elapsed().as_secs_f64();
+    // One second mark per second that passed, give or take the one at either end; the first
+    // mark only takes the position.
     assert!(
-        (3.0..=4.0).contains(&held.time_in_air),
-        "time in air {}",
+        (armed_for.floor() - 1.0..=armed_for.ceil()).contains(&f64::from(held.time_in_air)),
+        "time in air {} after {armed_for:.2} s armed",
         held.time_in_air
     );
     assert_eq!(held.time_since_arm_in_air, held.time_in_air);
