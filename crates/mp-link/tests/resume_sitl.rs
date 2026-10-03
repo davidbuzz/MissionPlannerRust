@@ -301,20 +301,34 @@ fn the_csharps_repeated_takeoff_is_refused_once_the_vehicle_is_climbing() {
     let (link, id) = connect();
     guided_and_armed(&link, id);
     let first = takeoff(&link, id, 10.0);
-    std::thread::sleep(Duration::from_secs(1));
-    let climbed = link
-        .vehicle(id)
-        .expect("the vehicle's state")
-        .load()
-        .altitude_relative
-        .0;
+    // The C# sleeps a second between sends. Here the second send waits until the vehicle has
+    // left the ground, which is what the refusal turns on (`ap.land_complete`): a second sufficed
+    // on this machine, and on the hosted runner (2026-10-03) the vehicle was still at 0.0 m after
+    // one, and the repeat was accepted.
+    let deadline = Instant::now() + Duration::from_secs(20);
+    let climbed = loop {
+        let climbed = link
+            .vehicle(id)
+            .expect("the vehicle's state")
+            .load()
+            .altitude_relative
+            .0;
+        if climbed > 0.3 {
+            break climbed;
+        }
+        assert!(
+            Instant::now() < deadline,
+            "the vehicle did not leave the ground within 20 s: {climbed:.1} m"
+        );
+        std::thread::sleep(Duration::from_millis(100));
+    };
     let second = takeoff(&link, id, 10.0);
     println!(
-        "first: {}; a second later, {climbed:.1} m up: {}",
+        "first: {}; off the ground at {climbed:.1} m: {}",
         first.text, second.text
     );
     land(&link, id);
     assert!(first.text.contains("accepted"), "{}", first.text);
-    assert!(climbed < 8.0, "within 2 m after one second: {climbed:.1} m");
+    assert!(climbed < 8.0, "still within 2 m of the height when sent again: {climbed:.1} m");
     assert!(second.text.contains("failed"), "{}", second.text);
 }
