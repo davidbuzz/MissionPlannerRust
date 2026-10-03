@@ -30,7 +30,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y libxkbcommon-x11-dev libxcb-shape0-dev libxcb-xfixes0-dev \
-            libwayland-dev libasound2-dev libudev-dev xvfb \
+            libwayland-dev libasound2-dev libudev-dev libfontconfig1-dev xvfb \
             libclang-dev linux-libc-dev  # mp-video: v4l2-sys-mit runs bindgen at build time (PLAN §13.6 row 84)
       # The tree is not kept rustfmt-clean (the owner's choice, 2026-10-03: rustfmt on a crate root
       # rewrites every module it declares), so the check reports and does not fail the build.
@@ -87,6 +87,8 @@ jobs:
         with:
           targets: x86_64-pc-windows-gnu, wasm32-unknown-unknown
       - uses: Swatinem/rust-cache@v2
+      # The Windows check links nothing, but a C dependency's build script asks for the cross gcc.
+      - run: sudo apt-get update && sudo apt-get install -y gcc-mingw-w64-x86-64
       # The core stays portable whether or not anyone is currently building for these targets.
       # Checking it here is cheaper than discovering it at release time.
       - name: Windows
@@ -109,14 +111,18 @@ jobs:
       # mp-transport's serial-port crate builds libudev-sys through pkg-config.
       - run: sudo apt-get update && sudo apt-get install -y libudev-dev
       # The SITL binary is committed under tools/sitl, so this needs no ArduPilot checkout.
+      # Started as the local suite starts it: start-sitl.sh waits for the simulator to be up and
+      # says "sitl ready"; the twenty seconds after are for its estimator to settle before the first
+      # test asks for a vehicle, as every local chain waits.
       - name: Start SITL
         run: |
-          tools/sitl/run-sitl.sh copter > /tmp/sitl.log 2>&1 &
-          for _ in $(seq 1 60); do
-            ss -tln | grep -q 5760 && break
+          setsid nohup tools/sitl/start-sitl.sh copter > /tmp/sitl.log 2>&1 &
+          for _ in $(seq 1 90); do
+            grep -q "sitl ready" /tmp/sitl.log && break
             sleep 1
           done
-          ss -tln | grep -q 5760 || { echo "SITL did not start"; cat /tmp/sitl.log; exit 1; }
+          grep -q "sitl ready" /tmp/sitl.log || { echo "SITL did not start"; cat /tmp/sitl.log; exit 1; }
+          sleep 20
       # These are the tests that catch what unit tests cannot: a protocol that stalls because the
       # vehicle answers with a different message than expected, and parameter values that decode
       # to numbers no battery or system id could hold.

@@ -52,10 +52,15 @@ pub fn current_platform(headless: bool) -> Rc<dyn Platform> {
 
     #[cfg(target_os = "windows")]
     {
-        Rc::new(
-            gpui_windows::WindowsPlatform::new(headless)
-                .expect("failed to initialise the Windows platform"),
-        )
+        match gpui_windows::WindowsPlatform::new(headless) {
+            Ok(platform) => Rc::new(platform),
+            Err(error) => {
+                // No window can open without the platform; say why and stop, as the program
+                // cannot run on.
+                eprintln!("planner: the Windows platform did not initialise: {error:?}");
+                std::process::exit(1);
+            }
+        }
     }
 
     #[cfg(target_os = "macos")]

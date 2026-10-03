@@ -61,7 +61,13 @@ fn current_platform() -> Rc<dyn Platform> {
     }
     #[cfg(target_os = "windows")]
     {
-        Rc::new(gpui_windows::WindowsPlatform::new(false).expect("windows platform"))
+        match gpui_windows::WindowsPlatform::new(false) {
+            Ok(platform) => Rc::new(platform),
+            Err(error) => {
+                eprintln!("the Windows platform did not initialise: {error:?}");
+                std::process::exit(1);
+            }
+        }
     }
     #[cfg(target_os = "macos")]
     {

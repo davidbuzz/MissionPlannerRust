@@ -49,3 +49,6 @@ multiple-versions = "warn"
 
 [advisories]
 yanked = "deny"
+# gpui's text stack (rustybuzz, ttf-parser), fluent's unic crates and paste are transitive and
+# unmaintained; the advisory is noted, and the workspace's own dependencies are held to it.
+unmaintained = "workspace"
