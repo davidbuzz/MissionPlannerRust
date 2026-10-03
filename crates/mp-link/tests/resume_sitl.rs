@@ -56,18 +56,35 @@ fn connect() -> (Link, VehicleId) {
     (link, id)
 }
 
-fn await_transfer(link: &Link, id: VehicleId) -> Vec<MissionItem> {
+fn await_transfer(link: &Link, id: VehicleId) -> Result<Vec<MissionItem>, String> {
     let deadline = Instant::now() + Duration::from_secs(60);
     loop {
         if let Some(transfer) = link.mission_transfer(id) {
             match transfer.state() {
-                TransferState::Complete => return transfer.items().to_vec(),
-                TransferState::Failed(err) => panic!("transfer failed: {err}"),
+                TransferState::Complete => return Ok(transfer.items().to_vec()),
+                TransferState::Failed(err) => return Err(err.to_string()),
                 _ => {}
             }
         }
         assert!(Instant::now() < deadline, "the transfer never finished");
         std::thread::sleep(Duration::from_millis(50));
+    }
+}
+
+/// A transfer the way a user runs one: started, waited for, and started once more if it failed,
+/// as the user presses the button again. The link's retries are the C#'s (`ProtocolTimeouts`),
+/// and the hosted runner's simulator let them run out once: a MISSION_REQUEST_LIST sent right
+/// after a set-current got no count in six tries of 700 ms (CI run 37110906200, 2026-10-03),
+/// where this machine's answers at once. The second try is the test's, not the link's.
+fn transfer(link: &Link, id: VehicleId, start: impl Fn() -> bool) -> Vec<MissionItem> {
+    assert!(start(), "the transfer did not start");
+    match await_transfer(link, id) {
+        Ok(items) => items,
+        Err(err) => {
+            println!("transfer failed once ({err}); started again, as a user would");
+            assert!(start(), "the second transfer did not start");
+            await_transfer(link, id).unwrap_or_else(|err| panic!("transfer failed twice: {err}"))
+        }
     }
 }
 
@@ -208,13 +225,11 @@ fn resume(with_upload: bool, with_set_current: bool) -> String {
     let handle = link.vehicle(id).expect("the vehicle's state");
 
     // The script's setup: the five items on the vehicle before the button is pressed.
-    link.upload_mission(id, script_mission());
-    await_transfer(&link, id);
+    transfer(&link, id, || link.upload_mission(id, script_mission()));
 
     // BUT_resumemis_Click: read the mission (getWPs), trim, write it, set current to 1, read it
     // back into the planner.
-    link.download_mission(id);
-    let held = await_transfer(&link, id);
+    let held = transfer(&link, id, || link.download_mission(id));
     assert_eq!(held.len(), 5, "the vehicle holds the script's mission");
     if with_upload {
         let items = trimmed(&held, 4);
@@ -223,8 +238,7 @@ fn resume(with_upload: bool, with_set_current: bool) -> String {
             4,
             "home, the take-off, the speed change, waypoint 4"
         );
-        link.upload_mission(id, items);
-        await_transfer(&link, id);
+        transfer(&link, id, || link.upload_mission(id, items.clone()));
     }
     if with_set_current {
         let request = link.set_current_waypoint(id, 1);
@@ -241,8 +255,7 @@ fn resume(with_upload: bool, with_set_current: bool) -> String {
             assert!(Instant::now() < deadline, "set current never answered");
             std::thread::sleep(Duration::from_millis(50));
         }
-        link.download_mission(id);
-        await_transfer(&link, id);
+        transfer(&link, id, || link.download_mission(id));
     }
 
     // Guided until in it, arm until armed, then the take-off, as the C#'s three loops.
