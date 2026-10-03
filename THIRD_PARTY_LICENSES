@@ -936,25 +936,25 @@ permissions the GPL's section 7 lets this work remove.
 | rustls | 0.23.45 | Apache-2.0 OR ISC OR MIT | crates.io |
 | rustls-pki-types | 1.15.1 | MIT OR Apache-2.0 | crates.io |
 | rustls-webpki | 0.103.15 | ISC | crates.io |
-| rustpython | 0.5.0 | MIT | crates.io |
-| rustpython-codegen | 0.5.0 | MIT | crates.io |
-| rustpython-common | 0.5.0 | MIT | crates.io |
-| rustpython-compiler | 0.5.0 | MIT | crates.io |
-| rustpython-compiler-core | 0.5.0 | MIT | crates.io |
-| rustpython-derive | 0.5.0 | MIT | crates.io |
-| rustpython-derive-impl | 0.5.0 | MIT | crates.io |
-| rustpython-doc | 0.5.0 | PSF-2.0 | crates.io |
-| rustpython-literal | 0.5.0 | MIT | crates.io |
-| rustpython-pylib | 0.5.0 | PSF-2.0 | crates.io |
+| rustpython | 0.5.0 | MIT | git https://github.com/davidbuzz/RustPython @ 3d9aa95 |
+| rustpython-codegen | 0.5.0 | MIT | git https://github.com/davidbuzz/RustPython @ 3d9aa95 |
+| rustpython-common | 0.5.0 | MIT | git https://github.com/davidbuzz/RustPython @ 3d9aa95 |
+| rustpython-compiler | 0.5.0 | MIT | git https://github.com/davidbuzz/RustPython @ 3d9aa95 |
+| rustpython-compiler-core | 0.5.0 | MIT | git https://github.com/davidbuzz/RustPython @ 3d9aa95 |
+| rustpython-derive | 0.5.0 | MIT | git https://github.com/davidbuzz/RustPython @ 3d9aa95 |
+| rustpython-derive-impl | 0.5.0 | MIT | git https://github.com/davidbuzz/RustPython @ 3d9aa95 |
+| rustpython-doc | 0.5.0 | PSF-2.0 | git https://github.com/davidbuzz/RustPython @ 3d9aa95 |
+| rustpython-literal | 0.5.0 | MIT | git https://github.com/davidbuzz/RustPython @ 3d9aa95 |
+| rustpython-pylib | 0.5.0 | PSF-2.0 | git https://github.com/davidbuzz/RustPython @ 3d9aa95 |
 | rustpython-ruff_python_ast | 0.15.8 | MIT | crates.io |
 | rustpython-ruff_python_parser | 0.15.8 | MIT | crates.io |
 | rustpython-ruff_python_trivia | 0.15.8 | MIT | crates.io |
 | rustpython-ruff_source_file | 0.15.8 | MIT | crates.io |
 | rustpython-ruff_text_size | 0.15.8 | MIT | crates.io |
-| rustpython-sre_engine | 0.5.0 | MIT | crates.io |
-| rustpython-stdlib | 0.5.0 | MIT | crates.io |
-| rustpython-vm | 0.5.0 | MIT | crates.io |
-| rustpython-wtf8 | 0.5.0 | MIT | crates.io |
+| rustpython-sre_engine | 0.5.0 | MIT | git https://github.com/davidbuzz/RustPython @ 3d9aa95 |
+| rustpython-stdlib | 0.5.0 | MIT | git https://github.com/davidbuzz/RustPython @ 3d9aa95 |
+| rustpython-vm | 0.5.0 | MIT | git https://github.com/davidbuzz/RustPython @ 3d9aa95 |
+| rustpython-wtf8 | 0.5.0 | MIT | git https://github.com/davidbuzz/RustPython @ 3d9aa95 |
 | rustversion | 1.0.23 | MIT OR Apache-2.0 | crates.io |
 | rusty-fork | 0.3.1 | MIT/Apache-2.0 | crates.io |
 | rustybuzz | 0.20.1 | MIT | crates.io |

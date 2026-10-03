@@ -107,6 +107,27 @@ cast_possible_truncation = "warn"
 async-task = { git = "https://github.com/smol-rs/async-task.git", rev = "b4486cd71e4e94fbda54ce6302444de14f4d190e" }
 calloop = { git = "https://github.com/zed-industries/calloop" }
 
+# RustPython 0.5.0 as released (commit a6c3352), plus one commit: its `time` module compiled the
+# Windows time-zone helper for the MSVC toolchain only and so did not build for
+# x86_64-pc-windows-gnu, the target the Windows binary is cross-compiled for (README). Upstream
+# fixed it in 0.6.0, which depends on rustpython-ruff 0.16.5 and so on rustc 1.96; PLAN.md holds
+# the toolchain at 1.95.0 while on crates.io gpui, so the fix is carried on the release here and
+# this block goes when the toolchain moves. The whole workspace is patched, not the VM crate
+# alone, so that one source provides every rustpython crate and no type is defined twice.
+rustpython = { git = "https://github.com/davidbuzz/RustPython", rev = "3d9aa95a6c2bdafecb8e923e8b2f04a8aa0a0a65" }
+rustpython-codegen = { git = "https://github.com/davidbuzz/RustPython", rev = "3d9aa95a6c2bdafecb8e923e8b2f04a8aa0a0a65" }
+rustpython-common = { git = "https://github.com/davidbuzz/RustPython", rev = "3d9aa95a6c2bdafecb8e923e8b2f04a8aa0a0a65" }
+rustpython-compiler = { git = "https://github.com/davidbuzz/RustPython", rev = "3d9aa95a6c2bdafecb8e923e8b2f04a8aa0a0a65" }
+rustpython-compiler-core = { git = "https://github.com/davidbuzz/RustPython", rev = "3d9aa95a6c2bdafecb8e923e8b2f04a8aa0a0a65" }
+rustpython-derive = { git = "https://github.com/davidbuzz/RustPython", rev = "3d9aa95a6c2bdafecb8e923e8b2f04a8aa0a0a65" }
+rustpython-derive-impl = { git = "https://github.com/davidbuzz/RustPython", rev = "3d9aa95a6c2bdafecb8e923e8b2f04a8aa0a0a65" }
+rustpython-literal = { git = "https://github.com/davidbuzz/RustPython", rev = "3d9aa95a6c2bdafecb8e923e8b2f04a8aa0a0a65" }
+rustpython-pylib = { git = "https://github.com/davidbuzz/RustPython", rev = "3d9aa95a6c2bdafecb8e923e8b2f04a8aa0a0a65" }
+rustpython-sre_engine = { git = "https://github.com/davidbuzz/RustPython", rev = "3d9aa95a6c2bdafecb8e923e8b2f04a8aa0a0a65" }
+rustpython-stdlib = { git = "https://github.com/davidbuzz/RustPython", rev = "3d9aa95a6c2bdafecb8e923e8b2f04a8aa0a0a65" }
+rustpython-vm = { git = "https://github.com/davidbuzz/RustPython", rev = "3d9aa95a6c2bdafecb8e923e8b2f04a8aa0a0a65" }
+rustpython-wtf8 = { git = "https://github.com/davidbuzz/RustPython", rev = "3d9aa95a6c2bdafecb8e923e8b2f04a8aa0a0a65" }
+
 # Telemetry and render paths must stay allocation- and panic-free; release builds are
 # optimised hard because "extreme performance" is a stated goal (see DELIVERABLES.md).
 [profile.release]

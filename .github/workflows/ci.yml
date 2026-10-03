@@ -91,11 +91,14 @@ jobs:
       - run: sudo apt-get update && sudo apt-get install -y gcc-mingw-w64-x86-64
       # The core stays portable whether or not anyone is currently building for these targets.
       # Checking it here is cheaper than discovering it at release time.
+      # mp-script is in the list because its Python engine is the one dependency that has failed
+      # to compile for this target (RustPython 0.5.0's time module; Cargo.toml's [patch] carries
+      # the fix), and a check is where that shows, long before a cross-build is attempted.
       - name: Windows
         run: cargo check --target x86_64-pc-windows-gnu
              -p mp-mavlink -p mp-mavlink-dialects -p mp-transport -p mp-vehicle
              -p mp-link -p mp-params -p mp-calibration -p mp-ftp -p mp-log -p mp-units
-             -p mp-mission -p mp-cli
+             -p mp-mission -p mp-cli -p mp-script
       - name: wasm
         run: cargo check --target wasm32-unknown-unknown
              -p mp-mavlink -p mp-mavlink-dialects -p mp-units -p mp-log

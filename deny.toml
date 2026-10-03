@@ -47,6 +47,16 @@ license-files = [{ path = "Lib/PSF-LICENSE", hash = 0xe5f4697b }]
 [bans]
 multiple-versions = "warn"
 
+# The git sources the workspace's [patch.crates-io] names: zed's two executor/event-loop pins,
+# and the owner's RustPython fork carrying the 0.5.0 release plus the windows-gnu time-zone gate
+# fix that upstream shipped in 0.6.0 (which needs rustc 1.96; the fork goes when the toolchain moves).
+[sources]
+allow-git = [
+    "https://github.com/smol-rs/async-task.git",
+    "https://github.com/zed-industries/calloop",
+    "https://github.com/davidbuzz/RustPython",
+]
+
 [advisories]
 yanked = "deny"
 # gpui's text stack (rustybuzz, ttf-parser), fluent's unic crates and paste are transitive and
