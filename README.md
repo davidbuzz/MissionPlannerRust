@@ -25,8 +25,9 @@ generated; `.rs` files under `crates/`, tests included), **4,033 tests** on `car
 (47 ignored: they need SITL, a window, or the network), **202 GUI scripts** under `tests/gui/`,
 across 355 commits. Linux first, and Windows since 2026-09-26 in the owner's Windows 10 VM - built
 there, run against SITL, the whole GUI suite run there on 2026-09-27, the bench board flashed from
-it (`win10_vm_setup.md`); macOS since 2026-10-03 on a borrowed Apple Silicon machine - built, the
-whole test suite run there and a release binary made (`DEV_MACOS.md`). The repository has been public at
+it (`win10_vm_setup.md`), and cross-compiled from Linux since 2026-10-03 (below); macOS since 2026-10-03
+on a borrowed Apple Silicon machine - built, the whole test suite run there and a release binary made
+(`DEV_MACOS.md`). The repository has been public at
 https://github.com/davidbuzz/MissionPlannerRust since 2026-10-03, where the three-OS workflow runs.
 
 | Working today | |
@@ -159,6 +160,18 @@ planner                          # the graphical front end
 
 A Linux build needs libclang and the kernel's UAPI headers (`linux-libc-dev`): `mp-video`'s V4L2
 bindings run bindgen at build time (`crates/mp-video/Cargo.toml`).
+
+The Windows binaries cross-compile from Linux with MinGW (`gcc-mingw-w64-x86-64` on Debian and
+Ubuntu; `rust-toolchain.toml` installs the Rust target):
+
+```sh
+cargo build --target x86_64-pc-windows-gnu -p mp-gui --bin planner -p mp-cli --bin headless-planner
+```
+
+Done on 2026-10-03 for the debug profile: `planner.exe` and `headless-planner.exe` import Windows's
+own DLLs and nothing else (no MinGW runtime), the Python engine being RustPython 0.5.0 from the
+owner's fork with two fixes for this target (`Cargo.toml`'s `[patch.crates-io]` says which). They
+have not yet been run on Windows; the Windows 10 VM builds its own, natively, as before.
 
 The GUI records every flight without being asked, into its own data directory's `logs` —
 `~/.local/share/MissionPlannerRust/logs` on Linux (`$XDG_DATA_HOME` when set, and never
