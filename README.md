@@ -171,7 +171,8 @@ cargo build --target x86_64-pc-windows-gnu -p mp-gui --bin planner -p mp-cli --b
 Done on 2026-10-03 for the debug profile: `planner.exe` and `headless-planner.exe` import Windows's
 own DLLs and nothing else (no MinGW runtime), the Python engine being RustPython 0.5.0 from the
 owner's fork with two fixes for this target (`Cargo.toml`'s `[patch.crates-io]` says which). They
-have not yet been run on Windows; the Windows 10 VM builds its own, natively, as before.
+have not yet been run on Windows; the Windows 10 VM builds its own, natively, as before. CI's
+cross-compile job builds and links both on every push.
 
 The GUI records every flight without being asked, into its own data directory's `logs` —
 `~/.local/share/MissionPlannerRust/logs` on Linux (`$XDG_DATA_HOME` when set, and never

@@ -95,18 +95,28 @@ jobs:
         with:
           targets: x86_64-pc-windows-gnu, wasm32-unknown-unknown
       - uses: Swatinem/rust-cache@v2
-      # The Windows check links nothing, but a C dependency's build script asks for the cross gcc.
+      # MinGW links the Windows binaries, and libffi's build script compiles libffi with it for
+      # this target (Cargo.toml's [patch] for RustPython); libffi uses its bundled configure.
       - run: sudo apt-get update && sudo apt-get install -y gcc-mingw-w64-x86-64
-      # The core stays portable whether or not anyone is currently building for these targets.
-      # Checking it here is cheaper than discovering it at release time.
-      # mp-script is in the list because its Python engine is the one dependency that has failed
-      # to compile for this target (RustPython 0.5.0's time module; Cargo.toml's [patch] carries
-      # the fix), and a check is where that shows, long before a cross-build is attempted.
-      - name: Windows
-        run: cargo check --target x86_64-pc-windows-gnu
-             -p mp-mavlink -p mp-mavlink-dialects -p mp-transport -p mp-vehicle
-             -p mp-link -p mp-params -p mp-calibration -p mp-ftp -p mp-log -p mp-units
-             -p mp-mission -p mp-cli -p mp-script
+      # The Windows binaries as README says to cross-compile them from Linux: built and linked, not
+      # only checked. This step was a `cargo check` of 13 crates, which generates no code and links
+      # nothing; it passed while the real cross-build failed twice on 2026-10-03 - RustPython's
+      # MSVC-only time-zone code, a compile error in a crate it did not name, and a missing libffi,
+      # a link error no check can find - and it never covered the planner. Debug information is
+      # off to keep the target directory inside a hosted runner's disk (with it, 11 GB here).
+      - name: Windows binaries
+        env:
+          CARGO_PROFILE_DEV_DEBUG: "0"
+        run: cargo build --target x86_64-pc-windows-gnu
+             -p mp-gui --bin planner -p mp-cli --bin headless-planner
+      - name: Windows binaries are Windows executables
+        run: |
+          for exe in planner headless-planner; do
+            file target/x86_64-pc-windows-gnu/debug/$exe.exe
+            file target/x86_64-pc-windows-gnu/debug/$exe.exe | grep -q "PE32+ executable"
+          done
+      # The core stays portable: the protocol, units, log and mission crates compile for wasm. A
+      # check is enough here, since nothing ships for this target yet.
       - name: wasm
         run: cargo check --target wasm32-unknown-unknown
              -p mp-mavlink -p mp-mavlink-dialects -p mp-units -p mp-log
