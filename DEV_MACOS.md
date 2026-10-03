@@ -123,8 +123,9 @@ measures a frame longer than that cadence and checks only that the default caden
 
 ## 5. Running it
 
-`headless-planner` is a command-line program and runs anywhere a shell does (`headless-planner
-watch file:testdata/mavlink/autotest.tlog` replays a recording). The `planner` window needs the
+`headless-planner`, the internal testing tool, is a command-line program and runs anywhere a
+shell does (`headless-planner watch file:testdata/mavlink/autotest.tlog` replays a recording); it
+is not part of the application and is never released. The `planner` window needs the
 logged-in desktop session: launched over SSH as a user who is not the one at the console, it
 opened no window and the smoke run timed out. Launch it from a Terminal in your own session:
 
@@ -139,10 +140,13 @@ with a desktop session of its own.
 Settings, recorded flights and map tiles go to the planner's own data directory, never to Mission
 Planner's.
 
-## 6. The release binaries
+## 6. The release binary
+
+The release is the planner alone: headless-planner is an internal testing tool, not part of the
+application (the owner, 2026-10-04).
 
 ```sh
-LZMA_API_STATIC=1 cargo build --release -p mp-gui --bin planner -p mp-cli --bin headless-planner
+LZMA_API_STATIC=1 cargo build --release -p mp-gui --bin planner
 ```
 
 The variable is for a Mac that has Homebrew's `xz`. RustPython's `lzma` module (in the planner
@@ -163,7 +167,6 @@ every crate is compiled again):
 | Wall time | 9 min 45 s (585 s; 1,504 s of CPU across the ten cores) |
 | Peak memory (`/usr/bin/time -l`, maximum resident set) | 8.05 GB |
 | `target/release/planner` | 66.5 MB (with the profile's debug info) |
-| `target/release/headless-planner` | 7.7 MB |
 | `target/release/` afterwards | 3.7 GB |
 
 `tools/package.sh` is the Linux release script (it strips with GNU `strip`, reads `ldd` and builds
@@ -171,12 +174,13 @@ a Debian package), so on macOS the last step is done by hand:
 
 ```sh
 mkdir -p dist
-cp target/release/planner target/release/headless-planner dist/
-strip dist/planner dist/headless-planner
+cp target/release/planner dist/
+strip dist/planner
 otool -L dist/planner        # what it links; anything under /opt/homebrew is a mistake
 ```
 
-Stripped, the binaries are 57.0 MB and 6.5 MB. `file` reports `Mach-O 64-bit executable arm64`.
+Stripped, the planner is 57.0 MB (73.9 MB since the ten shipped plugins are built into it,
+2026-10-04). `file` reports `Mach-O 64-bit executable arm64`.
 Built as above, the planner links macOS's own frameworks and libraries and nothing else: AppKit,
 Metal, OpenGL, QuartzCore, CoreGraphics, CoreVideo, ColorSync, CoreLocation, UserNotifications,
 Security, SystemConfiguration, IOKit, Carbon, ApplicationServices, CoreServices, Foundation and

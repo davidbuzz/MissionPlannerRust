@@ -1,7 +1,8 @@
 name: release builds
 
-# The Linux and Windows release binaries, built natively from one commit, each opened and painted
-# once, packaged with the licence files, and kept as this run's artifacts for the owner to publish.
+# The Linux and Windows release planner, built natively from one commit, opened and painted once,
+# packaged with the licence files, and kept as this run's artifacts for the owner to publish. The
+# planner alone: headless-planner is an internal testing tool, not part of the application.
 # The macOS build is made on the owner's borrowed Mac from the same commit (DEV_MACOS.md).
 # Run by hand: Actions > release builds > Run workflow, on the commit to release.
 on:
@@ -41,14 +42,12 @@ jobs:
           MP_NO_RECORD: "1"
           VK_ICD_FILENAMES: /usr/share/vulkan/icd.d/lvp_icd.json
         run: xvfb-run -a --server-args="-screen 0 1600x1200x24" dist/planner
-      - name: The release headless-planner runs
-        run: dist/headless-planner --help | head -3
       - name: Archive
         run: |
           V=$(grep -m1 '^version = ' Cargo.toml | sed 's/.*"\(.*\)"/\1/')
           N=missionplanner-rust_${V}_linux-x86_64
           mkdir -p release/$N
-          cp dist/planner dist/headless-planner LICENSE NOTICE THIRD_PARTY_LICENSES README.md release/$N/
+          cp dist/planner LICENSE NOTICE THIRD_PARTY_LICENSES README.md release/$N/
           {
             echo "MissionPlannerRust $V for Linux on x86-64"
             echo
@@ -58,8 +57,7 @@ jobs:
             echo "Command: tools/package.sh deb (cargo build --release, then strip)"
             echo "Needs:   $(objdump -T dist/planner | grep -oE 'GLIBC_[0-9]+\.[0-9]+' | sort -V | tail -1) or newer, a Vulkan driver (mesa-vulkan-drivers)"
             echo
-            echo "planner           the graphical ground control station"
-            echo "headless-planner  the command-line tool"
+            echo "planner  the ground control station"
             echo
             echo "Licensed under the GNU GPL version 3 (LICENSE); NOTICE and THIRD_PARTY_LICENSES"
             echo "record what it derives from and what it is built from."
@@ -86,42 +84,35 @@ jobs:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
       - name: Build
-        run: cargo build --release -p mp-gui --bin planner -p mp-cli --bin headless-planner
-      - name: The DLLs they import (system ones only)
+        run: cargo build --release -p mp-gui --bin planner
+      - name: The DLLs it imports (system ones only)
         shell: pwsh
         run: |
           $dumpbin = Get-ChildItem "${env:ProgramFiles}\Microsoft Visual Studio" -Recurse -Filter dumpbin.exe -ErrorAction SilentlyContinue | Where-Object FullName -match 'Hostx64\\x64' | Select-Object -First 1
-          foreach ($exe in 'planner', 'headless-planner') {
-            Write-Output "== $exe.exe"
-            & $dumpbin.FullName /dependents "target\release\$exe.exe" | Select-String '\.dll' | ForEach-Object { $_.Line.Trim() }
-          }
+          & $dumpbin.FullName /dependents "target\release\planner.exe" | Select-String '\.dll' | ForEach-Object { $_.Line.Trim() }
       - name: The release planner opens and paints
         env:
           MP_SMOKE: "1"
           MP_NO_TILES: "1"
           MP_NO_RECORD: "1"
         run: ./target/release/planner.exe
-      - name: The release headless-planner runs
-        shell: bash
-        run: ./target/release/headless-planner.exe --help | head -3
       - name: Archive
         shell: pwsh
         run: |
           $v = (Select-String -Path Cargo.toml -Pattern '^version = "(.*)"' | Select-Object -First 1).Matches[0].Groups[1].Value
           $n = "missionplanner-rust_${v}_windows-x86_64"
           New-Item -ItemType Directory -Force -Path "release\$n" | Out-Null
-          Copy-Item target\release\planner.exe, target\release\headless-planner.exe, LICENSE, NOTICE, THIRD_PARTY_LICENSES, README.md "release\$n\"
+          Copy-Item target\release\planner.exe, LICENSE, NOTICE, THIRD_PARTY_LICENSES, README.md "release\$n\"
           @(
             "MissionPlannerRust $v for Windows on x86-64",
             "",
             "Source:  https://github.com/$env:GITHUB_REPOSITORY",
             "Commit:  $env:GITHUB_SHA",
             "Built:   $((Get-Date).ToUniversalTime().ToString('yyyy-MM-dd')) on windows-latest, $(rustc --version)",
-            "Command: cargo build --release -p mp-gui --bin planner -p mp-cli --bin headless-planner",
+            "Command: cargo build --release -p mp-gui --bin planner",
             "         with the C runtime linked in (+crt-static): no Visual C++ Redistributable needed",
             "",
-            "planner.exe           the graphical ground control station",
-            "headless-planner.exe  the command-line tool",
+            "planner.exe  the ground control station",
             "",
             "Unsigned: Windows SmartScreen may ask before the first start.",
             "Licensed under the GNU GPL version 3 (LICENSE); NOTICE and THIRD_PARTY_LICENSES",

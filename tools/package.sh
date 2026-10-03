@@ -1,10 +1,11 @@
 #!/usr/bin/env bash
-# Builds the stripped release binaries and reports what a machine needs to run them; with `deb`,
-# packages them.
+# Builds the stripped release planner and reports what a machine needs to run it; with `deb`,
+# packages it. The planner is the application; headless-planner is an internal testing tool and
+# is neither built nor shipped here (the owner, 2026-10-04).
 #
-# usage: tools/package.sh                 the two binaries into dist/, and what they need
+# usage: tools/package.sh                 the planner into dist/, and what it needs
 #        tools/package.sh deb [--no-build] dist/missionplanner-rust_<version>_<arch>.deb as well:
-#                                         the binaries in /usr/bin, the desktop entry and icon
+#                                         the planner in /usr/bin, the desktop entry and icon
 #                                         (tools/packaging/), the licence, Depends from what the
 #                                         planner links (Deliverable 20); --no-build packages the release
 #                                         binaries already in target/release
@@ -27,10 +28,10 @@ done
 
 if [ "$BUILD" = 1 ]; then
     echo "building..."
-    cargo build --release --manifest-path "$ROOT/Cargo.toml" -p mp-gui --bin planner -p mp-cli --bin headless-planner
+    cargo build --release --manifest-path "$ROOT/Cargo.toml" -p mp-gui --bin planner
 fi
 
-for BIN in planner headless-planner; do
+for BIN in planner; do
     SRC="$ROOT/target/release/$BIN"
     [ -x "$SRC" ] || { echo "not built: $SRC" >&2; exit 1; }
     cp "$SRC" "$OUT/$BIN"
@@ -42,7 +43,7 @@ done
 
 echo
 printf '%-12s %10s  %10s\n' "binary" "built" "stripped"
-for BIN in planner headless-planner; do
+for BIN in planner; do
     BUILT=$(stat -c%s "$ROOT/target/release/$BIN")
     SHIPPED=$(stat -c%s "$OUT/$BIN")
     printf '%-12s %9.1fM  %9.1fM\n' "$BIN" \
@@ -81,7 +82,7 @@ DEB="$OUT/${NAME}_${VERSION}_${ARCH}.deb"
 rm -rf "$STAGE"
 mkdir -p "$STAGE/DEBIAN" "$STAGE/usr/bin" "$STAGE/usr/share/applications" \
     "$STAGE/usr/share/icons/hicolor/128x128/apps" "$STAGE/usr/share/doc/$NAME"
-install -m 0755 "$OUT/planner" "$OUT/headless-planner" "$STAGE/usr/bin/"
+install -m 0755 "$OUT/planner" "$STAGE/usr/bin/"
 install -m 0644 "$ROOT/tools/packaging/planner.desktop" "$STAGE/usr/share/applications/"
 install -m 0644 "$ROOT/tools/packaging/planner.png" "$STAGE/usr/share/icons/hicolor/128x128/apps/"
 install -m 0644 "$ROOT/LICENSE" "$STAGE/usr/share/doc/$NAME/copyright"
@@ -110,8 +111,7 @@ Depends: $DEPENDS, libvulkan1
 Recommends: mesa-vulkan-drivers, fonts-dejavu-core
 Description: Mission Planner, the ArduPilot ground station, in Rust
  The planner: flight data, flight planning, setup, configuration and tuning of
- ArduPilot vehicles over MAVLink, with the simulator screen and the log tools;
- and headless-planner, the same over the command line.
+ ArduPilot vehicles over MAVLink, with the simulator screen and the log tools.
 CONTROL
 (cd "$STAGE" && find usr -type f -exec md5sum {} \; > DEBIAN/md5sums)
 fakeroot dpkg-deb --build --root-owner-group "$STAGE" "$DEB" >/dev/null

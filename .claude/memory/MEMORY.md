@@ -19,6 +19,7 @@ controlled; the per-project memory directory holds symlinks to them.
 
 - [Acceptable is not do-it-now](acceptable-is-not-do-it-now.md) — "X is acceptable" is information, not an instruction; never interrupt or destroy on it without asking, never claim agreement he didn't give (2026-10-04)
 - [10A is for backups](10a-is-for-backups.md) — do NOT USE /media/buzz/10A for anything, ever, not even a read or a listing; VM disks go on / (nvme1n1p2); an interrupted command may have partly run, check before saying it didn't (Buzz, 2026-10-03)
+- [headless-planner is internal](headless-planner-is-internal.md) — not part of the application; releases and packages ship `planner` only (Buzz, 2026-10-04)
 - [NEVER save the VM](never-save-the-vm.md) — no savestate/pause/poweroff/live snapshot of tiny10 without Buzz's word: "SAVE = things IMMEDIATELY stop working, do not do" (2026-09-26)
 - [One build at a time](one-build-at-a-time.md) — one cargo build at a time under `flock <scratchpad>/build.lock`; with the VM up, debug at 4 jobs and NO release build (a release build beside the VM OOM-killed gnome-shell and the VM on 2026-09-26); with agents on the lock the coordinator goes first through mine.sh (2026-10-02)
 - [Scratch target dirs fill the disk](scratch-target-dirs-fill-the-disk.md) — /tmp is the root disk, 96% full without me; target-solo hit 65 GB; prune planner-* incremental caches, old test binaries and finished agents' target dirs; df before big runs (2026-09-26)
