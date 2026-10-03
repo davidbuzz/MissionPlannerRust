@@ -34,6 +34,22 @@ fn testdata(name: &str) -> PathBuf {
         .join(name)
 }
 
+/// Bytes with every CRLF made LF, for comparing what was written here with a golden: the goldens
+/// were written by Mission Planner's code under mono on Linux, where `Environment.NewLine` is LF,
+/// and the port ends lines with the platform's, as the C# does, so on Windows they are CRLF (the
+/// hosted runner, 2026-10-03). Both sides go through this.
+fn lf(bytes: Vec<u8>) -> Vec<u8> {
+    let mut out = Vec::with_capacity(bytes.len());
+    let mut bytes = bytes.into_iter().peekable();
+    while let Some(byte) = bytes.next() {
+        if byte == b'\r' && bytes.peek() == Some(&b'\n') {
+            continue;
+        }
+        out.push(byte);
+    }
+    out
+}
+
 /// A fresh directory for one test.
 fn scratch(test: &str) -> PathBuf {
     let dir = std::env::temp_dir().join(format!(
@@ -96,8 +112,8 @@ fn dflogtokml_writes_every_file_into_the_directory() {
         "dataflash.bin.param",
     ] {
         assert_eq!(
-            std::fs::read(out.join(file)).unwrap(),
-            std::fs::read(testdata(&format!("dataflash/golden/kml/{file}"))).unwrap(),
+            lf(std::fs::read(out.join(file)).unwrap()),
+            lf(std::fs::read(testdata(&format!("dataflash/golden/kml/{file}"))).unwrap()),
             "{file}"
         );
     }
@@ -132,17 +148,17 @@ fn loganalysis_prints_the_analyzers_report() {
         &xml,
     ]);
     assert!(output.status.success(), "{output:?}");
-    let stdout = String::from_utf8(output.stdout).unwrap();
+    // The report's own lines end with `Environment.NewLine` (CRLF on Windows) and the analyzer's
+    // with CRLF everywhere, as Mission Planner prints them; both are read here on LF.
+    let stdout = String::from_utf8(lf(output.stdout)).unwrap();
     assert!(stdout.contains("Vehicletype ArduCopter\n"), "{stdout}");
     assert!(stdout.contains("Firmware Version V4.5.7\n"), "{stdout}");
     assert!(
-        stdout.contains(
-            "Test: Dupe Log Data = UNKNOWN - range() step argument must not be zero\r\n"
-        ),
+        stdout.contains("Test: Dupe Log Data = UNKNOWN - range() step argument must not be zero\n"),
         "{stdout}"
     );
-    assert!(stdout.contains("Test: VCC = UNKNOWN - No CURR log data\r\n"), "{stdout}");
-    let written = std::fs::read_to_string(&xml).unwrap();
+    assert!(stdout.contains("Test: VCC = UNKNOWN - No CURR log data\n"), "{stdout}");
+    let written = String::from_utf8(lf(std::fs::read(&xml).unwrap())).unwrap();
     assert!(written.starts_with("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<loganalysis>\n"));
     std::fs::remove_dir_all(&dir).unwrap();
 }

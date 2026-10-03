@@ -10936,7 +10936,10 @@ mod tests {
             u64::try_from(control.len()).unwrap(),
             std::fs::metadata(&path).unwrap().len()
         );
-        control.set_speed(1000.0);
+        // Ten times real time: the log spans 36 s, so it plays for 3.6 s, and the pause below lands
+        // inside it on any machine. At a thousand times it was over in 36 ms, and on the hosted
+        // macOS runner (2026-10-03) the poll's sleep outlasted the whole log before the pause.
+        control.set_speed(10.0);
         let started = Instant::now();
         while telemetry.view().state.is_none() && started.elapsed() < Duration::from_secs(10) {
             std::thread::sleep(Duration::from_millis(20));
