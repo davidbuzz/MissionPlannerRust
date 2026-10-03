@@ -159,9 +159,15 @@ jobs:
       # display, a device, the network or a corpus, and are not this job's.
       - run: cargo test -p mp-link -- --ignored --test-threads=1
 
+      # The wrapper's own output is one line naming the simulator's log; the log itself is what
+      # says what the vehicle did (a mission upload it still waits for, a timeout), so it is printed
+      # too, its last 400 lines.
       - name: SITL log on failure
         if: failure()
-        run: cat /tmp/sitl.log
+        run: |
+          cat /tmp/sitl.log
+          log=$(grep -oE '/tmp/mp-sitl-[A-Za-z0-9]+\.log' /tmp/sitl.log | tail -1)
+          [ -n "$log" ] && { echo "== $log"; tail -400 "$log"; }
 
   fuzz:
     name: bounded fuzz pass

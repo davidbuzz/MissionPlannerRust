@@ -1,0 +1,138 @@
+name: release builds
+
+# The Linux and Windows release binaries, built natively from one commit, each opened and painted
+# once, packaged with the licence files, and kept as this run's artifacts for the owner to publish.
+# The macOS build is made on the owner's borrowed Mac from the same commit (DEV_MACOS.md).
+# Run by hand: Actions > release builds > Run workflow, on the commit to release.
+on:
+  workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  linux:
+    name: Linux (x86-64, glibc 2.35)
+    # 22.04, not the newest: a binary needs the glibc it was built against or newer, and 22.04's
+    # 2.35 runs on 22.04 and 24.04 alike, where a 24.04 build needs 2.39 (tools/package.sh says so).
+    runs-on: ubuntu-22.04
+    timeout-minutes: 150
+    steps:
+      - uses: actions/checkout@v4
+      # A release build with the profile's debug information is larger than the runner's free
+      # disk; the preinstalled .NET, Android and Haskell toolchains are not needed here.
+      - name: Room for a release build
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
+          df -h /
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libxkbcommon-x11-dev libxcb-shape0-dev libxcb-xfixes0-dev \
+            libwayland-dev libasound2-dev libudev-dev libfontconfig1-dev libclang-dev \
+            linux-libc-dev fakeroot xvfb mesa-vulkan-drivers
+      - name: Build, strip and package (tools/package.sh deb)
+        run: tools/package.sh deb
+      - name: The release planner opens and paints
+        env:
+          MP_SMOKE: "1"
+          MP_NO_TILES: "1"
+          MP_NO_RECORD: "1"
+          VK_ICD_FILENAMES: /usr/share/vulkan/icd.d/lvp_icd.json
+        run: xvfb-run -a --server-args="-screen 0 1600x1200x24" dist/planner
+      - name: The release headless-planner runs
+        run: dist/headless-planner --help | head -3
+      - name: Archive
+        run: |
+          V=$(grep -m1 '^version = ' Cargo.toml | sed 's/.*"\(.*\)"/\1/')
+          N=missionplanner-rust_${V}_linux-x86_64
+          mkdir -p release/$N
+          cp dist/planner dist/headless-planner LICENSE NOTICE THIRD_PARTY_LICENSES README.md release/$N/
+          {
+            echo "MissionPlannerRust $V for Linux on x86-64"
+            echo
+            echo "Source:  https://github.com/${GITHUB_REPOSITORY}"
+            echo "Commit:  ${GITHUB_SHA}"
+            echo "Built:   $(date -u +%Y-%m-%d) on $(. /etc/os-release && echo "$PRETTY_NAME"), $(rustc --version)"
+            echo "Command: tools/package.sh deb (cargo build --release, then strip)"
+            echo "Needs:   $(objdump -T dist/planner | grep -oE 'GLIBC_[0-9]+\.[0-9]+' | sort -V | tail -1) or newer, a Vulkan driver (mesa-vulkan-drivers)"
+            echo
+            echo "planner           the graphical ground control station"
+            echo "headless-planner  the command-line tool"
+            echo
+            echo "Licensed under the GNU GPL version 3 (LICENSE); NOTICE and THIRD_PARTY_LICENSES"
+            echo "record what it derives from and what it is built from."
+          } > release/$N/BUILD-INFO.txt
+          tar -C release -czf release/$N.tar.gz $N
+          cp dist/*.deb release/
+          (cd release && sha256sum *.tar.gz *.deb | tee SHA256SUMS-linux)
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linux-release
+          path: |
+            release/*.tar.gz
+            release/*.deb
+            release/SHA256SUMS-linux
+
+  windows:
+    name: Windows (x86-64, MSVC)
+    runs-on: windows-latest
+    timeout-minutes: 150
+    env:
+      # The C runtime linked in, so that the binaries need no Visual C++ Redistributable.
+      RUSTFLAGS: -C target-feature=+crt-static
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Build
+        run: cargo build --release -p mp-gui --bin planner -p mp-cli --bin headless-planner
+      - name: The DLLs they import (system ones only)
+        shell: pwsh
+        run: |
+          $dumpbin = Get-ChildItem "${env:ProgramFiles}\Microsoft Visual Studio" -Recurse -Filter dumpbin.exe -ErrorAction SilentlyContinue | Where-Object FullName -match 'Hostx64\\x64' | Select-Object -First 1
+          foreach ($exe in 'planner', 'headless-planner') {
+            Write-Output "== $exe.exe"
+            & $dumpbin.FullName /dependents "target\release\$exe.exe" | Select-String '\.dll' | ForEach-Object { $_.Line.Trim() }
+          }
+      - name: The release planner opens and paints
+        env:
+          MP_SMOKE: "1"
+          MP_NO_TILES: "1"
+          MP_NO_RECORD: "1"
+        run: ./target/release/planner.exe
+      - name: The release headless-planner runs
+        shell: bash
+        run: ./target/release/headless-planner.exe --help | head -3
+      - name: Archive
+        shell: pwsh
+        run: |
+          $v = (Select-String -Path Cargo.toml -Pattern '^version = "(.*)"' | Select-Object -First 1).Matches[0].Groups[1].Value
+          $n = "missionplanner-rust_${v}_windows-x86_64"
+          New-Item -ItemType Directory -Force -Path "release\$n" | Out-Null
+          Copy-Item target\release\planner.exe, target\release\headless-planner.exe, LICENSE, NOTICE, THIRD_PARTY_LICENSES, README.md "release\$n\"
+          @(
+            "MissionPlannerRust $v for Windows on x86-64",
+            "",
+            "Source:  https://github.com/$env:GITHUB_REPOSITORY",
+            "Commit:  $env:GITHUB_SHA",
+            "Built:   $((Get-Date).ToUniversalTime().ToString('yyyy-MM-dd')) on windows-latest, $(rustc --version)",
+            "Command: cargo build --release -p mp-gui --bin planner -p mp-cli --bin headless-planner",
+            "         with the C runtime linked in (+crt-static): no Visual C++ Redistributable needed",
+            "",
+            "planner.exe           the graphical ground control station",
+            "headless-planner.exe  the command-line tool",
+            "",
+            "Unsigned: Windows SmartScreen may ask before the first start.",
+            "Licensed under the GNU GPL version 3 (LICENSE); NOTICE and THIRD_PARTY_LICENSES",
+            "record what it derives from and what it is built from."
+          ) | Set-Content "release\$n\BUILD-INFO.txt"
+          Compress-Archive -Path "release\$n" -DestinationPath "release\$n.zip"
+          $h = (Get-FileHash "release\$n.zip" -Algorithm SHA256).Hash.ToLower()
+          "$h  $n.zip" | Tee-Object -FilePath release\SHA256SUMS-windows
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows-release
+          path: |
+            release/*.zip
+            release/SHA256SUMS-windows

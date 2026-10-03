@@ -85,6 +85,9 @@ install -m 0755 "$OUT/planner" "$OUT/headless-planner" "$STAGE/usr/bin/"
 install -m 0644 "$ROOT/tools/packaging/planner.desktop" "$STAGE/usr/share/applications/"
 install -m 0644 "$ROOT/tools/packaging/planner.png" "$STAGE/usr/share/icons/hicolor/128x128/apps/"
 install -m 0644 "$ROOT/LICENSE" "$STAGE/usr/share/doc/$NAME/copyright"
+# What it derives from and what it is built from, as the GPL and the crates' licences ask of a
+# binary handed to someone.
+install -m 0644 "$ROOT/NOTICE" "$ROOT/THIRD_PARTY_LICENSES" "$ROOT/README.md" "$STAGE/usr/share/doc/$NAME/"
 
 # What the planner links, as the packages that hold them here; the Vulkan loader and a driver are
 # loaded at run time by the renderer, and a font by the text system.
