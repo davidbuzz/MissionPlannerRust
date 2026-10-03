@@ -18,7 +18,7 @@
 //
 // SPDX-License-Identifier: GPL-3.0-only
 
-//! `.resx` → `.ftl` (DELIVERABLES.md D17, PLAN.md §13.6 row 76): every generated message formats
+//! `.resx` → `.ftl` (DELIVERABLES.md Deliverable 17, PLAN.md §13.6 row 76): every generated message formats
 //! back to the .NET string it came from, nothing a translator wrote is lost, and the ids never
 //! move.
 //!

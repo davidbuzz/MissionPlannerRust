@@ -1,4 +1,4 @@
-# D10: no UI stall over 8 ms during a 200 Hz telemetry storm, measured on the frame.
+# Deliverable 10: no UI stall over 8 ms during a 200 Hz telemetry storm, measured on the frame.
 #
 # MP_STORM=200 replaces the link with an in-memory vehicle (mp_link::testing::Storm) that writes
 # ATTITUDE, GLOBAL_POSITION_INT, VFR_HUD and HEARTBEAT 200 times a second each through the real
@@ -44,7 +44,7 @@ expect frame.stalls 0
 expect frame.p99 < 8
 expect storm.rate >= 190
 
-# D9: packet-to-pixel under 16 ms at the 99th percentile. From the packet arriving at the link
+# Deliverable 9: packet-to-pixel under 16 ms at the 99th percentile. From the packet arriving at the link
 # (the storm's link stamps VehicleState::packet_in; no product link does) to the frame showing it
 # presented (a callback deferred from the marker's paint, run when gpui's draw-and-present update
 # ends), less the harness's work. Each packet once, at the first frame that shows it. The journey

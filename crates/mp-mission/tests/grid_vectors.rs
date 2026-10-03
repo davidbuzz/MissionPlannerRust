@@ -18,7 +18,7 @@
 //
 // SPDX-License-Identifier: GPL-3.0-only
 
-//! Survey grids against Mission Planner's own: PLAN.md §13.3 item 3, DELIVERABLES.md D11.
+//! Survey grids against Mission Planner's own: PLAN.md §13.3 item 3, DELIVERABLES.md Deliverable 11.
 //!
 //! Every file in `testdata/grid/golden` is what `Grid.CreateGrid` returned under mono for one case
 //! of `testdata/grid/cases.txt`, with the arguments it was called with recorded above the points
@@ -517,7 +517,7 @@ fn every_case_has_a_golden_and_every_golden_a_case() {
     let generated: BTreeSet<String> = goldens().into_iter().map(|g| g.name).collect();
     assert!(
         declared.len() >= 30,
-        "D11 asks for at least 30 cases, cases.txt has {}",
+        "Deliverable 11 asks for at least 30 cases, cases.txt has {}",
         declared.len()
     );
     assert_eq!(

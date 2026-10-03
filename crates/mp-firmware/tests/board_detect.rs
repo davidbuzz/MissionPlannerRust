@@ -21,7 +21,7 @@
 //! Board detection: `BoardDetect.DetectBoard` against the C#'s own test cases, USB descriptor
 //! fixtures for every rule it has, and its live probes against the px4 mock.
 //!
-//! D13's definition of done names this file. The C# test cases are
+//! Deliverable 13's definition of done names this file. The C# test cases are
 //! `testdata/boards/detect_board_tests.json`, their inputs exactly as `BoardDetectTests.cs` writes
 //! them; the rule fixtures are `testdata/boards/usb_descriptors.json`, built from the constants in
 //! `BoardDetect.cs`. Every case asserts what `BoardDetect.cs` does, and the C# test cases also

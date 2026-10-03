@@ -665,7 +665,7 @@ Joystick = None
 
 class _Speech(object):
     """`MainV2.speechEngine`, `ISpeech`: `SpeakAsync` with its checks and its rewording, the
-    text handed to the host - speech itself is DELIVERABLES D15. `// C#: Utilities/Speech.cs`"""
+    text handed to the host - speech itself is DELIVERABLES Deliverable 15. `// C#: Utilities/Speech.cs`"""
 
     def __init__(self):
         # `speechEnable` from the "speechenable" setting, off when it is absent.

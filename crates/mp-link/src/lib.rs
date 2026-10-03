@@ -39,7 +39,7 @@
 //!
 //! Every conversation that asks the vehicle something and waits is an explicit state machine,
 //! fed each message and each pass of this thread's loop, holding Mission Planner's retry counts
-//! and waits from [`ProtocolTimeouts`] (DELIVERABLES.md D4). `tests/retries.rs` drives each one
+//! and waits from [`ProtocolTimeouts`] (DELIVERABLES.md Deliverable 4). `tests/retries.rs` drives each one
 //! against a scripted vehicle that drops, repeats, delays, skips and refuses, and asserts it
 //! stops - complete or a clean failure - within its waits, having sent exactly the C#'s number of
 //! retries; `tests/routing.rs` runs them among fifty vehicles on one link. C# lines are in
@@ -238,7 +238,7 @@ pub struct LinkConfig {
     pub timeouts: ProtocolTimeouts,
     /// Whether to stamp each vehicle's state with when its newest frame arrived
     /// ([`mp_vehicle::VehicleState::packet_in`]), so a screen can measure packet-to-pixel
-    /// latency (DELIVERABLES.md D9). Measurement scaffolding: off by default and in every
+    /// latency (DELIVERABLES.md Deliverable 9). Measurement scaffolding: off by default and in every
     /// product path, where it costs one untaken branch a frame; `planner`'s `MP_STORM` turns it
     /// on. **Not the C#'s.**
     pub stamp_arrivals: bool,
@@ -1303,7 +1303,7 @@ impl Link {
 
     /// A handle that can send on this link from another thread.
     ///
-    /// For the thing that must not wait for a frame: the joystick reader (D15's 5 ms from stick
+    /// For the thing that must not wait for a frame: the joystick reader (Deliverable 15's 5 ms from stick
     /// to wire is not reachable from a UI timer, so it runs on a thread of its own and sends
     /// from there). Everything `send` needs is cheap to copy - the outbound queue is a channel
     /// and the ids are two bytes - so the handle carries copies rather than a borrow of the link,

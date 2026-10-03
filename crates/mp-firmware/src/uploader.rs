@@ -23,7 +23,7 @@
 //! Ported from `ExtLibs/px4uploader/Uploader.cs` @ efb0801 (GPL-3.0-only).
 //!
 //! Generic over `Read + Write` rather than owning a serial port, so the other end of the
-//! conversation can be a test. D13 requires the byte protocol proven against a mock bootloader
+//! conversation can be a test. Deliverable 13 requires the byte protocol proven against a mock bootloader
 //! before a real board is flashed, and a type that can only talk to `/dev/ttyACM0` cannot be.
 
 use crate::firmware::Firmware;

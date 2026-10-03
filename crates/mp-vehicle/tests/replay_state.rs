@@ -172,7 +172,7 @@ fn a_real_flight_produces_a_plausible_vehicle_state() {
     // Note what this corpus is: an ArduPilot autotest run, which sits on the ground and
     // exercises protocol handling rather than flying. Max |roll| is about 0.002 rad, confirmed
     // against the C# decode. Asserting the vehicle manoeuvred would be asserting something the
-    // data does not contain. A dynamic-flight corpus is still needed - see D19's SITL work.
+    // data does not contain. A dynamic-flight corpus is still needed - see Deliverable 19's SITL work.
     assert!(
         obs.max_abs_pitch > 0.0,
         "attitude must actually be decoded, not left at zero"

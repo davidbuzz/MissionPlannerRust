@@ -796,7 +796,7 @@ impl LogBrowse {
     /// `new DFLogBuffer(filename)`: the file is read and walked once for every record's place and
     /// type, and everything after that - the field list, the units, the labels, the routes, the
     /// parameters, the grid's rows, each curve - reads only the records of the types it needs,
-    /// through that index (`mp_log::logfile`). D14's budget for this is two seconds for a 1 GB
+    /// through that index (`mp_log::logfile`). Deliverable 14's budget for this is two seconds for a 1 GB
     /// log to its first plot; `crates/mp-log/benches/parse_1gb.rs` measures it.
     /// `// C#: Log/LogBrowse.cs:359-401; ExtLibs/Utilities/DFLogBuffer.cs:43-200`
     pub fn open(&mut self, path: &std::path::Path) {

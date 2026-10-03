@@ -18,7 +18,7 @@
 //
 // SPDX-License-Identifier: GPL-3.0-only
 
-//! Proves the ingest→state path allocates nothing per packet once warm (DELIVERABLES.md D5).
+//! Proves the ingest→state path allocates nothing per packet once warm (DELIVERABLES.md Deliverable 5).
 //!
 //! The path is the one the link thread runs (`mp-link/src/lib.rs`, `run_link`), stage for stage:
 //! a transport read, [`FrameDecoder::push_and_drain`], [`MavMessage::decode`], then

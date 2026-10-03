@@ -31,7 +31,7 @@
 //!
 //! Byte compatibility with Mission Planner is a requirement, not a nicety: users have years of
 //! recordings, and the two applications must be able to read each other's logs
-//! (`DELIVERABLES.md` D17).
+//! (`DELIVERABLES.md` Deliverable 17).
 //!
 //! # The DataFlash Logs page's conversions
 //!

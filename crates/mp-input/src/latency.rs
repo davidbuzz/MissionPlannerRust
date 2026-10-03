@@ -20,7 +20,7 @@
 
 //! A small fixed-bucket latency histogram, for stick-to-wire timing.
 //!
-//! DELIVERABLES.md D15 sets the bar as a percentile - p99 under 5 ms - and a percentile needs a
+//! DELIVERABLES.md Deliverable 15 sets the bar as a percentile - p99 under 5 ms - and a percentile needs a
 //! distribution, not an average: an average of 0.2 ms hides the one frame in fifty that waited
 //! 40 ms behind a repaint, and that one frame is the pilot's input arriving late. So the thread
 //! that sends records every change it delivers here, and the screen can show p50 and p99 over a
@@ -130,7 +130,7 @@ impl LatencyHistogram {
         self.percentile(50)
     }
 
-    /// An upper bound on the 99th percentile: the number D15 is judged by.
+    /// An upper bound on the 99th percentile: the number Deliverable 15 is judged by.
     #[must_use]
     pub fn p99(&self) -> Option<Duration> {
         self.percentile(99)

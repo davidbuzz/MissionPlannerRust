@@ -35,7 +35,7 @@
 //! runs of non-decreasing time and a min/max pyramid over its values (`lod`) - so the extent,
 //! [`auto_range`] and [`reduce`] search and read summaries instead of visiting every sample, and
 //! give exactly what a pass over every sample gives ([`reduce_scan`], kept as the reference).
-//! D14's scrub budget, ten million samples in each of eight series at 120 frames a second, is
+//! Deliverable 14's scrub budget, ten million samples in each of eight series at 120 frames a second, is
 //! `benches/scrub_10m.rs`.
 
 use std::collections::VecDeque;
@@ -358,7 +358,7 @@ pub fn reduce(series: &Series, from: f64, to: f64, columns: usize) -> Vec<Column
 }
 
 /// [`reduce`], and how many things it read to get there: sample times and values, block
-/// summaries and block start times, one each. The measure D14's "work provably O(width)" is
+/// summaries and block start times, one each. The measure Deliverable 14's "work provably O(width)" is
 /// held to (`benches/scrub_10m.rs`): a count, not a time, so it is the same on every machine at
 /// every load. A scan reads every sample; the index reads a few hundred things a column.
 #[must_use]

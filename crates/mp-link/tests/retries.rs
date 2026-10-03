@@ -18,7 +18,7 @@
 //
 // SPDX-License-Identifier: GPL-3.0-only
 
-//! Protocol state machines under fault (DELIVERABLES.md D4, PLAN.md §7.3, §13.3 item 5).
+//! Protocol state machines under fault (DELIVERABLES.md Deliverable 4, PLAN.md §7.3, §13.3 item 5).
 //!
 //! Each test puts a scripted vehicle on the far end of a [`Loopback`] and has it misbehave in one
 //! way on purpose: drop a reply, answer late, answer twice, answer the wrong question, skip,

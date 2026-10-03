@@ -17,7 +17,7 @@ thiserror.workspace = true
 proptest.workspace = true
 criterion.workspace = true
 
-# D8's pan/zoom budget: the map's per-frame CPU work at 2560x1440 with a 1M-point track and 10k
+# Deliverable 8's pan/zoom budget: the map's per-frame CPU work at 2560x1440 with a 1M-point track and 10k
 # markers. Here rather than in mp-gui because mp-gui has no library target to bench.
 [[bench]]
 name = "pan_zoom"

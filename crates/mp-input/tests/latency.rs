@@ -20,7 +20,7 @@
 
 //! Stick-to-wire latency, measured against a fake device.
 //!
-//! DELIVERABLES.md D15: stick input to packet on the wire, p99 under 5 ms. The device here is one
+//! DELIVERABLES.md Deliverable 15: stick input to packet on the wire, p99 under 5 ms. The device here is one
 //! end of a Unix socket pair, which the reader blocks on exactly as it blocks on `/dev/input/js*`:
 //! the kernel wakes the blocked `read` when bytes arrive. Each test writes `js_event`s at recorded
 //! instants and times how long each takes to reach the sink as a change, so what is measured is
@@ -28,7 +28,7 @@
 //! publishing, the send thread waking, mapping, the failsafe, and the sink being called.
 //!
 //! The assertions are on p99, not the maximum, because a machine running a parallel build will
-//! occasionally deschedule a thread for longer than 5 ms and that is not what D15 measures. The
+//! occasionally deschedule a thread for longer than 5 ms and that is not what Deliverable 15 measures. The
 //! bound is the real target, not a loosened one: on an idle machine the p99 is two orders of
 //! magnitude under it, so a failure here means the design has regressed - a poll interval crept
 //! back in, or a send started waiting for a tick - rather than that the machine was busy.
@@ -61,7 +61,7 @@ fn channel_one_on_x(ranges: RcRanges) -> Mapping {
     mapping
 }
 
-/// D15's bar.
+/// Deliverable 15's bar.
 const TARGET: Duration = Duration::from_millis(5);
 
 /// Long enough to wait for something that must happen, on a machine that is busy.
@@ -132,7 +132,7 @@ fn report(title: &str, samples: &mut [Duration], histogram: &LatencyHistogram) -
 }
 
 /// One event at a time, each waited for before the next: the latency of a stick movement on its
-/// own, with both threads asleep in between. This is D15's number.
+/// own, with both threads asleep in between. This is Deliverable 15's number.
 ///
 /// "On its own" means nothing was sent in the last `MIN_INTERVAL`, which is what lets a movement
 /// go out at once rather than wait for the rate floor - so each event is written a floor and a
@@ -187,7 +187,7 @@ fn an_isolated_movement_reaches_the_wire_within_five_milliseconds() {
     assert_eq!(histogram.count(), u64::try_from(EVENTS).unwrap());
     assert!(
         p99 <= TARGET,
-        "p99 {p99:?} is over D15's {TARGET:?}\n{histogram}"
+        "p99 {p99:?} is over Deliverable 15's {TARGET:?}\n{histogram}"
     );
     reader.close();
 }
@@ -340,7 +340,7 @@ fn a_stick_stirred_at_one_kilohertz_is_sent_at_most_every_floor_and_never_stale(
         &mut samples,
         &histogram,
     );
-    // Held by the floor, so not D15's 5 ms: a floor, plus the same 5 ms for getting there.
+    // Held by the floor, so not Deliverable 15's 5 ms: a floor, plus the same 5 ms for getting there.
     let bound = MIN_INTERVAL + TARGET;
     assert!(
         p99 <= bound,

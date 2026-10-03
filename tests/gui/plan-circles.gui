@@ -1,4 +1,4 @@
-# Auto WP > Create Wp Circle and Create Spline Circle (PLAN.md 13.4, D11).
+# Auto WP > Create Wp Circle and Create Spline Circle (PLAN.md 13.4, Deliverable 11).
 #
 # createWpCircleToolStripMenuItem_Click asks four questions - Radius 50, Points 20, Direction 1,
 # Angle 0 - reads them only once all are answered, and adds a WAYPOINT (16) per point from the

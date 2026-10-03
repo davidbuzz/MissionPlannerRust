@@ -80,7 +80,7 @@ pub trait Transport: Send {
     /// Human-readable description, shown in the UI and in logs.
     ///
     /// Borrowed, so asking costs nothing: the link asks on every snapshot publish, to notice a UDP
-    /// link learning its peer, and that path must not allocate (DELIVERABLES.md D5). A transport
+    /// link learning its peer, and that path must not allocate (DELIVERABLES.md Deliverable 5). A transport
     /// keeps its text ready and rewrites it only when what it describes changes.
     fn description(&self) -> &str;
 

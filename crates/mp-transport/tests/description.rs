@@ -18,7 +18,7 @@
 //
 // SPDX-License-Identifier: GPL-3.0-only
 
-//! What each transport calls itself, and that asking costs nothing (DELIVERABLES.md D5).
+//! What each transport calls itself, and that asking costs nothing (DELIVERABLES.md Deliverable 5).
 //!
 //! The link shows `Transport::description` to the operator and asks for it on every snapshot
 //! publish, to notice a UDP link learning its peer (`run_link` in mp-link/src/lib.rs). The texts

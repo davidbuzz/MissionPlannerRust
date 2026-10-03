@@ -18,7 +18,7 @@
 //
 // SPDX-License-Identifier: GPL-3.0-only
 
-//! Compatibility with the tile cache the C# application writes (DELIVERABLES.md D8).
+//! Compatibility with the tile cache the C# application writes (DELIVERABLES.md Deliverable 8).
 //!
 //! The claim is specific: a tile Mission Planner cached is read here with the network off, and a
 //! tile cached here is found by Mission Planner. Both directions are proved against the layout

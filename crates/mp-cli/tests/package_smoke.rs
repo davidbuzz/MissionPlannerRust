@@ -18,7 +18,7 @@
 //
 // SPDX-License-Identifier: GPL-3.0-only
 
-//! D20's package smoke test, for the Debian package `tools/package.sh deb` writes: installed into
+//! Deliverable 20's package smoke test, for the Debian package `tools/package.sh deb` writes: installed into
 //! a clean container, both programs run, the package removed and nothing left behind.
 //!
 //! Needs Docker and the package, which a plain `cargo test` has neither of, so it is ignored

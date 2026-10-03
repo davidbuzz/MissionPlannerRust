@@ -1,5 +1,5 @@
 // Headless survey-grid oracle: the `grid`, `corridor` and `rotary` verbs of PLAN.md §7.1, for §13.3
-// item 3, §13.4 item 8 and D11.
+// item 3, §13.4 item 8 and Deliverable 11.
 //
 // Runs Mission Planner's own generators in `MissionPlanner.Utilities.Grid` (ExtLibs/Utilities/Grid.cs)
 // - CreateGrid, CreateCorridor and CreateRotary - over the cases in testdata/grid/cases.txt and

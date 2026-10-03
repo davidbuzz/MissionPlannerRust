@@ -18,7 +18,7 @@
 //
 // SPDX-License-Identifier: GPL-3.0-only
 
-//! What a frame costs during a telemetry storm: DELIVERABLES.md D10's "no UI stall > 8 ms during
+//! What a frame costs during a telemetry storm: DELIVERABLES.md Deliverable 10's "no UI stall > 8 ms during
 //! a 200 Hz telemetry storm", measured in the window, where the claim is made.
 //!
 //! `crates/mp-link/tests/telemetry_storm.rs` shows that the link and the snapshot bus hold up
@@ -71,7 +71,7 @@
 //!
 //! # Packet to pixel
 //!
-//! DELIVERABLES.md D9's "< 16 ms packet-to-pixel at the 99th percentile" runs from a packet
+//! DELIVERABLES.md Deliverable 9's "< 16 ms packet-to-pixel at the 99th percentile" runs from a packet
 //! arriving at the link to the frame showing it being presented. The storm's link is asked to
 //! stamp arrivals (`LinkConfig::stamp_arrivals`), so the snapshot a frame reads carries when its
 //! newest packet came in (`VehicleState::packet_in`); the product's links never are, and the
@@ -104,10 +104,10 @@ use crate::telemetry::Telemetry;
 /// of one of these frames.
 pub const REFRESH: Duration = Duration::from_millis(16);
 
-/// A frame costing more than this is a stall: D10's figure.
+/// A frame costing more than this is a stall: Deliverable 10's figure.
 pub const STALL: Duration = Duration::from_millis(8);
 
-/// Packet-to-pixel at the 99th percentile must be under this: D9's figure.
+/// Packet-to-pixel at the 99th percentile must be under this: Deliverable 9's figure.
 pub const LATENCY_BUDGET: Duration = Duration::from_millis(16);
 
 /// Frames drawn in this long after the first are not counted.
@@ -734,7 +734,7 @@ mod tests {
         assert_eq!(STALL, ms(8));
         assert!(has(&["storm.rate", ">=", "190"]));
         assert!(has(&["frame.count", ">=", &ENOUGH.to_string()]));
-        // D9: packet-to-pixel under 16 ms at the 99th percentile, from enough packets.
+        // Deliverable 9: packet-to-pixel under 16 ms at the 99th percentile, from enough packets.
         assert!(has(&["storm.latency.p99", "<", "16"]));
         assert_eq!(LATENCY_BUDGET, ms(16));
         assert!(has(&["storm.latency.count", ">=", "50"]));

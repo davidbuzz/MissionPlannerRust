@@ -4,7 +4,7 @@
 # the Cygwin SITL fetched from firmware.ardupilot.org and started (`SITL.cs:269-456, 604-738`),
 # FLIGHT DATA connected to it on tcp:127.0.0.1:5760, its heartbeat, its parameters, a flight mode
 # changed and changed back. PLAN.md §13.6 row 78 owes one real launch on each OS, and the GUI
-# runner (tools/gui-test.sh) is Linux only (D19), so this is that script's steps in PowerShell,
+# runner (tools/gui-test.sh) is Linux only (Deliverable 19), so this is that script's steps in PowerShell,
 # with user32 for the clicks.
 #
 # Run in the VM's console window, where it can be watched (it clicks in the VM's desktop):

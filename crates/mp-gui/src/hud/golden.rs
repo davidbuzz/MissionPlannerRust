@@ -18,7 +18,7 @@
 //
 // SPDX-License-Identifier: GPL-3.0-only
 
-//! Golden frames of the display: DELIVERABLES.md D9, PLAN.md §13.6 row 75.
+//! Golden frames of the display: DELIVERABLES.md Deliverable 9, PLAN.md §13.6 row 75.
 //!
 //! Every case is a [`HudInputs`] turned into a [`super::scene`] - the geometry of `doPaint()`,
 //! `// C#: ExtLibs/Controls/HUD.cs:1954-3333` - drawn by [`raster`] and compared with the image

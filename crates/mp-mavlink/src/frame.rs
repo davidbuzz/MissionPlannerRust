@@ -284,7 +284,7 @@ pub fn trim_payload(payload: &[u8]) -> &[u8] {
 
 /// Encodes a MAVLink v2 frame into `out`, returning its length. Does not allocate.
 // The argument list mirrors the wire header one-for-one, which is clearer here than a builder.
-// D4's link engine will wrap this in a typed sender that carries seq/sysid/compid itself.
+// Deliverable 4's link engine will wrap this in a typed sender that carries seq/sysid/compid itself.
 #[allow(clippy::too_many_arguments)]
 #[allow(clippy::indexing_slicing)] // guarded by the BufferTooSmall check below
 pub fn encode_v2(

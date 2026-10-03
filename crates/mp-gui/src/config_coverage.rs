@@ -19,9 +19,9 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
 //! Which of Mission Planner's setup and configuration pages this application has (DELIVERABLES.md
-//! D12).
+//! Deliverable 12).
 //!
-//! D12's definition of done is "every C# config panel enumerated with a checked-in coverage ledger
+//! Deliverable 12's definition of done is "every C# config panel enumerated with a checked-in coverage ledger
 //! at 100 %". The panels are the `Config*.cs` user controls in `GCSViews/ConfigurationView/`, and
 //! two screens list them down their left-hand side: `GCSViews/InitialSetup.cs`, which `MainV2`'s
 //! SETUP button opens, and `GCSViews/SoftwareConfig.cs`, which its CONFIG button opens (C#:

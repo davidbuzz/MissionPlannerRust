@@ -1,5 +1,5 @@
 // Headless dataflash-log oracle: the `bintolog`, `dflogtokml`, `matlab` and `loganalysis` verbs, for
-// D14 and the flight screen's DataFlash Logs page (GCSViews/FlightData.cs:1082-1098, 1135-1197,
+// Deliverable 14 and the flight screen's DataFlash Logs page (GCSViews/FlightData.cs:1082-1098, 1135-1197,
 // 1311-1385, 1387-1390).
 //
 // Runs Mission Planner's own converters out of the msbuild output of ExtLibs/Utilities - the same

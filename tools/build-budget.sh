@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Measures D1's build budgets: a cold `cargo check --workspace` and the incremental check after one
-# leaf file changes (DELIVERABLES.md D1 asks for under 90 s cold and under 5 s incremental on the
+# Measures Deliverable 1's build budgets: a cold `cargo check --workspace` and the incremental check after one
+# leaf file changes (DELIVERABLES.md Deliverable 1 asks for under 90 s cold and under 5 s incremental on the
 # dev box).
 #
 # The cold check goes into a target directory of its own, so the figure is the whole workspace

@@ -1,4 +1,4 @@
-// Headless reference dumper for differential testing (DELIVERABLES.md D19).
+// Headless reference dumper for differential testing (DELIVERABLES.md Deliverable 19).
 //
 // Loads the *shipped* Mission Planner MAVLink.dll and prints what the C# implementation decodes,
 // so the Rust codec can be diffed against the real thing rather than against our reading of it.

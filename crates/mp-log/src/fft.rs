@@ -20,7 +20,7 @@
 
 //! The FFT window's arithmetic: a log field's spectrum, as `Controls/fftui.cs` draws it.
 //!
-//! **Which transform.** DELIVERABLES.md D14 names `ExtLibs/Exocortex.DSP`, but nothing in Mission
+//! **Which transform.** DELIVERABLES.md Deliverable 14 names `ExtLibs/Exocortex.DSP`, but nothing in Mission
 //! Planner calls it: the only users of an FFT are `fftui` (SETUP's FFT Setup page and the
 //! advanced config's FFT button open it) and `Spectrogram` (MainV2's hotkey), and both use
 //! `MissionPlanner.Utilities.FFT2` in `ExtLibs/Utilities/fft.cs` - Gerald Beauregard's in-place

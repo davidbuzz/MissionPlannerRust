@@ -18,7 +18,7 @@
 //
 // SPDX-License-Identifier: GPL-3.0-only
 
-//! The projection proof: PLAN.md §13.3 item 8, DELIVERABLES.md D8.
+//! The projection proof: PLAN.md §13.3 item 8, DELIVERABLES.md Deliverable 8.
 //!
 //! Every file in `testdata/projection/golden` is what Mission Planner's own code returned under
 //! mono for the coordinates of `testdata/projection/points.txt` (`tools/csharp-reference/
@@ -36,7 +36,7 @@
 //! - **Inverse projection.** `FromPixelToLatLng` takes the pixel, and `pixel / map size` is exact
 //!   for GMap's power-of-two sizes, so ours is held to it to the bit.
 //! - **Round trip.** GMap's own round trip goes through the whole pixel, so it is only as good as
-//!   half a pixel - several centimetres at zoom 20, measured below - and cannot meet D8's < 1 mm.
+//!   half a pixel - several centimetres at zoom 20, measured below - and cannot meet Deliverable 8's < 1 mm.
 //!   Ours stays in `f64` (PLAN.md §9.1), and is held to 1e-8 degrees and 1 mm on the ground.
 //! - **Distance, bearing, offset.** Transliterated from `PointLatLngAlt.cs` operation for
 //!   operation (PLAN.md §1.3 ports `GetDistance` literally), and held to the bit, except where
@@ -62,7 +62,7 @@ use mp_units::geodesy::WEB_MERCATOR_MAX_LATITUDE;
 use mp_units::tiles::{MAX_ZOOM, TILE_SIZE_PX, tiles_across};
 use mp_units::{Bearing, Degrees, LatLon, Metres, TileId, WebMercator};
 
-/// D8's round-trip bound on the ground.
+/// Deliverable 8's round-trip bound on the ground.
 const MILLIMETRE: f64 = 0.001;
 
 /// The same bound in degrees, as PLAN.md §13.3 item 8 words it: 1e-8 degrees of latitude is

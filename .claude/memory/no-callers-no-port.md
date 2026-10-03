@@ -5,12 +5,12 @@ metadata:
   type: feedback
 ---
 
-Buzz, 2026-09-25, after the D14 agent found that `Exocortex.DSP` and `fft3.cs` have no callers and
+Buzz, 2026-09-25, after the Deliverable 14 agent found that `Exocortex.DSP` and `fft3.cs` have no callers and
 the real FFT is `FFT2`: "any/all .cs files or even .cs functions for which you can not find *any*
 callers or users of it are to be written to a 'out of scope because of x' record, and not ported."
 
 **Why:** the C# tree carries dead code (whole libraries under `ExtLibs/`, orphaned helpers); porting
-it is work that ships nothing, and a DoD written against a dead library (D14's `Exocortex.DSP`) was
+it is work that ships nothing, and a DoD written against a dead library (Deliverable 14's `Exocortex.DSP`) was
 simply wrong until somebody looked for callers.
 
 **How to apply:** before porting a `.cs` file or a function, grep the C# tree for its callers

@@ -18,7 +18,7 @@
 //
 // SPDX-License-Identifier: GPL-3.0-only
 
-//! What Mission Planner's planning screen can do, and what this one can (DELIVERABLES.md D11).
+//! What Mission Planner's planning screen can do, and what this one can (DELIVERABLES.md Deliverable 11).
 //!
 //! `GCSViews/FlightPlanner.Designer.cs` wires 121 events to handlers - the Read and Write
 //! buttons, the waypoint grid, the home and default-altitude boxes, and the map's right-click

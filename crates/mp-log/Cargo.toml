@@ -28,7 +28,7 @@ mp-mavlink-dialects.workspace = true
 mp-link.workspace = true
 criterion.workspace = true
 
-# D14's parse budget: a 1 GB dataflash log opened to its first plot in under two seconds.
+# Deliverable 14's parse budget: a 1 GB dataflash log opened to its first plot in under two seconds.
 [[bench]]
 name = "parse_1gb"
 harness = false

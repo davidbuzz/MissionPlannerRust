@@ -18,7 +18,7 @@
 //
 // SPDX-License-Identifier: GPL-3.0-only
 
-//! The checked-in generated code is what the generators produce today (DELIVERABLES.md D18).
+//! The checked-in generated code is what the generators produce today (DELIVERABLES.md Deliverable 18).
 //!
 //! `cargo xtask codegen-modes`, `codegen-param-meta` and `codegen all` write their output into
 //! the crates and the output is committed, so a plain build needs no reference tree. Nothing but

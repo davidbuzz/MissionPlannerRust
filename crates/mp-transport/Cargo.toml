@@ -36,7 +36,7 @@ mp-mavlink-dialects.workspace = true
 serialport = { version = "4.10", default-features = false }
 criterion.workspace = true
 
-# D3: what a transport adds to a raw OS read, over TCP and a pseudo-terminal.
+# Deliverable 3: what a transport adds to a raw OS read, over TCP and a pseudo-terminal.
 [[bench]]
 name = "latency"
 harness = false

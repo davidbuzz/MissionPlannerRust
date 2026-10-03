@@ -14,7 +14,7 @@ metadata:
 ASCII terminal plot to `headless-planner` for dataflash logs.
 
 Mission Planner plots logs with ZedGraph in `Log/LogBrowse.cs` — a WinForms chart. There is no
-terminal plotting anywhere in the 1.2M lines, and D14's definition of done is explicitly a GPU
+terminal plotting anywhere in the 1.2M lines, and Deliverable 14's definition of done is explicitly a GPU
 chart. I built the ASCII renderer because it was the shape I could verify from a terminal without
 opening a window, which is a convenience for *me* and not a thing the product does.
 

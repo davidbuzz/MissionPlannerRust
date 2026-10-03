@@ -1,4 +1,4 @@
-# The WP radius and loiter radius circles on the planning map (DELIVERABLES.md D8, D11).
+# The WP radius and loiter radius circles on the planning map (DELIVERABLES.md Deliverable 8, Deliverable 11).
 #
 # writeKML hands WPOverlay.CreateOverlay the WP Radius and Loiter Radius boxes
 # (GCSViews/FlightPlanner.cs:1423-1434). Each waypoint's GMapMarkerRect is given the WP radius, a

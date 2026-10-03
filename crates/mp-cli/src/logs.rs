@@ -360,7 +360,7 @@ pub fn to_kml(path: &str, out: &str) -> std::process::ExitCode {
 /// WinForms chart - and there is no terminal plotting anywhere in the C#. An earlier version of
 /// this drew an ASCII chart here, which was not a port of anything: it was the shape easiest to
 /// check from a terminal, which is a convenience for whoever is writing the code rather than a
-/// thing Mission Planner does. The plot belongs in the GUI, against `mp_chart`, where D14's
+/// thing Mission Planner does. The plot belongs in the GUI, against `mp_chart`, where Deliverable 14's
 /// definition of done puts it.
 ///
 /// What is useful from a command line is the inventory. The field list comes from the log's own

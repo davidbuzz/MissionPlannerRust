@@ -1,4 +1,4 @@
-# Home is item 0 (PLAN.md 13.4 row 12, DELIVERABLES.md D11).
+# Home is item 0 (PLAN.md 13.4 row 12, DELIVERABLES.md Deliverable 11).
 #
 # Mission Planner keeps home out of the waypoint grid, in the Home Location boxes, and puts it back
 # in front of the grid whenever a mission is written: savewaypoints writes it as record 0

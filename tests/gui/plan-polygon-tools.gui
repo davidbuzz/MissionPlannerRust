@@ -1,4 +1,4 @@
-# Polygon > Save Polygon, Load Polygon, Area, Offset Polygon and From SHP (PLAN.md 13.4, D11).
+# Polygon > Save Polygon, Load Polygon, Area, Offset Polygon and From SHP (PLAN.md 13.4, Deliverable 11).
 #
 # savePolygonToolStripMenuItem_Click writes a .poly - the corners, then the first again - and does
 # nothing with no polygon drawn (GCSViews/FlightPlanner.cs:5892-5933); loadPolygonToolStripMenuItem_

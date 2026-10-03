@@ -1,4 +1,4 @@
-# Geo-Fence > Clear on a vehicle (PLAN.md 13.4, D11).
+# Geo-Fence > Clear on a vehicle (PLAN.md 13.4, Deliverable 11).
 #
 # clearToolStripMenuItem_Click sets FENCE_ENABLE, FENCE_ACTION and FENCE_TOTAL to 0 with setParam,
 # one after another, each waiting for the vehicle's echo; a set that goes unanswered says "Failed

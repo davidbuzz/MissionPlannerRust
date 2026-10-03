@@ -18,7 +18,7 @@
 //
 // SPDX-License-Identifier: GPL-3.0-only
 
-//! The snapshot bus's latency: D5's `benches/snapshot.rs`.
+//! The snapshot bus's latency: Deliverable 5's `benches/snapshot.rs`.
 //!
 //! D5's DoD is a single-writer, multi-reader snapshot with zero locks on the render path, and
 //! PLAN.md §8.2 puts a number on the writer's side - packet to snapshot published, p99 ≤ 200 µs -
@@ -28,7 +28,7 @@
 //! one atomic load.
 //!
 //! Two criterion benches, `publish` and `load`, at steady state with one reader; and a gate that
-//! is the D5 `tests/concurrency.rs` shape without the `loom` model: a writer publishing at 1 kHz
+//! is the Deliverable 5 `tests/concurrency.rs` shape without the `loom` model: a writer publishing at 1 kHz
 //! for a second while eight readers load without pause. The writer's publish p99 must be under
 //! 200 µs, a reader's load p99 under 20 µs - a hundred times §3's figure, room for a descheduled
 //! thread on a loaded machine - and the pool must have kept the steady state allocation-free bar

@@ -20,7 +20,7 @@
 
 //! Joystick and gamepad input, mapped to RC channels.
 //!
-//! Flying from a ground station with no transmitter, which is what D15 asks for. It is also the
+//! Flying from a ground station with no transmitter, which is what Deliverable 15 asks for. It is also the
 //! most dangerous thing in this application: a stick position sent over a telemetry link is a
 //! stick position that can stop arriving, and a vehicle holding the last one it received is a
 //! vehicle flying itself into the ground.

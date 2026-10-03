@@ -9,7 +9,7 @@ Buzz, 2026-09-25, answering the row 76 agent's questions: "With language absent,
 assume english. i dont care about translations, keep mute about language stuff till told
 otherwise."
 
-**Why:** i18n is a P1 deliverable on paper (D17) but not what Buzz is testing now; questions about
+**Why:** i18n is a P1 deliverable on paper (Deliverable 17) but not what Buzz is testing now; questions about
 cultures, fallbacks and translation counts are noise to him.
 
 **How to apply:** when config.xml's `language` is empty the culture is English, not the system's

@@ -1,4 +1,4 @@
-# What the screens keep in Mission Planner's config.xml comes back after a restart (D17).
+# What the screens keep in Mission Planner's config.xml comes back after a restart (Deliverable 17).
 #
 # Settings.Instance is the whole file, read once; a screen changes it in memory and SaveConfig
 # writes all of it on start-up, on the FLIGHT DATA and FLIGHT PLAN buttons, after Connect and on

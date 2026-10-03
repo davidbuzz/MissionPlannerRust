@@ -22,7 +22,7 @@
 //!
 //! Replaces `ExtLibs/Comms/CommsSerialPort.cs`. Which ports are listed, and in what order, is the
 //! C#'s rule set in [`crate::enumerate`]; this module only feeds it what the OS shows. Enumeration
-//! carries USB VID/PID because board detection (D13) identifies autopilots by them, exactly as
+//! carries USB VID/PID because board detection (Deliverable 13) identifies autopilots by them, exactly as
 //! `BoardDetect.cs` does today.
 
 use std::io::{self, Read, Write};

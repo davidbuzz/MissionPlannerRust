@@ -1,4 +1,4 @@
-// Headless projection oracle: the `projection` verb of PLAN.md §7.1, for §13.3 item 8 and D8.
+// Headless projection oracle: the `projection` verb of PLAN.md §7.1, for §13.3 item 8 and Deliverable 8.
 //
 // Runs the projections the map and the planner actually use - GMap.NET's MercatorProjection
 // (ExtLibs/GMap.NET.Core/GMap.NET.Projections/MercatorProjection.cs) and PointLatLngAlt's spherical

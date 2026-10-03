@@ -4,7 +4,7 @@
 # `MP_SMOKE=1 planner` paints, and once three frames have gone through the swap chain it prints
 # "smoke: 3 frames painted in <time>" and exits (crates/mp-gui/src/smoke.rs). This runs that N
 # times and reports the smoke's figure and the process's whole wall time - start of the process to
-# its exit - as min, median and max. PLAN.md section 8 asks for a 20-run median; D20 for a cold
+# its exit - as min, median and max. PLAN.md section 8 asks for a 20-run median; Deliverable 20 for a cold
 # start under 500 ms.
 #
 # On the headless display (Xvfb, Mesa's lavapipe), as tools/gui-headless.sh runs the GUI scripts:

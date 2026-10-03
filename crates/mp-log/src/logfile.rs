@@ -23,7 +23,7 @@
 //! The functions in [`crate::plot`], [`crate::overlay`] and [`crate::track`] each take the log's
 //! bytes and walk every record in it, decoding every record of the types they want, and the log
 //! browser calls seven of them to open one log - fine for a flight of a few minutes, and minutes
-//! of work for a gigabyte (`DELIVERABLES.md` D14 budgets two seconds). `DFLogBuffer` does it the
+//! of work for a gigabyte (`DELIVERABLES.md` Deliverable 14 budgets two seconds). `DFLogBuffer` does it the
 //! other way round: `setlinecount` walks the file **once**, recording where each record starts
 //! and, per message type, the lines of its records (`messageindex`, `messageindexline`), and
 //! everything afterwards - `GetEnumeratorType(types)` - reads only the records of the types asked
@@ -43,7 +43,7 @@
 //! where it was logged, as the walk reads it. A "line" is a record's place among every record the
 //! walk yields, `FMT` records included: the grid's row, and `DFItem.lineno`.
 //!
-//! **Not memory-mapped.** D14 says "memory-mapped", and this crate forbids `unsafe`, which a
+//! **Not memory-mapped.** Deliverable 14 says "memory-mapped", and this crate forbids `unsafe`, which a
 //! mapping needs (`memmap2::Mmap::map` is `unsafe`: another process may change the file under
 //! it). The file is read into memory whole, once, and the index is about thirteen bytes a record
 //! beside it.

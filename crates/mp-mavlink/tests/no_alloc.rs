@@ -20,7 +20,7 @@
 
 //! Proves the decode path allocates nothing.
 //!
-//! D2 claims "zero heap allocations per packet". That claim is worthless unless a test fails when
+//! Deliverable 2 claims "zero heap allocations per packet". That claim is worthless unless a test fails when
 //! it stops being true, so this binary installs a counting allocator and asserts an exact zero,
 //! first over a synthetic stream and then over every frame of every real flight in
 //! `testdata/mavlink`.

@@ -20,7 +20,7 @@
 
 //! The byte protocol, against an in-process mock bootloader.
 //!
-//! D13's definition of done names this file and it is the gate before any real board is flashed.
+//! Deliverable 13's definition of done names this file and it is the gate before any real board is flashed.
 //! PLAN.md R9 rates firmware flashing the only risk in the programme with *fatal* impact and no
 //! SITL equivalent: a wrong byte here does not produce a wrong reading on a screen, it produces a
 //! vehicle that will not boot and an operator who cannot recover it in the field.

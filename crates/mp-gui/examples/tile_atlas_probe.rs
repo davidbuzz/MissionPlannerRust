@@ -20,7 +20,7 @@
 
 //! Measures what a raster map tile actually costs through gpui's image path.
 //!
-//! The load-bearing question for D8's tile pipeline is whether a `RenderImage` painted with
+//! The load-bearing question for Deliverable 8's tile pipeline is whether a `RenderImage` painted with
 //! `Window::paint_image` is uploaded to the sprite atlas once or re-uploaded every frame. The
 //! source says once (`AtlasState::get_or_insert_with` in gpui's `platform.rs`), keyed on
 //! `RenderImageParams { image_id, frame_index }`. This probe checks that claim against a running

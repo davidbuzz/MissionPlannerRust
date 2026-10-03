@@ -100,7 +100,7 @@ all five ran clean.
 The two edge counts are the point. `message_decode` reaches 150 times more of the codebase than
 `frame_parse` does, which is the measure of how much was going unfuzzed before it existed.
 
-**The 24-hour soak D2's definition of done asks for was run 2026-09-23 16:01Z to 2026-09-24
+**The 24-hour soak Deliverable 2's definition of done asks for was run 2026-09-23 16:01Z to 2026-09-24
 16:01Z**, `frame_parse` and `message_decode` at once, one core each, `-max_total_time=86400`,
 the fuzz soak sharing the machine with a day's builds and GUI runs. Both clean: no crash, no
 timeout, no out-of-memory, `fuzz/artifacts/` empty at the end.

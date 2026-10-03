@@ -5,7 +5,7 @@ Date: 2026-09-23
 
 ## Context
 
-D7 asks for a Windows build that opens a window and paints. Nobody working on this project has a
+Deliverable 7 asks for a Windows build that opens a window and paints. Nobody working on this project has a
 Windows machine, and the Direct3D 11 backend gpui selects on Windows had, up to this point, never
 been run — not once, by anyone.
 

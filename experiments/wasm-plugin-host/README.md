@@ -117,7 +117,7 @@ What a real host still has to decide, none of it a blocker:
    and UDP sockets. wasmtime's WASI support gives them a preopened directory and sockets the
    host chooses; nothing else is reachable, which is the point.
 4. **Distribution.** One `.wasm` for every OS, no per-OS builds, no unsafe ABI: the native
-   dynamic-library option (D21) is not needed.
+   dynamic-library option (Deliverable 21) is not needed.
 
 Recommendation: build the host in `mp-gui` on this model, with WIT, and port the four real
 plugins as its first plugins; keep the examples as the API's test suite. That is a row for

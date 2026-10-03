@@ -129,7 +129,7 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - name: Install cargo-fuzz
         run: cargo install cargo-fuzz --locked
-      # Bounded rather than the 24 hours D2 asks for on frame_parse. A CI job is a regression
+      # Bounded rather than the 24 hours Deliverable 2 asks for on frame_parse. A CI job is a regression
       # check: it proves the targets still build and still hold, and it is the long soak that
       # finds new things. frame_parse gets the longest slice because it is the one on the
       # telemetry path, where every byte is attacker-influenced in the sense that matters.

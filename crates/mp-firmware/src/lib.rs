@@ -23,7 +23,7 @@
 //! Ported from `ExtLibs/px4uploader/` @ efb0801 (GPL-3.0-only). This is the one path in the
 //! application with no simulator: a wrong byte here does not produce a wrong reading, it produces a
 //! board that will not boot. PLAN.md R9 rates it the only *fatal*-impact risk with no SITL
-//! equivalent, and D13 requires the byte protocol to be proven against a mock bootloader before
+//! equivalent, and Deliverable 13 requires the byte protocol to be proven against a mock bootloader before
 //! any real board is touched.
 //!
 //! So the shape of this crate is: everything that can be a pure function is one, the protocol is

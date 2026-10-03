@@ -27,7 +27,7 @@
 //! The safety is in `mp_input`, which is a separate crate with its own tests, precisely so the
 //! decision about when to hand control back is not tangled up with how a panel is laid out. So is
 //! the speed: the device is read and the frames are sent on threads of that crate's own
-//! (`mp_input::reader`), because D15's five milliseconds from stick to wire cannot be met from a
+//! (`mp_input::reader`), because Deliverable 15's five milliseconds from stick to wire cannot be met from a
 //! screen that sends what it polled once a frame. So is the arithmetic: `mp_input::mapping` is the
 //! C#'s `pickchannel`, and `mp_input::config` its `JoyChannel`/`JoyButton` arrays and their files.
 //! This module is the page: the device list, the sixteen channel rows (`JoystickAxis`), the button

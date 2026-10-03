@@ -18,7 +18,7 @@
 //
 // SPDX-License-Identifier: GPL-3.0-only
 
-//! Primary flight display (DELIVERABLES.md D9).
+//! Primary flight display (DELIVERABLES.md Deliverable 9).
 //!
 //! Ported from `ExtLibs/Controls/HUD.cs` @ efb0801 (GPL-3.0-only): the instrument geometry of
 //! `doPaint()` (lines 1954-3333), drawn with gpui paths and text instead of GDI+ and OpenGL. The
@@ -32,7 +32,7 @@
 //! canvas coordinates, plus the list of [`Element`]s it drew. It is pure, so the geometry is
 //! tested without a window - where the horizon sits at a roll, where the target bug lands on the
 //! heading tape, that ARMED goes away after eight seconds. [`paint`] then puts a scene on a gpui
-//! canvas. The split is also what D9's golden-frame tests will drive.
+//! canvas. The split is also what Deliverable 9's golden-frame tests will drive.
 //!
 //! [`ELEMENTS`] is the coverage table: every element `doPaint()` draws, with its C# lines and
 //! whether this file draws it. A test holds the table to what [`scene`] produces, so the table

@@ -18,7 +18,7 @@
 //
 // SPDX-License-Identifier: GPL-3.0-only
 
-//! Map viewport spike (DELIVERABLES.md D7/D8).
+//! Map viewport spike (DELIVERABLES.md Deliverable 7/Deliverable 8).
 //!
 //! # The question this answers
 //!
@@ -29,7 +29,7 @@
 //! real thing rather than an argument: a tile grid, a 100,000-point flight track and a few thousand
 //! markers, painted through `canvas()` and measured.
 //!
-//! If the numbers here hold, D8's map needs no fork of gpui. If they do not, the abandon
+//! If the numbers here hold, Deliverable 8's map needs no fork of gpui. If they do not, the abandon
 //! conditions in the plan apply.
 
 // This module is internal to the binary; `pub` here documents intent rather than exporting API.
@@ -443,7 +443,7 @@ const TRACK_CHUNK: usize = 8_000;
 /// points per pixel a 730 px viewport needs ~1,460 points, and the result is visually identical
 /// because the extra points were landing inside the same pixels.
 ///
-/// This is stride decimation, which is enough to establish the budget. The real map (D8) needs
+/// This is stride decimation, which is enough to establish the budget. The real map (Deliverable 8) needs
 /// Douglas-Peucker or a pre-built pyramid so that decimation preserves shape rather than
 /// sampling blindly, plus view culling so off-screen track costs nothing at all.
 const POINTS_PER_PIXEL: f32 = 2.0;
@@ -3125,7 +3125,7 @@ fn paint_pin(window: &mut Window, cx: &mut App, at: Point<Pixels>, fill: u32, la
 /// Paints the live map: the vehicle's real flight path, home, and the vehicle itself.
 ///
 /// Screen mapping goes through Web Mercator, the projection tile servers use, so the same
-/// transform will place raster tiles when D8 adds them.
+/// transform will place raster tiles when Deliverable 8 adds them.
 fn paint_live(map: &mut MapViewport, bounds: Bounds<Pixels>, window: &mut Window, cx: &mut App) {
     let started = Instant::now();
     let origin = bounds.origin;
@@ -4100,7 +4100,7 @@ fn paint_map(map: &mut MapViewport, bounds: Bounds<Pixels>, window: &mut Window)
     // silently skipped by the obvious `if let Ok(..)`. A 100k-point track simply vanishes.
     //
     // So the track is chunked, with one point of overlap so the segments join without a visible
-    // seam. The real map (D8) needs this anyway for level-of-detail and view culling.
+    // seam. The real map (Deliverable 8) needs this anyway for level-of-detail and view culling.
     map.track_paths = 0;
     map.track_path_failures = 0;
     if map.track.len() > 1 {

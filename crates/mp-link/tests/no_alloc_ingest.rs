@@ -18,7 +18,7 @@
 //
 // SPDX-License-Identifier: GPL-3.0-only
 
-//! Counts what the real link thread allocates per packet (DELIVERABLES.md D5, PLAN.md §8.2).
+//! Counts what the real link thread allocates per packet (DELIVERABLES.md Deliverable 5, PLAN.md §8.2).
 //!
 //! `mp-vehicle/tests/no_alloc_ingest.rs` proves the stages from bytes to a published
 //! `VehicleState` allocate nothing. This test runs the code that strings those stages together -

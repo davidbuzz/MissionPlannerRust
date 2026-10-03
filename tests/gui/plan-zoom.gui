@@ -1,4 +1,4 @@
-# The planning map's zoom (DELIVERABLES.md D8, D11).
+# The planning map's zoom (DELIVERABLES.md Deliverable 8, Deliverable 11).
 #
 # The zoom icon on the map (zoomicon, GCSViews/FlightPlanner.cs:4910-4911, 7624-7628) opens
 # contextMenuStripZoom: Zoom to Vehicle centres on cs.Location, Zoom to Home on cs.HomeLocation or

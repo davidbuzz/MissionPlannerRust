@@ -62,7 +62,7 @@ const GLOBAL_RELATIVE_ALT: u8 = 3;
 ///
 /// Lists sorted by sequence number rather than maps, as [`crate::fence_points::FencePoints`] are:
 /// clearing one keeps its storage, so a mission read again and again allocates nothing after the
-/// first time, which the link's per-packet budget needs (DELIVERABLES.md D5).
+/// first time, which the link's per-packet budget needs (DELIVERABLES.md Deliverable 5).
 #[derive(Debug, Default)]
 pub struct MissionPoints {
     by_vehicle: Vec<(VehicleId, Lists)>,

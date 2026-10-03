@@ -18,7 +18,7 @@
 //
 // SPDX-License-Identifier: GPL-3.0-only
 
-//! What a render pass costs while telemetry is pouring in (DELIVERABLES.md D10).
+//! What a render pass costs while telemetry is pouring in (DELIVERABLES.md Deliverable 10).
 //!
 //! The deliverable asks for no UI stall over 8 ms during a 200 Hz telemetry storm. The part of
 //! that which can be measured without a window - and the part the design rests on - is the
@@ -164,7 +164,7 @@ fn snapshots_keep_arriving_while_the_link_is_saturated() {
 fn a_paced_storm_arrives_through_the_link_at_its_rate() {
     // What `planner` reports as `storm.rate`: frames the link counted, a second, over the frames
     // in each tick. A storm that fell short would make the frame measurement a measurement of a
-    // lighter load than D10 names; one that ran unthrottled, of a heavier one.
+    // lighter load than Deliverable 10 names; one that ran unthrottled, of a heavier one.
     let (storm, end) = Storm::start(200);
     let link = Link::from_transport(Box::new(end), LinkConfig::default());
     let deadline = Instant::now() + Duration::from_secs(10);

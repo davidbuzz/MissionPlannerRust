@@ -782,7 +782,7 @@ pub struct ScriptsTab {
     to_start: Vec<Asked>,
     /// How many `setWP`s of this run the vehicle accepted: a fact.
     pub wps_accepted: usize,
-    /// What `SpeakAsync` was last asked to say: a fact, as speech is DELIVERABLES D15.
+    /// What `SpeakAsync` was last asked to say: a fact, as speech is DELIVERABLES Deliverable 15.
     pub spoken: Option<String>,
     /// `textOutput.Text`.
     pub console: String,

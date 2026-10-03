@@ -18,7 +18,7 @@
 //
 // SPDX-License-Identifier: GPL-3.0-only
 
-//! The map's per-frame CPU work at D8's load: PLAN.md §13.3 item 8, §8.2's map frame budget.
+//! The map's per-frame CPU work at Deliverable 8's load: PLAN.md §13.3 item 8, §8.2's map frame budget.
 //!
 //! D8's DoD is 120 fps - 8.33 ms a frame - with a 1,000,000-point track and 10,000 markers, and
 //! §8.2 measures the whole map frame at 2560x1440 on the GPU with `wgpu-profiler`. This measures
@@ -89,7 +89,7 @@ use mp_units::{LatLon, WebMercator};
 const WIDTH: f32 = 2560.0;
 const HEIGHT: f32 = 1440.0;
 
-/// D8's load.
+/// Deliverable 8's load.
 const TRACK_POINTS: usize = 1_000_000;
 const MARKERS: usize = 10_000;
 

@@ -24,7 +24,7 @@
 //! live in the generated dialect crate, so that this hot path stays small, auditable and
 //! free of generated code.
 //!
-//! Design constraints, from `DELIVERABLES.md` D2:
+//! Design constraints, from `DELIVERABLES.md` Deliverable 2:
 //!
 //! * **Zero-copy parse.** [`frame::parse`] borrows the caller's buffer; payloads are never copied.
 //! * **Allocation-free.** Nothing in this crate allocates. [`decoder::FrameDecoder`] owns a

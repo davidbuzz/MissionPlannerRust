@@ -24,7 +24,7 @@
 //! message as a vehicle puts it on the wire; `tests/telemetry_storm.rs` had its own until the GUI
 //! needed the same frames. [`Storm`] writes those frames at a fixed rate into an in-memory
 //! [`Loopback`], so that a link, and a screen reading one, can be measured under DELIVERABLES.md
-//! D10's "200 Hz telemetry storm" without a simulator. `planner` runs one when `MP_STORM` is set
+//! Deliverable 10's "200 Hz telemetry storm" without a simulator. `planner` runs one when `MP_STORM` is set
 //! (`crates/mp-gui/src/storm.rs`).
 //!
 //! A link in normal operation uses nothing here.

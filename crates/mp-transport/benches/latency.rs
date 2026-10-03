@@ -18,7 +18,7 @@
 //
 // SPDX-License-Identifier: GPL-3.0-only
 
-//! What a transport adds to the OS's own read: D3's `benches/latency.rs`.
+//! What a transport adds to the OS's own read: Deliverable 3's `benches/latency.rs`.
 //!
 //! D3's DoD is ≤ 1 ms added latency over a raw OS read. Measured as a round trip: this end
 //! sends one byte, the far end answers with a 64-byte frame the moment it sees it, and the
@@ -44,7 +44,7 @@ use std::time::{Duration, Instant};
 use criterion::{Criterion, criterion_group};
 use mp_transport::Transport;
 
-/// D3: added latency over a raw OS read, at the 99th percentile.
+/// Deliverable 3: added latency over a raw OS read, at the 99th percentile.
 const BUDGET: Duration = Duration::from_millis(1);
 const ROUNDS: usize = 2000;
 const ANSWER: usize = 64;
@@ -208,11 +208,11 @@ fn report(link: &str, (mut raw, mut through): (Vec<Duration>, Vec<Duration>)) {
     );
     assert!(
         added <= BUDGET,
-        "{link}: the transport adds {added:?} at p99 over the raw read, more than D3's {BUDGET:?}"
+        "{link}: the transport adds {added:?} at p99 over the raw read, more than Deliverable 3's {BUDGET:?}"
     );
 }
 
-/// D3's floor: the transport's added latency at the 99th percentile, TCP and serial.
+/// Deliverable 3's floor: the transport's added latency at the 99th percentile, TCP and serial.
 fn gate() {
     if cfg!(debug_assertions) {
         println!("latency gate: skipped in an unoptimised build");

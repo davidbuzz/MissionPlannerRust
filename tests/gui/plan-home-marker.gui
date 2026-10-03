@@ -1,4 +1,4 @@
-# The home marker on the planning map (PLAN.md 13.4 row 13, DELIVERABLES.md D8, D11).
+# The home marker on the planning map (PLAN.md 13.4 row 13, DELIVERABLES.md Deliverable 8, Deliverable 11).
 #
 # writeKML builds home from the three Home Location boxes - only when all three hold a number,
 # otherwise `new PointLatLngAlt()`, which is not drawn - and WPOverlay.CreateOverlay draws it as

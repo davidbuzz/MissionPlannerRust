@@ -392,7 +392,7 @@ fn codegen_param_meta() -> Result<()> {
     Ok(())
 }
 
-/// `.resx` → `.ftl` under `assets/i18n/`, with `keymap.toml` and `report.md` (D17).
+/// `.resx` → `.ftl` under `assets/i18n/`, with `keymap.toml` and `report.md` (Deliverable 17).
 ///
 /// `--check` regenerates in memory and fails if any file differs from what is committed, or is
 /// missing, or is there and would not be generated.

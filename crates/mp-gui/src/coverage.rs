@@ -18,10 +18,10 @@
 //
 // SPDX-License-Identifier: GPL-3.0-only
 
-//! What Mission Planner's flight screen can do, and what this one can (DELIVERABLES.md D10).
+//! What Mission Planner's flight screen can do, and what this one can (DELIVERABLES.md Deliverable 10).
 //!
 //! `GCSViews/FlightData.Designer.cs` wires 136 events to handlers - every button, menu item,
-//! double-click and timer the screen has. D10's definition of done is "every tab, button and
+//! double-click and timer the screen has. Deliverable 10's definition of done is "every tab, button and
 //! action of the C# `FlightData` present", and the first step toward a number like that is a
 //! list nobody can argue with: each wiring, what the C# calls it, and what stands in for it here.
 //! [`FLIGHTDATA`] is that list. The report it renders lives at `docs/coverage/flightdata.md` and

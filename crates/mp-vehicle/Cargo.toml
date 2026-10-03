@@ -20,7 +20,7 @@ arc-swap = "1.9"
 mp-transport.workspace = true
 criterion.workspace = true
 
-# D5's snapshot bus: publish and load latency, a writer at 1 kHz under eight readers.
+# Deliverable 5's snapshot bus: publish and load latency, a writer at 1 kHz under eight readers.
 [[bench]]
 name = "snapshot"
 harness = false

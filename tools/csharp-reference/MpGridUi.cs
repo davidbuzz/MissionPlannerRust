@@ -1,5 +1,5 @@
 // The `accept` verb of MpGrid.exe: Mission Planner's Survey (Grid) dialog, Grid/GridUI.cs, run
-// without its form, for crates/mp-mission/tests/gridui_vectors.rs and D11.
+// without its form, for crates/mp-mission/tests/gridui_vectors.rs and Deliverable 11.
 //
 // GridUI is a WinForms Form: its constructor needs InitializeComponent, a GMap control, MainV2 and
 // the flight planner behind plugin.Host, none of which run headless. What the dialog computes does

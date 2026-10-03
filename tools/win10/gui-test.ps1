@@ -2,7 +2,7 @@
 # user32 in place of xdotool. It reads the same tests/gui/*.gui files and says the same things -
 # a line stamped with its time per step, "  ok   ..." or "FAIL line N: ..." per check, and
 # "<script>: passed in N s" or "<script>: N failure(s)" at the end - so a Windows run can be put
-# beside a Linux one line for line (DELIVERABLES D19: the runner was Linux only).
+# beside a Linux one line for line (DELIVERABLES Deliverable 19: the runner was Linux only).
 #
 #   powershell -File tools\win10\gui-test.ps1 -Script tests\gui\x.gui [-Link tcp:127.0.0.1:5760]
 #

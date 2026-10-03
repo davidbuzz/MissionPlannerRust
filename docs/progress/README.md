@@ -14,7 +14,7 @@ Naming: `d<NN>-<what-changed>.png`, so the directory reads as a timeline of the 
 
 | Screenshot | Deliverable | What it shows |
 |---|---|---|
-| `d06-first-window.png` | D6 | The first gpui window: shell, theme, panel layout |
+| `d06-first-window.png` | Deliverable 6 | The first gpui window: shell, theme, panel layout |
 
 Why screenshots rather than a written status line: a GUI port can be "90% done" in a tracker while
 showing a blank window. An image is the one claim about the interface that cannot be overstated.

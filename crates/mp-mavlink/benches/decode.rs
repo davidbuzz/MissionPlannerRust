@@ -18,7 +18,7 @@
 //
 // SPDX-License-Identifier: GPL-3.0-only
 
-//! Throughput benchmarks. D2's gate is >1M messages/s/core on the decode path.
+//! Throughput benchmarks. Deliverable 2's gate is >1M messages/s/core on the decode path.
 
 // Test code deliberately uses unwrap/expect/indexing: a panic here is a test failure with a
 // useful message, which is exactly what we want. The production lint policy stays strict.

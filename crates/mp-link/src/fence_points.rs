@@ -54,7 +54,7 @@ const FENCE_POLYGON_VERTEX_INCLUSION: u16 = 5001;
 ///
 /// A list per vehicle, sorted by sequence number, rather than a map: clearing one keeps its
 /// storage, so a vehicle whose fence is read again and again allocates nothing after the first
-/// time, which the link's per-packet budget needs (DELIVERABLES.md D5).
+/// time, which the link's per-packet budget needs (DELIVERABLES.md Deliverable 5).
 #[derive(Debug, Default)]
 pub struct FencePoints {
     by_vehicle: Vec<(VehicleId, Vec<(u16, FenceItem)>)>,

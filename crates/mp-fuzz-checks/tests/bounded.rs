@@ -20,7 +20,7 @@
 
 //! A bounded fuzz pass that runs on stable, as part of the ordinary test suite.
 //!
-//! D2's definition of done asks for 24 hours clean on `frame_parse`, which is a job for libFuzzer
+//! Deliverable 2's definition of done asks for 24 hours clean on `frame_parse`, which is a job for libFuzzer
 //! on nightly and not for `cargo test`. This is the other half: enough input, generated cheaply
 //! and deterministically, to prove every target still compiles and still holds on the kinds of
 //! input that break parsers - truncation, near-misses, and bytes that look like a frame until the

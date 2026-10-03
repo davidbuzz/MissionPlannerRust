@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Regenerates testdata/dataflash/golden from Mission Planner's own dataflash converters: the four
-# buttons of the flight screen's DataFlash Logs page (GCSViews/FlightData.cs), for D14 and
+# buttons of the flight screen's DataFlash Logs page (GCSViews/FlightData.cs), for Deliverable 14 and
 # crates/mp-log/tests/{convert,matlab,analysis}.rs and crates/mp-kml/tests/dflog.rs.
 #
 # The build is regen-grid.sh's, step for step and in the same cache, so whichever script runs first

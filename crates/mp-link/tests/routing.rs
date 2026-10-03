@@ -18,7 +18,7 @@
 //
 // SPDX-License-Identifier: GPL-3.0-only
 
-//! Fifty vehicles through one link (DELIVERABLES.md D4: "multi-vehicle `sysid/compid` routing
+//! Fifty vehicles through one link (DELIVERABLES.md Deliverable 4: "multi-vehicle `sysid/compid` routing
 //! with N ≥ 50 simultaneous vehicles").
 //!
 //! One shared radio, or one UDP port fed by a swarm's router, carries every aircraft on it, and

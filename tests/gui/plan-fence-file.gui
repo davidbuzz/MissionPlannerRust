@@ -1,4 +1,4 @@
-# Geo-Fence > Load from File and Save to File, the .fen format (PLAN.md 13.4, D11).
+# Geo-Fence > Load from File and Save to File, the .fen format (PLAN.md 13.4, Deliverable 11).
 #
 # loadFromFileToolStripMenuItem_Click reads a .fen: '#' lines skipped, the first data line the
 # return location, the rest the drawn polygon's corners with the closing repeat of the first taken

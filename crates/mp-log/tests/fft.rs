@@ -18,7 +18,7 @@
 //
 // SPDX-License-Identifier: GPL-3.0-only
 
-//! D14's FFT, held to what Mission Planner's FFT window computes.
+//! Deliverable 14's FFT, held to what Mission Planner's FFT window computes.
 //!
 //! The C# cannot run here, so the golden is a sample set whose spectrum is known exactly:
 //! synthetic sines at known frequencies and amplitudes, and a DC level. `FFT2.rin`'s window has a

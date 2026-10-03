@@ -1,6 +1,6 @@
 # ADR 0001 — The map viewport can live inside gpui, if geometry is decimated
 
-**Status:** accepted, 2026-09-23. Settles the D7/D8 gate in `PLAN.md` §2.4 and §9.1.
+**Status:** accepted, 2026-09-23. Settles the Deliverable 7/Deliverable 8 gate in `PLAN.md` §2.4 and §9.1.
 **Evidence:** `crates/mp-gui/src/mapview.rs`, run on this box (Intel UHD + NVIDIA Quadro T2000,
 X11, gpui pinned at zed `62e5991`, wgpu backend). Screenshot: `docs/progress/d08-map-spike.png`.
 
@@ -50,7 +50,7 @@ markers 1.8 ms. Decimated: tiles 0.03 ms, clone 0.39 ms, submit 0.43 ms, **marke
 
 ## Consequences
 
-- D8's map is built around a decimation pyramid and view culling from the start. Douglas-Peucker
+- Deliverable 8's map is built around a decimation pyramid and view culling from the start. Douglas-Peucker
   or a pre-built pyramid replaces the stride sampling used in this spike, so shape is preserved
   rather than sampled blindly.
 - Every `PathBuilder::build()` call site counts failures and surfaces them. A silent `Ok` check is

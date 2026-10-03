@@ -22,7 +22,7 @@
 //!
 //! This is the `.waypoints` / `.txt` mission format Mission Planner, QGroundControl, MAVProxy and
 //! ArduPilot's own test suite all read and write. Users have years of these files, so reading them
-//! is not a feature, it is a prerequisite (`DELIVERABLES.md` D17).
+//! is not a feature, it is a prerequisite (`DELIVERABLES.md` Deliverable 17).
 //!
 //! # Layout
 //!

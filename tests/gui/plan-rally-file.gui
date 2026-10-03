@@ -1,5 +1,5 @@
 # Rally Points > Set Rally Point, Save Rally to File, Clear Rally Points and Load Rally from File
-# (PLAN.md 13.4, D11), with no vehicle.
+# (PLAN.md 13.4, Deliverable 11), with no vehicle.
 #
 # setRallyPointToolStripMenuItem_Click asks "Altitude", offering Default Alt, and puts a
 # GMapMarkerRallyPt - the purple pin - at the click, or says "Invalid Alt" (GCSViews/

@@ -1,4 +1,4 @@
-# Geo-Fence > Clear with no vehicle (PLAN.md 13.4, D11).
+# Geo-Fence > Clear with no vehicle (PLAN.md 13.4, Deliverable 11).
 #
 # clearToolStripMenuItem_Click sets FENCE_ENABLE, FENCE_ACTION and FENCE_TOTAL to 0, one after
 # another, then clears the geofence and the drawn polygon's overlay from the map

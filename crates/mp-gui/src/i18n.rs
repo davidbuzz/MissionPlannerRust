@@ -18,7 +18,7 @@
 //
 // SPDX-License-Identifier: GPL-3.0-only
 
-//! The screens' words through Fluent: DELIVERABLES.md D17, PLAN.md §13.6 row 76.
+//! The screens' words through Fluent: DELIVERABLES.md Deliverable 17, PLAN.md §13.6 row 76.
 //!
 //! Mission Planner keeps its words in `.resx` files, a base file in English and a sibling per
 //! culture holding what that culture translates; .NET's `ResourceManager` looks a name up in the

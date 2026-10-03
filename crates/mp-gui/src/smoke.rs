@@ -20,7 +20,7 @@
 
 //! A run that proves the window opened and the GPU painted it, then exits.
 //!
-//! D7 asks for a Windows build that opens a window and paints; the Direct3D 11 backend has never
+//! Deliverable 7 asks for a Windows build that opens a window and paints; the Direct3D 11 backend has never
 //! been exercised because nobody here has a Windows machine. This is the part of that which can be
 //! automated: the application starts normally, paints for real, and exits with a status that says
 //! whether it did. CI runs it on all three platforms, so the backend that has never run becomes

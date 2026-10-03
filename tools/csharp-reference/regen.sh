@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Regenerates the C# reference corpora used by the differential tests (D19).
+# Regenerates the C# reference corpora used by the differential tests (Deliverable 19).
 # Requires mono and a Mission Planner binary distribution.
 set -euo pipefail
 MP="${MP_DIST:-$HOME/Downloads/MissionPlanner-latest}"

@@ -20,7 +20,7 @@
 
 //! `.param` files written by other ground stations are read, and what we write is read back.
 //!
-//! Named in D12's definition of done. A parameter file is the one artefact an operator moves
+//! Named in Deliverable 12's definition of done. A parameter file is the one artefact an operator moves
 //! between tools - saved in Mission Planner, posted on a forum, pulled out of MAVProxy - so
 //! failing to read somebody else's file is failing at the format's whole purpose.
 //!
@@ -163,7 +163,7 @@ fn what_we_write_is_shaped_the_way_the_other_tools_read() {
 
 /// Byte-for-byte: reading the fixture and writing it back produces the fixture again.
 ///
-/// The strongest statement this can make without a run of the C# application, and the one D12 asks
+/// The strongest statement this can make without a run of the C# application, and the one Deliverable 12 asks
 /// for. It fails on any formatting drift at all - a decimal place gained, a sort order changed, a
 /// line ending altered - rather than on a semantic difference.
 #[test]

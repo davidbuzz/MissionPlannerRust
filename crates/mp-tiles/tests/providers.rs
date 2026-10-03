@@ -18,7 +18,7 @@
 //
 // SPDX-License-Identifier: GPL-3.0-only
 
-//! The providers against GMap.NET itself (DELIVERABLES.md D8: the identical provider list).
+//! The providers against GMap.NET itself (DELIVERABLES.md Deliverable 8: the identical provider list).
 //!
 //! `fixtures/gmap-oracle.tsv` is what a Mission Planner `GMap.NET.Core.dll` said when asked by
 //! `fixtures/GMapOracle.cs`: the order and names of `GMapProviders.List` - the list the map-type box

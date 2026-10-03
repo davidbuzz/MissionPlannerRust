@@ -18,7 +18,7 @@
 //
 // SPDX-License-Identifier: GPL-3.0-only
 
-//! D14's scrub budget: a cursor dragged across eight series of ten million samples each, every
+//! Deliverable 14's scrub budget: a cursor dragged across eight series of ten million samples each, every
 //! step inside a 120 fps frame (8.33 ms), and the work provably the plot's width, not the log's
 //! length.
 //!
@@ -68,7 +68,7 @@
 //!
 //! Measured on the development machine, an i7-10875H (8 cores, 16 threads, 32 GB, swap full),
 //! release profile, with other agents' builds running beside it (see the run's own output for
-//! the load): see DELIVERABLES.md D14 for the figures of the last run.
+//! the load): see DELIVERABLES.md Deliverable 14 for the figures of the last run.
 
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::indexing_slicing)]
 #![allow(clippy::print_stdout, clippy::cast_precision_loss)]

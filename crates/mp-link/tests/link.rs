@@ -537,7 +537,7 @@ fn talks_to_a_real_ardupilot_sitl() {
 
 #[test]
 fn a_sender_handle_puts_frames_on_the_wire_from_another_thread() {
-    // The joystick reader has to send from a thread of its own - D15's 5 ms from stick to wire
+    // The joystick reader has to send from a thread of its own - Deliverable 15's 5 ms from stick to wire
     // is not reachable through a UI timer - and it cannot borrow the link across threads. The
     // handle carries copies of what `send` needs and nothing else.
     let (gcs_side, mut vehicle_side) = Loopback::pair();

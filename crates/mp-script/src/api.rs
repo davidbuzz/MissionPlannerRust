@@ -266,7 +266,7 @@ pub trait ScriptHost {
     }
 
     /// `MainV2.speechEngine.SpeakAsync(text)` once `SpeakAsync`'s own checks have passed: the
-    /// text to be spoken. Speech itself is DELIVERABLES D15; a host records what it was asked
+    /// text to be spoken. Speech itself is DELIVERABLES Deliverable 15; a host records what it was asked
     /// to say.
     /// `// C#: Utilities/Speech.cs:65-80`
     fn speak(&mut self, _text: &str) {}

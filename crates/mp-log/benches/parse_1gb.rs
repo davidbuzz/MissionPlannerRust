@@ -18,9 +18,9 @@
 //
 // SPDX-License-Identifier: GPL-3.0-only
 
-//! D14's parse budget: a 1 GB dataflash log opened to its first plot in under two seconds.
+//! Deliverable 14's parse budget: a 1 GB dataflash log opened to its first plot in under two seconds.
 //!
-//! `DELIVERABLES.md` D14 asks for "a 1 GB dataflash log in < 2 s". What the log browser does to
+//! `DELIVERABLES.md` Deliverable 14 asks for "a 1 GB dataflash log in < 2 s". What the log browser does to
 //! open a log and plot its first field (`LogBrowse::open`, then `LogBrowse::graph`) is, on
 //! [`LogFile`]: read and index the file; the field inventory, the units, the chart's labels, the
 //! cursor's position records, the start of the time axis and the map's routes; and one field's
@@ -98,7 +98,7 @@ use mp_log::overlay::{Firmware, Overlays, Positions};
 use mp_log::plot::{PlottableField, Point, UnitTable};
 use mp_log::track::Routes;
 
-/// D14's budget.
+/// Deliverable 14's budget.
 const BUDGET: Duration = Duration::from_secs(2);
 
 /// How big the log is made: a gibibyte, in whole copies of the fixture.
@@ -166,7 +166,7 @@ struct Opened {
 }
 
 /// `LogBrowse::open`, then `LogBrowse::graph` of the first field it would plot, on
-/// [`LogFile`]: what D14's two seconds are for.
+/// [`LogFile`]: what Deliverable 14's two seconds are for.
 fn open_to_first_plot(path: &Path) -> Opened {
     let log = LogFile::open(path).expect("the log");
     let fields = log.plottable();
@@ -300,7 +300,7 @@ fn gate(path: &Path) {
     );
     assert!(
         median <= BUDGET,
-        "a 1 GB log takes {median:?} to open to its first plot, over D14's {BUDGET:?}"
+        "a 1 GB log takes {median:?} to open to its first plot, over Deliverable 14's {BUDGET:?}"
     );
 }
 

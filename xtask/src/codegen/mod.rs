@@ -18,7 +18,7 @@
 //
 // SPDX-License-Identifier: GPL-3.0-only
 
-//! Code generation from the upstream definition files (DELIVERABLES.md D18).
+//! Code generation from the upstream definition files (DELIVERABLES.md Deliverable 18).
 //!
 //! Generated code is checked in so that a plain `cargo build` needs no Python, no network and no
 //! reference tree. `cargo xtask codegen --check` regenerates into a temporary location and fails

@@ -1,4 +1,4 @@
-# Rally Points > Download, Upload and Clear Rally Points on a vehicle (PLAN.md 13.4, D11).
+# Rally Points > Download, Upload and Clear Rally Points on a vehicle (PLAN.md 13.4, Deliverable 11).
 #
 # getRallyPointsToolStripMenuItem_Click tests (capabilities & MISSION_RALLY) >= 0, which every uint
 # passes, so it always takes mav_mission.download of the rally list - MISSION_REQUEST_LIST with

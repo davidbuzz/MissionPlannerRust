@@ -36,7 +36,7 @@
 //!
 //! What the transport does *not* owe: it does not de-duplicate or reorder. A repeated frame is
 //! delivered twice and a late one late; MAVLink's sequence number is how the link notices, and
-//! doing it there is the link's job (D4), not the byte pipe's.
+//! doing it there is the link's job (Deliverable 4), not the byte pipe's.
 
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::indexing_slicing)]
 

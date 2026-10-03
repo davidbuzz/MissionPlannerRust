@@ -24,7 +24,7 @@
 //! format is as plain as a settings file gets - a `Config` root and one element per key, the
 //! element's text being the value - and [`Config::render`] writes it byte for byte as
 //! `XmlTextWriter` does under mono, so a file this crate writes is one the C# reads back unchanged
-//! and vice versa (DELIVERABLES.md D17) - which is what lets [`crate::migrate`] import the C#'s
+//! and vice versa (DELIVERABLES.md Deliverable 17) - which is what lets [`crate::migrate`] import the C#'s
 //! file into this application's own directory by copying it. Measured, not guessed:
 //! `tests/fixtures/config-saved.xml` is what Mission Planner's own `Settings.Save` wrote, under
 //! mono, for the keys in `config-saved.txt` (`tests/fixtures/SettingsOracle.cs` drives it), and

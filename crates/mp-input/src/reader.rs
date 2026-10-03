@@ -20,7 +20,7 @@
 
 //! Sticks read on a thread of their own, and sent the moment they move.
 //!
-//! DELIVERABLES.md D15 asks for stick input to packet on the wire at p99 under 5 ms. Polling a
+//! DELIVERABLES.md Deliverable 15 asks for stick input to packet on the wire at p99 under 5 ms. Polling a
 //! non-blocking device every 50 ms from gpui's foreground executor cannot get there - the poll
 //! interval alone is ten times the budget - and it ties the thing flying the aircraft to how
 //! quickly the user interface finishes a frame. So this owns two OS threads:

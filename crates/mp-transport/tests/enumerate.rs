@@ -20,7 +20,7 @@
 
 //! Serial enumeration against checked-in listings from each OS.
 //!
-//! D3 asks for the device list Mission Planner shows on the same hardware. The hardware is not
+//! Deliverable 3 asks for the device list Mission Planner shows on the same hardware. The hardware is not
 //! here, so its listings are (`testdata/ports/`), and each test asserts the exact list, in order,
 //! that `SerialPort.GetPortNames()` would build from one. Where the C# tree is present, the rules'
 //! constants are also checked against its source, so a change upstream fails here first.

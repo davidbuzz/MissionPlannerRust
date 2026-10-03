@@ -18,7 +18,7 @@
 //
 // SPDX-License-Identifier: GPL-3.0-only
 
-//! Corridor surveys against Mission Planner's own: PLAN.md §13.4 item 8, DELIVERABLES.md D11.
+//! Corridor surveys against Mission Planner's own: PLAN.md §13.4 item 8, DELIVERABLES.md Deliverable 11.
 //!
 //! Every file in `testdata/grid/golden/corridor` is what `Grid.CreateCorridor` returned under mono
 //! for one `corridor` line of `testdata/grid/cases.txt`, with the arguments it was called with

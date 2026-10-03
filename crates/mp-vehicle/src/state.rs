@@ -659,7 +659,7 @@ pub struct VehicleState {
     pub heartbeats: u64,
 
     /// When the newest frame applied to this state arrived at the link: the start of a
-    /// packet-to-pixel measurement (DELIVERABLES.md D9). Measurement scaffolding, not vehicle
+    /// packet-to-pixel measurement (DELIVERABLES.md Deliverable 9). Measurement scaffolding, not vehicle
     /// state and not the C#'s: a link stamps it only when its configuration asks
     /// (`mp_link::LinkConfig::stamp_arrivals`, which only `MP_STORM` sets), and it is `None`
     /// otherwise.

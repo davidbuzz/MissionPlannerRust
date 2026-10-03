@@ -138,7 +138,7 @@ what it looked at in Zed and chose against.
 | Platform selection the way Zed's `gpui_platform::current_platform` does it | `platform.rs` (reimplemented) |
 | Drawing our own scrollbars, as Zed does - gpui has no scrollbar geometry | `ui.rs:180` |
 | Map, HUD, tracks and fences drawn with gpui's own primitives and atlas-cached images, as Zed draws its UI, rather than owning a GPU surface | ADR 0001 (map viewport in gpui); PLAN.md §2.2 |
-| A sandboxed WASM extension host "modelled on zed's `extension` / `extension_host` / `extension_api`" | DELIVERABLES.md D16; built as `mp-plugin-host` on wasmtime's component model, our own WIT world, none of Zed's code |
+| A sandboxed WASM extension host "modelled on zed's `extension` / `extension_host` / `extension_api`" | DELIVERABLES.md Deliverable 16; built as `mp-plugin-host` on wasmtime's component model, our own WIT world, none of Zed's code |
 
 **Looked at in Zed, and not taken:**
 

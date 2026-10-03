@@ -36,7 +36,7 @@
 //! sink returning - with `X`, `Y`, `Rx` and `Ry` - axes 0, 1, 3 and 4, the two sticks of an
 //! XInput pad - on channels 1 to 4, so the sticks count and the triggers and buttons do not. A stick being moved is a stream of events, and every one that
 //! lands within `MIN_INTERVAL` of the last frame is held by the rate floor, so the bound here is a
-//! floor plus D15's 5 ms, as for the stirred fake device. D15's 5 ms itself is for an isolated
+//! floor plus Deliverable 15's 5 ms, as for the stirred fake device. Deliverable 15's 5 ms itself is for an isolated
 //! movement, which a person cannot produce on demand; `latency.rs` measures that. The kernel waking that read comes before it and cannot be timed
 //! through the `js` API, whose event timestamps are jiffies on a clock this process cannot read;
 //! the fake-device test in `latency.rs` covers that half, through a socket the kernel wakes the
@@ -51,7 +51,7 @@ use std::time::Duration;
 
 use mp_input::{JoystickAxis, MIN_INTERVAL, Mapping, Poll, StickReader};
 
-/// D15's bar, on top of the rate floor a moving stick is held by.
+/// Deliverable 15's bar, on top of the rate floor a moving stick is held by.
 const TARGET: Duration = Duration::from_millis(5);
 
 /// Fewer changes than this and a p99 is one or two samples; it is printed but not judged.

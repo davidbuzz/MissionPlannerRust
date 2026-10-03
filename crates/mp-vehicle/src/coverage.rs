@@ -19,11 +19,11 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
 //! What Mission Planner's `CurrentState` holds, and what stands for each of it here
-//! (DELIVERABLES.md D5).
+//! (DELIVERABLES.md Deliverable 5).
 //!
 //! `ExtLibs/ArduPilot/CurrentState.cs` is the object the whole C# application reads the vehicle
 //! through: the HUD binds to it, the quick view and the tuning graph offer its properties by
-//! name, speech and scripts format them. D5's definition of done is "every C# `CurrentState`
+//! name, speech and scripts format them. Deliverable 5's definition of done is "every C# `CurrentState`
 //! field accounted for", and [`CURRENTSTATE`] is that account - one row per public property or
 //! field, in the file's order, with the `[DisplayText]` and `[GroupText]` the quick view's field
 //! chooser shows for it and what this crate has in its place. The report it renders lives at

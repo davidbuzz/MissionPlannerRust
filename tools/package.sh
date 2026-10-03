@@ -6,10 +6,10 @@
 #        tools/package.sh deb [--no-build] dist/missionplanner-rust_<version>_<arch>.deb as well:
 #                                         the binaries in /usr/bin, the desktop entry and icon
 #                                         (tools/packaging/), the licence, Depends from what the
-#                                         planner links (D20); --no-build packages the release
+#                                         planner links (Deliverable 20); --no-build packages the release
 #                                         binaries already in target/release
 #
-# D20 asks for signed artefacts on three systems, auto-update and crash reports: the update and the
+# Deliverable 20 asks for signed artefacts on three systems, auto-update and crash reports: the update and the
 # crash reports are the program's (crates/mp-update, crates/mp-gui/src/crash.rs); of the artefacts
 # this is the Debian package, unsigned - signing, the AppImage, the MSI and the .dmg are not here.
 # The package is held to a clean container by crates/mp-cli/tests/package_smoke.rs.

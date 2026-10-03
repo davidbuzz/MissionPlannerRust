@@ -18,7 +18,7 @@
 //
 // SPDX-License-Identifier: GPL-3.0-only
 
-//! Full function with the network disabled (DELIVERABLES.md D8).
+//! Full function with the network disabled (DELIVERABLES.md Deliverable 8).
 //!
 //! The requirement is not "degrades gracefully". A survey flown from a cache filled at home has to
 //! work in a paddock with no signal, and nothing here may block, retry, or wait on a network that

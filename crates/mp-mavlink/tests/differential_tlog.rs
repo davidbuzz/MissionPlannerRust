@@ -18,7 +18,7 @@
 //
 // SPDX-License-Identifier: GPL-3.0-only
 
-//! Differential test against the shipping C# implementation (DELIVERABLES.md D19).
+//! Differential test against the shipping C# implementation (DELIVERABLES.md Deliverable 19).
 //!
 //! `testdata/mavlink/autotest.tlog` is a real ArduPilot autotest flight. The `.csharp.csv`
 //! beside it is what Mission Planner's own `MAVLink.dll` decoded from it, produced headless under
@@ -31,7 +31,7 @@
 //! The walker below deliberately mirrors `MavlinkParse.ReadPacket`'s quirky framing policy
 //! (consume 8 timestamp bytes, then scan forward for the next STX) so that the two
 //! implementations are compared on the *same* frames. A robust tlog reader for the product
-//! belongs in the log crate (D14); this one exists to make the comparison exact.
+//! belongs in the log crate (Deliverable 14); this one exists to make the comparison exact.
 
 // Test code deliberately uses unwrap/expect/indexing: a panic here is a test failure with a
 // useful message, which is exactly what we want. The production lint policy stays strict.
