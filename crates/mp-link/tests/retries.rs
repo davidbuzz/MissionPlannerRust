@@ -686,7 +686,19 @@ fn a_hole_never_filled_is_asked_for_until_cancelled() {
 
     link.cancel_param_download(VEHICLE);
     assert_eq!(download_state(&link), Some(ParamDownloadState::Cancelled));
-    let after = peer.collect(t.param_list_round * 4);
+    // A read the link sent just before the Cancel can still be on its way: on the hosted Linux
+    // runner (CI run 37128821793, 2026-10-03) one arrived after it. So the first round after
+    // Cancel may carry that one; the three rounds after it carry none.
+    let in_flight = peer.collect(t.param_list_round);
+    let stale = in_flight
+        .iter()
+        .filter(|message| is_param_read(message))
+        .count();
+    assert!(
+        stale <= 1,
+        "{stale} reads in the round after Cancel: {in_flight:?}"
+    );
+    let after = peer.collect(t.param_list_round * 3);
     assert!(
         after.iter().all(|message| !is_param_read(message)),
         "asked after Cancel: {after:?}"
