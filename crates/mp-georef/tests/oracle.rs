@@ -333,7 +333,10 @@ fn run_case(case: &Case) -> Vec<String> {
     let mut failures = Vec::new();
     let golden = common::data().join("golden").join(case.name);
 
-    let got_messages = messages.replace(&work_str, "{dir}");
+    // The separator after the directory is the platform's (see edge.rs): compared on the golden's.
+    let got_messages = messages
+        .replace(&work_str, "{dir}")
+        .replace("{dir}\\", "{dir}/");
     let want_messages = std::fs::read_to_string(golden.join("messages.txt")).unwrap();
     if got_messages != want_messages {
         failures.push(format!(

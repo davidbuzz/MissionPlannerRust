@@ -97,7 +97,11 @@ fn geotag_case(name: &str, lat: f64, lon: f64, alt: f64) -> Vec<String> {
     let golden = common::data().join("golden").join(name);
     let mut failures = Vec::new();
     let want = std::fs::read_to_string(golden.join("messages.txt")).unwrap();
-    let got = messages.replace(&work_str, "{dir}");
+    // The separator after the directory is the platform's, as the C#'s Path.Combine gives it: a
+    // backslash on Windows (the hosted runner, 2026-10-03), where the Linux-made golden has a slash.
+    let got = messages
+        .replace(&work_str, "{dir}")
+        .replace("{dir}\\", "{dir}/");
     if got != want {
         failures.push(format!(
             "{name}: messages\n--- want\n{want}\n--- got\n{got}"
