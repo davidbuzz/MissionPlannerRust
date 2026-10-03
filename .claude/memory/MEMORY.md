@@ -14,6 +14,7 @@ controlled; the per-project memory directory holds symlinks to them.
 - [No dialogs for avoidable errors](no-dialogs-for-avoidable-errors.md) — an error the main window can show as state/connectivity/colour never gets a message box (Buzz, 2026-09-25)
 - [Mute on language](mute-on-language.md) — English when `language` is empty; no i18n questions or reports until told otherwise (Buzz, 2026-09-25)
 - [Work the matrix in priority order](work-the-matrix-in-priority-order.md) — every "high" row of NOT_DONE_YET_MATRIX.md to 100% before any "med" row (Buzz, 2026-09-26); within med: Standard/Advanced Params, DroneCAN, MAVFtp, Sik Radio first (Buzz, 2026-10-02); a row at 100 moves out the same day, to DELIVERABLES.md's "Finished since the audit" list or PLAN.md §12 (Buzz, 2026-10-03)
+- [C# tree reads are measurement](csharp-tree-reads-are-measurement.md) — Rust never opens a path under the clone; tree reads only as measurement of the port, only via MP_SRC, passing without it (Buzz, 2026-10-03)
 - [Licensing decisions](licensing-decisions.md) — GPL-3.0-only; the header on every .rs (xtask::licence::HEADER, tested); David "Buzz" Bussenschutt / MissionPlannerRust; no product photos, no CPOL code; `cargo xtask licences` after a dependency change (Buzz, 2026-10-03)
 
 - [NEVER save the VM](never-save-the-vm.md) — no savestate/pause/poweroff/live snapshot of tiny10 without Buzz's word: "SAVE = things IMMEDIATELY stop working, do not do" (2026-09-26)
