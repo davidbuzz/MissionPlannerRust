@@ -12,6 +12,10 @@ jobs:
   test:
     name: test (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
+    # Every job has a limit about twice its longest run, so a hang fails within the hour or
+    # two rather than at GitHub's six hours: the planner's build script runs a second cargo
+    # (the shipped plugins, crates/mp-gui/build.rs), and a wait on a lock would otherwise sit.
+    timeout-minutes: 90
     strategy:
       fail-fast: false
       matrix:
@@ -89,6 +93,7 @@ jobs:
   cross-compile:
     name: cross-compile targets
     runs-on: ubuntu-latest
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -125,6 +130,7 @@ jobs:
   sitl:
     name: integration against ArduPilot SITL
     runs-on: ubuntu-latest
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -160,6 +166,7 @@ jobs:
   fuzz:
     name: bounded fuzz pass
     runs-on: ubuntu-latest
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
       # Nightly, because libFuzzer needs it. This is the only job that does, which is why the
@@ -216,6 +223,7 @@ jobs:
   codegen:
     name: generated code is up to date
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -238,6 +246,7 @@ jobs:
   deny:
     name: licences and advisories
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
       - uses: EmbarkStudios/cargo-deny-action@v2
