@@ -32,3 +32,9 @@ job run in the foreground - a build or test in the VM with a long timeout - is a
 like any other, and he rejected one. Every VM job that takes more than a moment goes with
 `run_in_background: true`; its output streams into the task file, the console window shows it,
 and the notification says when it ends.
+
+**2026-10-03, Buzz: "do not foreground wait".** Watching a VM boot with a foreground loop of
+`sleep 30; screenshot` six times - three minutes blocked - is a foreground wait, and he rejected
+it. A guest booting, an installer running, a download: start the watcher with
+`run_in_background: true` (screenshots into a folder, a DONE line at the end), answer him
+meanwhile, and look at the pictures when the notification comes.

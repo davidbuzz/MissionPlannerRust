@@ -53,3 +53,9 @@ helper with a heredoc - so the wrapper shell's command line carried `diag2.sh` f
 helper ran. A loop that waits on a pattern is the same trap as a kill by one. Wait on a PID
 (`while kill -0 $pid`), a flag file the job touches when done, or a line in its output file;
 and write helper scripts in a call of their own, not the call that runs them.
+
+**2026-10-03, again:** `for p in $(pgrep -f "try-cpu.sh host"); do kill $p; done` killed my own
+shell (exit 144), because that very command line contains "try-cpu.sh host". Taking PIDs from
+`pgrep -f` is no protection when the pattern is in the calling command: bracket it
+(`pgrep -f "try-cpu.sh hos[t]"`), or list with `pgrep -fa`, read the PIDs, and kill them in a
+second call by number.
