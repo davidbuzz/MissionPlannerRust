@@ -20,9 +20,12 @@ Advanced page's remaining windows (Warning Manager and the rest) and the other m
 
 **How to apply:** take the matrix's rows top-down (urgent, then high, then med, low; `not`
 rows are never worked). A high row is left only at 100 - the item ported, tested, its script
-run, its row deleted from the matrix. Rows that cannot move on this machine (a Windows or macOS
+run, its row moved out of the matrix the same day (Buzz, 2026-10-03: "this file is supposed to only
+contain the work we have NOT done yet"): to DELIVERABLES.md, under its deliverable's **Finished
+since the audit** list, or to PLAN.md §12 where what remains of it is a ruling or an open
+question for him - decided row by row. Rows that cannot move on this machine (a Windows or macOS
 run) are said so in the row, not silently skipped; ask Buzz how he wants them run. Keep the
-matrix current as rows finish (delete the row; the coverage ledgers and PLAN §13 hold the
+matrix current as rows finish (move the row; the coverage ledgers and PLAN §13 hold the
 detail). The in-flight commit is finished first; it is the test harness everything else is
 proved with. See [[not-in-the-csharp-not-in-scope]], [[autotests-mandatory]] and
 [[delegate-to-opus-subagents]] (two agents, disjoint files, one row each).
