@@ -130,11 +130,20 @@ fn a_60_hz_screen_sees_a_fresh_snapshot_every_frame_at_the_default_cadence() {
             "the 20 ms cadence should repeat snapshots at a {frame:?} frame, about {predicted:.0} \
              of {samples}; only {old} did"
         );
+        // The comparison the cadence was changed for.
+        assert!(
+            now * 4 < old.max(1),
+            "the default cadence repeated {now} of {samples} snapshots against the 20 ms \
+             cadence's {old}"
+        );
     } else {
-        println!("a {frame:?} frame is no shorter than the 20 ms cadence here; repeats not checked");
+        // A frame longer than the 20 ms cadence shows nothing about either: a repeat here means
+        // the machine starved the link thread, not that the cadence was too slow, and the counts
+        // are then noise on both sides (the hosted macOS runner, 2026-10-03: a 75 ms frame, 15
+        // repeats at 20 ms and 10 at the default).
+        println!(
+            "a {frame:?} frame is no shorter than the 20 ms cadence here, so neither cadence is \
+             judged: {old} repeats at 20 ms, {now} at the default, of {samples}"
+        );
     }
-    assert!(
-        now * 4 < old.max(1),
-        "the default cadence repeated {now} of {samples} snapshots against the 20 ms cadence's {old}"
-    );
 }

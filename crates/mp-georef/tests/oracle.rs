@@ -274,6 +274,20 @@ fn files_under(dir: &Path) -> Vec<PathBuf> {
     out
 }
 
+/// Bytes with every CRLF made LF, for comparing text with a golden written where the line end was
+/// LF.
+fn lf(bytes: Vec<u8>) -> Vec<u8> {
+    let mut out = Vec::with_capacity(bytes.len());
+    let mut bytes = bytes.into_iter().peekable();
+    while let Some(byte) = bytes.next() {
+        if byte == b'\r' && bytes.peek() == Some(&b'\n') {
+            continue;
+        }
+        out.push(byte);
+    }
+    out
+}
+
 fn run_case(case: &Case) -> Vec<String> {
     let dir = common::scratch(&format!("oracle-{}", case.name));
     let work = dir.join("work");
@@ -368,8 +382,19 @@ fn run_case(case: &Case) -> Vec<String> {
             continue;
         }
         let got = work.join(relative);
-        let want_bytes = std::fs::read(&want).unwrap();
-        match std::fs::read(&got) {
+        // The text files the C# writes end their lines with `Environment.NewLine`, as this port's
+        // do: LF where the goldens were made (mono on Linux) and CRLF on Windows, where the
+        // hosted runner found 24 bytes more in a 24-line location.csv (2026-10-03). Text is
+        // compared on LF; the geotagged JPEGs are compared byte for byte, as they are.
+        let text = relative
+            .extension()
+            .and_then(|e| e.to_str())
+            .is_some_and(|e| {
+                matches!(e, "txt" | "csv" | "kml" | "tel" | "geo" | "jxl" | "gpx" | "xml")
+            });
+        let normalise = |bytes: Vec<u8>| if text { lf(bytes) } else { bytes };
+        let want_bytes = normalise(std::fs::read(&want).unwrap());
+        match std::fs::read(&got).map(normalise) {
             Ok(got_bytes) if got_bytes == want_bytes => {}
             Ok(got_bytes) => {
                 let at = got_bytes
