@@ -106,6 +106,8 @@ jobs:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
+      # mp-transport's serial-port crate builds libudev-sys through pkg-config.
+      - run: sudo apt-get update && sudo apt-get install -y libudev-dev
       # The SITL binary is committed under tools/sitl, so this needs no ArduPilot checkout.
       - name: Start SITL
         run: |
@@ -137,6 +139,8 @@ jobs:
       # fuzz crate is excluded from the workspace - an ordinary build must not require it.
       - uses: dtolnay/rust-toolchain@nightly
       - uses: Swatinem/rust-cache@v2
+      # mp-transport's serial-port crate builds libudev-sys through pkg-config.
+      - run: sudo apt-get update && sudo apt-get install -y libudev-dev
       - name: Install cargo-fuzz
         run: cargo install cargo-fuzz --locked
       # Bounded rather than the 24 hours Deliverable 2 asks for on frame_parse. A CI job is a regression

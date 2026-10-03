@@ -1,3 +1,6 @@
 [toolchain]
 channel = "1.95.0"
 components = ["rustfmt", "clippy", "rust-src"]
+# The targets CI cross-checks (cross-compile job): rustup installs them with the toolchain, on
+# every machine, so the pinned toolchain has them whatever the runner's action installed.
+targets = ["x86_64-pc-windows-gnu", "wasm32-unknown-unknown"]
