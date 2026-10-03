@@ -19,7 +19,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
-        with: { components: clippy, rustfmt, targets: wasm32-unknown-unknown }
+                with: { components: "clippy, rustfmt", targets: wasm32-unknown-unknown }
       - uses: Swatinem/rust-cache@v2
       # gpui's X11 backend needs these to link; a machine that can run X11 software can still
       # fail to link it, because the bare .so symlinks live in the -dev packages.
@@ -30,7 +30,11 @@ jobs:
           sudo apt-get install -y libxkbcommon-x11-dev libxcb-shape0-dev libxcb-xfixes0-dev \
             libwayland-dev libasound2-dev libudev-dev xvfb \
             libclang-dev linux-libc-dev  # mp-video: v4l2-sys-mit runs bindgen at build time (PLAN §13.6 row 84)
+            # The tree is not kept rustfmt-clean (the owner's choice, 2026-10-03: rustfmt on a crate root
+      # rewrites every module it declares), so the check reports and does not fail the build.
       - run: cargo fmt --all -- --check
+        continue-on-error: true
+
       - run: cargo clippy --workspace --all-targets
       - run: cargo test --workspace
             # The porting ledger: one row per C# file, every row well-formed. MP_SRC names no C# tree
@@ -57,7 +61,7 @@ jobs:
         env: { MP_SMOKE: "1", MP_NO_TILES: "1", MP_NO_RECORD: "1" }
         # A runner has no display, so one is supplied. llvmpipe does the rendering, which is slow
         # and entirely sufficient: the question is whether the backend comes up, not how fast.
-        run: xvfb-run -a --server-args="-screen 0 1600x1200x24" ./target/debug/mpr-gui
+        run: xvfb-run -a --server-args="-screen 0 1600x1200x24" ./target/debug/planner
       # Named separately from macOS only because of the extension; the runner has a desktop
       # session, and Direct3D 11 falls back to WARP, the software rasteriser, where there is no
       # GPU. WARP still goes through the whole backend - device, swap chain, shaders - which is
@@ -65,11 +69,12 @@ jobs:
       - name: Window opens and paints (Windows)
         if: runner.os == 'Windows'
         env: { MP_SMOKE: "1", MP_NO_TILES: "1", MP_NO_RECORD: "1" }
-        run: ./target/debug/mpr-gui.exe
+                run: ./target/debug/planner.exe
       - name: Window opens and paints (macOS)
         if: runner.os == 'macOS'
         env: { MP_SMOKE: "1", MP_NO_TILES: "1", MP_NO_RECORD: "1" }
-        run: ./target/debug/mpr-gui
+                run: ./target/debug/planner
+
 
   cross-compile:
     name: cross-compile targets
@@ -110,10 +115,12 @@ jobs:
       # These are the tests that catch what unit tests cannot: a protocol that stalls because the
       # vehicle answers with a different message than expected, and parameter values that decode
       # to numbers no battery or system id could hold.
-      # Serially: SITL serves one TCP client at a time, so tests that each open a link must not
+            # Serially: SITL serves one TCP client at a time, so tests that each open a link must not
       # overlap. Within a binary that needs --test-threads=1; between binaries cargo already
-      # runs sequentially.
-      - run: cargo test --workspace -- --ignored --test-threads=1
+      # runs sequentially. Only mp-link's ignored tests are SITL's; the workspace's others need a
+      # display, a device, the network or a corpus, and are not this job's.
+      - run: cargo test -p mp-link -- --ignored --test-threads=1
+
       - name: SITL log on failure
         if: failure()
         run: cat /tmp/sitl.log
@@ -180,11 +187,13 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with: { components: rustfmt }
       - uses: Swatinem/rust-cache@v2
-            # Only runs where MP_SRC names a clone of https://github.com/ArduPilot/MissionPlanner. Generated code is
-      # committed, so the risk is that it stops matching the definitions it claims to come from.
+                  # Only runs where MP_SRC names a clone of https://github.com/ArduPilot/MissionPlanner.
+      # Generated code is committed, so the risk is that it stops matching the definitions it
+      # claims to come from.
       - name: Check regeneration
         run: |
-                    if [ -n "${MP_SRC:-}" ] && [ -d "$MP_SRC" ]; then
+          if [ -n "${MP_SRC:-}" ] && [ -d "$MP_SRC" ]; then
+
             cargo run -p xtask -- verify-mavlink all
             cargo run -p xtask -- codegen all --check
           else
