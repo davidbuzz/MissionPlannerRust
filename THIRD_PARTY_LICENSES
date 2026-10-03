@@ -458,19 +458,19 @@ permissions the GPL's section 7 lets this work remove.
 | cosmic-text | 0.19.0 | MIT OR Apache-2.0 | crates.io |
 | cpp_demangle | 0.5.1 | MIT OR Apache-2.0 | crates.io |
 | cpufeatures | 0.2.17 | MIT OR Apache-2.0 | crates.io |
-| cranelift-assembler-x64 | 0.135.3 | Apache-2.0 WITH LLVM-exception | crates.io |
-| cranelift-assembler-x64-meta | 0.135.3 | Apache-2.0 WITH LLVM-exception | crates.io |
-| cranelift-bforest | 0.135.3 | Apache-2.0 WITH LLVM-exception | crates.io |
-| cranelift-bitset | 0.135.3 | Apache-2.0 WITH LLVM-exception | crates.io |
-| cranelift-codegen | 0.135.3 | Apache-2.0 WITH LLVM-exception | crates.io |
-| cranelift-codegen-meta | 0.135.3 | Apache-2.0 WITH LLVM-exception | crates.io |
-| cranelift-codegen-shared | 0.135.3 | Apache-2.0 WITH LLVM-exception | crates.io |
-| cranelift-control | 0.135.3 | Apache-2.0 WITH LLVM-exception | crates.io |
-| cranelift-entity | 0.135.3 | Apache-2.0 WITH LLVM-exception | crates.io |
-| cranelift-frontend | 0.135.3 | Apache-2.0 WITH LLVM-exception | crates.io |
-| cranelift-isle | 0.135.3 | Apache-2.0 WITH LLVM-exception | crates.io |
-| cranelift-native | 0.135.3 | Apache-2.0 WITH LLVM-exception | crates.io |
-| cranelift-srcgen | 0.135.3 | Apache-2.0 WITH LLVM-exception | crates.io |
+| cranelift-assembler-x64 | 0.135.5 | Apache-2.0 WITH LLVM-exception | crates.io |
+| cranelift-assembler-x64-meta | 0.135.5 | Apache-2.0 WITH LLVM-exception | crates.io |
+| cranelift-bforest | 0.135.4 | Apache-2.0 WITH LLVM-exception | crates.io |
+| cranelift-bitset | 0.135.4 | Apache-2.0 WITH LLVM-exception | crates.io |
+| cranelift-codegen | 0.135.4 | Apache-2.0 WITH LLVM-exception | crates.io |
+| cranelift-codegen-meta | 0.135.4 | Apache-2.0 WITH LLVM-exception | crates.io |
+| cranelift-codegen-shared | 0.135.5 | Apache-2.0 WITH LLVM-exception | crates.io |
+| cranelift-control | 0.135.5 | Apache-2.0 WITH LLVM-exception | crates.io |
+| cranelift-entity | 0.135.4 | Apache-2.0 WITH LLVM-exception | crates.io |
+| cranelift-frontend | 0.135.4 | Apache-2.0 WITH LLVM-exception | crates.io |
+| cranelift-isle | 0.135.4 | Apache-2.0 WITH LLVM-exception | crates.io |
+| cranelift-native | 0.135.4 | Apache-2.0 WITH LLVM-exception | crates.io |
+| cranelift-srcgen | 0.135.5 | Apache-2.0 WITH LLVM-exception | crates.io |
 | crc | 3.4.0 | MIT OR Apache-2.0 | crates.io |
 | crc-catalog | 2.5.0 | MIT OR Apache-2.0 | crates.io |
 | crc32fast | 1.5.2 | MIT OR Apache-2.0 | crates.io |
@@ -871,8 +871,8 @@ permissions the GPL's section 7 lets this work remove.
 | profiling-procmacros | 1.0.18 | MIT OR Apache-2.0 | crates.io |
 | proptest | 1.11.0 | MIT OR Apache-2.0 | crates.io |
 | psm | 0.1.32 | MIT OR Apache-2.0 | crates.io |
-| pulley-interpreter | 48.0.3 | Apache-2.0 WITH LLVM-exception | crates.io |
-| pulley-macros | 48.0.3 | Apache-2.0 WITH LLVM-exception | crates.io |
+| pulley-interpreter | 48.0.4 | Apache-2.0 WITH LLVM-exception | crates.io |
+| pulley-macros | 48.0.4 | Apache-2.0 WITH LLVM-exception | crates.io |
 | pulp | 0.22.3 | MIT | crates.io |
 | pulp-wasm-simd-flag | 0.1.1 | MIT | crates.io |
 | pxfm | 0.1.30 | BSD-3-Clause OR Apache-2.0 | crates.io |
@@ -1146,22 +1146,22 @@ permissions the GPL's section 7 lets this work remove.
 | wasm-bindgen-macro | 0.2.128 | MIT OR Apache-2.0 | crates.io |
 | wasm-bindgen-macro-support | 0.2.128 | MIT OR Apache-2.0 | crates.io |
 | wasm-bindgen-shared | 0.2.128 | MIT OR Apache-2.0 | crates.io |
-| wasm-encoder | 0.254.0 | Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT | crates.io |
-| wasm-metadata | 0.254.0 | Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT | crates.io |
-| wasmparser | 0.254.0 | Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT | crates.io |
-| wasmprinter | 0.254.0 | Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT | crates.io |
-| wasmtime | 48.0.3 | Apache-2.0 WITH LLVM-exception | crates.io |
-| wasmtime-environ | 48.0.3 | Apache-2.0 WITH LLVM-exception | crates.io |
-| wasmtime-internal-component-macro | 48.0.3 | Apache-2.0 WITH LLVM-exception | crates.io |
-| wasmtime-internal-component-util | 48.0.3 | Apache-2.0 WITH LLVM-exception | crates.io |
-| wasmtime-internal-core | 48.0.3 | Apache-2.0 WITH LLVM-exception | crates.io |
-| wasmtime-internal-cranelift | 48.0.3 | Apache-2.0 WITH LLVM-exception | crates.io |
-| wasmtime-internal-fiber | 48.0.3 | Apache-2.0 WITH LLVM-exception | crates.io |
-| wasmtime-internal-jit-debug | 48.0.3 | Apache-2.0 WITH LLVM-exception | crates.io |
-| wasmtime-internal-jit-icache-coherence | 48.0.3 | Apache-2.0 WITH LLVM-exception | crates.io |
-| wasmtime-internal-unwinder | 48.0.3 | Apache-2.0 WITH LLVM-exception | crates.io |
-| wasmtime-internal-versioned-export-macros | 48.0.3 | Apache-2.0 WITH LLVM-exception | crates.io |
-| wasmtime-internal-wit-bindgen | 48.0.3 | Apache-2.0 WITH LLVM-exception | crates.io |
+| wasm-encoder | 0.254.2 | Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT | crates.io |
+| wasm-metadata | 0.254.2 | Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT | crates.io |
+| wasmparser | 0.254.2 | Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT | crates.io |
+| wasmprinter | 0.254.2 | Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT | crates.io |
+| wasmtime | 48.0.4 | Apache-2.0 WITH LLVM-exception | crates.io |
+| wasmtime-environ | 48.0.4 | Apache-2.0 WITH LLVM-exception | crates.io |
+| wasmtime-internal-component-macro | 48.0.4 | Apache-2.0 WITH LLVM-exception | crates.io |
+| wasmtime-internal-component-util | 48.0.4 | Apache-2.0 WITH LLVM-exception | crates.io |
+| wasmtime-internal-core | 48.0.4 | Apache-2.0 WITH LLVM-exception | crates.io |
+| wasmtime-internal-cranelift | 48.0.4 | Apache-2.0 WITH LLVM-exception | crates.io |
+| wasmtime-internal-fiber | 48.0.4 | Apache-2.0 WITH LLVM-exception | crates.io |
+| wasmtime-internal-jit-debug | 48.0.4 | Apache-2.0 WITH LLVM-exception | crates.io |
+| wasmtime-internal-jit-icache-coherence | 48.0.4 | Apache-2.0 WITH LLVM-exception | crates.io |
+| wasmtime-internal-unwinder | 48.0.4 | Apache-2.0 WITH LLVM-exception | crates.io |
+| wasmtime-internal-versioned-export-macros | 48.0.4 | Apache-2.0 WITH LLVM-exception | crates.io |
+| wasmtime-internal-wit-bindgen | 48.0.4 | Apache-2.0 WITH LLVM-exception | crates.io |
 | wayland-backend | 0.3.17 | MIT | crates.io |
 | wayland-client | 0.31.15 | MIT | crates.io |
 | wayland-cursor | 0.31.14 | MIT | crates.io |
@@ -1252,8 +1252,8 @@ permissions the GPL's section 7 lets this work remove.
 | wit-bindgen-core | 0.60.0 | Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT | crates.io |
 | wit-bindgen-rust | 0.60.0 | Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT | crates.io |
 | wit-bindgen-rust-macro | 0.60.0 | Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT | crates.io |
-| wit-component | 0.254.0 | Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT | crates.io |
-| wit-parser | 0.254.0 | Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT | crates.io |
+| wit-component | 0.254.2 | Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT | crates.io |
+| wit-parser | 0.254.2 | Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT | crates.io |
 | writeable | 0.6.4 | Unicode-3.0 | crates.io |
 | x11 | 2.21.0 | MIT | crates.io |
 | x11-clipboard | 0.9.3 | MIT | crates.io |
@@ -1272,7 +1272,7 @@ permissions the GPL's section 7 lets this work remove.
 | yazi | 0.2.1 | Apache-2.0 OR MIT | crates.io |
 | yeslogic-fontconfig-sys | 6.0.1 | MIT | crates.io |
 | yoke | 0.8.3 | Unicode-3.0 | crates.io |
-| yoke-derive | 0.8.3 | Unicode-3.0 | crates.io |
+| yoke-derive | 0.8.4 | Unicode-3.0 | crates.io |
 | zbus | 5.19.0 | MIT | crates.io |
 | zbus-lockstep | 0.5.2 | MIT | crates.io |
 | zbus-lockstep-macros | 0.5.2 | MIT | crates.io |

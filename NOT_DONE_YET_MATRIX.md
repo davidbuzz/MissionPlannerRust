@@ -26,3 +26,4 @@ Only the work not yet done (the owner, 2026-10-03). A row that reaches 100 moves
 | Deliverable 21 | Native in-process plugin host | not | 1 |
 | Deliverable 17, assets/i18n | i18n: cultures loaded at run time (muted by ruling) | not | 50 |
 | Deliverable 3 | BLE transport (not in the C#) | not | 1 |
+| crates/mp-gui/src/glyph_text.rs | Replace ttf-parser, which reads the planner's Text font: unmaintained since 2026 (RUSTSEC-2026-0192, no upgrade); cargo-deny notes it rather than failing while it stays (deny.toml) | low | 0 |

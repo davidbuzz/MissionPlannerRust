@@ -135,7 +135,10 @@ fn set_param_and_confirm(link: &Link, id: VehicleId, name: &str, value: f32) -> 
     // Wait for the table to show the *new* value, not merely some value. The table may already
     // hold this parameter from an earlier request, and returning on the first value seen reports
     // the old one - which looks exactly like a write the vehicle refused.
-    let deadline = Instant::now() + Duration::from_secs(10);
+        // Thirty seconds, asking again every five: a hosted CI runner at SITL's real-time speed took
+    // longer than ten to answer the ninth test's write (2026-10-03), and the ask is cheap.
+    let deadline = Instant::now() + Duration::from_secs(30);
+    let mut asked = Instant::now();
     while Instant::now() < deadline {
         if let Some(table) = link.params(id)
             && let Some(current) = table.get(name)
@@ -145,6 +148,10 @@ fn set_param_and_confirm(link: &Link, id: VehicleId, name: &str, value: f32) -> 
             if (read_back - value).abs() < 0.001 {
                 return true;
             }
+        }
+        if asked.elapsed() > Duration::from_secs(5) {
+            link.send(&commands::request_param_by_name(id, name));
+            asked = Instant::now();
         }
         std::thread::sleep(Duration::from_millis(100));
     }
