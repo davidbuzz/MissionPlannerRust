@@ -345,7 +345,15 @@ mod tests {
             );
         }
         let want = std::fs::read_to_string(golden.join("messages.txt")).unwrap();
-        assert_eq!(lines.replace(photos.to_str().unwrap(), "{dir}"), want);
+        // The directory is the test's; the separator after it is the platform's, as the C#'s
+        // Path.Combine would give it - a backslash on Windows (the hosted runner, 2026-10-03),
+        // where the golden, made on Linux, has a slash.
+        assert_eq!(
+            lines
+                .replace(photos.to_str().unwrap(), "{dir}")
+                .replace("{dir}\\", "{dir}/"),
+            want
+        );
     }
 
     #[test]
