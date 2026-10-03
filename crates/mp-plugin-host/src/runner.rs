@@ -141,39 +141,115 @@ impl Default for PluginHost {
     }
 }
 
+/// Where a plugin's WebAssembly comes from.
+#[derive(Debug, Clone)]
+pub enum PluginSource {
+    /// A `*.wasm` file, read on the plugin's thread.
+    File(PathBuf),
+    /// A plugin the application carries in itself, under the file name it would have in
+    /// `plugins/`.
+    Builtin {
+        /// The file name it is known by: the disable list and the window name it by this.
+        file: String,
+        /// The component's bytes.
+        bytes: &'static [u8],
+    },
+}
+
+impl PluginSource {
+    /// The file name the plugin is known by.
+    #[must_use]
+    pub fn file(&self) -> String {
+        match self {
+            Self::File(path) => file_name(path),
+            Self::Builtin { file, .. } => file.clone(),
+        }
+    }
+}
+
+/// Every `*.wasm` file in `dir`, in name order; none when there is no such folder.
+fn wasm_files(dir: &Path) -> Vec<PathBuf> {
+    let mut files: Vec<PathBuf> = std::fs::read_dir(dir)
+        .map(|entries| {
+            entries
+                .filter_map(|entry| entry.ok().map(|entry| entry.path()))
+                .filter(|path| {
+                    path.is_file()
+                        && path
+                            .extension()
+                            .is_some_and(|ext| ext.eq_ignore_ascii_case("wasm"))
+                })
+                .collect()
+        })
+        .unwrap_or_default();
+    files.sort();
+    files
+}
+
+/// Whether `file` is on the disable list (`DisabledPluginNames`, compared without case).
+fn is_disabled(file: &str, disabled: &[String]) -> bool {
+    let file = file.to_lowercase();
+    disabled.iter().any(|off| off.to_lowercase() == file)
+}
+
 impl PluginHost {
     /// `PluginLoader.LoadAll`: every `*.wasm` in `dir`, in name order, less the ones `disabled`
     /// names (`DisabledPluginNames`, lower-case file names), each loaded on its own thread. No
     /// folder, no plugins. `// C#: Plugin/PluginLoader.cs:99-120, 203-311`
     #[must_use]
     pub fn load_all(dir: &Path, disabled: &[String], limits: Limits) -> Self {
-        let mut files: Vec<PathBuf> = std::fs::read_dir(dir)
-            .map(|entries| {
-                entries
-                    .filter_map(|entry| entry.ok().map(|entry| entry.path()))
-                    .filter(|path| {
-                        path.is_file()
-                            && path
-                                .extension()
-                                .is_some_and(|ext| ext.eq_ignore_ascii_case("wasm"))
-                    })
-                    .collect()
+        Self::load_with_builtins(&[], Some(dir), disabled, limits)
+    }
+
+    /// `PluginLoader.LoadAll` over the plugins the application ships and the plugins folder.
+    ///
+    /// Mission Planner's build puts its plugins in the `plugins` folder beside the executable -
+    /// every `plugins\*.cs` copied there (`MissionPlanner.csproj`, `CopyToOutputDirectory`), and
+    /// the Dowding, OpenDroneID and TerrainMaker projects built into it - so every install starts
+    /// with them loaded unless `DisabledPluginNames` names one. Here the shipped plugins are
+    /// `builtins`, carried in the application, so that no install can be without them; a file in
+    /// `dir` with a built-in's name is loaded in its place, as replacing a file in the C#'s folder
+    /// does, and any other file in `dir` is loaded as well. The disable list applies to both.
+    /// Name order over the whole set. `// C#: Plugin/PluginLoader.cs:99-120, 203-311`
+    #[must_use]
+    pub fn load_with_builtins(
+        builtins: &[(&str, &'static [u8])],
+        dir: Option<&Path>,
+        disabled: &[String],
+        limits: Limits,
+    ) -> Self {
+        let files = dir.map(wasm_files).unwrap_or_default();
+        let replaced = |name: &str| {
+            files
+                .iter()
+                .any(|path| file_name(path).eq_ignore_ascii_case(name))
+        };
+        let mut sources: Vec<PluginSource> = builtins
+            .iter()
+            .filter(|(name, _)| !replaced(name))
+            .map(|(name, bytes)| PluginSource::Builtin {
+                file: (*name).to_owned(),
+                bytes,
             })
-            .unwrap_or_default();
-        files.sort();
-        let files: Vec<PathBuf> = files
-            .into_iter()
-            .filter(|path| {
-                let name = file_name(path).to_lowercase();
-                !disabled.iter().any(|off| off.to_lowercase() == name)
-            })
+            .chain(files.iter().cloned().map(PluginSource::File))
+            .filter(|source| !is_disabled(&source.file(), disabled))
             .collect();
-        Self::load_files(&files, limits)
+        sources.sort_by_key(|source| source.file().to_lowercase());
+        Self::load_sources(sources, limits)
     }
 
     /// The plugins in `files`, each loaded on its own thread.
     #[must_use]
     pub fn load_files(files: &[PathBuf], limits: Limits) -> Self {
+        Self::load_sources(
+            files.iter().cloned().map(PluginSource::File).collect(),
+            limits,
+        )
+    }
+
+    /// The plugins in `sources`, each loaded on its own thread.
+    #[must_use]
+    pub fn load_sources(sources: Vec<PluginSource>, limits: Limits) -> Self {
         let (tx, requests) = mpsc::channel();
         let snapshot = Arc::new(RwLock::new(Snapshot::default()));
         let engine = engine();
@@ -183,9 +259,9 @@ impl PluginHost {
             requests,
             snapshot: Arc::clone(&snapshot),
         };
-        for (index, path) in files.iter().enumerate() {
+        for (index, source) in sources.into_iter().enumerate() {
             let (commands, inbox) = mpsc::channel();
-            let file = file_name(path);
+            let file = source.file();
             host.status.push(PluginStatus {
                 file: file.clone(),
                 info: None,
@@ -194,7 +270,7 @@ impl PluginHost {
             let surface = ChannelSurface::new(index, tx.clone(), Arc::clone(&snapshot));
             let job = Job {
                 index,
-                path: path.clone(),
+                source,
                 file,
                 engine: engine.clone(),
                 limits,
@@ -331,7 +407,7 @@ fn file_name(path: &Path) -> String {
 /// One plugin's thread.
 struct Job {
     index: usize,
-    path: PathBuf,
+    source: PluginSource,
     file: String,
     engine: Result<Engine, Fault>,
     limits: Limits,
@@ -350,9 +426,16 @@ impl Job {
     /// a fault anywhere unloads the plugin.
     fn run(self, surface: ChannelSurface, inbox: &Receiver<Command>) {
         let loaded = self.engine.clone().and_then(|engine| {
-            let bytes = std::fs::read(&self.path)
-                .map_err(|err| Fault::Load(format!("{}: {err}", self.path.display())))?;
-            Plugin::load(&engine, &bytes, &self.file, Box::new(surface), self.limits)
+            let read;
+            let bytes: &[u8] = match &self.source {
+                PluginSource::File(path) => {
+                    read = std::fs::read(path)
+                        .map_err(|err| Fault::Load(format!("{}: {err}", path.display())))?;
+                    &read
+                }
+                PluginSource::Builtin { bytes, .. } => bytes,
+            };
+            Plugin::load(&engine, bytes, &self.file, Box::new(surface), self.limits)
         });
         let mut plugin = match loaded {
             Ok(plugin) => plugin,

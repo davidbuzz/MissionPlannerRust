@@ -16,6 +16,10 @@
 # does not run this test) and copies them there. Run as
 #
 #   tools/gui-test.sh tests/gui/plugins.gui
+#
+# Since 2026-10-03 the planner carries the ten plugins Mission Planner ships (plugins-shipped.gui);
+# these two files have built-ins' names, so each is loaded in its built-in's place, as replacing a
+# file in the C#'s plugins folder does: ten plugins, the menu example the sixth in name order.
 
 screen fly
 window 1600x1200
@@ -27,15 +31,17 @@ env MP_PLUGINS $WORK/plugins
 setup cargo build -q --release -p mp-plugins --target wasm32-unknown-unknown --example fencedist --example menu
 setup mkdir -p $WORK/plugins && cp "${CARGO_TARGET_DIR:-target}/wasm32-unknown-unknown/release/examples/fencedist.wasm" "${CARGO_TARGET_DIR:-target}/wasm32-unknown-unknown/release/examples/menu.wasm" $WORK/plugins/
 
-# Loaded, in the folder's name order: fencedist.wasm is plugin 0, menu.wasm plugin 1.
-expect plugins.count 2
+# Loaded in name order over the built-ins and the folder: anonymizebinlog, dowding, example,
+# fencedist (the folder's), mapicondesc, menu (the folder's, plugin 5), modechange, opendroneid,
+# persistentsimple, terrainmaker.
+expect plugins.count 10
 expect plugins.FenceDist.state running
 expect plugins.FenceDist.version 0.10
 expect plugins.FenceDist.author Michael Oborne
 expect plugins.Small_stuff.state running
 expect status ~ Plugin Init
-expect plugins.menu.flight-data Draw Fence Dist
-expect plugins.menu.flight-planner Fix mission top/bottom
+expect plugins.menu.flight-data ~ Draw Fence Dist
+expect plugins.menu.flight-planner ~ Fix mission top/bottom
 expect plugins.question none
 
 # The planning map's menu, the plugin's entry at its end.
@@ -43,7 +49,7 @@ click tab-plan
 expect map.ready true
 expect mission.items 0
 click map@0.40x0.50:right
-click plugin-menu-1-0
+click plugin-menu-5-0
 expect plan.menu closed
 expect plugins.question ~ This is a sample plugin
 click plugin-question-ok

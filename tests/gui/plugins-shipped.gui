@@ -1,0 +1,33 @@
+# The plugins Mission Planner ships load at a plain start (the owner's bug of 2026-10-03).
+#
+# Mission Planner's build puts its plugins in the plugins folder beside the executable, and every
+# start loads them (Plugin/PluginLoader.cs:203-311). Until 2026-10-03 the planner loaded only what
+# a plugins folder held, and nothing put one there: every test brought its own plugins, and a
+# plain start ran none. The planner now carries the ten ports of the plugins the C#'s build ships
+# (crates/mp-gui/build.rs), and this script starts it with nothing beside it - no plugins folder,
+# no MP_PLUGINS - as a user would.
+#
+# The claim: ten plugins listed; the seven that the C# starts are running - FenceDist, the menu
+# example, MapIconDesc, Open Drone ID, Dowding, TerrainMaker, Anonymize Binlog - and the three
+# whose Init returns false as the C# ships them are listed as not loaded, by file; their map menu
+# entries are in both menus; none asks a question at start.
+screen fly
+window 1600x1200
+budget 8
+env XDG_DATA_HOME $WORK
+env MP_CONFIG_XML $WORK/config.xml
+expect plugins.count 10
+expect plugins.FenceDist.state running
+expect plugins.Small_stuff.state running
+expect plugins.MapIconDesc.state running
+expect plugins.Open_Drone_ID.state running
+expect plugins.Dowding.state running
+expect plugins.TerrainMakerPlugin.state running
+expect plugins.Anonymize_Binlog.state running
+expect plugins.example.wasm.state not-loaded
+expect plugins.modechange.wasm.state not-loaded
+expect plugins.persistentsimple.wasm.state not-loaded
+expect status ~ Plugin Init
+expect plugins.menu.flight-data ~ Draw Fence Dist
+expect plugins.menu.flight-planner ~ Fix mission top/bottom
+expect plugins.question none

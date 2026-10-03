@@ -114,6 +114,65 @@ fn load_all_loads_the_folder() {
     assert_eq!(host.plugins()[1].name(), "FenceDist");
 }
 
+/// A built plugin's bytes, for the life of the test binary, as the application carries its own.
+fn builtin(name: &str) -> Option<&'static [u8]> {
+    Some(Box::leak(
+        std::fs::read(path(name)?).ok()?.into_boxed_slice(),
+    ))
+}
+
+/// The plugins the application ships load with no folder at all: the planner started anywhere,
+/// with nothing beside it, still runs them (the owner's bug of 2026-10-03: a plain start loaded
+/// none, because they were only ever in a test's folder).
+#[test]
+fn builtins_load_with_no_folder() {
+    let (Some(example), Some(fencedist)) = (builtin("example"), builtin("fencedist")) else {
+        return;
+    };
+    let builtins = [("example.wasm", example), ("fencedist.wasm", fencedist)];
+    let mut host = PluginHost::load_with_builtins(&builtins, None, &[], Limits::default());
+    let files: Vec<&str> = host.plugins().iter().map(|p| p.file.as_str()).collect();
+    assert_eq!(files, ["example.wasm", "fencedist.wasm"]);
+    let _ = pump(&mut host, |_| false);
+    let states: Vec<&str> = host.plugins().iter().map(|p| p.state.word()).collect();
+    // example.cs's Init returns false in the C# as here; FenceDist runs.
+    assert_eq!(states, ["not-loaded", "running"]);
+    assert_eq!(host.plugins()[1].name(), "FenceDist");
+}
+
+/// A file in the plugins folder with a built-in's name is loaded in its place - as replacing a
+/// file in the C#'s folder does - any other file is loaded as well, and the disable list applies
+/// to both, without regard to case.
+#[test]
+fn a_file_replaces_the_builtin_of_its_name_and_the_disable_list_applies_to_both() {
+    let (Some(example), Some(fencedist), Some(menu)) =
+        (builtin("example"), builtin("fencedist"), builtin("menu"))
+    else {
+        return;
+    };
+    let dir = folder("builtins");
+    std::fs::copy(path("fencedist").unwrap(), dir.join("FenceDist.wasm")).unwrap();
+    std::fs::copy(path("fencedist").unwrap(), dir.join("extra.wasm")).unwrap();
+    std::fs::copy(path("fencedist").unwrap(), dir.join("off.wasm")).unwrap();
+    let builtins = [
+        ("example.wasm", example),
+        ("fencedist.wasm", fencedist),
+        ("menu.wasm", menu),
+    ];
+    let mut host = PluginHost::load_with_builtins(
+        &builtins,
+        Some(&dir),
+        &["MENU.wasm".to_owned(), "Off.WASM".to_owned()],
+        Limits::default(),
+    );
+    let files: Vec<&str> = host.plugins().iter().map(|p| p.file.as_str()).collect();
+    // The file's FenceDist.wasm stands in for the built-in fencedist.wasm: three, not four.
+    assert_eq!(files, ["example.wasm", "extra.wasm", "FenceDist.wasm"]);
+    let _ = pump(&mut host, |_| false);
+    let states: Vec<&str> = host.plugins().iter().map(|p| p.state.word()).collect();
+    assert_eq!(states, ["not-loaded", "running", "running"]);
+}
+
 /// No folder, no plugins.
 #[test]
 fn no_folder_no_plugins() {

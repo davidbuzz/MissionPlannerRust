@@ -21,8 +21,10 @@
 //! The WebAssembly plugins in the window: `PluginLoader.LoadAll` at start, and each frame what
 //! the plugins did and asked, served through the application's own paths (PLAN.md §13.6 row 96).
 //!
-//! `mp_plugin_host` loads every `*.wasm` in `plugins/` beside the executable and runs each on a
-//! thread of its own; this module is the window's half. Once a frame [`MissionPlanner::plugins_tick`]
+//! `mp_plugin_host` loads the plugins Mission Planner ships - built into the planner by
+//! `build.rs`, as the C#'s build puts them in its plugins folder - and every `*.wasm` in
+//! `plugins/` beside the executable, a file there replacing a built-in of its name; each runs on
+//! a thread of its own. This module is the window's half. Once a frame [`MissionPlanner::plugins_tick`]
 //! hands the plugins a fresh snapshot to read - the vehicle's state as `Host.cs`, the parameters,
 //! the fence, the planning map's view - and serves what they asked since the last frame:
 //!
@@ -46,6 +48,11 @@
 
 // This module is internal to the binary; `pub` here documents intent rather than exporting API.
 #![allow(unreachable_pub)]
+
+/// The plugins Mission Planner ships, built for WebAssembly by `build.rs` and carried here.
+mod builtin {
+    include!(concat!(env!("OUT_DIR"), "/builtin_plugins.rs"));
+}
 
 use std::collections::{HashMap, VecDeque};
 use std::path::{Component, Path, PathBuf};
@@ -202,9 +209,14 @@ impl Plugins {
     /// `// C#: MainV2.cs:3185-3196`
     pub fn start(persisted: &crate::settings::Persisted, cx: &mut gpui::App) -> Self {
         let disabled = crate::raw_params_grid::get_list(persisted.get(DISABLED));
-        let host = folder().map_or_else(PluginHost::default, |dir| {
-            PluginHost::load_all(&dir, &disabled, Limits::default())
-        });
+        // `PluginLoader.LoadAll` at start: the shipped plugins and the folder's, less the
+        // disabled ones. `// C#: Plugin/PluginLoader.cs:203-311`
+        let host = PluginHost::load_with_builtins(
+            builtin::BUILTIN,
+            folder().as_deref(),
+            &disabled,
+            Limits::default(),
+        );
         host.update_snapshot(|snapshot| {
             snapshot.terrain = Arc::new(|lat, lng| {
                 let answer = crate::srtm::altitude(lat, lng);
@@ -1237,6 +1249,39 @@ fn question_box(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The planner carries the plugins Mission Planner ships, so a plain start loads them with
+    /// nothing beside the executable: the owner's bug of 2026-10-03 was a start that loaded none,
+    /// because the plugins were only ever built into a test's folder.
+    #[test]
+    fn the_planner_carries_the_plugins_mission_planner_ships() {
+        let names: Vec<&str> = super::builtin::BUILTIN
+            .iter()
+            .map(|(name, _)| *name)
+            .collect();
+        assert_eq!(
+            names,
+            [
+                "anonymizebinlog.wasm",
+                "dowding.wasm",
+                "example.wasm",
+                "fencedist.wasm",
+                "mapicondesc.wasm",
+                "menu.wasm",
+                "modechange.wasm",
+                "opendroneid.wasm",
+                "persistentsimple.wasm",
+                "terrainmaker.wasm",
+            ]
+        );
+        for (name, bytes) in super::builtin::BUILTIN {
+            assert!(
+                bytes.starts_with(b"\0asm"),
+                "{name} is not WebAssembly ({} bytes)",
+                bytes.len()
+            );
+        }
+    }
 
     /// A plugin writes under the user data directory only: a relative path, folders made.
     #[test]
