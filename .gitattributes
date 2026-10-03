@@ -1,5 +1,13 @@
-# Test fixtures are bytes, not text: a Windows checkout with core.autocrlf must not give them CRLF
-# line ends - the legacy firmware fixture grew from 654 to 664 bytes that way in the tiny10 VM,
-# and config-firmware.gui failed on its download size (2026-09-26).
+# Every text file is checked out with LF line ends on every platform. GitHub's Windows runners
+# check out with core.autocrlf, which gave the sources, the GUI scripts and the committed reports
+# CRLF there, and 17 of mp-gui's tests, which read them as text, failed only on Windows (CI run
+# 37125541254, 2026-10-03). The project is written on Linux and its goldens carry LF; PowerShell
+# reads the tools/win10 scripts as well with LF as with CRLF.
+* text=auto eol=lf
+
+# Test fixtures and fuzz seeds are bytes, not text: a Windows checkout must not change a byte of
+# them - the legacy firmware fixture grew from 654 to 664 bytes with CRLF in the tiny10 VM, and
+# config-firmware.gui failed on its download size (2026-09-26) - and four seeds are CRLF on purpose.
 testdata/** -text
 crates/*/testdata/** -text
+fuzz/seeds/** -text
