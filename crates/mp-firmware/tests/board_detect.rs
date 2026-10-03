@@ -949,7 +949,10 @@ fn a_port_that_will_not_open_for_the_stk500_probe_is_an_error() {
 
 /// The bootloader probe over `mp-transport`'s `SerialTransport` on a pseudo-terminal, with the px4
 /// mock on the other side: the path a board plugged into this machine would take.
-#[cfg(unix)]
+// Linux only: macOS's pseudo-terminals refuse the slave's second open by path with ENOTTY ("Not a
+// typewriter", the hosted runner, 2026-10-03), so the mock on the master never meets the detector;
+// that is the harness's limit, not the detector's, whose serial path the Linux run holds.
+#[cfg(target_os = "linux")]
 mod pty {
     use super::*;
     use mp_firmware::detect::{ProbePort, open_serial};
