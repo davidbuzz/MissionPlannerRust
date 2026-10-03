@@ -157,6 +157,41 @@ fn every_target_survives_the_degenerate_inputs() {
     }
 }
 
+/// Every committed seed, through its target.
+///
+/// The seeds are what libFuzzer starts from, and some of them are there because they once broke
+/// something: `fuzz/seeds/zip_archive/declared-size-3gib.zip` is the archive whose declared
+/// uncompressed size made the zip reader reserve 3 GiB (CI run 37116316968, 2026-10-03). Running
+/// them here means a regression shows in `cargo test`, on stable, without a fuzzer.
+#[test]
+fn every_seed_passes_its_target() {
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../fuzz/seeds")
+        .canonicalize()
+        .expect("the seeds directory");
+    let mut seen = 0;
+    for (name, target) in TARGETS {
+        let Ok(directory) = std::fs::read_dir(root.join(name)) else {
+            continue;
+        };
+        for entry in directory {
+            let path = entry.expect("a seed").path();
+            if !path.is_file() {
+                continue;
+            }
+            let data = std::fs::read(&path).expect("a seed's bytes");
+            let outcome = std::panic::catch_unwind(|| target(&data));
+            assert!(
+                outcome.is_ok(),
+                "{name} panicked on the seed {}",
+                path.display()
+            );
+            seen += 1;
+        }
+    }
+    assert!(seen > 0, "no seeds were run");
+}
+
 /// Every target has a committed seed corpus.
 ///
 /// A target with no seeds still runs, and on this protocol it runs almost nowhere: `frame_parse`

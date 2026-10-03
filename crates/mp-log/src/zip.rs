@@ -55,6 +55,11 @@ pub enum ZipError {
     Io(#[from] std::io::Error),
 }
 
+/// The most deflate can expand its input, from RFC 1951's smallest encoding of a stored block:
+/// 1032 bytes out of one byte in. A declared uncompressed size above this many times the
+/// compressed bytes is a lie, whatever else it is.
+const DEFLATE_MAX_EXPANSION: usize = 1032;
+
 fn u16_at(data: &[u8], at: usize) -> Result<u16, ZipError> {
     data.get(at..at + 2)
         .and_then(|b| b.try_into().ok())
@@ -118,7 +123,15 @@ pub fn read(data: &[u8]) -> Result<Vec<Entry>, ZipError> {
         let contents = match method {
             0 => raw.to_vec(),
             8 => {
-                let mut out = Vec::with_capacity(size);
+                // `size` is the archive's claim about the uncompressed length, not a measurement,
+                // and reserving it trusts a stranger with this process's memory: a 696-byte
+                // archive declaring 3 GiB for an entry with no compressed bytes at all made this
+                // reserve 3 GiB, which is how the fuzzer ran out of memory (its `zip_archive`
+                // target, CI run 37116316968, 2026-10-03). Deflate cannot expand by more than
+                // 1032:1, so the claim is believed only as far as these compressed bytes could
+                // stretch; `read_to_end` grows the buffer if the truth is larger.
+                let ceiling = compressed.saturating_mul(DEFLATE_MAX_EXPANSION);
+                let mut out = Vec::with_capacity(size.min(ceiling));
                 flate2::read::DeflateDecoder::new(raw).read_to_end(&mut out)?;
                 out
             }
@@ -275,6 +288,47 @@ mod tests {
         };
         let zip = write(&entries, when).unwrap();
         assert_eq!(read(&zip).unwrap(), entries);
+    }
+
+    /// An archive's declared uncompressed size is not a reason to reserve that much memory.
+    ///
+    /// The fuzzer's `zip_archive` target found a 696-byte archive declaring 3 GiB for an entry
+    /// with no compressed bytes, and this reader reserved it (CI run 37116316968, 2026-10-03).
+    /// The entry still reads as what its bytes say, and the buffer it comes in stays small.
+    #[test]
+    fn a_declared_size_the_compressed_bytes_cannot_hold_is_not_reserved() {
+        let entries = vec![Entry {
+            name: "doc.kml".to_owned(),
+            data: b"<kml>a</kml>".to_vec(),
+        }];
+        let when = DosTime {
+            year: 2026,
+            month: 10,
+            day: 3,
+            hour: 0,
+            minute: 0,
+            second: 0,
+        };
+        let mut zip = write(&entries, when).unwrap();
+        // The uncompressed size, in the central directory (at + 24) and the local header (+ 22),
+        // set to 3 GiB - the fuzzer's claim - leaving every length that bounds a slice alone.
+        let huge = 3_225_747_584u32.to_le_bytes();
+        let end = (0..=zip.len() - 22)
+            .rev()
+            .find(|&at| zip[at..at + 4] == [0x50, 0x4b, 0x05, 0x06])
+            .expect("the end record");
+        let central = usize_at(&zip, end + 16).unwrap();
+        let local = usize_at(&zip, central + 42).unwrap();
+        zip[central + 24..central + 28].copy_from_slice(&huge);
+        zip[local + 22..local + 26].copy_from_slice(&huge);
+
+        let read_back = read(&zip).unwrap();
+        assert_eq!(read_back, entries, "the entry is what its bytes say");
+        assert!(
+            read_back[0].data.capacity() < 1 << 20,
+            "reserved {} bytes for a 12-byte entry",
+            read_back[0].data.capacity()
+        );
     }
 
     /// A stored entry and a directory, as `zip -0` writes them.
