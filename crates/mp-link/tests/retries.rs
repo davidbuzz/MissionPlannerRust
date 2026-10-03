@@ -215,6 +215,23 @@ impl Peer {
     }
 }
 
+/// Mission Planner's timeouts divided by `divisor`, so that a test of eleven 450 ms resends takes
+/// a second rather than five - or by less on a machine that cannot keep time that finely.
+///
+/// `MP_TEST_SLOW` divides the divisor: CI's macOS job sets it to 8, because GitHub's hosted macOS
+/// runner stalls a sleeping thread for up to 180 ms (2026-10-03/04), and at a fortieth a resend
+/// every 11 ms let it fail a different one of these tests each round - an extra send, a timeout
+/// that the vehicle's answer should have beaten. Every claim here is relative to the timeouts the
+/// test runs with, so a slower scale changes how long a test takes and nothing it asserts.
+fn timeouts(divisor: u32) -> ProtocolTimeouts {
+    let slow = std::env::var("MP_TEST_SLOW")
+        .ok()
+        .and_then(|value| value.parse::<u32>().ok())
+        .unwrap_or(1)
+        .max(1);
+    ProtocolTimeouts::default().faster((divisor / slow).max(1))
+}
+
 /// A link with Mission Planner's retry counts and these waits, and a vehicle on the other end
 /// that has announced itself as ArduPilot.
 fn link(timeouts: ProtocolTimeouts) -> (Link, Peer) {
@@ -450,7 +467,7 @@ fn echo(value: f32) -> MavMessage {
 /// where one does is the next test.
 #[test]
 fn parameters_arriving_in_any_order_complete_without_asking_again() {
-    let t = ProtocolTimeouts::default().faster(20);
+    let t = timeouts(20);
     let (link, mut peer) = link(t);
     const COUNT: u16 = 50;
     // 7 is coprime with 50, so this visits every index once, and the last index is not last.
@@ -483,7 +500,7 @@ fn parameters_arriving_in_any_order_complete_without_asking_again() {
 /// by index; the stream's own late copy of it, arriving after, is "Already got" (:2039-2047).
 #[test]
 fn the_last_index_arriving_short_asks_for_the_hole_at_once() {
-    let t = ProtocolTimeouts::default().faster(4);
+    let t = timeouts(4);
     let (link, mut peer) = link(t);
     const COUNT: u16 = 50;
     let hole = 48;
@@ -530,7 +547,7 @@ fn holes_are_read_ten_at_a_time_a_round_apart() {
     // A round long enough for every read to be answered inside it on a loaded machine.
     let t = ProtocolTimeouts {
         param_list_round: Duration::from_millis(200),
-        ..ProtocolTimeouts::default().faster(10)
+        ..timeouts(10)
     };
     let (link, mut peer) = link(t);
     const COUNT: u16 = 60;
@@ -585,7 +602,7 @@ fn a_stream_under_three_quarters_is_asked_for_whole_twice_then_one_by_one() {
     let t = ProtocolTimeouts {
         param_list_quiet: Duration::from_millis(150),
         param_list_round: Duration::from_millis(200),
-        ..ProtocolTimeouts::default().faster(20)
+        ..timeouts(20)
     };
     let (link, mut peer) = link(t);
     const COUNT: u16 = 40;
@@ -641,7 +658,7 @@ fn a_stream_under_three_quarters_is_asked_for_whole_twice_then_one_by_one() {
 /// nothing and resets to the top (:2201-2205), and that round is spent. After Cancel, nothing.
 #[test]
 fn a_hole_never_filled_is_asked_for_until_cancelled() {
-    let t = ProtocolTimeouts::default().faster(20);
+    let t = timeouts(20);
     let (link, mut peer) = link(t);
     const COUNT: u16 = 30;
     let hole = 17;
@@ -711,7 +728,7 @@ fn a_hole_never_filled_is_asked_for_until_cancelled() {
 /// `getParamListAsync`, and so does this.
 #[test]
 fn a_parameter_outside_a_download_starts_no_recovery() {
-    let t = ProtocolTimeouts::default().faster(40);
+    let t = timeouts(40);
     let (link, mut peer) = link(t);
     peer.send(&param_value("RTL_ALT", 1500.0, PARAM_TYPE_INT32, 5, 900));
     wait_for("the parameter", || link.params(VEHICLE).is_some());
@@ -730,7 +747,7 @@ fn a_parameter_outside_a_download_starts_no_recovery() {
 /// "Timeout on read - setParam" (:1765). Every send is the same bytes.
 #[test]
 fn a_set_whose_echo_never_comes_is_sent_four_times_then_times_out() {
-    let t = ProtocolTimeouts::default().faster(20);
+    let t = timeouts(20);
     let (link, mut peer) = with_rtl_alt(t);
 
     let started = Instant::now();
@@ -773,7 +790,7 @@ fn a_set_whose_echo_never_comes_is_sent_four_times_then_times_out() {
 /// is queued until it has been sent; a single `None` fails it.
 #[test]
 fn a_request_is_never_missing_between_the_queue_and_the_table() {
-    let t = ProtocolTimeouts::default().faster(20);
+    let t = timeouts(20);
     let (link, mut peer) = with_rtl_alt(t);
 
     let mut ids = Vec::new();
@@ -812,7 +829,7 @@ fn a_request_is_never_missing_between_the_queue_and_the_table() {
 /// success, and nothing sent after.
 #[test]
 fn a_late_echo_ends_the_set_after_one_retry() {
-    let t = ProtocolTimeouts::default().faster(4);
+    let t = timeouts(4);
     let (link, mut peer) = with_rtl_alt(t);
 
     let id = link.set_param(VEHICLE, "RTL_ALT", 2000.0, false);
@@ -844,7 +861,7 @@ fn a_late_echo_ends_the_set_after_one_retry() {
 /// vehicle's value in the outcome and in the table, so a caller can see the difference.
 #[test]
 fn an_echo_of_a_different_value_is_the_answer_and_the_table_takes_it() {
-    let t = ProtocolTimeouts::default().faster(20);
+    let t = timeouts(20);
     let (link, mut peer) = with_rtl_alt(t);
 
     let id = link.set_param(VEHICLE, "RTL_ALT", 2000.0, false);
@@ -871,7 +888,7 @@ fn an_echo_of_a_different_value_is_the_answer_and_the_table_takes_it() {
 /// waiting (:1699-1703). All four sends go out and the set times out.
 #[test]
 fn an_echo_of_another_parameter_is_not_the_answer() {
-    let t = ProtocolTimeouts::default().faster(20);
+    let t = timeouts(20);
     let (link, mut peer) = with_rtl_alt(t);
 
     let id = link.set_param(VEHICLE, "RTL_ALT", 2000.0, false);
@@ -899,7 +916,7 @@ fn an_echo_of_another_parameter_is_not_the_answer() {
 /// and a value the table already holds is not sent - unless forced.
 #[test]
 fn a_set_that_cannot_or_need_not_be_sent_is_not_sent() {
-    let t = ProtocolTimeouts::default().faster(20);
+    let t = timeouts(20);
     let (link, mut peer) = with_rtl_alt(t);
 
     let unknown = link.set_param(VEHICLE, "NO_SUCH_PARAM", 1.0, false);
@@ -936,7 +953,7 @@ fn a_set_that_cannot_or_need_not_be_sent_is_not_sent() {
 /// does not end the wait.
 #[test]
 fn a_read_answered_only_wrongly_is_sent_four_times_then_times_out() {
-    let t = ProtocolTimeouts::default().faster(20);
+    let t = timeouts(20);
     let (link, mut peer) = link(t);
 
     let started = Instant::now();
@@ -967,7 +984,7 @@ fn a_read_answered_only_wrongly_is_sent_four_times_then_times_out() {
 /// retry with its confirmation counted up (:2789), then "Timeout on read - doCommand" (:2797).
 #[test]
 fn a_command_never_acknowledged_is_sent_four_times_with_rising_confirmation() {
-    let t = ProtocolTimeouts::default().faster(20);
+    let t = timeouts(20);
     let (link, mut peer) = link(t);
 
     let started = Instant::now();
@@ -996,7 +1013,7 @@ fn in_progress_then_accepted_is_accepted_without_a_resend() {
     // Halved, not divided by ten: each `IN_PROGRESS` comes three-fifths of a timeout after the
     // last, and at a tenth that left 80 ms before the link gave up - less than the hosted macOS
     // runner stalled a sleeping thread (CI run 37125541254, 2026-10-03, timed out). Halved, 400 ms.
-    let t = ProtocolTimeouts::default().faster(2);
+    let t = timeouts(2);
     let (link, mut peer) = link(t);
     let step = t.command.timeout * 3 / 5;
 
@@ -1032,7 +1049,7 @@ fn in_progress_then_accepted_is_accepted_without_a_resend() {
 /// `retrys` zero at :2786-2797).
 #[test]
 fn in_progress_then_silence_times_out_without_a_resend() {
-    let t = ProtocolTimeouts::default().faster(20);
+    let t = timeouts(20);
     let (link, mut peer) = link(t);
 
     let id = link.command(VEHICLE, TAKEOFF, [0.0; 7], true);
@@ -1068,7 +1085,7 @@ fn in_progress_then_silence_times_out_without_a_resend() {
 /// unknown to this one) and an out-of-range 200.
 #[test]
 fn every_refusal_ends_the_command_at_once_without_a_retry() {
-    let t = ProtocolTimeouts::default().faster(4);
+    let t = timeouts(4);
     let (link, mut peer) = link(t);
 
     for result in [
@@ -1112,7 +1129,7 @@ fn every_refusal_ends_the_command_at_once_without_a_retry() {
 /// answer (:2800-2813: the source must be the target, and "Commands dont match").
 #[test]
 fn an_ack_for_another_command_or_from_another_vehicle_is_not_the_answer() {
-    let t = ProtocolTimeouts::default().faster(4);
+    let t = timeouts(4);
     let (link, mut peer) = link(t);
 
     let id = link.command(VEHICLE, TAKEOFF, [0.0; 7], true);
@@ -1149,7 +1166,7 @@ fn an_ack_for_another_command_or_from_another_vehicle_is_not_the_answer() {
 /// vehicle's, not the caller's.
 #[test]
 fn acks_arriving_in_the_other_order_answer_their_own_commands() {
-    let t = ProtocolTimeouts::default().faster(4);
+    let t = timeouts(4);
     let (link, mut peer) = link(t);
     let arm = commands::CMD_COMPONENT_ARM_DISARM;
 
@@ -1182,7 +1199,7 @@ fn acks_arriving_in_the_other_order_answer_their_own_commands() {
 /// Arming waits ten seconds, not two, "as may need an imu calib" (:2764-2768).
 #[test]
 fn arming_waits_the_longer_arm_timeout_before_retrying() {
-    let t = ProtocolTimeouts::default().faster(40);
+    let t = timeouts(40);
     let (link, mut peer) = link(t);
     assert!(t.command_arm.timeout > t.command.timeout * 4);
 
@@ -1224,7 +1241,7 @@ fn arming_waits_the_longer_arm_timeout_before_retrying() {
 /// :2748-2752), as is a bootloader flash (:2753-2757).
 #[test]
 fn a_calibration_is_sent_twice_at_most() {
-    let t = ProtocolTimeouts::default().faster(100);
+    let t = timeouts(100);
     let (link, mut peer) = link(t);
 
     let started = Instant::now();
@@ -1248,7 +1265,7 @@ fn a_calibration_is_sent_twice_at_most() {
 /// compassmot, sent twice (p6 = 1, :2740-2747). None is ever resent.
 #[test]
 fn the_commands_not_waited_for_are_sent_and_forgotten() {
-    let t = ProtocolTimeouts::default().faster(40);
+    let t = timeouts(40);
     let (link, mut peer) = link(t);
 
     let cases: [(u16, [f32; 7], bool, usize); 5] = [
@@ -1296,7 +1313,7 @@ fn the_commands_not_waited_for_are_sent_and_forgotten() {
 /// (:2482-2487) - the C# does not check the sequence number, and nor does this.
 #[test]
 fn set_current_is_sent_six_times_then_times_out_and_any_mission_current_ends_it() {
-    let t = ProtocolTimeouts::default().faster(40);
+    let t = timeouts(40);
     let (link, mut peer) = link(t);
     let is_set_current = |m: &MavMessage| matches!(m, MavMessage::MissionSetCurrent(_));
 
@@ -1389,7 +1406,7 @@ fn in_order(count: u16, ack: u8) -> impl FnMut(&mut Peer, MavMessage) {
 /// completes with the C#'s closing `setWPACK` (mav_mission.cs:151).
 #[test]
 fn an_upload_asked_for_each_item_twice_in_either_form_completes() {
-    let t = ProtocolTimeouts::default().faster(2);
+    let t = timeouts(2);
     let (link, mut peer) = link(t);
     const COUNT: u16 = 5;
     let ask_twice = |peer: &mut Peer, seq: u16| {
@@ -1453,7 +1470,7 @@ fn an_upload_asked_for_each_item_twice_in_either_form_completes() {
 /// wire is the same.
 #[test]
 fn an_upload_asked_out_of_order_sends_what_was_asked() {
-    let t = ProtocolTimeouts::default().faster(2);
+    let t = timeouts(2);
     let (link, mut peer) = link(t);
     let order = [0u16, 2, 1, 4, 3];
     let mut next = 0;
@@ -1484,7 +1501,7 @@ fn an_upload_asked_out_of_order_sends_what_was_asked() {
 /// the mission on screen; it fails here at once, with the item.
 #[test]
 fn an_upload_accepted_without_every_item_asked_for_fails_naming_the_item() {
-    let t = ProtocolTimeouts::default().faster(2);
+    let t = timeouts(2);
     let (link, mut peer) = link(t);
     let order = [0u16, 1, 3, 4];
     let mut next = 0;
@@ -1531,7 +1548,7 @@ fn an_upload_accepted_without_every_item_asked_for_fails_naming_the_item() {
 ///   <result>" (:144-148).
 #[test]
 fn every_mission_result_on_the_final_ack_ends_the_upload_as_the_csharp_does() {
-    let t = ProtocolTimeouts::default().faster(2);
+    let t = timeouts(2);
     let (link, mut peer) = link(t);
     const COUNT: u16 = 3;
     let last = COUNT - 1;
@@ -1617,7 +1634,7 @@ fn every_mission_result_on_the_final_ack_ends_the_upload_as_the_csharp_does() {
 /// second is the generic failure (mav_mission.cs:104-111 then :144-148).
 #[test]
 fn a_second_error_for_the_same_item_fails_the_upload() {
-    let t = ProtocolTimeouts::default().faster(2);
+    let t = timeouts(2);
     let (link, mut peer) = link(t);
     let mut in_order = in_order(3, MISSION_ERROR);
 
@@ -1650,7 +1667,7 @@ fn a_second_error_for_the_same_item_fails_the_upload() {
 /// then "Timeout on read - setWPTotal" (:3795).
 #[test]
 fn an_upload_whose_count_is_never_answered_is_sent_four_times() {
-    let t = ProtocolTimeouts::default().faster(20);
+    let t = timeouts(20);
     let (link, mut peer) = link(t);
 
     let took = upload(&link, &mut peer, mission(3), silent);
@@ -1671,7 +1688,7 @@ fn an_upload_whose_count_is_never_answered_is_sent_four_times() {
 /// (`retrys = 10`, :4250-4254), then "Timeout on read - setWP" (:4267).
 #[test]
 fn an_item_never_followed_up_is_sent_eleven_times() {
-    let t = ProtocolTimeouts::default().faster(20);
+    let t = timeouts(20);
     let (link, mut peer) = link(t);
 
     let took = upload(&link, &mut peer, mission(3), |peer, message| {
@@ -1699,7 +1716,7 @@ fn an_item_never_followed_up_is_sent_eleven_times() {
 /// transfer ends after eleven sends rather than running as long as the vehicle does.
 #[test]
 fn a_vehicle_stuck_on_one_item_uses_up_that_items_retries() {
-    let t = ProtocolTimeouts::default().faster(4);
+    let t = timeouts(4);
     let (link, mut peer) = link(t);
 
     upload(&link, &mut peer, mission(3), |peer, message| {
@@ -1730,7 +1747,7 @@ fn a_vehicle_stuck_on_one_item_uses_up_that_items_retries() {
 /// nothing, as this scripted vehicle would - and not that the mission was too big.
 #[test]
 fn a_refused_count_ends_the_upload_with_the_refusal() {
-    let t = ProtocolTimeouts::default().faster(2);
+    let t = timeouts(2);
     let (link, mut peer) = link(t);
 
     let took = upload(&link, &mut peer, mission(3), |peer, message| {
@@ -1756,7 +1773,7 @@ fn a_refused_count_ends_the_upload_with_the_refusal() {
 /// `setWPACK` and returns - the upload reported a success the vehicle refused. Kept as a failure.
 #[test]
 fn invalid_sequence_then_silence_is_a_timeout_not_a_success() {
-    let t = ProtocolTimeouts::default().faster(20);
+    let t = timeouts(20);
     let (link, mut peer) = link(t);
     // Asks in order and acks the last item INVALID_SEQUENCE, then ignores everything: repeats of
     // an item and the partial list alike.
@@ -1839,7 +1856,7 @@ fn vehicle_holding(
 /// completes, with `setWPACK` (mav_mission.cs:50). Every other item is asked for once.
 #[test]
 fn a_download_with_a_lost_item_asks_again_and_completes() {
-    let t = ProtocolTimeouts::default().faster(10);
+    let t = timeouts(10);
     let (link, mut peer) = link(t);
     let items = mission(5);
     let mut dropped = false;
@@ -1868,7 +1885,7 @@ fn a_download_with_a_lost_item_asks_again_and_completes() {
 /// getWP" (:3478). What arrived before it is kept; no ack is sent for a partial mission.
 #[test]
 fn a_download_whose_item_never_arrives_asks_six_times_then_times_out() {
-    let t = ProtocolTimeouts::default().faster(20);
+    let t = timeouts(20);
     let (link, mut peer) = link(t);
 
     let took = download(
@@ -1896,7 +1913,7 @@ fn a_download_whose_item_never_arrives_asks_six_times_then_times_out() {
 /// "Timeout on read - getWPCount" (:3314).
 #[test]
 fn a_download_whose_count_never_arrives_asks_seven_times_then_times_out() {
-    let t = ProtocolTimeouts::default().faster(20);
+    let t = timeouts(20);
     let (link, mut peer) = link(t);
 
     let took = download(&link, &mut peer, silent);
@@ -1924,7 +1941,7 @@ fn a_download_whose_count_never_arrives_asks_seven_times_then_times_out() {
 /// item is dropped here; only an item nobody asked for gets the C#'s immediate request (next test).
 #[test]
 fn a_download_whose_items_all_arrive_twice_asks_for_each_once() {
-    let t = ProtocolTimeouts::default().faster(2);
+    let t = timeouts(2);
     let (link, mut peer) = link(t);
     let items = mission(6);
     let mut holding = vehicle_holding(items.clone(), |_| false);
@@ -1949,7 +1966,7 @@ fn a_download_whose_items_all_arrive_twice_asks_for_each_once() {
 /// still needed is asked for again at once, as the C# does (:3530-3534).
 #[test]
 fn a_download_sent_an_item_from_the_future_asks_again_for_the_right_one() {
-    let t = ProtocolTimeouts::default().faster(2);
+    let t = timeouts(2);
     let (link, mut peer) = link(t);
     let items = mission(5);
     let mut holding = vehicle_holding(items.clone(), |_| false);
@@ -2082,7 +2099,7 @@ fn assert_every_fault_injected(what: &str, totals: [usize; 3]) {
 /// more often than the C#'s six times (`getWP`, :3459).
 #[test]
 fn a_download_over_a_bad_link_converges_or_fails_cleanly() {
-    let t = ProtocolTimeouts::default().faster(40);
+    let t = timeouts(40);
     let items = mission(8);
     let mut totals = [0; 3];
     for seed in 1..=4u64 {
@@ -2134,7 +2151,7 @@ fn a_download_over_a_bad_link_converges_or_fails_cleanly() {
 /// order, or in a clean timeout.
 #[test]
 fn an_upload_over_a_bad_link_converges_or_fails_cleanly() {
-    let t = ProtocolTimeouts::default().faster(20);
+    let t = timeouts(20);
     const COUNT: u16 = 8;
     let mut totals = [0; 3];
     for seed in 1..=4u64 {
@@ -2192,7 +2209,7 @@ fn an_upload_over_a_bad_link_converges_or_fails_cleanly() {
 /// that delivers anything at all, it finishes.
 #[test]
 fn a_parameter_download_over_a_bad_link_completes() {
-    let t = ProtocolTimeouts::default().faster(40);
+    let t = timeouts(40);
     const COUNT: u16 = 40;
     let mut totals = [0; 3];
     for seed in 1..=3u64 {
@@ -2240,7 +2257,7 @@ fn a_parameter_download_over_a_bad_link_completes() {
 /// "Timeout on read - doCommand"; and its ack ends it, anything but ACCEPTED as a refusal.
 #[test]
 fn command_int_is_sent_four_times_then_times_out_and_its_ack_ends_it() {
-    let t = ProtocolTimeouts::default().faster(40);
+    let t = timeouts(40);
     let (link, mut peer) = link(t);
     let is_int = |m: &MavMessage| matches!(m, MavMessage::CommandInt(_));
     let set_home = |link: &Link| {
@@ -2322,7 +2339,10 @@ fn command_int_is_sent_four_times_then_times_out_and_its_ack_ends_it() {
 /// an acceptance (:4115-4143).
 #[test]
 fn set_wp_is_sent_eleven_times_then_times_out_and_an_ack_or_the_next_request_ends_it() {
-    let t = ProtocolTimeouts::default().faster(40);
+    // Halved, not divided by forty: at a fortieth the item was resent every 11 ms, and on the
+    // hosted macOS runner (CI run 37130531805, 2026-10-04) a resend came before the vehicle's
+    // second ack was read, three items where the ack ends it at two. Halved, 225 ms apart.
+    let t = timeouts(2);
     let (link, mut peer) = link(t);
     let is_item = |m: &MavMessage| matches!(m, MavMessage::MissionItem(_));
     let change_alt = |link: &Link| {
@@ -2420,7 +2440,7 @@ fn set_wp_is_sent_eleven_times_then_times_out_and_an_ack_or_the_next_request_end
 /// getHomePosition"; any `HOME_POSITION` from the vehicle ends it.
 #[test]
 fn get_home_position_asks_four_times_then_times_out_and_a_home_position_ends_it() {
-    let t = ProtocolTimeouts::default().faster(40);
+    let t = timeouts(40);
     let (link, mut peer) = link(t);
     let is_ask = |m: &MavMessage| matches!(m, MavMessage::CommandLong(long) if long.command == CMD_GET_HOME_POSITION);
 
@@ -2537,7 +2557,7 @@ fn request_float_sent(message: &MavMessage) -> Option<(u16, u8)> {
 /// (:3500-3511). No mission transfer is started for it, nor a `MISSION_REQUEST_LIST` sent.
 #[test]
 fn get_wp_asks_six_times_then_times_out_and_the_item_asked_for_ends_it() {
-    let t = ProtocolTimeouts::default().faster(50);
+    let t = timeouts(50);
     let (link, mut peer) = link(t);
     let is_request = |m: &MavMessage| matches!(m, MavMessage::MissionRequest(_));
 
@@ -2612,7 +2632,7 @@ fn get_wp_asks_a_mission_int_vehicle_with_request_int_and_scales_only_location_c
     const FENCE: u8 = 1;
     const DO_SET_ROI: u16 = 201;
     const DO_SET_SERVO: u16 = 183;
-    let t = ProtocolTimeouts::default().faster(50);
+    let t = timeouts(50);
     let (link, mut peer) = link(t);
     peer.send(&MavMessage::AutopilotVersion(AutopilotVersion {
         capabilities: u64::from(mp_link::requests::CAPABILITY_MISSION_INT),
@@ -2681,7 +2701,7 @@ fn set_wp_total_counts_four_times_then_times_out_and_the_first_request_ends_it()
     // Halved, not divided by forty: at a fortieth the count was resent every 17.5 ms, and on the
     // hosted macOS runner (CI run 37125541254, 2026-10-03) a resend came before the request that
     // ends the exchange had been read, so the answering vehicle ran twice. Halved, 350 ms apart.
-    let t = ProtocolTimeouts::default().faster(2);
+    let t = timeouts(2);
     let (link, mut peer) = link(t);
     peer.send_all(&[
         param_value("WP_TOTAL", 3.0, PARAM_TYPE_INT32, 0, 3),
@@ -2781,7 +2801,7 @@ fn set_wp_total_counts_four_times_then_times_out_and_the_first_request_ends_it()
 #[test]
 fn set_wp_total_takes_the_first_request_so_set_wp_sends_item_zero_once() {
     const FENCE: u8 = 1;
-    let t = ProtocolTimeouts::default().faster(20);
+    let t = timeouts(20);
     let (link, mut peer) = link(t);
     peer.send(&MavMessage::FencePoint(FencePoint {
         lat: -35.0,
@@ -2925,7 +2945,7 @@ fn set_wp_fills_the_mission_and_rally_lists_as_the_csharp_does() {
     const RALLY: u8 = 2;
     const RALLY_POINT: u16 = 5100;
     const WAYPOINT: u16 = 16;
-    let t = ProtocolTimeouts::default().faster(20);
+    let t = timeouts(20);
     let (link, mut peer) = link(t);
     // A mission item passing on the stream - another ground station's download - is held.
     peer.send(&MavMessage::MissionItemInt(MissionItemInt {

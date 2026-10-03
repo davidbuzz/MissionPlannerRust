@@ -311,13 +311,18 @@ mod tests {
         std::fs::create_dir_all(dir.join("Z16/1")).unwrap();
         std::fs::write(dir.join("Z16/1/1.jpeg"), b"x").unwrap();
         std::fs::write(dir.join("notes.txt"), b"x").unwrap();
+        // Named with "/" whatever the platform's separator, so the order is what is compared: on
+        // Windows the scan's paths carry "\\", as Directory.GetFiles's do (the hosted runner,
+        // 2026-10-04).
         let names: Vec<String> = scan(&dir)
             .iter()
             .map(|path| {
                 path.strip_prefix(&dir)
                     .unwrap()
-                    .to_string_lossy()
-                    .into_owned()
+                    .components()
+                    .map(|part| part.as_os_str().to_string_lossy().into_owned())
+                    .collect::<Vec<_>>()
+                    .join("/")
             })
             .collect();
         assert_eq!(

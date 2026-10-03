@@ -16425,8 +16425,21 @@ mod menu_batch_tests {
         assert_eq!(plan.items().len(), expected.len());
         for (item, row) in plan.items().iter().zip(&expected) {
             assert_eq!(item.command, mp_mission::commands::WAYPOINT);
-            assert_eq!(item.x.to_bits(), number(&row[1]).to_bits());
-            assert_eq!(item.y.to_bits(), number(&row[2]).to_bits());
+            // To the bit where the golden was made (glibc under mono), within the documented
+            // last-bits allowance elsewhere: the Windows runner's libm put one coordinate a bit
+            // off (2026-10-04). `mp_units::golden_match` says how far.
+            assert!(
+                mp_units::golden_match(item.x, number(&row[1])),
+                "x {} where the C# has {}",
+                item.x,
+                row[1]
+            );
+            assert!(
+                mp_units::golden_match(item.y, number(&row[2])),
+                "y {} where the C# has {}",
+                item.y,
+                row[2]
+            );
             assert_eq!(item.z, 100.0, "Default Alt");
             assert_eq!(item.frame, FRAME_RELATIVE);
         }

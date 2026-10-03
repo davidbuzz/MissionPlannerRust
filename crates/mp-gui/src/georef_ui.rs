@@ -3340,7 +3340,10 @@ mod tests {
         let Some(Prompt::Log(field)) = form.prompt.as_mut() else {
             panic!("no dialog");
         };
-        field.set(format!("{dir}/camera.bin"));
+        // The path as the platform writes it: typed with "/" on Windows the field keeps the
+        // typed text, as it should, and would not equal the joined path (the hosted runner,
+        // 2026-10-04).
+        field.set(log.clone());
         form.answer_prompt(true);
         assert!(form.prompt().is_none());
         assert_eq!(form.text(Field::LogFile), log);

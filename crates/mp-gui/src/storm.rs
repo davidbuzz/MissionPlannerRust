@@ -834,6 +834,11 @@ mod tests {
         assert_eq!(latencies.summary().p99.as_millis(), 16);
     }
 
+    // Unix only: tools/gui-test.sh is the Linux and macOS runner (Windows runs the scripts with
+    // tools/win10/gui-test.ps1), and on Windows the `bash` a process finds first can be the WSL
+    // launcher with no Linux behind it, which fails every call without running the comparison
+    // (the hosted runner, 2026-10-04).
+    #[cfg(unix)]
     #[test]
     fn the_test_runner_compares_less_than_as_the_script_needs() {
         // `expect frame.p99 < 8` is the runner's only `<`. Its comparison is run here, as the

@@ -11167,10 +11167,18 @@ mod tests {
                 "dataflash/golden/kml/dataflash.bin.param",
             ),
         ] {
-            let size = std::fs::metadata(testdata(golden)).expect("a golden").len();
-            assert!(
-                named.contains(&(name.to_owned(), size)),
-                "{name} at {size} bytes in {named:?}"
+            // Compared as text on LF: the waypoint file's lines end with the platform's
+            // `Environment.NewLine`, as the C# writes them, so on Windows (the hosted runner,
+            // 2026-10-04) it is longer than the Linux-made golden by a byte a line.
+            let lf = |bytes: Vec<u8>| String::from_utf8_lossy(&bytes).replace("\r\n", "\n");
+            let written = files
+                .iter()
+                .find(|(path, _)| path.file_name().is_some_and(|file| file == name))
+                .unwrap_or_else(|| panic!("{name} not written: {named:?}"));
+            assert_eq!(
+                lf(std::fs::read(&written.0).expect("the written file")),
+                lf(std::fs::read(testdata(golden)).expect("a golden")),
+                "{name}"
             );
         }
         assert!(
