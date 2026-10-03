@@ -177,7 +177,9 @@ pub fn write_report(data_dir: &Path, text: &str) -> std::io::Result<PathBuf> {
     Ok(path)
 }
 
-/// The reports not yet asked about, oldest first.
+/// The reports not yet asked about, oldest first: by the stamp in the name, then by the counter
+/// two reports of one second get - `<stamp>.txt` before `<stamp>-1.txt`, which a plain sort of the
+/// names would put the other way round (`-` sorts before `.`).
 #[must_use]
 pub fn pending(data_dir: &Path) -> Vec<PathBuf> {
     let Ok(entries) = std::fs::read_dir(reports_dir(data_dir)) else {
@@ -188,9 +190,31 @@ pub fn pending(data_dir: &Path) -> Vec<PathBuf> {
         .map(|e| e.path())
         .filter(|p| p.is_file() && p.extension().is_some_and(|e| e == "txt"))
         .collect();
-    reports.sort();
+    reports.sort_by_cached_key(|path| written_order(path));
     reports
 }
+
+/// Where a report's name puts it: its stamp, then its counter (none is 0), then the name itself
+/// for a file the application did not write.
+fn written_order(path: &Path) -> (String, u32, String) {
+    let stem = path
+        .file_stem()
+        .map(|stem| stem.to_string_lossy().into_owned())
+        .unwrap_or_default();
+    let (stamp, counter) = match stem.split_at_checked(STAMP_LEN) {
+        Some((stamp, rest)) if stamp.len() == STAMP_LEN => (
+            stamp.to_owned(),
+            rest.strip_prefix('-')
+                .and_then(|counter| counter.parse().ok())
+                .unwrap_or(0),
+        ),
+        _ => (stem.clone(), 0),
+    };
+    (stamp, counter, stem)
+}
+
+/// The length of a report's stamp, `%Y-%m-%dT%H-%M-%S`.
+const STAMP_LEN: usize = "2026-10-03T12-22-26".len();
 
 /// A report asked about: moved to `crash-reports/seen/`.
 fn mark_seen(path: &Path) {
@@ -566,6 +590,39 @@ mod tests {
                 "\"main\": [\n    \"0: a::b\",\n    \"at /src/a.rs:1:2\",\n    \"1: c::d\"\n  ]"
             ),
             "{body}"
+        );
+    }
+
+        /// Two reports of one second: the counter orders them, not the names' characters (`-` sorts
+    /// before `.`, so a plain sort would list `<stamp>-1.txt` before `<stamp>.txt`).
+    #[test]
+    fn reports_of_one_second_list_in_the_order_written() {
+        let dir = scratch("order");
+        let reports = reports_dir(&dir);
+        std::fs::create_dir_all(&reports).expect("dir");
+        let names = [
+            "2026-10-03T12-22-26-1.txt",
+            "2026-10-03T12-22-27.txt",
+            "2026-10-03T12-22-26-2.txt",
+            "2026-10-03T12-22-26.txt",
+            "2026-10-03T12-22-26-10.txt",
+        ];
+        for name in names {
+            std::fs::write(reports.join(name), "x").expect("written");
+        }
+        let listed: Vec<String> = pending(&dir)
+            .iter()
+            .map(|path| path.file_name().unwrap_or_default().to_string_lossy().into_owned())
+            .collect();
+        assert_eq!(
+            listed,
+            [
+                "2026-10-03T12-22-26.txt",
+                "2026-10-03T12-22-26-1.txt",
+                "2026-10-03T12-22-26-2.txt",
+                "2026-10-03T12-22-26-10.txt",
+                "2026-10-03T12-22-27.txt",
+            ]
         );
     }
 
