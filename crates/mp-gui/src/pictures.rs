@@ -3,7 +3,7 @@
 //! WinForms lays them out; the SITL page's vehicle pictures, which live in `SITL.resx` alone; and
 //! the HUD's `HUDT` icons.
 //!
-//! The files are the C# tree's `Resources/*.png|*.jpg` (both trees are GPL-3.0), copied to
+//! The files are the C# tree's `Resources/*.png` (both trees are GPL-3.0-only), copied to
 //! `assets/images/<resource>.<ext>` under the resource's name - the `Properties.Resources` property
 //! the Designer assigns, so `global::MissionPlanner.Properties.Resources.frames_h` is
 //! `assets/images/frames_h.png` although `Properties/Resources.resx` points it at
@@ -12,7 +12,12 @@
 //! image that is only a form's `.resx` base64, as SITL's are, is carried under that form and key
 //! (`SITL.pictureBoxplane.ImageNormal.png`). Only the pictures a ported page shows are carried:
 //! `SITES`, the tests' table, is every assignment, each held to its Designer line, its `.resx`
-//! layout and the file's bytes, and `hud::Icon::ALL` is every picture `HUD.cs` draws.
+//! layout and the file's bytes, and `hud::Icon::ALL` is every picture `HUD.cs` draws. The six
+//! product photographs the Designers also show - a Cube, a power module, a MinimOSD, an airspeed
+//! sensor, a sonar and an optical flow sensor, the tree's `Resources/*.jpg` - are not carried:
+//! they are the makers' pictures, not Mission Planner's to license, so their boxes draw their names
+//! as they did before the images came (the owner's ruling, 2026-10-03; `PHOTOGRAPHS`, under test,
+//! names them).
 //!
 //! Each image is embedded with `include_bytes!`, decoded once with the `image` crate on first use
 //! and kept; a box that scales it gets a copy resampled to its size in device pixels, also kept,
@@ -95,11 +100,11 @@ macro_rules! embedded {
 /// `// C#: Properties/Resources.resx` (the file each resource names) and `Resources.Designer.cs`
 /// (the property each resource is); `ExtLibs/Controls/HUDT.resx` and `HUDT.Designer.cs` for the
 /// HUD's; `GCSViews/SITL.resx` for SITL's.
-pub const IMAGES: [Embedded; 69] = [
+pub const IMAGES: [Embedded; 63] = [
     embedded!("APM_airframes_001", "APM_airframes_001.png"),
     embedded!("APM_airframes_08", "APM_airframes_08.png"),
     embedded!("Antenna_Tracker_01", "Antenna_Tracker_01.png"),
-    embedded!("BR_APMPWRDEAN_2", "BR_APMPWRDEAN_2.jpg"),
+    
     embedded!("FW_icons_2013_logos_03", "FW_icons_2013_logos_03.png"),
     embedded!("FW_icons_2013_logos_04", "FW_icons_2013_logos_04.png"),
     embedded!("FW_icons_2013_logos_06", "FW_icons_2013_logos_06.png"),
@@ -109,7 +114,7 @@ pub const IMAGES: [Embedded; 69] = [
     embedded!("FW_icons_2013_logos_10", "FW_icons_2013_logos_10.png"),
     embedded!("FW_icons_2013_logos_12", "FW_icons_2013_logos_12.png"),
     embedded!("FW_icons_2013_logos_13", "FW_icons_2013_logos_13.png"),
-    embedded!("MinimOSD", "MinimOSD.jpg"),
+    
     embedded!("Parachute", "Parachute.png"),
     embedded!(
         "SITL.pictureBoxheli.ImageNormal",
@@ -147,7 +152,7 @@ pub const IMAGES: [Embedded; 69] = [
     embedded!("_2dfix_wide", "_2dfix_wide.png"),
     embedded!("_3ddgps_wide", "_3ddgps_wide.png"),
     embedded!("_3dfix_wide", "_3dfix_wide.png"),
-    embedded!("airspeed", "airspeed.jpg"),
+    
     embedded!("batt_1", "batt_1.png"),
     embedded!("batt_2", "batt_2.png"),
     embedded!("batt_3", "batt_3.png"),
@@ -169,8 +174,8 @@ pub const IMAGES: [Embedded; 69] = [
     embedded!("new_3DR_04", "new_3DR_04.png"),
     embedded!("nofix_wide", "nofix_wide.png"),
     embedded!("nogps_wide", "nogps_wide.png"),
-    embedded!("opticalflow", "opticalflow.jpg"),
-    embedded!("pixhawk2cube", "pixhawk2cube.jpg"),
+    
+    
     embedded!("prearm_green", "prearm_green.png"),
     embedded!("prearm_red", "prearm_red.png"),
     // `Resources.quadicon`, the Proximity window's copter (`config/proximity.rs`).
@@ -182,7 +187,7 @@ pub const IMAGES: [Embedded; 69] = [
     embedded!("rover_11", "rover_11.png"),
     embedded!("rtkfixed_wide", "rtkfixed_wide.png"),
     embedded!("rtkfloat_wide", "rtkfloat_wide.png"),
-    embedded!("sonar", "sonar.jpg"),
+    
     embedded!("sub", "sub.png"),
     embedded!("unknown", "unknown.png"),
     embedded!("up", "up.png"),
@@ -360,6 +365,21 @@ pub const SITES: [Site; 63] = [
     resx_site(SITL, "pictureBoxrover", "ImageOver", "SITL.pictureBoxrover.ImageOver", Layout::None),
     resx_site(SITL, "pictureBoxplane", "ImageNormal", "SITL.pictureBoxplane.ImageNormal", Layout::None),
     resx_site(SITL, "pictureBoxplane", "ImageOver", "SITL.pictureBoxplane.ImageOver", Layout::None),
+];
+
+/// The product photographs the Designers assign that are not carried - the Cube on both Install
+/// Firmware pages, the power module on both Battery Monitors, the MinimOSD, the airspeed sensor,
+/// the sonar (Range Finder and Parachute) and the optical flow sensor: the makers' pictures, not
+/// Mission Planner's to license, left out on the owner's ruling of 2026-10-03. Their `SITES` rows
+/// stay as the record of what the Designers show; their boxes draw their names.
+#[cfg(test)]
+pub const PHOTOGRAPHS: [&str; 6] = [
+    "BR_APMPWRDEAN_2",
+    "MinimOSD",
+    "airspeed",
+    "opticalflow",
+    "pixhawk2cube",
+    "sonar",
 ];
 
 /// The bytes of a resource, if it is carried.
@@ -889,7 +909,7 @@ mod tests {
         names.sort_unstable();
         names.dedup();
         assert_eq!(names.len(), IMAGES.len(), "a resource carried twice");
-        assert_eq!(total, 831_774, "the images embedded, in bytes");
+        assert_eq!(total, 686_349, "the images embedded, in bytes");
         assert!(decoded("no_such_resource").is_none());
     }
 
@@ -911,18 +931,29 @@ mod tests {
         assert_eq!(files, embedded);
     }
 
-    /// Every site's resource is carried, and every carried image is some site's: nothing the
-    /// Designers do not assign.
+        /// Every site's resource is carried, or is one of the photographs left out; every carried
+    /// image is some site's: nothing the Designers do not assign; and no photograph is carried.
     #[test]
     fn every_site_is_carried_and_every_image_used() {
         for site in SITES {
             assert!(
-                bytes(site.resource).is_some(),
-                "{}'s {} is not carried",
+                bytes(site.resource).is_some() || PHOTOGRAPHS.contains(&site.resource),
+                "{}'s {} is neither carried nor a photograph left out",
                 site.control,
                 site.resource
             );
         }
+        for photograph in PHOTOGRAPHS {
+            assert!(
+                bytes(photograph).is_none(),
+                "{photograph} is a product photograph and is carried"
+            );
+            assert!(
+                SITES.iter().any(|site| site.resource == photograph),
+                "{photograph} is no Designer's"
+            );
+        }
+
         for icon in crate::hud::Icon::ALL {
             assert!(bytes(icon.resource()).is_some(), "{icon:?} is not carried");
         }
@@ -1117,8 +1148,9 @@ mod tests {
         found
     }
 
-    /// Every resource a page names at a `picture` call is carried, and is the one its Designer
-    /// assigns with the layout its `.resx` gives. The list is the call sites, file by file.
+        /// Every resource a page names at a `picture` call is carried, or is a photograph left out,
+    /// and is the one its Designer assigns with the layout its `.resx` gives. The list is the call
+    /// sites, file by file.
     #[test]
     fn every_call_site_resource_is_carried() {
         let sites = call_sites();
@@ -1145,10 +1177,10 @@ mod tests {
                 ("rangefinder.rs", "sonar", "Zoom"),
             ]
         );
-        for (file, resource, layout) in &sites {
+                for (file, resource, layout) in &sites {
             assert!(
-                bytes(resource).is_some(),
-                "{file}: {resource} is not carried"
+                bytes(resource).is_some() || PHOTOGRAPHS.contains(&resource.as_str()),
+                "{file}: {resource} is neither carried nor a photograph left out"
             );
             assert!(
                 SITES.iter().any(
@@ -1386,13 +1418,24 @@ mod tests {
                         .unwrap_or_else(|_| panic!("{stem}.resx's {key} is not base64"))
                 }
             };
-            assert!(
-                bytes(site.resource) == Some(file_bytes.as_slice()),
-                "{}.{}: the carried {} is not the C#'s file",
-                site.control,
-                site.property,
-                site.resource
-            );
+                        if PHOTOGRAPHS.contains(&site.resource) {
+                assert!(
+                    bytes(site.resource).is_none(),
+                    "{}.{}: the photograph {} is carried",
+                    site.control,
+                    site.property,
+                    site.resource
+                );
+            } else {
+                assert!(
+                    bytes(site.resource) == Some(file_bytes.as_slice()),
+                    "{}.{}: the carried {} is not the C#'s file",
+                    site.control,
+                    site.property,
+                    site.resource
+                );
+            }
+
 
             // The layout.
             let layout = if site.control.starts_with("radioButton") {
