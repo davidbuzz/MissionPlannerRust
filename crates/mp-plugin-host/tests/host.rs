@@ -391,7 +391,23 @@ fn the_thread_loops_at_the_rate() {
         }
         std::thread::sleep(Duration::from_millis(5));
     }
-    assert!((8..=16).contains(&loops), "{loops}");
+    // Never faster than its rate: 16 at most. As fast as the rate where the machine wakes a
+    // sleeping thread on time: 8 at least; on one that does not - the hosted macOS runner managed
+    // 3 in the quarter second (2026-10-04) - it still loops, and the rate is not judged.
+    let lateness = (0..3)
+        .map(|_| {
+            let asked = Duration::from_millis(5);
+            let slept = Instant::now();
+            std::thread::sleep(asked);
+            slept.elapsed().saturating_sub(asked)
+        })
+        .max()
+        .unwrap_or(Duration::ZERO);
+    let least = if lateness <= Duration::from_millis(2) { 8 } else { 2 };
+    assert!(
+        (least..=16).contains(&loops),
+        "{loops} loops in 250 ms, a timed wait here waking {lateness:?} late"
+    );
     host.shutdown();
     let logs: Vec<String> = host
         .drain()

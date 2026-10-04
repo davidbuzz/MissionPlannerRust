@@ -3422,7 +3422,14 @@ mod tests {
 
         let job = form.geotag_click().unwrap();
         finish(&mut form, job);
-        assert_eq!(form.output().replace(&dir, "{dir}"), want);
+        // The separator after the folder is the platform's, as the C#'s Path.Combine gives it: a
+        // backslash on Windows (the hosted runner, 2026-10-04), where the golden has a slash.
+        assert_eq!(
+            form.output()
+                .replace(&dir, "{dir}")
+                .replace("{dir}\\", "{dir}/"),
+            want
+        );
         assert_eq!(form.geotagged, Some(24));
         for n in [1, 13, 24] {
             let name = format!("IMG_{n:04}_geotag.jpg");
