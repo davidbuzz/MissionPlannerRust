@@ -145,22 +145,28 @@ fn button(
     cx: &mut Context<MissionPlanner>,
 ) -> AnyElement {
     let id = id.into();
+    // A narrow button - Auto Detect's 45 - wraps its text small, as the C#'s does: on one line
+    // it ran 68 wide in 43 (the layout guard on the owner's Mac, 2026-10-05).
+    let narrow = place.2 < 60.0;
+    let base = crate::probe::measured(id.clone(), div())
+        .id(SharedString::from(id))
+        .size_full()
+        .flex()
+        .items_center()
+        .justify_center()
+        .rounded_sm()
+        .border_1()
+        .border_color(rgb(theme::BORDER))
+        .bg(rgb(theme::ACTION));
+    let base = if narrow {
+        base.text_size(px(9.0)).line_height(px(10.0)).text_center()
+    } else {
+        base.text_xs().whitespace_nowrap()
+    };
     at(place)
         .child(
-            crate::probe::measured(id.clone(), div())
-                .id(SharedString::from(id))
-                .size_full()
-                .flex()
-                .items_center()
-                .justify_center()
-                .rounded_sm()
-                .border_1()
-                .border_color(rgb(theme::BORDER))
-                .bg(rgb(theme::ACTION))
-                .text_xs()
-                .text_color(rgb(theme::TEXT))
+            base.text_color(rgb(theme::TEXT))
                 .overflow_hidden()
-                .whitespace_nowrap()
                 .cursor_pointer()
                 .hover(|style| style.border_color(rgb(theme::ACCENT)))
                 .child(text.into())
@@ -433,7 +439,10 @@ fn text_box(
                 .items_center()
                 .px_1()
                 .bg(rgb(theme::BG))
-                .text_xs()
+                // A line no taller than the box: the Expo boxes are 13 high, and the default
+                // line made their text 19 (the layout guard on the owner's Mac, 2026-10-05).
+                .text_size(px(if place.3 < 16.0 { 10.0 } else { 12.0 }))
+                .line_height(px((place.3 - 2.0).min(16.0)))
                 .text_color(rgb(theme::TEXT))
                 .overflow_hidden()
                 .whitespace_nowrap()

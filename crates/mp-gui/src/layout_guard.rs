@@ -185,6 +185,33 @@ fn describe(hidden: &[String]) -> String {
         .join(",")
 }
 
+/// The file in the planner's data folder every cut-off the banner shows is added to, one line
+/// each: [`record_line`].
+pub const RECORD_FILE: &str = "layout-guard.log";
+
+/// One cut-off as the record has it: when, on which screen, in what size of window, and what.
+#[must_use]
+pub fn record_line(time: &str, screen: &str, size: (f32, f32), text: &str) -> String {
+    format!(
+        "{time} CUT OFF on {screen} at {:.0}x{:.0}: {text}",
+        size.0, size.1
+    )
+}
+
+/// Adds `line` to the record. A record that cannot be written is not worth stopping for: the
+/// strip and the stderr log still say it.
+fn append_record(path: &std::path::Path, line: &str) {
+    use std::io::Write as _;
+    let written = std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(path)
+        .and_then(|mut file| writeln!(file, "{line}"));
+    if let Err(err) = written {
+        log::debug!("layout guard record {}: {err}", path.display());
+    }
+}
+
 /// How long a cut-off lasts before the banner names it: longer than the frame a screen just
 /// switched to is measured late in, when its important controls look missing.
 pub const BANNER_AFTER: std::time::Duration = std::time::Duration::from_millis(500);
@@ -203,10 +230,12 @@ pub struct Banner {
 }
 
 impl Banner {
-    /// This frame's verdict on `screen`. Each cut-off the strip comes to show also goes to the
-    /// log, once, with its screen, so a run leaves the record of every one it met (the owner,
-    /// 2026-10-04: "check all the CUT OFF events").
-    pub fn update(&mut self, screen: Screen) {
+    /// This frame's verdict on `screen`, in a window `size` wide and high. Each cut-off the
+    /// strip comes to show also goes to the log and to [`RECORD_FILE`], with the time, the screen
+    /// and the window's size, so every run leaves a record of every one it met that outlives it
+    /// (the owner, 2026-10-04: "are you capturing *all the CUT OFF events into a log ... so you
+    /// dont miss them").
+    pub fn update(&mut self, screen: Screen, size: (f32, f32)) {
         let names = if crate::probe::enabled() {
             hidden(screen)
         } else {
@@ -216,7 +245,16 @@ impl Banner {
         let now = std::time::Instant::now();
         self.observe(text, now);
         if let Some(text) = self.newly_shown(now) {
-            log::warn!("CUT OFF on {}: {text}", screen.label());
+            let line = record_line(
+                &chrono::Local::now().format("%Y-%m-%d %H:%M:%S").to_string(),
+                screen.label(),
+                size,
+                &text,
+            );
+            log::warn!("{line}");
+            if let Some(folder) = mp_settings::user_data_directory() {
+                append_record(&folder.join(RECORD_FILE), &line);
+            }
         }
     }
 
@@ -319,6 +357,25 @@ mod tests {
         assert_eq!(banner.text_at(later(1_300)), Some("plan-read,plan-write"));
         banner.observe(None, later(1_400));
         assert_eq!(banner.text_at(later(5_000)), None);
+    }
+
+    /// The record's line says when, where, at what size and what; lines are added, never
+    /// replaced, so a restart keeps the run before.
+    #[test]
+    fn the_record_keeps_every_cut_off() {
+        assert_eq!(
+            record_line("2026-10-05 00:59:01", "fly", (1600.0, 920.0), "panel:actions"),
+            "2026-10-05 00:59:01 CUT OFF on fly at 1600x920: panel:actions"
+        );
+        let path = std::env::temp_dir().join(format!("mp-layout-record-{}.log", std::process::id()));
+        let _ = std::fs::remove_file(&path);
+        append_record(&path, "first");
+        append_record(&path, "second");
+        assert_eq!(
+            std::fs::read_to_string(&path).unwrap_or_default(),
+            "first\nsecond\n"
+        );
+        let _ = std::fs::remove_file(&path);
     }
 
     /// The log has each cut-off once, when the strip first shows it, and again only when it

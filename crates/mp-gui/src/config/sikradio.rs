@@ -3125,6 +3125,9 @@ fn text_box(
         .rounded_sm()
         .border_1()
         .text_xs()
+        // A line that fits the box inside its border (the layout guard on the owner's Mac,
+        // 2026-10-05: the text was 19 high in 18).
+        .line_height(px(16.0))
         .overflow_hidden();
     let base = if ctl.multiline {
         base.flex_col().child(div().child(text))

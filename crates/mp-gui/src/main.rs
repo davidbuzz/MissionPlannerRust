@@ -175,10 +175,8 @@ fn dropdown(id: &'static str, rows: Vec<gpui::AnyElement>) -> gpui::AnyElement {
 enum PlanGroup {
     /// `panelAction`'s.
     Actions,
-    /// `panelWaypoints`', stacked in a column of their own (Switch Docking's).
-    Waypoints,
-    /// `panelWaypoints`' under the map: the grid filling the height it is given, the editor
-    /// beside it.
+    /// `panelWaypoints`': the grid filling the height it is given, the editor beside it - under
+    /// the map, or at its right after Switch Docking.
     Grid,
 }
 use telemetry::{Telemetry, TelemetryView};
@@ -190,6 +188,15 @@ const REFRESH: Duration = Duration::from_millis(100);
 
 /// The mission file name used when nothing has been typed.
 const DEFAULT_PLAN_FILE: &str = "mission.waypoints";
+
+/// Where dialogs drawn over the whole window hang in the element tree: a box of no size at its
+/// parent's corner. Their window-sized backdrops (`deferred`, `anchored` at the window's origin)
+/// draw over everything wherever they hang, but laid out inside a screen's body they made the
+/// body measure as running past the window, and the layout guard said so whenever a dialog was
+/// open (the owner's Mac, 2026-10-05: SETUP's body "cut off" by its own dialog's backdrop).
+fn overlay_layer() -> gpui::Div {
+    div().absolute().top_0().left_0().size_0()
+}
 
 /// Under the product's name in the header (the owner, 2026-10-04).
 const BYLINE: &str = "by David Buzz";
@@ -2331,8 +2338,7 @@ impl MissionPlanner {
             fence_busy: self.plan.fence_busy(),
         };
         let actions = group == PlanGroup::Actions;
-        let waypoints = group != PlanGroup::Actions;
-        let fill = group == PlanGroup::Grid;
+        let waypoints = group == PlanGroup::Grid;
         let mut out = Vec::new();
         if actions {
             out.push(
@@ -2392,27 +2398,17 @@ impl MissionPlanner {
                 cx,
             );
             out.push(
-                plan::items_panel(
-                    &items,
-                    selected,
-                    strip,
-                    self.plan.commands_minimised(),
-                    fill,
-                    cx,
-                )
-                .into_any_element(),
+                plan::items_panel(&items, selected, strip, self.plan.commands_minimised(), cx)
+                    .into_any_element(),
             );
-            let editor = plan::editor_panel(&items, selected, cx);
-            out.push(if fill {
+            out.push(
                 div()
                     .id("plan-editor")
                     .flex_shrink_0()
                     .w(px(340.0))
-                    .child(editor)
-                    .into_any_element()
-            } else {
-                editor
-            });
+                    .child(plan::editor_panel(&items, selected, cx))
+                    .into_any_element(),
+            );
         }
         out
     }
@@ -2538,18 +2534,20 @@ impl MissionPlanner {
                             .min_h(px(0.0))
                             .gap_2()
                             .child(self.map_pane(window, cx))
+                            // The grid and the editor side by side, as under the map in the
+                            // default docking: stacked in one scrolling column, the editor's lower
+                            // controls scrolled out of a 357-high half (the layout guard on the
+                            // owner's Mac, 2026-10-05).
                             .child(
                                 div()
                                     .id("plan-waypoints")
                                     .flex()
-                                    .flex_col()
                                     .flex_shrink_0()
                                     .w(half)
                                     .min_h(px(0.0))
                                     .gap_2()
-                                    .overflow_y_scroll()
                                     .children(self.plan_panels(
-                                        PlanGroup::Waypoints,
+                                        PlanGroup::Grid,
                                         view,
                                         window,
                                         cx,
@@ -2999,7 +2997,11 @@ impl Render for MissionPlanner {
         // Controls that were not measured in the frame just finished have left the screen.
         probe::begin_frame();
         // What that frame left cut off, for the debug build's banner.
-        self.cut_off.update(self.screen);
+        let viewport = window.viewport_size();
+        self.cut_off.update(
+            self.screen,
+            (f32::from(viewport.width), f32::from(viewport.height)),
+        );
         // Where the planner's file dialogs open, for their lists.
         self.plan_menus.dialog_directory = self.dialog_directory();
         // Under MP_STORM, the frame's cost is timed from here to the marker at the end of the
@@ -4069,6 +4071,10 @@ impl Render for MissionPlanner {
                 .flex_1()
                 .min_h(px(0.0))
                 .child(self.backstage_screen(setup::List::Setup, &view, window, cx))
+                // The screen's dialogs, drawn over the whole window: hung from a box of no size,
+                // so their backdrops are not read as this body running past the window.
+                .child(
+                    overlay_layer()
                 .children(config::failsafe::overlay(&self.failsafe, window, cx))
                 .children(config::battery_monitor::overlay(
                     &self.battery_monitor,
@@ -4145,6 +4151,7 @@ impl Render for MissionPlanner {
                     cx,
                 ))
                 // ---- end Firmware Legacy / Ateryx ----
+                )
                 .into_any_element(),
             Screen::Config => probe::measured("config-body", div())
                 .flex()
@@ -4152,6 +4159,10 @@ impl Render for MissionPlanner {
                 .min_h(px(0.0))
                 .child(self.backstage_screen(setup::List::Config, &view, window, cx))
                 // ---- Basic Tuning / Advanced ----
+                // The screen's dialogs, drawn over the whole window: hung from a box of no size,
+                // so their backdrops are not read as this body running past the window.
+                .child(
+                    overlay_layer()
                 .children(config::basic_tuning::overlay(
                     &self.basic_tuning,
                     window,
@@ -4170,6 +4181,7 @@ impl Render for MissionPlanner {
                 // ---- Firmware Legacy / Ateryx ----
                 .children(config::ateryx::overlay(&self.ateryx, window, cx))
                 // ---- end Firmware Legacy / Ateryx ----
+                )
                 .into_any_element(),
             // ---- SITL ----
             Screen::Sitl => div()
@@ -4273,12 +4285,20 @@ impl Render for MissionPlanner {
                             .child(self.vehicle_picker(&view, cx))
                             .child(self.connection_controls(&view, cx)),
                     )
-                    .children(self.connect_dialogs(window, cx))
-                    // The update's question, progress and boxes, on whatever screen is showing:
-                    // the once-a-day check asks from the main thread, wherever the user is.
-                    .children(help::overlay(self, window, cx))
-                    // A crash report from a last run: its question, on the main thread at start.
-                    .children(crash::overlay(self, window, cx))
+                    // The connect, update and crash dialogs, drawn over the whole window: hung
+                    // from a box of no size, so their backdrops are not read as the header
+                    // running past the window.
+                    .child(
+                        overlay_layer()
+                            .children(self.connect_dialogs(window, cx))
+                            // The update's question, progress and boxes, on whatever screen is
+                            // showing: the once-a-day check asks from the main thread, wherever
+                            // the user is.
+                            .children(help::overlay(self, window, cx))
+                            // A crash report from a last run: its question, on the main thread
+                            // at start.
+                            .children(crash::overlay(self, window, cx)),
+                    )
                     .child(
                         div()
                             .flex()
@@ -4341,22 +4361,28 @@ impl Render for MissionPlanner {
                     ),
             )
             .child(body)
-            // The Compass page's boxes: modal over every screen, since leaving SETUP can ask one.
-            .children(config::compass::overlay(
-                &self.compass,
-                &self.compass_focus,
-                window,
-                cx,
-            ))
-            // ---- row 96 ----
-            // The plugins' questions and forms, and the flight map's plugin entries.
-            .children(plugins_ui::overlay(
-                self,
-                self.screen == Screen::Fly,
-                window,
-                cx,
-            ))
-            // ---- end row 96 ----
+            // Dialogs over every screen, hung from a box of no size so their backdrops are not
+            // read as the window's own content running past it.
+            .child(
+                overlay_layer()
+                    // The Compass page's boxes: modal over every screen, since leaving SETUP
+                    // can ask one.
+                    .children(config::compass::overlay(
+                        &self.compass,
+                        &self.compass_focus,
+                        window,
+                        cx,
+                    ))
+                    // ---- row 96 ----
+                    // The plugins' questions and forms, and the flight map's plugin entries.
+                    .children(plugins_ui::overlay(
+                        self,
+                        self.screen == Screen::Fly,
+                        window,
+                        cx,
+                    )),
+                // ---- end row 96 ----
+            )
             // Last, so its paint ends the frame's measurement; absent without MP_STORM.
             .children(storm::marker(
                 view.frames,

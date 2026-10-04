@@ -4951,6 +4951,9 @@ pub fn page(
             .id("rtk-labelmsgseen")
             .overflow_hidden()
             .text_xs()
+            // Two lines in the Designer's 31: the default line made them 38 (the layout guard
+            // on the owner's Mac, 2026-10-05).
+            .line_height(px(15.0))
             .text_color(rgb(theme::TEXT))
             .cursor_pointer()
             .child(seen.clone())

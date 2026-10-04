@@ -186,12 +186,14 @@ pub fn actions_panel(
             )
         }));
 
+    // Eight between the three, not twelve: at twelve the page was 5 taller than the 499 the
+    // owner's Mac window leaves under the HUD (the layout guard's record, 2026-10-05).
     panel(
         "actions",
         div()
             .flex()
             .flex_col()
-            .gap_3()
+            .gap_2()
             .child(controls)
             .child(actions_tab(view, tab, focus, window, cx))
             .child(mode_controls(view, cx)),

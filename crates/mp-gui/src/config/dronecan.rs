@@ -4185,6 +4185,9 @@ fn details(page: &DroneCan) -> AnyElement {
                     .border_color(rgb(theme::BORDER))
                     .bg(rgb(theme::BG))
                     .text_xs()
+                    // Fitting the 20-high cell inside its border (the layout guard on the
+                    // owner's Mac, 2026-10-05: 19 high in 18).
+                    .line_height(px(16.0))
                     .overflow_hidden()
                     .whitespace_nowrap()
                     .text_color(rgb(theme::TEXT))

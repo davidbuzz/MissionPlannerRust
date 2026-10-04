@@ -4009,14 +4009,13 @@ fn strip_checks(
         .child(checks)
 }
 
-/// The waypoint table. `fill`: it takes the height it is given - the lower third under the map -
-/// and its rows scroll in what is left; otherwise the rows scroll past 280 pixels.
+/// The waypoint table. It takes the height it is given - under the map, or at its right after
+/// Switch Docking - and its rows scroll in what is left.
 pub fn items_panel(
     plan_items: &[MissionItem],
     selected: Option<u16>,
     strip: AnyElement,
     minimised: bool,
-    fill: bool,
     cx: &mut Context<MissionPlanner>,
 ) -> impl IntoElement {
     // `but_mincommands` at (938, 0), anchored top right: ˅ folds `panelWaypoints` to the
@@ -4143,13 +4142,9 @@ pub fn items_panel(
         .flex_col()
         .gap_2()
         .child(strip)
-        // Filling, the rows take no height of their own: the area is as tall as the editor
-        // beside them needs, and they scroll in it.
-        .child(if fill {
-            list.flex_1().flex_basis(px(0.0)).min_h(px(0.0))
-        } else {
-            list.max_h(px(280.0))
-        })
+        // The rows take no height of their own: the area is as tall as the editor beside them
+        // needs, and they scroll in it.
+        .child(list.flex_1().flex_basis(px(0.0)).min_h(px(0.0)))
         .children((count > 8).then(|| {
             div()
                 .pt_1()
@@ -4157,14 +4152,10 @@ pub fn items_panel(
                 .text_color(rgb(theme::DIM))
                 .child(format!("{count} items - scroll for the rest"))
         }));
-    if fill {
-        crate::ui::panel_with_corner("mission items", min_button, body.flex_1().min_h(px(0.0)))
-            .flex_1()
-            .min_w(px(0.0))
-            .min_h(px(0.0))
-    } else {
-        crate::ui::panel_with_corner("mission items", min_button, body)
-    }
+    crate::ui::panel_with_corner("mission items", min_button, body.flex_1().min_h(px(0.0)))
+        .flex_1()
+        .min_w(px(0.0))
+        .min_h(px(0.0))
 }
 
 /// The editor for the selected item: what it does and how high.
@@ -5936,6 +5927,9 @@ pub fn dialog_listing(
             None => directory.to_path_buf(),
         }
     };
+    // Rebuilt from its parts, so a typed "/" is the platform's separator: on Windows "b-sub/"
+    // listed "b-sub/deep.waypoints" beside "\\"-separated paths (CI run 37206807094).
+    let folder: PathBuf = folder.components().collect();
     let mut folders = Vec::new();
     let mut files = Vec::new();
     for entry in std::fs::read_dir(&folder).into_iter().flatten().flatten() {
