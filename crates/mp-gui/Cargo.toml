@@ -121,6 +121,11 @@ gpui_windows = { git = "https://github.com/zed-industries/zed", rev = "62e5991dd
 [target.'cfg(target_os = "macos")'.dependencies]
 gpui_macos = { git = "https://github.com/zed-industries/zed", rev = "62e5991dd0f0c8a3af8d5e7e9c4652490d468db8", features = ["font-kit"] }
 
+# In a web page std's clock panics, so hud.rs takes web-time's `Instant` there (the browser
+# experiment, experiments/web-experiment). Already in the lock through gpui.
+[target.'cfg(target_family = "wasm")'.dependencies]
+web-time = "1"
+
 # A scripted vehicle on the far end of an in-memory link, so a screen's sets and commands can be
 # driven through the real link and its retries in a unit test: the frame codec that vehicle speaks
 # with. (Its transport double, mp-transport, is a dependency above.)

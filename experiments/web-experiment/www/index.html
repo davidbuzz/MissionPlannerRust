@@ -4,12 +4,14 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>MissionPlannerRust web experiment</title>
-<style>html, body { margin: 0; height: 100%; background: #1e1e2e; } canvas { display: block; }</style>
+<style>html, body { margin: 0; height: 100%; background: #000; } canvas { display: block; }</style>
 </head>
 <body>
 <script type="module">
-import init from "./pkg/mp_web_experiment.js";
-init();
+import { startLink } from "./link.js";
+import init, { facts } from "./pkg/mp_web_experiment.js";
+startLink();
+init().then(() => (globalThis.mpFacts = () => JSON.parse(facts())));
 </script>
 </body>
 </html>

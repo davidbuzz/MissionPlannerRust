@@ -164,6 +164,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c3d036a3c4ab069c7b410a2ce876bd74808d2d0888a82667669f8e783a898bf1"
 
 [[package]]
+name = "arc-swap"
+version = "1.9.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c049c0be4daef0b145cb3555416b3b8ef5b7888a38aea1a3a155801fe7b0810b"
+dependencies = [
+ "rustversion",
+]
+
+[[package]]
 name = "arg_enum_proc_macro"
 version = "0.3.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3004,13 +3013,61 @@ dependencies = [
 ]
 
 [[package]]
+name = "mp-mavlink"
+version = "0.0.0"
+dependencies = [
+ "sha2",
+ "thiserror 2.0.21",
+]
+
+[[package]]
+name = "mp-mavlink-dialects"
+version = "0.0.0"
+dependencies = [
+ "mp-mavlink",
+]
+
+[[package]]
+name = "mp-mission"
+version = "0.0.0"
+dependencies = [
+ "mp-units",
+ "thiserror 2.0.21",
+]
+
+[[package]]
+name = "mp-units"
+version = "0.0.0"
+dependencies = [
+ "thiserror 2.0.21",
+]
+
+[[package]]
+name = "mp-vehicle"
+version = "0.0.0"
+dependencies = [
+ "arc-swap",
+ "mp-mavlink",
+ "mp-mavlink-dialects",
+ "mp-units",
+]
+
+[[package]]
 name = "mp-web-experiment"
 version = "0.0.0"
 dependencies = [
  "gpui",
  "gpui_platform",
+ "image",
+ "js-sys",
+ "mp-mavlink",
+ "mp-mavlink-dialects",
+ "mp-mission",
+ "mp-units",
+ "mp-vehicle",
  "wasm-bindgen",
  "web-sys",
+ "web-time",
 ]
 
 [[package]]

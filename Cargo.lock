@@ -4578,6 +4578,7 @@ dependencies = [
  "sha1_smol",
  "ttf-parser",
  "unic-langid",
+ "web-time",
 ]
 
 [[package]]
