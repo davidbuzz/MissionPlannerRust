@@ -4,9 +4,13 @@ name: release builds
 # painted once, packaged with the licence files, and kept as this run's artifacts for the owner to
 # publish. The planner alone: headless-planner is an internal testing tool, not part of the
 # application. The owner's borrowed Mac builds the same commit by hand as a check (DEV_MACOS.md).
-# Run by hand: Actions > release builds > Run workflow, on the commit to release.
+# Run by hand (Actions > release builds > Run workflow), or by pushing a release tag - "v" and a
+# number, v0_1 or v1.2.0 - which builds that tag's commit and then publishes the three downloads,
+# their checksums and the release notes as the tag's GitHub release (the `publish` job).
 on:
   workflow_dispatch:
+  push:
+    tags: ['v[0-9]*']
 
 env:
   CARGO_TERM_COLOR: always
@@ -45,6 +49,7 @@ jobs:
       - name: Archive
         run: |
           V=$(grep -m1 '^version = ' Cargo.toml | sed 's/.*"\(.*\)"/\1/')
+          [ "$GITHUB_REF_TYPE" = tag ] && V=${GITHUB_REF_NAME#v}
           N=missionplanner-rust_${V}_linux-x86_64
           mkdir -p release/$N
           cp dist/planner LICENSE NOTICE THIRD_PARTY_LICENSES README.md release/$N/
@@ -100,6 +105,7 @@ jobs:
         shell: pwsh
         run: |
           $v = (Select-String -Path Cargo.toml -Pattern '^version = "(.*)"' | Select-Object -First 1).Matches[0].Groups[1].Value
+          if ($env:GITHUB_REF_TYPE -eq 'tag') { $v = $env:GITHUB_REF_NAME.Substring(1) }
           $n = "missionplanner-rust_${v}_windows-x86_64"
           New-Item -ItemType Directory -Force -Path "release\$n" | Out-Null
           Copy-Item target\release\planner.exe, LICENSE, NOTICE, THIRD_PARTY_LICENSES, README.md "release\$n\"
@@ -173,6 +179,7 @@ jobs:
       - name: Archive
         run: |
           V=$(grep -m1 '^version = ' Cargo.toml | sed 's/.*"\(.*\)"/\1/')
+          [ "$GITHUB_REF_TYPE" = tag ] && V=${GITHUB_REF_NAME#v}
           N=missionplanner-rust_${V}_macos-universal
           mkdir -p release/$N
           cp dist/planner LICENSE NOTICE THIRD_PARTY_LICENSES README.md release/$N/
@@ -202,3 +209,64 @@ jobs:
           path: |
             release/*.tar.gz
             release/SHA256SUMS-macos
+
+  publish:
+    name: GitHub release
+    # Only for a release tag, and only once all three platforms have built, opened and packaged.
+    if: github.ref_type == 'tag'
+    needs: [linux, windows, macos]
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: assets
+          merge-multiple: true
+      - name: Checksums and release notes
+        run: |
+          cd assets
+          cat SHA256SUMS-linux SHA256SUMS-windows SHA256SUMS-macos > SHA256SUMS.txt
+          rm SHA256SUMS-linux SHA256SUMS-windows SHA256SUMS-macos
+          ls -la
+          linux=$(ls *_linux-x86_64.tar.gz); deb=$(ls *.deb); windows=$(ls *_windows-x86_64.zip); macos=$(ls *_macos-universal.tar.gz)
+          {
+            echo "MissionPlannerRust ${GITHUB_REF_NAME}: Mission Planner, the ground control station for ArduPilot, in Rust."
+            echo
+            echo "Built from commit ${GITHUB_SHA} by this repository's release workflow. Each planner below"
+            echo "was opened and painted once on its own platform before it was packaged."
+            echo
+            echo "| Download | For |"
+            echo "|---|---|"
+            echo "| \`$linux\` | Linux on x86-64 with glibc 2.35 or newer (Ubuntu 22.04 and later) |"
+            echo "| \`$deb\` | Debian and Ubuntu: \`sudo apt install ./$deb\` |"
+            echo "| \`$windows\` | Windows 10 and 11 on x86-64 |"
+            echo "| \`$macos\` | macOS on Apple Silicon and Intel (one universal binary) |"
+            echo
+            echo "Each archive holds the planner, its licence, NOTICE, THIRD_PARTY_LICENSES and a BUILD-INFO.txt"
+            echo "naming the commit and the toolchain; SHA256SUMS.txt lists every download's SHA-256."
+            echo
+            echo "The binaries are not signed. Windows SmartScreen asks before the first start; on macOS, allow"
+            echo "it in System Settings > Privacy & Security after the first attempt. On Linux the planner draws"
+            echo "with Vulkan, so a Vulkan driver is needed (mesa-vulkan-drivers)."
+            echo
+            echo "MissionPlannerRust is derived from Mission Planner (https://github.com/ArduPilot/MissionPlanner)"
+            echo "and licensed under the GNU General Public License version 3; its source is this repository at"
+            echo "${GITHUB_REF_NAME}."
+          } > ../notes.md
+          cat ../notes.md
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          cd assets
+          if gh release view "$GITHUB_REF_NAME" > /dev/null 2>&1; then
+            gh release upload "$GITHUB_REF_NAME" * --clobber
+            gh release edit "$GITHUB_REF_NAME" --notes-file ../notes.md
+          else
+            gh release create "$GITHUB_REF_NAME" * --title "MissionPlannerRust $GITHUB_REF_NAME" \
+              --notes-file ../notes.md --verify-tag
+          fi
+          gh release view "$GITHUB_REF_NAME" --json url,assets --jq '.url, (.assets[] | "  " + .name)'

@@ -174,6 +174,12 @@ owner's fork with two fixes for this target (`Cargo.toml`'s `[patch.crates-io]` 
 have not yet been run on Windows; the Windows 10 VM builds its own, natively, as before. CI's
 cross-compile job builds and links both on every push.
 
+A release is made by pushing a tag of "v" and a number (`git tag v0_1 && git push origin v0_1`):
+`.github/workflows/release.yml` builds the planner on Linux (glibc 2.35), Windows and macOS (one
+universal binary for Apple Silicon and Intel) at that tag, opens each once, packages each with the
+licence files, and publishes the downloads, their SHA-256 sums and the release notes as the tag's
+GitHub release. headless-planner is an internal testing tool and is not released.
+
 The GUI records every flight without being asked, into its own data directory's `logs` —
 `~/.local/share/MissionPlannerRust/logs` on Linux (`$XDG_DATA_HOME` when set, and never
 `~/MissionPlannerRust`), `Documents\MissionPlannerRust\logs` on Windows - a directory of its own
