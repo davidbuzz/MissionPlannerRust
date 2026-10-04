@@ -11,6 +11,10 @@ tridge is logged in at its console - it is his desktop - so a `planner` launched
 no window; only `headless-planner` and the test suite run from here. Disk was 11 GB free on
 2026-10-03 and 41 GB after he cleared some; the scripts carry a disk watchdog.
 
+- Screen Sharing (2026-10-04): `ssh -f -N -L 127.0.0.1:5901:127.0.0.1:5900 tridge-mac`, then
+  `remmina -c vnc://buzz@127.0.0.1:5901`; Apple Remote Desktop login as `buzz` is accepted
+  (1920x1080, "Andrew's Mac mini"). Buzz has the password - never write it into this repository.
+  tridge is logged in at the console, so what it shows is his session: ask before acting in it.
 - Clone: `~/MissionPlannerRust`, pulled from GitHub (`git pull`), never pushed from there.
 - Scripts in `~`: `mpr-build.sh` (debug planner, 6m42s), `mpr-test.sh` (`cargo test --workspace
   --no-fail-fast`, 177 binaries), `mpr-release.sh` (release, timed with `/usr/bin/time -l`:
