@@ -823,6 +823,12 @@ impl MissionPlanner {
         );
         // ---- row 96 ----
         // `PluginLoader.LoadAll`, less `DisabledPlugins`. `// C#: MainV2.cs:3185-3196`
+        // `loadTabControlActions`: the flight screen's pages as the setting saved them.
+        // `// C#: GCSViews/FlightData.cs:733-791`
+        let mut fly_pages = fly::Pages::default();
+        if let Some(saved) = persisted.get(fly::TAB_SETTING) {
+            fly_pages.load_tab_control_actions(saved);
+        }
         let plugins = plugins_ui::Plugins::start(&persisted, cx);
         // ---- end row 96 ----
         // `WarningEngine`'s `LoadConfig`, and speech as the settings left it.
@@ -926,7 +932,7 @@ impl MissionPlanner {
             connect_focus: cx.focus_handle(),
             fly_actions: fly::Actions::default(),
             fly_focus: fly::ActionsFocus::new(cx),
-            fly_pages: fly::Pages::default(),
+            fly_pages,
             root_focus: cx.focus_handle(),
             experimental: experimental::Experimental::default(),
             fly_data,
@@ -4065,6 +4071,11 @@ impl Render for MissionPlanner {
                         })
                         .child(div().flex_shrink_0().child(fly::messages_panel(&view))),
                 )
+                // The flight screen's dialogs and forms, drawn over the window: hung from a box of
+                // no size, so their backdrops are not read as this body running past the window
+                // (the layout guard on the owner's Linux desktop, 2026-10-05).
+                .child(
+                    overlay_layer()
                 .children(fly::prompt_dialog(
                     &self.fly_actions,
                     &self.fly_focus,
@@ -4088,6 +4099,7 @@ impl Render for MissionPlanner {
                 // `new Georefimage().Show()`: its form over the screen, which stays usable.
                 .children(georef_ui::window(self, window, cx))
                 // ---- end Geo Reference ----
+                )
                 .into_any_element(),
             // The Survey (Grid) dialog is modal: while it shows it is the screen.
             Screen::Plan if self.survey.is_open() => div()

@@ -270,6 +270,10 @@ PROBE_FILE="$(mktemp -t planner-probe-XXXXXX.json)"
 FACTS_FILE="$(mktemp -t planner-facts-XXXXXX.conf)"
 export MP_PROBE="$PROBE_FILE"
 export MP_FACTS="$FACTS_FILE"
+# The application's built-in plugins stay out of a script that does not ask for them with
+# `env MP_BUILTIN_PLUGINS 1`: the Drone ID plugin's first-start question would otherwise sit
+# over every script's first clicks (2026-10-05, fifteen scripts failing behind it).
+export MP_BUILTIN_PLUGINS=0
 
 # A settings file of its own, per run.
 #

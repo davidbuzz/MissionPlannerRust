@@ -7,6 +7,8 @@
 #
 # TerrainMakerPlugin (terrainmaker.wasm): Make Terrain DAT, on the planning map's menu, with no
 # area chosen asks whether to use the area on screen - No, and nothing is made.
+# The built-in plugins: the runner leaves them out unless a script asks for them.
+env MP_BUILTIN_PLUGINS 1
 screen fly
 window 1600x1200
 budget 10

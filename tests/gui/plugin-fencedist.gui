@@ -10,6 +10,8 @@
 #
 # Run as:
 #   tools/gui-test.sh tests/gui/plugin-fencedist.gui -- file:testdata/mavlink/autotest.tlog
+# The built-in plugins: the runner leaves them out unless a script asks for them.
+env MP_BUILTIN_PLUGINS 1
 screen fly
 window 1600x1200
 budget 10

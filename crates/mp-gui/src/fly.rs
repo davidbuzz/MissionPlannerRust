@@ -3485,6 +3485,47 @@ impl Pages {
         }
     }
 
+    /// `Settings.Instance["tabcontrolactions"]`, once saved or chosen.
+    #[must_use]
+    pub fn setting(&self) -> Option<&str> {
+        self.setting.as_deref()
+    }
+
+    /// `saveTabControlActions`: the pages the strip has, as the setting; what to save.
+    /// `// C#: GCSViews/FlightData.cs:4747-4757`
+    pub fn save_tab_control_actions(&mut self) -> String {
+        let names = page_names(&self.shown);
+        self.setting = Some(names.clone());
+        names
+    }
+
+    /// `loadTabControlActions` at start: the saved setting's pages, in its order, the page
+    /// showing kept when the strip still has it. An empty setting changes nothing, as the C#
+    /// returns before touching the pages.
+    /// `// C#: GCSViews/FlightData.cs:733-791`
+    pub fn load_tab_control_actions(&mut self, setting: &str) {
+        let selected = self.selected;
+        let list: Vec<(Page, bool)> = Page::ALL
+            .iter()
+            .map(|page| (*page, setting.split(';').any(|name| name == page.name())))
+            .collect();
+        if list.iter().any(|(_, on)| *on) {
+            // In the setting's order, not `Page::ALL`'s.
+            let mut ordered: Vec<(Page, bool)> = setting
+                .split(';')
+                .filter_map(|name| Page::ALL.iter().find(|page| page.name() == name))
+                .map(|page| (*page, true))
+                .collect();
+            ordered.dedup();
+            self.customize(&ordered);
+            if self.shown.contains(&selected) {
+                self.selected = selected;
+            }
+        } else {
+            self.setting = Some(setting.to_owned());
+        }
+    }
+
     /// MultiLine: `tabControlactions.Multiline` turned over.
     /// `// C#: GCSViews/FlightData.cs:6498-6502`
     pub fn toggle_multiline(&mut self) {
@@ -3553,6 +3594,9 @@ impl Pages {
         crate::facts::record("fly.page.overflow", format!("{:.0}", overflow.max(0.0)));
     }
 }
+
+/// The setting the strip's pages are kept in.
+pub const TAB_SETTING: &str = "tabcontrolactions";
 
 /// Pages' names each followed by `;`, as `saveTabControlActions` and Customize write them.
 fn page_names(pages: &[Page]) -> String {
@@ -8518,6 +8562,10 @@ impl MissionPlanner {
     fn fly_customize_close(&mut self) {
         if let Some(list) = self.fly_data.customizing.take() {
             self.fly_pages.customize(&list);
+            // Kept, as the C#'s `Settings.Instance["tabcontrolactions"]` is.
+            if let Some(names) = self.fly_pages.setting() {
+                self.persisted.set(TAB_SETTING, names.to_owned());
+            }
             self.fly_scroll.set_offset(gpui::point(px(0.0), px(0.0)));
         }
     }
@@ -11995,6 +12043,35 @@ mod tests {
         assert_eq!(dotnet_int(" 4 "), Some(4));
         assert_eq!(dotnet_int("four"), None);
         assert_eq!(dotnet_int("3.5"), None);
+    }
+
+    /// `saveTabControlActions` writes the strip's pages, each followed by `;`; at the next start
+    /// `loadTabControlActions` makes them the strip again, in the setting's order, keeping the
+    /// page showing when the strip has it - so the Drone ID plugin's question comes once, not at
+    /// every start (the owner's bug, 2026-10-04). An empty setting changes nothing.
+    #[test]
+    fn the_strips_pages_are_saved_and_read_back() {
+        let mut pages = Pages::default();
+        pages.customize(&[
+            (Page::Status, true),
+            (Page::Quick, true),
+            (Page::Actions, true),
+        ]);
+        let saved = pages.save_tab_control_actions();
+        assert_eq!(saved, format!("{};{};{};", Page::Status.name(), Page::Quick.name(), Page::Actions.name()));
+        assert_eq!(pages.setting(), Some(saved.as_str()));
+
+        let mut next = Pages::default();
+        next.select(Page::Actions);
+        next.load_tab_control_actions(&saved);
+        assert_eq!(next.shown(), [Page::Status, Page::Quick, Page::Actions]);
+        assert_eq!(next.selected(), Page::Actions, "the page showing is kept");
+        assert_eq!(next.setting(), Some(saved.as_str()));
+
+        let mut untouched = Pages::default();
+        untouched.load_tab_control_actions("");
+        assert_eq!(untouched.shown().len(), Page::ALL.len());
+        assert_eq!(untouched.setting(), Some(""));
     }
 
     /// Customize lists every page, checked while the strip has it; closing it makes the checked

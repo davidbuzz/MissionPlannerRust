@@ -219,6 +219,11 @@ impl Surface for Scripted {
             .config
             .insert(key.to_owned(), value.to_owned());
     }
+    fn save_tab_control_actions(&mut self) {
+        self.record()
+            .config
+            .insert("tabcontrolactions".to_owned(), "tabQuick;".to_owned());
+    }
     fn fp_selected_area(&mut self) -> Option<Area> {
         None
     }

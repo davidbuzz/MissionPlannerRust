@@ -11,6 +11,8 @@
 # as a file in the plugins folder.
 #
 # The config holds `tabcontrolactions`, so the Drone ID plugin's message box does not show.
+# The built-in plugins: the runner leaves them out unless a script asks for them.
+env MP_BUILTIN_PLUGINS 1
 screen fly
 window 1600x1200
 budget 30

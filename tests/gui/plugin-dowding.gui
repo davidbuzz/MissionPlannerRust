@@ -7,6 +7,8 @@
 #
 # Dowding (dowding.wasm, plugins/Dowding): two entries; Dowding Point At asks for the HAE altitude
 # to point the tracker at - Cancel and nothing is sent.
+# The built-in plugins: the runner leaves them out unless a script asks for them.
+env MP_BUILTIN_PLUGINS 1
 screen fly
 window 1600x1200
 budget 10

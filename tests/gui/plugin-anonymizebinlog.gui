@@ -7,6 +7,8 @@
 #
 # Anonymize Binlog (anonymizebinlog.wasm, Plugins/AnonymizeBinlog): its one entry asks for the
 # .bin log to anonymize first - Cancel and nothing more is asked.
+# The built-in plugins: the runner leaves them out unless a script asks for them.
+env MP_BUILTIN_PLUGINS 1
 screen fly
 window 1600x1200
 budget 10

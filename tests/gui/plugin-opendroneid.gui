@@ -7,6 +7,8 @@
 #
 # Open Drone ID (opendroneid.wasm): it adds nothing to the map menus - its Try says so - and its
 # Drone ID form is up from the start.
+# The built-in plugins: the runner leaves them out unless a script asks for them.
+env MP_BUILTIN_PLUGINS 1
 screen fly
 window 1600x1200
 budget 10

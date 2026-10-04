@@ -120,6 +120,10 @@ interface host {
     /// `Host.config[key] = value`.
     config-set: func(key: string, value: string);
 
+    /// `Host.MainForm.FlightData.saveTabControlActions()` and `Settings.Instance.Save()`: the
+    /// flight screen's pages saved as the `tabcontrolactions` setting, and the settings written.
+    save-tab-control-actions: func();
+
     /// A map area in degrees: `RectLatLng`.
     record area {
         top: f64,

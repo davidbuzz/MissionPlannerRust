@@ -11,6 +11,8 @@
 # example, MapIconDesc, Open Drone ID, Dowding, TerrainMaker, Anonymize Binlog - and the three
 # whose Init returns false as the C# ships them are listed as not loaded, by file; their map menu
 # entries are in both menus; none asks a question at start.
+# The built-in plugins: the runner leaves them out unless a script asks for them.
+env MP_BUILTIN_PLUGINS 1
 screen fly
 window 1600x1200
 budget 8

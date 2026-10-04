@@ -109,6 +109,8 @@ pub trait Surface: Send + 'static {
     fn config_get(&mut self, key: &str) -> Option<String>;
     /// `Host.config[key] = value`.
     fn config_set(&mut self, key: &str, value: &str);
+    /// `Host.MainForm.FlightData.saveTabControlActions()`, then `Settings.Instance.Save()`.
+    fn save_tab_control_actions(&mut self);
     /// `Host.FPGMapControl.SelectedArea`.
     fn fp_selected_area(&mut self) -> Option<Area>;
     /// `Host.FPGMapControl.ViewArea`.
@@ -185,6 +187,9 @@ impl wit::missionplanner::plugin::host::Host for plugin::State {
     }
     fn config_set(&mut self, key: String, value: String) {
         self.surface.config_set(&key, &value);
+    }
+    fn save_tab_control_actions(&mut self) {
+        self.surface.save_tab_control_actions();
     }
     fn fp_selected_area(&mut self) -> Option<Area> {
         self.surface.fp_selected_area()

@@ -402,8 +402,9 @@ impl Guest for OpenDroneId {
         true
     }
 
-    // `Loaded` and `forceSettings`: without `tabcontrolactions` the C# asks for a restart and
-    // saves the flight screen's tabs, which a plugin here cannot reach.
+    // `Loaded` and `forceSettings`: without `tabcontrolactions` the C# asks for a restart once,
+    // then saves the flight screen's tabs as the setting, so the next start has it and does not
+    // ask (the owner's bug, 2026-10-04: the message came at every start).
     // `// C#: Plugins/OpenDroneID2/OpenDroneID_Plugin.cs:40-82`
     fn loaded() -> bool {
         if host::config_get("tabcontrolactions").is_none() {
@@ -412,6 +413,7 @@ impl Guest for OpenDroneId {
                 "",
                 MessageButtons::Ok,
             );
+            host::save_tab_control_actions();
         }
         show(&UI.lock().unwrap_or_else(PoisonError::into_inner));
         true

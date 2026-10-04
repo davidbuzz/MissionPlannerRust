@@ -234,6 +234,8 @@ pub enum SaveEvent {
     Close,
     /// `MenuConnect_Click`, after the link is opened or closed.
     Connect,
+    /// A plugin's `Settings.Instance.Save()`.
+    Plugin,
 }
 
 impl SaveEvent {
@@ -246,6 +248,7 @@ impl SaveEvent {
             Self::FlightPlanner => "plan",
             Self::Close => "close",
             Self::Connect => "connect",
+            Self::Plugin => "plugin",
         }
     }
 }

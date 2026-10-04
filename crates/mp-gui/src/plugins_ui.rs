@@ -76,6 +76,19 @@ use crate::ui::{action, theme};
 /// The variable naming another plugins folder.
 pub const ENV: &str = "MP_PLUGINS";
 
+/// The variable that, set to `0`, leaves the built-in plugins out: a harness's switch, for GUI
+/// scripts that are not about plugins (`tools/gui-test.sh` sets it unless a script asks for them).
+pub const BUILTIN_ENV: &str = "MP_BUILTIN_PLUGINS";
+
+/// The built-in plugins, unless [`BUILTIN_ENV`] is `0`.
+fn builtins() -> &'static [(&'static str, &'static [u8])] {
+    if std::env::var(BUILTIN_ENV).is_ok_and(|value| value == "0") {
+        &[]
+    } else {
+        builtin::BUILTIN
+    }
+}
+
 /// The setting `PluginLoader.DisabledPluginNames` is read from. `// C#: MainV2.cs:3192-3194`
 const DISABLED: &str = "DisabledPlugins";
 
@@ -214,7 +227,7 @@ impl Plugins {
         // `PluginLoader.LoadAll` at start: the shipped plugins and the folder's, less the
         // disabled ones. `// C#: Plugin/PluginLoader.cs:203-311`
         let host = PluginHost::load_with_builtins(
-            builtin::BUILTIN,
+            builtins(),
             folder().as_deref(),
             &disabled,
             Limits::default(),
@@ -712,6 +725,13 @@ impl MissionPlanner {
                 reply.send(self.persisted.get(&key).map(str::to_owned));
             }
             RequestBody::ConfigSet { key, value } => self.persisted.set(&key, value),
+            // `FlightData.saveTabControlActions()`, then `Settings.Instance.Save()`.
+            // `// C#: Plugins/OpenDroneID2/OpenDroneID_Plugin.cs:76-79; GCSViews/FlightData.cs:4747-4757`
+            RequestBody::SaveTabControlActions => {
+                let names = self.fly_pages.save_tab_control_actions();
+                self.persisted.set(crate::fly::TAB_SETTING, names);
+                self.save_config(crate::settings::SaveEvent::Plugin);
+            }
             RequestBody::WriteUserData { path, data, reply } => {
                 reply.send(write_user_data(
                     mp_settings::user_data_directory(),

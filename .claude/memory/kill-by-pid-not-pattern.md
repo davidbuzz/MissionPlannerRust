@@ -59,3 +59,13 @@ shell (exit 144), because that very command line contains "try-cpu.sh host". Tak
 `pgrep -f` is no protection when the pattern is in the calling command: bracket it
 (`pgrep -f "try-cpu.sh hos[t]"`), or list with `pgrep -fa`, read the PIDs, and kill them in a
 second call by number.
+
+**2026-10-05, again.** Buzz asked for tiny10 to be stopped with escalating force. My background
+script found the VM's process with `pgrep -f "VirtualBoxVM.*tiny10"`. The script's own command
+line had that text in it, so the PID it found was the script itself. After `VBoxManage controlvm
+tiny10 poweroff` had already turned the VM off, the final SIGKILL step killed my own script. No
+harm came of it, by luck.
+- Find a VM's process from its own record: `VBoxManage showvminfo tiny10 --machinereadable`
+  gives the session's PID.
+- Or use `pgrep -x VirtualBoxVM` and check each PID's `/proc/PID/cmdline`.
+- Never pass `pgrep -f` a pattern the calling script's own text contains.

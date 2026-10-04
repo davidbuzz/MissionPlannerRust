@@ -226,6 +226,8 @@ pub enum RequestBody {
         /// The value.
         value: String,
     },
+    /// `FlightData.saveTabControlActions()`, then `Settings.Instance.Save()`.
+    SaveTabControlActions,
     /// `OpenFileDialog` and the read.
     OpenFile {
         /// The dialog's title.
@@ -458,6 +460,10 @@ impl Surface for ChannelSurface {
             key: key.to_owned(),
             value: value.to_owned(),
         });
+    }
+
+    fn save_tab_control_actions(&mut self) {
+        self.tell(RequestBody::SaveTabControlActions);
     }
 
     // This map has no rubber band: `SelectedArea` is always empty (plan.rs's Prefetch says so).

@@ -21,6 +21,8 @@
 # these two files have built-ins' names, so each is loaded in its built-in's place, as replacing a
 # file in the C#'s plugins folder does: ten plugins, the menu example the sixth in name order.
 
+# The built-in plugins: the runner leaves them out unless a script asks for them.
+env MP_BUILTIN_PLUGINS 1
 screen fly
 window 1600x1200
 budget 8
