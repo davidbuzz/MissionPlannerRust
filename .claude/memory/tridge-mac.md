@@ -15,7 +15,10 @@ no window; only `headless-planner` and the test suite run from here. Disk was 11
 - Scripts in `~`: `mpr-build.sh` (debug planner, 6m42s), `mpr-test.sh` (`cargo test --workspace
   --no-fail-fast`, 177 binaries), `mpr-release.sh` (release, timed with `/usr/bin/time -l`:
   9m45s, 8.05 GB peak), `mpr-release-static.sh` (`LZMA_API_STATIC=1`), `mpr-verify.sh` (tests
-  of named crates against `~/mac-fixes.patch`, applied with `git apply`), each logging to
+  of named crates against `~/mac-fixes.patch`, applied with `git apply`), `mpr-release-universal.sh`
+  (2026-10-04: both architectures with `--target`, joined by `lipo`, packaged in `~/mpr-universal/`
+  as the release workflow does; the x86_64-apple-darwin target is installed for 1.95.0;
+  `mpr-release-intel.sh`, Intel alone, was stopped for it at Buzz's word), each logging to
   `~/mpr-*.log`; run them with `nohup zsh ~/x.sh > ~/x.log 2>&1 < /dev/null & disown`.
 - Always `CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0` for debug work there (disk).
 - The release planner linked `/opt/homebrew/opt/xz/lib/liblzma.5.dylib` until built with
