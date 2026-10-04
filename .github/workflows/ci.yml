@@ -44,12 +44,7 @@ jobs:
         continue-on-error: true
 
       - run: cargo clippy --workspace --all-targets
-      # GitHub's hosted macOS runner stalls a sleeping thread for up to 180 ms; MP_TEST_SLOW tells
-      # mp-link's retry tests to compress Mission Planner's timeouts eight times less there
-      # (crates/mp-link/tests/retries.rs, `timeouts`), so they test the protocol, not the runner.
       - run: cargo test --workspace
-        env:
-          MP_TEST_SLOW: ${{ runner.os == 'macOS' && '8' || '1' }}
             # The porting ledger: one row per C# file, every row well-formed. MP_SRC names no C# tree
       # here, so this validates the CSV on its own and says so; a row whose state
       # claims evidence that does not exist still fails.

@@ -3382,20 +3382,26 @@ mod tests {
             "location.gpx",
         ] {
             let bytes = std::fs::read(Path::new(&dir).join(name)).unwrap();
+            // Compared as text on LF: the files' lines end with the platform's
+            // `Environment.NewLine`, as the C# writes them, CRLF on Windows (the hosted runner,
+            // 2026-10-04), where the golden was made under mono on Linux.
+            let lf = |bytes: &[u8]| String::from_utf8_lossy(bytes).replace("\r\n", "\n");
             assert_eq!(
-                bytes,
-                std::fs::read(golden.join("cam-amsl").join(name)).unwrap(),
+                lf(&bytes),
+                lf(&std::fs::read(golden.join("cam-amsl").join(name)).unwrap()),
                 "{name}"
             );
             sizes.push((name.to_owned(), bytes.len() as u64));
         }
         assert_eq!(form.files, Some(sizes));
+        // The KML the map shows is the file's text, its lines ending as the file's do (see above).
         assert_eq!(
-            form.kml.as_deref().map(str::len),
+            form.kml.as_deref().map(|kml| kml.replace("\r\n", "\n")),
             Some(
-                std::fs::read(golden.join("cam-amsl/location.kml"))
-                    .unwrap()
-                    .len()
+                String::from_utf8_lossy(
+                    &std::fs::read(golden.join("cam-amsl/location.kml")).unwrap()
+                )
+                .replace("\r\n", "\n")
             )
         );
         assert!(form.enabled("BUT_doit") && form.enabled("BUT_Geotagimages"));
