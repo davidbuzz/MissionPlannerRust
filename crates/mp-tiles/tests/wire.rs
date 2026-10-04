@@ -34,6 +34,7 @@
 
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::indexing_slicing)]
 
+use mp_os::Lock as _;
 use std::io::{BufRead, BufReader, Write};
 use std::net::{TcpListener, TcpStream};
 use std::path::PathBuf;
@@ -115,7 +116,7 @@ fn serve(stream: TcpStream, seen: &Mutex<Vec<Seen>>) {
     let Some((line, headers)) = read_head(&mut reader) else {
         return;
     };
-    seen.lock().unwrap().push(Seen {
+    seen.os_lock().unwrap().push(Seen {
         tunnel: tunnel.clone(),
         line: line.clone(),
         headers,
@@ -178,11 +179,11 @@ fn a_bing_map_checks_its_version_then_asks_for_tiles_as_the_csharp_does() {
         matches!(answer, TileAnswer::Exact(_)),
         "{answer:?}, {:?}, seen {:?}",
         store.stats(),
-        seen.lock().unwrap()
+        seen.os_lock().unwrap()
     );
     assert_eq!(store.stats().fetched, 1);
 
-    let requests = seen.lock().unwrap().clone();
+    let requests = seen.os_lock().unwrap().clone();
     assert_eq!(requests.len(), 2, "{requests:#?}");
 
     // First Bing's maps page, for the version: BingMapProvider.cs:158, before any tile.
@@ -232,7 +233,7 @@ fn a_bing_map_checks_its_version_then_asks_for_tiles_as_the_csharp_does() {
         TileFetcher::through_proxy(&proxy).unwrap(),
     );
     assert!(matches!(wait_for(&store, tile), TileAnswer::Exact(_)));
-    let requests = seen.lock().unwrap().clone();
+    let requests = seen.os_lock().unwrap().clone();
     assert_eq!(requests.len(), 3, "{requests:#?}");
     assert_eq!(
         requests[2].line,

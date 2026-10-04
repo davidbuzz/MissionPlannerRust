@@ -58,6 +58,7 @@
 //!   `doAutoReconnect`'s pace - and not also on every packet, as `VerifyConnected`'s retries do
 //!   (`:363-386`), each one a connect the vehicle's reader waits for.
 
+use mp_os::Lock as _;
 use std::collections::BTreeMap;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::mpsc::{Receiver, RecvTimeoutError, SyncSender, TrySendError, sync_channel};
@@ -203,7 +204,7 @@ impl Mirror {
     /// The link what the stream sends is written to - `BaseStream`, the vehicle's port - or
     /// none, when there is no link to write to.
     pub fn attach(&self, link: Option<LinkSender>) {
-        if let Ok(mut held) = self.shared.link.lock() {
+        if let Ok(mut held) = self.shared.link.os_lock() {
             *held = link;
         }
     }
@@ -362,7 +363,7 @@ fn run(
                 };
                 let sent = shared
                     .link
-                    .lock()
+                    .os_lock()
                     .ok()
                     .and_then(|link| link.as_ref().map(|link| link.outbound.send(bytes).is_ok()))
                     .unwrap_or(false);

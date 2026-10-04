@@ -328,6 +328,7 @@ pub fn fetch_unversioned(data_directory: &Path, vehicle: &str) -> Result<PathBuf
     Ok(path)
 }
 
+#[cfg(not(target_family = "wasm"))]
 fn download(url: &str) -> Result<Vec<u8>, FetchError> {
     let http = |reason: String| FetchError::Http {
         url: url.to_owned(),
@@ -346,6 +347,22 @@ fn download(url: &str) -> Result<Vec<u8>, FetchError> {
         .read_to_end(&mut bytes)
         .map_err(|err| http(err.to_string()))?;
     Ok(bytes)
+}
+
+/// In a web page, through the browser (mp_os::http), failing on a status that is not a success
+/// as ureq's does above.
+#[cfg(target_family = "wasm")]
+fn download(url: &str) -> Result<Vec<u8>, FetchError> {
+    let http = |reason: String| FetchError::Http {
+        url: url.to_owned(),
+        reason,
+    };
+    let (status, bytes) = mp_os::http("GET", url, None).map_err(http)?;
+    if (200..300).contains(&status) {
+        Ok(bytes)
+    } else {
+        Err(http(format!("http status: {status}")))
+    }
 }
 
 fn write_atomically(path: &Path, bytes: &[u8]) -> Result<(), FetchError> {

@@ -72,6 +72,7 @@
 // This module is internal to the binary; `pub` here documents intent rather than exporting API.
 #![allow(unreachable_pub)]
 
+use mp_os::Lock as _;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{Receiver, RecvTimeoutError, Sender, channel};
@@ -306,7 +307,7 @@ impl GuiScriptHost {
     /// The link and the vehicle being flown, as the window last saw them.
     fn current(&self) -> Option<(mp_link::LinkSender, VehicleId)> {
         self.link
-            .lock()
+            .os_lock()
             .unwrap_or_else(PoisonError::into_inner)
             .clone()
     }
@@ -1082,7 +1083,7 @@ impl ScriptsTab {
             return;
         };
         // `MainV2.comPort` and `sysidcurrent` as they stand, for the script's thread.
-        *self.link.lock().unwrap_or_else(PoisonError::into_inner) = telemetry.send_handle();
+        *self.link.os_lock().unwrap_or_else(PoisonError::into_inner) = telemetry.send_handle();
         let mut taken: Option<TelemetryView> = None;
         let mut started = Vec::new();
         while let Ok((request, reply)) = asks.try_recv() {

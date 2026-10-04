@@ -44,6 +44,7 @@
     clippy::cast_possible_truncation
 )]
 
+use mp_os::Lock as _;
 use std::collections::BTreeMap;
 use std::path::PathBuf;
 use std::sync::{Mutex, MutexGuard, PoisonError};
@@ -57,7 +58,7 @@ use mp_vehicle::{DateTime, FenceItem, LatLngAlt, VehicleId, VehicleRegistry, Veh
 static LOCK: Mutex<()> = Mutex::new(());
 
 fn lock() -> MutexGuard<'static, ()> {
-    LOCK.lock().unwrap_or_else(PoisonError::into_inner)
+    LOCK.os_lock().unwrap_or_else(PoisonError::into_inner)
 }
 
 fn testdata(path: &str) -> PathBuf {

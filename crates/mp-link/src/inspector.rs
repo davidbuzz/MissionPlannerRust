@@ -42,6 +42,7 @@
 //!   `SeenBps(sysid, compid)` only the DroneCAN inspector's (`Controls/DroneCANInspector.cs:81`),
 //!   another window.
 
+use mp_os::Lock as _;
 use std::collections::{BTreeMap, VecDeque};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex, Weak};
@@ -137,7 +138,7 @@ impl Subscribers {
     /// A handler added, and the token that keeps it.
     fn subscribe(&self, handler: PacketHandler) -> Arc<()> {
         let alive = Arc::new(());
-        if let Ok(mut handlers) = self.handlers.lock() {
+        if let Ok(mut handlers) = self.handlers.os_lock() {
             handlers.push((Arc::downgrade(&alive), handler));
             self.count.store(handlers.len(), Ordering::Relaxed);
         }
@@ -146,7 +147,7 @@ impl Subscribers {
 
     /// Each live handler told of `packet`; the dropped ones forgotten.
     pub(crate) fn notify(&self, packet: &Packet) {
-        if let Ok(mut handlers) = self.handlers.lock() {
+        if let Ok(mut handlers) = self.handlers.os_lock() {
             handlers.retain(|(alive, _)| alive.strong_count() > 0);
             for (_, handler) in handlers.iter_mut() {
                 handler(packet);
@@ -458,7 +459,7 @@ mod tests {
         let heard: Arc<Mutex<Vec<Packet>>> = Arc::new(Mutex::new(Vec::new()));
         let into = Arc::clone(&heard);
         let subscription = link.on_packet(move |packet| {
-            if let Ok(mut heard) = into.lock() {
+            if let Ok(mut heard) = into.os_lock() {
                 heard.push(*packet);
             }
         });
@@ -471,7 +472,7 @@ mod tests {
         let deadline = Instant::now() + Duration::from_secs(5);
         let has = |sent: bool, msgid: u32| {
             heard
-                .lock()
+                .os_lock()
                 .expect("not poisoned")
                 .iter()
                 .any(|packet| packet.sent == sent && packet.msgid == msgid)
@@ -481,7 +482,7 @@ mod tests {
             wasm_thread::sleep(Duration::from_millis(2));
         }
         drop(subscription);
-        let seen = heard.lock().expect("not poisoned").clone();
+        let seen = heard.os_lock().expect("not poisoned").clone();
         let received = seen
             .iter()
             .find(|packet| !packet.sent && packet.msgid == 30)
@@ -497,9 +498,9 @@ mod tests {
         // Nothing after the drop, once a packet in flight at it has landed: the heartbeat goes
         // on being written every 20 ms, and nobody hears it.
         wasm_thread::sleep(Duration::from_millis(50));
-        let count = heard.lock().expect("not poisoned").len();
+        let count = heard.os_lock().expect("not poisoned").len();
         wasm_thread::sleep(Duration::from_millis(100));
-        assert_eq!(heard.lock().expect("not poisoned").len(), count);
+        assert_eq!(heard.os_lock().expect("not poisoned").len(), count);
     }
 
     /// Subscribers hear every packet until their subscription is dropped, and a link nobody
@@ -513,7 +514,7 @@ mod tests {
         let subscription = PacketSubscription::new(
             &shared,
             Box::new(move |packet: &Packet| {
-                if let Ok(mut heard) = into.lock() {
+                if let Ok(mut heard) = into.os_lock() {
                     heard.push((packet.msgid, packet.sent));
                 }
             }),
@@ -543,7 +544,7 @@ mod tests {
         shared.packets.sent(&bytes);
         assert!(!shared.packets.any());
         assert_eq!(
-            *heard.lock().expect("not poisoned"),
+            *heard.os_lock().expect("not poisoned"),
             vec![(30, true), (30, false)]
         );
     }

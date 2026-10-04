@@ -30,6 +30,7 @@
 //! Replies are matched by who sent them, not by whom they are addressed to, as the C#'s
 //! subscription matches them (MAVLinkInterface.cs:5541-5543).
 
+use mp_os::Lock as _;
 use std::sync::Arc;
 use web_time::Instant;
 
@@ -64,7 +65,7 @@ pub(crate) fn route(
     now: Instant,
     out: &mut Vec<(VehicleId, Header)>,
 ) {
-    let Ok(mut clients) = shared.ftp.lock() else {
+    let Ok(mut clients) = shared.ftp.os_lock() else {
         return;
     };
     let Some(client) = clients.get_mut(&from) else {
@@ -77,7 +78,7 @@ pub(crate) fn route(
 
 /// Lets every client's wait run out, if it has. What they want sent is added to `out`.
 pub(crate) fn tick(shared: &Arc<Shared>, now: Instant, out: &mut Vec<(VehicleId, Header)>) {
-    let Ok(mut clients) = shared.ftp.lock() else {
+    let Ok(mut clients) = shared.ftp.os_lock() else {
         return;
     };
     let mut sends = Vec::new();
@@ -100,7 +101,7 @@ impl Link {
     pub fn ftp(&self, target: VehicleId, request: FtpRequest) -> bool {
         let mut sends = Vec::new();
         {
-            let Ok(mut clients) = self.shared.ftp.lock() else {
+            let Ok(mut clients) = self.shared.ftp.os_lock() else {
                 return false;
             };
             let client = clients
@@ -118,7 +119,7 @@ impl Link {
     /// Whether a request is running on this vehicle, and its last progress report.
     #[must_use]
     pub fn ftp_progress(&self, target: VehicleId) -> Option<(bool, Progress)> {
-        let clients = self.shared.ftp.lock().ok()?;
+        let clients = self.shared.ftp.os_lock().ok()?;
         let client = clients.get(&target)?;
         Some((client.is_busy(), client.progress().clone()))
     }
@@ -127,7 +128,7 @@ impl Link {
     pub fn take_ftp_outcome(&self, target: VehicleId) -> Option<Result<FtpOutcome, FtpError>> {
         self.shared
             .ftp
-            .lock()
+            .os_lock()
             .ok()?
             .get_mut(&target)?
             .take_outcome()
@@ -135,7 +136,7 @@ impl Link {
 
     /// Asks the running request to stop, as the C#'s progress dialog's Cancel does.
     pub fn cancel_ftp(&self, target: VehicleId) {
-        if let Ok(mut clients) = self.shared.ftp.lock()
+        if let Ok(mut clients) = self.shared.ftp.os_lock()
             && let Some(client) = clients.get_mut(&target)
         {
             client.cancel();

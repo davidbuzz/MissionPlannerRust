@@ -1660,6 +1660,7 @@ pub mod worker {
     //! for them - an NTRIP caster's first line, a u-blox's seven baud rates. Here the thread does
     //! both before its loop, and the page carries on drawing meanwhile, its Connect button disabled
     //! as the C# disables it for the Septentrio and Unicore configurations.
+    use mp_os::Lock as _;
 
     use std::collections::BTreeMap;
     use std::io::{self, Write as _};
@@ -1679,7 +1680,7 @@ pub mod worker {
     /// A lock that a panicking holder did not poison for everyone else.
     fn lock<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
         mutex
-            .lock()
+            .os_lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
     }
 

@@ -24,6 +24,7 @@
 
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::indexing_slicing)]
 
+use mp_os::Lock as _;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use web_time::{Duration, Instant, SystemTime};
@@ -94,14 +95,14 @@ impl Server {
     }
 
     fn take_requests(&self) -> Vec<String> {
-        std::mem::take(&mut *self.requests.lock().unwrap())
+        std::mem::take(&mut *self.requests.os_lock().unwrap())
     }
 }
 
 impl Http for Server {
     fn get(&self, url: &str) -> Result<Vec<u8>, HttpError> {
         let path = url.strip_prefix(BASE).unwrap_or(url).to_owned();
-        self.requests.lock().unwrap().push(path.clone());
+        self.requests.os_lock().unwrap().push(path.clone());
         Ok(self.pages.iter().find(|(p, _)| *p == path).map_or_else(
             || b"<html>404 Not Found</html>".to_vec(),
             |(_, b)| b.clone(),

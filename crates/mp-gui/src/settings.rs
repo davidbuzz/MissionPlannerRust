@@ -42,6 +42,7 @@
 // This module is internal to the binary; `pub` here documents intent rather than exporting API.
 #![allow(unreachable_pub)]
 
+use mp_os::Lock as _;
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use std::sync::{Mutex, PoisonError};
@@ -850,7 +851,7 @@ pub fn download_kindex(fetch: impl mp_firmware::manifest::Fetch + Send + 'static
                 .unwrap_or(-1);
             VehicleState::set_kindex(kindex);
             *KINDEX_DOWNLOADED
-                .lock()
+                .os_lock()
                 .unwrap_or_else(PoisonError::into_inner) = Some(kindex);
         });
     // A thread that cannot start is a download that failed: the C#'s event with -1.
@@ -916,7 +917,7 @@ impl Persisted {
     /// since the last frame. `// C#: MainV2.cs:3977-3981`
     pub fn kindex_downloaded(&mut self) {
         let downloaded = KINDEX_DOWNLOADED
-            .lock()
+            .os_lock()
             .unwrap_or_else(PoisonError::into_inner)
             .take();
         if let Some(kindex) = downloaded {

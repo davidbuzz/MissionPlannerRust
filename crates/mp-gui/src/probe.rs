@@ -37,6 +37,7 @@
 // This module is internal to the binary; `pub` here documents intent rather than exporting API.
 #![allow(unreachable_pub)]
 
+use mp_os::Lock as _;
 use std::collections::BTreeMap;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -125,7 +126,7 @@ pub fn begin_frame() {
     }
     let finished = frame().fetch_add(1, Ordering::SeqCst);
     let removed = registry()
-        .lock()
+        .os_lock()
         .is_ok_and(|mut registry| retire(&mut registry, finished));
     if removed {
         write();
@@ -143,7 +144,7 @@ fn retire(registry: &mut BTreeMap<String, Measured>, finished: u64) -> bool {
 fn record(name: &str, rect: Rect, visible: Rect) {
     let clipped = !within(rect, visible);
     let now = frame().load(Ordering::SeqCst);
-    if let Ok(mut registry) = registry().lock() {
+    if let Ok(mut registry) = registry().os_lock() {
         // Only rewrite the file when something moved. A UI that repaints ten times a second would
         // otherwise rewrite it ten times a second, and a script reading it could catch a partial
         // write.
@@ -228,7 +229,7 @@ fn within(inner: Rect, outer: Rect) -> bool {
 #[must_use]
 pub fn clipped(name: &str) -> Option<bool> {
     registry()
-        .lock()
+        .os_lock()
         .ok()
         .and_then(|registry| registry.get(name).map(|measured| measured.clipped))
 }
@@ -236,7 +237,7 @@ pub fn clipped(name: &str) -> Option<bool> {
 /// Every control measured this frame whose paint was clipped, by name.
 #[must_use]
 pub fn clipped_names() -> Vec<String> {
-    registry().lock().map_or_else(
+    registry().os_lock().map_or_else(
         |_| Vec::new(),
         |registry| {
             registry
@@ -252,7 +253,7 @@ pub fn clipped_names() -> Vec<String> {
 /// `None` for one not measured.
 #[must_use]
 pub fn placement(name: &str) -> Option<(Rect, Rect)> {
-    registry().lock().ok().and_then(|registry| {
+    registry().os_lock().ok().and_then(|registry| {
         registry
             .get(name)
             .map(|measured| (measured.rect, measured.visible))
@@ -266,7 +267,7 @@ pub fn placement(name: &str) -> Option<(Rect, Rect)> {
 /// dependency for that would be more code than this is.
 fn write() {
     let Some(path) = output_path() else { return };
-    let Ok(registry) = registry().lock() else {
+    let Ok(registry) = registry().os_lock() else {
         return;
     };
 
@@ -365,7 +366,7 @@ pub fn measured(name: impl Into<String>, element: Div) -> Div {
 #[cfg(test)]
 pub fn snapshot() -> BTreeMap<String, Rect> {
     registry()
-        .lock()
+        .os_lock()
         .map(|r| {
             r.iter()
                 .map(|(name, measured)| (name.clone(), measured.rect))

@@ -3018,6 +3018,7 @@ version = "0.0.0"
 dependencies = [
  "sha2",
  "thiserror 2.0.21",
+ "wasm_thread",
 ]
 
 [[package]]
@@ -3031,8 +3032,19 @@ dependencies = [
 name = "mp-mission"
 version = "0.0.0"
 dependencies = [
+ "mp-os",
  "mp-units",
  "thiserror 2.0.21",
+]
+
+[[package]]
+name = "mp-os"
+version = "0.0.0"
+dependencies = [
+ "js-sys",
+ "wasm-bindgen",
+ "wasm_thread",
+ "web-sys",
 ]
 
 [[package]]
@@ -3040,6 +3052,7 @@ name = "mp-units"
 version = "0.0.0"
 dependencies = [
  "thiserror 2.0.21",
+ "web-time",
 ]
 
 [[package]]
@@ -3049,7 +3062,10 @@ dependencies = [
  "arc-swap",
  "mp-mavlink",
  "mp-mavlink-dialects",
+ "mp-os",
  "mp-units",
+ "wasm_thread",
+ "web-time",
 ]
 
 [[package]]
@@ -3063,6 +3079,7 @@ dependencies = [
  "mp-mavlink",
  "mp-mavlink-dialects",
  "mp-mission",
+ "mp-os",
  "mp-units",
  "mp-vehicle",
  "wasm-bindgen",

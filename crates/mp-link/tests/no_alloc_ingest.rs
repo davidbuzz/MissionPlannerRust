@@ -69,6 +69,7 @@
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::indexing_slicing)]
 #![allow(clippy::cast_possible_truncation)]
 
+use mp_os::Lock as _;
 use std::alloc::{GlobalAlloc, Layout, System};
 use std::cell::Cell;
 use std::collections::BTreeMap;
@@ -265,7 +266,7 @@ impl FramePerRead {
         let Some(msgid) = self.in_flight.take() else {
             return;
         };
-        let mut probe = self.probe.lock().unwrap();
+        let mut probe = self.probe.os_lock().unwrap();
         probe.measured_frames += 1;
         probe.publishes += publishes;
         probe.description_allocations += description;
@@ -297,7 +298,7 @@ impl Transport for FramePerRead {
         }
         if self.pass == self.passes {
             if let Some(from) = self.measured_from.take() {
-                self.probe.lock().unwrap().measured_elapsed = from.elapsed();
+                self.probe.os_lock().unwrap().measured_elapsed = from.elapsed();
             }
             // Counting stays off: the link's shutdown is not a packet.
             self.open = false;
@@ -325,7 +326,13 @@ impl Transport for FramePerRead {
             self.wrote_param_request = true;
         }
         if self.in_flight.is_some() {
-            *self.probe.lock().unwrap().written.entry(msgid).or_default() += 1;
+            *self
+                .probe
+                .os_lock()
+                .unwrap()
+                .written
+                .entry(msgid)
+                .or_default() += 1;
         }
         WATCHING.with(|w| w.set(watching));
         Ok(())
@@ -466,7 +473,7 @@ fn run(name: &str, bytes: Vec<u8>, allocating_description: bool) -> (Probe, usiz
     link.close();
     let _ = std::fs::remove_file(&recording);
 
-    let probe = std::mem::take(&mut *probe.lock().unwrap());
+    let probe = std::mem::take(&mut *probe.os_lock().unwrap());
     (probe, count)
 }
 

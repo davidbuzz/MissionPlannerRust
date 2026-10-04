@@ -176,10 +176,12 @@ impl TileFetcher {
             zoom: tile.z,
         })?;
 
+        #[cfg(not(target_family = "wasm"))]
         let mut response = self.get(&url, source.referer)?;
 
         // Bounded read. A server that streams forever, or lies about its content length, must not
         // be able to exhaust memory.
+        #[cfg(not(target_family = "wasm"))]
         let bytes = response
             .body_mut()
             .with_config()
@@ -189,6 +191,9 @@ impl TileFetcher {
                 url: url.clone(),
                 message: error.to_string(),
             })?;
+        // In a web page, through the browser (mp_os::http); the size is checked below as here.
+        #[cfg(target_family = "wasm")]
+        let bytes = page_get(&url)?;
 
         if bytes.len() >= MAX_TILE_BYTES {
             return Err(FetchError::TooLarge {
@@ -213,6 +218,7 @@ impl TileFetcher {
     /// Bounded like a tile, because the pages are a few hundred kilobytes and a server that sends
     /// more is not sending the page.
     /// `// C#: ExtLibs/GMap.NET.Core/GMap.NET.MapProviders/GMapProvider.cs:443-461`
+    #[cfg(not(target_family = "wasm"))]
     pub fn fetch_text(&self, url: &str, referer: &str) -> Result<String, FetchError> {
         let mut response = self.get(url, referer)?;
         response
@@ -225,6 +231,30 @@ impl TileFetcher {
                 message: error.to_string(),
             })
     }
+
+    /// In a web page, through the browser (the `Referer` is the browser's own).
+    #[cfg(target_family = "wasm")]
+    pub fn fetch_text(&self, url: &str, _referer: &str) -> Result<String, FetchError> {
+        String::from_utf8(page_get(url)?).map_err(|error| FetchError::Request {
+            url: url.to_owned(),
+            message: error.to_string(),
+        })
+    }
+}
+
+/// A GET through the browser (mp_os::http), failing on a status that is not a success as ureq's
+/// does here.
+#[cfg(target_family = "wasm")]
+fn page_get(url: &str) -> Result<Vec<u8>, FetchError> {
+    let request = |message: String| FetchError::Request {
+        url: url.to_owned(),
+        message,
+    };
+    let (status, bytes) = mp_os::http("GET", url, None).map_err(request)?;
+    if !(200..300).contains(&status) {
+        return Err(request(format!("http status: {status}")));
+    }
+    Ok(bytes)
 }
 
 #[cfg(test)]

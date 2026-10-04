@@ -50,6 +50,7 @@
 // This module is internal to the binary; `pub` here documents intent rather than exporting API.
 #![allow(unreachable_pub)]
 
+use mp_os::Lock as _;
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command};
 use std::sync::Mutex;
@@ -239,7 +240,7 @@ impl Processes {
     /// It could not be started.
     pub fn start(&self, spawn: &Spawn) -> Result<(), String> {
         let child = start_process(spawn).map_err(|err| err.to_string())?;
-        if let Ok(mut children) = self.children.lock() {
+        if let Ok(mut children) = self.children.os_lock() {
             children.push(child);
         }
         Ok(())
@@ -247,7 +248,7 @@ impl Processes {
 
     /// Kills every one; one already gone is ignored, as `catch { }` ignores it.
     pub fn kill_all(&self) {
-        if let Ok(mut children) = self.children.lock() {
+        if let Ok(mut children) = self.children.os_lock() {
             for child in children.iter_mut() {
                 let _ = child.kill();
                 let _ = child.wait();
@@ -376,7 +377,7 @@ impl Launcher for ManifestSitl {
         say: &dyn Fn(&str),
     ) -> Image {
         let mav_type = mav_type_of(file);
-        let Ok(mut held) = self.manifest.lock() else {
+        let Ok(mut held) = self.manifest.os_lock() else {
             return Image::Failed("the manifest's lock is poisoned".to_owned());
         };
         // `GetOptions` starts with `GetList()`, the default URL.
@@ -1118,7 +1119,7 @@ pub mod tests {
         /// The URLs asked for so far.
         pub fn asked(&self) -> Vec<String> {
             self.asked
-                .lock()
+                .os_lock()
                 .map(|asked| asked.clone())
                 .unwrap_or_default()
         }
@@ -1126,7 +1127,7 @@ pub mod tests {
 
     impl Fetch for StubWeb {
         fn get(&self, url: &str) -> Result<Vec<u8>, String> {
-            if let Ok(mut asked) = self.asked.lock() {
+            if let Ok(mut asked) = self.asked.os_lock() {
                 asked.push(url.to_owned());
             }
             self.files
@@ -1162,7 +1163,7 @@ pub mod tests {
 
         /// The spawns so far.
         pub fn spawns(&self) -> Vec<Spawn> {
-            self.spawns.lock().map(|s| s.clone()).unwrap_or_default()
+            self.spawns.os_lock().map(|s| s.clone()).unwrap_or_default()
         }
     }
 
@@ -1186,7 +1187,7 @@ pub mod tests {
             if self.refuse {
                 return Err("The system cannot find the file specified".to_owned());
             }
-            if let Ok(mut spawns) = self.spawns.lock() {
+            if let Ok(mut spawns) = self.spawns.os_lock() {
                 spawns.push(spawn.clone());
             }
             Ok(())
@@ -1320,7 +1321,7 @@ pub mod tests {
             Some(ReleaseType::Beta),
             &dir,
             &web,
-            &|text| said.lock().expect("lock").push(text.to_owned()),
+            &|text| said.os_lock().expect("lock").push(text.to_owned()),
         );
         assert_eq!(image, Image::Found(dir.join("ArduRover.exe")));
         assert_eq!(web.asked().len(), 11);
@@ -1332,7 +1333,7 @@ pub mod tests {
             )
         );
         assert!(dir.join("cygstdc++-6.dll").is_file());
-        assert_eq!(*said.lock().expect("lock"), [model::DOWNLOADING]);
+        assert_eq!(*said.os_lock().expect("lock"), [model::DOWNLOADING]);
 
         let web = StubWeb::default();
         let image = cygwin.image("ArduRover.elf", None, &dir, &web, &|_| {});
@@ -1356,7 +1357,7 @@ pub mod tests {
             &web,
             &request(&dir, Vehicle::Multirotor),
             &|_| {},
-            &|d| waited.lock().expect("lock").push(d),
+            &|d| waited.os_lock().expect("lock").push(d),
         );
         let defaults = dir.join("default_params").join("copter.parm");
         let line = format!(
@@ -1391,7 +1392,7 @@ pub mod tests {
             Some(b"FRAME_CLASS 1\n".to_vec())
         );
         assert_eq!(launcher.kills.load(Ordering::Relaxed), 1);
-        assert_eq!(*waited.lock().expect("lock"), [Duration::from_secs(2)]);
+        assert_eq!(*waited.os_lock().expect("lock"), [Duration::from_secs(2)]);
         // sim_vehicle.py first, then vehicleinfo.py, then the file it names.
         assert_eq!(
             web.asked(),

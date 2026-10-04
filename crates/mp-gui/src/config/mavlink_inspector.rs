@@ -88,6 +88,7 @@
 // This module is internal to the binary; `pub` here documents intent rather than exporting API.
 #![allow(unreachable_pub)]
 
+use mp_os::Lock as _;
 use std::cmp::Ordering;
 use std::collections::{BTreeSet, VecDeque};
 use std::sync::atomic::{AtomicBool, Ordering as Atomic};
@@ -832,14 +833,14 @@ impl Graph {
             let data = Arc::clone(&self.data);
             let target = self.target.clone();
             self.subscription = telemetry.on_packet(move |packet| {
-                if let Ok(mut curves) = data.lock() {
+                if let Ok(mut curves) = data.os_lock() {
                     curves.add(&target, packet);
                 }
             });
         }
         if now >= self.next_draw {
             self.next_draw = now + GRAPH_EVERY;
-            if let Ok(curves) = self.data.lock() {
+            if let Ok(curves) = self.data.os_lock() {
                 self.shown = curves.clone();
             }
         }
@@ -1370,7 +1371,7 @@ impl Inspector {
             if packet.sent && !gcs_traffic.load(Atomic::Relaxed) {
                 return;
             }
-            if let Ok(mut mavi) = mavi.lock() {
+            if let Ok(mut mavi) = mavi.os_lock() {
                 mavi.add(
                     packet.sysid,
                     packet.compid,
@@ -1414,7 +1415,7 @@ impl Inspector {
         }
         self.next_update = now + UPDATE_EVERY;
         self.updates += 1;
-        if let Ok(mavi) = self.mavi.lock() {
+        if let Ok(mavi) = self.mavi.os_lock() {
             update(&mut self.tree, &mavi, now);
         }
     }
@@ -2654,7 +2655,7 @@ mod tests {
         let held = |inspector: &Inspector| {
             inspector
                 .mavi
-                .lock()
+                .os_lock()
                 .expect("not poisoned")
                 .packet_messages()
                 .iter()
@@ -2989,7 +2990,7 @@ mod tests {
             pages.inspector.window.as_ref().map_or(0, |window| {
                 window
                     .mavi
-                    .lock()
+                    .os_lock()
                     .map_or(0, |mavi| mavi.packet_messages().len())
             })
         };

@@ -30,6 +30,7 @@
 
 mod common;
 
+use mp_os::Lock as _;
 use std::io::{self, Write};
 use std::net::{IpAddr, UdpSocket};
 use std::sync::{Arc, Mutex};
@@ -177,7 +178,7 @@ fn every_gga_sentence_is_the_csharps_to_the_checksum() {
 fn hand_clock(start: SystemTime) -> (Arc<Mutex<SystemTime>>, Clock) {
     let now = Arc::new(Mutex::new(start));
     let read = Arc::clone(&now);
-    (now, Box::new(move || *read.lock().unwrap()))
+    (now, Box::new(move || *read.os_lock().unwrap()))
 }
 
 #[test]
@@ -261,7 +262,7 @@ fn the_gga_cadence_is_the_csharps() {
         .unwrap();
     let mut buf = [0u8; 64];
     for (step, moment) in at.iter().enumerate().skip(1) {
-        *now.lock().unwrap() = *moment;
+        *now.os_lock().unwrap() = *moment;
         if step == 4 {
             transport.set_position(0.0, 0.0, 1.0);
         }

@@ -27,6 +27,7 @@
 // This module is internal to the binary; `pub` here documents intent rather than exporting API.
 #![allow(unreachable_pub)]
 
+use mp_os::Lock as _;
 use std::sync::{Arc, Mutex, PoisonError};
 use web_time::{Duration, Instant};
 
@@ -732,7 +733,7 @@ impl Telemetry {
         };
         let mut shared = self
             .parameters
-            .lock()
+            .os_lock()
             .unwrap_or_else(PoisonError::into_inner);
         if let Some(held) = shared.as_ref()
             && held.generation == generation
@@ -1558,7 +1559,7 @@ impl Telemetry {
         link.command(target, command, params, true);
         // `if (!bootloadermode && (BaseStream is SerialPort))`.
         if self.is_serial()
-            && let Ok(mut reopen) = self.reopen.lock()
+            && let Ok(mut reopen) = self.reopen.os_lock()
         {
             *reopen = Some(Reopen::Check(Instant::now() + REBOOT_REOPEN_WAIT));
         }

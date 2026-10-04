@@ -39,6 +39,7 @@
 //! the stream is read on the capture thread though it was opened on another.
 #![allow(unsafe_code)]
 
+use mp_os::Lock as _;
 use std::path::PathBuf;
 use std::sync::Mutex;
 use std::sync::mpsc::{self, Receiver, RecvTimeoutError, Sender};
@@ -461,7 +462,7 @@ impl Arrivals {
         // A stream already dropped has no receiver; the arrival is not wanted.
         let _ = self
             .sender
-            .lock()
+            .os_lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
             .send(arrival);
     }

@@ -3196,6 +3196,7 @@ impl MissionPlanner {
 
 #[cfg(test)]
 mod tests {
+    use mp_os::Lock as _;
     use super::*;
 
     fn fixture() -> Manifest {
@@ -3662,7 +3663,7 @@ mod tests {
             move || {
                 calls.fetch_add(1, Ordering::SeqCst);
                 lists
-                    .lock()
+                    .os_lock()
                     .expect("the lists")
                     .pop_front()
                     .unwrap_or_else(|| ports(&["/dev/ttyS0", "/dev/ttyACM0"]))
@@ -3685,7 +3686,7 @@ mod tests {
         );
 
         // The page takes the latest arrival, once, for the probe.
-        lists.lock().expect("the lists").extend([
+        lists.os_lock().expect("the lists").extend([
             ports(&["/dev/ttyS0"]),
             ports(&["/dev/ttyS0", "/dev/ttyUSB0"]),
         ]);

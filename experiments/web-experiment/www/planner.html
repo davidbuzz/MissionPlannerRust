@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MissionPlannerRust in the browser</title>
+<style>html, body { margin: 0; height: 100%; background: #0d1117; } canvas { display: block; }</style>
+</head>
+<body>
+<script type="module">
+// The whole planner, crates/mp-gui, built for a web page by tools/planner-wasm.sh build and
+// wasm-bindgen into pkg-planner/. Its main() runs when the module starts; its links go through
+// link.js (`servePlanner`).
+// A panic's stack in full: Chrome keeps ten frames by default.
+Error.stackTraceLimit = 200;
+import { servePlanner } from "./link.js";
+import init, { page_link_requested, page_link_push, page_link_take } from "./pkg-planner/planner.js";
+init()
+    .then(() => servePlanner({ requested: page_link_requested, push: page_link_push, take: page_link_take }))
+    .catch((err) => console.error("planner: " + err));
+</script>
+</body>
+</html>

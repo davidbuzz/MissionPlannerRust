@@ -26,6 +26,8 @@ mp-mavlink-dialects = { path = "../../crates/mp-mavlink-dialects" }
 mp-vehicle = { path = "../../crates/mp-vehicle" }
 mp-mission = { path = "../../crates/mp-mission" }
 mp-units = { path = "../../crates/mp-units" }
+# What the linked files reach for in a web page: `os_lock` (pictures.rs).
+mp-os = { path = "../../crates/mp-os" }
 
 # A workspace of its own: its lock file and target folder stay out of the planner's.
 [workspace]

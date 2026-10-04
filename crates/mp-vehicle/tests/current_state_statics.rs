@@ -31,6 +31,7 @@
     clippy::indexing_slicing
 )]
 
+use mp_os::Lock as _;
 use std::sync::{Mutex, MutexGuard, PoisonError};
 
 use mp_mavlink::Message;
@@ -41,7 +42,7 @@ use mp_vehicle::{DateTime, LatLngAlt, StreamRates, VehicleId, VehicleRegistry, V
 static LOCK: Mutex<()> = Mutex::new(());
 
 fn lock() -> MutexGuard<'static, ()> {
-    LOCK.lock().unwrap_or_else(PoisonError::into_inner)
+    LOCK.os_lock().unwrap_or_else(PoisonError::into_inner)
 }
 
 fn named(name: &[u8], value: f32) -> MavMessage {

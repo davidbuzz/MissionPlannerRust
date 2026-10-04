@@ -140,6 +140,7 @@ impl Http for UreqHttp {
         self.get_status(url).map(|(_, body)| body)
     }
 
+    #[cfg(not(target_family = "wasm"))]
     fn get_status(&self, url: &str) -> Result<(u16, Vec<u8>), HttpError> {
         let mut response = self
             .agent
@@ -154,6 +155,12 @@ impl Http for UreqHttp {
             .read_to_vec()
             .map(|body| (status, body))
             .map_err(|error| HttpError(format!("{url}: {error}")))
+    }
+
+    /// In a web page, through the browser (mp_os::http); its status is the caller's, as above.
+    #[cfg(target_family = "wasm")]
+    fn get_status(&self, url: &str) -> Result<(u16, Vec<u8>), HttpError> {
+        mp_os::http("GET", url, None).map_err(HttpError)
     }
 }
 

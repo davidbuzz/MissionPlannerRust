@@ -56,6 +56,7 @@
 // No `unsafe` but in the Windows source's FFI, which allows it for its file alone.
 #![deny(unsafe_code)]
 
+use mp_os::Lock as _;
 use std::fmt;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
@@ -313,7 +314,7 @@ impl Capture {
                 ..*mode
             };
             let note = move |why: &VideoError| {
-                *error.lock().unwrap_or_else(PoisonError::into_inner) = Some(why.to_string());
+                *error.os_lock().unwrap_or_else(PoisonError::into_inner) = Some(why.to_string());
             };
             wasm_thread::Builder::new()
                 .name("video-capture".to_owned())
@@ -324,7 +325,7 @@ impl Capture {
                             .and_then(|(raw, sequence)| convert::decode(&decoded, &raw, sequence));
                         match decoded {
                             Ok(frame) => {
-                                *latest.lock().unwrap_or_else(PoisonError::into_inner) =
+                                *latest.os_lock().unwrap_or_else(PoisonError::into_inner) =
                                     Some(Arc::new(frame));
                                 frames.fetch_add(1, Ordering::Release);
                             }
@@ -358,7 +359,7 @@ impl Capture {
     #[must_use]
     pub fn latest(&self) -> Option<Arc<Frame>> {
         self.latest
-            .lock()
+            .os_lock()
             .unwrap_or_else(PoisonError::into_inner)
             .clone()
     }
@@ -373,7 +374,7 @@ impl Capture {
     #[must_use]
     pub fn error(&self) -> Option<String> {
         self.error
-            .lock()
+            .os_lock()
             .unwrap_or_else(PoisonError::into_inner)
             .clone()
     }
@@ -421,18 +422,18 @@ pub(crate) struct Feed {
 impl Feed {
     /// A new frame: `_onNewImage?.Invoke(null, image)`.
     pub(crate) fn show(&self, frame: Frame) {
-        *self.latest.lock().unwrap_or_else(PoisonError::into_inner) = Some(Arc::new(frame));
+        *self.latest.os_lock().unwrap_or_else(PoisonError::into_inner) = Some(Arc::new(frame));
         self.frames.fetch_add(1, Ordering::Release);
     }
 
     /// No picture: `_onNewImage?.Invoke(null, null)`, which clears the HUD's.
     pub(crate) fn clear(&self) {
-        *self.latest.lock().unwrap_or_else(PoisonError::into_inner) = None;
+        *self.latest.os_lock().unwrap_or_else(PoisonError::into_inner) = None;
     }
 
     /// What went wrong, kept for the screen: the C# logs it.
     pub(crate) fn note(&self, why: impl Into<String>) {
-        *self.error.lock().unwrap_or_else(PoisonError::into_inner) = Some(why.into());
+        *self.error.os_lock().unwrap_or_else(PoisonError::into_inner) = Some(why.into());
     }
 
     /// Whether the thread has been told to stop.
@@ -448,7 +449,7 @@ impl Feed {
     /// The latest frame.
     pub(crate) fn latest(&self) -> Option<Arc<Frame>> {
         self.latest
-            .lock()
+            .os_lock()
             .unwrap_or_else(PoisonError::into_inner)
             .clone()
     }
@@ -461,7 +462,7 @@ impl Feed {
     /// The last failure noted.
     pub(crate) fn error(&self) -> Option<String> {
         self.error
-            .lock()
+            .os_lock()
             .unwrap_or_else(PoisonError::into_inner)
             .clone()
     }

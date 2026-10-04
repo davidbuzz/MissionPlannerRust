@@ -35,6 +35,7 @@
 //! The counting and the walk are `mp_tiles::prefetch`; what is here is the state the screen
 //! holds and the two forms drawn over it.
 
+use mp_os::Lock as _;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 
@@ -264,7 +265,7 @@ impl Drop for PrefetchJob {
 
 fn lock<T>(mutex: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
     mutex
-        .lock()
+        .os_lock()
         .unwrap_or_else(std::sync::PoisonError::into_inner)
 }
 

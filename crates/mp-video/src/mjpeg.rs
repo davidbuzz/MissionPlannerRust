@@ -27,6 +27,7 @@
 //! `TcpStream` - the answer to one is never chunked - so an `https://` URL is not read; an
 //! MJPEG server on a camera or a companion computer serves plain HTTP.
 
+use mp_os::Lock as _;
 use std::io::{BufReader, Write as _};
 use std::net::{Shutdown, TcpStream, ToSocketAddrs};
 use std::sync::{Arc, Mutex, PoisonError};
@@ -95,7 +96,7 @@ impl CaptureMjpeg {
         self.feed.tell_stop();
         if let Some(socket) = self
             .socket
-            .lock()
+            .os_lock()
             .unwrap_or_else(PoisonError::into_inner)
             .as_ref()
         {
@@ -152,7 +153,7 @@ fn get_url(url: &str, feed: &Feed, socket: &Mutex<Option<TcpStream>>) {
     while !feed.stopping() {
         match connect(url) {
             Ok((stream, mut reader)) => {
-                *socket.lock().unwrap_or_else(PoisonError::into_inner) = Some(stream);
+                *socket.os_lock().unwrap_or_else(PoisonError::into_inner) = Some(stream);
                 // Stopped while connecting: the shutdown missed this socket.
                 if feed.stopping() {
                     break;

@@ -39,6 +39,7 @@
 //! ([`crate::multipart`]). Without an `appsink name=outsink` the pipeline plays as it is and
 //! hands the HUD nothing, as the C#'s waits for its end.
 
+use mp_os::Lock as _;
 use std::ffi::OsString;
 use std::io::{BufRead as _, BufReader};
 use std::path::{Path, PathBuf};
@@ -496,7 +497,11 @@ impl Drop for GStreamer {
 
 /// Ends the launcher, if it has not ended, and reaps it.
 fn kill(child: &Mutex<Option<Child>>) {
-    if let Some(mut child) = child.lock().unwrap_or_else(PoisonError::into_inner).take() {
+    if let Some(mut child) = child
+        .os_lock()
+        .unwrap_or_else(PoisonError::into_inner)
+        .take()
+    {
         let _ = child.kill();
         let _ = child.wait();
     }

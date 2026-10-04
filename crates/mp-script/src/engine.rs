@@ -55,6 +55,7 @@
 //! * RustPython is Python 3 and IronPython 2.7 is Python 2: `print 'x'` is a syntax error here,
 //!   which is why the shipped scripts are converted (PLAN.md §12 D20).
 
+use mp_os::Lock as _;
 use std::fmt;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, PoisonError};
@@ -152,7 +153,7 @@ impl fmt::Debug for Runtime {
 type Shared = Arc<Mutex<Runtime>>;
 
 fn lock(shared: &Shared) -> std::sync::MutexGuard<'_, Runtime> {
-    shared.lock().unwrap_or_else(PoisonError::into_inner)
+    shared.os_lock().unwrap_or_else(PoisonError::into_inner)
 }
 
 /// A count a script passes: IronPython lets a float stand where the C# takes an `int` or a
@@ -603,7 +604,7 @@ impl PyOutput {
     fn write(&self, text: PyStrRef) -> usize {
         let text = text.to_string_lossy();
         self.buffer
-            .lock()
+            .os_lock()
             .unwrap_or_else(PoisonError::into_inner)
             .push_str(&text);
         text.len()
@@ -760,7 +761,7 @@ pub fn run_blocking(
         Arc::new(AtomicBool::new(false)),
     );
     let printed = output
-        .lock()
+        .os_lock()
         .unwrap_or_else(PoisonError::into_inner)
         .clone();
     (result, printed)
@@ -804,7 +805,7 @@ impl ScriptRun {
                 .name(THREAD_NAME.to_owned())
                 .spawn(move || {
                     let outcome = run_with(&name, &source, host, output, abort);
-                    *result.lock().unwrap_or_else(PoisonError::into_inner) = Some(outcome);
+                    *result.os_lock().unwrap_or_else(PoisonError::into_inner) = Some(outcome);
                 })
                 .ok()
         };
@@ -816,7 +817,7 @@ impl ScriptRun {
             thread,
         };
         if run.thread.is_none() {
-            *run.result.lock().unwrap_or_else(PoisonError::into_inner) =
+            *run.result.os_lock().unwrap_or_else(PoisonError::into_inner) =
                 Some(Err("the script thread could not be started".to_owned()));
         }
         run
@@ -826,7 +827,7 @@ impl ScriptRun {
     #[must_use]
     pub fn is_running(&self) -> bool {
         self.result
-            .lock()
+            .os_lock()
             .unwrap_or_else(PoisonError::into_inner)
             .is_none()
     }
@@ -840,7 +841,7 @@ impl ScriptRun {
 
     /// `RetrieveWrittenString`: what was printed since the last call.
     pub fn take_output(&mut self) -> String {
-        let output = self.output.lock().unwrap_or_else(PoisonError::into_inner);
+        let output = self.output.os_lock().unwrap_or_else(PoisonError::into_inner);
         let fresh = output.get(self.taken..).unwrap_or("").to_owned();
         self.taken = output.len();
         fresh
@@ -850,7 +851,7 @@ impl ScriptRun {
     #[must_use]
     pub fn output(&self) -> String {
         self.output
-            .lock()
+            .os_lock()
             .unwrap_or_else(PoisonError::into_inner)
             .clone()
     }
@@ -860,7 +861,7 @@ impl ScriptRun {
     #[must_use]
     pub fn result(&self) -> Option<Result<(), String>> {
         self.result
-            .lock()
+            .os_lock()
             .unwrap_or_else(PoisonError::into_inner)
             .clone()
     }
@@ -1048,34 +1049,34 @@ mod tests {
         }
         impl ScriptHost for Through {
             fn get_parameter(&self, name: &str) -> Option<f32> {
-                self.0.lock().unwrap().get_parameter(name)
+                self.0.os_lock().unwrap().get_parameter(name)
             }
             fn change_param(&mut self, name: &str, value: f32) -> bool {
-                self.0.lock().unwrap().change_param(name, value)
+                self.0.os_lock().unwrap().change_param(name, value)
             }
             fn change_mode(&mut self, mode: &str) -> bool {
-                self.0.lock().unwrap().change_mode(mode)
+                self.0.os_lock().unwrap().change_mode(mode)
             }
             fn has_message(&self, text: &str) -> bool {
-                self.0.lock().unwrap().has_message(text)
+                self.0.os_lock().unwrap().has_message(text)
             }
             fn clear_messages(&mut self) {
-                self.0.lock().unwrap().clear_messages();
+                self.0.os_lock().unwrap().clear_messages();
             }
             fn cs_field(&self, name: &str) -> Option<CsValue> {
-                self.0.lock().unwrap().cs_field(name)
+                self.0.os_lock().unwrap().cs_field(name)
             }
             fn send_rc(&mut self, channel: u8, pwm: u16, send_now: bool) -> bool {
-                self.0.lock().unwrap().send_rc(channel, pwm, send_now)
+                self.0.os_lock().unwrap().send_rc(channel, pwm, send_now)
             }
             fn sleep(&mut self, milliseconds: u32) {
-                self.0.lock().unwrap().sleep(milliseconds);
+                self.0.os_lock().unwrap().sleep(milliseconds);
             }
             fn link_target(&self) -> (u8, u8) {
-                self.0.lock().unwrap().link_target()
+                self.0.os_lock().unwrap().link_target()
             }
             fn is_open(&self) -> bool {
-                self.0.lock().unwrap().is_open()
+                self.0.os_lock().unwrap().is_open()
             }
             fn set_param(
                 &mut self,
@@ -1084,7 +1085,7 @@ mod tests {
                 value: f64,
                 force: bool,
             ) -> Result<bool, Timeout> {
-                self.0.lock().unwrap().set_param(target, name, value, force)
+                self.0.os_lock().unwrap().set_param(target, name, value, force)
             }
             fn command(
                 &mut self,
@@ -1094,21 +1095,21 @@ mod tests {
                 require_ack: bool,
             ) -> Result<bool, Timeout> {
                 self.0
-                    .lock()
+                    .os_lock()
                     .unwrap()
                     .command(target, command, params, require_ack)
             }
             fn set_wp_total(&mut self, target: (u8, u8), total: u16, kind: u8) -> Result<(), Timeout> {
-                self.0.lock().unwrap().set_wp_total(target, total, kind)
+                self.0.os_lock().unwrap().set_wp_total(target, total, kind)
             }
             fn set_wp(&mut self, target: (u8, u8), item: &WpItem) -> Result<u8, Timeout> {
-                self.0.lock().unwrap().set_wp(target, item)
+                self.0.os_lock().unwrap().set_wp(target, item)
             }
             fn set_wp_ack(&mut self, target: (u8, u8), kind: u8) {
-                self.0.lock().unwrap().set_wp_ack(target, kind);
+                self.0.os_lock().unwrap().set_wp_ack(target, kind);
             }
             fn set_wp_current(&mut self, target: (u8, u8), seq: u16) -> Result<bool, Timeout> {
-                self.0.lock().unwrap().set_wp_current(target, seq)
+                self.0.os_lock().unwrap().set_wp_current(target, seq)
             }
             fn get_wp(
                 &mut self,
@@ -1116,23 +1117,23 @@ mod tests {
                 index: u16,
                 kind: u8,
             ) -> Result<Locationwp, Timeout> {
-                self.0.lock().unwrap().get_wp(target, index, kind)
+                self.0.os_lock().unwrap().get_wp(target, index, kind)
             }
             fn set_position_target(
                 &mut self,
                 target: (u8, u8),
                 position: &PositionTarget,
             ) -> bool {
-                self.0.lock().unwrap().set_position_target(target, position)
+                self.0.os_lock().unwrap().set_position_target(target, position)
             }
             fn write_raw(&mut self, bytes: &[u8]) -> bool {
-                self.0.lock().unwrap().write_raw(bytes)
+                self.0.os_lock().unwrap().write_raw(bytes)
             }
             fn speak(&mut self, text: &str) {
-                self.0.lock().unwrap().speak(text);
+                self.0.os_lock().unwrap().speak(text);
             }
             fn speech_settings(&self) -> (bool, bool) {
-                self.0.lock().unwrap().speech_settings()
+                self.0.os_lock().unwrap().speech_settings()
             }
         }
         let shared = Arc::new(Mutex::new(fake));
@@ -1162,7 +1163,7 @@ mod tests {
         );
         assert_eq!(result, Ok(()));
         assert_eq!(printed, "Start Script\n0.0\nTrue\nTrue\n");
-        let host = host.lock().unwrap();
+        let host = host.os_lock().unwrap();
         assert_eq!(host.rc.len(), 9);
         assert_eq!(host.rc[8], (3, 1100, true));
         assert_eq!(host.modes, ["AUTO"]);
@@ -1186,7 +1187,7 @@ mod tests {
         );
         assert_eq!(result, Ok(()));
         assert_eq!(printed, "True\nFalse\n");
-        let host = host.lock().unwrap();
+        let host = host.os_lock().unwrap();
         assert_eq!(host.cleared, 1);
         // Five polls of 5 ms pass 20 ms.
         assert_eq!(host.slept_ms, 25);
@@ -1415,7 +1416,7 @@ mod tests {
             last_line(&result),
             "TypeError: setWPCurrent() takes exactly 3 arguments (1 given)"
         );
-        let host = host.lock().unwrap();
+        let host = host.os_lock().unwrap();
         assert_eq!(host.calls[0], "setWPTotal (1, 1) 2 0");
         assert!(host.calls[1].starts_with("setWP (1, 1) WpItem { seq: 0, frame: 3, command: 16, current: 0, autocontinue: 1, params: [0.0, 0.0, 0.0, 0.0], x: -35.0, y: 117.8, z: 50.0, mission_type: 0 }"), "{}", host.calls[1]);
         assert!(host.calls[2].contains("seq: 1, frame: 3, command: 22"), "{}", host.calls[2]);
@@ -1480,7 +1481,7 @@ mod tests {
         );
         assert_eq!(result, Ok(()));
         assert_eq!(printed, "True\nTrue\nTrue\n");
-        let host = host.lock().unwrap();
+        let host = host.os_lock().unwrap();
         assert_eq!(
             host.calls,
             [
@@ -1522,7 +1523,7 @@ mod tests {
         assert_eq!(result, Ok(()));
         // The script's item keeps its id: the C#'s struct was a copy.
         assert_eq!(printed, "0\n");
-        let host = host.lock().unwrap();
+        let host = host.os_lock().unwrap();
         assert_eq!(host.modes, ["GUIDED"]);
         assert_eq!(
             host.calls,
@@ -1539,7 +1540,7 @@ mod tests {
             .insert("firmware".to_owned(), CsValue::Text("ArduPlane".to_owned()));
         let (host, result, _) = run(script, plane);
         assert_eq!(result, Ok(()));
-        let host = host.lock().unwrap();
+        let host = host.os_lock().unwrap();
         assert!(host.modes.is_empty());
         assert_eq!(host.calls.len(), 1);
         assert!(
@@ -1568,7 +1569,7 @@ mod tests {
             last_line(&result),
             "OverflowError: Value was either too large or too small for an unsigned byte."
         );
-        assert_eq!(host.lock().unwrap().calls, ["Write [0, 0, 0, 8]"]);
+        assert_eq!(host.os_lock().unwrap().calls, ["Write [0, 0, 0, 8]"]);
     }
 
     /// `SubscribeToPacketType` takes four or five arguments; the corpus's two are IronPython's
@@ -1637,7 +1638,7 @@ mod tests {
             "RuntimeError: MainV2.nosuch is not available to scripts in this version"
         );
         assert_eq!(
-            host.lock().unwrap().calls,
+            host.os_lock().unwrap().calls,
             ["Speak test 0", "Speak Pre Arm: 5 meters to Navigation distance"]
         );
     }
@@ -1660,7 +1661,7 @@ mod tests {
         );
         assert_eq!(result, Ok(()));
         assert_eq!(printed, "True False\n");
-        assert_eq!(host.lock().unwrap().calls, ["Speak hello"]);
+        assert_eq!(host.os_lock().unwrap().calls, ["Speak hello"]);
 
         let mut disarmed = Fake {
             speech: (true, true),
@@ -1672,7 +1673,7 @@ mod tests {
         let (host, result, printed) = run(script, disarmed);
         assert_eq!(result, Ok(()));
         assert_eq!(printed, "True True\n");
-        assert!(host.lock().unwrap().calls.is_empty());
+        assert!(host.os_lock().unwrap().calls.is_empty());
     }
 
     /// `cs` numbers are their C# types: a `float` member's `ToString()` is .NET Framework's
@@ -1734,7 +1735,7 @@ mod tests {
             last_line(&result),
             "TypeError: doARM() takes at most 4 arguments (5 given)"
         );
-        let host = host.lock().unwrap();
+        let host = host.os_lock().unwrap();
         let calls: Vec<&str> = host.calls.iter().map(String::as_str).collect();
         assert_eq!(calls[0], "setParam (2, 1) RTL_ALT 1500 false");
         assert_eq!(calls[1], "setParam (1, 1) NOPE 1500 false");
@@ -1794,7 +1795,7 @@ mod tests {
     fn time_sleep_is_a_wait_the_abort_reaches() {
         let (host, result, _) = run("import time\ntime.sleep(0.25)\n", Fake::default());
         assert_eq!(result, Ok(()));
-        assert_eq!(host.lock().unwrap().slept_ms, 250);
+        assert_eq!(host.os_lock().unwrap().slept_ms, 250);
         let mut run = ScriptRun::start(
             "loop.py",
             "import time\nprint('going')\nwhile True:\n    time.sleep(1)\n".to_owned(),

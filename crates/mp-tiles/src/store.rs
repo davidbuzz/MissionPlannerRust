@@ -37,6 +37,7 @@
 //! second timeout, and a full cache took five to ten seconds to appear.
 //! `// C#: ExtLibs/GMap.NET.Core/GMap.NET.Internals/Core.cs:62, 791-1030, 1150-1165`
 
+use mp_os::Lock as _;
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Condvar, Mutex};
@@ -331,7 +332,7 @@ impl TileStore {
     /// Counters.
     #[must_use]
     pub fn stats(&self) -> StoreStats {
-        self.shared.stats.lock().map(|s| *s).unwrap_or_default()
+        self.shared.stats.os_lock().map(|s| *s).unwrap_or_default()
     }
 
     /// Whether fetching is switched off.
@@ -339,7 +340,7 @@ impl TileStore {
     pub fn is_offline(&self) -> bool {
         self.shared
             .policy
-            .lock()
+            .os_lock()
             .map(|policy| policy.is_offline())
             .unwrap_or(true)
     }
@@ -350,7 +351,7 @@ impl TileStore {
     /// progressively from coarse to fine rather than appearing blank and then snapping.
     pub fn get(&self, tile: TileId) -> TileAnswer {
         // Memory first: the common case, and the only one on the hot path of a pan.
-        if let Ok(mut memory) = self.shared.memory.lock()
+        if let Ok(mut memory) = self.shared.memory.os_lock()
             && let Some(found) = memory.get(tile)
         {
             self.bump(|stats| stats.memory_hits += 1);
@@ -375,7 +376,7 @@ impl TileStore {
 
     /// The nearest ancestor already in memory.
     fn best_ancestor(&self, tile: TileId) -> Option<(TileId, Arc<DecodedTile>)> {
-        let Ok(memory) = self.shared.memory.lock() else {
+        let Ok(memory) = self.shared.memory.os_lock() else {
             return None;
         };
         let mut ancestor = tile;
@@ -393,7 +394,7 @@ impl TileStore {
         if self.source.url_for(tile).is_none() {
             return;
         }
-        let Ok(mut queue) = self.shared.queue.lock() else {
+        let Ok(mut queue) = self.shared.queue.os_lock() else {
             return;
         };
         if queue.contains(&tile) {
@@ -415,7 +416,7 @@ impl TileStore {
     pub fn load_from_cache(&self, tile: TileId) -> Option<Arc<DecodedTile>> {
         let cached = self.cache.read(self.source.cache_name, tile)?;
         let decoded = Arc::new(DecodedTile::decode(&cached.bytes)?);
-        if let Ok(mut memory) = self.shared.memory.lock() {
+        if let Ok(mut memory) = self.shared.memory.os_lock() {
             memory.insert(tile, Arc::clone(&decoded));
         }
         self.bump(|stats| stats.disk_hits += 1);
@@ -427,13 +428,13 @@ impl TileStore {
     pub fn memory_tiles(&self) -> usize {
         self.shared
             .memory
-            .lock()
+            .os_lock()
             .map(|memory| memory.tiles.len())
             .unwrap_or(0)
     }
 
     fn bump(&self, change: impl FnOnce(&mut StoreStats)) {
-        if let Ok(mut stats) = self.shared.stats.lock() {
+        if let Ok(mut stats) = self.shared.stats.os_lock() {
             change(&mut stats);
         }
     }
@@ -461,7 +462,7 @@ fn run_reader(source: &'static TileSource, cache: &TileCache, shared: &Arc<Share
         };
 
         #[cfg(test)]
-        if let Ok(gate) = shared.reader_gate.lock()
+        if let Ok(gate) = shared.reader_gate.os_lock()
             && let Some(gate) = gate.as_ref()
         {
             let _ = gate.taken.send(tile);
@@ -476,7 +477,7 @@ fn run_reader(source: &'static TileSource, cache: &TileCache, shared: &Arc<Share
         // `// C#: ExtLibs/GMap.NET.Core/GMap.NET.Internals/Core.cs:881-882, 1139-1142`
         if shared
             .memory
-            .lock()
+            .os_lock()
             .is_ok_and(|memory| memory.tiles.contains_key(&tile))
         {
             continue;
@@ -493,7 +494,7 @@ fn run_reader(source: &'static TileSource, cache: &TileCache, shared: &Arc<Share
 
         let now = Instant::now();
         {
-            let Ok(mut policy) = shared.policy.lock() else {
+            let Ok(mut policy) = shared.policy.os_lock() else {
                 continue;
             };
             policy.expire(now, FETCH_TIMEOUT);
@@ -503,7 +504,7 @@ fn run_reader(source: &'static TileSource, cache: &TileCache, shared: &Arc<Share
             policy.begin(tile, now);
         }
 
-        let Ok(mut network) = shared.network.lock() else {
+        let Ok(mut network) = shared.network.os_lock() else {
             continue;
         };
         if !network.contains(&tile) {
@@ -532,7 +533,7 @@ fn run_fetcher(
         };
 
         {
-            let Ok(mut initialized) = shared.initialized.lock() else {
+            let Ok(mut initialized) = shared.initialized.os_lock() else {
                 continue;
             };
             if !*initialized {
@@ -545,7 +546,7 @@ fn run_fetcher(
             Ok(bytes) => {
                 // Written before decoding, so a tile survives even if this build cannot decode it.
                 let _ = cache.write(source.cache_name, tile, &bytes);
-                if let Ok(mut policy) = shared.policy.lock() {
+                if let Ok(mut policy) = shared.policy.os_lock() {
                     policy.succeeded(tile);
                 }
                 if let Some(decoded) = DecodedTile::decode(&bytes) {
@@ -553,10 +554,10 @@ fn run_fetcher(
                 }
             }
             Err(_) => {
-                if let Ok(mut policy) = shared.policy.lock() {
+                if let Ok(mut policy) = shared.policy.os_lock() {
                     policy.failed(tile, Instant::now());
                 }
-                if let Ok(mut stats) = shared.stats.lock() {
+                if let Ok(mut stats) = shared.stats.os_lock() {
                     stats.failed += 1;
                 }
             }
@@ -566,7 +567,7 @@ fn run_fetcher(
 
 /// Takes the next tile from a queue, newest first, waiting if there is nothing to do.
 fn next_from(shared: &Arc<Shared>, queue: &Mutex<Vec<TileId>>, wake: &Condvar) -> Option<TileId> {
-    let Ok(mut queue) = queue.lock() else {
+    let Ok(mut queue) = queue.os_lock() else {
         return None;
     };
     while queue.is_empty() {
@@ -591,9 +592,9 @@ fn publish(
 ) {
     // Counted with the memory still held, so whoever finds the tile in memory also finds it
     // counted: a caller that sees the tile and then reads the stats never sees it uncounted.
-    if let Ok(mut memory) = shared.memory.lock() {
+    if let Ok(mut memory) = shared.memory.os_lock() {
         memory.insert(tile, Arc::new(decoded));
-        if let Ok(mut stats) = shared.stats.lock() {
+        if let Ok(mut stats) = shared.stats.os_lock() {
             count(&mut stats);
         }
     }
@@ -633,7 +634,7 @@ mod tests {
         let store = TileStore::offline(&BING_MAP, cache);
         let (taken_tx, taken) = mpsc::channel();
         let (go, go_rx) = mpsc::channel();
-        *store.shared.reader_gate.lock().unwrap() = Some(ReaderGate {
+        *store.shared.reader_gate.os_lock().unwrap() = Some(ReaderGate {
             taken: taken_tx,
             go: go_rx,
         });
@@ -649,7 +650,7 @@ mod tests {
         // The first ask is in the reader's hands and out of the queue; this one is queued.
         assert!(matches!(store.get(tile), TileAnswer::Missing));
         assert!(
-            store.shared.queue.lock().unwrap().contains(&tile),
+            store.shared.queue.os_lock().unwrap().contains(&tile),
             "the second ask was queued, which is the race"
         );
 
@@ -664,10 +665,10 @@ mod tests {
         // Dropping the store joins the reader, which finishes the second ask first.
         let shared = Arc::clone(&store.shared);
         drop(store);
-        let stats = *shared.stats.lock().unwrap();
+        let stats = *shared.stats.os_lock().unwrap();
         assert_eq!(stats.disk_hits, 1, "{stats:?}");
         assert_eq!(stats.misses, 2, "{stats:?}");
-        assert!(shared.memory.lock().unwrap().tiles.contains_key(&tile));
+        assert!(shared.memory.os_lock().unwrap().tiles.contains_key(&tile));
         let _ = std::fs::remove_dir_all(&root);
     }
 }

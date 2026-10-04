@@ -32,6 +32,7 @@
 
 mod common;
 
+use mp_os::Lock as _;
 use common::MockBootloader;
 use mp_firmware::detect::{
     Boards, DetectHost, Detected, DeviceInfo, FLASH_SIZE_2MB, PLEASE_UNPLUG_THE_BOARD_AND, Probe,
@@ -464,7 +465,7 @@ impl Transport for MockLink {
     }
 
     fn write_all(&mut self, buf: &[u8]) -> io::Result<()> {
-        self.sent.lock().unwrap().extend_from_slice(buf);
+        self.sent.os_lock().unwrap().extend_from_slice(buf);
         match &mut self.device {
             Device::Px4(mock) => mock.write_all(buf)?,
             Device::Stk500v1 => {
@@ -506,7 +507,7 @@ struct Opened {
 
 impl Opened {
     fn sent(&self) -> Vec<u8> {
-        self.sent.lock().unwrap().clone()
+        self.sent.os_lock().unwrap().clone()
     }
 }
 

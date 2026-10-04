@@ -6,6 +6,10 @@
 //                     pumps it, with no TCP in between. The default.
 //   ?link=ws://host:port/path                     a vehicle behind a WebSocket: Mission Planner's
 //                     "WS" link (ExtLibs/Comms/CommsWebSocket.cs), binary frames both ways.
+//
+// The whole planner (planner.html) asks for its link itself, through crates/mp-transport/src/page.rs:
+// `servePlanner` answers a `tcp:` link with the SITL in this page, started on the first one, and a
+// `ws://` link with a WebSocket.
 
 const inbox = [];
 let status = "no link";
@@ -43,6 +47,8 @@ const VEHICLES = {
     rover: ["ardurover.js", "rover"],
     heli: ["arducopter-heli.js", "heli"],
 };
+
+let sitlStarting = null;
 
 async function startSitl(vehicle) {
     const [file, model] = VEHICLES[vehicle] ?? VEHICLES.copter;
@@ -122,4 +128,51 @@ export function startLink() {
             console.error(err);
         });
     }
+}
+
+// The planner's side (planner.html): what it asks for, and the bytes both ways, every 5 ms. The
+// planner's calls never wait (page.rs), so a refused hand-over is kept for the next turn.
+export function servePlanner(planner) {
+    const query = new URLSearchParams(location.search);
+    let forwarding = false;
+    // What crossed, for check/planner_check.js: bytes to the planner, and bytes it sent.
+    const crossed = { asked: [], toPlanner: 0, fromPlanner: 0 };
+    globalThis.mpLinkCrossed = () => ({ ...crossed });
+    setInterval(() => {
+        const asked = planner.requested();
+        if (asked !== undefined && asked !== null) {
+            console.log(`link: the planner asks for ${asked}`);
+            crossed.asked.push(asked);
+            if (asked === "close") {
+                forwarding = false;
+                status = "closed";
+            } else if (asked.startsWith("ws://") || asked.startsWith("wss://")) {
+                inbox.length = 0;
+                openWebSocket(asked);
+                forwarding = true;
+            } else {
+                // A tcp: (or udpcl:) link: the SITL in this page, as a SITL already running is
+                // reached on the desktop. Started once; a second connect finds it running.
+                inbox.length = 0;
+                forwarding = true;
+                if (sitlStarting === null) {
+                    sitlStarting = startSitl(query.get("vehicle") ?? "copter").catch((err) => {
+                        status = `SITL failed: ${err}`;
+                        console.error(err);
+                    });
+                }
+            }
+        }
+        while (forwarding && inbox.length > 0) {
+            if (!planner.push(inbox[0])) break;
+            crossed.toPlanner += inbox[0].length;
+            inbox.shift();
+        }
+        if (!forwarding) inbox.length = 0;
+        const out = planner.take();
+        if (forwarding && out.length > 0) {
+            crossed.fromPlanner += out.length;
+            sendTo(out);
+        }
+    }, 5);
 }

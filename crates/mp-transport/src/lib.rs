@@ -61,6 +61,9 @@ pub use replay::ReplayTransport;
 #[cfg(feature = "serial")]
 pub use serial::{SerialTransport, list_ports};
 pub use socket::{TcpTransport, UdpTransport};
+// A web page has no sockets: its network links go through the page (the browser experiment).
+#[cfg(target_family = "wasm")]
+pub mod page;
 pub use udp_client::UdpClientTransport;
 pub use url::{LinkUrl, UrlError};
 pub use websocket::WebSocketTransport;
@@ -171,11 +174,19 @@ pub fn open_url(url: &LinkUrl) -> Result<Box<dyn Transport>, OpenError> {
                 Err(OpenError::Unsupported("serial"))
             }
         }
+        #[cfg(target_family = "wasm")]
+        LinkUrl::Tcp { host, port } => Ok(Box::new(page::PageTransport::open(&format!(
+            "tcp:{host}:{port}"
+        ))?)),
+        #[cfg(not(target_family = "wasm"))]
         LinkUrl::Tcp { host, port } => Ok(Box::new(TcpTransport::connect(host, *port)?)),
         LinkUrl::TcpListen { port } => Ok(Box::new(TcpTransport::listen(*port)?)),
         LinkUrl::Udp { bind, port } => Ok(Box::new(UdpTransport::bind(bind, *port)?)),
         LinkUrl::File { path } => Ok(Box::new(ReplayTransport::open(path)?)),
         LinkUrl::UdpClient { host, port } => Ok(Box::new(UdpClientTransport::open(host, *port)?)),
+        #[cfg(target_family = "wasm")]
+        LinkUrl::WebSocket { url } => Ok(Box::new(page::PageTransport::open(url)?)),
+        #[cfg(not(target_family = "wasm"))]
         LinkUrl::WebSocket { url } => Ok(Box::new(WebSocketTransport::open(url)?)),
         // No position yet, so no GGA until one is set: what the RTK page does with "send GGA"
         // unticked.

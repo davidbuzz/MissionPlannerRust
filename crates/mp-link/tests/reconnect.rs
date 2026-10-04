@@ -24,6 +24,7 @@
 
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
+use mp_os::Lock as _;
 use std::io;
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::{Arc, Mutex};
@@ -60,7 +61,7 @@ fn reopening_after(refusals: u32, fresh: LoopbackEnd, attempts: &Arc<AtomicU32>)
             ));
         }
         fresh
-            .lock()
+            .os_lock()
             .unwrap()
             .take()
             .map(|end| Box::new(end) as Box<dyn Transport>)

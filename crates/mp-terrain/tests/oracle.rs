@@ -34,6 +34,7 @@
 
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::indexing_slicing)]
 
+use mp_os::Lock as _;
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
@@ -138,20 +139,20 @@ impl Server {
     }
 
     fn take_requests(&self) -> Vec<String> {
-        std::mem::take(&mut *self.requests.lock().unwrap())
+        std::mem::take(&mut *self.requests.os_lock().unwrap())
     }
 }
 
 impl Http for Server {
     fn get(&self, url: &str) -> Result<Vec<u8>, HttpError> {
         if let Some(path) = url.strip_prefix(BROKEN) {
-            self.requests.lock().unwrap().push(path.to_owned());
+            self.requests.os_lock().unwrap().push(path.to_owned());
             return Err(HttpError("connection reset".to_owned()));
         }
         let Some(path) = url.strip_prefix(BASE) else {
             panic!("the oracle's C# never asked for {url}");
         };
-        self.requests.lock().unwrap().push(path.to_owned());
+        self.requests.os_lock().unwrap().push(path.to_owned());
         let region = path
             .strip_prefix("/SRTM3/Region")
             .and_then(|rest| rest.strip_suffix('/'))

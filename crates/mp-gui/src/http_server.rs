@@ -57,6 +57,7 @@
 // This module is internal to the binary; `pub` here documents intent rather than exporting API.
 #![allow(unreachable_pub)]
 
+use mp_os::Lock as _;
 use std::collections::{BTreeMap, HashMap};
 use std::io::{Read, Write};
 use std::net::{IpAddr, TcpListener, TcpStream};
@@ -257,7 +258,7 @@ pub struct Shared {
 /// A lock taken whatever the other side did.
 fn lock<T>(mutex: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
     mutex
-        .lock()
+        .os_lock()
         .unwrap_or_else(std::sync::PoisonError::into_inner)
 }
 

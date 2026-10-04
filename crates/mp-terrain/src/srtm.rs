@@ -21,6 +21,7 @@
 //! `srtm.getAltitude` and everything it reads: tile names, `.hgt` tiles, the ASCII-grid fallback,
 //! and the state the download thread shares with it.
 
+use mp_os::Lock as _;
 use std::collections::HashMap;
 use std::io::Read;
 use std::path::{Path, PathBuf};
@@ -121,7 +122,7 @@ impl From<std::io::Error> for Fault {
 /// A lock that a panic elsewhere does not poison for good: every value behind these is left
 /// consistent between statements.
 pub(crate) fn lock<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
-    mutex.lock().unwrap_or_else(PoisonError::into_inner)
+    mutex.os_lock().unwrap_or_else(PoisonError::into_inner)
 }
 
 /// C#'s `(int)` of a double, as mono does it on x86-64 (`cvttsd2si`): truncation toward zero,

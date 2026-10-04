@@ -1641,6 +1641,35 @@ pub trait Fetch {
 #[derive(Debug, Clone, Copy, Default)]
 pub struct Http;
 
+/// In a web page, through the browser (mp_os::http): a status that is not a success fails, as
+/// `EnsureSuccessStatusCode` does, and `exists` is a HEAD's success.
+#[cfg(target_family = "wasm")]
+impl Fetch for Http {
+    fn get(&self, url: &str) -> Result<Vec<u8>, String> {
+        match mp_os::http("GET", url, None)? {
+            (status, bytes) if (200..300).contains(&status) => Ok(bytes),
+            (status, _) => Err(format!("{url}: http status: {status}")),
+        }
+    }
+
+    fn post(&self, url: &str, data: &str) -> Result<String, String> {
+        match mp_os::http("POST", url, Some(data))? {
+            (status, bytes) if (200..300).contains(&status) => {
+                String::from_utf8(bytes).map_err(|err| err.to_string())
+            }
+            (status, _) => Err(format!("{url}: http status: {status}")),
+        }
+    }
+
+    fn exists(&self, url: &str) -> Result<bool, String> {
+        if !is_absolute_url(url) {
+            return Ok(false);
+        }
+        Ok((200..300).contains(&mp_os::http("HEAD", url, None)?.0))
+    }
+}
+
+#[cfg(not(target_family = "wasm"))]
 impl Fetch for Http {
     fn get(&self, url: &str) -> Result<Vec<u8>, String> {
         let mut response = ureq::get(url)

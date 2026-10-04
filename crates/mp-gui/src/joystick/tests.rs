@@ -23,6 +23,7 @@
 
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::indexing_slicing)]
 
+use mp_os::Lock as _;
 use std::sync::mpsc::{self, Receiver, Sender};
 use web_time::{Duration, Instant};
 
@@ -62,7 +63,7 @@ struct Feeds(Arc<Mutex<Vec<Sender<Vec<u8>>>>>);
 impl Feeds {
     /// Bytes to every opening still open.
     fn send(&self, bytes: &[u8]) {
-        let feeds = self.0.lock().unwrap();
+        let feeds = self.0.os_lock().unwrap();
         for feed in feeds.iter() {
             let _ = feed.send(bytes.to_vec());
         }
@@ -70,11 +71,11 @@ impl Feeds {
 
     /// The device unplugged: every stream ends.
     fn unplug(&self) {
-        self.0.lock().unwrap().clear();
+        self.0.os_lock().unwrap().clear();
     }
 
     fn openings(&self) -> usize {
-        self.0.lock().unwrap().len()
+        self.0.os_lock().unwrap().len()
     }
 }
 
@@ -115,7 +116,7 @@ impl DeviceSource for TestSource {
 
     fn open(&self, _device: &Device) -> std::io::Result<Box<dyn Read + Send>> {
         let (feed, chunks) = mpsc::channel();
-        self.0.0.lock().unwrap().push(feed);
+        self.0.0.os_lock().unwrap().push(feed);
         Ok(Box::new(Stream {
             chunks,
             leftover: Vec::new(),

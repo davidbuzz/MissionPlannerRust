@@ -94,6 +94,7 @@
 use crate::event::{self, LEN as EVENT_LEN};
 use crate::mapping::{ButtonEvent, ButtonTracker, ManualControl, Runtime};
 use crate::{Channels, Failsafe, LatencyHistogram, Mapping, Poll, Reading};
+use mp_os::Lock as _;
 use std::io::{ErrorKind, Read};
 use std::sync::{Arc, Condvar, Mutex, MutexGuard, PoisonError};
 use wasm_thread::{self as thread, JoinHandle};
@@ -231,7 +232,7 @@ impl Shared {
     /// lock is a single field assignment - and refusing to touch it afterwards would mean refusing
     /// to send the release that the panic makes necessary.
     fn lock(&self) -> MutexGuard<'_, State> {
-        self.state.lock().unwrap_or_else(PoisonError::into_inner)
+        self.state.os_lock().unwrap_or_else(PoisonError::into_inner)
     }
 }
 

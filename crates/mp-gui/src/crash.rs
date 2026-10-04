@@ -513,6 +513,7 @@ pub fn record_facts(crash: &Crash) {
 
 #[cfg(test)]
 mod tests {
+    use mp_os::Lock as _;
     use super::*;
     use std::sync::Mutex;
 
@@ -531,7 +532,7 @@ mod tests {
                 return Err("no route".to_owned());
             }
             self.posted
-                .lock()
+                .os_lock()
                 .expect("the sink")
                 .push((url.to_owned(), data.to_owned()));
             Ok("ok".to_owned())
@@ -655,7 +656,7 @@ mod tests {
         assert!(crash.message_done(Some("https://x/mail.php")).is_none());
         assert!(wait(&mut crash).is_none());
         assert_eq!(crash.posted, 1);
-        let posted = sink.posted.lock().expect("the sink");
+        let posted = sink.posted.os_lock().expect("the sink");
         assert_eq!(posted.len(), 1);
         assert_eq!(posted[0].0, "https://x/mail.php");
         assert!(posted[0].1.contains("message my note\n"), "{}", posted[0].1);

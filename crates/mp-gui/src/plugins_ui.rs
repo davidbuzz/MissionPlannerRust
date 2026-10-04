@@ -54,6 +54,7 @@ mod builtin {
     include!(concat!(env!("OUT_DIR"), "/builtin_plugins.rs"));
 }
 
+use mp_os::Lock as _;
 use std::collections::{HashMap, VecDeque};
 use std::path::{Component, Path, PathBuf};
 use std::sync::{Arc, Mutex, OnceLock, PoisonError};
@@ -141,7 +142,7 @@ fn static_id(id: String) -> &'static str {
     static IDS: OnceLock<Mutex<HashMap<String, &'static str>>> = OnceLock::new();
     let mut ids = IDS
         .get_or_init(Mutex::default)
-        .lock()
+        .os_lock()
         .unwrap_or_else(PoisonError::into_inner);
     if let Some(id) = ids.get(&id) {
         return id;

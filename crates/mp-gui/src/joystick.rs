@@ -70,6 +70,7 @@ pub mod forms;
 
 pub use draw::{overlay, page, page_size};
 
+use mp_os::Lock as _;
 use std::io::Read;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -292,7 +293,7 @@ impl Wire {
     fn sink(&self) -> impl FnMut(&mp_input::Frame) -> bool + Send + 'static {
         let wire = self.clone();
         move |frame| {
-            let guard = wire.target.lock().unwrap_or_else(PoisonError::into_inner);
+            let guard = wire.target.os_lock().unwrap_or_else(PoisonError::into_inner);
             let Some((sender, vehicle)) = guard.as_ref() else {
                 // No vehicle to send to. Not delivered, and said so, rather than swallowed.
                 return false;
@@ -763,7 +764,7 @@ impl Sticks {
     /// Keeps the reader pointed at the vehicle, the joystick holding the vehicle's ranges, notices
     /// a device lost, and runs the page's timer and a detection.
     pub fn tick(&mut self, target: Target, view: &TelemetryView, banner: Option<&str>) {
-        *self.wire.target.lock().unwrap_or_else(PoisonError::into_inner) = target;
+        *self.wire.target.os_lock().unwrap_or_else(PoisonError::into_inner) = target;
         // `cs.firmware`, which starts as ArduCopter2 before any vehicle is heard.
         self.firmware = view.state.as_ref().map_or(Firmware::ArduCopter2, |state| {
             firmware_of(state.autopilot, state.vehicle_type, banner)

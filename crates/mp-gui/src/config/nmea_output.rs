@@ -60,6 +60,7 @@
 // This module is internal to the binary; `pub` here documents intent rather than exporting API.
 #![allow(unreachable_pub)]
 
+use mp_os::Lock as _;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 use web_time::{Duration, Instant};
@@ -282,7 +283,7 @@ fn main_loop(mut stream: Box<dyn Transport>, shared: &Shared) {
             continue;
         }
         let started = Instant::now();
-        let cs = shared.snapshot.lock().map(|s| *s).unwrap_or_default();
+        let cs = shared.snapshot.os_lock().map(|s| *s).unwrap_or_default();
         let lines = sentences(
             &cs,
             chrono::Utc::now(),
@@ -296,11 +297,11 @@ fn main_loop(mut stream: Box<dyn Transport>, shared: &Shared) {
                 break;
             }
             shared.written.fetch_add(1, Ordering::Relaxed);
-            if let Ok(mut last) = shared.last.lock() {
+            if let Ok(mut last) = shared.last.os_lock() {
                 *last = line;
             }
         }
-        let rate = shared.rate.lock().map(|r| *r).unwrap_or(RATE);
+        let rate = shared.rate.os_lock().map(|r| *r).unwrap_or(RATE);
         let period = Duration::from_secs_f64((1000.0 / rate.max(0.001)).abs() / 1000.0);
         let elapsed = started.elapsed();
         let sleep_for = period.saturating_sub(elapsed).min(SLEEP_MOST);
@@ -385,7 +386,7 @@ impl NmeaOutput {
     pub fn last(&self) -> String {
         self.shared
             .as_ref()
-            .and_then(|shared| shared.last.lock().ok().map(|l| l.clone()))
+            .and_then(|shared| shared.last.os_lock().ok().map(|l| l.clone()))
             .unwrap_or_default()
     }
 
@@ -467,7 +468,7 @@ impl NmeaOutput {
                     Ok(rate) => {
                         self.rate = Some(f64::from(rate));
                         if let Some(shared) = self.shared.as_ref()
-                            && let Ok(mut held) = shared.rate.lock()
+                            && let Ok(mut held) = shared.rate.os_lock()
                         {
                             *held = f64::from(rate);
                         }
@@ -562,7 +563,7 @@ impl NmeaOutput {
     pub fn tick(&mut self, state: Option<&VehicleState>) -> Option<String> {
         if let Some(shared) = self.shared.as_ref()
             && let Some(state) = state
-            && let Ok(mut held) = shared.snapshot.lock()
+            && let Ok(mut held) = shared.snapshot.os_lock()
         {
             *held = Snapshot::of(state);
         }

@@ -52,6 +52,7 @@
 // This module is internal to the binary; `pub` here documents intent rather than exporting API.
 #![allow(unreachable_pub)]
 
+use mp_os::Lock as _;
 use gpui::{AnyElement, Context, Window, div, prelude::*, px, rgb};
 use mp_units::{Metres, MetresPerSecond};
 use mp_vehicle::VehicleState;
@@ -192,14 +193,14 @@ static FENCE: std::sync::Mutex<Vec<mp_vehicle::FenceItem>> = std::sync::Mutex::n
 /// once a frame.
 pub fn set_fence(fence: Vec<mp_vehicle::FenceItem>) {
     *FENCE
-        .lock()
+        .os_lock()
         .unwrap_or_else(std::sync::PoisonError::into_inner) = fence;
 }
 
 /// `GeoFenceDist` from the fence last handed over.
 fn geo_fence_dist(state: &VehicleState) -> f64 {
     let fence = FENCE
-        .lock()
+        .os_lock()
         .unwrap_or_else(std::sync::PoisonError::into_inner);
     f64::from(state.geo_fence_dist(&fence))
 }

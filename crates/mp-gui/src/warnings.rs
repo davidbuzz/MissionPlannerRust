@@ -943,6 +943,7 @@ impl crate::MissionPlanner {
 
 #[cfg(test)]
 mod tests {
+    use mp_os::Lock as _;
     use super::*;
     use crate::config_coverage::source::csharp;
     use std::collections::HashMap;
@@ -1371,7 +1372,7 @@ mod tests {
     fn the_file_is_loaded_at_start_and_saved_by_save() {
         static LOCK: Mutex<()> = Mutex::new(());
         let _guard = LOCK
-            .lock()
+            .os_lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner);
         let dir = mp_os::temp_dir().join(format!("mp-warnings-{}", mp_os::process_id()));
         let _ = std::fs::remove_dir_all(&dir);

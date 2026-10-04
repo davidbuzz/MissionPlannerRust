@@ -1376,6 +1376,7 @@ pub fn overlay(
 
 #[cfg(test)]
 mod tests {
+    use mp_os::Lock as _;
     use super::*;
     use crate::config_coverage::source::{csharp, resx};
 
@@ -1538,7 +1539,7 @@ mod tests {
     #[test]
     fn add_asks_scores_stores_and_saves() {
         let _store = STORE
-            .lock()
+            .os_lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner);
         let dir = scratch("add");
         let mut window = holder(&dir);
@@ -1643,7 +1644,7 @@ mod tests {
         use mp_transport::testing::Loopback;
 
         let _store = STORE
-            .lock()
+            .os_lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner);
         let dir = scratch("use");
         let mut window = holder(&dir);

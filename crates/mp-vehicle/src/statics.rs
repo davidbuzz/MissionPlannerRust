@@ -28,6 +28,7 @@
 //! in the C# something outside `CurrentState` writes each of them; the setter's documentation
 //! says what.
 
+use mp_os::Lock as _;
 use std::sync::atomic::{AtomicI32, Ordering};
 use std::sync::{Mutex, MutexGuard, PoisonError};
 
@@ -64,7 +65,7 @@ pub const CUSTOM_FIELDS: usize = 20;
 /// A lock that a panic elsewhere cannot poison: every value behind one is whole after any
 /// single write.
 fn lock<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
-    mutex.lock().unwrap_or_else(PoisonError::into_inner)
+    mutex.os_lock().unwrap_or_else(PoisonError::into_inner)
 }
 
 /// The stream rates Mission Planner asks a vehicle for, in hertz (`rateattitude`,

@@ -4730,6 +4730,12 @@ dependencies = [
 [[package]]
 name = "mp-os"
 version = "0.0.0"
+dependencies = [
+ "js-sys",
+ "wasm-bindgen",
+ "wasm_thread",
+ "web-sys",
+]
 
 [[package]]
 name = "mp-params"
@@ -4748,6 +4754,7 @@ name = "mp-plugin-host"
 version = "0.0.0"
 dependencies = [
  "anyhow",
+ "mp-os",
  "wasm_thread",
  "wasmtime",
  "web-time",
@@ -4767,6 +4774,7 @@ name = "mp-script"
 version = "0.0.0"
 dependencies = [
  "getrandom 0.3.4",
+ "mp-os",
  "rustpython",
  "rustpython-vm",
  "thiserror 2.0.20",
@@ -4832,6 +4840,7 @@ dependencies = [
  "mp-os",
  "serialport",
  "thiserror 2.0.20",
+ "wasm-bindgen",
  "wasm_thread",
  "web-time",
  "windows-sys 0.52.0",
@@ -4867,6 +4876,7 @@ dependencies = [
  "criterion",
  "mp-mavlink",
  "mp-mavlink-dialects",
+ "mp-os",
  "mp-transport",
  "mp-units",
  "wasm_thread",

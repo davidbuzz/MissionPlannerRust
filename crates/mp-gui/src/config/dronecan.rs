@@ -116,6 +116,7 @@
 // This module is internal to the binary; `pub` here documents intent rather than exporting API.
 #![allow(unreachable_pub)]
 
+use mp_os::Lock as _;
 use std::collections::{BTreeMap, VecDeque};
 use std::io::{Read as _, Write as _};
 use std::net::{TcpListener, TcpStream, UdpSocket};
@@ -2897,13 +2898,13 @@ impl DroneCan {
                             return;
                         }
                         if let MavMessage::CanFrame(frame) = packet.message
-                            && let Ok(mut heard) = heard.lock()
+                            && let Ok(mut heard) = heard.os_lock()
                         {
                             heard.push_back(frame);
                         }
                     });
                 }
-                if let Ok(mut heard) = bus.heard.lock() {
+                if let Ok(mut heard) = bus.heard.os_lock() {
                     for frame in heard.drain(..) {
                         bus.received += 1;
                         lines.push(mavlink::line_of(&frame));

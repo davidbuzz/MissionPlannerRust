@@ -38,6 +38,7 @@
 // This module is internal to the binary; `pub` here documents intent rather than exporting API.
 #![allow(unreachable_pub)]
 
+use mp_os::Lock as _;
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
@@ -162,7 +163,7 @@ impl Injection {
                             let _ = cache.write(PROVIDER, tile, &jpeg);
                         }
                         Err(why) => {
-                            if let Ok(mut failure) = worker.failure.lock() {
+                            if let Ok(mut failure) = worker.failure.os_lock() {
                                 *failure = Some(format!("{}: {why}", file.display()));
                             }
                             break;
@@ -172,7 +173,7 @@ impl Injection {
                     if worker.done.load(Ordering::Acquire) < maximum {
                         worker.done.fetch_add(1, Ordering::AcqRel);
                     }
-                    if let Ok(mut counts) = worker.counts.lock() {
+                    if let Ok(mut counts) = worker.counts.os_lock() {
                         *counts.entry(tile.z).or_insert(0) += 1;
                     }
                 }
@@ -208,7 +209,7 @@ impl Injection {
     pub fn failure(&self) -> Option<String> {
         self.shared
             .failure
-            .lock()
+            .os_lock()
             .ok()
             .and_then(|held| held.clone())
     }
@@ -221,7 +222,7 @@ impl Injection {
         let counts = self
             .shared
             .counts
-            .lock()
+            .os_lock()
             .map(|held| held.clone())
             .unwrap_or_default();
         let mut results = String::new();

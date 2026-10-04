@@ -27,6 +27,7 @@
 //! startup (`GMap.NET.MapProviders/GMapProvider.cs:24-36`, `Program.cs:328-351`). [`CSHARP_LIST`]
 //! is that list by name; [`SOURCES`] is the part of it ported so far, in the same order.
 
+use mp_os::Lock as _;
 use mp_units::TileId;
 
 use crate::gmap;
@@ -177,7 +178,7 @@ impl TileSource {
         if !self.attribution.contains("{0}") {
             return self.attribution;
         }
-        let Ok(mut formatted) = FORMATTED.lock() else {
+        let Ok(mut formatted) = FORMATTED.os_lock() else {
             return self.attribution;
         };
         formatted.entry(self.attribution).or_insert_with(|| {

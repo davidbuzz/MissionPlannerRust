@@ -34,6 +34,7 @@
 
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::indexing_slicing)]
 
+use mp_os::Lock as _;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 
@@ -317,7 +318,7 @@ impl Simulated {
     }
 
     fn note(&self, line: String) {
-        self.log.lock().unwrap().push(line);
+        self.log.os_lock().unwrap().push(line);
     }
 }
 
@@ -675,7 +676,7 @@ fn every_script_runs_under_the_engine_with_the_recorded_verdict() {
         };
         println!("{name}: {verdict}");
         verdicts.push((name.clone(), verdict));
-        logs.insert(name, log.lock().unwrap().clone());
+        logs.insert(name, log.os_lock().unwrap().clone());
     }
     assert_eq!(verdicts.len(), SHIPPED_SCRIPTS);
     let actual: Vec<(&str, &str)> = verdicts

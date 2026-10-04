@@ -27,6 +27,7 @@
 // The mock indexes into buffers it has just length-checked; `expect` in a test is the report.
 #![allow(clippy::indexing_slicing, clippy::expect_used)]
 
+use mp_os::Lock as _;
 use std::collections::BTreeMap;
 use std::io::{self, Read, Write};
 use std::sync::{Arc, Mutex};
@@ -63,17 +64,17 @@ impl Read for BenchPort {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
         match self {
             Self::Flaky(mock, writes) => {
-                if *writes.lock().expect("count") > IDENTIFY_WRITES {
+                if *writes.os_lock().expect("count") > IDENTIFY_WRITES {
                     return Err(io::Error::other("the cable came out"));
                 }
-                let mut mock = mock.lock().expect("the bench");
+                let mut mock = mock.os_lock().expect("the bench");
                 if mock.outgoing.is_empty() {
                     return Err(io::Error::new(io::ErrorKind::TimedOut, "nothing to read"));
                 }
                 mock.read(buf)
             }
             Self::Board(mock) => {
-                let mut mock = mock.lock().expect("the bench");
+                let mut mock = mock.os_lock().expect("the bench");
                 if mock.outgoing.is_empty() {
                     return Err(io::Error::new(io::ErrorKind::TimedOut, "nothing to read"));
                 }
@@ -88,14 +89,14 @@ impl Write for BenchPort {
     fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
         match self {
             Self::Flaky(mock, writes) => {
-                let mut count = writes.lock().expect("count");
+                let mut count = writes.os_lock().expect("count");
                 *count += 1;
                 if *count > IDENTIFY_WRITES {
                     return Err(io::Error::other("the cable came out"));
                 }
-                mock.lock().expect("the bench").write(buf)
+                mock.os_lock().expect("the bench").write(buf)
             }
-            Self::Board(mock) => mock.lock().expect("the bench").write(buf),
+            Self::Board(mock) => mock.os_lock().expect("the bench").write(buf),
             Self::Silent => Ok(buf.len()),
         }
     }
@@ -110,14 +111,14 @@ impl ProbePort for BenchPort {
     }
     fn discard_in_buffer(&mut self) -> io::Result<()> {
         if let Self::Board(mock) | Self::Flaky(mock, _) = self {
-            mock.lock().expect("the bench").outgoing.clear();
+            mock.os_lock().expect("the bench").outgoing.clear();
         }
         Ok(())
     }
     fn bytes_to_read(&mut self) -> io::Result<usize> {
         Ok(match self {
             Self::Board(mock) | Self::Flaky(mock, _) => {
-                mock.lock().expect("the bench").outgoing.len()
+                mock.os_lock().expect("the bench").outgoing.len()
             }
             Self::Silent => 0,
         })
@@ -327,7 +328,7 @@ fn a_board_on_the_second_port_is_found_after_the_reboot_and_flashed() {
     assert_eq!(flashed.board_id, 140);
     // The board holds the image now.
     let mock = bench.board_at("/dev/ttyACM0");
-    let mock = mock.lock().expect("bench");
+    let mock = mock.os_lock().expect("bench");
     assert!(mock.erased);
     assert_eq!(&mock.flash[..image.len()], &image[..]);
 }
@@ -357,7 +358,7 @@ fn a_board_already_holding_the_firmware_asks_and_no_is_no_need_to_upload() {
     );
     assert!(reached.flashed.is_none());
     let mock = bench.board_at("/dev/ttyACM0");
-    assert!(!mock.lock().expect("bench").erased, "nothing was erased");
+    assert!(!mock.os_lock().expect("bench").erased, "nothing was erased");
     // Yes uploads anyway.
     let mut mock = MockBootloader::new(140, 2_080_768);
     mock.crc_override = Some(fw.crc(2_080_768));
@@ -458,8 +459,8 @@ fn a_device_arriving_finds_the_bootloader_with_its_chip_on_every_port_at_once() 
     let started = Instant::now();
     flow::probe_arrival(
         &names,
-        |port, baud| bench.lock().expect("the bench").open(port, baud),
-        |board| found.lock().expect("found").push(board),
+        |port, baud| bench.os_lock().expect("the bench").open(port, baud),
+        |board| found.os_lock().expect("found").push(board),
     );
     // Twenty milliseconds for each port to appear - at once, not one after another.
     assert!(started.elapsed() >= flow::ARRIVAL_SETTLE);
@@ -492,7 +493,7 @@ fn a_device_arriving_finds_the_bootloader_with_its_chip_on_every_port_at_once() 
         "every port tried"
     );
     let mock = bench.board_at("/dev/ttyACM0");
-    let mock = mock.lock().expect("the board");
+    let mock = mock.os_lock().expect("the board");
     assert!(
         mock.received.is_empty(),
         "whole commands: {:?}",
@@ -522,8 +523,8 @@ fn a_bootloader_without_the_chip_is_found_without_it() {
     let found = Mutex::new(Vec::new());
     flow::probe_arrival(
         &names,
-        |port, baud| bench.lock().expect("the bench").open(port, baud),
-        |board| found.lock().expect("found").push(board),
+        |port, baud| bench.os_lock().expect("the bench").open(port, baud),
+        |board| found.os_lock().expect("found").push(board),
     );
     let mut found = found.into_inner().expect("found");
     found.sort_by(|a, b| a.port.cmp(&b.port));
@@ -543,7 +544,7 @@ fn a_bootloader_without_the_chip_is_found_without_it() {
     let bench = bench.into_inner().expect("the bench");
     for port in ["/dev/ttyACM0", "/dev/ttyACM1"] {
         let mock = bench.board_at(port);
-        let mock = mock.lock().expect("the board");
+        let mock = mock.os_lock().expect("the board");
         assert!(mock.received.is_empty(), "{port}: {:?}", mock.received);
         assert!(mock.outgoing.is_empty(), "{port}: every answer read");
     }

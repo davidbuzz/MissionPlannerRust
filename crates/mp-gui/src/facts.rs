@@ -38,6 +38,7 @@
 // This module is internal to the binary; `pub` here documents intent rather than exporting API.
 #![allow(unreachable_pub)]
 
+use mp_os::Lock as _;
 use std::collections::BTreeMap;
 use std::path::PathBuf;
 use std::sync::{Mutex, OnceLock};
@@ -68,7 +69,7 @@ pub fn record(key: impl Into<String>, value: impl std::fmt::Display) {
     if !enabled() {
         return;
     }
-    if let Ok(mut facts) = FACTS.get_or_init(|| Mutex::new(BTreeMap::new())).lock() {
+    if let Ok(mut facts) = FACTS.get_or_init(|| Mutex::new(BTreeMap::new())).os_lock() {
         facts.insert(key.into(), value.to_string());
     }
 }
@@ -85,7 +86,7 @@ pub fn publish() {
     let Some(facts) = FACTS.get() else {
         return;
     };
-    let Ok(facts) = facts.lock() else {
+    let Ok(facts) = facts.os_lock() else {
         return;
     };
     let mut text = String::new();

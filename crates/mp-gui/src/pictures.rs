@@ -53,6 +53,7 @@
 // This module is internal to the binary; `pub` here documents intent rather than exporting API.
 #![allow(unreachable_pub)]
 
+use mp_os::Lock as _;
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex, OnceLock};
 
@@ -416,7 +417,7 @@ pub fn bytes(resource: &str) -> Option<&'static [u8]> {
 fn decoded(resource: &'static str) -> Option<Arc<RgbaImage>> {
     type Decoded = HashMap<&'static str, Option<Arc<RgbaImage>>>;
     static DECODED: OnceLock<Mutex<Decoded>> = OnceLock::new();
-    let mut cache = DECODED.get_or_init(Mutex::default).lock().ok()?;
+    let mut cache = DECODED.get_or_init(Mutex::default).os_lock().ok()?;
     cache
         .entry(resource)
         .or_insert_with(|| {
@@ -588,7 +589,7 @@ pub fn rotated(
     let turn = (degrees.rem_euclid(360.0).round() as i32) % 360;
     let (device_width, device_height) = (device(width * scale), device(height * scale));
     let source = decoded(resource)?;
-    let mut cache = ROTATED.get_or_init(Mutex::default).lock().ok()?;
+    let mut cache = ROTATED.get_or_init(Mutex::default).os_lock().ok()?;
     let (render, side) = cache
         .entry((resource, device_width, device_height, turn))
         .or_insert_with(|| {
@@ -615,7 +616,7 @@ fn sized(resource: &'static str, width: u32, height: u32) -> Option<Arc<RenderIm
     type Key = (&'static str, u32, u32);
     static SIZED: OnceLock<Mutex<HashMap<Key, Arc<RenderImage>>>> = OnceLock::new();
     let source = decoded(resource)?;
-    let mut cache = SIZED.get_or_init(Mutex::default).lock().ok()?;
+    let mut cache = SIZED.get_or_init(Mutex::default).os_lock().ok()?;
     Some(Arc::clone(
         cache
             .entry((resource, width, height))
