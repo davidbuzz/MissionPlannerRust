@@ -172,7 +172,11 @@ Done on 2026-10-03 for the debug profile: `planner.exe` and `headless-planner.ex
 own DLLs and nothing else (no MinGW runtime), the Python engine being RustPython 0.5.0 from the
 owner's fork with two fixes for this target (`Cargo.toml`'s `[patch.crates-io]` says which). They
 have not yet been run on Windows; the Windows 10 VM builds its own, natively, as before. CI's
-cross-compile job builds and links both on every push.
+cross-compile job builds and links both on every push. A *release* build cannot be cross-compiled:
+gpui's Windows backend compiles its shaders with Microsoft's `fxc.exe` in release builds, and its
+build script does that only when it runs on Windows, so from Linux the release compile stops on
+the missing `shaders_bytes.rs` (tried 2026-10-04). Windows releases are built on Windows - the VM
+(`tools/win10/release-build.ps1`) or the release workflow's Windows job.
 
 A release is made by pushing a tag of "v" and a number (`git tag v0_1 && git push origin v0_1`):
 `.github/workflows/release.yml` builds the planner on Linux (glibc 2.35), Windows and macOS (one
