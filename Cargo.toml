@@ -9,7 +9,7 @@ members = ["crates/*", "crates/mp-plugin-host/plugins", "xtask", "experiments/wa
 exclude = ["fuzz"]
 
 [workspace.package]
-version = "0.1.0"
+version = "0.0.0"
 edition = "2024"
 rust-version = "1.95"
 license = "GPL-3.0-only"

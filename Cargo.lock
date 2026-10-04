@@ -2282,7 +2282,7 @@ dependencies = [
 
 [[package]]
 name = "fencedist"
-version = "0.1.0"
+version = "0.0.0"
 
 [[package]]
 name = "filedescriptor"
@@ -4433,7 +4433,7 @@ dependencies = [
 
 [[package]]
 name = "mp-calibration"
-version = "0.1.0"
+version = "0.0.0"
 dependencies = [
  "levenberg-marquardt",
  "mp-mavlink-dialects",
@@ -4444,7 +4444,7 @@ dependencies = [
 
 [[package]]
 name = "mp-chart"
-version = "0.1.0"
+version = "0.0.0"
 dependencies = [
  "mp-log",
  "proptest",
@@ -4452,7 +4452,7 @@ dependencies = [
 
 [[package]]
 name = "mp-cli"
-version = "0.1.0"
+version = "0.0.0"
 dependencies = [
  "mp-calibration",
  "mp-firmware",
@@ -4474,7 +4474,7 @@ dependencies = [
 
 [[package]]
 name = "mp-dronecan"
-version = "0.1.0"
+version = "0.0.0"
 dependencies = [
  "mp-mavlink-dialects",
  "nix 0.30.1",
@@ -4483,7 +4483,7 @@ dependencies = [
 
 [[package]]
 name = "mp-firmware"
-version = "0.1.0"
+version = "0.0.0"
 dependencies = [
  "base64 0.22.1",
  "flate2",
@@ -4500,7 +4500,7 @@ dependencies = [
 
 [[package]]
 name = "mp-ftp"
-version = "0.1.0"
+version = "0.0.0"
 dependencies = [
  "mp-vehicle",
  "thiserror 2.0.20",
@@ -4508,7 +4508,7 @@ dependencies = [
 
 [[package]]
 name = "mp-fuzz-checks"
-version = "0.1.0"
+version = "0.0.0"
 dependencies = [
  "mp-dronecan",
  "mp-firmware",
@@ -4520,7 +4520,7 @@ dependencies = [
 
 [[package]]
 name = "mp-georef"
-version = "0.1.0"
+version = "0.0.0"
 dependencies = [
  "mp-log",
  "mp-mavlink",
@@ -4531,7 +4531,7 @@ dependencies = [
 
 [[package]]
 name = "mp-gui"
-version = "0.1.0"
+version = "0.0.0"
 dependencies = [
  "aes",
  "base64 0.22.1",
@@ -4580,14 +4580,14 @@ dependencies = [
 
 [[package]]
 name = "mp-input"
-version = "0.1.0"
+version = "0.0.0"
 dependencies = [
  "roxmltree 0.20.0",
 ]
 
 [[package]]
 name = "mp-kml"
-version = "0.1.0"
+version = "0.0.0"
 dependencies = [
  "chrono",
  "mp-log",
@@ -4601,7 +4601,7 @@ dependencies = [
 
 [[package]]
 name = "mp-link"
-version = "0.1.0"
+version = "0.0.0"
 dependencies = [
  "mp-calibration",
  "mp-ftp",
@@ -4617,7 +4617,7 @@ dependencies = [
 
 [[package]]
 name = "mp-log"
-version = "0.1.0"
+version = "0.0.0"
 dependencies = [
  "criterion",
  "flate2",
@@ -4632,7 +4632,7 @@ dependencies = [
 
 [[package]]
 name = "mp-mavlink"
-version = "0.1.0"
+version = "0.0.0"
 dependencies = [
  "criterion",
  "mp-mavlink-dialects",
@@ -4643,14 +4643,14 @@ dependencies = [
 
 [[package]]
 name = "mp-mavlink-dialects"
-version = "0.1.0"
+version = "0.0.0"
 dependencies = [
  "mp-mavlink",
 ]
 
 [[package]]
 name = "mp-mission"
-version = "0.1.0"
+version = "0.0.0"
 dependencies = [
  "mp-units",
  "thiserror 2.0.20",
@@ -4658,7 +4658,7 @@ dependencies = [
 
 [[package]]
 name = "mp-params"
-version = "0.1.0"
+version = "0.0.0"
 dependencies = [
  "flate2",
  "mp-settings",
@@ -4669,7 +4669,7 @@ dependencies = [
 
 [[package]]
 name = "mp-plugin-host"
-version = "0.1.0"
+version = "0.0.0"
 dependencies = [
  "anyhow",
  "wasmtime",
@@ -4678,7 +4678,7 @@ dependencies = [
 
 [[package]]
 name = "mp-plugins"
-version = "0.1.0"
+version = "0.0.0"
 dependencies = [
  "mp-mavlink-dialects",
  "wit-bindgen 0.60.0",
@@ -4686,7 +4686,7 @@ dependencies = [
 
 [[package]]
 name = "mp-script"
-version = "0.1.0"
+version = "0.0.0"
 dependencies = [
  "rustpython",
  "rustpython-vm",
@@ -4695,7 +4695,7 @@ dependencies = [
 
 [[package]]
 name = "mp-settings"
-version = "0.1.0"
+version = "0.0.0"
 dependencies = [
  "roxmltree 0.20.0",
  "thiserror 2.0.20",
@@ -4703,11 +4703,11 @@ dependencies = [
 
 [[package]]
 name = "mp-sikradio"
-version = "0.1.0"
+version = "0.0.0"
 
 [[package]]
 name = "mp-terrain"
-version = "0.1.0"
+version = "0.0.0"
 dependencies = [
  "mp-log",
  "mp-settings",
@@ -4718,7 +4718,7 @@ dependencies = [
 
 [[package]]
 name = "mp-tiles"
-version = "0.1.0"
+version = "0.0.0"
 dependencies = [
  "chrono",
  "image",
@@ -4732,7 +4732,7 @@ dependencies = [
 
 [[package]]
 name = "mp-transport"
-version = "0.1.0"
+version = "0.0.0"
 dependencies = [
  "criterion",
  "mp-mavlink",
@@ -4744,7 +4744,7 @@ dependencies = [
 
 [[package]]
 name = "mp-units"
-version = "0.1.0"
+version = "0.0.0"
 dependencies = [
  "criterion",
  "proptest",
@@ -4753,7 +4753,7 @@ dependencies = [
 
 [[package]]
 name = "mp-update"
-version = "0.1.0"
+version = "0.0.0"
 dependencies = [
  "mp-firmware",
  "mp-log",
@@ -4762,7 +4762,7 @@ dependencies = [
 
 [[package]]
 name = "mp-vehicle"
-version = "0.1.0"
+version = "0.0.0"
 dependencies = [
  "arc-swap",
  "criterion",
@@ -4774,7 +4774,7 @@ dependencies = [
 
 [[package]]
 name = "mp-video"
-version = "0.1.0"
+version = "0.0.0"
 dependencies = [
  "image",
  "thiserror 2.0.20",
@@ -8973,7 +8973,7 @@ dependencies = [
 
 [[package]]
 name = "wasm-plugin-host"
-version = "0.1.0"
+version = "0.0.0"
 dependencies = [
  "anyhow",
  "wasmtime",
@@ -10306,7 +10306,7 @@ checksum = "ec7a2a501ed189703dba8b08142f057e887dfc4b2cc4db2d343ac6376ba3e0b9"
 
 [[package]]
 name = "xtask"
-version = "0.1.0"
+version = "0.0.0"
 dependencies = [
  "anyhow",
  "fluent-bundle",
