@@ -62,15 +62,16 @@ fn the_report_is_the_csharps_text() {
     let golden =
         std::fs::read_to_string(testdata("dataflash/golden/loganalysis/example_output.txt"))
             .unwrap();
-    // The header's lines end with Environment.NewLine, the tests' with "\r\n"; the golden was
-    // written where the newline is "\n".
-    let ours = report(&example());
-    let ours = if cfg!(windows) {
-        ours.replace("\r\n", "\n").replace("\n", "\r\n")
+    // The ten header lines end with Environment.NewLine, which was "\n" where the golden was
+    // written and is "\r\n" on Windows. The tests' lines end "\r\n" everywhere, and the "\n" inside
+    // the Compass test's message comes from the XML, the same everywhere: only the header changes.
+    let expected = if cfg!(windows) {
+        let header_end = golden.match_indices('\n').nth(9).map(|(at, _)| at + 1).unwrap();
+        golden[..header_end].replace('\n', "\r\n") + &golden[header_end..]
     } else {
-        ours
+        golden
     };
-    assert_eq!(ours, golden);
+    assert_eq!(report(&example()), expected);
 }
 
 /// Vibration is the last test in the file, and `Results` never adds the last one.

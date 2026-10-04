@@ -44,7 +44,9 @@ jobs:
         continue-on-error: true
 
       - run: cargo clippy --workspace --all-targets
-      - run: cargo test --workspace
+      # --no-fail-fast: every failing test binary in one run - without it the run stops at the
+      # first, and a platform's failures came to light one push at a time (2026-10-04).
+      - run: cargo test --workspace --no-fail-fast
             # The porting ledger: one row per C# file, every row well-formed. MP_SRC names no C# tree
       # here, so this validates the CSV on its own and says so; a row whose state
       # claims evidence that does not exist still fails.
