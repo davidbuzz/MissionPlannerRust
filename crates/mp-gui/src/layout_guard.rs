@@ -67,6 +67,16 @@ pub const IMPORTANT: &[(Screen, &[&str])] = &[
         &["main-port", "main-connect", "config-body"],
     ),
     (Screen::Sitl, &["main-port", "main-connect"]),
+    // The temp form's table: every row shown, as the form shows them (the owner's bug of
+    // 2026-10-04, rows run off the bottom of a smaller window).
+    (
+        Screen::Experimental,
+        &["main-port", "main-connect", "experimental-table"],
+    ),
+    (
+        Screen::Plugins,
+        &["main-port", "main-connect", "plugin-manager"],
+    ),
     (Screen::Params, &["main-port", "main-connect"]),
 ];
 

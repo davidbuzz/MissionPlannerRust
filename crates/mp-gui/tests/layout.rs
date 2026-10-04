@@ -257,20 +257,36 @@ fn the_flight_screens_left_column_fits_without_scrolling() {
 #[ignore = "opens a window; needs a display"]
 fn no_important_control_is_hidden_on_any_screen() {
     let mut hidden = Vec::new();
-    for screen in ["fly", "plan", "setup", "config", "simulation", "params"] {
-        let measured = measure(1600, 1200, screen);
-        let important: Vec<_> = measured.iter().filter(|(_, rect)| rect.important).collect();
-        assert!(
-            important.len() >= 2,
-            "{screen}: only {} important controls measured; the connect box alone is two",
-            important.len()
-        );
-        for (name, rect) in important {
-            if rect.clipped {
-                hidden.push(format!(
-                    "{screen}: {name} at {:.0},{:.0} {:.0}x{:.0} is clipped",
+    // The tabs of 2026-10-04 at a smaller window too: the EXPERIMENTAL tab's rows ran off the
+    // bottom of the owner's Mac window, which 1600x1200 never showed.
+    let big: &[(u32, u32)] = &[(1600, 1200)];
+    let both: &[(u32, u32)] = &[(1600, 1200), (1280, 800)];
+    let screens = [
+        ("fly", big),
+        ("plan", big),
+        ("setup", big),
+        ("config", big),
+        ("simulation", big),
+        ("params", big),
+        ("experimental", both),
+        ("plugins", both),
+    ];
+    for (screen, sizes) in screens {
+        for &(width, height) in sizes {
+            let measured = measure(width, height, screen);
+            let important: Vec<_> = measured.iter().filter(|(_, rect)| rect.important).collect();
+            assert!(
+                important.len() >= 2,
+                "{screen}: only {} important controls measured; the connect box alone is two",
+                important.len()
+            );
+            for (name, rect) in important {
+                if rect.clipped {
+                    hidden.push(format!(
+                    "{screen} at {width}x{height}: {name} at {:.0},{:.0} {:.0}x{:.0} is clipped",
                     rect.x, rect.y, rect.width, rect.height
                 ));
+                }
             }
         }
     }

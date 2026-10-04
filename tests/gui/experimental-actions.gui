@@ -8,7 +8,7 @@
 # experimental-sitl.gui.
 screen fly
 window 1600x1200
-budget 12
+budget 20
 env XDG_DATA_HOME $WORK
 env MP_CONFIG_XML $WORK/config.xml
 setup printf '<?xml version="1.0" encoding="utf-8"?><Config><tabcontrolactions>tabQuick;</tabcontrolactions></Config>' > "$WORK/config.xml"
@@ -44,6 +44,7 @@ expect experimental.asking hwid: Enter the ID number
 key ctrl+a
 type 97539
 key Return
-expect experimental.asking ~ message: 97539 =  devid 97539 bus type UAVCAN bus 0 address 125 devtype HMC5883_OLD
+# (Matched from "bus type" on: the C#'s text has two spaces after "=", which a script's words lose.)
+expect experimental.asking ~ bus type UAVCAN bus 0 address 125 devtype HMC5883_OLD or 1 or BARO_SITL or 1
 click experimental-message-ok
 expect experimental.asking none

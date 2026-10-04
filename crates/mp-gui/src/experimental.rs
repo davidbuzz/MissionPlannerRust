@@ -188,9 +188,14 @@ const CELLS: &[(u8, u8, &str, &str, bool)] = &[
 
 /// `tableLayoutPanel1`'s column widths, per cent of its width (temp.resx's `ColumnStyles`).
 const COLUMNS: [f32; 4] = [16.375, 33.625, 19.25, 30.75];
-/// Its rows: 32, of equal height; each drawn this tall, so its words can be read.
+/// Its rows: 32 of equal height, sharing the tab's height as the form's 3.125 per cent rows share
+/// its height - so the whole table shows, as the C#'s does - but none shorter than its words need;
+/// below that the tab scrolls, with the indicator saying so. (Found by the owner, 2026-10-04: rows
+/// of a fixed 28 pixels ran off the bottom of a smaller window, and nothing showed there was more.)
 const ROWS: u8 = 32;
-const ROW_HEIGHT: f32 = 28.0;
+const MIN_ROW_HEIGHT: f32 = 20.0;
+/// The space between rows.
+const ROW_GAP: f32 = 2.0;
 
 /// The owner's rulings a dimmed button cites.
 const SECTION_12_D13: &str = "out of scope, the owner's ruling (PLAN.md section 12 D13, 2026-09-25)";
@@ -343,13 +348,25 @@ enum Answered {
     Hwids,
 }
 
-/// The tab's state: the last button pressed, for the facts, and the question showing.
-#[derive(Default)]
+/// The tab's state: the last button pressed, for the facts, the question showing, and where the
+/// table is scrolled to.
 pub(crate) struct Experimental {
     last: Option<&'static str>,
     asking: Option<Asking>,
     /// The input box's keyboard, made the first time one shows.
     focus: Option<gpui::FocusHandle>,
+    scroll: gpui::ScrollHandle,
+}
+
+impl Default for Experimental {
+    fn default() -> Self {
+        Self {
+            last: None,
+            asking: None,
+            focus: None,
+            scroll: gpui::ScrollHandle::new(),
+        }
+    }
 }
 
 impl std::fmt::Debug for Experimental {
@@ -667,9 +684,21 @@ pub(crate) fn screen(
     window: &Window,
     cx: &mut Context<MissionPlanner>,
 ) -> AnyElement {
-    let mut table = div().flex().flex_col().w_full().gap_1();
+    #[allow(clippy::cast_precision_loss)] // 32 rows
+    let least = f32::from(ROWS) * MIN_ROW_HEIGHT + f32::from(ROWS - 1) * ROW_GAP;
+    let mut table = crate::probe::measured("experimental-table", div())
+        .flex()
+        .flex_col()
+        .w_full()
+        .flex_1()
+        .min_h(px(least))
+        .gap(px(ROW_GAP));
     for row in 0..ROWS {
-        let mut line = div().flex().w_full().h(px(ROW_HEIGHT));
+        let mut line = div()
+            .flex()
+            .w_full()
+            .flex_1()
+            .min_h(px(MIN_ROW_HEIGHT));
         for (column, width) in (0u8..).zip(COLUMNS) {
             let found = CELLS
                 .iter()
@@ -679,14 +708,23 @@ pub(crate) fn screen(
         table = table.child(line);
     }
     div()
-        .id("experimental-body")
+        .relative()
         .flex()
         .flex_col()
         .flex_1()
         .min_h(px(0.0))
-        .overflow_y_scroll()
-        .p_3()
-        .child(table)
+        .child(
+            div()
+                .id("experimental-body")
+                .flex()
+                .flex_col()
+                .size_full()
+                .overflow_y_scroll()
+                .track_scroll(&this.experimental.scroll)
+                .p_3()
+                .child(table),
+        )
+        .children(crate::ui::scroll_indicator(&this.experimental.scroll))
         // The windows the buttons open, over the tab as over the pages that open them elsewhere.
         .children(this.extra_setup_overlay(window, cx))
         .children(crate::georef_ui::window(this, window, cx))

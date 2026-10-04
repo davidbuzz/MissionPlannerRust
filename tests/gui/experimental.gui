@@ -11,7 +11,9 @@
 # the NMEA output window as CONFIG > Advanced's NMEA does; a ruled-out tool says why on the status
 # line, and one not yet ported says so.
 screen fly
-window 1600x1200
+# Smaller than the owner's Mac window, where rows ran off the bottom (2026-10-04): the run's
+# end checks the table is wholly on screen (layout_guard's EXPERIMENTAL entry).
+window 1280x800
 budget 12
 env XDG_DATA_HOME $WORK
 env MP_CONFIG_XML $WORK/config.xml
