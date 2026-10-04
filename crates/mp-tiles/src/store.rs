@@ -40,7 +40,7 @@
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Condvar, Mutex};
-use std::time::{Duration, Instant};
+use web_time::{Duration, Instant};
 
 use mp_units::TileId;
 
@@ -220,7 +220,7 @@ pub struct TileStore {
     shared: Arc<Shared>,
     cache: TileCache,
     source: &'static TileSource,
-    threads: Vec<std::thread::JoinHandle<()>>,
+    threads: Vec<wasm_thread::JoinHandle<()>>,
 }
 
 impl TileStore {
@@ -288,7 +288,7 @@ impl TileStore {
         if spawn {
             let thread_shared = Arc::clone(&shared);
             let thread_cache = cache.clone();
-            let reader = std::thread::Builder::new()
+            let reader = wasm_thread::Builder::new()
                 .name("mp-tiles".to_owned())
                 .spawn(move || run_reader(source, &thread_cache, &thread_shared));
             threads.extend(reader.ok());
@@ -299,7 +299,7 @@ impl TileStore {
                 let thread_shared = Arc::clone(&shared);
                 let thread_cache = cache.clone();
                 let thread_fetcher = fetcher.clone();
-                let handle = std::thread::Builder::new()
+                let handle = wasm_thread::Builder::new()
                     .name(format!("mp-tiles-fetch-{index}"))
                     .spawn(move || {
                         run_fetcher(source, &thread_cache, &thread_shared, &thread_fetcher);
@@ -624,7 +624,7 @@ mod tests {
     #[test]
     fn a_second_ask_while_the_first_is_being_read_reads_the_disk_once() {
         let root =
-            std::env::temp_dir().join(format!("mp-tiles-store-second-ask-{}", std::process::id()));
+            mp_os::temp_dir().join(format!("mp-tiles-store-second-ask-{}", mp_os::process_id()));
         let _ = std::fs::remove_dir_all(&root);
         let cache = TileCache::new(&root);
         let tile = TileId::new(10, 500, 600).unwrap();

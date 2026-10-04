@@ -62,7 +62,7 @@
 
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
-use std::time::{Duration, Instant};
+use web_time::{Duration, Instant};
 
 use gpui::{AnyElement, Context, FocusHandle, Window, div, prelude::*, px, rgb};
 use mp_mission::dotnet::{format_f64, general_f32, general_f64};
@@ -278,7 +278,7 @@ fn main_loop(mut stream: Box<dyn Transport>, shared: &Shared) {
     let mut counter: u32 = 0;
     while shared.running.load(Ordering::Acquire) {
         if !stream.is_open() {
-            std::thread::sleep(Duration::from_millis(10));
+            wasm_thread::sleep(Duration::from_millis(10));
             continue;
         }
         let started = Instant::now();
@@ -304,7 +304,7 @@ fn main_loop(mut stream: Box<dyn Transport>, shared: &Shared) {
         let period = Duration::from_secs_f64((1000.0 / rate.max(0.001)).abs() / 1000.0);
         let elapsed = started.elapsed();
         let sleep_for = period.saturating_sub(elapsed).min(SLEEP_MOST);
-        std::thread::sleep(sleep_for);
+        wasm_thread::sleep(sleep_for);
         counter = counter.wrapping_add(1);
     }
     stream.close();
@@ -322,7 +322,7 @@ pub struct NmeaOutput {
     /// A stream being opened, and the kind and baud it was asked for.
     opening: Option<Opening>,
     /// A thread's handle, to let go.
-    thread: Option<std::thread::JoinHandle<()>>,
+    thread: Option<wasm_thread::JoinHandle<()>>,
     /// `updaterate`: the class's, kept across forms.
     rate: Option<f64>,
     /// What the C# would have boxed, for the status line.
@@ -492,7 +492,7 @@ impl NmeaOutput {
             if let Some(thread) = self.thread.take() {
                 let deadline = Instant::now() + Duration::from_millis(500);
                 while !thread.is_finished() && Instant::now() < deadline {
-                    std::thread::sleep(Duration::from_millis(1));
+                    wasm_thread::sleep(Duration::from_millis(1));
                 }
             }
             return;
@@ -588,7 +588,7 @@ impl NmeaOutput {
             last: Mutex::new(String::new()),
         });
         let for_thread = Arc::clone(&shared);
-        match std::thread::Builder::new()
+        match wasm_thread::Builder::new()
             .name("Nmea output".to_owned())
             .spawn(move || main_loop(stream, &for_thread))
         {
@@ -611,7 +611,7 @@ impl NmeaOutput {
             if self.opening.is_none() {
                 break;
             }
-            std::thread::sleep(Duration::from_millis(5));
+            wasm_thread::sleep(Duration::from_millis(5));
         }
         status
     }
@@ -947,7 +947,7 @@ mod tests {
             if output.written() >= 12 {
                 break;
             }
-            std::thread::sleep(Duration::from_millis(5));
+            wasm_thread::sleep(Duration::from_millis(5));
         }
         assert!(output.running());
         assert!(output.written() >= 12, "{}", output.written());

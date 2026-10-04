@@ -30,7 +30,7 @@
 
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
-use std::time::{Duration, Instant};
+use web_time::{Duration, Instant};
 
 use mp_link::{Link, LinkConfig};
 
@@ -43,7 +43,7 @@ fn download_params() -> mp_params::ParamTable {
 
     let deadline = Instant::now() + Duration::from_secs(20);
     while link.primary_vehicle().is_none() && Instant::now() < deadline {
-        std::thread::sleep(Duration::from_millis(100));
+        wasm_thread::sleep(Duration::from_millis(100));
     }
     let (id, _) = link.primary_vehicle().expect("a vehicle");
     link.download_params(id);
@@ -56,7 +56,7 @@ fn download_params() -> mp_params::ParamTable {
             return table;
         }
         assert!(Instant::now() < deadline, "parameter download timed out");
-        std::thread::sleep(Duration::from_millis(100));
+        wasm_thread::sleep(Duration::from_millis(100));
     }
 }
 

@@ -42,8 +42,8 @@ use std::collections::HashMap;
 use std::io::Write;
 use std::os::unix::net::UnixStream;
 use std::sync::mpsc::{self, Receiver};
-use std::thread;
-use std::time::{Duration, Instant};
+use wasm_thread as thread;
+use web_time::{Duration, Instant};
 
 use mp_input::mapping::{SAFE_MAX_US, SAFE_MIN_US};
 use mp_input::{
@@ -128,7 +128,7 @@ fn flying(mapping: Mapping) -> (StickReader, UnixStream, Receiver<(Instant, Fram
     let until = Instant::now() + PATIENCE;
     while reader.reading().axes.is_empty() {
         assert!(Instant::now() < until, "the opening burst never arrived");
-        std::thread::sleep(Duration::from_millis(1));
+        wasm_thread::sleep(Duration::from_millis(1));
     }
     assert!(reader.set_enabled(true));
     // Switching on sends the current position at once; take it, so the first event's change is

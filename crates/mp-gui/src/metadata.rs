@@ -133,7 +133,7 @@ fn read_only_in(
 /// documentation, as `CheckLoad` fetches them) and kept for [`read_only`]. On a thread; a file
 /// that cannot be had is left out, as the C# logs and goes on.
 fn fetch_fallbacks() {
-    std::thread::Builder::new()
+    wasm_thread::Builder::new()
         .name("mp-metadata-fallbacks".to_owned())
         .spawn(|| {
             let Some(dir) = mp_settings::data_directory() else {
@@ -321,7 +321,7 @@ impl Fetch {
         let (sender, receiver) = channel();
         self.receiver = Some(receiver);
         self.status = Some(format!("fetching documentation for {version}"));
-        std::thread::Builder::new()
+        wasm_thread::Builder::new()
             .name("mp-metadata".to_owned())
             .spawn(move || {
                 let _ = sender.send(fetch(versioned.as_deref(), unversioned.as_deref(), version));

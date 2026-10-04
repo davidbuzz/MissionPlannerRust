@@ -76,7 +76,7 @@ use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{Receiver, RecvTimeoutError, Sender, channel};
 use std::sync::{Arc, Mutex, PoisonError};
-use std::time::{Duration, Instant};
+use web_time::{Duration, Instant};
 
 use gpui::{AnyElement, Context, div, prelude::*, px, rgb};
 use mp_link::RequestId;
@@ -417,13 +417,13 @@ impl ScriptHost for GuiScriptHost {
         };
         let message = mp_link::commands::rc_override(vehicle, self.api.overrides());
         let first = sender.send(&message);
-        std::thread::sleep(Duration::from_millis(u64::from(RC_RESEND_GAP_MS)));
+        wasm_thread::sleep(Duration::from_millis(u64::from(RC_RESEND_GAP_MS)));
         let second = sender.send(&message);
         first && second
     }
 
     fn sleep(&mut self, milliseconds: u32) {
-        std::thread::sleep(Duration::from_millis(u64::from(milliseconds)));
+        wasm_thread::sleep(Duration::from_millis(u64::from(milliseconds)));
     }
 
     fn cs_field_of(&self, target: (u8, u8), name: &str) -> Option<CsValue> {
@@ -653,6 +653,34 @@ pub enum Effect {
     Speak(String),
 }
 
+/// `Host.cs.<name>`: the fields the Scripts tab reads by the C#'s names, the quick view's whole
+/// table, and `connected` and `firmware`.
+#[must_use]
+pub fn cs_value(state: Option<&VehicleState>, connected: bool, name: &str) -> Option<CsValue> {
+    match name {
+        "connected" => return Some(CsValue::Flag(connected)),
+        // `cs.firmware`: the C#'s `Firmwares` name of the vehicle's family.
+        "firmware" => {
+            let family = state.and_then(|state| VehicleFamily::from_mav_type(state.vehicle_type));
+            return Some(CsValue::Text(
+                match family {
+                    Some(VehicleFamily::Copter) => "ArduCopter2",
+                    Some(VehicleFamily::Plane) => "ArduPlane",
+                    Some(VehicleFamily::Rover) => "ArduRover",
+                    None => "Other",
+                }
+                .to_owned(),
+            ));
+        }
+        _ => {}
+    }
+    let state = state?;
+    if let Some(value) = cs_field(state, name) {
+        return Some(value);
+    }
+    crate::quick::value(name, state).map(CsValue::Number)
+}
+
 /// `cs.<field>` from the vehicle's state, by the C#'s names, for the fields the corpus and the
 /// Status tab read most; a name not listed is an `AttributeError` in the script.
 /// `// C#: ExtLibs/ArduPilot/CurrentState.cs`
@@ -720,15 +748,11 @@ pub fn service(request: &Request, answers: &Answers<'_>) -> (Option<Reply>, Opti
         // The Plugins host's `cs`: these fields, `connected`, `firmware` and the quick view's
         // table - `setGuidedModeWP` reads `cs.firmware`.
         Request::CsField(name) => (
-            Some(Reply::Field(
-                crate::plugins_ui::cs_value(answers.state, answers.connected, name).map(|value| {
-                    match value {
-                        mp_plugin_host::CsValue::Number(number) => CsValue::Number(number),
-                        mp_plugin_host::CsValue::Text(text) => CsValue::Text(text),
-                        mp_plugin_host::CsValue::Flag(flag) => CsValue::Flag(flag),
-                    }
-                }),
-            )),
+            Some(Reply::Field(cs_value(
+                answers.state,
+                answers.connected,
+                name,
+            ))),
             None,
         ),
         Request::IsOpen => (Some(Reply::Bool(answers.connected)), None),
@@ -1132,13 +1156,7 @@ impl ScriptsTab {
                 Request::CsFieldOf { target, ref name } => {
                     // `MAVlist[sysid, compid].cs`, from that vehicle's own state.
                     let state = telemetry.vehicle_state(target);
-                    let value =
-                        crate::plugins_ui::cs_value(state.as_deref(), telemetry.is_open(), name)
-                            .map(|value| match value {
-                                mp_plugin_host::CsValue::Number(number) => CsValue::Number(number),
-                                mp_plugin_host::CsValue::Text(text) => CsValue::Text(text),
-                                mp_plugin_host::CsValue::Flag(flag) => CsValue::Flag(flag),
-                            });
+                    let value = cs_value(state.as_deref(), telemetry.is_open(), name);
                     let _ = reply.send(Reply::Field(value));
                     continue;
                 }
@@ -1707,10 +1725,10 @@ mod tests {
         );
         assert_eq!(tab.status, STATUS_RUNNING);
         assert!(tab.console_shown);
-        let deadline = std::time::Instant::now() + Duration::from_secs(30);
-        while tab.result.is_none() && std::time::Instant::now() < deadline {
+        let deadline = web_time::Instant::now() + Duration::from_secs(30);
+        while tab.result.is_none() && web_time::Instant::now() < deadline {
             tab.tick(&telemetry, &view, &mut guided);
-            std::thread::sleep(Duration::from_millis(10));
+            wasm_thread::sleep(Duration::from_millis(10));
         }
         assert_eq!(tab.result, Some(Ok(())));
         assert_eq!(tab.status, STATUS_FINISHED);
@@ -1723,11 +1741,11 @@ mod tests {
             None,
             (false, false),
         );
-        let deadline = std::time::Instant::now() + Duration::from_secs(30);
+        let deadline = web_time::Instant::now() + Duration::from_secs(30);
         let mut status = None;
-        while tab.result.is_none() && std::time::Instant::now() < deadline {
+        while tab.result.is_none() && web_time::Instant::now() < deadline {
             status = tab.tick(&telemetry, &view, &mut guided).or(status);
-            std::thread::sleep(Duration::from_millis(10));
+            wasm_thread::sleep(Duration::from_millis(10));
         }
         assert!(tab.result.as_ref().is_some_and(Result::is_err));
         assert!(
@@ -1751,14 +1769,14 @@ mod tests {
         guided: &mut GuidedMode,
         mut vehicle: impl FnMut(&mut ScriptsTab),
     ) {
-        let deadline = std::time::Instant::now() + Duration::from_secs(60);
+        let deadline = web_time::Instant::now() + Duration::from_secs(60);
         while tab.result.is_none() {
-            assert!(std::time::Instant::now() < deadline, "{}", tab.console);
+            assert!(web_time::Instant::now() < deadline, "{}", tab.console);
             tab.serve(telemetry, guided);
             vehicle(tab);
             let view = telemetry.view();
             tab.tick(telemetry, &view, guided);
-            std::thread::sleep(SERVE_INTERVAL);
+            wasm_thread::sleep(SERVE_INTERVAL);
         }
     }
 
@@ -2315,7 +2333,7 @@ mod tests {
             assert!(Instant::now() < deadline);
             tab.serve(&mut telemetry, &mut guided);
             serves += 1;
-            std::thread::sleep(SERVE_INTERVAL);
+            wasm_thread::sleep(SERVE_INTERVAL);
         }
         assert!(serves > 10, "{serves}");
         assert_eq!(tab.views_taken, 0);
@@ -2329,7 +2347,7 @@ mod tests {
         while tab.is_running() {
             assert!(Instant::now() < deadline);
             tab.serve(&mut telemetry, &mut guided);
-            std::thread::sleep(SERVE_INTERVAL);
+            wasm_thread::sleep(SERVE_INTERVAL);
         }
         assert!(tab.views_taken > 0);
     }
@@ -2349,7 +2367,7 @@ mod tests {
         let deadline = Instant::now() + Duration::from_secs(30);
         while tab.result.is_none() && Instant::now() < deadline {
             tab.tick(&telemetry, &view, &mut GuidedMode::default());
-            std::thread::sleep(Duration::from_millis(5));
+            wasm_thread::sleep(Duration::from_millis(5));
         }
         assert_eq!(tab.result, Some(Ok(())));
         assert_eq!(tab.console, "True\n");
@@ -2587,8 +2605,7 @@ mod tests {
     /// `// C#: MainV2.cs:658, 1005-1006`
     #[test]
     fn run_reads_the_speech_settings() {
-        let path =
-            std::env::temp_dir().join(format!("mp-scripts-speech-{}.py", std::process::id()));
+        let path = mp_os::temp_dir().join(format!("mp-scripts-speech-{}.py", mp_os::process_id()));
         std::fs::write(
             &path,
             "print(MainV2.speechEnable, MainV2.speech_armed_only)\n",
@@ -2609,7 +2626,7 @@ mod tests {
             let deadline = Instant::now() + Duration::from_secs(30);
             while tab.result.is_none() && Instant::now() < deadline {
                 tab.tick(&telemetry, &view, &mut GuidedMode::default());
-                std::thread::sleep(Duration::from_millis(5));
+                wasm_thread::sleep(Duration::from_millis(5));
             }
             assert_eq!(tab.result, Some(Ok(())));
             assert_eq!(tab.console, printed);
@@ -2623,7 +2640,7 @@ mod tests {
         // second on: a short mission can be read between two looks.
         const PICKUP: Duration = Duration::from_millis(500);
         telemetry.request_mission();
-        let asked = std::time::Instant::now();
+        let asked = web_time::Instant::now();
         let mut seen_running = false;
         loop {
             let view = telemetry.view();
@@ -2635,7 +2652,7 @@ mod tests {
                 }
             }
             assert!(asked.elapsed() < Duration::from_secs(30), "no mission read");
-            std::thread::sleep(Duration::from_millis(20));
+            wasm_thread::sleep(Duration::from_millis(20));
         }
     }
 
@@ -2654,10 +2671,10 @@ mod tests {
         let link = mp_link::Link::connect("tcp:127.0.0.1:5760", mp_link::LinkConfig::default())
             .expect("SITL on 5760");
         let mut telemetry = Telemetry::over(link, "tcp:127.0.0.1:5760");
-        let deadline = std::time::Instant::now() + Duration::from_secs(20);
+        let deadline = web_time::Instant::now() + Duration::from_secs(20);
         while telemetry.send_handle().is_none() || telemetry.view().state.is_none() {
-            assert!(std::time::Instant::now() < deadline, "no vehicle on 5760");
-            std::thread::sleep(Duration::from_millis(50));
+            assert!(web_time::Instant::now() < deadline, "no vehicle on 5760");
+            wasm_thread::sleep(Duration::from_millis(50));
         }
         let script = |name: &str| {
             std::fs::read_to_string(format!(
@@ -2749,10 +2766,10 @@ mod tests {
             None,
             (false, false),
         );
-        let deadline = std::time::Instant::now() + Duration::from_secs(30);
-        while tab.result.is_none() && std::time::Instant::now() < deadline {
+        let deadline = web_time::Instant::now() + Duration::from_secs(30);
+        while tab.result.is_none() && web_time::Instant::now() < deadline {
             tab.tick(&telemetry, &view, &mut GuidedMode::default());
-            std::thread::sleep(Duration::from_millis(5));
+            wasm_thread::sleep(Duration::from_millis(5));
         }
         assert!(tab.console.starts_with("0.0\nFalse\n"), "{}", tab.console);
         // `cs.lat` with no vehicle: the field is not there, an AttributeError.

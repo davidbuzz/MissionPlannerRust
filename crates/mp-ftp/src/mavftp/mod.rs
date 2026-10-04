@@ -76,7 +76,7 @@ mod steps;
 pub mod testing;
 pub mod wire;
 
-use std::time::Instant;
+use web_time::Instant;
 
 pub use crc::crc_crc32;
 pub use listing::FtpFileInfo;

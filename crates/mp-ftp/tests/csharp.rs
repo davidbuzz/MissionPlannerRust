@@ -30,7 +30,7 @@
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::indexing_slicing)]
 
 use std::collections::BTreeMap;
-use std::time::Instant;
+use web_time::Instant;
 
 use mp_ftp::mavftp::testing::FakeVehicle;
 use mp_ftp::mavftp::wire::{Errno, ErrorCode, Header, Opcode};

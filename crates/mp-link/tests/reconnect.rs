@@ -27,7 +27,7 @@
 use std::io;
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::{Arc, Mutex};
-use std::time::{Duration, Instant};
+use web_time::{Duration, Instant};
 
 use mp_link::testing::heartbeat;
 use mp_link::{Link, LinkConfig, RECONNECT_INTERVAL, Reopen};
@@ -41,7 +41,7 @@ fn within(patience: Duration, what: impl Fn() -> bool) -> bool {
         if what() {
             return true;
         }
-        std::thread::sleep(Duration::from_millis(10));
+        wasm_thread::sleep(Duration::from_millis(10));
     }
     what()
 }

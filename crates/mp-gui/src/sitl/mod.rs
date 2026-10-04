@@ -407,7 +407,7 @@ impl Sitl {
     fn start_probe(&mut self) {
         self.probed = true;
         let (sender, receiver) = channel();
-        let started = std::thread::Builder::new()
+        let started = wasm_thread::Builder::new()
             .name("mp-sitl-wasm-probe".to_owned())
             .spawn(move || {
                 let fetch = mp_firmware::manifest::fetcher();
@@ -825,7 +825,7 @@ impl MissionPlanner {
         self.sitl.local_wasm.kill_all();
         let launcher = self.sitl.chosen();
         self.sitl.worker = run(move |fetch, say| {
-            launcher::start(launcher.as_ref(), fetch, &request, say, &std::thread::sleep)
+            launcher::start(launcher.as_ref(), fetch, &request, say, &wasm_thread::sleep)
         });
     }
 
@@ -884,7 +884,7 @@ impl MissionPlanner {
         self.sitl.outcome = None;
         let launcher = Arc::clone(&self.sitl.launcher);
         self.sitl.worker = run(move |fetch, say| {
-            launcher::start_chain(launcher.as_ref(), fetch, &request, say, &std::thread::sleep)
+            launcher::start_chain(launcher.as_ref(), fetch, &request, say, &wasm_thread::sleep)
         });
     }
 
@@ -921,7 +921,7 @@ fn run(
     work: impl FnOnce(&dyn mp_firmware::manifest::Fetch, &dyn Fn(&str)) -> Outcome + Send + 'static,
 ) -> Option<Receiver<Progress>> {
     let (sender, receiver) = channel();
-    std::thread::Builder::new()
+    wasm_thread::Builder::new()
         .name("mp-sitl-start".to_owned())
         .spawn(move || {
             let fetch = mp_firmware::manifest::fetcher();

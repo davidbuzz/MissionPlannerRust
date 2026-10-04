@@ -67,7 +67,7 @@
 #![allow(unreachable_pub)]
 
 use std::collections::VecDeque;
-use std::time::{Duration, Instant};
+use web_time::{Duration, Instant};
 
 use gpui::{AnyElement, Context, KeyDownEvent, Window, div, prelude::*, px, rgb};
 

@@ -973,7 +973,7 @@ pub(crate) mod tests {
     /// programming; cancelled, nothing is done.
     #[test]
     fn upload_asks_for_the_file_and_programs_it() {
-        let dir = std::env::temp_dir().join(format!("mp-sikradio-page-{}", std::process::id()));
+        let dir = mp_os::temp_dir().join(format!("mp-sikradio-page-{}", mp_os::process_id()));
         std::fs::create_dir_all(&dir).unwrap();
         let file = dir.join("rfd900p.hex");
         std::fs::write(&file, ":0700100052464439303050E1\n").unwrap();

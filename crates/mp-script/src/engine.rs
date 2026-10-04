@@ -58,7 +58,7 @@
 use std::fmt;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, PoisonError};
-use std::thread::JoinHandle;
+use wasm_thread::JoinHandle;
 
 use rustpython::InterpreterBuilderExt;
 use rustpython_vm::builtins::{PyBaseExceptionRef, PyBytesRef, PyStr, PyStrRef};
@@ -800,7 +800,7 @@ impl ScriptRun {
             let output = Arc::clone(&output);
             let abort = Arc::clone(&abort);
             let result = Arc::clone(&result);
-            std::thread::Builder::new()
+            wasm_thread::Builder::new()
                 .name(THREAD_NAME.to_owned())
                 .spawn(move || {
                     let outcome = run_with(&name, &source, host, output, abort);
@@ -961,7 +961,7 @@ mod tests {
                 // button, as the window's does.
                 started.store(true, Ordering::Relaxed);
                 while !abort.load(Ordering::Relaxed) {
-                    std::thread::sleep(Duration::from_millis(1));
+                    wasm_thread::sleep(Duration::from_millis(1));
                 }
                 return Err(Timeout::on("getWP"));
             }
@@ -1033,7 +1033,7 @@ mod tests {
         fn sleep(&mut self, milliseconds: u32) {
             self.slept_ms += u64::from(milliseconds);
             // A real wait, short, so the abort test has time to press its button.
-            std::thread::sleep(Duration::from_millis(1));
+            wasm_thread::sleep(Duration::from_millis(1));
         }
     }
 
@@ -1239,9 +1239,9 @@ mod tests {
             "print('going')\nwhile True:\n    Script.Sleep(1000)\n".to_owned(),
             Box::new(Fake::default()),
         );
-        let deadline = std::time::Instant::now() + Duration::from_secs(20);
-        while run.output().is_empty() && std::time::Instant::now() < deadline {
-            std::thread::sleep(Duration::from_millis(10));
+        let deadline = web_time::Instant::now() + Duration::from_secs(20);
+        while run.output().is_empty() && web_time::Instant::now() < deadline {
+            wasm_thread::sleep(Duration::from_millis(10));
         }
         assert_eq!(run.take_output(), "going\n");
         assert_eq!(run.take_output(), "");
@@ -1777,10 +1777,10 @@ mod tests {
             Box::new(fake),
             Arc::clone(&abort),
         );
-        let deadline = std::time::Instant::now() + Duration::from_secs(20);
+        let deadline = web_time::Instant::now() + Duration::from_secs(20);
         while !started.load(Ordering::Relaxed) {
-            assert!(std::time::Instant::now() < deadline, "getWP never called");
-            std::thread::sleep(Duration::from_millis(5));
+            assert!(web_time::Instant::now() < deadline, "getWP never called");
+            wasm_thread::sleep(Duration::from_millis(5));
         }
         assert!(run.is_running());
         run.abort();
@@ -1800,9 +1800,9 @@ mod tests {
             "import time\nprint('going')\nwhile True:\n    time.sleep(1)\n".to_owned(),
             Box::new(Fake::default()),
         );
-        let deadline = std::time::Instant::now() + Duration::from_secs(20);
-        while run.output().is_empty() && std::time::Instant::now() < deadline {
-            std::thread::sleep(Duration::from_millis(10));
+        let deadline = web_time::Instant::now() + Duration::from_secs(20);
+        while run.output().is_empty() && web_time::Instant::now() < deadline {
+            wasm_thread::sleep(Duration::from_millis(10));
         }
         run.abort();
         run.join();

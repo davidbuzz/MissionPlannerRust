@@ -51,7 +51,7 @@ impl LinkSender {
 
 #[cfg(test)]
 mod tests {
-    use std::time::{Duration, Instant};
+    use web_time::{Duration, Instant};
 
     use mp_transport::Transport as _;
     use mp_transport::testing::Loopback;
@@ -79,7 +79,7 @@ mod tests {
             let n = vehicle_side.read(&mut buf).unwrap_or(0);
             got.extend_from_slice(buf.get(..n).unwrap_or(&[]));
             if n == 0 {
-                std::thread::sleep(Duration::from_millis(1));
+                wasm_thread::sleep(Duration::from_millis(1));
             }
         }
         assert_eq!(got, key);

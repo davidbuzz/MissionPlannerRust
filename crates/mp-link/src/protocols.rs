@@ -27,7 +27,7 @@
 //! holds the port.
 //! `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:500-586, ExtLibs/ArduPilot/CurrentState.cs:4654-4655`
 
-use std::time::{Duration, Instant};
+use web_time::{Duration, Instant};
 
 use mp_mavlink_dialects::all::MavMessage;
 use mp_vehicle::VehicleId;

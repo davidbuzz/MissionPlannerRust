@@ -58,7 +58,7 @@
 //!   guard delays nothing. It is not ported, because it does nothing.
 
 use std::collections::BTreeSet;
-use std::time::Instant;
+use web_time::Instant;
 
 use mp_vehicle::VehicleId;
 

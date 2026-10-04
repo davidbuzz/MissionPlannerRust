@@ -148,7 +148,7 @@ mod tests {
     use super::*;
     use crate::dsdl::NodeStatus;
     use crate::node::{Identity, Node};
-    use std::time::Instant;
+    use web_time::Instant;
 
     /// The node's status, through `FrameReceived`, is a `CAN_FRAME` with the extended flag, on
     /// bus 0 for bus 1; and the vehicle's `CAN_FRAME` back becomes a line our node reads.

@@ -26,7 +26,7 @@ use std::io::Read;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Condvar, Mutex, MutexGuard, PoisonError};
-use std::time::{Duration, Instant};
+use web_time::{Duration, Instant};
 
 use crate::fetch::{Http, UreqHttp};
 
@@ -413,7 +413,7 @@ impl Srtm {
         // C#: requestThreadrun = true, at the top of requestRunner (srtm.cs:530). Set before the
         // thread starts rather than in it, so a drop that comes first is not undone.
         inner.run.store(true, Ordering::Release);
-        let spawned = std::thread::Builder::new()
+        let spawned = wasm_thread::Builder::new()
             .name("mp-terrain".to_owned())
             .spawn(move || crate::fetch::request_runner(&inner));
         // C#: StartQueueProcess's task. A thread that cannot be started leaves the queue unread;

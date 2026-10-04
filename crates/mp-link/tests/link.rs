@@ -22,7 +22,7 @@
 
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::indexing_slicing)]
 
-use std::time::{Duration, Instant};
+use web_time::{Duration, Instant};
 
 use mp_link::messages::Severity;
 use mp_link::{Link, LinkConfig};
@@ -84,7 +84,7 @@ fn wait_for(what: &str, mut check: impl FnMut() -> bool) {
         if check() {
             return;
         }
-        std::thread::sleep(Duration::from_millis(5));
+        wasm_thread::sleep(Duration::from_millis(5));
     }
     panic!("timed out waiting for {what}");
 }
@@ -376,7 +376,7 @@ fn the_link_announces_itself_with_heartbeats() {
                 }
             });
         }
-        std::thread::sleep(Duration::from_millis(5));
+        wasm_thread::sleep(Duration::from_millis(5));
     }
     assert!(seen_gcs_heartbeat, "the link must send heartbeats");
     drop(link);
@@ -415,7 +415,7 @@ fn telemetry_streams_are_requested_when_a_vehicle_appears() {
                 }
             });
         }
-        std::thread::sleep(Duration::from_millis(5));
+        wasm_thread::sleep(Duration::from_millis(5));
     }
 
     let rates = mp_vehicle::StreamRates::backups();
@@ -456,7 +456,7 @@ fn an_idle_link_does_not_burn_cpu() {
     let link = Link::from_transport(Box::new(gcs_side), LinkConfig::default());
 
     let before = cpu_time();
-    std::thread::sleep(Duration::from_millis(500));
+    wasm_thread::sleep(Duration::from_millis(500));
     let used = cpu_time() - before;
 
     drop(link);
@@ -522,7 +522,7 @@ fn talks_to_a_real_ardupilot_sitl() {
     // needs the stream to keep coming. Sample a window rather than asserting a magic count,
     // which would only measure how fast the earlier waits happened to complete.
     let before = link.frames_received();
-    std::thread::sleep(Duration::from_secs(2));
+    wasm_thread::sleep(Duration::from_secs(2));
     let rate = (link.frames_received() - before) / 2;
     assert!(
         rate >= 10,
@@ -557,7 +557,7 @@ fn a_sender_handle_puts_frames_on_the_wire_from_another_thread() {
     channels[2] = 1100;
 
     let worker =
-        std::thread::spawn(move || sender.send(&mp_link::commands::rc_override(target, channels)));
+        wasm_thread::spawn(move || sender.send(&mp_link::commands::rc_override(target, channels)));
     assert!(
         worker.join().expect("the sending thread finished"),
         "the link is running, so the frame is queued"
@@ -580,7 +580,7 @@ fn a_sender_handle_puts_frames_on_the_wire_from_another_thread() {
                 }
             });
         }
-        std::thread::sleep(Duration::from_millis(5));
+        wasm_thread::sleep(Duration::from_millis(5));
     }
     let rc = seen.expect("the override should reach the wire");
     assert_eq!(rc.chan1_raw, 1500);
@@ -596,7 +596,7 @@ fn a_sender_handle_puts_frames_on_the_wire_from_another_thread() {
     let mut refused = false;
     while Instant::now() < deadline && !refused {
         refused = !after.send(&mp_link::commands::rc_override(target, channels));
-        std::thread::sleep(Duration::from_millis(5));
+        wasm_thread::sleep(Duration::from_millis(5));
     }
     assert!(
         refused,

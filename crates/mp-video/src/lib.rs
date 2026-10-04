@@ -60,7 +60,7 @@ use std::fmt;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, PoisonError};
-use std::thread::JoinHandle;
+use wasm_thread::JoinHandle;
 
 pub mod avi;
 pub mod convert;
@@ -315,7 +315,7 @@ impl Capture {
             let note = move |why: &VideoError| {
                 *error.lock().unwrap_or_else(PoisonError::into_inner) = Some(why.to_string());
             };
-            std::thread::Builder::new()
+            wasm_thread::Builder::new()
                 .name("video-capture".to_owned())
                 .spawn(move || {
                     while !stop.load(Ordering::Acquire) {
@@ -533,13 +533,13 @@ mod tests {
         let mode = source.modes(&device).unwrap()[1];
         assert_eq!(mode.format, PixelFormat::Yuyv);
         let capture = Capture::start(&source, &device, &mode).unwrap();
-        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+        let deadline = web_time::Instant::now() + std::time::Duration::from_secs(5);
         while capture.frames() < 3 {
             assert!(
-                std::time::Instant::now() < deadline,
+                web_time::Instant::now() < deadline,
                 "no frames: {capture:?}"
             );
-            std::thread::sleep(std::time::Duration::from_millis(2));
+            wasm_thread::sleep(std::time::Duration::from_millis(2));
         }
         let frame = capture.latest().expect("a frame");
         assert_eq!((frame.width, frame.height), (mode.width, mode.height));
@@ -569,10 +569,10 @@ mod tests {
         let device = source.devices()[0].clone();
         let mode = source.modes(&device).unwrap()[1];
         let capture = Capture::start(&source, &device, &mode).unwrap();
-        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+        let deadline = web_time::Instant::now() + std::time::Duration::from_secs(5);
         while capture.frames() < 10 {
-            assert!(std::time::Instant::now() < deadline, "{capture:?}");
-            std::thread::sleep(std::time::Duration::from_millis(2));
+            assert!(web_time::Instant::now() < deadline, "{capture:?}");
+            wasm_thread::sleep(std::time::Duration::from_millis(2));
         }
         assert!(capture.is_running());
         assert_eq!(
@@ -588,10 +588,10 @@ mod tests {
         let device = source.devices()[0].clone();
         let mode = source.modes(&device).unwrap()[1];
         let capture = Capture::start(&source, &device, &mode).unwrap();
-        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+        let deadline = web_time::Instant::now() + std::time::Duration::from_secs(5);
         while capture.latest().is_none() {
-            assert!(std::time::Instant::now() < deadline, "{capture:?}");
-            std::thread::sleep(std::time::Duration::from_millis(2));
+            assert!(web_time::Instant::now() < deadline, "{capture:?}");
+            wasm_thread::sleep(std::time::Duration::from_millis(2));
         }
         let frame = capture.latest().unwrap();
         assert_eq!((frame.width, frame.height), (160, 120));
@@ -617,10 +617,10 @@ mod tests {
         let device = source.devices()[0].clone();
         let mode = source.modes(&device).unwrap()[1];
         let capture = Capture::start(&source, &device, &mode).unwrap();
-        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+        let deadline = web_time::Instant::now() + std::time::Duration::from_secs(5);
         while capture.is_running() {
-            assert!(std::time::Instant::now() < deadline);
-            std::thread::sleep(std::time::Duration::from_millis(2));
+            assert!(web_time::Instant::now() < deadline);
+            wasm_thread::sleep(std::time::Duration::from_millis(2));
         }
         assert_eq!(capture.frames(), 2);
         assert!(capture.latest().is_some());

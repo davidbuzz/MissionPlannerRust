@@ -326,7 +326,7 @@ mod tests {
     #[test]
     #[allow(clippy::indexing_slicing)]
     fn the_file_is_the_csharps_layout() {
-        let dir = std::env::temp_dir().join(format!("mp-video-avi-{}", std::process::id()));
+        let dir = mp_os::temp_dir().join(format!("mp-video-avi-{}", mp_os::process_id()));
         std::fs::create_dir_all(&dir).unwrap();
         let path = dir.join("hud.avi");
         let mut writer = AviWriter::new();
@@ -407,7 +407,7 @@ mod tests {
 
     #[test]
     fn a_frame_behind_the_clock_is_added_again() {
-        let dir = std::env::temp_dir().join(format!("mp-video-avi-extra-{}", std::process::id()));
+        let dir = mp_os::temp_dir().join(format!("mp-video-avi-extra-{}", mp_os::process_id()));
         std::fs::create_dir_all(&dir).unwrap();
         let path = dir.join("extra.avi");
         let mut writer = AviWriter::new();

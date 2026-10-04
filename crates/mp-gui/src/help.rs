@@ -44,7 +44,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{Receiver, TryRecvError, channel};
-use std::time::Instant;
+use web_time::Instant;
 
 use gpui::{AnyElement, Context, MouseButton, Window, div, prelude::*, px, rgb};
 use mp_update::check::Check;
@@ -376,7 +376,7 @@ impl Help {
         let fetch = Arc::clone(&self.fetch);
         let install_dir = self.install_dir.clone();
         let url = channel.version_url;
-        let spawned = std::thread::Builder::new()
+        let spawned = wasm_thread::Builder::new()
             .name("mp-update-check".to_owned())
             .spawn(move || {
                 let outcome =
@@ -428,7 +428,7 @@ impl Help {
         let cancelled = Arc::clone(&cancel);
         let fetch = Arc::clone(&self.fetch);
         let install_dir = self.install_dir.clone();
-        let spawned = std::thread::Builder::new()
+        let spawned = wasm_thread::Builder::new()
             .name("mp-update".to_owned())
             .spawn(move || {
                 let reporter = sender.clone();
@@ -960,7 +960,7 @@ mod tests {
     }
 
     fn scratch(test: &str) -> PathBuf {
-        let dir = std::env::temp_dir().join(format!("mp-gui-help-{test}-{}", std::process::id()));
+        let dir = mp_os::temp_dir().join(format!("mp-gui-help-{test}-{}", mp_os::process_id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).expect("a scratch directory");
         dir
@@ -981,7 +981,7 @@ mod tests {
             if !matches!(help.flow, Flow::Checking | Flow::Updating) || Instant::now() > deadline {
                 return status;
             }
-            std::thread::sleep(std::time::Duration::from_millis(5));
+            wasm_thread::sleep(std::time::Duration::from_millis(5));
         }
     }
 

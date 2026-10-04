@@ -89,7 +89,7 @@ use std::cell::RefCell;
 use std::collections::VecDeque;
 use std::rc::Rc;
 use std::sync::Arc;
-use std::time::{Duration, Instant};
+use web_time::{Duration, Instant};
 
 use gpui::{AnyElement, Context, FocusHandle, SharedString, Window, div, prelude::*, px, rgb};
 use mp_units::LatLon;
@@ -1473,7 +1473,7 @@ pub mod septentrio {
     pub fn send_ack(port: &mut dyn Answering, command: &str) -> Result<(), Failure> {
         port.write(command.as_bytes())?;
         let wanted = command.get(..command.len().saturating_sub(1)).unwrap_or("");
-        let started = std::time::Instant::now();
+        let started = web_time::Instant::now();
         while let Some(left) = ACK_TIMEOUT.checked_sub(started.elapsed()) {
             match port.read_line(left) {
                 Some(line) if line.contains(wanted) => return Ok(()),
@@ -1666,7 +1666,7 @@ pub mod worker {
     use std::path::PathBuf;
     use std::sync::atomic::{AtomicBool, Ordering};
     use std::sync::{Arc, Mutex, MutexGuard};
-    use std::time::{Duration, Instant};
+    use web_time::{Duration, Instant};
 
     use mp_link::LinkSender;
     use mp_transport::{NtripOptions, Transport};
@@ -2110,7 +2110,7 @@ pub mod worker {
         }
 
         fn sleep(&mut self, time: Duration) {
-            std::thread::sleep(time);
+            wasm_thread::sleep(time);
         }
     }
 
@@ -2158,7 +2158,7 @@ pub mod worker {
         /// The shared statics.
         shared: Arc<Shared>,
         /// The thread.
-        thread: Option<std::thread::JoinHandle<()>>,
+        thread: Option<wasm_thread::JoinHandle<()>>,
     }
 
     impl Worker {
@@ -2196,7 +2196,7 @@ pub mod worker {
                     Arc::clone(&port),
                     Arc::clone(&shared),
                 );
-                std::thread::Builder::new()
+                wasm_thread::Builder::new()
                     .name("injectgps".to_owned())
                     .spawn(move || {
                         let flags = Flags {
@@ -2252,7 +2252,7 @@ pub mod worker {
                 return;
             };
             let shared = Arc::clone(&self.shared);
-            let _ = std::thread::Builder::new()
+            let _ = wasm_thread::Builder::new()
                 .name("injectgps-command".to_owned())
                 .spawn(move || run_command(command, port, &shared));
         }
@@ -2486,7 +2486,7 @@ pub mod worker {
                     });
                     // The port stays open, with no loop reading it, until Connect closes it.
                     while run.load(Ordering::Acquire) {
-                        std::thread::sleep(Duration::from_millis(50));
+                        wasm_thread::sleep(Duration::from_millis(50));
                     }
                     open.store(false, Ordering::Release);
                     lock(&handle.port).io().close();
@@ -2545,9 +2545,9 @@ pub mod worker {
             // "this is for a CAN adapter"
             let io = port.io();
             io.write_all(b"\r\r\r").map_err(|e| e.to_string())?;
-            std::thread::sleep(Duration::from_millis(50));
+            wasm_thread::sleep(Duration::from_millis(50));
             io.write_all(b"S8\r").map_err(|e| e.to_string())?;
-            std::thread::sleep(Duration::from_millis(50));
+            wasm_thread::sleep(Duration::from_millis(50));
             io.write_all(b"O\r").map_err(|e| e.to_string())?;
         }
         Ok(port)
@@ -2626,7 +2626,7 @@ pub mod worker {
                             // "Failed to reconnect": ten seconds' sleep.
                             let until = Instant::now() + Duration::from_secs(10);
                             while Instant::now() < until && run.load(Ordering::Acquire) {
-                                std::thread::sleep(Duration::from_millis(50));
+                                wasm_thread::sleep(Duration::from_millis(50));
                             }
                         }
                     }
@@ -2647,7 +2647,7 @@ pub mod worker {
             };
             let mut buffer = [0u8; 180];
             let Some(port) = port else {
-                std::thread::sleep(Duration::from_millis(10));
+                wasm_thread::sleep(Duration::from_millis(10));
                 continue;
             };
             // `while (comPort.BytesToRead > 0)`: read until a read finds nothing.
@@ -2683,7 +2683,7 @@ pub mod worker {
                     break;
                 }
             }
-            std::thread::sleep(Duration::from_millis(10));
+            wasm_thread::sleep(Duration::from_millis(10));
         }
     }
 
@@ -5734,7 +5734,7 @@ const TIMER: Duration = Duration::from_millis(1000);
 #[allow(clippy::cast_possible_truncation, clippy::cast_possible_wrap)]
 mod tests {
     use std::collections::BTreeMap;
-    use std::time::{Duration, Instant};
+    use web_time::{Duration, Instant};
 
     use mp_transport::Transport as _;
     use mp_transport::testing::Loopback;
@@ -5783,7 +5783,7 @@ mod tests {
         let deadline = Instant::now() + Duration::from_secs(10);
         while !check() {
             assert!(Instant::now() < deadline, "timed out waiting for {what}");
-            std::thread::sleep(Duration::from_millis(2));
+            wasm_thread::sleep(Duration::from_millis(2));
         }
     }
 
@@ -6103,7 +6103,7 @@ mod tests {
                 }
             });
             if n == 0 {
-                std::thread::sleep(Duration::from_millis(1));
+                wasm_thread::sleep(Duration::from_millis(1));
             }
         }
         // Reassembled: a message starts at fragment 0, and all its fragments carry its sequence
@@ -6147,9 +6147,9 @@ mod tests {
     fn a_connection_reads_logs_and_counts_until_stopped() {
         let (mut base, port) = Loopback::pair();
         let shared = Arc::new(Shared::default());
-        let dir = std::env::temp_dir().join(format!(
+        let dir = mp_os::temp_dir().join(format!(
             "headless-planner-rtk-{}-{}",
-            std::process::id(),
+            mp_os::process_id(),
             line!()
         ));
         std::fs::create_dir_all(&dir).expect("the log directory");
@@ -6835,7 +6835,7 @@ mod tests {
 
     fn scratch(tag: &str) -> std::path::PathBuf {
         let dir =
-            std::env::temp_dir().join(format!("headless-planner-rtk-{}-{tag}", std::process::id()));
+            mp_os::temp_dir().join(format!("headless-planner-rtk-{}-{tag}", mp_os::process_id()));
         std::fs::create_dir_all(&dir).expect("scratch");
         dir
     }

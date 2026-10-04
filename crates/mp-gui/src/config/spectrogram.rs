@@ -1104,7 +1104,7 @@ impl Spectrogram {
     /// Runs `work` on a thread of its own.
     fn start(&mut self, task: Task, work: impl FnOnce() -> Result<Done, String> + Send + 'static) {
         let (send, receive) = std::sync::mpsc::channel();
-        let spawned = std::thread::Builder::new()
+        let spawned = wasm_thread::Builder::new()
             .name("mp-spectrogram".to_owned())
             .spawn(move || {
                 // The receiver may be gone with the form; nothing is owed then.
@@ -1172,7 +1172,7 @@ impl Spectrogram {
             if self.running.is_none() {
                 break;
             }
-            std::thread::sleep(std::time::Duration::from_millis(5));
+            wasm_thread::sleep(std::time::Duration::from_millis(5));
         }
         error
     }

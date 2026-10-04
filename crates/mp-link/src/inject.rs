@@ -245,7 +245,7 @@ mod tests {
     /// out as frames, and a base written through a sender is in the vehicle's next snapshot.
     #[test]
     fn a_senders_injections_and_base_reach_the_wire_and_the_state() {
-        use std::time::{Duration, Instant};
+        use web_time::{Duration, Instant};
 
         use mp_mavlink::FrameDecoder;
         use mp_mavlink_dialects::all::DIALECT;
@@ -267,7 +267,7 @@ mod tests {
             let deadline = Instant::now() + Duration::from_secs(5);
             while !check() {
                 assert!(Instant::now() < deadline, "timed out waiting for {what}");
-                std::thread::sleep(Duration::from_millis(2));
+                wasm_thread::sleep(Duration::from_millis(2));
             }
         };
         until("the vehicle", &|| link.vehicles().contains(&TARGET));

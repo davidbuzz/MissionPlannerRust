@@ -36,8 +36,8 @@
 
 use std::io::{Read, Write};
 use std::net::{TcpListener, TcpStream};
-use std::thread::JoinHandle;
 use std::time::Duration;
+use wasm_thread::JoinHandle;
 
 use mp_mavlink::FrameDecoder;
 use mp_mavlink_dialects::all::DIALECT;
@@ -149,7 +149,7 @@ pub fn caster(
     hang_up: bool,
 ) -> JoinHandle<CasterConnection> {
     let listener = listener.try_clone().unwrap();
-    std::thread::spawn(move || {
+    wasm_thread::spawn(move || {
         let (mut stream, _) = listener.accept().unwrap();
         stream.set_nodelay(true).unwrap();
         let request = read_until(&mut stream, b"\r\n\r\n");
@@ -187,7 +187,7 @@ pub fn ws_accept_answering(
     bad_accept: Option<&'static str>,
 ) -> JoinHandle<(String, TcpStream)> {
     let listener = listener.try_clone().unwrap();
-    std::thread::spawn(move || {
+    wasm_thread::spawn(move || {
         let (mut stream, _) = listener.accept().unwrap();
         // Each write of the server's goes out at once, so a test that writes and then has the
         // client read finds it there.

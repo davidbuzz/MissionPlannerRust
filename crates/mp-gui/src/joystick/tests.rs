@@ -24,7 +24,7 @@
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::indexing_slicing)]
 
 use std::sync::mpsc::{self, Receiver, Sender};
-use std::time::{Duration, Instant};
+use web_time::{Duration, Instant};
 
 use mp_input::event::{self, AXIS, BUTTON, INIT};
 use mp_link::ProtocolTimeouts;
@@ -38,10 +38,10 @@ struct Scratch(PathBuf);
 
 impl Scratch {
     fn new(name: &str) -> Self {
-        let path = std::env::temp_dir().join(format!(
+        let path = mp_os::temp_dir().join(format!(
             "mp-gui-joystick-{name}-{}-{:?}",
-            std::process::id(),
-            std::thread::current().id()
+            mp_os::process_id(),
+            wasm_thread::current().id()
         ));
         let _ = std::fs::remove_dir_all(&path);
         std::fs::create_dir_all(&path).unwrap();
@@ -529,7 +529,7 @@ fn auto_detect_finds_the_axis_that_moves() {
     assert_eq!(sticks.page.message.as_ref().unwrap().text, MOVE_AXIS);
     until("the detector's device", || feeds.openings() > 1);
     feeds.send(&init());
-    std::thread::sleep(Duration::from_millis(50));
+    wasm_thread::sleep(Duration::from_millis(50));
     sticks.message_ok();
     feeds.send(&axis(1, 30_000));
     tick_until(&mut sticks, "the axis found", |s| s.page.detect.is_none());
@@ -549,7 +549,7 @@ fn detect_finds_the_button_pressed() {
     assert_eq!(sticks.page.message.as_ref().unwrap().text, PRESS_BUTTON);
     until("the detector's device", || feeds.openings() > 1);
     feeds.send(&init());
-    std::thread::sleep(Duration::from_millis(50));
+    wasm_thread::sleep(Duration::from_millis(50));
     sticks.message_ok();
     feeds.send(&button(2, true));
     tick_until(&mut sticks, "the button found", |s| s.page.detect.is_none());

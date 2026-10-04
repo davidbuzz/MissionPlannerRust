@@ -38,7 +38,7 @@ use std::io::{BufRead, BufReader, Write};
 use std::net::{TcpListener, TcpStream};
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
-use std::time::{Duration, Instant};
+use web_time::{Duration, Instant};
 
 use mp_tiles::cache::TileCache;
 use mp_tiles::fetch::{TileFetcher, USER_AGENT};
@@ -144,7 +144,7 @@ fn wait_for(store: &TileStore, tile: TileId) -> TileAnswer {
         if matches!(answer, TileAnswer::Exact(_)) || Instant::now() > deadline {
             return answer;
         }
-        std::thread::sleep(Duration::from_millis(10));
+        wasm_thread::sleep(Duration::from_millis(10));
     }
 }
 
@@ -155,15 +155,15 @@ fn a_bing_map_checks_its_version_then_asks_for_tiles_as_the_csharp_does() {
     let seen = Arc::new(Mutex::new(Vec::<Seen>::new()));
     {
         let seen = Arc::clone(&seen);
-        std::thread::spawn(move || {
+        wasm_thread::spawn(move || {
             for stream in listener.incoming().flatten() {
                 let seen = Arc::clone(&seen);
-                std::thread::spawn(move || serve(stream, &seen));
+                wasm_thread::spawn(move || serve(stream, &seen));
             }
         });
     }
 
-    let root = std::env::temp_dir().join(format!("mp-tiles-wire-{}", std::process::id()));
+    let root = mp_os::temp_dir().join(format!("mp-tiles-wire-{}", mp_os::process_id()));
     let _ = std::fs::remove_dir_all(&root);
     let _cleanup = Cleanup(root.clone());
     let tile = TileId::new(2, 3, 1).unwrap();

@@ -52,7 +52,7 @@ pub use mapping::{
 };
 pub use reader::{Cause, Frame, MIN_INTERVAL, RESEND, StickReader};
 
-use std::time::{Duration, Instant};
+use web_time::{Duration, Instant};
 
 /// How long a mapping may go unfed before its channels are released.
 ///

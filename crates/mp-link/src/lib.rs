@@ -122,7 +122,7 @@ pub mod traffic;
 use std::collections::BTreeMap;
 use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
-use std::time::{Duration, Instant};
+use web_time::{Duration, Instant};
 
 use mission_transfer::{Action, MissionTransfer};
 use mp_mavlink::{DecodeStats, FrameDecoder, Message as _, encode_v2};
@@ -530,7 +530,7 @@ pub struct Link {
     last_log_progress: AtomicU32,
     shared: Arc<Shared>,
     outbound: std::sync::mpsc::Sender<Vec<u8>>,
-    thread: Option<std::thread::JoinHandle<()>>,
+    thread: Option<wasm_thread::JoinHandle<()>>,
     description: String,
     config: LinkConfig,
 }
@@ -581,7 +581,7 @@ impl Link {
 
         let thread_shared = Arc::clone(&shared);
         let thread_config = config.clone();
-        let thread = std::thread::Builder::new()
+        let thread = wasm_thread::Builder::new()
             .name("mp-link".to_owned())
             .spawn(move || run_link(transport, thread_config, &thread_shared, &rx, reopen))
             .ok();
@@ -1529,7 +1529,7 @@ fn reopen_transport(
                     if !shared.running.load(Ordering::Acquire) {
                         return give_up(shared);
                     }
-                    std::thread::sleep(RECONNECT_POLL);
+                    wasm_thread::sleep(RECONNECT_POLL);
                 }
             }
         }
@@ -1588,7 +1588,7 @@ fn run_link(
                 // would otherwise spin a core flat. Idle CPU is a stated budget for this port, so
                 // yield only when the read cost us nothing.
                 if read_started.elapsed() < IDLE_POLL {
-                    std::thread::sleep(IDLE_POLL);
+                    wasm_thread::sleep(IDLE_POLL);
                 }
             }
             Ok(n) => {

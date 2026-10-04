@@ -32,7 +32,7 @@
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::indexing_slicing)]
 
 use std::io;
-use std::time::{Duration, Instant};
+use web_time::{Duration, Instant};
 
 use mp_link::{Link, LinkConfig, ProtocolTimeouts, mission_transfer::TransferState};
 use mp_mavlink::{FrameDecoder, encode_v2};
@@ -160,7 +160,7 @@ fn wait_for(what: &str, mut check: impl FnMut() -> bool) {
     let deadline = Instant::now() + HUNG;
     while !check() {
         assert!(Instant::now() < deadline, "timed out waiting for {what}");
-        std::thread::sleep(Duration::from_millis(2));
+        wasm_thread::sleep(Duration::from_millis(2));
     }
 }
 
@@ -256,7 +256,7 @@ fn each_packet_is_stamped_with_the_time_it_is_read() {
     let after = DateTime::now();
     assert!(before <= first && first <= after, "{first:?}");
 
-    std::thread::sleep(Duration::from_millis(30));
+    wasm_thread::sleep(Duration::from_millis(30));
     peer.send(&heartbeat(false));
     wait_for("the clock to move", || {
         state(&link, VEHICLE).unwrap().datetime > first
@@ -304,14 +304,14 @@ fn a_recording_stamps_its_own_time_and_asks_for_no_streams() {
     let mut peer = Peer::new(vehicle_side);
     for _ in 0..10 {
         peer.send(&heartbeat(false));
-        std::thread::sleep(Duration::from_millis(20));
+        wasm_thread::sleep(Duration::from_millis(20));
     }
     wait_for("the vehicle", || state(&link, VEHICLE).is_some());
     assert_eq!(
         state(&link, VEHICLE).unwrap().datetime,
         DateTime::from_tlog_micros(STAMP).unwrap()
     );
-    std::thread::sleep(Duration::from_millis(100));
+    wasm_thread::sleep(Duration::from_millis(100));
     peer.pump();
     assert!(
         peer.stream_requests().is_empty(),
@@ -337,7 +337,7 @@ fn time_in_air_and_distance_count_each_second_while_armed() {
             peer.send(&message);
         }
         peer.send(&vfr_hud(0.0, 50));
-        std::thread::sleep(Duration::from_millis(100));
+        wasm_thread::sleep(Duration::from_millis(100));
     };
     for _ in 0..15 {
         tick(&mut peer, false, north);
@@ -355,7 +355,7 @@ fn time_in_air_and_distance_count_each_second_while_armed() {
         tick(&mut peer, true, north);
         north += 100;
     }
-    std::thread::sleep(Duration::from_millis(100));
+    wasm_thread::sleep(Duration::from_millis(100));
     let held = state(&link, VEHICLE).unwrap();
     let armed_for = armed_at.elapsed().as_secs_f64();
     // One second mark per second that passed, give or take the one at either end; the first
@@ -435,7 +435,7 @@ fn the_streams_are_asked_for_at_the_vehicles_own_rates() {
     peer.send(&heartbeat(false));
     wait_for("the second round", || {
         peer.send(&heartbeat(false));
-        std::thread::sleep(Duration::from_millis(10));
+        wasm_thread::sleep(Duration::from_millis(10));
         peer.pump();
         peer.stream_requests().len() >= 14 + 12
     });
@@ -471,7 +471,7 @@ fn every_listed_vehicle_is_asked_and_an_unlisted_one_is_not() {
         peer.pump();
         peer.stream_requests().len() >= 28
     });
-    std::thread::sleep(Duration::from_millis(100));
+    wasm_thread::sleep(Duration::from_millis(100));
     peer.pump();
     let requests = peer.stream_requests();
     assert_eq!(requests.len(), 28);
@@ -523,9 +523,9 @@ fn the_airspeed_minimums_come_from_the_parameters() {
             peer.send_from(id, &sensors);
             peer.send_from(id, &vfr_hud(5.0, 50));
         }
-        std::thread::sleep(Duration::from_millis(100));
+        wasm_thread::sleep(Duration::from_millis(100));
     }
-    std::thread::sleep(Duration::from_millis(50));
+    wasm_thread::sleep(Duration::from_millis(50));
     for id in [both, fbw, neither] {
         assert!(
             state(&link, id).unwrap().time_since_arm_in_air > 0.0,
@@ -715,7 +715,7 @@ fn this_links_fence_upload_files_what_the_csharp_files() {
                     _ => {}
                 }
             }
-            std::thread::sleep(Duration::from_millis(1));
+            wasm_thread::sleep(Duration::from_millis(1));
         }
         wait_for("the last item filed", || {
             link.fence_points(VEHICLE)

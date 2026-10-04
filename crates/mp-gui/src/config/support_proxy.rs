@@ -416,7 +416,7 @@ impl SupportProxy {
         persisted.set(&protocol.port_key(), port.to_string());
         persisted.set(&protocol.host_key(), host.clone());
         let (send, receive) = std::sync::mpsc::channel();
-        let spawned = std::thread::Builder::new()
+        let spawned = wasm_thread::Builder::new()
             .name("mp-support-proxy".to_owned())
             .spawn(move || {
                 let _ = send.send(open(protocol, &host, port));
@@ -537,7 +537,7 @@ impl SupportProxy {
             if self.opening.is_none() {
                 break;
             }
-            std::thread::sleep(std::time::Duration::from_millis(5));
+            wasm_thread::sleep(std::time::Duration::from_millis(5));
         }
         status
     }
@@ -1065,7 +1065,7 @@ mod tests {
             .expect("sent");
         until("the request at the vehicle", || {
             vehicle.heartbeat();
-            std::thread::sleep(Duration::from_millis(5));
+            wasm_thread::sleep(Duration::from_millis(5));
             vehicle.read().contains(&request)
         });
         assert!(proxy.relayed().up >= 1 && proxy.relayed().down >= 1);
@@ -1083,7 +1083,7 @@ mod tests {
         assert!(proxy.window.as_ref().is_some_and(|form| !form.stopping));
         let after = proxy.relayed().up;
         vehicle.heartbeat();
-        std::thread::sleep(Duration::from_millis(50));
+        wasm_thread::sleep(Duration::from_millis(50));
         assert_eq!(proxy.relayed().up, after, "closed: nothing more");
     }
 

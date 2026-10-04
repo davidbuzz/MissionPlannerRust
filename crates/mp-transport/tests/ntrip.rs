@@ -31,8 +31,8 @@ mod common;
 
 use std::io::{self, Write};
 use std::net::TcpListener;
-use std::thread::JoinHandle;
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use wasm_thread::JoinHandle;
+use web_time::{Duration, SystemTime, UNIX_EPOCH};
 
 use common::{base64_reference, caster, listen, read_to_end, read_until, sentences};
 use mp_transport::ntrip::{GGA_INTERVAL, nmea_checksum};
@@ -68,7 +68,7 @@ fn rtcm(length: usize) -> Vec<u8> {
 /// it is asked, and gives back the request and the connection.
 fn mock_caster(listener: &TcpListener) -> JoinHandle<(String, std::net::TcpStream)> {
     let listener = listener.try_clone().unwrap();
-    std::thread::spawn(move || {
+    wasm_thread::spawn(move || {
         let (mut stream, _) = listener.accept().unwrap();
         let request = String::from_utf8(read_until(&mut stream, b"\r\n\r\n")).unwrap();
         let first = request.lines().next().unwrap().to_owned();

@@ -43,7 +43,7 @@
 #![allow(unreachable_pub)]
 
 use std::sync::{Arc, Mutex, PoisonError};
-use std::time::{Duration, Instant};
+use web_time::{Duration, Instant};
 
 use mp_link::inspector::PacketSubscription;
 use mp_mavlink_dialects::all::{MavMessage, OsdParamConfig, OsdParamShowConfig};

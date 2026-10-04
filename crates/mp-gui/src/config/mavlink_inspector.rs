@@ -92,7 +92,7 @@ use std::cmp::Ordering;
 use std::collections::{BTreeSet, VecDeque};
 use std::sync::atomic::{AtomicBool, Ordering as Atomic};
 use std::sync::{Arc, Mutex};
-use std::time::{Duration, Instant};
+use web_time::{Duration, Instant};
 
 use chrono::{Datelike as _, NaiveDate, NaiveDateTime, Timelike as _};
 use gpui::{

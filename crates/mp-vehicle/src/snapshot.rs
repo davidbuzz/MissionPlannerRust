@@ -178,7 +178,7 @@ mod tests {
         let mut pub_ = StatePublisher::new(VehicleState::new(1, 1));
         let handle = pub_.handle();
 
-        let reader = std::thread::spawn(move || {
+        let reader = wasm_thread::spawn(move || {
             let mut last = 0;
             for _ in 0..10_000 {
                 let snap = handle.load();

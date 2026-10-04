@@ -26,7 +26,7 @@
 //! frame is indistinguishable from an attack.
 
 use std::collections::HashMap;
-use std::time::{Duration, Instant};
+use web_time::{Duration, Instant};
 
 use mp_units::TileId;
 

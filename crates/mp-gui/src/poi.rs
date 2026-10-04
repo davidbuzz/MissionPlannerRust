@@ -394,12 +394,12 @@ mod tests {
         // Nanoseconds since the epoch, not `SystemTime`'s Debug text: that carries braces and a
         // colon, which Windows refuses in a folder name (os error 123, the hosted runner,
         // 2026-10-04).
-        let stamp = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
+        let stamp = web_time::SystemTime::now()
+            .duration_since(web_time::UNIX_EPOCH)
             .map_or(0, |since| since.as_nanos());
-        let dir = std::env::temp_dir().join(format!(
+        let dir = mp_os::temp_dir().join(format!(
             "headless-planner-poi-{}-{name}-{stamp}",
-            std::process::id()
+            mp_os::process_id()
         ));
         dir.join("MissionPlannerRust").join(FILE_NAME)
     }

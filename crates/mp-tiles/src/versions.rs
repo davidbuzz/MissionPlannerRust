@@ -203,7 +203,7 @@ pub fn initialize(source: &'static TileSource, root: &Path, fetcher: &TileFetche
             }
             let root = root.to_path_buf();
             let fetcher = fetcher.clone();
-            let _ = std::thread::Builder::new()
+            let _ = wasm_thread::Builder::new()
                 .name("mp-tiles-version".to_owned())
                 .spawn(move || {
                     correct_google(&root, |url| fetcher.fetch_text(url, source.referer));

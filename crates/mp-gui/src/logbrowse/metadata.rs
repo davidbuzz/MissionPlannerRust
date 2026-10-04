@@ -209,10 +209,16 @@ pub fn xml_file(data_directory: &Path, vehicle: &str) -> PathBuf {
 }
 
 /// Whether a download is young enough to keep: its last write within [`FRESH`] of `now`.
-fn fresh(path: &Path, now: std::time::SystemTime) -> bool {
+fn fresh(path: &Path, now: web_time::SystemTime) -> bool {
     std::fs::metadata(path)
         .and_then(|meta| meta.modified())
-        .is_ok_and(|written| now.duration_since(written).map_or(true, |age| age < FRESH))
+        .is_ok_and(|written| {
+            // A file's time is std's, `now` the page's clock in a browser: the same instant,
+            // counted from the same epoch (one type on the desktop).
+            let epoch = std::time::UNIX_EPOCH; // port_clock: keep
+            let written = web_time::UNIX_EPOCH + written.duration_since(epoch).unwrap_or_default();
+            now.duration_since(written).map_or(true, |age| age < FRESH)
+        })
 }
 
 /// `XZStream.IsXZStream`: the six bytes an xz stream starts with.
@@ -225,7 +231,7 @@ const XZ_MAGIC: [u8; 6] = [0xFD, b'7', b'z', b'X', b'Z', 0x00];
 /// `// C#: ExtLibs/ArduPilot/LogMetaData.cs:41-98`
 pub fn get_meta_data(data_directory: &Path, fetch: Option<&dyn mp_firmware::manifest::Fetch>) {
     if let Some(fetch) = fetch {
-        let now = std::time::SystemTime::now();
+        let now = web_time::SystemTime::now();
         for vehicle in VEHICLES {
             let file = xz_file(data_directory, vehicle);
             if fresh(&file, now) {
@@ -266,7 +272,7 @@ pub fn start() {
         return;
     };
     let offline = std::env::var_os("MP_OFFLINE").is_some();
-    let _ = std::thread::Builder::new()
+    let _ = wasm_thread::Builder::new()
         .name("log-metadata".to_owned())
         .spawn(move || {
             let http = mp_firmware::manifest::Http;
@@ -322,8 +328,7 @@ mod tests {
 </loggermessagefile>"#;
 
     fn scratch(test: &str) -> PathBuf {
-        let dir =
-            std::env::temp_dir().join(format!("mp-gui-logmeta-{test}-{}", std::process::id()));
+        let dir = mp_os::temp_dir().join(format!("mp-gui-logmeta-{test}-{}", mp_os::process_id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).expect("scratch");
         dir
@@ -436,7 +441,7 @@ mod tests {
     fn a_fresh_download_is_kept() {
         let dir = scratch("fresh");
         let file = xz_file(&dir, "Copter");
-        let now = std::time::SystemTime::now();
+        let now = web_time::SystemTime::now();
         assert!(!fresh(&file, now));
         std::fs::write(&file, b"x").unwrap();
         assert!(fresh(&file, now));

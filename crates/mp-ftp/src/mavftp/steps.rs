@@ -36,7 +36,7 @@
 //!   (e.g. MAVFtp.cs:664). At sequence number 65535 the request's `+ 1` is 65536 and the reply's
 //!   wrapped 0 can never match it, so every 65,536th command times out; that is kept too.
 
-use std::time::Instant;
+use web_time::Instant;
 
 use super::Progress;
 use super::listing::{FtpFileInfo, parse_entries};

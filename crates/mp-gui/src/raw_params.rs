@@ -51,7 +51,7 @@
 use std::collections::BTreeMap;
 use std::path::Path;
 use std::sync::mpsc::{Receiver, TryRecvError};
-use std::time::{Duration, Instant};
+use web_time::{Duration, Instant};
 
 use gpui::{AnyElement, Context, SharedString, Window, div, prelude::*, px, rgb};
 use mp_firmware::manifest::Fetch;
@@ -575,7 +575,7 @@ impl Presets {
         } else if self.listing.is_none() {
             let url = list_url(parameters);
             let (send, receive) = std::sync::mpsc::channel();
-            let spawned = std::thread::Builder::new()
+            let spawned = wasm_thread::Builder::new()
                 .name("presaved-params".to_owned())
                 .spawn(move || {
                     let _ = send.send(fetch_list(&*mp_firmware::manifest::fetcher(), &url));
@@ -777,7 +777,7 @@ impl MissionPlanner {
         presets.open = false;
         let directory = mp_settings::user_data_directory();
         let (send, receive) = std::sync::mpsc::channel();
-        let spawned = std::thread::Builder::new()
+        let spawned = wasm_thread::Builder::new()
             .name("presaved-param-file".to_owned())
             .spawn(move || {
                 let fetch = mp_firmware::manifest::fetcher();
@@ -1165,7 +1165,7 @@ mod tests {
             last != ResetProgress::Waiting
         });
         // What the link wrote before the port closed.
-        std::thread::sleep(Duration::from_millis(50));
+        wasm_thread::sleep(Duration::from_millis(50));
         vehicle.read();
         last
     }
@@ -1624,10 +1624,10 @@ mod tests {
             ["3DR_Iris+.param", "Solo.PARAM"]
         );
 
-        let directory = std::env::temp_dir().join(format!(
+        let directory = mp_os::temp_dir().join(format!(
             "mp-gui-presaved-{}-{:?}",
-            std::process::id(),
-            std::thread::current().id()
+            mp_os::process_id(),
+            wasm_thread::current().id()
         ));
         std::fs::create_dir_all(&directory).expect("scratch directory");
         let first = files.first().expect("a file");

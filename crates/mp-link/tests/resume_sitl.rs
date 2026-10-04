@@ -30,7 +30,7 @@
 
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::indexing_slicing)]
 
-use std::time::{Duration, Instant};
+use web_time::{Duration, Instant};
 
 use mp_link::messages::LogMessage;
 use mp_link::mission_transfer::TransferState;
@@ -50,7 +50,7 @@ fn connect() -> (Link, VehicleId) {
     let link = Link::connect("tcp:127.0.0.1:5760", LinkConfig::default()).expect("SITL on 5760");
     let deadline = Instant::now() + Duration::from_secs(20);
     while link.primary_vehicle().is_none() && Instant::now() < deadline {
-        std::thread::sleep(Duration::from_millis(100));
+        wasm_thread::sleep(Duration::from_millis(100));
     }
     let (id, _) = link.primary_vehicle().expect("a vehicle");
     (link, id)
@@ -67,7 +67,7 @@ fn await_transfer(link: &Link, id: VehicleId) -> Result<Vec<MissionItem>, String
             }
         }
         assert!(Instant::now() < deadline, "the transfer never finished");
-        std::thread::sleep(Duration::from_millis(50));
+        wasm_thread::sleep(Duration::from_millis(50));
     }
 }
 
@@ -99,7 +99,7 @@ fn await_message(
             return found;
         }
         assert!(Instant::now() < deadline, "timed out waiting for {what}");
-        std::thread::sleep(Duration::from_millis(50));
+        wasm_thread::sleep(Duration::from_millis(50));
     }
 }
 
@@ -169,7 +169,7 @@ fn wait(
     let deadline = Instant::now() + Duration::from_secs(secs);
     while !check(&handle.load()) {
         assert!(Instant::now() < deadline, "timed out waiting for {what}");
-        std::thread::sleep(Duration::from_millis(100));
+        wasm_thread::sleep(Duration::from_millis(100));
     }
 }
 
@@ -184,7 +184,7 @@ fn guided_and_armed(link: &Link, id: VehicleId) {
             "the vehicle never entered Guided"
         );
         link.send(&commands::set_mode(id, MODE_GUIDED));
-        std::thread::sleep(Duration::from_secs(1));
+        wasm_thread::sleep(Duration::from_secs(1));
     }
     let deadline = Instant::now() + Duration::from_secs(30);
     while !handle.load().armed {
@@ -193,7 +193,7 @@ fn guided_and_armed(link: &Link, id: VehicleId) {
             "the vehicle never armed in Guided"
         );
         link.send(&commands::arm(id, true, false));
-        std::thread::sleep(Duration::from_secs(1));
+        wasm_thread::sleep(Duration::from_secs(1));
     }
 }
 
@@ -253,7 +253,7 @@ fn resume(with_upload: bool, with_set_current: bool) -> String {
                 _ => {}
             }
             assert!(Instant::now() < deadline, "set current never answered");
-            std::thread::sleep(Duration::from_millis(50));
+            wasm_thread::sleep(Duration::from_millis(50));
         }
         transfer(&link, id, || link.download_mission(id));
     }
@@ -333,7 +333,7 @@ fn the_csharps_repeated_takeoff_is_refused_once_the_vehicle_is_climbing() {
             Instant::now() < deadline,
             "the vehicle did not leave the ground within 20 s: {climbed:.1} m"
         );
-        std::thread::sleep(Duration::from_millis(100));
+        wasm_thread::sleep(Duration::from_millis(100));
     };
     let second = takeoff(&link, id, 10.0);
     println!(

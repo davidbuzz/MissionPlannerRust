@@ -30,8 +30,8 @@
 use std::path::{Path, PathBuf};
 use std::sync::mpsc::{self, Receiver, RecvTimeoutError, Sender};
 use std::sync::{Arc, PoisonError, RwLock};
-use std::thread::JoinHandle;
-use std::time::{Duration, Instant};
+use wasm_thread::JoinHandle;
+use web_time::{Duration, Instant};
 
 use wasmtime::Engine;
 
@@ -280,7 +280,7 @@ impl PluginHost {
                 limits,
                 requests: tx.clone(),
             };
-            let thread = std::thread::Builder::new()
+            let thread = wasm_thread::Builder::new()
                 .name(format!("plugin {index}"))
                 .spawn(move || job.run(surface, &inbox))
                 .ok();
@@ -385,7 +385,7 @@ impl PluginHost {
         for handle in &mut self.handles {
             if let Some(thread) = handle.thread.take() {
                 while !thread.is_finished() && Instant::now() < deadline {
-                    std::thread::sleep(Duration::from_millis(5));
+                    wasm_thread::sleep(Duration::from_millis(5));
                 }
                 if thread.is_finished() {
                     let _ = thread.join();

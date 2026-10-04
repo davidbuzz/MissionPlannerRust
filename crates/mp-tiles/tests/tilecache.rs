@@ -31,7 +31,7 @@
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::indexing_slicing)]
 
 use std::path::{Path, PathBuf};
-use std::time::{Duration, Instant};
+use web_time::{Duration, Instant};
 
 use mp_tiles::cache::{ImageFormat, TileCache};
 use mp_tiles::source::{GOOGLE_SATELLITE_MAP, OPENSTREETMAP};
@@ -43,10 +43,10 @@ struct Scratch(PathBuf);
 
 impl Scratch {
     fn new(name: &str) -> Self {
-        let path = std::env::temp_dir().join(format!(
+        let path = mp_os::temp_dir().join(format!(
             "mp-tiles-compat-{name}-{}-{:?}",
-            std::process::id(),
-            std::thread::current().id()
+            mp_os::process_id(),
+            wasm_thread::current().id()
         ));
         let _ = std::fs::remove_dir_all(&path);
         Self(path)
@@ -83,7 +83,7 @@ fn csharp_path(gmapcache: &Path, provider: &str, z: u8, x: u32, y: u32) -> PathB
 fn wait_for_a_tile(store: &TileStore) {
     let deadline = Instant::now() + Duration::from_secs(2);
     while store.generation() == 0 && Instant::now() < deadline {
-        std::thread::sleep(Duration::from_millis(5));
+        wasm_thread::sleep(Duration::from_millis(5));
     }
 }
 

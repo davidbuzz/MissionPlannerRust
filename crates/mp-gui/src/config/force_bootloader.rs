@@ -36,7 +36,7 @@
 // This module is internal to the binary; `pub` here documents intent rather than exporting API.
 #![allow(unreachable_pub)]
 
-use std::time::Instant;
+use web_time::Instant;
 
 use mp_link::Link;
 

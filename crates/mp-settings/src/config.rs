@@ -677,7 +677,7 @@ mod tests {
 
     #[test]
     fn saving_makes_the_directory_and_round_trips() {
-        let dir = std::env::temp_dir().join(format!("mp-settings-config-{}", std::process::id()));
+        let dir = mp_os::temp_dir().join(format!("mp-settings-config-{}", mp_os::process_id()));
         let _ = std::fs::remove_dir_all(&dir);
         // GetConfigFullPath creates the user data directory; so does this.
         let path = dir.join("MissionPlannerRust").join("config.xml");

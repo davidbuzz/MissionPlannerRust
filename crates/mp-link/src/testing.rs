@@ -32,8 +32,8 @@
 use std::f64::consts::TAU;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
-use std::thread::JoinHandle;
-use std::time::{Duration, Instant};
+use wasm_thread::JoinHandle;
+use web_time::{Duration, Instant};
 
 use mp_mavlink::encode_v2;
 use mp_mavlink_dialects::all::{Attitude, GlobalPositionInt, Heartbeat, MavMessage, VfrHud};
@@ -309,7 +309,7 @@ impl Storm {
         let thread = {
             let stop = Arc::clone(&stop);
             let ticks = Arc::clone(&ticks);
-            std::thread::Builder::new()
+            wasm_thread::Builder::new()
                 .name("mp-storm".to_owned())
                 .spawn(move || {
                     let mut vehicle = StormVehicle::new(rate);
@@ -318,7 +318,7 @@ impl Storm {
                     while !stop.load(Ordering::Acquire) {
                         let wait = pacer.wait(Instant::now());
                         if !wait.is_zero() {
-                            std::thread::sleep(wait);
+                            wasm_thread::sleep(wait);
                         }
                         // What the link sends the vehicle - its heartbeat, a banner request - is
                         // read and dropped, so the direction nobody else reads does not grow for
@@ -481,7 +481,7 @@ mod tests {
     #[test]
     fn a_storm_writes_at_its_rate_and_stops_when_dropped() {
         let (storm, mut end) = Storm::start(200);
-        std::thread::sleep(Duration::from_millis(500));
+        wasm_thread::sleep(Duration::from_millis(500));
         let ticks = storm.ticks();
         drop(storm);
         // Half a second at 200 Hz is 100 ticks. Generous either side for a loaded machine, and
@@ -501,7 +501,7 @@ mod tests {
             "{frames}"
         );
         // Dropped means stopped: nothing more arrives.
-        std::thread::sleep(Duration::from_millis(50));
+        wasm_thread::sleep(Duration::from_millis(50));
         assert_eq!(end.read(&mut buf).ok(), Some(0));
     }
 }

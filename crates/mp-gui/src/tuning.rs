@@ -86,7 +86,7 @@ pub struct Tuning {
     /// Which fields are shown, by index into [`FIELDS`].
     chosen: Vec<usize>,
     /// When the graph started, so the x axis is seconds rather than a wall clock.
-    started: std::time::Instant,
+    started: web_time::Instant,
     /// The snapshot count last sampled, so a stalled link does not draw a flat line that looks
     /// like a real measurement of zero.
     last_seen: u64,
@@ -111,7 +111,7 @@ impl Tuning {
         let mut tuning = Self {
             series: Vec::new(),
             chosen: Vec::new(),
-            started: std::time::Instant::now(),
+            started: web_time::Instant::now(),
             last_seen: 0,
             visible: false,
         };
@@ -194,7 +194,7 @@ impl Tuning {
 
     /// Forgets everything drawn so far.
     pub fn clear(&mut self) {
-        self.started = std::time::Instant::now();
+        self.started = web_time::Instant::now();
         for series in &mut self.series {
             series.clear();
         }

@@ -96,8 +96,8 @@ use crate::mapping::{ButtonEvent, ButtonTracker, ManualControl, Runtime};
 use crate::{Channels, Failsafe, LatencyHistogram, Mapping, Poll, Reading};
 use std::io::{ErrorKind, Read};
 use std::sync::{Arc, Condvar, Mutex, MutexGuard, PoisonError};
-use std::thread::{self, JoinHandle};
-use std::time::{Duration, Instant};
+use wasm_thread::{self as thread, JoinHandle};
+use web_time::{Duration, Instant};
 
 /// The longest the sticks go without being sent while overrides are on.
 ///

@@ -31,7 +31,7 @@
 //! subscription matches them (MAVLinkInterface.cs:5541-5543).
 
 use std::sync::Arc;
-use std::time::Instant;
+use web_time::Instant;
 
 use mp_ftp::FtpError;
 use mp_ftp::mavftp::wire::Header;
@@ -195,8 +195,8 @@ mod tests {
         stop: Arc<AtomicBool>,
         mut vehicle: FakeVehicle,
         mut lost: impl FnMut(&Header) -> bool + Send + 'static,
-    ) -> std::thread::JoinHandle<(FakeVehicle, Heard)> {
-        std::thread::spawn(move || {
+    ) -> wasm_thread::JoinHandle<(FakeVehicle, Heard)> {
+        wasm_thread::spawn(move || {
             let mut seq = 0u8;
             let heartbeat = MavMessage::Heartbeat(Heartbeat {
                 custom_mode: 0,
@@ -213,7 +213,7 @@ mod tests {
             while !stop.load(Ordering::Acquire) {
                 let n = end.read(&mut buf).unwrap_or(0);
                 if n == 0 {
-                    std::thread::sleep(Duration::from_millis(1));
+                    wasm_thread::sleep(Duration::from_millis(1));
                     continue;
                 }
                 let mut requests = Vec::new();
@@ -255,7 +255,7 @@ mod tests {
         let deadline = Instant::now() + Duration::from_secs(5);
         while link.vehicle(VEHICLE).is_none() {
             assert!(Instant::now() < deadline, "the vehicle was never heard");
-            std::thread::sleep(Duration::from_millis(1));
+            wasm_thread::sleep(Duration::from_millis(1));
         }
         link
     }
@@ -269,7 +269,7 @@ mod tests {
                 return outcome;
             }
             assert!(Instant::now() < deadline, "the request never finished");
-            std::thread::sleep(Duration::from_millis(1));
+            wasm_thread::sleep(Duration::from_millis(1));
         }
     }
 

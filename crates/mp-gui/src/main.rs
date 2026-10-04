@@ -83,7 +83,17 @@ mod planner_coverage;
 mod plotline;
 // ---- row 96 ----
 mod experimental;
+// The plugins run on wasmtime, which does not build for a web page: there the browser build
+// carries the same names with no plugins behind them.
+#[cfg(not(target_family = "wasm"))]
 mod plugin_manager;
+#[cfg(target_family = "wasm")]
+#[path = "plugin_manager_web.rs"]
+mod plugin_manager;
+#[cfg(not(target_family = "wasm"))]
+mod plugins_ui;
+#[cfg(target_family = "wasm")]
+#[path = "plugins_ui_web.rs"]
 mod plugins_ui;
 // ---- end row 96 ----
 mod platform;
@@ -485,16 +495,16 @@ struct MissionPlanner {
     /// The armed flag comes from the heartbeat, which is 1 Hz. Retrying at the render rate sends
     /// ten commands before the state can possibly catch up, and the vehicle acknowledges every one
     /// of them - which buries the message log under its own retries.
-    last_force_arm: Option<std::time::Instant>,
+    last_force_arm: Option<web_time::Instant>,
     /// While a forced arm is in progress, when to stop re-sending it.
     ///
     /// The parameter write that disables the checks takes effect asynchronously, so one arm
     /// command sent straight after it can arrive too early. Re-sending for a couple of seconds
     /// costs nothing and removes the race.
-    forcing_arm_until: Option<std::time::Instant>,
+    forcing_arm_until: Option<web_time::Instant>,
     /// The forced arm the link may still be retrying, and when it was made, so the next is sent
     /// only once it has ended.
-    force_arm_request: Option<(mp_link::RequestId, std::time::Instant)>,
+    force_arm_request: Option<(mp_link::RequestId, web_time::Instant)>,
     /// Lists of parameter writes under way, each made one write at a time.
     param_writes: Vec<params::ParamWrites>,
     /// The last parameter write to end, for the facts.
@@ -1133,7 +1143,7 @@ impl MissionPlanner {
         let Some(mut tour) = self.tour.take() else {
             return;
         };
-        let now = std::time::Instant::now();
+        let now = web_time::Instant::now();
         let view = self.telemetry.view();
         if !tour.waiting(view.parameters.len(), usize::from(view.parameters_expected), now) {
             if !tour.has_begun() {
@@ -1741,7 +1751,7 @@ impl MissionPlanner {
         // Asked for Install Firmware's Bootloader Update: its own link, not the window's.
         if self.install_firmware.take_bl_asking() {
             self.install_firmware
-                .bl_open(url.as_deref(), std::time::Instant::now());
+                .bl_open(url.as_deref(), web_time::Instant::now());
             return;
         }
         if let Some(url) = url {
@@ -1886,7 +1896,7 @@ impl MissionPlanner {
                 self.connect_box.asking = None;
                 if self.install_firmware.take_bl_asking() {
                     self.install_firmware
-                        .bl_open(None, std::time::Instant::now());
+                        .bl_open(None, web_time::Instant::now());
                 }
             }
         }
@@ -1980,11 +1990,11 @@ impl MissionPlanner {
         /// which is never going to arm stops being asked.
         const GIVE_UP_AFTER: std::time::Duration = std::time::Duration::from_secs(6);
 
-        let now = std::time::Instant::now();
+        let now = web_time::Instant::now();
         self.force_arm_request = self.telemetry.force_arm().map(|id| (id, now));
         self.last_force_arm = Some(now);
         self.disabled_arming_checks = true;
-        self.forcing_arm_until = Some(std::time::Instant::now() + GIVE_UP_AFTER);
+        self.forcing_arm_until = Some(web_time::Instant::now() + GIVE_UP_AFTER);
         self.file_status =
             Some("arming checks disabled (ARMING_SKIPCHK=-1); forcing arm".to_owned());
     }
@@ -2281,7 +2291,7 @@ impl MissionPlanner {
         hud::live_inputs(
             state,
             &mut self.hud_timing,
-            std::time::Instant::now(),
+            web_time::Instant::now(),
             chrono::Local::now().format("%H:%M:%S").to_string(),
             &view.parameters,
         )
@@ -3207,7 +3217,7 @@ impl Render for MissionPlanner {
             &view,
             self.screen == Screen::Setup,
             self.compass_focus.declination(window),
-            std::time::Instant::now(),
+            web_time::Instant::now(),
         );
         if self.compass.dialog().is_some() && !self.compass_focus.dialog.is_focused(window) {
             self.compass_focus.dialog.focus(window, cx);
@@ -3216,7 +3226,7 @@ impl Render for MissionPlanner {
         // with its screen, a number that lost the focus read, the numbers' timers, and every
         // write's answer.
         let on_setup = self.screen == Screen::Setup;
-        let now = std::time::Instant::now();
+        let now = web_time::Instant::now();
         self.servo_output.tick(
             &self.telemetry,
             &view,
@@ -3328,7 +3338,7 @@ impl Render for MissionPlanner {
         // that will not open is said on the status line. `// C#: MAVLinkInterface.cs:2573-2583`
         match self
             .telemetry
-            .reopen_after_reboot(std::time::Instant::now(), Telemetry::connect)
+            .reopen_after_reboot(web_time::Instant::now(), Telemetry::connect)
         {
             None => {}
             Some(telemetry::Reopened::Connecting) => {
@@ -3419,7 +3429,7 @@ impl Render for MissionPlanner {
         // them is already in hand, and published at the end of the frame so a reader never sees
         // half a set. Costs nothing unless MP_FACTS names a file.
         if facts::enabled() {
-            let harness = std::time::Instant::now();
+            let harness = web_time::Instant::now();
             facts::record("screen", self.screen.label());
             logs_tab::record_facts(self.logs_page);
             self.persisted.record_facts();
@@ -3874,7 +3884,7 @@ impl Render for MissionPlanner {
         // Other aircraft. Read every frame because the link forgets stale ones on read, and a
         // display that only updated on an event would keep a symbol after its aircraft had gone.
         {
-            let now = std::time::Instant::now();
+            let now = web_time::Instant::now();
             let traffic: Vec<(mp_units::LatLon, bool)> = self
                 .telemetry
                 .traffic()
@@ -3922,7 +3932,7 @@ impl Render for MissionPlanner {
             if armed {
                 self.forcing_arm_until = None;
                 self.file_status = Some("armed with arming checks disabled".to_owned());
-            } else if std::time::Instant::now() >= deadline {
+            } else if web_time::Instant::now() >= deadline {
                 self.forcing_arm_until = None;
                 self.file_status = Some(
                     "forced arm gave up; the vehicle is still refusing - see the messages"
@@ -3936,7 +3946,7 @@ impl Render for MissionPlanner {
                 // `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:2632-2645, 2764-2768`
                 const BETWEEN_ATTEMPTS: std::time::Duration =
                     std::time::Duration::from_millis(1000);
-                let now = std::time::Instant::now();
+                let now = web_time::Instant::now();
                 let in_flight = self.force_arm_request.is_some_and(|(id, made)| {
                     match self.telemetry.lookup(id, made) {
                         telemetry::Lookup::Found(request) => !request.is_finished(),
@@ -4290,7 +4300,7 @@ impl Render for MissionPlanner {
 
         let cut_off = self
             .cut_off
-            .text_at(std::time::Instant::now())
+            .text_at(web_time::Instant::now())
             .map(ToOwned::to_owned);
         probe::measured("root", div())
             .relative()
@@ -4690,6 +4700,13 @@ fn report_import(imported: &mp_settings::migrate::Import) {
 }
 
 fn main() {
+    // In a web page a panic says nothing unless it is sent to the console, and `log` goes there
+    // too: what gpui_platform's `web_init` does (the browser experiment).
+    #[cfg(target_family = "wasm")]
+    {
+        console_error_panic_hook::set_once();
+        gpui_web::init_logging();
+    }
     // First: what gpui cannot do - open a Metal device, load a font - it says only through `log`.
     stderr_log::install();
     let raw: Vec<String> = std::env::args().skip(1).collect();
@@ -4753,6 +4770,21 @@ fn main() {
     let read_mission = arguments.read_mission;
 
     platform::application().run(move |cx: &mut App| {
+        // A web page has no system fonts for gpui to find, so the browser build brings its own
+        // (the experiment's IBM Plex Sans, OFL), as Zed's web examples do.
+        #[cfg(target_family = "wasm")]
+        if let Err(err) = cx.text_system().add_fonts(vec![
+            std::borrow::Cow::Borrowed(
+                include_bytes!("../../../experiments/web-experiment/fonts/IBMPlexSans-Regular.ttf")
+                    .as_slice(),
+            ),
+            std::borrow::Cow::Borrowed(
+                include_bytes!("../../../experiments/web-experiment/fonts/IBMPlexSans-SemiBold.ttf")
+                    .as_slice(),
+            ),
+        ]) {
+            log::error!("planner: the fonts did not load: {err:#}");
+        }
         // 1600x1200. Room for the panel columns and a map worth looking at side by side. Smaller
         // windows work - the panel columns scroll and the map takes what is left, which is what
         // the scrolling was added for - but this is the size the application is laid out for.

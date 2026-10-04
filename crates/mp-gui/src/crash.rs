@@ -124,7 +124,7 @@ pub fn report_text(info: &PanicHookInfo<'_>, backtrace: &Backtrace) -> String {
         || "unknown".to_owned(),
         |at| format!("{}:{}:{}", at.file(), at.line(), at.column()),
     );
-    let thread = std::thread::current()
+    let thread = wasm_thread::current()
         .name()
         .unwrap_or("<unnamed>")
         .to_owned();
@@ -387,7 +387,7 @@ impl Crash {
         }
         let (sender, receiver) = channel();
         let fetch = Arc::clone(&self.fetch);
-        let spawned = std::thread::Builder::new()
+        let spawned = wasm_thread::Builder::new()
             .name("mp-crash-report".to_owned())
             .spawn(move || {
                 let _ = sender.send(fetch.post(&url, &body));
@@ -539,7 +539,7 @@ mod tests {
     }
 
     fn scratch(test: &str) -> PathBuf {
-        let dir = std::env::temp_dir().join(format!("mp-gui-crash-{test}-{}", std::process::id()));
+        let dir = mp_os::temp_dir().join(format!("mp-gui-crash-{test}-{}", mp_os::process_id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).expect("a scratch directory");
         dir
@@ -551,7 +551,7 @@ mod tests {
             if !matches!(crash.flow, Flow::Posting { .. }) {
                 return status;
             }
-            std::thread::sleep(std::time::Duration::from_millis(5));
+            wasm_thread::sleep(std::time::Duration::from_millis(5));
         }
         None
     }

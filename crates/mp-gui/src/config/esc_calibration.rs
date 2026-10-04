@@ -47,7 +47,7 @@
 #![allow(unreachable_pub)]
 
 use std::collections::VecDeque;
-use std::time::Instant;
+use web_time::Instant;
 
 use gpui::{
     AnyElement, Context, FocusHandle, KeyDownEvent, SharedString, Window, div, prelude::*, px, rgb,
@@ -908,7 +908,7 @@ mod tests {
         esc.activate(&telemetry, &view.parameters, Key::of(&view), bundled);
         for _ in 0..20 {
             esc.tick(&telemetry, &view, true, false, Instant::now());
-            std::thread::sleep(std::time::Duration::from_millis(2));
+            wasm_thread::sleep(std::time::Duration::from_millis(2));
         }
         esc.hide(Instant::now());
         esc.tick(&telemetry, &view, false, false, Instant::now());

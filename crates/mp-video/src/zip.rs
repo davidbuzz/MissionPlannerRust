@@ -221,7 +221,7 @@ pub(crate) mod tests {
     }
 
     fn scratch(name: &str) -> PathBuf {
-        let dir = std::env::temp_dir().join(format!("mp-video-zip-{name}-{}", std::process::id()));
+        let dir = mp_os::temp_dir().join(format!("mp-video-zip-{name}-{}", mp_os::process_id()));
         let _ = std::fs::remove_dir_all(&dir);
         dir
     }

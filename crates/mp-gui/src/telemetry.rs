@@ -28,7 +28,7 @@
 #![allow(unreachable_pub)]
 
 use std::sync::{Arc, Mutex, PoisonError};
-use std::time::{Duration, Instant};
+use web_time::{Duration, Instant};
 
 use mp_link::FtpError;
 use mp_link::mavftp::{FtpOutcome, FtpRequest, Progress};
@@ -462,7 +462,7 @@ impl Telemetry {
             .unwrap_or_else(|| {
                 // No home directory at all is a strange environment, not a reason to lose the
                 // recording; the temp directory keeps it for the length of the session.
-                std::env::temp_dir().join("mission-planner-rust-logs")
+                mp_os::temp_dir().join("mission-planner-rust-logs")
             })
     }
 
@@ -2065,7 +2065,7 @@ pub(crate) fn command_long_parts(message: &MavMessage) -> Option<(VehicleId, u16
 /// the way.
 #[cfg(test)]
 pub mod scripted {
-    use std::time::{Duration, Instant};
+    use web_time::{Duration, Instant};
 
     use mp_link::{Link, LinkConfig, ProtocolTimeouts};
     use mp_mavlink::{FrameDecoder, encode_v2};
@@ -2235,7 +2235,7 @@ pub mod scripted {
         let deadline = Instant::now() + HUNG;
         while !check() {
             assert!(Instant::now() < deadline, "timed out waiting for {what}");
-            std::thread::sleep(Duration::from_millis(1));
+            wasm_thread::sleep(Duration::from_millis(1));
         }
     }
 }
@@ -2244,7 +2244,7 @@ pub mod scripted {
 #[cfg(test)]
 mod shared_parameters {
     use std::sync::Arc;
-    use std::time::{Duration, Instant};
+    use web_time::{Duration, Instant};
 
     use mp_link::ProtocolTimeouts;
     use mp_mavlink_dialects::all::{MavMessage, ParamValue};
@@ -2442,7 +2442,7 @@ mod tests {
             vehicle.count(reboot) == 2
         });
         // The link's retry would come after `command.timeout`; there is none.
-        std::thread::sleep(fast().command.timeout * 3);
+        wasm_thread::sleep(fast().command.timeout * 3);
         vehicle.read();
         assert_eq!(
             longs(&vehicle),
@@ -2674,7 +2674,7 @@ mod tests {
         let press = set_mode_messages(VEHICLE, Some(VehicleFamily::Copter), "GUIDED");
         let (requests, queued) = send_routed(&mut telemetry, &sender, &press, &report, true);
         assert!(requests.is_empty() && queued);
-        std::thread::sleep(fast().command.timeout * 3);
+        wasm_thread::sleep(fast().command.timeout * 3);
         vehicle.read();
         assert_eq!(
             vehicle.count(|m| matches!(m, MavMessage::CommandLong(l) if l.command == commands::CMD_DO_SET_MODE)),
@@ -2842,9 +2842,9 @@ mod tests {
     /// Two connections in the same second must not have one silently lose its recording.
     #[test]
     fn a_taken_name_is_not_reused() {
-        let directory = std::env::temp_dir().join(format!(
+        let directory = mp_os::temp_dir().join(format!(
             "headless-planner-record-test-{}",
-            std::process::id()
+            mp_os::process_id()
         ));
         let _ = std::fs::remove_dir_all(&directory);
         std::fs::create_dir_all(&directory).expect("a writable temp directory");
@@ -2906,9 +2906,9 @@ mod tests {
     /// Ninety-nine is the cap, and past it the answer is "no recording" rather than a hang.
     #[test]
     fn the_search_for_a_free_name_is_bounded() {
-        let directory = std::env::temp_dir().join(format!(
+        let directory = mp_os::temp_dir().join(format!(
             "headless-planner-record-full-{}",
-            std::process::id()
+            mp_os::process_id()
         ));
         let _ = std::fs::remove_dir_all(&directory);
         std::fs::create_dir_all(&directory).expect("a writable temp directory");
@@ -2967,7 +2967,7 @@ mod state_wiring {
             ..saved
         };
         telemetry.hand_over_rates(start);
-        std::thread::sleep(std::time::Duration::from_millis(60));
+        wasm_thread::sleep(std::time::Duration::from_millis(60));
         assert_eq!(rates(&telemetry), Some(saved));
         assert_eq!(StreamRates::backups(), saved);
         // A combo changed.

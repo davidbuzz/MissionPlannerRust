@@ -232,8 +232,8 @@ impl DfLog {
 /// `LeapSecondsGPS(DateTime.Now.Year, DateTime.Now.Month)`: TAI-UTC less 19.
 /// `// C#: ExtLibs/Utilities/rtcm3.cs:715-735`
 fn leap_seconds_gps_now() -> i32 {
-    let days = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
+    let days = web_time::SystemTime::now()
+        .duration_since(web_time::UNIX_EPOCH)
         .map_or(0, |d| d.as_secs() / 86_400);
     let (year, month, _) = civil_from_days(i64::try_from(days).unwrap_or(0));
     let yyyymm = year * 100 + i64::from(month);

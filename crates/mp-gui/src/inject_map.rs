@@ -133,7 +133,7 @@ pub struct Injection {
     shared: Arc<Shared>,
     /// `progressBarInjectCustomMap.Maximum`: the files and one more.
     maximum: usize,
-    handle: Option<std::thread::JoinHandle<()>>,
+    handle: Option<wasm_thread::JoinHandle<()>>,
 }
 
 impl Injection {
@@ -146,7 +146,7 @@ impl Injection {
         let shared = Arc::new(Shared::default());
         let worker = Arc::clone(&shared);
         let maximum = files.len() + 1;
-        let handle = std::thread::Builder::new()
+        let handle = wasm_thread::Builder::new()
             .name("inject-custom-map".to_owned())
             .spawn(move || {
                 for file in &files {
@@ -303,7 +303,7 @@ mod tests {
     /// folder that is not there.
     #[test]
     fn the_scan_lists_the_three_kinds_in_order() {
-        let dir = std::env::temp_dir().join(format!("mp-inject-scan-{}", std::process::id()));
+        let dir = mp_os::temp_dir().join(format!("mp-inject-scan-{}", mp_os::process_id()));
         let _ = std::fs::remove_dir_all(&dir);
         png(&dir.join("Z15/1/2.png"), [1, 2, 3]);
         png(&dir.join("Z15/1/3.png"), [1, 2, 3]);
@@ -337,7 +337,7 @@ mod tests {
     /// stray skipped, the bar at two of four, the results box counting the zoom's two.
     #[test]
     fn the_run_writes_the_tiles_and_counts_them() {
-        let dir = std::env::temp_dir().join(format!("mp-inject-run-{}", std::process::id()));
+        let dir = mp_os::temp_dir().join(format!("mp-inject-run-{}", mp_os::process_id()));
         let _ = std::fs::remove_dir_all(&dir);
         png(&dir.join("tiles/Z15/18000/30000.png"), [10, 20, 30]);
         png(&dir.join("tiles/Z15/18000/30001.png"), [40, 50, 60]);
@@ -367,7 +367,7 @@ mod tests {
     /// A file that is not an image ends the run where the C#'s exception does; one tile counts.
     #[test]
     fn a_file_that_is_not_an_image_ends_the_run() {
-        let dir = std::env::temp_dir().join(format!("mp-inject-bad-{}", std::process::id()));
+        let dir = mp_os::temp_dir().join(format!("mp-inject-bad-{}", mp_os::process_id()));
         let _ = std::fs::remove_dir_all(&dir);
         png(&dir.join("Z15/1/1.png"), [10, 20, 30]);
         std::fs::create_dir_all(dir.join("Z15/1")).unwrap();

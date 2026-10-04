@@ -513,7 +513,7 @@ pub fn find_node() -> Option<PathBuf> {
     }
     let name = if cfg!(windows) { "node.exe" } else { "node" };
     let path = std::env::var_os("PATH").unwrap_or_default();
-    std::env::split_paths(&path)
+    mp_os::split_paths(&path)
         .chain(
             ["/opt/homebrew/bin", "/usr/local/bin", "/usr/bin"]
                 .into_iter()
@@ -961,13 +961,13 @@ pub mod tests {
         };
         let outcome = start(&wasm, &StubWeb::default(), &request, &|_| {}, &|_| {});
         assert!(matches!(outcome, Outcome::Connect { .. }), "{outcome:?}");
-        let deadline = std::time::Instant::now() + Duration::from_secs(60);
+        let deadline = web_time::Instant::now() + Duration::from_secs(60);
         let mut seen = Vec::new();
-        while std::time::Instant::now() < deadline && !seen.contains(&0xFD) {
+        while web_time::Instant::now() < deadline && !seen.contains(&0xFD) {
             if let Ok(mut socket) = std::net::TcpStream::connect(("127.0.0.1", port)) {
                 let _ = socket.set_read_timeout(Some(Duration::from_secs(2)));
                 let mut buffer = [0u8; 4096];
-                while std::time::Instant::now() < deadline {
+                while web_time::Instant::now() < deadline {
                     match std::io::Read::read(&mut socket, &mut buffer) {
                         Ok(0) | Err(_) => break,
                         Ok(read) => {
@@ -979,7 +979,7 @@ pub mod tests {
                     }
                 }
             } else {
-                std::thread::sleep(Duration::from_millis(200));
+                wasm_thread::sleep(Duration::from_millis(200));
             }
         }
         wasm.kill_all();
@@ -1030,7 +1030,7 @@ pub mod tests {
             let outcome = start(&wasm, &StubWeb::default(), &request, &|_| {}, &|_| {});
             assert!(matches!(outcome, Outcome::Connect { .. }), "{outcome:?}");
             // Node takes a moment to listen; the planner's connect retries too.
-            let deadline = std::time::Instant::now() + Duration::from_secs(90);
+            let deadline = web_time::Instant::now() + Duration::from_secs(90);
             let link = loop {
                 match mp_link::Link::connect(
                     &format!("tcp:127.0.0.1:{port}"),
@@ -1042,10 +1042,10 @@ pub mod tests {
                     Ok(link) => break link,
                     Err(err) => {
                         assert!(
-                            std::time::Instant::now() < deadline,
+                            web_time::Instant::now() < deadline,
                             "the bridge's port never opened: {err:?}"
                         );
-                        std::thread::sleep(Duration::from_millis(250));
+                        wasm_thread::sleep(Duration::from_millis(250));
                     }
                 }
             };
@@ -1058,7 +1058,7 @@ pub mod tests {
             let mut asked = false;
             let mut set = false;
             let mut last = None;
-            while std::time::Instant::now() < deadline {
+            while web_time::Instant::now() < deadline {
                 if let Some((id, _)) = link.primary_vehicle() {
                     if !asked {
                         asked = link.download_params(id);
@@ -1074,10 +1074,10 @@ pub mod tests {
                         _ => {}
                     }
                 }
-                std::thread::sleep(Duration::from_millis(200));
+                wasm_thread::sleep(Duration::from_millis(200));
             }
             // Past the bridge's half-second save, then stopped as the planner stops it.
-            std::thread::sleep(Duration::from_secs(2));
+            wasm_thread::sleep(Duration::from_secs(2));
             drop(link);
             wasm.kill_all();
             last
@@ -1199,7 +1199,7 @@ pub mod tests {
 
     /// A directory of its own under the system's temporary one, emptied first.
     pub fn scratch(name: &str) -> PathBuf {
-        let dir = std::env::temp_dir().join(format!("mp-gui-sitl-{}-{name}", std::process::id()));
+        let dir = mp_os::temp_dir().join(format!("mp-gui-sitl-{}-{name}", mp_os::process_id()));
         let _ = std::fs::remove_dir_all(&dir);
         let _ = std::fs::create_dir_all(&dir);
         dir

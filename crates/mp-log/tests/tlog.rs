@@ -54,7 +54,7 @@ fn heartbeat(seq: u8) -> Vec<u8> {
 }
 
 fn scratch(name: &str) -> std::path::PathBuf {
-    let dir = std::env::temp_dir().join("mp-log-tests");
+    let dir = mp_os::temp_dir().join("mp-log-tests");
     std::fs::create_dir_all(&dir).unwrap();
     let path = dir.join(name);
     let _ = std::fs::remove_file(&path);

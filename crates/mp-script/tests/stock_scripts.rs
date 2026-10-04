@@ -480,7 +480,7 @@ fn verdict(result: &Result<(), String>, stopped: bool) -> String {
 /// fixed port is taken whenever two runs of this test overlap - two checkouts built at once -
 /// and the script's `bind` failing is its `sys.exit()`, which would read as a clean end.
 fn run_example6(source: &str, log: &Arc<Mutex<Vec<String>>>) -> String {
-    use std::time::{Duration, Instant};
+    use web_time::{Duration, Instant};
     let port = std::net::UdpSocket::bind("127.0.0.1:0")
         .and_then(|socket| socket.local_addr())
         .expect("a free port")
@@ -503,7 +503,7 @@ fn run_example6(source: &str, log: &Arc<Mutex<Vec<String>>>) -> String {
                 run.output()
             );
             assert!(Instant::now() < deadline, "example6 never printed {text:?}");
-            std::thread::sleep(Duration::from_millis(10));
+            wasm_thread::sleep(Duration::from_millis(10));
         }
     };
     wait_for("Guided Mode");

@@ -37,7 +37,7 @@
 
 use std::io::{self, Read, Write};
 use std::net::TcpStream;
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use web_time::{Duration, SystemTime, UNIX_EPOCH};
 
 use crate::codec::base64;
 use crate::dotnet::{Uri, format_fixed, unescape_data_string};

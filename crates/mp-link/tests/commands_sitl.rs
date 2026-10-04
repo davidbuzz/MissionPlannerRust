@@ -30,7 +30,7 @@
 
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::indexing_slicing)]
 
-use std::time::{Duration, Instant};
+use web_time::{Duration, Instant};
 
 use mp_link::messages::LogMessage;
 use mp_link::{Link, LinkConfig, commands};
@@ -44,7 +44,7 @@ fn connect() -> (Link, VehicleId) {
     let link = Link::connect("tcp:127.0.0.1:5760", LinkConfig::default()).expect("SITL on 5760");
     let deadline = Instant::now() + Duration::from_secs(20);
     while link.primary_vehicle().is_none() && Instant::now() < deadline {
-        std::thread::sleep(Duration::from_millis(100));
+        wasm_thread::sleep(Duration::from_millis(100));
     }
     let (id, _) = link.primary_vehicle().expect("a vehicle");
     (link, id)
@@ -62,7 +62,7 @@ fn await_message(
             return found;
         }
         assert!(Instant::now() < deadline, "timed out waiting for {what}");
-        std::thread::sleep(Duration::from_millis(50));
+        wasm_thread::sleep(Duration::from_millis(50));
     }
 }
 
@@ -153,7 +153,7 @@ fn set_param_and_confirm(link: &Link, id: VehicleId, name: &str, value: f32) -> 
             link.send(&commands::request_param_by_name(id, name));
             asked = Instant::now();
         }
-        std::thread::sleep(Duration::from_millis(100));
+        wasm_thread::sleep(Duration::from_millis(100));
     }
     false
 }
@@ -172,7 +172,7 @@ fn arming_check_param(link: &Link, id: VehicleId) -> Option<(&'static str, f32, 
             {
                 return Some((name, disable, restore));
             }
-            std::thread::sleep(Duration::from_millis(100));
+            wasm_thread::sleep(Duration::from_millis(100));
         }
     }
     None
@@ -222,7 +222,7 @@ fn disabling_the_arming_checks_arms_a_vehicle_that_was_refusing() {
     let mut armed = false;
     while Instant::now() < deadline {
         link.send(&commands::arm(id, true, true));
-        std::thread::sleep(Duration::from_millis(400));
+        wasm_thread::sleep(Duration::from_millis(400));
         if handle.load().armed {
             armed = true;
             break;
@@ -291,7 +291,7 @@ fn a_mode_change_reaches_the_vehicle_and_comes_back_in_telemetry() {
             "the vehicle stayed in mode {} instead of adopting {target}",
             handle.load().custom_mode
         );
-        std::thread::sleep(Duration::from_millis(50));
+        wasm_thread::sleep(Duration::from_millis(50));
     }
 
     assert_eq!(handle.load().custom_mode, target);
@@ -348,7 +348,7 @@ fn a_user_takeoff_in_guided_is_accepted_once_armed() {
         let deadline = Instant::now() + Duration::from_secs(secs);
         while !check(&handle.load()) {
             assert!(Instant::now() < deadline, "timed out waiting for {what}");
-            std::thread::sleep(Duration::from_millis(100));
+            wasm_thread::sleep(Duration::from_millis(100));
         }
     };
 
@@ -360,7 +360,7 @@ fn a_user_takeoff_in_guided_is_accepted_once_armed() {
             "the vehicle never entered Guided"
         );
         link.send(&commands::set_mode(id, MODE_GUIDED));
-        std::thread::sleep(Duration::from_secs(1));
+        wasm_thread::sleep(Duration::from_secs(1));
     }
     // Arm, the same way.
     let deadline = Instant::now() + Duration::from_secs(30);
@@ -370,7 +370,7 @@ fn a_user_takeoff_in_guided_is_accepted_once_armed() {
             "the vehicle never armed in Guided"
         );
         link.send(&commands::arm(id, true, false));
-        std::thread::sleep(Duration::from_secs(1));
+        wasm_thread::sleep(Duration::from_secs(1));
     }
     let before = handle.load();
     println!(
@@ -413,7 +413,7 @@ fn a_user_takeoff_sent_the_instant_the_heartbeat_shows_armed() {
             "the vehicle never entered Guided"
         );
         link.send(&commands::set_mode(id, MODE_GUIDED));
-        std::thread::sleep(Duration::from_secs(1));
+        wasm_thread::sleep(Duration::from_secs(1));
     }
     assert!(link.send(&commands::arm(id, true, false)), "send failed");
     let asked = Instant::now();
@@ -423,7 +423,7 @@ fn a_user_takeoff_sent_the_instant_the_heartbeat_shows_armed() {
             Instant::now() < deadline,
             "the vehicle never armed in Guided"
         );
-        std::thread::sleep(Duration::from_millis(10));
+        wasm_thread::sleep(Duration::from_millis(10));
     }
     let armed_after = asked.elapsed();
     assert!(link.send(&commands::takeoff(id, 10.0)), "send failed");
@@ -439,7 +439,7 @@ fn a_user_takeoff_sent_the_instant_the_heartbeat_shows_armed() {
         let deadline = Instant::now() + Duration::from_secs(secs);
         while !check(&handle.load()) {
             assert!(Instant::now() < deadline, "timed out waiting for {what}");
-            std::thread::sleep(Duration::from_millis(100));
+            wasm_thread::sleep(Duration::from_millis(100));
         }
     };
     if accepted {

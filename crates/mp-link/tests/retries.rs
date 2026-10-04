@@ -52,7 +52,7 @@
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::indexing_slicing)]
 
 use std::collections::VecDeque;
-use std::time::{Duration, Instant};
+use web_time::{Duration, Instant};
 
 use mp_link::mission_transfer::{
     MISSION_ACCEPTED, MISSION_ERROR, MISSION_INVALID_SEQUENCE, MISSION_NO_SPACE, TransferFailure,
@@ -138,7 +138,7 @@ impl Peer {
             if Instant::now() >= deadline {
                 return None;
             }
-            std::thread::sleep(Duration::from_millis(1));
+            wasm_thread::sleep(Duration::from_millis(1));
         }
     }
 
@@ -251,7 +251,7 @@ fn wait_for(what: &str, mut check: impl FnMut() -> bool) {
     let deadline = Instant::now() + HUNG;
     while !check() {
         assert!(Instant::now() < deadline, "timed out waiting for {what}");
-        std::thread::sleep(Duration::from_millis(1));
+        wasm_thread::sleep(Duration::from_millis(1));
     }
 }
 
@@ -1007,9 +1007,9 @@ fn in_progress_then_accepted_is_accepted_without_a_resend() {
         |peer, message| {
             if command_long(&message).is_some() {
                 peer.send(&command_ack(TAKEOFF, MAV_RESULT_IN_PROGRESS));
-                std::thread::sleep(step);
+                wasm_thread::sleep(step);
                 peer.send(&command_ack(TAKEOFF, MAV_RESULT_IN_PROGRESS));
-                std::thread::sleep(step);
+                wasm_thread::sleep(step);
                 peer.send(&command_ack(TAKEOFF, MAV_RESULT_ACCEPTED));
             }
         },
@@ -1124,7 +1124,7 @@ fn an_ack_for_another_command_or_from_another_vehicle_is_not_the_answer() {
                 peer.send(&command_ack(21, MAV_RESULT_ACCEPTED));
                 peer.send_from(VehicleId::new(2, 1), &command_ack(TAKEOFF, 4));
                 peer.send_from(VehicleId::new(1, 154), &command_ack(TAKEOFF, 4));
-                std::thread::sleep(Duration::from_millis(20));
+                wasm_thread::sleep(Duration::from_millis(20));
                 early.push(outcome(&link, id));
                 peer.send(&command_ack(TAKEOFF, MAV_RESULT_ACCEPTED));
             }
@@ -2749,7 +2749,7 @@ fn set_wp_total_counts_four_times_then_times_out_and_the_first_request_ends_it()
                         mission_type: MISSION_TYPE_MISSION,
                     }),
                 ]);
-                std::thread::sleep(Duration::from_millis(5));
+                wasm_thread::sleep(Duration::from_millis(5));
                 assert_eq!(outcome(&link, answered), None);
                 peer.send(&mission_request_float(0));
             }
@@ -2823,7 +2823,7 @@ fn set_wp_total_takes_the_first_request_so_set_wp_sends_item_zero_once() {
         outcome(&link, mission_total),
         Some(RequestOutcome::Accepted { value: None })
     );
-    std::thread::sleep(Duration::from_millis(20));
+    wasm_thread::sleep(Duration::from_millis(20));
     assert_eq!(link.fence_points(VEHICLE).len(), 1);
 
     let total = link.set_wp_total(VEHICLE, 2, FENCE);
@@ -3053,7 +3053,7 @@ fn set_wp_fills_the_mission_and_rally_lists_as_the_csharp_does() {
         float_item(2, WAYPOINT, 2, MISSION_TYPE_MISSION),
         ack(MISSION_TYPE_MISSION),
     );
-    std::thread::sleep(Duration::from_millis(20));
+    wasm_thread::sleep(Duration::from_millis(20));
     assert_eq!(link.wps(VEHICLE).len(), 2);
     // A rally point, acknowledged: filed in rallypoints (:4124-4126).
     set(

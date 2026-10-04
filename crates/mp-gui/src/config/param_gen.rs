@@ -77,7 +77,7 @@
 use std::collections::{BTreeSet, HashMap};
 use std::path::{Path, PathBuf};
 use std::sync::mpsc::{Receiver, TryRecvError};
-use std::time::Instant;
+use web_time::Instant;
 
 use gpui::{AnyElement, Context, Window};
 use mp_terrain::{Http, UreqHttp};
@@ -642,7 +642,7 @@ impl ParamGen {
         }
         let file = data_dir.join(XML_FILE);
         let (send, receive) = std::sync::mpsc::channel();
-        let spawned = std::thread::Builder::new()
+        let spawned = wasm_thread::Builder::new()
             .name("mp-param-gen".to_owned())
             .spawn(move || {
                 let http = UreqHttp::new();
@@ -703,7 +703,7 @@ impl ParamGen {
             if self.running.is_none() {
                 break;
             }
-            std::thread::sleep(std::time::Duration::from_millis(5));
+            wasm_thread::sleep(std::time::Duration::from_millis(5));
         }
         status
     }
@@ -883,7 +883,7 @@ mod tests {
     /// carry is the C#'s throw.
     #[test]
     fn a_run_writes_the_xml_the_csharp_writes() {
-        let dir = std::env::temp_dir().join(format!("mp-paramgen-{}", std::process::id()));
+        let dir = mp_os::temp_dir().join(format!("mp-paramgen-{}", mp_os::process_id()));
         let _ = std::fs::remove_dir_all(&dir);
         fixture(&dir);
         let location = format!("file://{}/ArduCopter/Parameters.cpp", dir.display());
@@ -926,7 +926,7 @@ mod tests {
     /// closes the dialogue with the run unseen.
     #[test]
     fn the_button_runs_the_generation_behind_its_dialogue() {
-        let dir = std::env::temp_dir().join(format!("mp-paramgen-ui-{}", std::process::id()));
+        let dir = mp_os::temp_dir().join(format!("mp-paramgen-ui-{}", mp_os::process_id()));
         let _ = std::fs::remove_dir_all(&dir);
         fixture(&dir);
         let path = dir.join("ArduCopter/Parameters.cpp");

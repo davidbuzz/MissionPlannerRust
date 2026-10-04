@@ -272,10 +272,10 @@ impl Work<'_> {
 
 /// `new Random().Next()` on the URL, so no cache answers.
 fn random() -> u32 {
-    let nanos = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
+    let nanos = web_time::SystemTime::now()
+        .duration_since(web_time::UNIX_EPOCH)
         .map_or(0, |d| d.subsec_nanos());
-    nanos ^ std::process::id()
+    nanos ^ mp_os::process_id()
 }
 
 /// `DoUpdateWorker_DoWork` and `updateCheckMain` up to "Starting Updater": "Getting Base URL",
@@ -431,7 +431,7 @@ mod tests {
     }
 
     fn scratch(test: &str) -> PathBuf {
-        let dir = std::env::temp_dir().join(format!("mp-update-{test}-{}", std::process::id()));
+        let dir = mp_os::temp_dir().join(format!("mp-update-{test}-{}", mp_os::process_id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
         dir

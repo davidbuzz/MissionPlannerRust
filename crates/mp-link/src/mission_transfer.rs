@@ -94,7 +94,7 @@
 //! wait for the vehicle's. [`MissionTransfer::upload_fast`] is that machine; the bursts come out
 //! as [`Action::SendItems`].
 
-use std::time::{Duration, Instant};
+use web_time::{Duration, Instant};
 
 use mp_mavlink_dialects::all::{MavCmd, MavMissionResult, MavMissionType};
 use mp_mission::{MissionItem, WireItem};

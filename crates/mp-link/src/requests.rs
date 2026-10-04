@@ -32,7 +32,7 @@
 //! callers. A [`Request`] instead lives on the link thread, which feeds it every message and every
 //! tick, and the caller reads its [`RequestState`] when it wants to know.
 
-use std::time::Instant;
+use web_time::Instant;
 
 use mp_mavlink_dialects::all::{
     FenceFetchPoint, FencePoint, MavMessage, MissionCount, MissionRequest, MissionRequestInt,

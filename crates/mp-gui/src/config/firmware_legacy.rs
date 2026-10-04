@@ -532,7 +532,7 @@ impl FirmwareLegacy {
     fn update_fw_list_from(&mut self, fetch: Box<dyn mp_firmware::manifest::Fetch + Send + Sync>) {
         let (sender, receiver) = channel();
         let firmwareurl = self.firmwareurl.clone();
-        let started = std::thread::Builder::new()
+        let started = wasm_thread::Builder::new()
             .name("mp-firmware-legacy-list".to_owned())
             .spawn(move || {
                 let status = sender.clone();
@@ -1328,7 +1328,7 @@ mod tests {
 
     /// A web of fixtures: the list at its first source, the Copter version beside its build.
     fn web(name: &str) -> std::path::PathBuf {
-        let root = std::env::temp_dir().join(format!("mp-gui-fwl-{name}-{}", std::process::id()));
+        let root = mp_os::temp_dir().join(format!("mp-gui-fwl-{name}-{}", mp_os::process_id()));
         let _ = std::fs::remove_dir_all(&root);
         for (url, file) in [
             (
@@ -1376,9 +1376,9 @@ mod tests {
 
     /// Ticks until the list is no longer loading.
     fn settle(page: &mut FirmwareLegacy) {
-        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
-        while page.list_state() == "loading" && std::time::Instant::now() < deadline {
-            std::thread::sleep(std::time::Duration::from_millis(5));
+        let deadline = web_time::Instant::now() + std::time::Duration::from_secs(10);
+        while page.list_state() == "loading" && web_time::Instant::now() < deadline {
+            wasm_thread::sleep(std::time::Duration::from_millis(5));
             page.tick(key(), true);
         }
     }
@@ -1511,7 +1511,7 @@ mod tests {
     /// A list that cannot be had shows the progress dialog's error, and Close takes it away.
     #[test]
     fn a_failed_list_shows_the_dialogs_error() {
-        let root = std::env::temp_dir().join(format!("mp-gui-fwl-empty-{}", std::process::id()));
+        let root = mp_os::temp_dir().join(format!("mp-gui-fwl-empty-{}", mp_os::process_id()));
         let page = &mut loaded(&root);
         assert_eq!(page.list_state(), "failed");
         let error = page
@@ -1533,7 +1533,7 @@ mod tests {
     #[test]
     fn the_links_do_what_their_handlers_do() {
         // Nothing is served: each list fails, as a dead link does.
-        let root = std::env::temp_dir().join(format!("mp-gui-fwl-links-{}", std::process::id()));
+        let root = mp_os::temp_dir().join(format!("mp-gui-fwl-links-{}", mp_os::process_id()));
         let mut page = FirmwareLegacy {
             source: Some(root.clone()),
             ..FirmwareLegacy::default()
@@ -1612,9 +1612,9 @@ mod tests {
         let mut page = loaded(&root);
         page.click(index_of("fwl-quad"), &Persisted::at(None));
         assert!(page.worker.is_some());
-        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
-        while page.question().is_none() && std::time::Instant::now() < deadline {
-            std::thread::sleep(std::time::Duration::from_millis(5));
+        let deadline = web_time::Instant::now() + std::time::Duration::from_secs(10);
+        while page.question().is_none() && web_time::Instant::now() < deadline {
+            wasm_thread::sleep(std::time::Duration::from_millis(5));
             page.tick(key(), true);
         }
         assert_eq!(
@@ -1622,8 +1622,8 @@ mod tests {
             Some("Are you sure you want to upload ArduCopter V4.7.1 Quad?")
         );
         page.answer_worker(false);
-        while page.worker.is_some() && std::time::Instant::now() < deadline {
-            std::thread::sleep(std::time::Duration::from_millis(5));
+        while page.worker.is_some() && web_time::Instant::now() < deadline {
+            wasm_thread::sleep(std::time::Duration::from_millis(5));
             page.tick(key(), true);
         }
         assert_eq!(page.reached, Some(Reached::default()), "No: nothing more");
@@ -1686,7 +1686,7 @@ mod tests {
 /// the click, what goes on the wire, the box over this page and what is said on the status line.
 #[cfg(test)]
 mod force_bootloader_tests {
-    use std::time::{Duration, Instant};
+    use web_time::{Duration, Instant};
 
     use mp_link::ProtocolTimeouts;
     use mp_link::requests::CMD_PREFLIGHT_REBOOT_SHUTDOWN;
@@ -1752,7 +1752,7 @@ mod force_bootloader_tests {
             if let Some(end) = page.force.tick(telemetry, &view, now()) {
                 return Some(end);
             }
-            std::thread::sleep(Duration::from_millis(2));
+            wasm_thread::sleep(Duration::from_millis(2));
         }
         None
     }
@@ -1803,7 +1803,7 @@ mod force_bootloader_tests {
             page.force.tick(&mut telemetry, &view, Instant::now());
             matches!(page.force.state(), Some(Force::Heartbeat { .. }))
         });
-        std::thread::sleep(Duration::from_millis(50));
+        wasm_thread::sleep(Duration::from_millis(50));
         vehicle.read();
         assert_eq!(reboots(&vehicle), [], "not before the next heartbeat");
         vehicle.heartbeat();
@@ -1815,7 +1815,7 @@ mod force_bootloader_tests {
             vehicle.read();
             reboots(&vehicle).len() >= 4
         });
-        std::thread::sleep(fast().command.timeout * 3);
+        wasm_thread::sleep(fast().command.timeout * 3);
         vehicle.read();
         assert_eq!(reboots(&vehicle), FOUR);
 
@@ -1891,7 +1891,7 @@ mod force_bootloader_tests {
         assert!(page.message().is_none(), "no box");
         assert!(!page.forcing());
         assert!(page.live());
-        std::thread::sleep(Duration::from_millis(100));
+        wasm_thread::sleep(Duration::from_millis(100));
         vehicle.read();
         assert_eq!(reboots(&vehicle), []);
     }

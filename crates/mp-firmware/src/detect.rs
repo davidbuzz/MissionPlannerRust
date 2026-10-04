@@ -62,7 +62,7 @@
 
 use std::collections::VecDeque;
 use std::io::{self, Read, Write};
-use std::time::{Duration, Instant};
+use web_time::{Duration, Instant};
 
 use mp_transport::{PortInfo, Transport};
 

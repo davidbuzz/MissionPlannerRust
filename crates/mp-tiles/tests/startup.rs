@@ -36,7 +36,7 @@ use std::net::{TcpListener, TcpStream};
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::time::{Duration, Instant};
+use web_time::{Duration, Instant};
 
 use mp_tiles::cache::TileCache;
 use mp_tiles::fetch::TileFetcher;
@@ -50,7 +50,7 @@ struct Scratch(PathBuf);
 impl Scratch {
     fn new(name: &str) -> Self {
         let path =
-            std::env::temp_dir().join(format!("mp-tiles-startup-{name}-{}", std::process::id()));
+            mp_os::temp_dir().join(format!("mp-tiles-startup-{name}-{}", mp_os::process_id()));
         let _ = std::fs::remove_dir_all(&path);
         std::fs::create_dir_all(&path).unwrap();
         Self(path)
@@ -68,7 +68,7 @@ impl Drop for Scratch {
 struct Silent {
     proxy: String,
     stop: Arc<AtomicBool>,
-    thread: Option<std::thread::JoinHandle<()>>,
+    thread: Option<wasm_thread::JoinHandle<()>>,
 }
 
 impl Silent {
@@ -78,12 +78,12 @@ impl Silent {
         let proxy = format!("http://{}", listener.local_addr().unwrap());
         let stop = Arc::new(AtomicBool::new(false));
         let flag = Arc::clone(&stop);
-        let thread = std::thread::spawn(move || {
+        let thread = wasm_thread::spawn(move || {
             let mut held: Vec<TcpStream> = Vec::new();
             while !flag.load(Ordering::Acquire) {
                 match listener.accept() {
                     Ok((stream, _)) => held.push(stream),
-                    Err(_) => std::thread::sleep(Duration::from_millis(10)),
+                    Err(_) => wasm_thread::sleep(Duration::from_millis(10)),
                 }
             }
             // Dropping the sockets ends every hung fetch with an error, so the store's threads
@@ -139,7 +139,7 @@ fn cached_tiles_arrive_while_every_fetch_thread_is_stuck() {
         assert!(matches!(store.get(*tile), TileAnswer::Missing));
     }
     // Long enough for the reader to have handed all of them to the fetch threads.
-    std::thread::sleep(Duration::from_millis(200));
+    wasm_thread::sleep(Duration::from_millis(200));
 
     let asked = Instant::now();
     assert!(matches!(store.get(cached), TileAnswer::Missing));
@@ -154,7 +154,7 @@ fn cached_tiles_arrive_while_every_fetch_thread_is_stuck() {
              threads stuck; the stats say {:?}",
             store.stats()
         );
-        std::thread::sleep(Duration::from_millis(5));
+        wasm_thread::sleep(Duration::from_millis(5));
     };
     let took = asked.elapsed();
     assert_eq!((found.width, found.height), (256, 256));
@@ -186,7 +186,7 @@ fn an_offline_store_starts_no_fetch_threads_and_still_reads_the_disk() {
             break;
         }
         assert!(Instant::now() < deadline, "{:?}", store.stats());
-        std::thread::sleep(Duration::from_millis(5));
+        wasm_thread::sleep(Duration::from_millis(5));
     }
     assert!(store.is_offline());
     assert_eq!(store.stats().disk_hits, 1);

@@ -182,9 +182,9 @@ pub fn analyse_to(
     let is_bin = log.to_string_lossy().to_lowercase().ends_with(".bin");
     let converted = if is_bin {
         // `Path.GetTempFileName() + ".log"`.
-        let temp = std::env::temp_dir().join(format!(
+        let temp = mp_os::temp_dir().join(format!(
             "tmp{}{}.tmp.log",
-            std::process::id(),
+            mp_os::process_id(),
             crate::now_micros()
         ));
         convert_bin_file(log, &temp, mode_name).map_err(AnalysisError::FileAccess)?;
@@ -438,7 +438,7 @@ mod tests {
             PathBuf::from("/logs/a b.log.xml")
         );
         let missing =
-            std::env::temp_dir().join(format!("mp-log-missing-{}.log", std::process::id()));
+            mp_os::temp_dir().join(format!("mp-log-missing-{}.log", mp_os::process_id()));
         let outcome = run_analyzer(&missing, &xml_path_for(&missing));
         assert!(matches!(outcome, Err(AnalysisError::BadInputFile)));
         assert!(!xml_path_for(&missing).exists());
@@ -448,7 +448,7 @@ mod tests {
     /// leaves it, and the C#'s reading of it fails - "Failed to load analyzer results".
     #[test]
     fn an_unknown_vehicle_is_a_truncated_xml_that_fails_to_load() {
-        let dir = std::env::temp_dir().join(format!("mp-log-novehicle-{}", std::process::id()));
+        let dir = mp_os::temp_dir().join(format!("mp-log-novehicle-{}", mp_os::process_id()));
         std::fs::create_dir_all(&dir).unwrap();
         let log = dir.join("sub.log");
         std::fs::write(

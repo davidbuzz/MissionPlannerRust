@@ -35,7 +35,7 @@
 //! to us, as each C# handler checks.
 
 use std::path::{Path, PathBuf};
-use std::time::{Duration, Instant};
+use web_time::{Duration, Instant};
 
 use crate::dsdl::{
     BEGIN_ERROR_IN_PROGRESS, BEGIN_ERROR_OK, GetSetReq, GetSetRes, MODE_SOFTWARE_UPDATE,
@@ -730,7 +730,7 @@ mod tests {
     /// it reads the file from us to the end - and the update is done.
     #[test]
     fn an_update_runs_to_the_end() {
-        let dir = std::env::temp_dir().join(format!("mp-dronecan-update-{}", std::process::id()));
+        let dir = mp_os::temp_dir().join(format!("mp-dronecan-update-{}", mp_os::process_id()));
         std::fs::create_dir_all(&dir).expect("a directory");
         let path = dir.join("firmware.bin");
         let image: Vec<u8> = (0..600u32)
@@ -856,7 +856,7 @@ mod tests {
     #[test]
     fn a_refused_begin_is_an_error() {
         let (mut node, now) = started();
-        let dir = std::env::temp_dir().join(format!("mp-dronecan-refused-{}", std::process::id()));
+        let dir = mp_os::temp_dir().join(format!("mp-dronecan-refused-{}", mp_os::process_id()));
         std::fs::create_dir_all(&dir).expect("a directory");
         let path = dir.join("fw.bin");
         std::fs::write(&path, [0u8; 16]).expect("written");

@@ -11,14 +11,28 @@ publish = false
 workspace = true
 
 [dependencies]
+# Threads, std's on the desktop and Web Workers in a web page (experiments/web-experiment/tools/port_threads.py).
+wasm_thread = { git = "https://github.com/zed-industries/wasm_thread", rev = "0cf96c7708dfb97ccf3da50347e25edcf75d6937" }
+# The clock, std's on the desktop and the browser's in a web page (experiments/web-experiment/tools/port_clock.py).
+web-time = "1"
 # `host_env` is what gives scripts `os`, `socket`, `time` and `select`, which IronPython gives them
 # and which example6, example9 and debugenv use. It compiles RustPython's posix module, and that
 # module (rustpython-vm 0.5.0, `src/stdlib/posix.rs:1812`) passes `libc::POSIX_SPAWN_SETSID` as an
 # int, which libc 0.2.189 made a short: Cargo.lock holds libc at 0.2.185, the newest that wasmtime
 # 48 accepts and that still types it as an int (`cargo update -p libc --precise 0.2.185`). A
 # `cargo update` that moves libc past 0.2.188 breaks this build until RustPython releases the fix.
-rustpython = { version = "0.5", default-features = false, features = ["stdlib", "freeze-stdlib", "host_env"] }
+rustpython = { version = "0.5", default-features = false, features = ["stdlib", "freeze-stdlib"] }
 # The class and method attribute macros expand to `::rustpython_vm::...`, so the VM crate has to
 # be a direct dependency under that name; it is the same crate `rustpython::vm` re-exports.
 rustpython-vm = { version = "0.5", default-features = false }
 thiserror.workspace = true
+
+# `host_env` (above) everywhere but a web page: its posix module is libc's, which wasm32 has no
+# part of. A script in the browser build has no `os`, `socket`, `time` or `select`.
+[target.'cfg(not(target_family = "wasm"))'.dependencies]
+rustpython = { version = "0.5", default-features = false, features = ["host_env"] }
+
+# RustPython's random numbers in a web page: getrandom 0.3's browser backend, which also wants
+# `--cfg getrandom_backend="wasm_js"` in the wasm build's RUSTFLAGS.
+[target.'cfg(target_family = "wasm")'.dependencies]
+getrandom = { version = "0.3", features = ["wasm_js"] }

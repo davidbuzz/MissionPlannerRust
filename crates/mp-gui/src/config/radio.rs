@@ -66,7 +66,7 @@
 #![allow(unreachable_pub)]
 
 use std::collections::VecDeque;
-use std::time::Instant;
+use web_time::Instant;
 
 use gpui::{AnyElement, Context, Div, SharedString, Window, div, prelude::*, px, rgb};
 use mp_calibration::radio::{

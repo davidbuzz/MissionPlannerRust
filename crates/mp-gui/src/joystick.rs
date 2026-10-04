@@ -74,7 +74,7 @@ use std::io::Read;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, PoisonError};
-use std::time::{Duration, Instant};
+use web_time::{Duration, Instant};
 
 use gpui::KeyDownEvent;
 use mp_input::mapping::{CHANNELS, axis_value};

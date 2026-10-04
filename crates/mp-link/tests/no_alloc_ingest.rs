@@ -76,7 +76,7 @@ use std::hint::black_box;
 use std::io;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
-use std::time::{Duration, Instant};
+use web_time::{Duration, Instant};
 
 use mp_link::{Link, LinkConfig};
 use mp_mavlink::FrameDecoder;
@@ -398,7 +398,7 @@ fn frames_of(bytes: &[u8]) -> Vec<Recorded> {
 /// A recording path nobody else is using. `TlogWriter` refuses to overwrite.
 fn recording_path(name: &str) -> PathBuf {
     let path = Path::new(env!("CARGO_TARGET_TMPDIR"))
-        .join(format!("no_alloc_ingest-{}-{name}", std::process::id()));
+        .join(format!("no_alloc_ingest-{}-{name}", mp_os::process_id()));
     let _ = std::fs::remove_file(&path);
     path
 }
@@ -436,7 +436,7 @@ fn run(name: &str, bytes: Vec<u8>, allocating_description: bool) -> (Probe, usiz
     let deadline = Instant::now() + Duration::from_secs(300);
     while link.is_running() {
         assert!(Instant::now() < deadline, "{name}: the link never finished");
-        std::thread::sleep(Duration::from_millis(10));
+        wasm_thread::sleep(Duration::from_millis(10));
     }
 
     // Both passes were received, recorded and published, or the numbers below describe a link

@@ -22,6 +22,7 @@ log = "0.4.34"
 regex = "1.13"
 sha1_smol = "1.0"
 mp-units = { path = "crates/mp-units" }
+mp-os = { path = "crates/mp-os" }
 mp-settings = { path = "crates/mp-settings" }
 mp-vehicle = { path = "crates/mp-vehicle" }
 mp-link = { path = "crates/mp-link" }

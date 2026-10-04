@@ -107,8 +107,8 @@ pub type Random<'a> = &'a mut dyn FnMut(usize) -> usize;
 /// `new Random()`: seeded from the clock, as .NET's parameterless constructor is. An xorshift, not
 /// .NET's generator - the sequence is not the C#'s, only its being unpredictable.
 fn clock_random() -> impl FnMut(usize) -> usize {
-    let nanos = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
+    let nanos = web_time::SystemTime::now()
+        .duration_since(web_time::UNIX_EPOCH)
         .map_or(0, |since| since.as_nanos());
     #[allow(clippy::cast_possible_truncation)] // any 64 bits of the clock will do
     let mut state = (nanos as u64) | 1;

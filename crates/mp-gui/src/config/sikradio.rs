@@ -74,7 +74,7 @@ use std::fmt;
 use std::io;
 use std::path::PathBuf;
 use std::sync::mpsc;
-use std::time::{Duration, Instant};
+use web_time::{Duration, Instant};
 
 use gpui::{
     AnyElement, AnyView, Context, FocusHandle, KeyDownEvent, SharedString, Window, div, prelude::*,
@@ -716,7 +716,7 @@ impl Port for LinkPort {
     }
 
     fn sleep(&mut self, duration: Duration) {
-        std::thread::sleep(duration);
+        wasm_thread::sleep(duration);
     }
 
     fn now(&self) -> Duration {
@@ -2461,7 +2461,7 @@ impl SikRadio {
         let (events, receiver) = mpsc::channel();
         let name = work.name();
         let sender = events.clone();
-        let spawned = std::thread::Builder::new()
+        let spawned = wasm_thread::Builder::new()
             .name("sik radio".to_owned())
             .spawn(move || {
                 let mut report = Sender(sender);
@@ -2683,8 +2683,8 @@ fn modify_for_multipoint(items: &[String], fix: i64) -> Vec<String> {
 /// `GetRandomKey`: hex numerals, upper case, from a generator seeded by the clock.
 /// `// C#: Radio/Sikradio.cs:2596-2608`
 fn random_key(digits: i32) -> String {
-    let mut state = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
+    let mut state = web_time::SystemTime::now()
+        .duration_since(web_time::UNIX_EPOCH)
         .map_or(0x9E37_79B9_7F4A_7C15, |d| {
             u64::try_from(d.as_nanos() & u128::from(u64::MAX)).unwrap_or(1)
         })
@@ -4371,7 +4371,7 @@ mod tests {
         assert_eq!(path.filter, INI_FILTER);
         assert!(saved.contains("NETID = 28"), "{saved}");
         assert!(saved.contains(&format!("AESKEY = {KEY}")));
-        let dir = std::env::temp_dir().join(format!("mp-gui-sikradio-{}", std::process::id()));
+        let dir = mp_os::temp_dir().join(format!("mp-gui-sikradio-{}", mp_os::process_id()));
         std::fs::create_dir_all(&dir).unwrap();
         let file = dir.join("netid.ini");
         std::fs::write(&file, "NETID = 33\n; comment\nNOT_THERE = 1\n").unwrap();
@@ -4397,7 +4397,7 @@ mod tests {
     #[test]
     fn a_remote_file_reaches_only_its_check_and_text_boxes() {
         let mut page = page();
-        let dir = std::env::temp_dir().join(format!("mp-gui-sikradio-r-{}", std::process::id()));
+        let dir = mp_os::temp_dir().join(format!("mp-gui-sikradio-r-{}", mp_os::process_id()));
         std::fs::create_dir_all(&dir).unwrap();
         let file = dir.join("remote.ini");
         std::fs::write(&file, "NETID = 33\nECC = 1\nAESKEY = ABCD\n").unwrap();
@@ -4680,7 +4680,7 @@ mod thread_tests {
         let deadline = Instant::now() + Duration::from_secs(20);
         while page.busy() && Instant::now() < deadline {
             page.tick(on_setup);
-            std::thread::sleep(Duration::from_millis(5));
+            wasm_thread::sleep(Duration::from_millis(5));
         }
         assert!(!page.busy(), "the thread did not finish");
     }

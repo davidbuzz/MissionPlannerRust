@@ -33,7 +33,7 @@ mod common;
 use std::io::{self, Write};
 use std::net::{IpAddr, UdpSocket};
 use std::sync::{Arc, Mutex};
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use web_time::{Duration, SystemTime, UNIX_EPOCH};
 
 use common::{
     caster, escape, golden_lines, listen, read_client_frame, read_to_end, sentences, server_frame,
@@ -525,7 +525,7 @@ fn is_in_range_answers_as_the_csharps_does() {
 
 /// Asks until the answer is `Some`, for a datagram to finish arriving; bounded, and never asleep.
 fn until<T>(mut ask: impl FnMut() -> Option<T>) -> T {
-    let started = std::time::Instant::now();
+    let started = web_time::Instant::now();
     loop {
         if let Some(answer) = ask() {
             return answer;

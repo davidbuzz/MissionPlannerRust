@@ -326,7 +326,7 @@ pub fn measured(name: impl Into<String>, element: Div) -> Div {
     element.on_children_prepainted(move |children, window, _cx| {
         // Runs inside a frame, and is harness work a normal run does not do - a file rewritten
         // whenever something moves - so a storm measurement leaves it out of the frame's cost.
-        let started = std::time::Instant::now();
+        let started = web_time::Instant::now();
         if children.is_empty() {
             return;
         }

@@ -30,7 +30,7 @@
 use std::collections::BTreeMap;
 use std::io::{self, Read, Write};
 use std::sync::{Arc, Mutex};
-use std::time::{Duration, Instant};
+use web_time::{Duration, Instant};
 
 use mp_firmware::Firmware;
 use mp_firmware::detect::{PLEASE_UNPLUG_THE_BOARD_AND, ProbePort};
@@ -264,8 +264,8 @@ fn cx<'a>(person: &'a mut Person) -> Cx<'a> {
     Cx {
         dialogue: person,
         fetch: &NoNetwork,
-        user_data: std::env::temp_dir().join("mp-flash-test"),
-        temp_dir: std::env::temp_dir(),
+        user_data: mp_os::temp_dir().join("mp-flash-test"),
+        temp_dir: mp_os::temp_dir(),
     }
 }
 

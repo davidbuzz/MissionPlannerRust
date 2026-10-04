@@ -51,7 +51,7 @@
 //! * `linkqualitygcs`, which `mp_vehicle::link_quality` works out from each packet, and
 //!   `dowindcalc`, which is not ported (see `VehicleState::wind_speed`).
 
-use std::time::{Duration, Instant};
+use web_time::{Duration, Instant};
 
 use mp_mavlink_dialects::all::{MavMessage, RequestDataStream};
 use mp_vehicle::{StreamRates, VehicleId};

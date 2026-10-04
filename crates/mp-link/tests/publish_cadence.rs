@@ -26,7 +26,7 @@
 
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
-use std::time::{Duration, Instant};
+use web_time::{Duration, Instant};
 
 use mp_link::testing::{attitude, heartbeat};
 use mp_link::{DEFAULT_PUBLISH_INTERVAL, Link, LinkConfig};
@@ -70,12 +70,12 @@ fn stale_frames(publish_interval: Duration, samples: usize) -> (usize, Duration)
     let sending = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(true));
     let sender = {
         let sending = sending.clone();
-        std::thread::spawn(move || {
+        wasm_thread::spawn(move || {
             let mut roll = 0.0f32;
             while sending.load(std::sync::atomic::Ordering::Relaxed) {
                 roll += 0.001;
                 vehicle.write_all(&attitude(1, roll)).unwrap();
-                std::thread::sleep(Duration::from_millis(5));
+                wasm_thread::sleep(Duration::from_millis(5));
             }
         })
     };
@@ -88,14 +88,14 @@ fn stale_frames(publish_interval: Duration, samples: usize) -> (usize, Duration)
             break handle;
         }
         assert!(Instant::now() < deadline, "the vehicle never appeared");
-        std::thread::sleep(Duration::from_millis(2));
+        wasm_thread::sleep(Duration::from_millis(2));
     };
 
     let mut stale = 0;
     let mut last = handle.load().messages_applied;
     let sampling = Instant::now();
     for _ in 0..samples {
-        std::thread::sleep(FRAME_60_HZ);
+        wasm_thread::sleep(FRAME_60_HZ);
         let applied = handle.load().messages_applied;
         if applied <= last {
             stale += 1;

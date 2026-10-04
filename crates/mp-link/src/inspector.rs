@@ -45,7 +45,7 @@
 use std::collections::{BTreeMap, VecDeque};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex, Weak};
-use std::time::{Duration, Instant};
+use web_time::{Duration, Instant};
 
 use mp_mavlink::Frame;
 use mp_mavlink_dialects::all::{DIALECT, MavMessage};
@@ -478,7 +478,7 @@ mod tests {
         };
         while !(has(false, 30) && has(true, 0)) {
             assert!(Instant::now() < deadline, "the link told nothing");
-            std::thread::sleep(Duration::from_millis(2));
+            wasm_thread::sleep(Duration::from_millis(2));
         }
         drop(subscription);
         let seen = heard.lock().expect("not poisoned").clone();
@@ -496,9 +496,9 @@ mod tests {
         assert_eq!((written.sysid, written.compid), (255, 190));
         // Nothing after the drop, once a packet in flight at it has landed: the heartbeat goes
         // on being written every 20 ms, and nobody hears it.
-        std::thread::sleep(Duration::from_millis(50));
+        wasm_thread::sleep(Duration::from_millis(50));
         let count = heard.lock().expect("not poisoned").len();
-        std::thread::sleep(Duration::from_millis(100));
+        wasm_thread::sleep(Duration::from_millis(100));
         assert_eq!(heard.lock().expect("not poisoned").len(), count);
     }
 

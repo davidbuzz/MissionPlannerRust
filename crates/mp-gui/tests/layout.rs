@@ -40,7 +40,7 @@
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command};
-use std::time::{Duration, Instant};
+use web_time::{Duration, Instant};
 
 /// A measured rectangle.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -84,7 +84,7 @@ impl Drop for Running {
 fn measure(width: u32, height: u32, screen: &str) -> BTreeMap<String, Rect> {
     // The application writes Mission Planner's config.xml on starting; a measurement must not
     // rewrite the settings of the Mission Planner installed on this machine.
-    let config = std::env::temp_dir().join("headless-planner-layout-config.xml");
+    let config = mp_os::temp_dir().join("headless-planner-layout-config.xml");
     measure_with(width, height, screen, &config)
 }
 
@@ -92,11 +92,11 @@ fn measure(width: u32, height: u32, screen: &str) -> BTreeMap<String, Rect> {
 /// measured. Offline, with a data directory of its own, so no tile is fetched and no saved link
 /// is opened.
 fn measure_with(width: u32, height: u32, screen: &str, config: &Path) -> BTreeMap<String, Rect> {
-    let probe: PathBuf = std::env::temp_dir().join(format!(
+    let probe: PathBuf = mp_os::temp_dir().join(format!(
         "headless-planner-layout-{width}x{height}-{screen}.json"
     ));
     let _ = std::fs::remove_file(&probe);
-    let home = std::env::temp_dir().join("headless-planner-layout-home");
+    let home = mp_os::temp_dir().join("headless-planner-layout-home");
     let _ = std::fs::create_dir_all(&home);
 
     let child = Command::new(env!("CARGO_BIN_EXE_planner"))
@@ -137,7 +137,7 @@ fn measure_with(width: u32, height: u32, screen: &str, config: &Path) -> BTreeMa
             "the layout never settled; measured {} controls",
             previous.len()
         );
-        std::thread::sleep(Duration::from_millis(100));
+        wasm_thread::sleep(Duration::from_millis(100));
     }
 }
 
@@ -308,7 +308,7 @@ fn no_control_is_cut_off_on_any_screen() {
 #[test]
 #[ignore = "opens a window; needs a display"]
 fn the_planners_mission_buttons_are_on_screen_when_docked_bottom() {
-    let config = std::env::temp_dir().join("headless-planner-layout-bottom-config.xml");
+    let config = mp_os::temp_dir().join("headless-planner-layout-bottom-config.xml");
     std::fs::write(
         &config,
         "<?xml version=\"1.0\" encoding=\"utf-8\"?><Config><FP_docking>Bottom</FP_docking></Config>",

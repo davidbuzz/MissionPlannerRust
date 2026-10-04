@@ -28,7 +28,7 @@
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::indexing_slicing)]
 
 use std::path::PathBuf;
-use std::time::{Duration, SystemTime};
+use web_time::{Duration, SystemTime};
 
 use mp_tiles::urlcache;
 
@@ -37,7 +37,7 @@ const OTHER: &str = "http://maps.google.com/maps/api/js?v=3.2&sensor=false";
 
 #[test]
 fn nothing_is_read_before_something_is_written_and_old_pages_are_deleted() {
-    let root = std::env::temp_dir().join(format!("mp-tiles-urlcache-{}", std::process::id()));
+    let root = mp_os::temp_dir().join(format!("mp-tiles-urlcache-{}", mp_os::process_id()));
     let _ = std::fs::remove_dir_all(&root);
     let cleanup = Cleanup(root.clone());
 

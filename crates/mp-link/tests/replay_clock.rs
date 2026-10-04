@@ -33,7 +33,7 @@
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::indexing_slicing)]
 
 use std::path::PathBuf;
-use std::time::{Duration, Instant};
+use web_time::{Duration, Instant};
 
 use mp_link::{Link, LinkConfig};
 use mp_transport::ReplayTransport;
@@ -103,7 +103,7 @@ fn a_file_link_stamps_each_packet_with_its_records_time_as_the_csharp_does() {
                 Instant::now() < deadline,
                 "the replay to {position} never ended"
             );
-            std::thread::sleep(Duration::from_millis(5));
+            wasm_thread::sleep(Duration::from_millis(5));
         }
         let state = link.vehicle(AUTOPILOT).expect("vehicle 1:1").load();
         assert_eq!(
@@ -127,13 +127,13 @@ fn the_flight_screens_paced_replay_carries_the_same_clock() {
     let deadline = Instant::now() + Duration::from_secs(60);
     while control.position() < position {
         assert!(Instant::now() < deadline, "the paced replay never finished");
-        std::thread::sleep(Duration::from_millis(5));
+        wasm_thread::sleep(Duration::from_millis(5));
     }
     // A publish after the last packet.
     let published = link.stats().publishes;
     while link.stats().publishes < published + 2 {
         assert!(Instant::now() < deadline, "nothing published");
-        std::thread::sleep(Duration::from_millis(5));
+        wasm_thread::sleep(Duration::from_millis(5));
     }
     let state = link.vehicle(AUTOPILOT).expect("vehicle 1:1").load();
     assert_eq!(state.datetime.ticks(), ticks, "paced, to byte {position}");

@@ -32,8 +32,8 @@
 use std::io::{self, Write};
 use std::net::TcpListener;
 use std::sync::mpsc;
-use std::thread;
-use std::time::{Duration, Instant};
+use wasm_thread as thread;
+use web_time::{Duration, Instant};
 
 use mp_transport::testing::Loopback;
 use mp_transport::{OpenError, Transport};
@@ -213,7 +213,7 @@ mod pty {
     #[test]
     fn a_serial_port_that_vanishes_fails_its_next_read_and_the_same_url_reopens_when_it_returns() {
         let dir = PathBuf::from(env!("CARGO_TARGET_TMPDIR"))
-            .join(format!("hotplug-{}", std::process::id()));
+            .join(format!("hotplug-{}", mp_os::process_id()));
         std::fs::create_dir_all(&dir).unwrap();
         let link = dir.join("usb-ArduPilot_Test_0123456789ABCDEF-if00");
         let url = format!("serial:{}:115200", link.display());

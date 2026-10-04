@@ -28,7 +28,9 @@
 use std::sync::Arc;
 use std::sync::OnceLock;
 use std::sync::atomic::Ordering;
-use std::time::{Duration, SystemTime};
+// A file's time is std's: this file compares the clock only with files' times. port_clock: keep
+use std::time::SystemTime; // port_clock: keep
+use web_time::Duration;
 
 use crate::srtm::{Fault, Inner, decode_utf8, lock, read_lines};
 
@@ -161,7 +163,7 @@ pub(crate) fn request_runner(inner: &Arc<Inner>) {
     while inner.run.load(Ordering::Acquire) {
         request_step(inner);
         // C#: await Task.Delay(1000) - "never more than 1/s".
-        std::thread::sleep(REQUEST_PAUSE);
+        wasm_thread::sleep(REQUEST_PAUSE);
     }
 }
 

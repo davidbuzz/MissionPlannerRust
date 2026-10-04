@@ -131,7 +131,7 @@ struct Shared {
 #[derive(Debug)]
 pub(crate) struct PrefetchJob {
     shared: Arc<Shared>,
-    handle: Option<std::thread::JoinHandle<()>>,
+    handle: Option<wasm_thread::JoinHandle<()>>,
     /// How many walks the job was given.
     pub(crate) walks: usize,
 }
@@ -149,7 +149,7 @@ impl PrefetchJob {
         let shared = Arc::new(Shared::default());
         let worker = Arc::clone(&shared);
         let count = walks.len();
-        let handle = std::thread::Builder::new()
+        let handle = wasm_thread::Builder::new()
             .name("tile-prefetch".to_owned())
             .spawn(move || {
                 let fetcher = mp_tiles::TileFetcher::new();
@@ -666,7 +666,7 @@ mod tests {
 
     #[test]
     fn an_offline_job_over_an_empty_cache_ends_with_nothing_and_says_so() {
-        let dir = std::env::temp_dir().join(format!("mp-prefetch-{}", std::process::id()));
+        let dir = mp_os::temp_dir().join(format!("mp-prefetch-{}", mp_os::process_id()));
         let _ = std::fs::remove_dir_all(&dir);
         let cache = TileCache::new(&dir);
         let area = Area::between(
@@ -679,9 +679,9 @@ mod tests {
             cache,
             true,
         );
-        let started = std::time::Instant::now();
+        let started = web_time::Instant::now();
         while !job.finished() && started.elapsed() < std::time::Duration::from_secs(5) {
-            std::thread::sleep(std::time::Duration::from_millis(5));
+            wasm_thread::sleep(std::time::Duration::from_millis(5));
         }
         assert!(job.finished());
         assert_eq!(job.ok(), 0);

@@ -65,7 +65,7 @@
 #![allow(unreachable_pub)]
 
 use std::collections::BTreeSet;
-use std::time::{Duration, Instant};
+use web_time::{Duration, Instant};
 
 use gpui::{
     AnyElement, Context, FocusHandle, KeyDownEvent, SharedString, Window, div, prelude::*, px, rgb,
@@ -635,8 +635,8 @@ pub fn target(path: &str) -> Result<Option<Target>, String> {
 #[must_use]
 #[allow(clippy::cast_precision_loss)] // milliseconds since 1970: well inside f64
 pub fn xdate_now() -> f64 {
-    let ms = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
+    let ms = web_time::SystemTime::now()
+        .duration_since(web_time::UNIX_EPOCH)
         .map_or(0, |d| d.as_millis());
     // 1970-01-01 is day 25569 of the XDate calendar.
     ms as f64 / 86_400_000.0 + 25569.0

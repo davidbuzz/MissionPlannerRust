@@ -61,7 +61,7 @@
 
 use std::path::PathBuf;
 use std::sync::OnceLock;
-use std::time::{Duration, Instant};
+use web_time::{Duration, Instant};
 
 use mp_mission::dotnet::format_f64;
 use mp_vehicle::VehicleState;
@@ -1373,7 +1373,7 @@ mod tests {
         let _guard = LOCK
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner);
-        let dir = std::env::temp_dir().join(format!("mp-warnings-{}", std::process::id()));
+        let dir = mp_os::temp_dir().join(format!("mp-warnings-{}", mp_os::process_id()));
         let _ = std::fs::remove_dir_all(&dir);
         let file = dir.join("data").join(FILE_NAME);
         let mut engine = WarningEngine {

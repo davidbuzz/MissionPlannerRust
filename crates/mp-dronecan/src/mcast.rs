@@ -169,6 +169,7 @@ pub fn interfaces() -> Vec<Interface> {
 ///
 /// # Errors
 /// What the socket calls fail with; the C#'s throw out of the click handler.
+#[cfg(not(target_family = "wasm"))]
 pub fn open(bus: u8, interface: &Interface) -> std::io::Result<UdpSocket> {
     use socket2::{Domain, Protocol, SockAddr, Socket, Type};
     let socket = Socket::new(Domain::IPV4, Type::DGRAM, Some(Protocol::UDP))?;
@@ -183,6 +184,15 @@ pub fn open(bus: u8, interface: &Interface) -> std::io::Result<UdpSocket> {
     Ok(socket.into())
 }
 
+/// A web page has no sockets: what std's own `UdpSocket::bind` answers there.
+///
+/// # Errors
+/// Always [`std::io::ErrorKind::Unsupported`].
+#[cfg(target_family = "wasm")]
+pub fn open(_bus: u8, _interface: &Interface) -> std::io::Result<UdpSocket> {
+    Err(std::io::Error::from(std::io::ErrorKind::Unsupported))
+}
+
 /// Sends a datagram to the bus's group.
 ///
 /// # Errors
@@ -195,7 +205,7 @@ pub fn send(socket: &UdpSocket, bus: u8, datagram: &[u8]) -> std::io::Result<usi
 mod tests {
     use super::*;
     use crate::node::{Identity, Node};
-    use std::time::Instant;
+    use web_time::Instant;
 
     /// Our node's status as a datagram, and back to the line it was: the header as pydronecan
     /// packs it, the CRC over what follows it.

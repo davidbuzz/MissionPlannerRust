@@ -27,7 +27,7 @@
 
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::indexing_slicing)]
 
-use std::time::{Duration, Instant};
+use web_time::{Duration, Instant};
 
 use mp_link::{Link, LinkConfig};
 use mp_mavlink::{FrameDecoder, encode_v2};
@@ -92,7 +92,7 @@ fn commands_until(
         if seen.iter().any(&until) {
             return true;
         }
-        std::thread::sleep(Duration::from_millis(5));
+        wasm_thread::sleep(Duration::from_millis(5));
     }
     false
 }
@@ -123,7 +123,7 @@ fn a_heartbeat_makes_a_camera_and_a_gimbal_manager_that_discover_two_seconds_on(
     // Made at once, not yet started: nothing asked, nothing kept.
     let deadline = Instant::now() + Duration::from_secs(5);
     while link.camera(VEHICLE).is_none() && Instant::now() < deadline {
-        std::thread::sleep(Duration::from_millis(5));
+        wasm_thread::sleep(Duration::from_millis(5));
     }
     let camera = link.camera(VEHICLE).expect("a camera for the autopilot");
     assert!(!camera.is_started());
@@ -222,7 +222,7 @@ fn a_heartbeat_makes_a_camera_and_a_gimbal_manager_that_discover_two_seconds_on(
     );
     let deadline = Instant::now() + Duration::from_secs(5);
     while link.video_streams().is_empty() && Instant::now() < deadline {
-        std::thread::sleep(Duration::from_millis(5));
+        wasm_thread::sleep(Duration::from_millis(5));
     }
     let streams = link.video_streams();
     assert_eq!(streams.len(), 1);

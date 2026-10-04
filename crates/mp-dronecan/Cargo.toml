@@ -11,11 +11,17 @@ repository.workspace = true
 workspace = true
 
 [dependencies]
+# The std calls that panic in a web page, std's on the desktop (experiments/web-experiment/tools/port_os.py).
+mp-os.workspace = true
+# The clock, std's on the desktop and the browser's in a web page (experiments/web-experiment/tools/port_clock.py).
+web-time = "1"
 # CAN_FRAME, CANFD_FRAME and CAN_FILTER_MODIFY: the MAVLink side of the CAN forwarding.
 mp-mavlink-dialects.workspace = true
+
 # The multicast bus (`StartmcastCAN`): `ReuseAddress` before the bind and the group joined on the
 # chosen interface, as the C#'s `UdpClient` sets them; std's `UdpSocket` cannot set the first.
-# Already in the tree.
+# Already in the tree. Not in a web page, which has no sockets (src/mcast.rs `open`).
+[target.'cfg(not(target_family = "wasm"))'.dependencies]
 socket2 = "0.6"
 
 # `NetworkInterface.GetAllNetworkInterfaces()` for the multicast interface list: getifaddrs.

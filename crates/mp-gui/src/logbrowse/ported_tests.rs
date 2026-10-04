@@ -63,7 +63,7 @@ fn facts(browse: &LogBrowse) -> BTreeMap<String, String> {
 
 /// A scratch copy of a fixture, for the tests that write beside the log.
 fn scratch_copy(path: &std::path::Path, tag: &str) -> std::path::PathBuf {
-    let directory = std::env::temp_dir().join(format!("mp-logbrowse-{tag}-{}", std::process::id()));
+    let directory = mp_os::temp_dir().join(format!("mp-logbrowse-{tag}-{}", mp_os::process_id()));
     let _ = std::fs::remove_dir_all(&directory);
     std::fs::create_dir_all(&directory).expect("scratch directory");
     let copy = directory.join(path.file_name().expect("a file"));

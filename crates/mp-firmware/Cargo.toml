@@ -11,6 +11,12 @@ publish = false
 workspace = true
 
 [dependencies]
+# The std calls that panic in a web page, std's on the desktop (experiments/web-experiment/tools/port_os.py).
+mp-os.workspace = true
+# Threads, std's on the desktop and Web Workers in a web page (experiments/web-experiment/tools/port_threads.py).
+wasm_thread = { git = "https://github.com/zed-industries/wasm_thread", rev = "0cf96c7708dfb97ccf3da50347e25edcf75d6937" }
+# The clock, std's on the desktop and the browser's in a web page (experiments/web-experiment/tools/port_clock.py).
+web-time = "1"
 thiserror.workspace = true
 # The .apj/.px4 container is JSON holding a base64 zlib stream. All three are already compiled in
 # this workspace's dependency closure, so none of them costs a new build.
@@ -37,3 +43,11 @@ roxmltree.workspace = true
 [dev-dependencies]
 # For TTYPort::pair(): the bootloader probe is run over a real serial port on a pseudo-terminal.
 serialport = { version = "4.10", default-features = false }
+
+# HTTPS in a web page (the browser experiment), for ring and rustls under ureq: ring's random
+# numbers from `crypto.getRandomValues` (getrandom 0.2's "js", which ring's own feature turns on),
+# and rustls' clock from the browser's (pki-types' "web").
+[target.'cfg(target_family = "wasm")'.dependencies]
+getrandom = { version = "0.2", features = ["js"] }
+ring = { version = "0.17", features = ["wasm32_unknown_unknown_js"] }
+rustls-pki-types = { version = "1", features = ["web"] }

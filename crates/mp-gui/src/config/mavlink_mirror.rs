@@ -559,7 +559,7 @@ impl MavlinkMirror {
             if self.mirrors.iter().all(|s| s.opening.is_none()) {
                 break;
             }
-            std::thread::sleep(std::time::Duration::from_millis(5));
+            wasm_thread::sleep(std::time::Duration::from_millis(5));
         }
         status
     }

@@ -63,7 +63,7 @@ use std::net::{IpAddr, TcpListener, TcpStream};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex, mpsc};
-use std::time::{Duration, Instant};
+use web_time::{Duration, Instant};
 
 use base64::Engine as _;
 use mp_mavlink_dialects::all::{DIALECT, MavMessage};
@@ -307,7 +307,7 @@ impl Server {
             shared.run.store(true, Ordering::Release);
             let worker = Arc::clone(&shared);
             let dir = files.clone();
-            let _ = std::thread::Builder::new()
+            let _ = wasm_thread::Builder::new()
                 .name("motion jpg stream-network kml".to_owned())
                 .spawn(move || listen(&worker, port, &dir));
         }
@@ -407,7 +407,7 @@ fn listen(shared: &Arc<Shared>, port: u16, files: &Path) {
                 let _ = stream.set_read_timeout(Some(READ_TIMEOUT));
                 let worker = Arc::clone(shared);
                 let dir = files.to_path_buf();
-                let spawned = std::thread::Builder::new()
+                let spawned = wasm_thread::Builder::new()
                     .name("http client".to_owned())
                     .spawn(move || {
                         let mut stream = stream;
@@ -419,9 +419,9 @@ fn listen(shared: &Arc<Shared>, port: u16, files: &Path) {
                 }
             }
             Err(err) if err.kind() == std::io::ErrorKind::WouldBlock => {
-                std::thread::sleep(Duration::from_millis(50));
+                wasm_thread::sleep(Duration::from_millis(50));
             }
-            Err(_) => std::thread::sleep(Duration::from_millis(50)),
+            Err(_) => wasm_thread::sleep(Duration::from_millis(50)),
         }
     }
     *lock(&shared.listening) = None;
@@ -768,7 +768,7 @@ fn websocket_server<C: Connection>(stream: &mut C, head: &str, shared: &Shared) 
                 return;
             }
         }
-        std::thread::sleep(PERIOD);
+        wasm_thread::sleep(PERIOD);
     }
 }
 
@@ -810,7 +810,7 @@ fn websocket_raw<C: Connection>(stream: &mut C, head: &str, shared: &Shared) {
                 lock(&shared.commands).push(Command::Send(Box::new(message)));
             }
         }
-        std::thread::sleep(PERIOD);
+        wasm_thread::sleep(PERIOD);
     }
 }
 
@@ -1162,7 +1162,7 @@ fn jpeg_stream<C: Connection>(stream: &mut C, shared: &Shared) {
         return;
     }
     while shared.running() && stream.connected() {
-        std::thread::sleep(PERIOD);
+        wasm_thread::sleep(PERIOD);
         let Some(data) = lock(&shared.snapshot).hud_jpeg.clone() else {
             continue;
         };
@@ -1680,7 +1680,7 @@ mod tests {
     #[test]
     fn the_index_the_network_kml_and_a_404() {
         let shared = shared();
-        let dir = std::env::temp_dir();
+        let dir = mp_os::temp_dir();
         let index = get("/", LOOPBACK, &shared, &dir);
         assert!(
             index.starts_with("HTTP/1.1 200 OK\r\nConnection: close\r\nContent-Type: text/html")
@@ -1749,7 +1749,7 @@ mod tests {
     #[test]
     fn guided_takes_loopback_requests_only() {
         let shared = shared();
-        let dir = std::env::temp_dir();
+        let dir = mp_os::temp_dir();
         let ok = get("/guided?lat=-34&lng=117.8&alt=30", LOOPBACK, &shared, &dir);
         assert!(ok.ends_with("Sent Guide Mode Wp"));
         assert_eq!(
@@ -1823,7 +1823,7 @@ mod tests {
         );
         let shared = shared();
         for path in ["/command_long", "/rcoverride", "/get_mission"] {
-            let answer = get(path, LOOPBACK, &shared, &std::env::temp_dir());
+            let answer = get(path, LOOPBACK, &shared, &mp_os::temp_dir());
             assert!(answer.starts_with("HTTP/1.1 404 not found\r\nContent-Type: image/jpg"));
         }
     }
@@ -1831,7 +1831,7 @@ mod tests {
     /// `/mav/`: a file inside `mavelous_web`, its type, a 304, and a path that climbs out.
     #[test]
     fn mavelous_files_stay_inside_their_folder() {
-        let dir = std::env::temp_dir().join(format!("mp-http-{}", std::process::id()));
+        let dir = mp_os::temp_dir().join(format!("mp-http-{}", mp_os::process_id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(dir.join("mavelous_web")).unwrap();
         std::fs::write(dir.join("mavelous_web/index.html"), "<html>mavelous</html>").unwrap();
@@ -1887,7 +1887,7 @@ mod tests {
     #[test]
     fn the_map_stream_is_not_here_and_origins_are_judged() {
         let shared = shared();
-        let answer = get("/map.jpg", LOOPBACK, &shared, &std::env::temp_dir());
+        let answer = get("/map.jpg", LOOPBACK, &shared, &mp_os::temp_dir());
         assert!(answer.starts_with("HTTP/1.1 404 not found"));
         assert!(answer.contains(NO_MAP_IMAGE));
         assert!(!is_cross_site(

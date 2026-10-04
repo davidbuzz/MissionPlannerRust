@@ -87,7 +87,7 @@ impl Settings {
             .map(PathBuf::from)
             .or_else(|| std::env::var_os("APPDATA").map(PathBuf::from))
             .or_else(|| std::env::var_os("HOME").map(|home| PathBuf::from(home).join(".config")))
-            .unwrap_or_else(std::env::temp_dir);
+            .unwrap_or_else(mp_os::temp_dir);
         base.join("mission-planner-rust").join("settings.conf")
     }
 
@@ -840,7 +840,7 @@ pub fn parse_kindex(text: &str) -> Option<i32> {
 /// `kindex` for [`Persisted::kindex_downloaded`] to write.
 /// `// C#: ExtLibs/Utilities/KIndex.cs:23-71; MainV2.cs:3952-3953, 3977-3981`
 pub fn download_kindex(fetch: impl mp_firmware::manifest::Fetch + Send + 'static) {
-    let spawned = std::thread::Builder::new()
+    let spawned = wasm_thread::Builder::new()
         .name("kindex".to_owned())
         .spawn(move || {
             let kindex = fetch
@@ -963,8 +963,8 @@ mod tests {
 
     impl Scratch {
         fn new(name: &str) -> Self {
-            let path = std::env::temp_dir()
-                .join(format!("mp-gui-persisted-{name}-{}", std::process::id()));
+            let path =
+                mp_os::temp_dir().join(format!("mp-gui-persisted-{name}-{}", mp_os::process_id()));
             let _ = std::fs::remove_dir_all(&path);
             std::fs::create_dir_all(&path).expect("scratch directory");
             Self(path)
@@ -1777,13 +1777,13 @@ mod tests {
             }
         }
         let wait_for = |persisted: &mut Persisted, value: &str| {
-            let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+            let deadline = web_time::Instant::now() + std::time::Duration::from_secs(5);
             while persisted.get("kindex") != Some(value) {
                 assert!(
-                    std::time::Instant::now() < deadline,
+                    web_time::Instant::now() < deadline,
                     "kindex never became {value}"
                 );
-                std::thread::sleep(std::time::Duration::from_millis(2));
+                wasm_thread::sleep(std::time::Duration::from_millis(2));
                 persisted.kindex_downloaded();
             }
         };

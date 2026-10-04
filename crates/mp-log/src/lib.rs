@@ -97,7 +97,7 @@ impl LogError {
 /// Unix epoch microseconds, the unit tlog timestamps use.
 #[must_use]
 pub fn now_micros() -> u64 {
-    std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
+    web_time::SystemTime::now()
+        .duration_since(web_time::UNIX_EPOCH)
         .map_or(0, |d| u64::try_from(d.as_micros()).unwrap_or(u64::MAX))
 }

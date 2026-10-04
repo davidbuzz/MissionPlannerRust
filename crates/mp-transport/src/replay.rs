@@ -30,7 +30,7 @@ use std::io;
 use std::path::Path;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
-use std::time::{Duration, Instant};
+use web_time::{Duration, Instant};
 
 use crate::{OpenError, Transport};
 
@@ -548,7 +548,7 @@ impl ReplayTransport {
             });
             if due > now {
                 let remaining = due - now;
-                std::thread::sleep(remaining.min(paced.timeout));
+                wasm_thread::sleep(remaining.min(paced.timeout));
                 if remaining > paced.timeout {
                     return 0;
                 }

@@ -845,7 +845,7 @@ mod tests {
             eprintln!("mode {}", mode.label());
         }
         let mode = modes.first().expect("a decodable mode");
-        let started = std::time::Instant::now();
+        let started = web_time::Instant::now();
         let capture = crate::Capture::start(&source, first, mode).unwrap();
         while capture.frames() < 10 {
             assert!(
@@ -853,7 +853,7 @@ mod tests {
                 "{capture:?} {:?}",
                 capture.error()
             );
-            std::thread::sleep(Duration::from_millis(5));
+            wasm_thread::sleep(Duration::from_millis(5));
         }
         let frame = capture.latest().unwrap();
         eprintln!(
