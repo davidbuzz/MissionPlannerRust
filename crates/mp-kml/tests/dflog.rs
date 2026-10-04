@@ -36,7 +36,7 @@
 
 use std::path::{Path, PathBuf};
 
-use mp_kml::dflog::{LogOutput, dflog_to_kml, process_log, utc};
+use mp_kml::dflog::{LogOutput, NEWLINE, dflog_to_kml, process_log, utc};
 use mp_log::convert::flight_mode_name;
 use mp_log::zip::{self, DosTime};
 
@@ -220,9 +220,14 @@ fn the_button_writes_beside_the_log() {
     for path in &written {
         assert!(path.exists(), "{}", path.display());
     }
+    // The button writes `Environment.NewLine` as the C# does - "\r\n" on Windows - and the golden
+    // was taken under mono on Linux, so its lines end "\n".
+    let golden = std::fs::read_to_string(testdata("dataflash/golden/kml/dataflash.bin0wp.txt"))
+        .unwrap()
+        .replace('\n', NEWLINE);
     assert_eq!(
-        std::fs::read(dir.join("Flight.BIN0wp.txt")).unwrap(),
-        std::fs::read(testdata("dataflash/golden/kml/dataflash.bin0wp.txt")).unwrap()
+        std::fs::read_to_string(dir.join("Flight.BIN0wp.txt")).unwrap(),
+        golden
     );
     std::fs::remove_dir_all(&dir).unwrap();
 }
