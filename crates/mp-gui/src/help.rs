@@ -94,9 +94,10 @@ pub const INSTALL_DIR_ENV: &str = "MP_UPDATE_DIR";
 const UPDATER: &str = "headless-planner";
 
 /// `Resources.help_text`, the RTF's words: its paragraphs, a tab where it has one, the links as
-/// their addresses. `// C#: Properties/Resources.resx (help_text)`
+/// their addresses - with "Mission Planner" read "MissionPlannerRust" (the owner, 2026-10-04).
+/// `// C#: Properties/Resources.resx (help_text)`
 pub const HELP_TEXT: &str = "\n\
-    \tWelcome to the Mission Planner, mission planning for Unmanned Aerial Vehicles (UAV).\n\
+    \tWelcome to the MissionPlannerRust, mission planning for Unmanned Aerial Vehicles (UAV).\n\
     \tHelp:\n\
     Arduplane: http://ardupilot.org/plane\n\
     ArduCopter: http://ardupilot.org/copter\n\
@@ -109,7 +110,7 @@ pub const HELP_TEXT: &str = "\n\
     \tArduCopter Illustrations: Max Levine\n\
     Librarys: Gmap.net, Sharpkml, SharpZipLib, IronPython, KMLib, OpenTK, ZedGraph, alglib, BouncyCastle, DotSpatial, LibVLC, netDXF\n\
     \n\
-    Companys that have contributed to Mission Planners development: 3D Robotics, Falcon Unmanned, UAV Solutions\n\
+    Companys that have contributed to MissionPlannerRusts development: 3D Robotics, Falcon Unmanned, UAV Solutions\n\
     \n\
     ShortCuts\n\
     \n\
@@ -923,6 +924,17 @@ pub fn record_facts(help: &Help) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The help screen names this program: "Mission Planner" read "MissionPlannerRust" (the owner,
+    /// 2026-10-04), the rest the C#'s words.
+    #[test]
+    fn the_help_text_names_missionplannerrust() {
+        assert!(!HELP_TEXT.contains("Mission Planner"), "{HELP_TEXT}");
+        assert!(HELP_TEXT.contains(
+            "Welcome to the MissionPlannerRust, mission planning for Unmanned Aerial Vehicles (UAV)."
+        ));
+        assert!(HELP_TEXT.contains("Control-T - Blind connect"));
+    }
     use std::collections::HashMap;
 
     struct Server(HashMap<String, Vec<u8>>);
