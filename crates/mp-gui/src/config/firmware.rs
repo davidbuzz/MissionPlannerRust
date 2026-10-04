@@ -3851,7 +3851,9 @@ mod tests {
     #[test]
     fn a_port_arriving_is_heard_and_probed() {
         static PLUGGED: AtomicBool = AtomicBool::new(false);
+        static LOOKS: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
         fn ports() -> Vec<String> {
+            LOOKS.fetch_add(1, Ordering::SeqCst);
             if PLUGGED.load(Ordering::SeqCst) {
                 vec!["/dev/mp-test-no-such-port".to_owned()]
             } else {
@@ -3862,6 +3864,14 @@ mod tests {
         page.watch_ports = Some(ports);
         page.activate();
         assert!(page.watcher.is_some(), "Activate watches the ports");
+        // The port arrives after the watcher's first list of the ports there are: plugged before
+        // its thread has looked, it is among them and no arrival - the race Windows' slower
+        // thread start lost (CI run 37173996196).
+        let until = Instant::now() + Duration::from_secs(5);
+        while LOOKS.load(Ordering::SeqCst) == 0 {
+            assert!(Instant::now() < until, "the watcher never looked at the ports");
+            std::thread::sleep(Duration::from_millis(1));
+        }
         PLUGGED.store(true, Ordering::SeqCst);
         let until = Instant::now() + Duration::from_secs(5);
         while page.arrivals == 0 {

@@ -489,9 +489,11 @@ mod tests {
         assert_eq!(fetch_order("b.dll", "a.exe"), std::cmp::Ordering::Greater);
         assert_eq!(fetch_order("z.exe", "a.dll"), std::cmp::Ordering::Less);
         assert_eq!(fetch_order("a.txt", "b.txt"), std::cmp::Ordering::Less);
+        // Joined with the platform's separator, as Path.GetFullPath joins them.
+        let expected = if cfg!(windows) { r"\inst\a.dll" } else { "/inst/a.dll" };
         assert_eq!(
             full_path_lower(Path::new("/Inst"), "./Sub/../A.DLL"),
-            "/inst/a.dll"
+            expected
         );
     }
 

@@ -167,9 +167,11 @@ fn the_thread_downloads_a_queued_tile_and_the_next_lookup_has_it() {
         names(&dir),
         vec!["N00W001.hgt", "N00W001.hgt.zip", "SRTM1", "SRTM3"]
     );
+    // A line at a time with Environment.NewLine, as the C# writes it: "\r\n" on Windows.
+    let newline = if cfg!(windows) { "\r\n" } else { "\n" };
     assert_eq!(
         std::fs::read_to_string(dir.join("SRTM1")).unwrap(),
-        format!("{BASE}/SRTM1/N00W001.hgt.zip\n")
+        format!("{BASE}/SRTM1/N00W001.hgt.zip{newline}")
     );
 }
 

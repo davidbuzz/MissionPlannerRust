@@ -675,5 +675,13 @@ fn joining_a_group_twice_fails_here_as_it_did_there() {
     let second = socket
         .join_multicast_v4(&group, &any)
         .expect_err("a second join");
-    assert_eq!(second.kind(), io::ErrorKind::AddrInUse);
+    // The golden is mono's on Linux, where the kernel answers EADDRINUSE. Windows refuses the
+    // same second IP_ADD_MEMBERSHIP with WSAEINVAL (CI run 37173996196), as it does under .NET
+    // there (SocketError.InvalidArgument): the join still fails, and the loop still returns.
+    let expected = if cfg!(windows) {
+        io::ErrorKind::InvalidInput
+    } else {
+        io::ErrorKind::AddrInUse
+    };
+    assert_eq!(second.kind(), expected);
 }

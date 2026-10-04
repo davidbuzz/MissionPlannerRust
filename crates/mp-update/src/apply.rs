@@ -200,6 +200,13 @@ mod tests {
             false,
         );
         assert!(missing.is_err());
-        std::fs::remove_dir_all(&dir).unwrap();
+        // The planner was started standing in `dir` and not waited for, as the C# starts it, and
+        // Windows will not remove a folder a running process stands in: the cleanup waits for
+        // `true` to have gone (CI run 37173996196, "being used by another process").
+        let until = std::time::Instant::now() + std::time::Duration::from_secs(10);
+        while let Err(e) = std::fs::remove_dir_all(&dir) {
+            assert!(std::time::Instant::now() < until, "{}: {e}", dir.display());
+            std::thread::sleep(std::time::Duration::from_millis(50));
+        }
     }
 }

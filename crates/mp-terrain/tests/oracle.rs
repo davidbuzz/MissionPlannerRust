@@ -226,10 +226,19 @@ fn files(dir: &Path) -> Vec<Vec<String>> {
         .into_iter()
         .map(|name| {
             let path = dir.join(&name);
-            let length = std::fs::metadata(&path).unwrap().len().to_string();
+            let bytes = std::fs::read(&path).unwrap();
             if name.ends_with(".hgt") || name.ends_with(".zip") || name.ends_with(".asc") {
-                return vec!["file".to_owned(), name, length];
+                return vec!["file".to_owned(), name, bytes.len().to_string()];
             }
+            // A listing is written a line at a time with Environment.NewLine, as the C# writes it
+            // - "\r\n" on Windows - and the oracle measured it where that is "\n": its length is
+            // compared as the oracle's, a byte less for each line's "\r" on Windows.
+            let carriage_returns = if cfg!(windows) {
+                bytes.windows(2).filter(|pair| pair == b"\r\n").count()
+            } else {
+                0
+            };
+            let length = (bytes.len() - carriage_returns).to_string();
             let lines = read_all_lines(&path);
             let norm = |s: &String| s.replace(BASE, "{base}");
             vec![

@@ -187,7 +187,10 @@ mod tests {
         field.parse().expect("an integer in the golden")
     }
 
-    /// Every case of `wp_circle.csv`: the same number of points, each the same doubles.
+    /// Every case of `wp_circle.csv`: the same number of points, each the same doubles - to the
+    /// bit on Linux, where the golden was made, and within [`mp_units::golden_match`]'s allowance
+    /// where the platform's libm rounds a last bit otherwise (Windows: one ulp, CI run
+    /// 37173996196).
     #[test]
     fn a_wp_circle_is_the_c_sharps_to_the_bit() {
         let cases = cases(GOLDEN_WP);
@@ -204,17 +207,18 @@ mod tests {
             assert_eq!(got.len(), rows.len(), "{}", case[1]);
             for (index, (point, row)) in got.iter().zip(&rows).enumerate() {
                 assert_eq!(row[0], "wp");
-                assert_eq!(
-                    point.0.to_bits(),
-                    number(&row[1]).to_bits(),
-                    "{} {index}",
-                    case[1]
+                let (lat, lng) = (number(&row[1]), number(&row[2]));
+                assert!(
+                    mp_units::golden_match(point.0, lat),
+                    "{} {index}: latitude {} where the C# has {lat}",
+                    case[1],
+                    point.0
                 );
-                assert_eq!(
-                    point.1.to_bits(),
-                    number(&row[2]).to_bits(),
-                    "{} {index}",
-                    case[1]
+                assert!(
+                    mp_units::golden_match(point.1, lng),
+                    "{} {index}: longitude {} where the C# has {lng}",
+                    case[1],
+                    point.1
                 );
             }
         }

@@ -2423,7 +2423,10 @@ fn set_wp_is_sent_eleven_times_then_times_out_and_an_ack_or_the_next_request_end
 /// getHomePosition"; any `HOME_POSITION` from the vehicle ends it.
 #[test]
 fn get_home_position_asks_four_times_then_times_out_and_a_home_position_ends_it() {
-    let t = ProtocolTimeouts::default().faster(40);
+    // Halved, not divided by forty: at a fortieth a timeout was 17.5 ms, and the hosted macOS
+    // runner, waking threads 50 ms late, sent a third ask before the answer to the second was
+    // heard (CI run 37173996196, 2026-10-04: 3 asks, not 2). Halved, 350 ms.
+    let t = ProtocolTimeouts::default().faster(2);
     let (link, mut peer) = link(t);
     let is_ask = |m: &MavMessage| matches!(m, MavMessage::CommandLong(long) if long.command == CMD_GET_HOME_POSITION);
 

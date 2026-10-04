@@ -1211,14 +1211,20 @@ mod tests {
     /// How late past its deadline a held frame may go out, on a busy machine.
     const SLACK: Duration = Duration::from_millis(10);
 
-    /// The worst overshoot of three short sleeps: what the scheduler adds to a timed wait here,
-    /// now.
+    /// The worst overshoot of three short timed waits on a condition variable - the wait the
+    /// reader holds a change with (`wake.wait_timeout`) - what the scheduler adds to one here,
+    /// now. Not `thread::sleep`: on Windows a sleep takes a high-resolution timer and a condition
+    /// variable's timeout the system's coarser tick, so a sleep measured a few hundred
+    /// microseconds late while the reader's hold ran 10 ms over (CI run 37173996196).
     fn wake_up_lateness() -> Duration {
+        let lock = std::sync::Mutex::new(());
+        let never = std::sync::Condvar::new();
         (0..3)
             .map(|_| {
                 let asked = Duration::from_millis(5);
                 let started = Instant::now();
-                thread::sleep(asked);
+                let guard = lock.lock().unwrap_or_else(PoisonError::into_inner);
+                drop(never.wait_timeout(guard, asked));
                 started.elapsed().saturating_sub(asked)
             })
             .max()

@@ -427,12 +427,33 @@ fn distance_is_get_distance_to_the_bit() {
     }
 }
 
+/// How far, in degrees, a last-bit difference in the platform's sines and cosines can move
+/// `GetBearing`'s answer for this pair: none on Linux, where the golden was made. Elsewhere the
+/// bearing is `atan2(y, x)` of two terms built from products of sines and cosines of order one,
+/// so a few ulps of one in either term turn the bearing by that much over the terms' length - for
+/// points a nanodegree apart, where the terms are 1e-11, about 1e-4 degrees (Windows: 1.7e-4, CI
+/// run 37173996196). The C# formula is as sensitive; the allowance is the computation's at the
+/// scale of its inputs, as `mp_units::golden_match`'s is.
+fn bearing_allowance(a: LatLon, b: LatLon) -> f64 {
+    if cfg!(target_os = "linux") {
+        return 0.0;
+    }
+    let (latitude1, latitude2) = (a.latitude().to_radians(), b.latitude().to_radians());
+    let longitude_difference = (b.longitude() - a.longitude()).to_radians();
+    let y = longitude_difference.sin() * latitude2.cos();
+    let x = latitude1.cos() * latitude2.sin()
+        - latitude1.sin() * latitude2.cos() * longitude_difference.cos();
+    (16.0 * f64::EPSILON / y.hypot(x)).to_degrees()
+}
+
 #[test]
 fn bearing_is_get_bearing_to_the_bit() {
     for pair in pairs() {
         let ours = pair.a.bearing_to(pair.b).0.0;
+        let apart = (ours - pair.bearing).abs();
+        let apart = apart.min(360.0 - apart);
         assert!(
-            same_bits(ours, pair.bearing),
+            same_bits(ours, pair.bearing) || apart <= bearing_allowance(pair.a, pair.b),
             "{:?} to {:?}: ours {ours}, GetBearing {}",
             pair.a,
             pair.b,
