@@ -37,3 +37,9 @@ would not boot - its commands removed at Buzz's request (2026-10-04).
 
 **Installed 2026-10-04 12:05**, desktop 12:11; the local account is `user` - its password is in
 Buzz's untracked hackintosh-vm-dev.md, never in a committed file (this repository is public).
+
+**Reaching it (2026-10-04 12:20):** Buzz set auto-login as `user`, Remote Login and Screen Sharing
+on, hostname `buzz-osx`. `ssh -p 50922 user@127.0.0.1` logs in by the laptop's ed25519 key (in the
+VM's authorized_keys); laptop 127.0.0.1:5908 forwards to the VM's Screen Sharing (in start.sh's
+hostfwd). `buzz-osx.local` does not resolve on the laptop - user-mode networking carries no mDNS.
+macOS 14.8.9, 4 cores, 4 GB (`-m` in start.sh; likely too little for a release build).
