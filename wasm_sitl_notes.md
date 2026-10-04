@@ -5,13 +5,14 @@
 # this is a dep, 6.0.8 
 source "$HOME/emsdk/emsdk_env.sh"
 
-# using this folder as its not in-use for rp2350 righ tnow annd its already a workspace.
-cd ~/ardupilot_rp2350_v6_buzz
+# using this folder 
+cd ~/ardupilot
 
 ./waf configure --board wasm
 ./waf build --target bin/arduplane -j12
 ./waf build --target bin/arducopter -j12
-
+./waf build --target bin/ardurover -j12
+./waf build --target bin/arduheli -j12
 
 
 # test -f build/wasm/bin/arduplane.js
