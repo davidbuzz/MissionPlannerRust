@@ -68,7 +68,7 @@
 // This module is internal to the binary; `pub` here documents intent rather than exporting API.
 #![allow(unreachable_pub)]
 
-use gpui::{AnyElement, Context, Div, SharedString, div, prelude::*, px, rgb};
+use gpui::{AnyElement, Context, Div, SharedString, Window, div, prelude::*, px, rgb};
 
 use super::auth_keys::AuthKeysWindow;
 use super::fft::Fft;
@@ -436,48 +436,7 @@ fn button(row: Row, y: f32, cx: &mut Context<MissionPlanner>) -> AnyElement {
             .hover(|style| style.border_color(rgb(theme::ACCENT)))
             .on_click(cx.listener(move |this, _event, window, cx| {
                 window.blur(cx);
-                let pages = &mut this.extra;
-                let now = std::time::Instant::now();
-                let windows = Windows {
-                    fft: &mut pages.fft,
-                    inspector: &mut pages.inspector,
-                    warnings: &mut pages.warnings_manager,
-                    rules: &mut this.warnings.warnings,
-                };
-                if open(row.button, windows, now)
-                    || click_keys_or_proximity(
-                        row.button,
-                        &mut pages.proximity,
-                        &mut pages.auth_keys,
-                        now,
-                    )
-                    || click_window(
-                        row.button,
-                        &mut pages.spectrogram,
-                        &mut pages.support_proxy,
-                        &this.persisted,
-                    )
-                    || click_outputs(
-                        row.button,
-                        &mut pages.mavlink_mirror,
-                        &mut pages.nmea_output,
-                        &this.persisted,
-                    )
-                    || click_paramgen(
-                        row.button,
-                        &mut pages.param_gen,
-                        // `Settings.GetUserDataDirectory()`.
-                        &mp_settings::user_data_directory().unwrap_or_else(std::env::temp_dir),
-                    )
-                {
-                    // A new form is activated: the proximity window takes its keys at once.
-                    if row.button == "but_proximity" {
-                        this.extra_focus.proximity.focus(window, cx);
-                    }
-                    // `NUM_port.Select()`: the Support Proxy's number has the keyboard.
-                    if row.button == "BUT_supportproxy" {
-                        this.extra_focus.support_proxy.number.focus(window, cx);
-                    }
+                if this.open_advanced_tool(row.button, window, cx) {
                     cx.notify();
                 }
             }))
@@ -486,6 +445,59 @@ fn button(row: Row, y: f32, cx: &mut Context<MissionPlanner>) -> AnyElement {
         base.bg(rgb(theme::PANEL))
             .text_color(rgb(theme::DIM))
             .into_any_element()
+    }
+}
+
+impl MissionPlanner {
+    /// One of the Advanced page's buttons pressed, by its C# name: the window it opens opened,
+    /// the keyboard given where the C#'s new form takes it. Whether the name was one of them. The
+    /// EXPERIMENTAL tab opens the same windows through it (`experimental.rs`).
+    /// `// C#: GCSViews/ConfigurationView/ConfigAdvanced.cs:22-127`
+    pub(crate) fn open_advanced_tool(
+        &mut self,
+        button: &str,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> bool {
+        let pages = &mut self.extra;
+        let now = std::time::Instant::now();
+        let windows = Windows {
+            fft: &mut pages.fft,
+            inspector: &mut pages.inspector,
+            warnings: &mut pages.warnings_manager,
+            rules: &mut self.warnings.warnings,
+        };
+        let opened = open(button, windows, now)
+            || click_keys_or_proximity(button, &mut pages.proximity, &mut pages.auth_keys, now)
+            || click_window(
+                button,
+                &mut pages.spectrogram,
+                &mut pages.support_proxy,
+                &self.persisted,
+            )
+            || click_outputs(
+                button,
+                &mut pages.mavlink_mirror,
+                &mut pages.nmea_output,
+                &self.persisted,
+            )
+            || click_paramgen(
+                button,
+                &mut pages.param_gen,
+                // `Settings.GetUserDataDirectory()`.
+                &mp_settings::user_data_directory().unwrap_or_else(std::env::temp_dir),
+            );
+        if opened {
+            // A new form is activated: the proximity window takes its keys at once.
+            if button == "but_proximity" {
+                self.extra_focus.proximity.focus(window, cx);
+            }
+            // `NUM_port.Select()`: the Support Proxy's number has the keyboard.
+            if button == "BUT_supportproxy" {
+                self.extra_focus.support_proxy.number.focus(window, cx);
+            }
+        }
+        opened
     }
 }
 

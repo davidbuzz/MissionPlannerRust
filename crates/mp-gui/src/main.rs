@@ -81,6 +81,7 @@ mod plan;
 mod planner_coverage;
 mod plotline;
 // ---- row 96 ----
+mod experimental;
 mod plugin_manager;
 mod plugins_ui;
 // ---- end row 96 ----
@@ -228,14 +229,18 @@ enum Screen {
     /// makes it a tab; what it holds is the same - the list of fields the log declares, and a
     /// chart of the chosen one.
     Logs,
+    /// Mission Planner's temp form, Ctrl+F's (`temp.cs`, experimental.rs), as a tab of its own
+    /// between LOGS and PLUGINS - the owner's addition, 2026-10-04.
+    Experimental,
     /// The plugins: the plugin manager Ctrl+P opens (`Plugin/PluginUI.cs`, plugin_manager.rs) as a
     /// tab of its own, between LOGS and HELP - the owner's addition, 2026-10-04.
     Plugins,
 }
 
 impl Screen {
-    /// The tabs, in order: PARAMS, LOGS, PLUGINS, and HELP the very last (the owner, 2026-10-04).
-    const ALL: [Self; 9] = [
+    /// The tabs, in order: PARAMS, LOGS, EXPERIMENTAL, PLUGINS, and HELP the very last (the
+    /// owner, 2026-10-04).
+    const ALL: [Self; 10] = [
         Self::Fly,
         Self::Plan,
         Self::Setup,
@@ -245,6 +250,7 @@ impl Screen {
         // ---- end SITL ----
         Self::Params,
         Self::Logs,
+        Self::Experimental,
         Self::Plugins,
         Self::Help,
     ];
@@ -271,6 +277,7 @@ impl Screen {
             "help" => Self::Help,
             "params" => Self::Params,
             "logs" => Self::Logs,
+            "experimental" => Self::Experimental,
             "plugins" => Self::Plugins,
             // Anything else, including nothing and a typo, opens on the flight screen. An operator
             // who mistypes a screen name should still get the one the application is for.
@@ -290,6 +297,7 @@ impl Screen {
             Self::Help => "help",
             Self::Params => "params",
             Self::Logs => "logs",
+            Self::Experimental => "experimental",
             Self::Plugins => "plugins",
         }
     }
@@ -306,6 +314,7 @@ impl Screen {
             Self::Help => "tab-help",
             Self::Params => "tab-params",
             Self::Logs => "tab-logs",
+            Self::Experimental => "tab-experimental",
             Self::Plugins => "tab-plugins",
         }
     }
@@ -487,6 +496,8 @@ struct MissionPlanner {
     /// root's `ProcessCmdKey` (cmd_keys.rs): gpui gives a key to the focused element and its
     /// parents, and with nothing focused to the window's top alone.
     root_focus: gpui::FocusHandle,
+    /// The EXPERIMENTAL tab's state (experimental.rs).
+    experimental: experimental::Experimental,
     /// The flight screen's other state: the Quick and Telemetry Logs pages, the points of
     /// interest, the Log Downloader and the windows the HUD opens.
     fly_data: fly::FlightData,
@@ -885,6 +896,7 @@ impl MissionPlanner {
             fly_focus: fly::ActionsFocus::new(cx),
             fly_pages: fly::Pages::default(),
             root_focus: cx.focus_handle(),
+            experimental: experimental::Experimental::default(),
             fly_data,
             failsafe: config::failsafe::FailSafe::default(),
             failsafe_focus: cx.focus_handle(),
@@ -2106,6 +2118,7 @@ impl MissionPlanner {
                 | Screen::Help
                 | Screen::Params
                 | Screen::Logs
+                | Screen::Experimental
                 | Screen::Plugins => {}
             }
         }
@@ -3501,6 +3514,7 @@ impl Render for MissionPlanner {
             config::esc_calibration::record_facts(&self.esc_calibration, &view);
             // Optional Hardware pages
             config::optional::record_facts(&self.optional, &view);
+            experimental::record_facts(&self.experimental);
             // ---- RTK/GPS Inject ----
             config::rtk_inject::record_facts(&self.rtk_inject, &view, &self.persisted);
             // ---- end RTK/GPS Inject ----
@@ -4048,6 +4062,7 @@ impl Render for MissionPlanner {
                 .into_any_element(),
             // ---- end SITL ----
             Screen::Help => help::screen(self, window, cx),
+            Screen::Experimental => experimental::screen(self, window, cx),
             Screen::Plugins => plugin_manager::screen(self, cx),
         };
 
@@ -4771,12 +4786,22 @@ mod tests {
 
     #[test]
     fn help_is_the_last_tab_after_params_logs_and_plugins() {
-        // The owner, 2026-10-04: params, then logs, then plugins, then help.
+        // The owner, 2026-10-04: params, logs, experimental, plugins, then help.
         assert_eq!(
-            Screen::ALL[Screen::ALL.len() - 4..],
-            [Screen::Params, Screen::Logs, Screen::Plugins, Screen::Help]
+            Screen::ALL[Screen::ALL.len() - 5..],
+            [
+                Screen::Params,
+                Screen::Logs,
+                Screen::Experimental,
+                Screen::Plugins,
+                Screen::Help
+            ]
         );
         assert_eq!(Screen::initial(Some("plugins"), None), Screen::Plugins);
+        assert_eq!(
+            Screen::initial(Some("experimental"), None),
+            Screen::Experimental
+        );
     }
 
     #[test]

@@ -161,9 +161,10 @@ impl MissionPlanner {
             CmdKey::PluginManager => self.choose_screen(Screen::Plugins),
             CmdKey::OverrideConnect => self.override_connect(window, cx),
             CmdKey::StorageWrite => self.storage_write(),
+            // The owner's (2026-10-04): the EXPERIMENTAL tab, where the C# opens the temp form.
+            CmdKey::Temp => self.choose_screen(Screen::Experimental),
             // Their forms are not ported yet (NOT_DONE_YET_MATRIX.md, ProcessCmdKey's row).
-            CmdKey::Temp
-            | CmdKey::NmeaOut
+            CmdKey::NmeaOut
             | CmdKey::MapCache
             | CmdKey::Spectrogram
             | CmdKey::Propagation
