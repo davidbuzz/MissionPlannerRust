@@ -94,6 +94,7 @@ mod sitl;
 // ---- end SITL ----
 mod smoke;
 mod srtm;
+mod stderr_log;
 mod storm;
 mod survey_ui;
 mod telemetry;
@@ -4323,6 +4324,8 @@ fn report_import(imported: &mp_settings::migrate::Import) {
 }
 
 fn main() {
+    // First: what gpui cannot do - open a Metal device, load a font - it says only through `log`.
+    stderr_log::install();
     let raw: Vec<String> = std::env::args().skip(1).collect();
 
     // Help and version before anything else, so they work with no display and answer instantly.

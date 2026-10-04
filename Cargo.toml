@@ -17,6 +17,8 @@ repository = "https://github.com/davidbuzz/MissionPlannerRust"
 authors = ["Mission Planner Rust contributors"]
 
 [workspace.dependencies]
+# The facade gpui reports through; mp-gui installs a logger for it (stderr_log).
+log = "0.4.34"
 regex = "1.13"
 sha1_smol = "1.0"
 mp-units = { path = "crates/mp-units" }

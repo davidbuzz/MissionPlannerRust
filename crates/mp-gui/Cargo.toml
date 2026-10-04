@@ -15,6 +15,7 @@ path = "src/main.rs"
 workspace = true
 
 [dependencies]
+log.workspace = true
 # Pinned to the zed tree rather than the crates.io release. The published gpui 0.2.2 is an older,
 # self-contained snapshot that still uses the blade renderer and has no web backend; the current
 # tree is wgpu on Linux and web, Direct3D 11 on Windows, Metal on macOS, and gpui_web makes a
@@ -113,8 +114,12 @@ gpui_linux = { git = "https://github.com/zed-industries/zed", rev = "62e5991dd0f
 [target.'cfg(target_os = "windows")'.dependencies]
 gpui_windows = { git = "https://github.com/zed-industries/zed", rev = "62e5991dd0f0c8a3af8d5e7e9c4652490d468db8" }
 
+# font-kit, as gpui's own dependency on gpui_platform turns it on (`features = ["font-kit", ...]`,
+# which gpui_platform passes to gpui_macos): gpui_macos loads and shapes text with it, and without
+# it the planner drew no text at all on macOS - "gpui_macos was compiled without the `font-kit`
+# feature, so no text will be rendered" (seen on the owner's borrowed Mac, 2026-10-04).
 [target.'cfg(target_os = "macos")'.dependencies]
-gpui_macos = { git = "https://github.com/zed-industries/zed", rev = "62e5991dd0f0c8a3af8d5e7e9c4652490d468db8" }
+gpui_macos = { git = "https://github.com/zed-industries/zed", rev = "62e5991dd0f0c8a3af8d5e7e9c4652490d468db8", features = ["font-kit"] }
 
 # A scripted vehicle on the far end of an in-memory link, so a screen's sets and commands can be
 # driven through the real link and its retries in a unit test: the frame codec that vehicle speaks

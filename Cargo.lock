@@ -3083,6 +3083,7 @@ dependencies = [
  "smallvec",
  "strum",
  "uuid",
+ "zed-font-kit",
 ]
 
 [[package]]
@@ -4544,6 +4545,7 @@ dependencies = [
  "gpui_macos",
  "gpui_windows",
  "image",
+ "log",
  "lzma-rs",
  "mp-calibration",
  "mp-chart",
