@@ -3,7 +3,7 @@
 # Export Files the files the log carries into a folder - Ctrl+G's "Line no", and a double click
 # on a row, which moves the chart's cursor and the map's marker to its record.
 #
-# Self-contained: the healthy fixture, and the damaged one, which carries five files in 134 FILE
+# Self-contained: the healthy fixture, and the damaged one, which carries two files in 536 FILE
 # records; a config.xml of its own.
 
 env MP_PLAN_DIR $WORK/logs
@@ -62,4 +62,4 @@ expect log.prompt Where to save the files
 type files
 click log-prompt-ok
 expect log.prompt none
-expect log.exported 5 files
+expect log.exported 2 files

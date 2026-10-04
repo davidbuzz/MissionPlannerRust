@@ -11,8 +11,14 @@ tridge is logged in at its console - it is his desktop - so a `planner` launched
 no window; only `headless-planner` and the test suite run from here. Disk was 11 GB free on
 2026-10-03 and 41 GB after he cleared some; the scripts carry a disk watchdog.
 
-- Screen Sharing (2026-10-04): `ssh -f -N -L 127.0.0.1:5901:127.0.0.1:5900 tridge-mac`, then
-  `remmina -c vnc://buzz@127.0.0.1:5901`; Apple Remote Desktop login as `buzz` is accepted
+- Screen Sharing (2026-10-04): `ssh -f -N -o ExitOnForwardFailure=yes -o ServerAliveInterval=30
+  -L 127.0.0.1:5901:127.0.0.1:5900 tridge-mac`, then
+  `remmina -c ~/.local/share/remmina/group_vnc_tridge-mac_127-0-0-1-5901.remmina`, the saved
+  profile "tridge's Mac (buzz)". Don't use a `vnc://` link. Remmina treats it as a one-off
+  connection and can't save the password into it, however often Buzz ticks "save password". The
+  profile keeps the password in the GNOME keyring, and Buzz had it written outside the
+  repository too, in `~/.tridge-mac-vnc.txt` (mode 600). When the Mac's network drops, the tunnel dies
+  with it and the VNC window freezes; open the tunnel again, then the profile; Apple Remote Desktop login as `buzz` is accepted
   (1920x1080, "Andrew's Mac mini"). Buzz has the password - never write it into this repository.
   tridge is logged in at the console, so what it shows is his session: ask before acting in it.
 - Clone: `~/MissionPlannerRust`, pulled from GitHub (`git pull`), never pushed from there.
@@ -23,7 +29,10 @@ no window; only `headless-planner` and the test suite run from here. Disk was 11
   (2026-10-04: both architectures with `--target`, joined by `lipo`, packaged in `~/mpr-universal/`
   as the release workflow does; the x86_64-apple-darwin target is installed for 1.95.0;
   `mpr-release-intel.sh`, Intel alone, was stopped for it at Buzz's word), each logging to
-  `~/mpr-*.log`; run them with `nohup zsh ~/x.sh > ~/x.log 2>&1 < /dev/null & disown`.
+  `~/mpr-*.log`. Run them with `nohup zsh ~/x.sh > ~/x.log 2>&1 < /dev/null &!`, zsh's own
+  background-and-disown. On 2026-10-04 `( nohup ... & disown )` inside an `&&` chain failed with
+  "no current job": the subshell has no job table. The chain then reported failure, so a retry
+  loop around it would have started the build a second time.
 - Always `CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0` for debug work there (disk).
 - The release planner linked `/opt/homebrew/opt/xz/lib/liblzma.5.dylib` until built with
   `LZMA_API_STATIC=1` (liblzma-sys, through RustPython's lzma module); DEV_MACOS.md says so.

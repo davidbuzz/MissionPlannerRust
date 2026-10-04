@@ -55,3 +55,11 @@ linked from ~/MissionPlannerRust. macOS checks permissions itself and the files 
 the VM has a group `buzz` (GID 1000) with `user` in it, and umask 002. Catch: a name the VM looked
 up before the laptop created it stays invisible (even to ls) until that folder changes from the VM
 side (touch+rm a file there) or a remount. Build in the VM with CARGO_TARGET_DIR on the VM's disk.
+
+**Not the build box (Buzz, 2026-10-04).** He had hoped this VM would be a macOS build box.
+tridge's Mac has that role now ([[tridge-mac]]). It builds natively for arm64, makes the
+universal release, and can run and test the GUI, which this VM can't: it has no Metal.
+
+This VM is x86_64 with 4 GB, sharing the host's 31 GB, which is usually nearly full. So it
+could at most stand in to compile when tridge's Mac is unavailable, and it would need more RAM
+to do even that. Don't move builds here unless he asks.

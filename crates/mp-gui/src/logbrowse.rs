@@ -5462,23 +5462,23 @@ mod tests {
         browse.toggle_check(Check::Msg);
         browse.toggle_check(Check::Mode);
         let placed = labels(&browse);
-        assert_eq!(placed.len(), 5, "{placed:?}");
-        assert!(
-            placed
-                .iter()
-                .all(|label| label.alert && label.text == "EV: EKF_YAW_RESET")
-        );
+        // The fixture's two ERRs, then its eleven events: each list alternating on its own, as
+        // `DrawErrors` and `DrawEvents` each keep their own `top`.
+        assert_eq!(placed.len(), 13, "{placed:?}");
+        assert!(placed.iter().all(|label| label.alert), "{placed:?}");
+        assert!(placed[..2].iter().all(|label| label.text.starts_with("Err: ")));
+        assert!(placed[2..].iter().all(|label| label.text.starts_with("EV: ")));
         let places: Vec<Place> = placed.iter().map(|label| label.place).collect();
-        assert_eq!(
-            places,
-            vec![
-                Place::AboveTop,
-                Place::BelowTop,
-                Place::AboveTop,
-                Place::BelowTop,
-                Place::AboveTop
-            ]
-        );
+        let alternate = |count: usize| {
+            (0..count).map(|index| {
+                if index % 2 == 0 {
+                    Place::AboveTop
+                } else {
+                    Place::BelowTop
+                }
+            })
+        };
+        assert_eq!(places, alternate(2).chain(alternate(11)).collect::<Vec<_>>());
     }
 
     fn mode_at(line: usize, number: i64) -> mp_log::overlay::ModeChange {
@@ -5559,7 +5559,7 @@ mod tests {
         assert_eq!(fact(&browse, "log.cursor.grid"), "true");
         assert_eq!(fact(&browse, "log.cursor.centred"), "true");
         assert_eq!(fact(&browse, "log.cursor.line"), line.to_string());
-        assert!(fact(&browse, "log.cursor.marker").starts_with("-27.51"));
+        assert!(fact(&browse, "log.cursor.marker").starts_with("-35.36"));
     }
 
     /// On a time axis it goes to the first position record at or after the time under the
@@ -5781,7 +5781,8 @@ mod tests {
         browse.double_click(0.5);
         let facts = facts_of(&browse);
         assert_eq!(facts["log.overlays.messages"], "47");
-        assert_eq!(facts["log.overlays.minutes"], "0");
+        // Its GPS time crosses one minute, 12:31 to 12:32 GPS.
+        assert_eq!(facts["log.overlays.minutes"], "1");
         assert!(
             facts["log.cursor.line"]
                 .parse::<usize>()

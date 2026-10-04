@@ -69,7 +69,7 @@ impl LogsPage {
     }
 
     /// Its tab's text: the flight screen's page names, and the button that opens the browser.
-    pub fn text(self) -> String {
+    pub fn text(self) -> &'static str {
         match self {
             Self::TLogs => fl!("flightdata-tabTLogs-Text"),
             Self::DataFlash => fl!("flightdata-tablogbrowse-Text"),

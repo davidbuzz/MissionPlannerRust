@@ -120,16 +120,24 @@ pub fn is_important(name: &str) -> bool {
 }
 
 /// The controls on screen whose paint was clipped this frame - measured, and not wholly inside
-/// the window and the boxes above them - but for the rows [`MAY_SCROLL`] lets go. A control not
-/// measured - its screen not showing, a page not built - is not hidden, it is absent; this says
-/// nothing about those. (The probe keeps only what was measured in the last frame, which is the
-/// screen showing.)
+/// the window and the boxes above them - but for the rows [`MAY_SCROLL`] lets go; and the
+/// important controls of `screen`, the one showing, that were not laid out at all, as
+/// "`name` (missing)": a screen that lost its mission grid has hidden it as surely as one that
+/// scrolled it away. (The probe keeps only what was measured in the last frame, which is the
+/// screen showing; another screen's controls are not counted.)
 #[must_use]
-pub fn hidden(_screen: Screen) -> Vec<String> {
-    crate::probe::clipped_names()
+pub fn hidden(screen: Screen) -> Vec<String> {
+    let mut hidden: Vec<String> = crate::probe::clipped_names()
         .into_iter()
         .filter(|name| must_show(name))
-        .collect()
+        .collect();
+    hidden.extend(
+        important(screen)
+            .iter()
+            .filter(|name| crate::probe::clipped(name).is_none())
+            .map(|name| format!("{name} (missing)")),
+    );
+    hidden
 }
 
 /// `layout.hidden` and `layout.hidden.names`; "n/a" when the probe is off, since nothing is

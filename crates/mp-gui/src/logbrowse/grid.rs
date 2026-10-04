@@ -1008,8 +1008,9 @@ mod tests {
 
     /// A log with a fix writes its rows in GPS time from that fix on.
     ///
-    /// The damaged fixture's first fix is GPS week 2432, 20,489 seconds in - 2026-08-16 05:41:29
-    /// GPS, 05:41:11 UTC - logged 458,484,379 microseconds after boot.
+    /// The damaged fixture's first fix is GPS week 2439, 45,075.8 seconds in - 2026-10-04
+    /// 12:31:15.8 GPS, 12:30:57.8 UTC - logged 9,999,332 microseconds after boot (SITL's, read
+    /// by a header walk in Python).
     #[test]
     fn a_log_with_a_fix_writes_gps_time() {
         let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -1019,15 +1020,15 @@ mod tests {
         assert_eq!(
             index.gps_start(),
             Some(mp_log::index::GpsStart {
-                week: 2_432,
-                week_ms: 20_489_000,
-                boot_ms: 458_484,
+                week: 2_439,
+                week_ms: 45_075_800,
+                boot_ms: 9_999,
             })
         );
         let grid = grid_over(data);
         assert_eq!(
-            grid.clock.text_in(Some(458_484.379), &chrono::Utc),
-            "2026-08-16 05:41:11.000"
+            grid.clock.text_in(Some(9_999.332), &chrono::Utc),
+            "2026-10-04 12:30:57.800"
         );
     }
 

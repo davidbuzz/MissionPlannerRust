@@ -203,8 +203,8 @@ fn the_map_draws_every_route_of_the_stretch_charted() {
     );
     browse.toggle_check(Check::Map);
     let facts_now = facts(&browse);
-    assert_eq!(facts_now["log.map.drawn.gps"], "63");
-    assert_eq!(facts_now["log.map.drawn.pos"], "119");
+    assert_eq!(facts_now["log.map.drawn.gps"], "408");
+    assert_eq!(facts_now["log.map.drawn.pos"], "815");
     assert!(
         browse.fit_routes.get(),
         "the map fits the routes when next painted"
@@ -527,17 +527,22 @@ fn the_grid_menu_exports_rows_and_files() {
     assert!(!script.is_empty());
     let _ = std::fs::remove_dir_all(log.parent().expect("scratch"));
 
-    // The damaged log carries five files in 134 FILE records: the board's hwdef and four of its
-    // @SYS reports, each rebuilt from its 64-byte pieces.
+    // The damaged log carries two files in 536 FILE records - SITL's @SYS/uarts.txt and its
+    // 16 KiB @SYS/storage.bin - each rebuilt from its 64-byte pieces.
     let log = scratch_copy(&damaged(), "files");
     let mut browse = opened(&log);
     browse.export_files("files");
-    assert_eq!(facts(&browse)["log.exported"], "5 files");
+    assert_eq!(facts(&browse)["log.exported"], "2 files");
     let folder = log.with_file_name("files");
     let uarts = std::fs::read_to_string(folder.join("@SYS/uarts.txt")).expect("uarts.txt");
     assert!(uarts.starts_with("UARTV1"), "{uarts:?}");
-    assert!(uarts.contains("SERIAL0 OTG1"), "{uarts:?}");
-    assert!(folder.join("@ROMFS/hwdef.dat").is_file());
+    assert!(uarts.contains("SERIAL0 TX="), "{uarts:?}");
+    assert_eq!(
+        std::fs::metadata(folder.join("@SYS/storage.bin"))
+            .map(|meta| meta.len())
+            .ok(),
+        Some(16_384)
+    );
     let _ = std::fs::remove_dir_all(log.parent().expect("scratch"));
 }
 
@@ -632,10 +637,10 @@ fn the_log_routes_script_holds_without_a_window() {
     let mut browse = opened(&damaged());
     browse.toggle_check(Check::Map);
     let facts_now = facts(&browse);
-    assert_eq!(facts_now["log.map.drawn.gps"], "63");
+    assert_eq!(facts_now["log.map.drawn.gps"], "408");
     assert_eq!(facts_now["log.map.drawn.gps2"], "0");
     assert_eq!(facts_now["log.map.drawn.gpsb"], "0");
-    assert_eq!(facts_now["log.map.drawn.pos"], "119");
+    assert_eq!(facts_now["log.map.drawn.pos"], "815");
     browse.toggle_check(Check::Time);
     let roll = field(&browse, "ATT", "Roll");
     browse.toggle(&roll);
@@ -647,8 +652,8 @@ fn the_log_routes_script_holds_without_a_window() {
     assert!(
         facts_now["log.map.drawn.pos"]
             .parse::<usize>()
-            .unwrap_or(119)
-            < 119
+            .unwrap_or(815)
+            < 815
     );
     // The second log reads the ticked Map back from config.xml, as LB_Map.
     let mut healthy = opened(&healthy());

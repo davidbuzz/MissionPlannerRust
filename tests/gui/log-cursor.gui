@@ -10,9 +10,8 @@
 # Moving the pointer over the chart does nothing in the C# but debounce, so nothing here hovers.
 #
 # Self-contained: the damaged fixture, which came off a vehicle with a GPS fix and logs five mode
-# changes, 47 messages, eleven events and two ERRs; and the healthy one, whose GPS never had a fix.
-# Neither spans a minute of GPS time, so an unticked Time box has no minute labels to show: the
-# unit tests cover those with logs built for them.
+# changes, 47 messages, eleven events and two ERRs, and whose GPS time crosses one minute - the
+# one minute label an unticked Time box shows; and the healthy one, whose GPS never had a fix.
 
 env MP_PLAN_DIR $WORK/logs
 # A config.xml of its own: the boxes the log browser remembers start as the designer has them.
@@ -83,7 +82,7 @@ expect log.overlays.messages 0
 click logfield-ATT.Roll
 expect log.plotted 1
 expect log.overlays.messages 47
-expect log.overlays.minutes 0
+expect log.overlays.minutes 1
 
 doubleclick log-chart@0.5x0.5
 expect log.cursor.line > 0
@@ -99,7 +98,7 @@ key Return
 expect log.open true
 expect log.cursor.marker none
 expect log.cursor.line none
-expect log.overlays.modes 5
+expect log.overlays.modes 1
 expect log.overlays.messages 14
 
 click logfield-ATT.Roll
