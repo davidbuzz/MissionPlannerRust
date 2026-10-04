@@ -34,6 +34,8 @@ $stage = "C:\setup\release\$n"
 Remove-Item -Recurse -Force C:\setup\release -ErrorAction SilentlyContinue
 New-Item -ItemType Directory -Force -Path $stage | Out-Null
 Copy-Item target\release\planner.exe, LICENSE, NOTICE, THIRD_PARTY_LICENSES, README.md $stage
+# SIMULATION's "try local wasm": ArduPilot's SITL as WebAssembly, run under Node.
+Copy-Item -Recurse tools\sitl\wasm "$stage\sitl-wasm"
 $rustc = (& "$env:USERPROFILE\.cargo\bin\rustc.exe" --version)
 @(
   "MissionPlannerRust $v for Windows on x86-64",
@@ -45,6 +47,8 @@ $rustc = (& "$env:USERPROFILE\.cargo\bin\rustc.exe" --version)
   "         with the C runtime linked in (+crt-static): no Visual C++ Redistributable needed",
   "",
   "planner.exe  the ground control station",
+  "sitl-wasm    ArduPilot's SITL (plane, rover, copter, heli) as WebAssembly, for SIMULATION's",
+  "             'try local wasm'; needs Node.js (nodejs.org). sitl-wasm\README.md says where from",
   "",
   "Unsigned: Windows SmartScreen may ask before the first start.",
   "Licensed under the GNU GPL version 3 (LICENSE); NOTICE and THIRD_PARTY_LICENSES",

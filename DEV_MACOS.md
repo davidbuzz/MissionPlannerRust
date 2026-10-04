@@ -140,6 +140,13 @@ with a desktop session of its own.
 Settings, recorded flights and map tiles go to the planner's own data directory, never to Mission
 Planner's.
 
+**SIMULATION on a Mac.** ArduPilot publishes no native SITL for macOS, so the SIMULATION screen's
+"try local wasm" box is ticked by default here: the four pictures start ArduPilot's SITL built as
+WebAssembly (`tools/sitl/wasm`) under Node.js, which the planner finds as `MP_NODE`, on `PATH`, or
+in `/opt/homebrew/bin` or `/usr/local/bin`. Without Node the status line says so. On the owner's
+borrowed Mac (2026-10-04) Node 22 went into `~/.local` from nodejs.org, no Homebrew or admin
+change, and `MP_NODE` names it in the script that starts the planner.
+
 ## 6. The release binary
 
 The release is the planner alone: headless-planner is an internal testing tool, not part of the

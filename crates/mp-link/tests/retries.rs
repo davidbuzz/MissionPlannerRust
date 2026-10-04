@@ -1885,9 +1885,12 @@ fn a_download_whose_item_never_arrives_asks_six_times_then_times_out() {
     assert_eq!(usize::from(t.mission_item_request.sends()), 6);
     assert_eq!(link.mission_transfer(VEHICLE).unwrap().items().len(), 3);
     assert!(peer.sent(ack_sent).is_empty());
+    // Never sooner than six timeouts; and not a round more - which the six requests counted above
+    // already hold - so the ceiling is loose: the hosted macOS runner, waking its threads late,
+    // took 1.35 s for six twentieth-speed timeouts (CI run 37199369377, 2026-10-04).
     let budget = t.mission_item_request.timeout * 6;
     assert!(
-        took >= budget && took < budget + Duration::from_millis(500),
+        took >= budget && took < budget * 2 + Duration::from_millis(500),
         "took {took:?}"
     );
 }

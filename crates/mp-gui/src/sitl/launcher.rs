@@ -472,21 +472,36 @@ impl Launcher for NotAvailable {
     fn kill_all(&self) {}
 }
 
-/// The folder holding the local WebAssembly builds and `bridge.mjs`: `MP_SITL_WASM`, else
-/// `sitl-wasm` beside the executable, else the source tree's `tools/sitl/wasm` this was built from.
+/// The folder holding the local WebAssembly builds and `bridge.mjs`: the first of
+/// [`local_wasm_candidates`] that has the bridge.
 #[must_use]
 pub fn local_wasm_dir() -> Option<PathBuf> {
-    let candidates = [
+    local_wasm_candidates(
         std::env::var_os("MP_SITL_WASM").map(PathBuf::from),
-        std::env::current_exe()
-            .ok()
-            .and_then(|exe| exe.parent().map(|dir| dir.join("sitl-wasm"))),
-        Some(Path::new(env!("CARGO_MANIFEST_DIR")).join("../../tools/sitl/wasm")),
-    ];
-    candidates
+        std::env::current_exe().ok(),
+    )
+    .into_iter()
+    .find(|dir| dir.join(BRIDGE).is_file())
+}
+
+/// Where the WebAssembly builds may be, in order: `MP_SITL_WASM`; `sitl-wasm` beside the
+/// executable, as the release archives put it; `share/missionplanner-rust/sitl-wasm` beside its
+/// `bin`, as the Debian package installs it; the source tree's `tools/sitl/wasm` this was built from.
+#[must_use]
+pub fn local_wasm_candidates(named: Option<PathBuf>, exe: Option<PathBuf>) -> Vec<PathBuf> {
+    let beside = exe.as_deref().and_then(Path::parent);
+    named
         .into_iter()
-        .flatten()
-        .find(|dir| dir.join(BRIDGE).is_file())
+        .chain(beside.map(|dir| dir.join("sitl-wasm")))
+        .chain(
+            beside
+                .and_then(Path::parent)
+                .map(|prefix| prefix.join("share/missionplanner-rust/sitl-wasm")),
+        )
+        .chain(std::iter::once(
+            Path::new(env!("CARGO_MANIFEST_DIR")).join("../../tools/sitl/wasm"),
+        ))
+        .collect()
 }
 
 /// Node: `MP_NODE`, else `node` on `PATH`, else where Homebrew and the installers put it - a
@@ -877,6 +892,24 @@ pub mod tests {
         assert_eq!(local_wasm_module("ArduHeli.elf"), Some("arducopter-heli.js"));
         assert_eq!(local_wasm_module("ArduSub.elf"), None);
         assert_eq!(quote("/a b/c.js"), "\"/a b/c.js\"");
+    }
+
+    /// Where the builds are looked for: the variable, beside the executable (the archives), the
+    /// Debian package's share folder, then the source tree.
+    #[test]
+    fn the_builds_are_looked_for_where_the_releases_put_them() {
+        let found = local_wasm_candidates(
+            Some(PathBuf::from("/named")),
+            Some(PathBuf::from("/usr/bin/planner")),
+        );
+        assert_eq!(found[0], PathBuf::from("/named"));
+        assert_eq!(found[1], PathBuf::from("/usr/bin/sitl-wasm"));
+        assert_eq!(
+            found[2],
+            PathBuf::from("/usr/share/missionplanner-rust/sitl-wasm")
+        );
+        assert!(found[3].ends_with("tools/sitl/wasm"));
+        assert_eq!(local_wasm_candidates(None, None).len(), 1);
     }
 
     /// A file with no local build: said so, nothing started.

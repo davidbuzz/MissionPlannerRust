@@ -62,6 +62,8 @@ jobs:
           N=missionplanner-rust_${V}_linux-x86_64
           mkdir -p release/$N
           cp dist/planner LICENSE NOTICE THIRD_PARTY_LICENSES README.md release/$N/
+          # SIMULATION's "try local wasm": ArduPilot's SITL as WebAssembly, run under Node.
+          cp -r tools/sitl/wasm release/$N/sitl-wasm
           {
             echo "MissionPlannerRust $V for Linux on x86-64"
             echo
@@ -72,6 +74,8 @@ jobs:
             echo "Needs:   $(objdump -T dist/planner | grep -oE 'GLIBC_[0-9]+\.[0-9]+' | sort -V | tail -1) or newer, a Vulkan driver (mesa-vulkan-drivers)"
             echo
             echo "planner  the ground control station"
+            echo "sitl-wasm  ArduPilot's SITL (plane, rover, copter, heli) as WebAssembly, for SIMULATION's"
+            echo "           'try local wasm'; needs Node.js (nodejs.org). sitl-wasm/README.md says where from"
             echo
             echo "Licensed under the GNU GPL version 3 (LICENSE); NOTICE and THIRD_PARTY_LICENSES"
             echo "record what it derives from and what it is built from."
@@ -118,6 +122,8 @@ jobs:
           $n = "missionplanner-rust_${v}_windows-x86_64"
           New-Item -ItemType Directory -Force -Path "release\$n" | Out-Null
           Copy-Item target\release\planner.exe, LICENSE, NOTICE, THIRD_PARTY_LICENSES, README.md "release\$n\"
+          # SIMULATION's "try local wasm": ArduPilot's SITL as WebAssembly, run under Node.
+          Copy-Item -Recurse tools\sitl\wasm "release\$n\sitl-wasm"
           @(
             "MissionPlannerRust $v for Windows on x86-64",
             "",
@@ -128,6 +134,8 @@ jobs:
             "         with the C runtime linked in (+crt-static): no Visual C++ Redistributable needed",
             "",
             "planner.exe  the ground control station",
+            "sitl-wasm    ArduPilot's SITL (plane, rover, copter, heli) as WebAssembly, for SIMULATION's",
+            "             'try local wasm'; needs Node.js (nodejs.org). sitl-wasm\README.md says where from",
             "",
             "Unsigned: Windows SmartScreen may ask before the first start.",
             "Licensed under the GNU GPL version 3 (LICENSE); NOTICE and THIRD_PARTY_LICENSES",
@@ -192,6 +200,8 @@ jobs:
           N=missionplanner-rust_${V}_macos-universal
           mkdir -p release/$N
           cp dist/planner LICENSE NOTICE THIRD_PARTY_LICENSES README.md release/$N/
+          # SIMULATION's "try local wasm": ArduPilot's SITL as WebAssembly, run under Node.
+          cp -r tools/sitl/wasm release/$N/sitl-wasm
           {
             echo "MissionPlannerRust $V for macOS, universal (Apple Silicon and Intel)"
             echo
@@ -205,6 +215,8 @@ jobs:
             echo "Plugins:  the ten plugins Mission Planner ships are built into the planner"
             echo
             echo "planner  the ground control station"
+            echo "sitl-wasm  ArduPilot's SITL (plane, rover, copter, heli) as WebAssembly, for SIMULATION's"
+            echo "           'try local wasm'; needs Node.js (nodejs.org). sitl-wasm/README.md says where from"
             echo
             echo "Unsigned and not notarised: macOS will hold the first launch until it is allowed in"
             echo "System Settings > Privacy & Security. Licensed under the GNU GPL version 3 (LICENSE);"
@@ -255,6 +267,11 @@ jobs:
             echo
             echo "Each archive holds the planner, its licence, NOTICE, THIRD_PARTY_LICENSES and a BUILD-INFO.txt"
             echo "naming the commit and the toolchain; SHA256SUMS.txt lists every download's SHA-256."
+            echo
+            echo "Each also holds \`sitl-wasm\`, ArduPilot's SITL built as WebAssembly (plane, rover, copter, heli),"
+            echo "which the SIMULATION screen's \"try local wasm\" box starts - ticked by default on macOS, where"
+            echo "ArduPilot publishes no native SITL. It needs Node.js (https://nodejs.org), found on PATH or named"
+            echo "by MP_NODE; nothing else of the planner does."
             echo
             echo "The binaries are not signed. Windows SmartScreen asks before the first start; on macOS, allow"
             echo "it in System Settings > Privacy & Security after the first attempt. On Linux the planner draws"

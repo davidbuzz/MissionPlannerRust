@@ -89,6 +89,11 @@ install -m 0644 "$ROOT/LICENSE" "$STAGE/usr/share/doc/$NAME/copyright"
 # What it derives from and what it is built from, as the GPL and the crates' licences ask of a
 # binary handed to someone.
 install -m 0644 "$ROOT/NOTICE" "$ROOT/THIRD_PARTY_LICENSES" "$ROOT/README.md" "$STAGE/usr/share/doc/$NAME/"
+# SIMULATION's "try local wasm": ArduPilot's SITL as WebAssembly, where the planner looks for it
+# beside /usr/bin (crates/mp-gui/src/sitl/launcher.rs, local_wasm_candidates). Node is a
+# suggestion, not a dependency: only that box needs it.
+mkdir -p "$STAGE/usr/share/$NAME/sitl-wasm"
+install -m 0644 "$ROOT"/tools/sitl/wasm/* "$STAGE/usr/share/$NAME/sitl-wasm/"
 
 # What the planner links, as the packages that hold them here; the Vulkan loader and a driver are
 # loaded at run time by the renderer, and a font by the text system.

@@ -198,6 +198,18 @@ place's `gmapcache`. `MP_NO_RECORD` turns recording off.
 Requires a recent stable Rust (see `rust-toolchain.toml`). `DEV_MACOS.md` is the same process on a
 Mac, with what it measured, through to the release binary.
 
+**Optional: Node.js, for the local WebAssembly SITL.** The SIMULATION screen's "try local wasm"
+box (ticked by default on macOS, where ArduPilot publishes no native SITL) starts ArduPilot's SITL
+built as WebAssembly - plane, rover, copter or heli, `tools/sitl/wasm` - under Node, through
+`bridge.mjs`, which serves the vehicle on tcp:127.0.0.1:5760 for the usual connect. Nothing else
+in the planner needs Node. Install it from https://nodejs.org (or `brew install node`,
+`sudo apt install nodejs`); the planner finds it as `MP_NODE`, else on `PATH`, else in
+`/opt/homebrew/bin`, `/usr/local/bin` or `/usr/bin` (a program started from the Finder has no
+shell `PATH`). The builds themselves ship with the planner: `sitl-wasm` beside it in each release
+archive, `/usr/share/missionplanner-rust/sitl-wasm` from the `.deb`, the source tree's
+`tools/sitl/wasm` for a build from source, or a folder named by `MP_SITL_WASM`. Node is what
+Emscripten and ArduPilot's own smoke test target; Bun and Deno are untried.
+
 ## Layout
 
 ```
