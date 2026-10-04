@@ -103,6 +103,38 @@ pub fn panel(title: &str, body: impl IntoElement) -> gpui::Div {
         .child(body)
 }
 
+/// A titled box with a control at the title's right, on the same row: the mission grid's fold
+/// button, which would otherwise take a row of its own.
+pub fn panel_with_corner(
+    title: &str,
+    corner: impl IntoElement,
+    body: impl IntoElement,
+) -> gpui::Div {
+    crate::probe::measured(format!("panel:{title}"), div())
+        .flex()
+        .flex_col()
+        .gap_2()
+        .p_3()
+        .bg(rgb(theme::PANEL))
+        .border_1()
+        .border_color(rgb(theme::BORDER))
+        .rounded_md()
+        .child(
+            div()
+                .flex()
+                .items_center()
+                .justify_between()
+                .child(
+                    div()
+                        .text_xs()
+                        .text_color(rgb(theme::DIM))
+                        .child(title.to_uppercase()),
+                )
+                .child(corner),
+        )
+        .child(body)
+}
+
 /// A control that commands the aircraft.
 ///
 /// Visually distinct from [`button`] on purpose. Reading telemetry and changing what the aircraft

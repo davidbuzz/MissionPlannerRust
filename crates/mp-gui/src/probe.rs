@@ -30,8 +30,9 @@
 //! produces a screenshot, so the test goes green while testing nothing. Instead the application
 //! reports where each named control actually ended up, and the script looks the name up.
 //!
-//! Off unless `MP_PROBE` names a file to write. There is no cost in a normal run: the elements
-//! are not created, nothing is recorded and nothing is written.
+//! On when `MP_PROBE` names a file to write, and in every debug build, which measures without
+//! writing for its own cut-off guard (`crate::layout_guard::Banner`). There is no cost in a
+//! release run without it: nothing is recorded and nothing is written.
 
 // This module is internal to the binary; `pub` here documents intent rather than exporting API.
 #![allow(unreachable_pub)]
@@ -64,17 +65,28 @@ impl Rect {
     }
 }
 
-/// Where the probe writes, or `None` when probing is off.
+/// Where the probe writes, or `None` when it writes nothing.
 fn output_path() -> Option<&'static PathBuf> {
     static PATH: OnceLock<Option<PathBuf>> = OnceLock::new();
-    PATH.get_or_init(|| std::env::var_os("MP_PROBE").map(PathBuf::from))
-        .as_ref()
+    PATH.get_or_init(|| {
+        std::env::var_os("MP_PROBE")
+            .filter(|value| value != "off")
+            .map(PathBuf::from)
+    })
+    .as_ref()
 }
 
-/// Whether the application should report control positions.
+/// Whether the application measures its controls: under `MP_PROBE`, for the harness, and always
+/// in a debug build, whose own guard says on screen when anything is cut off
+/// (`crate::layout_guard::Banner`; the owner, 2026-10-04: the cut-off guard "mandatory
+/// everywhere"). `MP_PROBE=off` turns it off.
 #[must_use]
 pub fn enabled() -> bool {
-    output_path().is_some()
+    static ON: OnceLock<bool> = OnceLock::new();
+    *ON.get_or_init(|| match std::env::var_os("MP_PROBE") {
+        Some(value) => value != "off",
+        None => cfg!(debug_assertions),
+    })
 }
 
 /// The positions recorded, each with the frame it was last measured in.
@@ -424,12 +436,14 @@ mod tests {
         assert!(!retire(&mut registry, 2), "nothing more to drop");
     }
 
+    /// A release run without `MP_PROBE` measures nothing - its cost has to be nothing, or it is
+    /// not a probe, it is a feature with a switch - and a debug run measures for its cut-off
+    /// guard; neither writes a file unless `MP_PROBE` names one.
     #[test]
-    fn probing_is_off_unless_asked_for() {
-        // The cost of the probe in a normal run has to be nothing, or it is not a probe, it is a
-        // feature with a switch.
+    fn probing_is_the_debug_builds_and_the_harnesss() {
         if std::env::var_os("MP_PROBE").is_none() {
-            assert!(!enabled());
+            assert_eq!(enabled(), cfg!(debug_assertions));
+            assert!(output_path().is_none());
         }
     }
 

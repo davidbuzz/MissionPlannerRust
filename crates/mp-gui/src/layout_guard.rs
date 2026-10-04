@@ -95,6 +95,8 @@ pub const IMPORTANT: &[(Screen, &[&str])] = &[
 pub const MAY_SCROLL: &[&str] = &[
     // `Commands`, the mission grid (`FlightPlanner.Designer.cs`): its rows past the third.
     "plan-row-",
+    // A file dialog's list of its folder, as the dialog's own list scrolls.
+    "plan-file-",
 ];
 
 /// Whether a control must be wholly on screen whenever it is measured: all but a scrolling
@@ -150,26 +152,76 @@ pub fn record_facts(screen: Screen) {
     }
     let hidden = hidden(screen);
     crate::facts::record("layout.hidden", hidden.len());
-    // Each hidden control with where it was laid out and what could be seen there, so the
-    // failure says which edge cut it: `map[9,77 724x839 in 0,0 1600x760]`.
     crate::facts::record(
         "layout.hidden.names",
         if hidden.is_empty() {
             "none".to_owned()
         } else {
-            hidden
-                .iter()
-                .map(|name| match crate::probe::placement(name) {
-                    Some((at, seen)) => format!(
-                        "{name}[{:.0},{:.0} {:.0}x{:.0} in {:.0},{:.0} {:.0}x{:.0}]",
-                        at.x, at.y, at.width, at.height, seen.x, seen.y, seen.width, seen.height
-                    ),
-                    None => name.clone(),
-                })
-                .collect::<Vec<_>>()
-                .join(",")
+            describe(&hidden)
         },
     );
+}
+
+/// Each hidden control with where it was laid out and what could be seen there, so the failure
+/// says which edge cut it: `map[9,77 724x839 in 0,0 1600x760]`.
+fn describe(hidden: &[String]) -> String {
+    hidden
+        .iter()
+        .map(|name| match crate::probe::placement(name) {
+            Some((at, seen)) => format!(
+                "{name}[{:.0},{:.0} {:.0}x{:.0} in {:.0},{:.0} {:.0}x{:.0}]",
+                at.x, at.y, at.width, at.height, seen.x, seen.y, seen.width, seen.height
+            ),
+            None => name.clone(),
+        })
+        .collect::<Vec<_>>()
+        .join(",")
+}
+
+/// How long a cut-off lasts before the banner names it: longer than the frame a screen just
+/// switched to is measured late in, when its important controls look missing.
+pub const BANNER_AFTER: std::time::Duration = std::time::Duration::from_millis(500);
+
+/// The debug build's own guard (the owner, 2026-10-04: the cut-off guard "mandatory everywhere"):
+/// what [`hidden`] has named on the screen showing for longer than [`BANNER_AFTER`], said in a red
+/// strip across the window's foot - at whatever size the window is, on every screen, without a
+/// test run. The strip is drawn over the window, so it moves nothing; a release build measures
+/// nothing and never shows it.
+#[derive(Debug, Default)]
+pub struct Banner {
+    /// What is cut off, described, and since when it has been so.
+    showing: Option<(String, std::time::Instant)>,
+}
+
+impl Banner {
+    /// This frame's verdict on `screen`.
+    pub fn update(&mut self, screen: Screen) {
+        let names = if crate::probe::enabled() {
+            hidden(screen)
+        } else {
+            Vec::new()
+        };
+        let text = (!names.is_empty()).then(|| describe(&names));
+        self.observe(text, std::time::Instant::now());
+    }
+
+    /// What is cut off at `now`, if anything: the time starts again when it changes.
+    pub fn observe(&mut self, text: Option<String>, now: std::time::Instant) {
+        self.showing = match (text, self.showing.take()) {
+            (None, _) => None,
+            (Some(text), Some((shown, since))) if shown == text => Some((shown, since)),
+            (Some(text), _) => Some((text, now)),
+        };
+    }
+
+    /// What the strip says at `now`, once the cut-off has lasted.
+    #[must_use]
+    pub fn text_at(&self, now: std::time::Instant) -> Option<&str> {
+        self.showing
+            .as_ref()
+            .filter(|(_, since)| now.duration_since(*since) >= BANNER_AFTER)
+            .map(|(text, _)| text.as_str())
+    }
 }
 
 #[cfg(test)]
@@ -221,6 +273,24 @@ mod tests {
             assert!(must_show(name), "{name}");
         }
         assert!(!must_show("plan-row-40"));
+    }
+
+    /// The banner names a cut-off once it has lasted, not the frame a screen is switched to; a
+    /// change starts the time again, and nothing cut off takes it away.
+    #[test]
+    fn the_banner_names_what_stays_cut_off() {
+        let start = std::time::Instant::now();
+        let later = |ms: u64| start + std::time::Duration::from_millis(ms);
+        let mut banner = Banner::default();
+        banner.observe(Some("plan-read".to_owned()), start);
+        assert_eq!(banner.text_at(later(100)), None, "a frame late is not cut off");
+        banner.observe(Some("plan-read".to_owned()), later(200));
+        assert_eq!(banner.text_at(later(600)), Some("plan-read"));
+        banner.observe(Some("plan-read,plan-write".to_owned()), later(700));
+        assert_eq!(banner.text_at(later(900)), None, "the time starts again");
+        assert_eq!(banner.text_at(later(1_300)), Some("plan-read,plan-write"));
+        banner.observe(None, later(1_400));
+        assert_eq!(banner.text_at(later(5_000)), None);
     }
 
     /// The owner's case: the Mission box's buttons are on the planner's list, so a planner whose

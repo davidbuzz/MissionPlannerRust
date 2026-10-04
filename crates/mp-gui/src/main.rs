@@ -191,6 +191,14 @@ const REFRESH: Duration = Duration::from_millis(100);
 /// The mission file name used when nothing has been typed.
 const DEFAULT_PLAN_FILE: &str = "mission.waypoints";
 
+/// A path's last part, as `Path.GetFileName` gives it.
+fn file_name_of(path: &std::path::Path) -> String {
+    path.file_name().map_or_else(
+        || path.display().to_string(),
+        |name| name.to_string_lossy().into_owned(),
+    )
+}
+
 /// The name a parameter backup gets if the operator does not choose one.
 const DEFAULT_PARAM_FILE: &str = "vehicle.param";
 
@@ -432,6 +440,8 @@ struct MissionPlanner {
     log_name_focus: gpui::FocusHandle,
     /// The LOGS tab's page: Telemetry Logs, DataFlash Logs or Review a Log.
     logs_page: logs_tab::LogsPage,
+    /// The debug build's cut-off guard, said in a red strip over the window's foot.
+    cut_off: layout_guard::Banner,
     /// Focus for the log browser's prompt: Ctrl+G's line, a field's scaler, an export's name.
     log_prompt_focus: gpui::FocusHandle,
     /// Focus for the log browser itself, which Ctrl+G is heard through.
@@ -870,6 +880,7 @@ impl MissionPlanner {
             log_name: textfield::TextField::new("a .BIN or .log in the plan directory"),
             log_name_focus: cx.focus_handle(),
             logs_page: logs_tab::LogsPage::default(),
+            cut_off: layout_guard::Banner::default(),
             log_prompt_focus: cx.focus_handle(),
             log_screen_focus: cx.focus_handle(),
             log_info_focus: cx.focus_handle(),
@@ -1031,64 +1042,78 @@ impl MissionPlanner {
         self.http.server.stop();
     }
 
-    /// The directory missions are read from and written to.
-    ///
-    /// A file dialog needs a platform integration gpui does not give us for free. A typed name in
-    /// a known directory is the next best thing, and better than the fixed path this had before -
-    /// which meant a second mission silently overwrote the first.
+    /// The folder missions, logs and the dialogs' files start in: `MP_PLAN_DIR` (the harness's),
+    /// else the planner's data folder - Mission Planner's dialogs open in the documents folder -
+    /// and only failing both the folder it was started in, where a mission once landed in the
+    /// source tree it was run from (the owner, 2026-10-04).
     fn plan_directory() -> std::path::PathBuf {
         std::env::var("MP_PLAN_DIR").map_or_else(
-            |_| std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from(".")),
+            |_| {
+                mp_settings::user_data_directory()
+                    .or_else(|| std::env::current_dir().ok())
+                    .unwrap_or_else(|| std::path::PathBuf::from("."))
+            },
             std::path::PathBuf::from,
         )
     }
 
-    /// Where a named mission lives.
-    ///
-    /// The name is treated as a name, not a path: anything with a separator in it is reduced to
-    /// its last component. A typed "../../etc/passwd" writing outside the mission directory would
-    /// be a surprise at best.
-    fn plan_path_named(name: &str) -> std::path::PathBuf {
-        let trimmed = name.trim();
-        let leaf = trimmed
-            .rsplit(['/', '\\'])
-            .next()
-            .filter(|part| !part.is_empty() && *part != "." && *part != "..")
-            .unwrap_or(DEFAULT_PLAN_FILE);
-        // A missing extension is added rather than refused, because the operator meant a mission
-        // file and typing the suffix is not the interesting part.
-        let leaf = if leaf.contains('.') {
-            leaf.to_owned()
+    /// Where the planner's file dialogs open: `MP_PLAN_DIR` when it is set, else the folder a
+    /// mission was last loaded from or saved to (`WPFileDirectory`), else the plan directory.
+    /// `// C#: GCSViews/FlightPlanner.cs:1821-1822, 6074`
+    fn dialog_directory(&self) -> std::path::PathBuf {
+        if std::env::var_os("MP_PLAN_DIR").is_none()
+            && let Some(folder) = self
+                .persisted
+                .get("WPFileDirectory")
+                .map(std::path::PathBuf::from)
+                .filter(|folder| folder.is_dir())
+        {
+            return folder;
+        }
+        Self::plan_directory()
+    }
+
+    /// `Settings.Instance["WPFileDirectory"] = Path.GetDirectoryName(file)`: where the next
+    /// dialog opens.
+    /// `// C#: GCSViews/FlightPlanner.cs:1830, 6080`
+    fn remember_dialog_directory(&mut self, file: &std::path::Path) {
+        if let Some(folder) = file.parent() {
+            self.persisted
+                .set("WPFileDirectory", folder.to_string_lossy().into_owned());
+        }
+    }
+
+    /// The mission file's name, `wpfilename`, which Save File's dialog opens on.
+    fn plan_file_name(&self) -> String {
+        let name = self.plan_name.value().trim();
+        if name.is_empty() {
+            DEFAULT_PLAN_FILE.to_owned()
         } else {
-            format!("{leaf}.waypoints")
-        };
-        Self::plan_directory().join(leaf)
+            name.to_owned()
+        }
     }
 
-    /// The path the currently typed name refers to.
-    fn plan_path(&self) -> std::path::PathBuf {
-        Self::plan_path_named(self.plan_name.value())
-    }
-
-    /// Writes the plan in QGC WPL 110 format, the one every ground station reads.
-    fn save_plan(&mut self) {
-        let path = self.plan_path();
+    /// Writes the plan to `path` in QGC WPL 110 format, the one every ground station reads:
+    /// `savewaypoints` once its dialog has returned.
+    fn save_plan_to(&mut self, path: &std::path::Path) {
         // Home at record 0 from the Home Location boxes, then the rows: `savewaypoints`.
         let text = self.plan.waypoints_file();
-        self.file_status = match std::fs::write(&path, text) {
-            Ok(()) => Some(format!(
-                "saved {} items to {}",
-                self.plan.items().len(),
-                path.display()
-            )),
+        self.file_status = match std::fs::write(path, text) {
+            Ok(()) => {
+                self.plan_name.set(file_name_of(path));
+                Some(format!(
+                    "saved {} items to {}",
+                    self.plan.items().len(),
+                    path.display()
+                ))
+            }
             Err(err) => Some(format!("could not save to {}: {err}", path.display())),
         };
     }
 
-    /// Reads a plan from the same location.
-    fn load_plan(&mut self) {
-        let path = self.plan_path();
-        let text = match std::fs::read_to_string(&path) {
+    /// Reads a waypoint file: `readQGC110wpfile`, once Load File's dialog has returned it.
+    fn load_plan_from(&mut self, path: &std::path::Path) {
+        let text = match std::fs::read_to_string(path) {
             Ok(text) => text,
             Err(err) => {
                 self.file_status = Some(format!("could not read {}: {err}", path.display()));
@@ -1097,18 +1122,17 @@ impl MissionPlanner {
         };
         match mp_mission::read_waypoints(&text) {
             Ok(items) => {
-                let name = path.file_name().map_or_else(
-                    || path.display().to_string(),
-                    |n| n.to_string_lossy().into_owned(),
-                );
+                let name = file_name_of(path);
                 // Item 0 is home and leaves the rows; if it is not the boxes' home, the
                 // operator is asked whether to take it.
-                if let Some(home) = self.plan.adopt_from_file(name, &items) {
+                if let Some(home) = self.plan.adopt_from_file(name.clone(), &items) {
                     self.plan_menus.offer_home_reset(home);
                 }
                 // `processToScreen` ends with `setWPParams`.
                 // `// C#: GCSViews/FlightPlanner.cs:5630`
                 self.plan.set_wp_params(&self.telemetry.view().parameters);
+                // `wpfilename = file`: what Save File opens on next.
+                self.plan_name.set(name);
                 let count = self.plan.items().len();
                 self.file_status = Some(format!("loaded {count} items from {}", path.display()));
             }
@@ -2379,15 +2403,11 @@ impl MissionPlanner {
                     .id("plan-editor")
                     .flex_shrink_0()
                     .w(px(340.0))
-                    .overflow_y_scroll()
                     .child(editor)
                     .into_any_element()
             } else {
                 editor
             });
-        }
-        if actions {
-            out.push(plan::checks_panel(&items, view));
         }
         out
     }
@@ -2471,19 +2491,19 @@ impl MissionPlanner {
                                 .min_h(px(0.0))
                                 .child(self.map_pane(window, cx)),
                         )
-                        // `panelWaypoints`, `DockStyle.Bottom`: the grid fills the third and
-                        // scrolls its rows; the selected item's editor sits beside it. Folded
-                        // (`but_mincommands`), it is as high as the button and the map has the
-                        // rest.
+                        // `panelWaypoints`, `DockStyle.Bottom`: at least the lower third, and
+                        // as tall as the selected item's editor beside the grid needs, so
+                        // nothing in it is cut off (the owner, 2026-10-04); the grid fills it
+                        // and scrolls its rows. Folded (`but_mincommands`), it is as high as the
+                        // button and the map has the rest.
                         .child(
                             div()
                                 .id("plan-waypoints")
                                 .flex()
                                 .flex_shrink_0()
                                 .when(!self.plan.commands_minimised(), |grid| {
-                                    grid.h(gpui::relative(1.0 / 3.0))
+                                    grid.min_h(gpui::relative(1.0 / 3.0))
                                 })
-                                .min_h(px(0.0))
                                 .gap_2()
                                 .children(self.plan_panels(
                                     PlanGroup::Grid,
@@ -2972,6 +2992,10 @@ impl Render for MissionPlanner {
         smoke::painted();
         // Controls that were not measured in the frame just finished have left the screen.
         probe::begin_frame();
+        // What that frame left cut off, for the debug build's banner.
+        self.cut_off.update(self.screen);
+        // Where the planner's file dialogs open, for their lists.
+        self.plan_menus.dialog_directory = self.dialog_directory();
         // Under MP_STORM, the frame's cost is timed from here to the marker at the end of the
         // root, less the facts' own work: storm.rs.
         storm::frame_started();
@@ -4155,11 +4179,34 @@ impl Render for MissionPlanner {
             Screen::Plugins => plugin_manager::screen(self, cx),
         };
 
+        let cut_off = self
+            .cut_off
+            .text_at(std::time::Instant::now())
+            .map(ToOwned::to_owned);
         probe::measured("root", div())
+            .relative()
             .flex()
             .flex_col()
             .size_full()
             .overflow_hidden()
+            // The debug build's cut-off guard: over the window's foot, so it moves nothing, and
+            // painted after everything else, so nothing covers it.
+            .children(cut_off.map(|text| {
+                gpui::deferred(
+                    div()
+                        .absolute()
+                        .left_0()
+                        .right_0()
+                        .bottom_0()
+                        .px_2()
+                        .py_1()
+                        .bg(rgb(theme::ALERT))
+                        .text_color(rgb(theme::BG))
+                        .text_xs()
+                        .child(format!("CUT OFF (the layout guard): {text}")),
+                )
+                .with_priority(3)
+            }))
             .bg(rgb(theme::BG))
             .text_color(rgb(theme::TEXT))
             // `MainV2.ProcessCmdKey`: a key no element inside took, on its way out.
@@ -4172,10 +4219,15 @@ impl Render for MissionPlanner {
                 }
             }))
             .child(
+                // Wrapping, both halves, rather than running past the window's right edge: at
+                // 1600 wide the recording, the link and the tabs' end were cut off (the owner's
+                // Mac, 2026-10-04, as the layout guard's strip said: header 1709 wide).
                 probe::measured("header", div())
                     .flex()
+                    .flex_wrap()
                     .items_center()
                     .justify_between()
+                    .gap_x_4()
                     .px_4()
                     .pt_2()
                     .bg(rgb(theme::PANEL))
@@ -4184,6 +4236,7 @@ impl Render for MissionPlanner {
                     .child(
                         div()
                             .flex()
+                            .flex_wrap()
                             .items_end()
                             .gap_4()
                             .child(
@@ -4212,6 +4265,7 @@ impl Render for MissionPlanner {
                     .child(
                         div()
                             .flex()
+                            .flex_wrap()
                             .items_center()
                             .gap_2()
                             .pb_2()
@@ -4820,62 +4874,6 @@ mod tests {
         assert_eq!(window_size(None, Some((800, 600))), (800.0, 600.0));
         assert_eq!(Screen::initial(None, Some("setup")), Screen::Setup);
         assert_eq!(Screen::initial(Some("plan"), Some("setup")), Screen::Plan);
-    }
-
-    #[test]
-    fn a_mission_name_is_a_name_not_a_path() {
-        // A typed "../../etc/passwd" writing outside the mission directory would be a surprise at
-        // best. The name is reduced to its last component.
-        let directory = MissionPlanner::plan_directory();
-        for typed in ["../../etc/passwd", "/etc/passwd", "a/b/c.waypoints"] {
-            let path = MissionPlanner::plan_path_named(typed);
-            assert_eq!(
-                path.parent(),
-                Some(directory.as_path()),
-                "{typed} escaped the mission directory: {}",
-                path.display()
-            );
-        }
-    }
-
-    #[test]
-    fn a_name_without_an_extension_gets_one() {
-        // The operator meant a mission file; typing the suffix is not the interesting part.
-        let path = MissionPlanner::plan_path_named("survey");
-        assert_eq!(
-            path.file_name().and_then(|n| n.to_str()),
-            Some("survey.waypoints")
-        );
-    }
-
-    #[test]
-    fn an_existing_extension_is_left_alone() {
-        let path = MissionPlanner::plan_path_named("survey.txt");
-        assert_eq!(
-            path.file_name().and_then(|n| n.to_str()),
-            Some("survey.txt")
-        );
-    }
-
-    #[test]
-    fn an_empty_or_useless_name_falls_back_to_the_default() {
-        // Rather than writing to a file called "" or to the directory itself.
-        for typed in ["", "   ", ".", "..", "/"] {
-            let path = MissionPlanner::plan_path_named(typed);
-            assert_eq!(
-                path.file_name().and_then(|n| n.to_str()),
-                Some(DEFAULT_PLAN_FILE),
-                "{typed:?} should fall back"
-            );
-        }
-    }
-
-    #[test]
-    fn two_missions_do_not_overwrite_each_other() {
-        // The whole point of the change: the path used to be fixed.
-        let first = MissionPlanner::plan_path_named("survey");
-        let second = MissionPlanner::plan_path_named("delivery");
-        assert_ne!(first, second);
     }
 
     #[test]

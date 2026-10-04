@@ -28,13 +28,14 @@
 // This module is internal to the binary; `pub` here documents intent rather than exporting API.
 #![allow(unreachable_pub)]
 
+use std::path::{Path, PathBuf};
+
 use gpui::{AnyElement, Context, div, prelude::*, px, rgb};
 use mp_link::mavftp::{FtpOutcome, FtpRequest};
 use mp_mavlink_dialects::all::MavCmd;
 use mp_mission::fence::{FenceItem, RallyPoint};
 use mp_mission::rows::Home;
-use mp_mission::validate::{Context as ValidationContext, validate_with};
-use mp_mission::{MissionItem, Severity};
+use mp_mission::MissionItem;
 use mp_units::LatLon;
 
 use crate::MissionPlanner;
@@ -3821,6 +3822,9 @@ fn check_box(
 /// `CMB_altmode` is a combo box there and three buttons here, because gpui has no combo and three
 /// values do not need one; its handler keeps the choice for the next session as `FPaltmode` does.
 /// MAVFTP is drawn dimmed: this application has no MAVFTP mission transfer to switch to.
+///
+/// One row, as the `.resx` has it, wrapping only when the grid is too narrow for it (the owner,
+/// 2026-10-04: the grid's top third was wasted space).
 /// `// C#: GCSViews/FlightPlanner.resx (panelWaypoints); GCSViews/FlightPlanner.cs:234-239, 2157-2168, 8403-8406`
 pub fn waypoint_strip(
     plan: &Plan,
@@ -3829,8 +3833,9 @@ pub fn waypoint_strip(
 ) -> AnyElement {
     div()
         .flex()
-        .flex_col()
-        .gap_2()
+        .flex_wrap()
+        .items_end()
+        .gap_3()
         .child(strip_boxes(plan, state, cx))
         .child(strip_checks(plan, state, cx))
         .into_any_element()
@@ -4015,9 +4020,10 @@ pub fn items_panel(
     cx: &mut Context<MissionPlanner>,
 ) -> impl IntoElement {
     // `but_mincommands` at (938, 0), anchored top right: ˅ folds `panelWaypoints` to the
-    // button's own height, so only it remains; ˄ opens it to 166 again.
+    // button's own height, so only it remains; ˄ opens it to 166 again. On the title's row, not
+    // a row of its own (the owner, 2026-10-04: the grid's top third was wasted space).
     // `// C#: GCSViews/FlightPlanner.cs:69-80; GCSViews/FlightPlanner.resx (but_mincommands)`
-    let min_button = div().flex().justify_end().child(action(
+    let min_button = div().child(action(
         "plan-mincommands",
         if minimised { "˄" } else { "˅" },
         theme::TEXT,
@@ -4028,7 +4034,7 @@ pub fn items_panel(
         }),
     ));
     if minimised {
-        return panel("mission items", min_button);
+        return crate::ui::panel_with_corner("mission items", min_button, div());
     }
     let mut rows = div().flex().flex_col();
 
@@ -4136,10 +4142,11 @@ pub fn items_panel(
         .flex()
         .flex_col()
         .gap_2()
-        .child(min_button)
         .child(strip)
+        // Filling, the rows take no height of their own: the area is as tall as the editor
+        // beside them needs, and they scroll in it.
         .child(if fill {
-            list.flex_1().min_h(px(0.0))
+            list.flex_1().flex_basis(px(0.0)).min_h(px(0.0))
         } else {
             list.max_h(px(280.0))
         })
@@ -4151,12 +4158,12 @@ pub fn items_panel(
                 .child(format!("{count} items - scroll for the rest"))
         }));
     if fill {
-        panel("mission items", body.flex_1().min_h(px(0.0)))
+        crate::ui::panel_with_corner("mission items", min_button, body.flex_1().min_h(px(0.0)))
             .flex_1()
             .min_w(px(0.0))
             .min_h(px(0.0))
     } else {
-        panel("mission items", body)
+        crate::ui::panel_with_corner("mission items", min_button, body)
     }
 }
 
@@ -4673,62 +4680,6 @@ fn problem(text: &str) -> impl IntoElement {
         .child(text.to_owned())
 }
 
-/// What the validator says about the plan.
-pub fn checks_panel(plan_items: &[MissionItem], view: &TelemetryView) -> AnyElement {
-    let findings = validate_with(
-        plan_items,
-        ValidationContext {
-            home: view.state.as_ref().and_then(|s| s.home),
-            vehicle_type: view.state.as_ref().map(|s| s.vehicle_type),
-        },
-    );
-
-    if findings.is_empty() {
-        return panel(
-            "checks",
-            div()
-                .text_xs()
-                .text_color(rgb(theme::OK))
-                .child("nothing to report"),
-        )
-        .into_any_element();
-    }
-
-    let mut lines = div().flex().flex_col().gap_1();
-    for finding in &findings {
-        let colour = match finding.severity {
-            Severity::Danger => theme::ALERT,
-            Severity::Warning => theme::WARN,
-            Severity::Note => theme::DIM,
-        };
-        let prefix = finding
-            .seq
-            .map_or_else(|| "mission".to_owned(), |seq| format!("item {seq}"));
-        lines = lines.child(
-            div()
-                .flex()
-                .gap_2()
-                .text_xs()
-                .child(
-                    div()
-                        .flex_shrink_0()
-                        .w(px(56.0))
-                        .text_color(rgb(theme::DIM))
-                        .child(prefix),
-                )
-                .child(
-                    div()
-                        .flex_1()
-                        .min_w(px(0.0))
-                        .text_color(rgb(colour))
-                        .child(finding.message.clone()),
-                ),
-        );
-    }
-
-    panel("checks", lines).into_any_element()
-}
-
 /// Read, write, load, save and clear.
 /// The mission file name field and its focus, which travel together everywhere.
 pub struct NameField<'a> {
@@ -5008,14 +4959,17 @@ pub fn actions_panel(
                             start_write(this, true, window, cx);
                         }),
                     ))
+                    // `BUT_saveWPFile_Click` and `BUT_loadwpfile_Click`: each opens its file
+                    // dialog, the planner's own box (the owner, 2026-10-04: they acted on the
+                    // name field at once, and only in one folder).
+                    // `// C#: GCSViews/FlightPlanner.cs:1817-1823, 1890-1893, 6069-6077`
                     .child(action(
                         "plan-save",
                         "save file",
                         theme::TEXT,
                         has_items,
-                        cx.listener(|this, _event: &(), _window, cx| {
-                            this.save_plan();
-                            cx.notify();
+                        cx.listener(|this, _event: &(), window, cx| {
+                            ask_mission_save(this, window, cx);
                         }),
                     ))
                     .child(action(
@@ -5024,11 +4978,8 @@ pub fn actions_panel(
                         theme::TEXT,
                         true,
                         cx.listener(|this, _event: &(), window, cx| {
-                            this.load_plan();
-                            // Reading a file whose home differs from the boxes asks about it.
-                            if this.plan_menus.prompt.is_some() {
-                                this.plan_prompt_focus.focus(window, cx);
-                            }
+                            this.plan_menus.ask_mission_load();
+                            this.plan_prompt_focus.focus(window, cx);
                             cx.notify();
                         }),
                     ))
@@ -5064,11 +5015,14 @@ pub fn actions_panel(
                         name_focus,
                         name_focused,
                         px(240.0),
-                        cx.listener(|this, event: &gpui::KeyDownEvent, _window, cx| {
-                            // Enter saves. A file name field where enter does nothing is a field
-                            // that has to be followed by finding the button.
+                        cx.listener(|this, event: &gpui::KeyDownEvent, window, cx| {
+                            // Enter is Save File. A file name field where enter does nothing is
+                            // a field that has to be followed by finding the button.
                             match this.plan_name.key(event) {
-                                crate::textfield::KeyOutcome::Submitted => this.save_plan(),
+                                crate::textfield::KeyOutcome::Submitted => {
+                                    ask_mission_save(this, window, cx);
+                                    return;
+                                }
                                 crate::textfield::KeyOutcome::Ignored => return,
                                 _ => {}
                             }
@@ -5899,28 +5853,144 @@ pub fn drive_writes(
     }
 }
 
-/// The file a typed name means for a `.fen`, in the plan directory: a name rather than a path,
-/// and `.fen` added when it has no extension, as the dialogs' `AddExtension` does. Nothing for an
-/// empty name: the C# acts only on `sf.FileName != ""`, and `File.Exists("")` is false.
+/// The file a file dialog's typed answer means, as an `OpenFileDialog` or `SaveFileDialog` takes
+/// one (the owner, 2026-10-04: the mission's Load and Save File are to reach any file, as Mission
+/// Planner's dialogs do): an absolute path as it is, `~/` from the home folder, anything else from
+/// `directory`, the folder the dialog opened in; `extension` - the filter's - added when the file
+/// has none, as the dialogs' `AddExtension` does. Nothing for an empty answer or a folder: the C#
+/// acts only on `FileName != ""`, and `File.Exists` of a folder is false.
 #[must_use]
-pub fn fence_file_name(typed: &str) -> Option<String> {
-    dialog_file_name(typed, "fen")
+pub fn dialog_path(typed: &str, extension: &str, directory: &Path) -> Option<PathBuf> {
+    let typed = typed.trim();
+    if typed.is_empty() || typed.ends_with(['/', '\\']) {
+        return None;
+    }
+    let path = typed_path(typed, directory)?;
+    if path.is_dir() {
+        return None;
+    }
+    Some(if path.extension().is_none() && !extension.is_empty() {
+        path.with_extension(extension)
+    } else {
+        path
+    })
 }
 
-/// The file a typed name means in the plan directory, `extension` - the dialog filter's - added
-/// when it has none. See [`fence_file_name`].
-#[must_use]
-pub fn dialog_file_name(typed: &str, extension: &str) -> Option<String> {
-    let leaf = typed
-        .trim()
-        .rsplit(['/', '\\'])
-        .next()
-        .filter(|part| !part.is_empty() && *part != "." && *part != "..")?;
-    Some(if leaf.contains('.') {
-        leaf.to_owned()
+/// A typed path: absolute as it is, `~` from the home folder, anything else from `directory`.
+fn typed_path(typed: &str, directory: &Path) -> Option<PathBuf> {
+    if typed == "~" {
+        return home_directory();
+    }
+    if let Some(rest) = typed.strip_prefix("~/").or_else(|| typed.strip_prefix("~\\")) {
+        return home_directory().map(|home| home.join(rest));
+    }
+    let path = PathBuf::from(typed);
+    Some(if path.is_absolute() {
+        path
     } else {
-        format!("{leaf}.{extension}")
+        directory.join(path)
     })
+}
+
+/// The user's home folder, as `~` means it.
+fn home_directory() -> Option<PathBuf> {
+    std::env::var_os("HOME")
+        .or_else(|| std::env::var_os("USERPROFILE"))
+        .map(PathBuf::from)
+}
+
+/// One row of a file dialog's list: a folder to open, or a file of the dialog's filter.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DialogEntry {
+    /// What the row says.
+    pub name: String,
+    /// Where it is.
+    pub path: PathBuf,
+    /// A folder - `..` among them - rather than a file.
+    pub folder: bool,
+}
+
+/// The most rows a file dialog lists.
+const DIALOG_LIST_MAX: usize = 200;
+
+/// What a file dialog lists, and of which folder: the folder the typed answer names or sits in,
+/// else the one it opened in; `..` first, then its folders, then its files with one of
+/// `extensions` - folders only when there are none, as for a folder dialog - each by name, hidden
+/// ones left out.
+#[must_use]
+pub fn dialog_listing(
+    typed: &str,
+    directory: &Path,
+    extensions: &[&str],
+) -> (PathBuf, Vec<DialogEntry>) {
+    let typed = typed.trim();
+    let folder = if typed.is_empty() {
+        directory.to_path_buf()
+    } else {
+        match typed_path(typed, directory) {
+            Some(path) if path.is_dir() => path,
+            Some(path) => path
+                .parent()
+                .filter(|parent| parent.is_dir())
+                .map_or_else(|| directory.to_path_buf(), Path::to_path_buf),
+            None => directory.to_path_buf(),
+        }
+    };
+    let mut folders = Vec::new();
+    let mut files = Vec::new();
+    for entry in std::fs::read_dir(&folder).into_iter().flatten().flatten() {
+        let name = entry.file_name().to_string_lossy().into_owned();
+        if name.starts_with('.') {
+            continue;
+        }
+        let path = entry.path();
+        if path.is_dir() {
+            folders.push(DialogEntry {
+                name,
+                path,
+                folder: true,
+            });
+        } else if path.extension().is_some_and(|extension| {
+            extensions
+                .iter()
+                .any(|wanted| extension.eq_ignore_ascii_case(wanted))
+        }) {
+            files.push(DialogEntry {
+                name,
+                path,
+                folder: false,
+            });
+        }
+    }
+    let by_name =
+        |a: &DialogEntry, b: &DialogEntry| a.name.to_lowercase().cmp(&b.name.to_lowercase());
+    folders.sort_by(by_name);
+    files.sort_by(by_name);
+    let up = folder.parent().map(|parent| DialogEntry {
+        name: "..".to_owned(),
+        path: parent.to_path_buf(),
+        folder: true,
+    });
+    let entries = up
+        .into_iter()
+        .chain(folders)
+        .chain(files)
+        .take(DIALOG_LIST_MAX)
+        .collect();
+    (folder, entries)
+}
+
+/// What a row puts in the dialog's box: a file in the dialog's own folder by its name, anything
+/// else by its path, a folder's with a separator after it so the list opens it.
+#[must_use]
+pub fn dialog_answer(entry: &DialogEntry, directory: &Path) -> String {
+    if entry.folder {
+        format!("{}{}", entry.path.display(), std::path::MAIN_SEPARATOR)
+    } else if entry.path.parent() == Some(directory) {
+        entry.name.clone()
+    } else {
+        entry.path.display().to_string()
+    }
 }
 
 /// Polygon > From SHP once its dialog has returned: the polygon cleared whatever it returned,
@@ -5932,10 +6002,9 @@ pub fn dialog_file_name(typed: &str, extension: &str) -> Option<String> {
 fn load_shp(this: &mut MissionPlanner, name: &str) -> Result<(), String> {
     // Poly Clear
     this.plan.load_polygon(Vec::new());
-    let Some(name) = dialog_file_name(name, "shp") else {
+    let Some(path) = dialog_path(name, "shp", &this.plan_menus.dialog_directory) else {
         return Ok(());
     };
-    let path = MissionPlanner::plan_directory().join(name);
     let Ok(bytes) = std::fs::read(&path) else {
         this.file_status = Some(format!("could not read {}", path.display()));
         return Ok(());
@@ -5956,18 +6025,30 @@ fn load_shp(this: &mut MissionPlanner, name: &str) -> Result<(), String> {
     Ok(())
 }
 
+/// Save File's dialog, opened on the mission's file name.
+fn ask_mission_save(
+    this: &mut MissionPlanner,
+    window: &mut gpui::Window,
+    cx: &mut Context<MissionPlanner>,
+) {
+    let name = this.plan_file_name();
+    this.plan_menus.ask_mission_save(&name);
+    this.plan_prompt_focus.focus(window, cx);
+    cx.notify();
+}
+
 /// The dialogs' files, once named: Geo-Fence > Load from File and Save to File, Polygon > Save
-/// Polygon, Load Polygon and From SHP, Rally Points > Save Rally to File and Load Rally from File.
-/// Each name is a file in the plan directory, as the mission file is.
+/// Polygon, Load Polygon and From SHP, Rally Points > Save Rally to File and Load Rally from File,
+/// and the mission's Load File and Save File. Each answer is a path as a file dialog takes one
+/// ([`dialog_path`]).
 fn file_request(
     this: &mut MissionPlanner,
     request: FileRequest,
     window: &mut gpui::Window,
     cx: &mut Context<MissionPlanner>,
 ) {
-    let path = |name: &str, extension: &str| {
-        dialog_file_name(name, extension).map(|name| MissionPlanner::plan_directory().join(name))
-    };
+    let directory = this.plan_menus.dialog_directory.clone();
+    let path = |name: &str, extension: &str| dialog_path(name, extension, &directory);
     let mut refused: Option<(&'static str, String)> = None;
     match request {
         // `if (File.Exists(fd.FileName))`, then the polygon replaced by the file's corners and
@@ -6047,6 +6128,8 @@ fn file_request(
         FileRequest::LoadShpMission(name) => refused = load_shp_mission(this, &name),
         FileRequest::KmlOverlay(name) => refused = load_kml_overlay(this, &name),
         FileRequest::InjectCustomMap(folder) => this.inject_map_begin(&folder),
+        FileRequest::LoadMission(name) => refused = load_mission(this, &name),
+        FileRequest::SaveMission(name) => refused = save_mission(this, &name),
     }
     if let Some((title, text)) = refused {
         this.plan_menus.say(title, text);
@@ -6066,10 +6149,9 @@ fn fence_file(
 ) {
     match request {
         FileRequest::LoadFence(name) => {
-            let Some(name) = fence_file_name(&name) else {
+            let Some(path) = dialog_path(&name, "fen", &this.plan_menus.dialog_directory) else {
                 return;
             };
-            let path = MissionPlanner::plan_directory().join(name);
             match std::fs::read_to_string(&path) {
                 Ok(text) => {
                     this.plan
@@ -6083,10 +6165,9 @@ fn fence_file(
             }
         }
         FileRequest::SaveFence(name) => {
-            let Some(name) = fence_file_name(&name) else {
+            let Some(path) = dialog_path(&name, "fen", &this.plan_menus.dialog_directory) else {
                 return;
             };
-            let path = MissionPlanner::plan_directory().join(name);
             let written = this.plan.fence_file().and_then(|file| {
                 std::fs::write(&path, mp_mission::fence_file::write_fence(&file))
                     .map_err(|_| FENCE_FILE_FAILED)
@@ -6111,7 +6192,9 @@ fn fence_file(
         | FileRequest::LoadKml(_)
         | FileRequest::LoadShpMission(_)
         | FileRequest::KmlOverlay(_)
-        | FileRequest::InjectCustomMap(_) => {}
+        | FileRequest::InjectCustomMap(_)
+        | FileRequest::LoadMission(_)
+        | FileRequest::SaveMission(_) => {}
     }
 }
 
@@ -7689,11 +7772,77 @@ pub(crate) fn kml_text(name: &str, bytes: &[u8]) -> Result<Option<String>, Strin
 /// What one of the four loaders leaves for the screen to say and show.
 type Refusal = Option<(&'static str, String)>;
 
+/// A path's last part, as `Path.GetFileName` gives it.
+fn file_name_of(path: &Path) -> String {
+    path.file_name().map_or_else(
+        || path.display().to_string(),
+        |name| name.to_string_lossy().into_owned(),
+    )
+}
+
+/// Load File once its dialog has returned: `if (File.Exists(file))`, the folder remembered as
+/// `WPFileDirectory`, and the file read by its kind - a `.shp` through `LoadSHPFile`, a `.kml`
+/// through the KML parser, a JSON mission (`MissionFile.ReadFile`, not ported: said on the status
+/// line), anything else as a waypoint file.
+/// `// C#: GCSViews/FlightPlanner.cs:1817-1887`
+fn load_mission(this: &mut MissionPlanner, name: &str) -> Refusal {
+    let path = dialog_path(name, "waypoints", &this.plan_menus.dialog_directory)?;
+    if !path.is_file() {
+        this.file_status = Some(format!(
+            "could not read {}: there is no such file",
+            path.display()
+        ));
+        return None;
+    }
+    this.remember_dialog_directory(&path);
+    let lower = path.to_string_lossy().to_lowercase();
+    let answer = path.display().to_string();
+    if lower.ends_with(".shp") {
+        return load_shp_mission(this, &answer);
+    }
+    if lower.ends_with(".kml") {
+        return load_kml_mission(this, &answer);
+    }
+    // `line = fs.ReadLine(); if (line.StartsWith("{"))`: a JSON mission.
+    let json = std::fs::read_to_string(&path)
+        .is_ok_and(|text| text.lines().next().is_some_and(|line| line.starts_with('{')));
+    if json {
+        this.file_status = Some(format!(
+            "{} is a JSON mission (MissionFile), which this planner does not read yet",
+            path.display()
+        ));
+        return None;
+    }
+    this.load_plan_from(&path);
+    None
+}
+
+/// Save File once its dialog has returned: `savewaypoints`' QGC WPL 110 file, `.waypoints` added
+/// to a name without an extension (`DefaultExt`), and the folder remembered as `WPFileDirectory`.
+/// A `.mission` - the Mission JSON filter's - is `MissionFile.WriteFile`, not ported: said on the
+/// status line.
+/// `// C#: GCSViews/FlightPlanner.cs:6069-6140`
+fn save_mission(this: &mut MissionPlanner, name: &str) -> Refusal {
+    let path = dialog_path(name, "waypoints", &this.plan_menus.dialog_directory)?;
+    if path
+        .extension()
+        .is_some_and(|extension| extension.eq_ignore_ascii_case("mission"))
+    {
+        this.file_status = Some(format!(
+            "{} would be a JSON mission (MissionFile), which this planner does not write yet",
+            path.display()
+        ));
+        return None;
+    }
+    this.remember_dialog_directory(&path);
+    this.save_plan_to(&path);
+    None
+}
+
 /// Load and Append once its dialog has returned: `readQGC110wpfile(file, true)`.
 /// `// C#: GCSViews/FlightPlanner.cs:990-1010, 4330-4344`
 fn load_and_append(this: &mut MissionPlanner, name: &str) -> Refusal {
-    let name = dialog_file_name(name, "waypoints")?;
-    let path = MissionPlanner::plan_directory().join(name);
+    let path = dialog_path(name, "waypoints", &this.plan_menus.dialog_directory)?;
     let read = std::fs::read_to_string(&path)
         .map_err(|err| format!("System.IO.FileNotFoundException: {err}"))
         .and_then(|text| {
@@ -7719,8 +7868,8 @@ fn load_and_append(this: &mut MissionPlanner, name: &str) -> Refusal {
 /// Load KML File once its dialog has returned.
 /// `// C#: GCSViews/FlightPlanner.cs:4470-4525`
 fn load_kml_mission(this: &mut MissionPlanner, name: &str) -> Refusal {
-    let name = dialog_file_name(name, "kml")?;
-    let path = MissionPlanner::plan_directory().join(&name);
+    let path = dialog_path(name, "kml", &this.plan_menus.dialog_directory)?;
+    let name = file_name_of(&path);
     let context = menu_context(this);
     let loaded = std::fs::read(&path)
         .map_err(|err| format!("System.IO.FileNotFoundException: {err}"))
@@ -7746,8 +7895,7 @@ fn load_kml_mission(this: &mut MissionPlanner, name: &str) -> Refusal {
 /// nothing; so does a file that is not there.
 /// `// C#: GCSViews/FlightPlanner.cs:4718-4737`
 fn load_shp_mission(this: &mut MissionPlanner, name: &str) -> Refusal {
-    let name = dialog_file_name(name, "shp")?;
-    let path = MissionPlanner::plan_directory().join(name);
+    let path = dialog_path(name, "shp", &this.plan_menus.dialog_directory)?;
     let Ok(shp) = std::fs::read(&path) else {
         return None;
     };
@@ -7779,8 +7927,8 @@ fn load_shp_mission(this: &mut MissionPlanner, name: &str) -> Refusal {
 /// say so on the status line - and the two questions asked.
 /// `// C#: GCSViews/FlightPlanner.cs:4131-4290`
 fn load_kml_overlay(this: &mut MissionPlanner, name: &str) -> Refusal {
-    let name = dialog_file_name(name, "kml")?;
-    let path = MissionPlanner::plan_directory().join(&name);
+    let path = dialog_path(name, "kml", &this.plan_menus.dialog_directory)?;
+    let name = file_name_of(&path);
     this.plan.set_kml_overlay(None);
     let lower = name.to_lowercase();
     if lower.ends_with("gpkg") {
@@ -7891,6 +8039,12 @@ pub enum PromptKind {
     RallySaveFile,
     /// Rally Points > Load Rally from File's `OpenFileDialog`, likewise.
     RallyLoadFile,
+    /// Load File's `OpenFileDialog`, filtered to `All Supported Types`.
+    /// `// C#: GCSViews/FlightPlanner.cs:1817-1823`
+    MissionLoadFile,
+    /// Save File's `SaveFileDialog`, filtered to `Mission`, opened on the mission's file name.
+    /// `// C#: GCSViews/FlightPlanner.cs:6069-6077`
+    MissionSaveFile,
     /// One of Create Wp Circle's or Create Spline Circle's questions, all asked before any is
     /// read; the answers so far are in [`PlanMenus`].
     Circle {
@@ -8023,6 +8177,10 @@ pub enum FileRequest {
     KmlOverlay(String),
     /// Inject Custom Map's folder.
     InjectCustomMap(String),
+    /// Load File.
+    LoadMission(String),
+    /// Save File.
+    SaveMission(String),
 }
 
 /// What `lnk_kml` opens: the built-in HTTP server's network link for Google Earth.
@@ -8045,6 +8203,12 @@ pub const SHP_FILTER: &str = "Shape file";
 /// The filter both rally dialogs are given.
 /// `// C#: GCSViews/FlightPlanner.cs:4419, 6038`
 pub const RALLY_FILTER: &str = "Rally (*.ral)";
+/// Load File's `All Supported Types|*.txt;*.waypoints;*.shp;*.plan;*.kml`.
+/// `// C#: GCSViews/FlightPlanner.cs:1821`
+pub const MISSION_LOAD_FILTER: &str = "All Supported Types";
+/// Save File's `Mission|*.waypoints;*.txt|Mission JSON|*.mission`.
+/// `// C#: GCSViews/FlightPlanner.cs:6073`
+pub const MISSION_SAVE_FILTER: &str = "Mission";
 /// Load and Append's `Ardupilot Mission|*.waypoints;*.txt`.
 /// `// C#: GCSViews/FlightPlanner.cs:4334`
 pub const MISSION_FILTER: &str = "Ardupilot Mission";
@@ -8187,12 +8351,34 @@ impl Prompt {
                 | PromptKind::ShpLoadFile
                 | PromptKind::RallySaveFile
                 | PromptKind::RallyLoadFile
+                | PromptKind::MissionLoadFile
+                | PromptKind::MissionSaveFile
                 | PromptKind::AppendLoadFile
                 | PromptKind::KmlLoadFile
                 | PromptKind::ShpMissionLoadFile
                 | PromptKind::KmlOverlayFile
                 | PromptKind::InjectCustomMapFolder
         )
+    }
+
+    /// The extensions a file dialog's list shows, from the C#'s `Filter`; none for the folder
+    /// dialog, whose list holds folders only.
+    #[must_use]
+    pub const fn file_types(&self) -> &'static [&'static str] {
+        match self.kind {
+            PromptKind::FenceLoadFile | PromptKind::FenceSaveFile => &["fen"],
+            PromptKind::PolygonSaveFile | PromptKind::PolygonLoadFile => &["poly"],
+            PromptKind::ShpLoadFile | PromptKind::ShpMissionLoadFile => &["shp"],
+            PromptKind::RallySaveFile | PromptKind::RallyLoadFile => &["ral"],
+            PromptKind::AppendLoadFile => &["waypoints", "txt"],
+            PromptKind::KmlLoadFile => &["kml", "kmz"],
+            PromptKind::KmlOverlayFile => &["kml", "kmz", "dxf", "gpkg"],
+            // `"All Supported Types|*.txt;*.waypoints;*.shp;*.plan;*.kml"`
+            PromptKind::MissionLoadFile => &["txt", "waypoints", "shp", "plan", "kml"],
+            // `"Mission|*.waypoints;*.txt|Mission JSON|*.mission"`
+            PromptKind::MissionSaveFile => &["waypoints", "txt", "mission"],
+            _ => &[],
+        }
     }
 
     /// Whether this asks Yes or No.
@@ -8343,6 +8529,10 @@ pub fn measure_text(from: LatLon, to: LatLon) -> String {
 pub struct PlanMenus {
     /// The menu, while it is open.
     pub open: Option<OpenMenu>,
+    /// The folder the file dialogs open in - the remembered `WPFileDirectory`, else the plan
+    /// directory - which the screen keeps up to date each frame, for a dialog's list of what is
+    /// there and for the paths typed into it.
+    pub dialog_directory: PathBuf,
     /// The dialog, while one is showing.
     pub prompt: Option<Prompt>,
     /// Measure Distance's first point, `startmeasure`, once chosen.
@@ -8484,6 +8674,30 @@ impl PlanMenus {
         if let Some(menu) = self.open.as_mut() {
             menu.submenu = index;
         }
+    }
+
+    /// Load File's `OpenFileDialog`: blank, in the folder the dialogs open in.
+    /// `// C#: GCSViews/FlightPlanner.cs:1817-1823`
+    pub fn ask_mission_load(&mut self) {
+        self.open = None;
+        self.ask(Prompt::input(
+            OPEN_FILE,
+            MISSION_LOAD_FILTER,
+            "",
+            PromptKind::MissionLoadFile,
+        ));
+    }
+
+    /// Save File's `SaveFileDialog`, on the mission's file name: `fd.FileName = wpfilename`.
+    /// `// C#: GCSViews/FlightPlanner.cs:6069-6077`
+    pub fn ask_mission_save(&mut self, file_name: &str) {
+        self.open = None;
+        self.ask(Prompt::input(
+            SAVE_FILE,
+            MISSION_SAVE_FILTER,
+            file_name,
+            PromptKind::MissionSaveFile,
+        ));
     }
 
     fn ask(&mut self, prompt: Prompt) {
@@ -9519,6 +9733,8 @@ impl PlanMenus {
             PromptKind::ShpLoadFile => return Some(FileRequest::LoadShp(value)),
             PromptKind::RallySaveFile => return Some(FileRequest::SaveRally(value)),
             PromptKind::RallyLoadFile => return Some(FileRequest::LoadRally(value)),
+            PromptKind::MissionLoadFile => return Some(FileRequest::LoadMission(value)),
+            PromptKind::MissionSaveFile => return Some(FileRequest::SaveMission(value)),
             PromptKind::AppendLoadFile => return Some(FileRequest::LoadAndAppend(value)),
             PromptKind::KmlLoadFile => return Some(FileRequest::LoadKml(value)),
             PromptKind::ShpMissionLoadFile => return Some(FileRequest::LoadShpMission(value)),
@@ -10580,10 +10796,7 @@ fn choose_entry(
         }
     }
     match action {
-        MenuAction::LoadWpFile => {
-            this.plan_menus.open = None;
-            this.load_plan();
-        }
+        MenuAction::LoadWpFile => this.plan_menus.ask_mission_load(),
         // `if (CurrentPOIMarker == null) return; POI.POIDelete(CurrentPOIMarker)`: the marker the
         // menu opened over, found where the button came up.
         // `// C#: GCSViews/FlightPlanner.cs:5014-5019, 8113-8116; Utilities/POI.cs:87-102`
@@ -10614,8 +10827,8 @@ fn choose_entry(
             this.plan.fence_exclusion_from_polygon();
         }
         MenuAction::SaveWpFile => {
-            this.plan_menus.open = None;
-            this.save_plan();
+            let name = this.plan_file_name();
+            this.plan_menus.ask_mission_save(&name);
         }
         MenuAction::FenceClear => {
             this.plan_menus.open = None;
@@ -11201,6 +11414,9 @@ fn prompt_dialog(
                 px(310.0),
                 on_key,
             ));
+            if prompt.is_file_dialog() {
+                dialog = dialog.child(file_list(prompt, &menus.dialog_directory, cx));
+            }
             dialog.child(buttons).into_any_element()
         }
         None => dialog
@@ -11230,6 +11446,73 @@ fn prompt_dialog(
         .with_priority(2)
         .into_any_element(),
     )
+}
+
+/// A file dialog's list of what its folder holds, under its box, as an `OpenFileDialog` shows
+/// the files to choose from (the owner, 2026-10-04): the folder, then a row per entry - `..`, the
+/// folders, the files of the dialog's filter. A click puts the entry in the box, a folder's so
+/// the list opens it next; a double click on a file takes it.
+fn file_list(prompt: &Prompt, directory: &Path, cx: &mut Context<MissionPlanner>) -> AnyElement {
+    let (folder, entries) = dialog_listing(prompt.value(), directory, prompt.file_types());
+    let rows: Vec<AnyElement> = entries
+        .iter()
+        .enumerate()
+        .map(|(index, entry)| {
+            let answer = dialog_answer(entry, directory);
+            let is_folder = entry.folder;
+            crate::probe::measured(format!("plan-file-{index}"), div())
+                .id(("plan-file", index))
+                .px_2()
+                .text_xs()
+                .cursor_pointer()
+                .text_color(rgb(if is_folder { theme::ACCENT } else { theme::TEXT }))
+                .hover(|style| style.bg(rgb(theme::BORDER)))
+                .child(if is_folder {
+                    format!("{}/", entry.name)
+                } else {
+                    entry.name.clone()
+                })
+                .on_click(cx.listener(move |this, event: &gpui::ClickEvent, window, cx| {
+                    if let Some(field) = this
+                        .plan_menus
+                        .prompt
+                        .as_mut()
+                        .and_then(|prompt| prompt.field.as_mut())
+                    {
+                        field.set(answer.clone());
+                    }
+                    this.plan_prompt_focus.focus(window, cx);
+                    if !is_folder && event.click_count() >= 2 {
+                        submit_prompt(this, window, cx);
+                    }
+                    cx.notify();
+                }))
+                .into_any_element()
+        })
+        .collect();
+    div()
+        .flex()
+        .flex_col()
+        .gap_1()
+        .child(
+            div()
+                .text_xs()
+                .text_color(rgb(theme::DIM))
+                .child(format!("in {}", folder.display())),
+        )
+        .child(
+            div()
+                .id("plan-file-list")
+                .flex()
+                .flex_col()
+                .max_h(px(220.0))
+                .overflow_y_scroll()
+                .border_1()
+                .border_color(rgb(theme::BORDER))
+                .rounded_sm()
+                .children(rows),
+        )
+        .into_any_element()
 }
 
 /// The menu and the dialog, for the planning screen to draw over itself. `fence_mode` is
@@ -11813,6 +12096,33 @@ pub fn record_facts(plan: &Plan, menus: &PlanMenus) {
     record(
         "plan.prompt.value",
         menus.prompt.as_ref().map_or("", Prompt::value),
+    );
+    // A file dialog's list: its folder and how many rows it shows.
+    let listing = menus
+        .prompt
+        .as_ref()
+        .filter(|prompt| prompt.is_file_dialog())
+        .map(|prompt| {
+            dialog_listing(prompt.value(), &menus.dialog_directory, prompt.file_types())
+        });
+    record(
+        "plan.prompt.folder",
+        listing
+            .as_ref()
+            .map_or_else(|| "none".to_owned(), |(folder, _)| folder.display().to_string()),
+    );
+    record(
+        "plan.prompt.files",
+        listing.as_ref().map_or_else(
+            || "none".to_owned(),
+            |(_, entries)| {
+                entries
+                    .iter()
+                    .map(|entry| entry.name.as_str())
+                    .collect::<Vec<_>>()
+                    .join(",")
+            },
+        ),
     );
     record(
         "plan.prompt.showagain",
@@ -14559,18 +14869,81 @@ mod tests {
         assert_eq!(other.fence_return(), Some(at(-35.3625, 149.166)));
     }
 
-    /// A typed name is a name in the plan directory, `.fen` added when it has no extension, and
-    /// nothing at all when empty.
+    /// A typed answer is a path as a file dialog takes one (the owner, 2026-10-04: Load and
+    /// Save File are to reach any file): a name or a relative path from the folder the dialog
+    /// opened in, an absolute path as it is, `~/` from home; the filter's extension added when
+    /// the file has none; nothing when empty or a folder.
     #[test]
-    fn a_fence_file_name_is_a_name_with_its_extension() {
-        assert_eq!(fence_file_name("square"), Some("square.fen".to_owned()));
-        assert_eq!(fence_file_name("square.fen"), Some("square.fen".to_owned()));
+    fn a_dialog_answer_is_a_path_as_a_file_dialog_takes_it() {
+        let folder = std::env::temp_dir().join(format!("mp-dialog-path-{}", std::process::id()));
+        std::fs::create_dir_all(folder.join("sub")).unwrap();
         assert_eq!(
-            fence_file_name("../../etc/square"),
-            Some("square.fen".to_owned())
+            dialog_path("square", "fen", &folder),
+            Some(folder.join("square.fen"))
         );
-        assert_eq!(fence_file_name("  "), None);
-        assert_eq!(fence_file_name(""), None);
+        assert_eq!(
+            dialog_path(" square.fen ", "fen", &folder),
+            Some(folder.join("square.fen"))
+        );
+        assert_eq!(
+            dialog_path("sub/square", "fen", &folder),
+            Some(folder.join("sub").join("square.fen"))
+        );
+        let elsewhere = std::env::temp_dir().join("elsewhere.waypoints");
+        assert_eq!(
+            dialog_path(&elsewhere.display().to_string(), "waypoints", &folder),
+            Some(elsewhere)
+        );
+        if let Some(home) = home_directory() {
+            assert_eq!(
+                dialog_path("~/flight.txt", "waypoints", &folder),
+                Some(home.join("flight.txt"))
+            );
+        }
+        assert_eq!(dialog_path("  ", "fen", &folder), None);
+        assert_eq!(dialog_path("sub", "fen", &folder), None, "a folder is not a file");
+        assert_eq!(dialog_path("sub/", "fen", &folder), None);
+        std::fs::remove_dir_all(&folder).unwrap();
+    }
+
+    /// The dialog's list: `..`, the folders, then the files of its filter, each by name and
+    /// hidden ones left out; of the folder the typed answer names or sits in, else its own; and
+    /// a row puts a file of its own folder in the box by name, anything else by path.
+    #[test]
+    fn a_file_dialog_lists_its_folder() {
+        let folder = std::env::temp_dir().join(format!("mp-dialog-list-{}", std::process::id()));
+        for sub in ["b-sub", ".hidden"] {
+            std::fs::create_dir_all(folder.join(sub)).unwrap();
+        }
+        for file in ["z.waypoints", "a.TXT", "notes.md", ".x.waypoints"] {
+            std::fs::write(folder.join(file), "").unwrap();
+        }
+        std::fs::write(folder.join("b-sub").join("deep.waypoints"), "").unwrap();
+        let names = |entries: &[DialogEntry]| -> Vec<String> {
+            entries.iter().map(|entry| entry.name.clone()).collect()
+        };
+        let (listed, entries) = dialog_listing("", &folder, &["waypoints", "txt"]);
+        assert_eq!(listed, folder);
+        assert_eq!(names(&entries), ["..", "b-sub", "a.TXT", "z.waypoints"]);
+        assert_eq!(
+            entries.iter().map(|entry| entry.folder).collect::<Vec<_>>(),
+            [true, true, false, false]
+        );
+        assert_eq!(dialog_answer(&entries[3], &folder), "z.waypoints");
+        assert!(dialog_answer(&entries[1], &folder).starts_with(&folder.join("b-sub").display().to_string()));
+        let (listed, entries) = dialog_listing("b-sub/", &folder, &["waypoints"]);
+        assert_eq!(listed, folder.join("b-sub"));
+        assert_eq!(names(&entries), ["..", "deep.waypoints"]);
+        assert_eq!(
+            dialog_answer(&entries[1], &folder),
+            folder.join("b-sub").join("deep.waypoints").display().to_string()
+        );
+        let typed = folder.join("b-sub").join("new.waypoints");
+        let (listed, _) = dialog_listing(&typed.display().to_string(), &folder, &["waypoints"]);
+        assert_eq!(listed, folder.join("b-sub"), "a file's own folder");
+        let (_, entries) = dialog_listing("", &folder, &[]);
+        assert_eq!(names(&entries), ["..", "b-sub"], "a folder dialog lists folders");
+        std::fs::remove_dir_all(&folder).unwrap();
     }
 
     /// Clear's ending: the geofence goes, the return marker stays, the drawn corners stay but go
@@ -15429,7 +15802,49 @@ mod menu_batch_tests {
             answer(&mut plan, &mut menus, "home"),
             Some(FileRequest::LoadRally("home".to_owned()))
         );
-        assert_eq!(dialog_file_name("home", "ral"), Some("home.ral".to_owned()));
+        assert_eq!(
+            dialog_path("home", "ral", Path::new("/missions")),
+            Some(Path::new("/missions").join("home.ral"))
+        );
+    }
+
+    /// Load File and Save File each open their dialog (the owner, 2026-10-04: they acted on the
+    /// name field at once): Open on nothing, filtered to `All Supported Types`, and Save As on the
+    /// mission's file name, filtered to `Mission`; the answer is the file to read or write.
+    /// `// C#: GCSViews/FlightPlanner.cs:1817-1823, 6069-6077`
+    #[test]
+    fn load_and_save_file_ask_for_the_file() {
+        let mut plan = Plan::default();
+        let mut menus = PlanMenus::default();
+        menus.ask_mission_load();
+        assert_eq!(
+            showing(&menus),
+            (OPEN_FILE, MISSION_LOAD_FILTER.to_owned(), String::new())
+        );
+        assert!(menus.prompt.as_ref().is_some_and(Prompt::is_file_dialog));
+        assert_eq!(
+            answer(&mut plan, &mut menus, "/elsewhere/flight.waypoints"),
+            Some(FileRequest::LoadMission(
+                "/elsewhere/flight.waypoints".to_owned()
+            ))
+        );
+        menus.ask_mission_save("survey.waypoints");
+        assert_eq!(
+            showing(&menus),
+            (
+                SAVE_FILE,
+                MISSION_SAVE_FILTER.to_owned(),
+                "survey.waypoints".to_owned()
+            )
+        );
+        assert_eq!(
+            menus.prompt.as_ref().map(Prompt::file_types),
+            Some(&["waypoints", "txt", "mission"][..])
+        );
+        assert_eq!(
+            answer(&mut plan, &mut menus, "survey.waypoints"),
+            Some(FileRequest::SaveMission("survey.waypoints".to_owned()))
+        );
     }
 
     /// What Save Rally to File writes from the markers is the C#'s file; what Load Rally from
