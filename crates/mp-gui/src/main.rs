@@ -191,6 +191,11 @@ const REFRESH: Duration = Duration::from_millis(100);
 /// The mission file name used when nothing has been typed.
 const DEFAULT_PLAN_FILE: &str = "mission.waypoints";
 
+/// Under the product's name in the header (the owner, 2026-10-04).
+const BYLINE: &str = "by David Buzz";
+/// What the byline says when the pointer is over it (the owner's words, 2026-10-04).
+const BYLINE_TIP: &str = ".. and with thanks to the OG Michael Oborne";
+
 /// A path's last part, as `Path.GetFileName` gives it.
 fn file_name_of(path: &std::path::Path) -> String {
     path.file_name().map_or_else(
@@ -2552,15 +2557,16 @@ impl MissionPlanner {
                             ),
                     )
                                         .child(
-                        // As high as its tallest panel, up to half the window, so a panel is
-                        // never cut: the strip was a fixed 240 px and the Mission box is 414,
-                        // which put Read WPs and Write WPs below the window's bottom edge (the
-                        // owner's report, 2026-10-03; `layout_guard` holds it now).
+                        // As high as its tallest panel, so a panel is never cut: the strip was a
+                        // fixed 240 px and the Mission box is 414, which put Read WPs and Write
+                        // WPs below the window's bottom edge (the owner's report, 2026-10-03);
+                        // then capped at half the window, which cut the Mission box by 11 in a
+                        // 920-high one (the layout guard on the owner's Mac, 2026-10-04). The
+                        // map has what is left.
                         div()
                             .id("plan-action")
                             .flex()
                             .flex_shrink_0()
-                            .max_h(gpui::relative(0.5))
                             .gap_2()
                             .overflow_x_scroll()
                             .children(
@@ -4245,11 +4251,22 @@ impl Render for MissionPlanner {
                                     .flex_col()
                                     .pb_2()
                                                                         .child(div().text_xl().child(PRODUCT_NAME))
+                                    // The byline, and Mission Planner's author when the pointer
+                                    // is over it (the owner, 2026-10-04).
                                     .child(
                                         div()
+                                            .id("header-byline")
                                             .text_xs()
                                             .text_color(rgb(theme::DIM))
-                                            .child("Rust port - gpui"),
+                                            .child(BYLINE)
+                                            .tooltip(|_window, cx| -> gpui::AnyView {
+                                                cx.new(|_| {
+                                                    config::rover_tuning::Tip(SharedString::from(
+                                                        BYLINE_TIP,
+                                                    ))
+                                                })
+                                                .into()
+                                            }),
                                     ),
                             )
                             .child(self.tabs(cx))
@@ -4874,6 +4891,16 @@ mod tests {
         assert_eq!(window_size(None, Some((800, 600))), (800.0, 600.0));
         assert_eq!(Screen::initial(None, Some("setup")), Screen::Setup);
         assert_eq!(Screen::initial(Some("plan"), Some("setup")), Screen::Plan);
+    }
+
+    /// The header names this port's author, and Mission Planner's when hovered (the owner,
+    /// 2026-10-04); the old sub-title is gone.
+    #[test]
+    fn the_byline_names_the_author_and_thanks_mission_planners() {
+        assert_eq!(BYLINE, "by David Buzz");
+        assert_eq!(BYLINE_TIP, ".. and with thanks to the OG Michael Oborne");
+        let source = include_str!("main.rs");
+        assert!(!source.contains(concat!("Rust port", " - gpui")));
     }
 
     #[test]

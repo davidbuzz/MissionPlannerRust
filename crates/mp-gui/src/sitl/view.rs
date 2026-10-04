@@ -554,7 +554,9 @@ fn swarm_button(
         .text_size(px(9.0))
         .line_height(px(10.0))
         .text_center()
-        .child(text);
+        // Wrapping inside the button, as the C#'s text does: on one line it ran 110 wide in 87
+        // (the layout guard on the owner's Mac, 2026-10-04).
+        .child(div().w_full().child(text));
     let base = if enabled {
         base.bg(rgb(theme::ACTION))
             .text_color(rgb(theme::TEXT))

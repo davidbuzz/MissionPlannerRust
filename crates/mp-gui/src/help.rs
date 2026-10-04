@@ -839,12 +839,15 @@ pub fn screen(
                 }),
             ),
     );
+    // A box as high as the text's line, up from the Designer's bottom edge: a fixed 13 left the
+    // 19-high text 3 pixels below a 920-high window (the layout guard on the owner's Mac,
+    // 2026-10-04).
     let change_log = div()
         .absolute()
         .left(px(0.0))
         .bottom(px(PAGE.1 - CHANGE_LOG.1 - 13.0))
         .w(px(PAGE.0))
-        .h(px(13.0))
+        .h(px(20.0))
         .child(link_label(
             "help-changelog",
             CHANGE_LOG_TEXT,

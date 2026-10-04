@@ -2909,6 +2909,9 @@ fn number_box(
         .px_1()
         .overflow_hidden()
         .text_xs()
+        // A line that fits the Designer's 20-high box inside its border: the default line height
+        // made the text 19 high in 18 (the layout guard on the owner's Mac, 2026-10-04).
+        .line_height(px(16.0))
         .text_color(rgb(theme::TEXT))
         .track_focus(handle)
         .key_context("TextField")
@@ -2995,6 +2998,7 @@ fn log_dir_box(
                 }))
                 .bg(rgb(theme::ACTION))
                 .text_xs()
+                .line_height(px(16.0))
                 .text_color(rgb(theme::TEXT))
                 .track_focus(&focus.log_dir)
                 .key_context("TextField")

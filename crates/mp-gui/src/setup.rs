@@ -1554,6 +1554,9 @@ fn list_button(list: List, row: Row, cx: &mut Context<MissionPlanner>) -> AnyEle
         .overflow_hidden()
         .whitespace_nowrap()
         .text_sm()
+        // Inside the 30-high button, under its 6 at the top: the default line overran it by one
+        // (the layout guard on the owner's Mac, 2026-10-04).
+        .line_height(px(18.0))
         .font_weight(FontWeight::BOLD)
         .cursor_pointer()
         .child(row.label)

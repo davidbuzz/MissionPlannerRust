@@ -565,6 +565,9 @@ pub fn text_box(
         .rounded_sm()
         .border_1()
         .text_xs()
+        // A line that fits a 20-high box inside its border (the layout guard on the owner's Mac,
+        // 2026-10-04: SIMULATION's command line was 19 high in 18).
+        .line_height(px(16.0))
         .overflow_hidden()
         .whitespace_nowrap()
         .child(text.to_owned());

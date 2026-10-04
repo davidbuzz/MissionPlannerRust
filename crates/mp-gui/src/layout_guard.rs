@@ -97,6 +97,13 @@ pub const MAY_SCROLL: &[&str] = &[
     "plan-row-",
     // A file dialog's list of its folder, as the dialog's own list scrolls.
     "plan-file-",
+    // FLIGHT DATA's page strip, `tabControlactions`: one line, as the C#'s, its other tabs
+    // reached with the strip's arrows.
+    // `// C#: GCSViews/FlightData.Designer.cs (tabControlactions)`
+    "fly-tab-",
+    // HELP's text, `richTextBox1`, which scrolls in its box.
+    // `// C#: GCSViews/Help.Designer.cs (richTextBox1)`
+    "help-text",
 ];
 
 /// Whether a control must be wholly on screen whenever it is measured: all but a scrolling
@@ -191,10 +198,14 @@ pub const BANNER_AFTER: std::time::Duration = std::time::Duration::from_millis(5
 pub struct Banner {
     /// What is cut off, described, and since when it has been so.
     showing: Option<(String, std::time::Instant)>,
+    /// Whether the strip has shown it yet, so the log has it once.
+    logged: bool,
 }
 
 impl Banner {
-    /// This frame's verdict on `screen`.
+    /// This frame's verdict on `screen`. Each cut-off the strip comes to show also goes to the
+    /// log, once, with its screen, so a run leaves the record of every one it met (the owner,
+    /// 2026-10-04: "check all the CUT OFF events").
     pub fn update(&mut self, screen: Screen) {
         let names = if crate::probe::enabled() {
             hidden(screen)
@@ -202,7 +213,11 @@ impl Banner {
             Vec::new()
         };
         let text = (!names.is_empty()).then(|| describe(&names));
-        self.observe(text, std::time::Instant::now());
+        let now = std::time::Instant::now();
+        self.observe(text, now);
+        if let Some(text) = self.newly_shown(now) {
+            log::warn!("CUT OFF on {}: {text}", screen.label());
+        }
     }
 
     /// What is cut off at `now`, if anything: the time starts again when it changes.
@@ -210,8 +225,21 @@ impl Banner {
         self.showing = match (text, self.showing.take()) {
             (None, _) => None,
             (Some(text), Some((shown, since))) if shown == text => Some((shown, since)),
-            (Some(text), _) => Some((text, now)),
+            (Some(text), _) => {
+                self.logged = false;
+                Some((text, now))
+            }
         };
+    }
+
+    /// What the strip has just come to show at `now`: each cut-off once.
+    pub fn newly_shown(&mut self, now: std::time::Instant) -> Option<String> {
+        if self.logged {
+            return None;
+        }
+        let text = self.text_at(now)?.to_owned();
+        self.logged = true;
+        Some(text)
     }
 
     /// What the strip says at `now`, once the cut-off has lasted.
@@ -291,6 +319,25 @@ mod tests {
         assert_eq!(banner.text_at(later(1_300)), Some("plan-read,plan-write"));
         banner.observe(None, later(1_400));
         assert_eq!(banner.text_at(later(5_000)), None);
+    }
+
+    /// The log has each cut-off once, when the strip first shows it, and again only when it
+    /// changes and lasts.
+    #[test]
+    fn the_log_has_each_cut_off_once() {
+        let start = std::time::Instant::now();
+        let later = |ms: u64| start + std::time::Duration::from_millis(ms);
+        let mut banner = Banner::default();
+        banner.observe(Some("header".to_owned()), start);
+        assert_eq!(banner.newly_shown(later(100)), None);
+        assert_eq!(banner.newly_shown(later(600)), Some("header".to_owned()));
+        banner.observe(Some("header".to_owned()), later(700));
+        assert_eq!(banner.newly_shown(later(800)), None, "logged already");
+        banner.observe(Some("help-changelog".to_owned()), later(900));
+        assert_eq!(
+            banner.newly_shown(later(1_500)),
+            Some("help-changelog".to_owned())
+        );
     }
 
     /// The owner's case: the Mission box's buttons are on the planner's list, so a planner whose
