@@ -1,0 +1,20 @@
+# The browser experiment (local only: never pushed until the owner says so). One gpui window in a web
+# page, through gpui_web at the revision the planner uses: does the pipeline work at all?
+[package]
+name = "mp-web-experiment"
+version = "0.0.0"
+edition = "2024"
+license = "GPL-3.0-only"
+publish = false
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+gpui = { git = "https://github.com/zed-industries/zed", rev = "62e5991dd0f0c8a3af8d5e7e9c4652490d468db8" }
+gpui_platform = { git = "https://github.com/zed-industries/zed", rev = "62e5991dd0f0c8a3af8d5e7e9c4652490d468db8" }
+wasm-bindgen = "=0.2.128"
+web-sys = { version = "0.3", features = ["console"] }
+
+# A workspace of its own: its lock file and target folder stay out of the planner's.
+[workspace]
