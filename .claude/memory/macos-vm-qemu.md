@@ -17,7 +17,11 @@ the instant boot.efi handed over ("HANDOFF TO XNU", then OVMF again), which is w
 the Docker-OSX attempts too; and `OC=debug`, a copy of OSX-KVM's OpenCore with the picker's
 Timeout 0 (its 2-second auto-boot picked the "EFI" entry and failed "Already started"), HaltLevel
 0, the log on serial and file only, and `-v` boot-args. `OC=debug ./start.sh` writes the serial
-log to `serial.log`.
+log to `serial.log`. Since 2026-10-04 12:30 it boots `buzz` by itself: the debug image has
+`Timeout` 5 and `ScanPolicy` 0x301 (no EFI-partition entries), and start.sh attaches the installer
+only with `INSTALLER=1`, so `buzz` is the only entry. OVMF's variables are NOT saved (OSX-KVM's
+4 MB OVMF_CODE with a 128 KB OVMF_VARS: OVMF falls back to memory), so a default set by Ctrl+Enter
+or Startup Disk is lost when QEMU stops - do not rely on NVRAM in this VM.
 
 **Seeing and driving it:** VNC on 127.0.0.1:5907 (Remmina `-c vnc://127.0.0.1:5907` on
 DISPLAY=:0); QMP on `qmp.sock` through `vmctl.py` (shot, key, type, click). Pointer events need the
