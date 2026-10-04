@@ -190,6 +190,8 @@ pub struct Plugins {
     forms: Vec<Form>,
     /// The last status line a plugin said.
     status: Option<String>,
+    /// Ctrl+P's plugin manager (`Plugin/PluginUI.cs`).
+    pub manager: crate::plugin_manager::PluginManager,
 }
 
 impl std::fmt::Debug for Plugins {
@@ -242,7 +244,40 @@ impl Plugins {
             focused: false,
             forms: Vec::new(),
             status: None,
+            manager: crate::plugin_manager::PluginManager::default(),
         }
+    }
+
+    /// The PLUGINS tab's form (Ctrl+P's), `new PluginUI()`: the plugins as they are now and the
+    /// disabled list as it is saved; a name counts as present when its file is in the plugins
+    /// folder or it is built in.
+    /// `// C#: MainV2.cs:4118-4122; Plugin/PluginUI.cs:18-24`
+    pub fn open_manager(&mut self, persisted: &crate::settings::Persisted) {
+        let disabled = crate::raw_params_grid::get_list(persisted.get(DISABLED));
+        let dir = folder();
+        let present = |name: &str| {
+            builtin::BUILTIN
+                .iter()
+                .any(|(built_in, _)| built_in.eq_ignore_ascii_case(name))
+                || dir.as_ref().is_some_and(|dir| dir.join(name).is_file())
+        };
+        self.manager.show(self.host.plugins(), &disabled, present);
+    }
+
+    /// The map menu entries a plugin added, both maps', in the order it added them: the plugin
+    /// manager's Exercise (the owner's addition, 2026-10-04).
+    #[must_use]
+    pub(crate) fn entries_of(&self, plugin: usize) -> Vec<Entry> {
+        self.entries
+            .iter()
+            .filter(|entry| entry.plugin == plugin)
+            .cloned()
+            .collect()
+    }
+
+    /// One of those entries clicked, at `lat`, `lng`, as a map's menu clicks it.
+    pub(crate) fn run_entry(&self, plugin: usize, id: u32, lat: f64, lng: f64) {
+        self.host.menu_click(plugin, id, lat, lng);
     }
 
     /// Whether any plugin file was found.
@@ -328,6 +363,23 @@ impl Plugins {
     /// last status line.
     fn record_facts(&self) {
         facts::record("plugins.count", self.host.plugins().len());
+        self.manager.record_facts();
+        // The plugin manager's Exercise list: the entries its open Try shows.
+        if let Some((_, plugin)) = self.manager.exercised() {
+            let entries: Vec<String> = self
+                .entries_of(plugin)
+                .iter()
+                .map(|entry| entry.text.clone())
+                .collect();
+            facts::record(
+                "plugin-manager.exercise.entries",
+                if entries.is_empty() {
+                    "none".to_owned()
+                } else {
+                    entries.join("|")
+                },
+            );
+        }
         for status in self.host.plugins() {
             let name = status.name().replace(' ', "_");
             facts::record(format!("plugins.{name}.state"), status.state.word());
@@ -445,6 +497,18 @@ fn fence_point(item: &mp_vehicle::FenceItem) -> FencePoint {
 }
 
 impl MissionPlanner {
+    /// The plugin manager's Save && Close: `DisabledPlugins` set to the rows not ticked, or
+    /// removed when there are none, for the next start's `LoadAll`.
+    /// `// C#: Plugin/PluginUI.cs:73-91`
+    pub(crate) fn plugin_manager_save(&mut self) {
+        if let Some(list) = self.plugins.manager.save() {
+            match crate::raw_params_grid::set_list(&list) {
+                Some(value) => self.persisted.set(DISABLED, value),
+                None => self.persisted.remove(DISABLED),
+            }
+        }
+    }
+
     /// Once a frame: the plugins' snapshot refreshed, what they did and asked served, a menu
     /// click on the planning map passed on, and the facts recorded.
     pub(crate) fn plugins_tick(

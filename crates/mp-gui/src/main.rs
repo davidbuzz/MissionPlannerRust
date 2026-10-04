@@ -35,6 +35,7 @@
 pub const PRODUCT_NAME: &str = "MissionPlannerRust";
 
 mod camera_photos;
+mod cmd_keys;
 mod config;
 mod config_coverage;
 mod connect;
@@ -80,6 +81,7 @@ mod plan;
 mod planner_coverage;
 mod plotline;
 // ---- row 96 ----
+mod plugin_manager;
 mod plugins_ui;
 // ---- end row 96 ----
 mod platform;
@@ -226,11 +228,14 @@ enum Screen {
     /// makes it a tab; what it holds is the same - the list of fields the log declares, and a
     /// chart of the chosen one.
     Logs,
+    /// The plugins: the plugin manager Ctrl+P opens (`Plugin/PluginUI.cs`, plugin_manager.rs) as a
+    /// tab of its own, between LOGS and HELP - the owner's addition, 2026-10-04.
+    Plugins,
 }
 
 impl Screen {
-    /// The tabs, in order.
-    const ALL: [Self; 8] = [
+    /// The tabs, in order: PARAMS, LOGS, PLUGINS, and HELP the very last (the owner, 2026-10-04).
+    const ALL: [Self; 9] = [
         Self::Fly,
         Self::Plan,
         Self::Setup,
@@ -238,9 +243,10 @@ impl Screen {
         // ---- SITL ----
         Self::Sitl,
         // ---- end SITL ----
-        Self::Help,
         Self::Params,
         Self::Logs,
+        Self::Plugins,
+        Self::Help,
     ];
 
     /// The screen to open on, from `MP_SCREEN`.
@@ -265,6 +271,7 @@ impl Screen {
             "help" => Self::Help,
             "params" => Self::Params,
             "logs" => Self::Logs,
+            "plugins" => Self::Plugins,
             // Anything else, including nothing and a typo, opens on the flight screen. An operator
             // who mistypes a screen name should still get the one the application is for.
             _ => Self::Fly,
@@ -283,6 +290,7 @@ impl Screen {
             Self::Help => "help",
             Self::Params => "params",
             Self::Logs => "logs",
+            Self::Plugins => "plugins",
         }
     }
 
@@ -298,6 +306,7 @@ impl Screen {
             Self::Help => "tab-help",
             Self::Params => "tab-params",
             Self::Logs => "tab-logs",
+            Self::Plugins => "tab-plugins",
         }
     }
 }
@@ -314,6 +323,9 @@ struct MissionPlanner {
     /// Whether the parameters have been asked for on this connection: `MAVLinkInterface.Open`'s
     /// `getParamListMavftp` (`:938`), run here once a vehicle is heard and nothing is held.
     params_requested: bool,
+    /// Ctrl+T's `comPort.Open(false)`: the link the connect flow opens next is not to fetch the
+    /// parameters. `// C#: MainV2.cs:4146-4157`
+    blind_connect: bool,
     /// Whether that automatic read has already happened.
     mission_requested: bool,
     /// Which screen is showing.
@@ -471,6 +483,10 @@ struct MissionPlanner {
     fly_focus: fly::ActionsFocus,
     /// Which page of the flight screen's `tabControlactions` is showing.
     fly_pages: fly::Pages,
+    /// The main window's own focus, held whenever no control has it, so that a key reaches the
+    /// root's `ProcessCmdKey` (cmd_keys.rs): gpui gives a key to the focused element and its
+    /// parents, and with nothing focused to the window's top alone.
+    root_focus: gpui::FocusHandle,
     /// The flight screen's other state: the Quick and Telemetry Logs pages, the points of
     /// interest, the Log Downloader and the windows the HUD opens.
     fly_data: fly::FlightData,
@@ -780,6 +796,7 @@ impl MissionPlanner {
             auto_read_mission: read_mission || config::planner::load_wps_on_connect(&persisted),
             mission_requested: false,
             params_requested: false,
+            blind_connect: false,
             screen,
             plan,
             adopt_vehicle_mission: false,
@@ -867,6 +884,7 @@ impl MissionPlanner {
             fly_actions: fly::Actions::default(),
             fly_focus: fly::ActionsFocus::new(cx),
             fly_pages: fly::Pages::default(),
+            root_focus: cx.focus_handle(),
             fly_data,
             failsafe: config::failsafe::FailSafe::default(),
             failsafe_focus: cx.focus_handle(),
@@ -1456,6 +1474,13 @@ impl MissionPlanner {
     /// serial port opens at once; a network kind asks its transport's questions first.
     /// `// C#: MainV2.cs:1448-1526`
     fn do_connect(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        self.do_connect_with(false, window, cx);
+    }
+
+    /// [`MissionPlanner::do_connect`], `blind` for Ctrl+T: the transport's questions asked as its
+    /// `Open` asks them, the parameters not fetched once it is open.
+    fn do_connect_with(&mut self, blind: bool, window: &mut Window, cx: &mut Context<Self>) {
+        self.blind_connect = blind;
         let port = self.connect_box.port.clone();
         let kind = connect::kind(&port);
         if port.is_empty() {
@@ -1493,7 +1518,8 @@ impl MissionPlanner {
     fn open_link(&mut self, url: &str) {
         self.telemetry = Telemetry::connect(url);
         self.mission_requested = false;
-        self.params_requested = false;
+        // `Open(false)`, Ctrl+T's: no `getParamList` - as if already asked for.
+        self.params_requested = std::mem::take(&mut self.blind_connect);
         if let Some(err) = self.telemetry.error() {
             self.file_status = Some(format!("could not open {url}: {err}"));
         } else {
@@ -2045,7 +2071,14 @@ impl MissionPlanner {
                 this.show_screen_again(screen);
             }
             // ---- end Display view ----
+            // The PLUGINS tab's form goes with it; chosen, it is filled anew, as Ctrl+P fills it.
+            if this.screen == Screen::Plugins && screen != Screen::Plugins {
+                this.plugins.manager.close();
+            }
             this.screen = screen;
+            if screen == Screen::Plugins {
+                this.plugins.open_manager(&this.persisted);
+            }
             if screen == Screen::Plan {
                 plan::activate(this);
             }
@@ -2072,7 +2105,8 @@ impl MissionPlanner {
                 | Screen::Sitl
                 | Screen::Help
                 | Screen::Params
-                | Screen::Logs => {}
+                | Screen::Logs
+                | Screen::Plugins => {}
             }
         }
     }
@@ -2843,6 +2877,15 @@ impl MissionPlanner {
 
 impl Render for MissionPlanner {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        // The PLUGINS tab always shows the form: filled again after Save && Close closes it, and
+        // at a start on that screen.
+        if self.screen == Screen::Plugins && !self.plugins.manager.is_open() {
+            self.plugins.open_manager(&self.persisted);
+        }
+        // No control holding the keyboard: the main window takes it, for `ProcessCmdKey`.
+        if window.focused(cx).is_none() {
+            self.root_focus.focus(window, cx);
+        }
         // Counted here because this is the one place that only runs when a frame is actually
         // painted. See smoke.rs: the failure being looked for is a backend that will not
         // initialise, and every earlier signal - a window handle, a running executor - survives
@@ -4005,6 +4048,7 @@ impl Render for MissionPlanner {
                 .into_any_element(),
             // ---- end SITL ----
             Screen::Help => help::screen(self, window, cx),
+            Screen::Plugins => plugin_manager::screen(self, cx),
         };
 
         probe::measured("root", div())
@@ -4014,6 +4058,15 @@ impl Render for MissionPlanner {
             .overflow_hidden()
             .bg(rgb(theme::BG))
             .text_color(rgb(theme::TEXT))
+            // `MainV2.ProcessCmdKey`: a key no element inside took, on its way out.
+            // `// C#: MainV2.cs:4067-4182`
+            .track_focus(&self.root_focus)
+            .on_key_down(cx.listener(|this, event: &gpui::KeyDownEvent, window, cx| {
+                if this.process_cmd_key(&event.keystroke, window, cx) {
+                    cx.stop_propagation();
+                    cx.notify();
+                }
+            }))
             .child(
                 probe::measured("header", div())
                     .flex()
@@ -4714,6 +4767,16 @@ mod tests {
         );
         assert_eq!(link_to_remember("loopback:b".to_owned(), true), None);
         assert_eq!(link_to_remember(String::new(), false), None);
+    }
+
+    #[test]
+    fn help_is_the_last_tab_after_params_logs_and_plugins() {
+        // The owner, 2026-10-04: params, then logs, then plugins, then help.
+        assert_eq!(
+            Screen::ALL[Screen::ALL.len() - 4..],
+            [Screen::Params, Screen::Logs, Screen::Plugins, Screen::Help]
+        );
+        assert_eq!(Screen::initial(Some("plugins"), None), Screen::Plugins);
     }
 
     #[test]

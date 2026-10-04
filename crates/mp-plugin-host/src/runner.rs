@@ -46,6 +46,10 @@ pub fn plugins_dir() -> Option<PathBuf> {
     Some(exe.parent()?.join("plugins"))
 }
 
+/// The reason a plugin is [`PluginState::NotLoaded`] when its `Init` said no - as against a file
+/// that could not be loaded at all, which is what the plugin manager's Show Errors lists.
+pub const INIT_REFUSED: &str = "Init returned false";
+
 /// Where a plugin is in its life.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum PluginState {
@@ -446,7 +450,7 @@ impl Job {
         match plugin.init() {
             Ok(true) => self.tell(RequestBody::Started(plugin.info().clone())),
             Ok(false) => {
-                return self.tell(RequestBody::NotLoaded("Init returned false".to_owned()));
+                return self.tell(RequestBody::NotLoaded(INIT_REFUSED.to_owned()));
             }
             Err(fault) => return self.tell(RequestBody::Unloaded(fault.to_string())),
         }

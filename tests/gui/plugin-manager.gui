@@ -1,0 +1,66 @@
+# Ctrl+P and the PLUGINS tab: the plugin manager (the owner's bug of 2026-10-04: Ctrl+P did
+# nothing).
+#
+# Mission Planner's Ctrl+P is MainV2.ProcessCmdKey's `new PluginUI().Show()` (MainV2.cs:4118-4122),
+# and the Drone ID plugin's first-run message tells the user to press it. Here, by the owner's word
+# (2026-10-04), the form is the PLUGINS tab, between LOGS and HELP, and Ctrl+P shows that tab. The
+# form (Plugin/PluginUI.cs) lists the plugins PluginLoader.Plugins holds - Init and Loaded both
+# said yes - green when enabled; Save && Close writes the rows not ticked as DisabledPlugins for
+# the next start and shows the restart warning from then on; a disabled plugin is not loaded at
+# the next start and is listed dark red, "Not loaded" - here a shipped plugin, built in, counting
+# as a file in the plugins folder.
+#
+# The config holds `tabcontrolactions`, so the Drone ID plugin's message box does not show.
+screen fly
+window 1600x1200
+budget 30
+env XDG_DATA_HOME $WORK
+env MP_CONFIG_XML $WORK/config.xml
+setup printf '<?xml version="1.0" encoding="utf-8"?><Config><tabcontrolactions>tabQuick;</tabcontrolactions></Config>' > "$WORK/config.xml"
+expect plugins.Dowding.state running
+expect plugins.question none
+expect plugin-manager.open false
+# The key, on the flight screen with nothing focused: the PLUGINS tab.
+key ctrl+p
+expect screen plugins
+expect plugin-manager.open true
+expect plugin-manager.restart-required false
+# The seven running plugins, by file name; the three whose Init said no are not in Plugins.
+expect plugin-manager.rows 7
+expect plugin-manager.row.0 ~ |anonymizebinlog.wasm|enabled|green
+expect plugin-manager.row.1 Dowding|dowding.wasm|enabled|green
+expect plugin-manager.row.6 ~ |terrainmaker.wasm|enabled|green
+# Show Errors: every plugin loaded or refused by its own Init, so none.
+click plugin-manager-errors
+expect plugin-manager.errors No Errors
+click plugin-manager-errors-ok
+expect plugin-manager.errors none
+# Dowding unticked, saved: the tab fills again, Dowding still loaded and now on the disabled list -
+# dark orange - and the restart warning shown.
+click plugin-manager-enabled-1
+expect plugin-manager.row.1 Dowding|dowding.wasm|disabled|green
+click plugin-manager-save
+expect plugin-manager.restart-required true
+expect plugin-manager.row.1 Dowding|dowding.wasm|disabled|dark-orange
+# Leaving the tab puts the form away; the tab itself shows it again.
+click tab-fly
+expect plugin-manager.open false
+click tab-plugins
+expect plugin-manager.open true
+expect plugin-manager.row.1 Dowding|dowding.wasm|disabled|dark-orange
+# The next start loads it no more, and lists it "Not loaded", dark red, after the running six.
+restart
+expect plugins.count 9
+expect plugins.FenceDist.state running
+key ctrl+p
+expect screen plugins
+expect plugin-manager.rows 7
+expect plugin-manager.row.6 Not loaded|dowding.wasm|disabled|dark-red
+# Ticked again and saved: enabled for the start after. (A moment first: the restarted planner's
+# controls are written after its facts.)
+settle 1
+click plugin-manager-enabled-6
+click plugin-manager-save
+restart
+expect plugins.Dowding.state running
+expect plugins.count 10

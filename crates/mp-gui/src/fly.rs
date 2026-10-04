@@ -3438,6 +3438,15 @@ impl Pages {
         self.selected = page;
     }
 
+    /// `tabControlactions.SelectedIndex = index`: the page at that place in the strip; past the
+    /// last page, nothing changes.
+    /// `// C#: GCSViews/FlightData.cs:865-916`
+    pub fn select_index(&mut self, index: usize) {
+        if let Some(page) = self.shown.get(index).copied() {
+            self.selected = page;
+        }
+    }
+
     /// The pages the strip has, in its order.
     #[must_use]
     pub fn shown(&self) -> &[Page] {
