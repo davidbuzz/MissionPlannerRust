@@ -101,6 +101,9 @@ pub const MAY_SCROLL: &[&str] = &[
     // reached with the strip's arrows.
     // `// C#: GCSViews/FlightData.Designer.cs (tabControlactions)`
     "fly-tab-",
+    // The Full Parameter List's groups, `treeView1`'s nodes, which scroll in their list.
+    // `// C#: GCSViews/ConfigurationView/ConfigRawParams.Designer.cs`
+    "param-group-",
     // HELP's text, `richTextBox1`, which scrolls in its box.
     // `// C#: GCSViews/Help.Designer.cs (richTextBox1)`
     "help-text",

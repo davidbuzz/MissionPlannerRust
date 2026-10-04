@@ -692,8 +692,9 @@ pub fn list_panel(
             },
         ),
     )
-    .with_sizing_behavior(gpui::ListSizingBehavior::Infer)
-    .max_h(px(420.0));
+    // The height the screen leaves it, its rows scrolling in it.
+    .flex_1()
+    .min_h(px(0.0));
 
     panel(
         "values",
@@ -701,6 +702,8 @@ pub fn list_panel(
             .track_focus(grid.grid_focus)
             .flex()
             .flex_col()
+            .flex_1()
+            .min_h(px(0.0))
             .child(crate::raw_params_grid::header(
                 grid.grid.layout(),
                 with_defaults,
@@ -713,9 +716,13 @@ pub fn list_panel(
                 crate::probe::measured("param-values", div())
                     .flex()
                     .flex_col()
+                    .flex_1()
+                    .min_h(px(0.0))
                     .child(rows),
             ),
     )
+    .flex_1()
+    .min_h(px(0.0))
     .into_any_element()
     // ---- end ConfigRawParams remainder ----
 }

@@ -2270,18 +2270,24 @@ impl MissionPlanner {
             .child(
                 // The scrolling page and its indicator share a positioned parent, so the
                 // indicator can sit over the page's right edge without taking width from it.
+                //
+                // As high as the page needs, the HUD above giving way to it down to its least:
+                // the Actions page's mode buttons, with a vehicle's modes, ran 160 past the 499
+                // a fixed HUD left (the layout guard on the owner's Mac, 2026-10-05). The page
+                // shrinks, and scrolls, only once the HUD has given all it can.
                 div()
                     .relative()
                     .flex()
                     .flex_col()
-                    .flex_1()
+                    .flex_grow(1.0)
+                    .flex_shrink(0.001)
                     .min_h(px(0.0))
                     .child(
                         probe::measured("fly-sidebar", div())
                             .id("fly-sidebar")
                             .flex()
                             .flex_col()
-                            .flex_1()
+                            .flex_grow(1.0)
                             .min_h(px(0.0))
                             .gap_2()
                             .pr_2()
@@ -2598,6 +2604,9 @@ impl MissionPlanner {
             edit_focused: self.param_edit_focus.is_focused(window),
         };
         // ---- end ConfigRawParams remainder ----
+        // Not scrolling: the grid's panel takes the height the others leave and scrolls its rows,
+        // where the whole column had scrolled the editor and file panels below the window (the
+        // layout guard on the owner's Mac, 2026-10-05).
         let main = div()
             .id("params-body")
             .flex()
@@ -2607,7 +2616,6 @@ impl MissionPlanner {
             .min_h(px(0.0))
             .gap_2()
             .p_2()
-            .overflow_y_scroll()
             .child(params::browser_panel(
                 view,
                 &parameters,
@@ -4207,6 +4215,11 @@ impl Render for MissionPlanner {
             .flex_col()
             .size_full()
             .overflow_hidden()
+            // Lines 1.3 times the text, not gpui's 1.618: 12-pixel text was 19 high, a pixel past
+            // every 20-high box's inside, on page after page (the layout guard on the owner's
+            // Mac, 2026-10-05). Closer to Mission Planner's own spacing, and it only makes things
+            // smaller.
+            .line_height(gpui::relative(1.3))
             // The debug build's cut-off guard: over the window's foot, so it moves nothing, and
             // painted after everything else, so nothing covers it.
             .children(cut_off.map(|text| {

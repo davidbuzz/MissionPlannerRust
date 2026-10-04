@@ -2362,9 +2362,13 @@ pub fn row(
     let row_name = name.clone();
     #[allow(clippy::cast_precision_loss)] // pixels
     let desc_minimum = Column::Desc.minimum() as f32;
+    // As wide as the grid, so Desc fills what the other columns leave and Fav stays on it: a
+    // long description had pushed rows to 2557 wide in 1356, and Fav past the edge (the layout
+    // guard on the owner's Mac, 2026-10-05).
     crate::probe::measured(format!("param-{name}"), div())
         .id(SharedString::from(format!("row-{name}")))
         .flex()
+        .w_full()
         .h(px(ROW_HEIGHT))
         .flex_shrink_0()
         .py(px(1.0))
@@ -2411,7 +2415,8 @@ pub fn row(
                 .h_full()
                 .overflow_hidden()
                 .text_color(rgb(theme::DIM))
-                .child(texts.desc)
+                // Wrapped in its width, two lines at most, the rest an ellipsis.
+                .child(div().w_full().line_clamp(2).text_ellipsis().child(texts.desc))
                 .on_click(cx.listener(move |this, _event, window, cx| {
                     this.param_grid_select(&desc_name, false, window, cx);
                     this.param_grid_desc(&desc, cx);

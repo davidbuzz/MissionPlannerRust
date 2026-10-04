@@ -6160,6 +6160,9 @@ pub fn hud_zone(scene: &crate::hud::Scene, window: HudWindow) -> Option<(f32, f3
         })
 }
 
+/// The least the HUD gives way to the page under it.
+const HUD_LEAST: f32 = 140.0;
+
 /// The primary flight display, with the two places a click opens a window and its menu on the
 /// right button. Where the HUD and the map have been swapped it fills the map's place rather than
 /// the column's top.
@@ -6194,10 +6197,11 @@ pub fn hud_panel(
         .border_color(rgb(theme::BORDER));
     // `SwapHud1AndMap` puts `hud1` in `MainH.Panel2`, which it fills; otherwise it is the top of
     // the column. `// C#: GCSViews/FlightData.cs:5139-5159`
+    // 260 high, giving way to the page under it down to 140 (the owner's Mac, 2026-10-05).
     let hud = if data.swapped {
         hud.flex_1().min_h(px(0.0))
     } else {
-        hud.h(px(260.0))
+        hud.h(px(260.0)).flex_shrink(1.0).min_h(px(HUD_LEAST))
     };
     let mut hud = hud
         .child(
