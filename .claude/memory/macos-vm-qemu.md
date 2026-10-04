@@ -47,3 +47,11 @@ on, hostname `buzz-osx`. `ssh -p 50922 user@127.0.0.1` logs in by the laptop's e
 VM's authorized_keys); laptop 127.0.0.1:5908 forwards to the VM's Screen Sharing (in start.sh's
 hostfwd). `buzz-osx.local` does not resolve on the laptop - user-mode networking carries no mDNS.
 macOS 14.8.9, 4 cores, 4 GB (`-m` in start.sh; likely too little for a release build).
+
+**The repository is shared into it (2026-10-04, Buzz's request):** QEMU virtio-9p, tag
+MissionPlannerRust, `SHARE` in start.sh (default ~/MissionPlannerRust); in the VM a root
+LaunchDaemon (local.missionplannerrust.share) runs `mount_9p` at boot -> /Volumes/MissionPlannerRust,
+linked from ~/MissionPlannerRust. macOS checks permissions itself and the files are 1000:1000, so
+the VM has a group `buzz` (GID 1000) with `user` in it, and umask 002. Catch: a name the VM looked
+up before the laptop created it stays invisible (even to ls) until that folder changes from the VM
+side (touch+rm a file there) or a remount. Build in the VM with CARGO_TARGET_DIR on the VM's disk.
