@@ -9,7 +9,7 @@ pointed at them without a toolchain (PLAN.md §12 D14 and D21, §13.6 row 78).
 | | |
 |---|---|
 | Files | `arducopter.js` + `arducopter.wasm` (3.6 MB), `arduplane.js` + `arduplane.wasm` (3.6 MB), `ardurover.js` + `ardurover.wasm` (3.4 MB), `arducopter-heli.js` + `arducopter-heli.wasm` (3.6 MB, ArduPilot's heli target) |
-| ArduPilot | Unmodified ArduPilot master (the owner, 2026-10-04): `ArduPilot-4.6.0-beta1-8776-g9f648ccabc`, commit `9f648ccabcf25a421192dc5b57491ce981506872` of https://github.com/ardupilot/ardupilot - the corresponding source for all four. Built in `~/ardupilot_rp2350_v6_buzz`, whose working tree on 2026-09-25 also held two of the owner's RP2350 files, which the `wasm` board does not build: the copter rebuilt there on 2026-10-04 from the clean tree is byte for byte the one built then |
+| ArduPilot | Unmodified ArduPilot master: `ArduPilot-4.6.0-beta1-8776-g9f648ccabc`, commit `9f648ccabcf25a421192dc5b57491ce981506872` of https://github.com/ardupilot/ardupilot - the corresponding source for all four |
 | Toolchain | Emscripten 6.0.8 from emsdk (`Tools/environment_install/install-wasm-prereqs-ubuntu.sh`); Ubuntu's `emscripten` 3.1.6 package cannot link the board (its `wasm-ld` rejects waf's `-Bstatic`/`-Bdynamic` markers) |
 | Built with | `./waf configure --board wasm && ./waf build --target bin/arducopter` (and `bin/arduplane`, `bin/ardurover`, `bin/arduheli`, whose output is `arducopter-heli`) |
 | Licence | GPL-3.0-or-later, ArduPilot's; these are build artefacts of ArduPilot, not part of this project, and the source is at the commit above |
