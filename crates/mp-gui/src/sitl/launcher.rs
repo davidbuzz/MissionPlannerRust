@@ -990,6 +990,115 @@ pub mod tests {
         );
     }
 
+    /// The WebAssembly copter's parameters outlive it, as a native SITL's do (the owner's bug of
+    /// 2026-10-04: one written to it was gone after a stop and a start). Written, the copter
+    /// stopped as the planner stops it - killed, with no last word - and started again in its
+    /// folder, the parameter holds what was written: kept in the folder's `eeprom.bin`, which the
+    /// bridge puts back into the module before the vehicle starts and saves whenever it changes
+    /// (`tools/sitl/wasm/bridge.mjs`). Skipped where Node or the builds are not here.
+    #[test]
+    fn the_local_copters_parameters_survive_a_restart() {
+        if find_node().is_none() || local_wasm_dir().is_none() {
+            eprintln!("skipped: needs Node and tools/sitl/wasm (MP_NODE, MP_SITL_WASM)");
+            return;
+        }
+        // RTL_LOIT_TIME rather than RTL_ALT, which this master has renamed RTL_ALT_M.
+        const NAME: &str = "RTL_LOIT_TIME";
+        const WRITTEN: f32 = 4_321.0;
+        let port = std::net::TcpListener::bind("127.0.0.1:0")
+            .and_then(|listener| listener.local_addr())
+            .map(|address| address.port())
+            .expect("a free port");
+        let wasm = LocalWasm {
+            processes: Processes::default(),
+            port,
+        };
+        let dir = scratch("local-wasm-eeprom");
+        let request = Request {
+            vehicle: Vehicle::Multirotor,
+            release: None,
+            model_text: String::new(),
+            home: "-35.363262,149.165237,584,353".to_owned(),
+            speedup: 1,
+            cmdline: String::new(),
+            wipe: false,
+            dir: dir.clone(),
+            path: std::env::var("PATH").unwrap_or_default(),
+        };
+        // The parameter as the vehicle reports it, once its list is in; `written` sets it first.
+        let session = |written: Option<f32>| -> Option<f32> {
+            let outcome = start(&wasm, &StubWeb::default(), &request, &|_| {}, &|_| {});
+            assert!(matches!(outcome, Outcome::Connect { .. }), "{outcome:?}");
+            // Node takes a moment to listen; the planner's connect retries too.
+            let deadline = std::time::Instant::now() + Duration::from_secs(90);
+            let link = loop {
+                match mp_link::Link::connect(
+                    &format!("tcp:127.0.0.1:{port}"),
+                    mp_link::LinkConfig {
+                        stream_rate_hz: 0,
+                        ..mp_link::LinkConfig::default()
+                    },
+                ) {
+                    Ok(link) => break link,
+                    Err(err) => {
+                        assert!(
+                            std::time::Instant::now() < deadline,
+                            "the bridge's port never opened: {err:?}"
+                        );
+                        std::thread::sleep(Duration::from_millis(250));
+                    }
+                }
+            };
+            let value = |link: &mp_link::Link| {
+                let (id, _) = link.primary_vehicle()?;
+                link.params(id)?
+                    .get(NAME)
+                    .map(mp_params::ParamValue::to_param_value_field)
+            };
+            let mut asked = false;
+            let mut set = false;
+            let mut last = None;
+            while std::time::Instant::now() < deadline {
+                if let Some((id, _)) = link.primary_vehicle() {
+                    if !asked {
+                        asked = link.download_params(id);
+                    }
+                    last = value(&link);
+                    match (written, last) {
+                        (Some(want), Some(_)) if !set => {
+                            let _ = link.set_param(id, NAME, f64::from(want), true);
+                            set = true;
+                        }
+                        (Some(want), Some(now)) if (now - want).abs() < f32::EPSILON => break,
+                        (None, Some(_)) => break,
+                        _ => {}
+                    }
+                }
+                std::thread::sleep(Duration::from_millis(200));
+            }
+            // Past the bridge's half-second save, then stopped as the planner stops it.
+            std::thread::sleep(Duration::from_secs(2));
+            drop(link);
+            wasm.kill_all();
+            last
+        };
+        let after_writing = session(Some(WRITTEN));
+        let after_restart = session(None);
+        let saved = std::fs::read_dir(&dir)
+            .into_iter()
+            .flatten()
+            .flatten()
+            .any(|entry| entry.path().join("eeprom.bin").is_file());
+        let _ = std::fs::remove_dir_all(&dir);
+        assert_eq!(after_writing, Some(WRITTEN), "the write was not echoed");
+        assert!(saved, "no eeprom.bin in the copter's folder");
+        assert_eq!(
+            after_restart,
+            Some(WRITTEN),
+            "the parameter did not survive the restart"
+        );
+    }
+
     /// A web of fixed files that records what was asked of it.
     #[derive(Debug, Default)]
     pub struct StubWeb {
