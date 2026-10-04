@@ -40,6 +40,7 @@
 #![allow(unsafe_code)]
 
 use mp_os::Lock as _;
+use mp_os::RecvTimeout as _;
 use std::path::PathBuf;
 use std::sync::Mutex;
 use std::sync::mpsc::{self, Receiver, RecvTimeoutError, Sender};
@@ -570,7 +571,7 @@ impl Stream for MediaFoundationStream {
             .map_err(|why| VideoError::Read(why.message()))?;
             self.pending = true;
         }
-        match self.arrivals.recv_timeout(READ_TIMEOUT) {
+        match self.arrivals.os_recv_timeout(READ_TIMEOUT) {
             Ok(arrival) => {
                 self.pending = false;
                 match arrival {

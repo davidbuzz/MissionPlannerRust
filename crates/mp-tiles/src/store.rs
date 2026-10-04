@@ -604,6 +604,7 @@ fn publish(
 #[cfg(test)]
 mod tests {
     #![allow(clippy::unwrap_used, clippy::expect_used)]
+    use mp_os::RecvTimeout as _;
 
     use super::*;
     use crate::source::BING_MAP;
@@ -642,7 +643,7 @@ mod tests {
 
         assert!(matches!(store.get(tile), TileAnswer::Missing));
         assert_eq!(
-            taken.recv_timeout(wait).unwrap(),
+            taken.os_recv_timeout(wait).unwrap(),
             tile,
             "the reader took the first ask"
         );
@@ -656,7 +657,7 @@ mod tests {
 
         go.send(()).unwrap();
         assert_eq!(
-            taken.recv_timeout(wait).unwrap(),
+            taken.os_recv_timeout(wait).unwrap(),
             tile,
             "the reader took the second ask"
         );

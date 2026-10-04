@@ -28,6 +28,7 @@
 //! paths - the link's parameter write, the fly screen's mode command, the plan's list, its
 //! prompts - so a plugin opens no second path to the vehicle.
 
+use mp_os::RecvTimeout as _;
 use std::sync::mpsc::{self, Receiver, RecvTimeoutError, Sender};
 use std::sync::{Arc, PoisonError, RwLock};
 use std::time::Duration;
@@ -320,7 +321,7 @@ impl ChannelSurface {
         let (reply, answer) = Reply::pair();
         self.tell(body(reply));
         match wait {
-            Some(wait) => match answer.recv_timeout(wait) {
+            Some(wait) => match answer.os_recv_timeout(wait) {
                 Ok(value) => value,
                 Err(RecvTimeoutError::Timeout | RecvTimeoutError::Disconnected) => default,
             },

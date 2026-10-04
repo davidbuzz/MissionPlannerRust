@@ -707,6 +707,7 @@ mod tests {
     use crate::RELEASE_REPEATS;
     use crate::config::{ButtonFunction, JoyButton, JoystickAxis};
     use crate::event::{AXIS, BUTTON, INIT};
+    use mp_os::RecvTimeout as _;
     use std::sync::mpsc::{self, Receiver, RecvTimeoutError, Sender};
 
     /// Long enough to wait for something that must happen, on a machine that is busy.
@@ -743,7 +744,7 @@ mod tests {
 
     impl Wire {
         fn next(&self) -> Frame {
-            self.frames.recv_timeout(PATIENCE).expect("a frame").1
+            self.frames.os_recv_timeout(PATIENCE).expect("a frame").1
         }
 
         /// The next frame of a kind, skipping others - a resend can always be in flight.
@@ -753,7 +754,7 @@ mod tests {
 
         fn next_timed_of(&self, cause: Cause) -> (Instant, Frame) {
             loop {
-                let (at, frame) = self.frames.recv_timeout(PATIENCE).expect("a frame");
+                let (at, frame) = self.frames.os_recv_timeout(PATIENCE).expect("a frame");
                 if frame.cause == cause {
                     return (at, frame);
                 }
@@ -765,7 +766,7 @@ mod tests {
             let until = Instant::now() + window;
             let mut frames = Vec::new();
             while let Some(left) = until.checked_duration_since(Instant::now()) {
-                match self.frames.recv_timeout(left) {
+                match self.frames.os_recv_timeout(left) {
                     Ok((_, frame)) => frames.push(frame),
                     Err(RecvTimeoutError::Timeout) => break,
                     Err(RecvTimeoutError::Disconnected) => break,
@@ -775,7 +776,7 @@ mod tests {
         }
 
         fn is_silent_for(&self, window: Duration) -> bool {
-            self.frames.recv_timeout(window).is_err()
+            self.frames.os_recv_timeout(window).is_err()
         }
 
         /// Everything that arrives until `quiet` passes with nothing, within `PATIENCE`.
@@ -789,7 +790,7 @@ mod tests {
             let deadline = Instant::now() + PATIENCE;
             let mut frames = Vec::new();
             while let Some(left) = deadline.checked_duration_since(Instant::now()) {
-                match self.frames.recv_timeout(quiet.min(left)) {
+                match self.frames.os_recv_timeout(quiet.min(left)) {
                     Ok((_, frame)) => frames.push(frame),
                     Err(_) => break,
                 }
@@ -1258,7 +1259,7 @@ mod tests {
         );
         feed.send(Ok(axis(-16_000))).expect("feed");
 
-        let (second_at, second) = wire.frames.recv_timeout(PATIENCE).expect("a frame");
+        let (second_at, second) = wire.frames.os_recv_timeout(PATIENCE).expect("a frame");
         assert_eq!(second.cause, Cause::Changed, "{second:?}");
         assert!(
             second.channels.get(1) < Some(crate::mapping::CENTRE_US),
@@ -1299,7 +1300,7 @@ mod tests {
         );
         assert!(!reader.set_enabled(false));
 
-        let (released_at, released) = wire.frames.recv_timeout(PATIENCE).expect("a frame");
+        let (released_at, released) = wire.frames.os_recv_timeout(PATIENCE).expect("a frame");
         assert_eq!(released.cause, Cause::Release, "{released:?}");
         let gap = released_at.duration_since(changed_at);
         assert!(
@@ -1313,7 +1314,7 @@ mod tests {
     fn a_stirred_stick_never_sends_two_frames_inside_the_floor() {
         let (reader, feed, wire) = rig(one_axis());
         assert!(reader.set_enabled(true));
-        let mut times = vec![wire.frames.recv_timeout(PATIENCE).expect("a frame").0];
+        let mut times = vec![wire.frames.os_recv_timeout(PATIENCE).expect("a frame").0];
         for step in 0..200i16 {
             feed.send(Ok(axis(if step % 2 == 0 { 20_000 } else { -20_000 })))
                 .expect("feed");
@@ -1322,7 +1323,7 @@ mod tests {
         // A fixed window rather than "until quiet": a flying reader resends every RESEND for ever.
         let until = Instant::now() + RESEND * 2;
         while let Some(left) = until.checked_duration_since(Instant::now()) {
-            match wire.frames.recv_timeout(left) {
+            match wire.frames.os_recv_timeout(left) {
                 Ok((at, _)) => times.push(at),
                 Err(_) => break,
             }

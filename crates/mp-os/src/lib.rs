@@ -34,7 +34,11 @@ use std::ffi::OsStr;
 use std::path::PathBuf;
 #[cfg(target_family = "wasm")]
 use std::sync::TryLockError;
+#[cfg(target_family = "wasm")]
+use std::sync::mpsc::TryRecvError;
+use std::sync::mpsc::{Receiver, RecvTimeoutError};
 use std::sync::{LockResult, Mutex, MutexGuard};
+use std::time::Duration;
 
 /// `std::env::temp_dir`; in a web page `/tmp`, where nothing can be written.
 #[must_use]
@@ -116,6 +120,47 @@ impl<T: ?Sized> Lock<T> for Mutex<T> {
     }
 }
 
+/// `Receiver::recv_timeout`, which reads std's clock for its deadline and so panics in a web
+/// page: there the channel is polled against the page's clock, a millisecond's sleep apart on a
+/// Web Worker and spinning on the page's main thread, which may not sleep. On the desktop it is
+/// `recv_timeout` itself (experiments/web-experiment/tools/port_locks.py puts it in place).
+pub trait RecvTimeout<T> {
+    /// `recv_timeout`.
+    ///
+    /// # Errors
+    /// As `recv_timeout`: [`RecvTimeoutError::Timeout`] when nothing came in time,
+    /// [`RecvTimeoutError::Disconnected`] when nothing can come.
+    fn os_recv_timeout(&self, timeout: Duration) -> Result<T, RecvTimeoutError>;
+}
+
+impl<T> RecvTimeout<T> for Receiver<T> {
+    fn os_recv_timeout(&self, timeout: Duration) -> Result<T, RecvTimeoutError> {
+        #[cfg(not(target_family = "wasm"))]
+        {
+            self.recv_timeout(timeout)
+        }
+        #[cfg(target_family = "wasm")]
+        {
+            let deadline = web_time::Instant::now() + timeout;
+            loop {
+                match self.try_recv() {
+                    Ok(value) => return Ok(value),
+                    Err(TryRecvError::Disconnected) => return Err(RecvTimeoutError::Disconnected),
+                    Err(TryRecvError::Empty) => {}
+                }
+                if web_time::Instant::now() >= deadline {
+                    return Err(RecvTimeoutError::Timeout);
+                }
+                if on_main_thread() {
+                    std::hint::spin_loop();
+                } else {
+                    wasm_thread::sleep(Duration::from_millis(1));
+                }
+            }
+        }
+    }
+}
+
 /// Whether this is the page's main thread rather than a Web Worker, asked of the browser once a
 /// thread.
 #[cfg(target_family = "wasm")]
@@ -160,6 +205,22 @@ pub fn http(method: &str, url: &str, body: Option<&str>) -> Result<(u16, Vec<u8>
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn on_the_desktop_os_recv_timeout_is_recv_timeout() {
+        let (send, receive) = std::sync::mpsc::channel();
+        send.send(7).expect("open");
+        assert_eq!(receive.os_recv_timeout(Duration::from_millis(10)), Ok(7));
+        assert_eq!(
+            receive.os_recv_timeout(Duration::from_millis(10)),
+            Err(RecvTimeoutError::Timeout)
+        );
+        drop(send);
+        assert_eq!(
+            receive.os_recv_timeout(Duration::from_millis(10)),
+            Err(RecvTimeoutError::Disconnected)
+        );
+    }
 
     #[test]
     fn on_the_desktop_lock_is_mutex_lock() {

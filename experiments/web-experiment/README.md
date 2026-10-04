@@ -42,7 +42,7 @@ no-op on the desktop: the replacement is std's own item there.
 | `tools/port_clock.py` | std's clock panics | `web_time::{Instant, SystemTime}` |
 | `tools/port_threads.py` | std cannot spawn threads | `wasm_thread`, Web Workers on shared memory |
 | `tools/port_os.py` | `temp_dir`, `process::id` and `split_paths` panic | `mp_os::*` |
-| `tools/port_locks.py` | the main thread may never wait (`Atomics.wait` throws) | `.os_lock()`: spins on the main thread only |
+| `tools/port_locks.py` | the main thread may never wait (`Atomics.wait` throws); `recv_timeout` reads std's clock | `.os_lock()`, `.os_recv_timeout()`: they spin on the main thread only |
 
 By hand:
 - `mp-os::http`: a synchronous XHR from a worker, for tiles, terrain and catalogues.
@@ -53,10 +53,9 @@ By hand:
 
 ## Not done
 
-- `std::sync::mpsc::Receiver::recv_timeout` still reads std's clock. It is used by scripts' abort
-  watch, firmware upload and the link mirror.
-- `RwLock` and blocking `recv`/`join` on the page's main thread are not swept. Only the paths
-  exercised so far are proven: startup, every top screen, the map, connect, the HUD.
+- `RwLock` and blocking `recv`/`join` on the page's main thread are not swept. The paths exercised
+  so far are proven: startup, every top screen with and without a vehicle, the map, connect, the
+  HUD, and the full parameter download.
 - Files: std::fs fails in a page, so settings, logs and parameter files are not kept between
   visits. The browser's own storage (OPFS) would be the place.
 - Networking beyond the page: the owner's route is Tailscale's Go client built for wasm, with

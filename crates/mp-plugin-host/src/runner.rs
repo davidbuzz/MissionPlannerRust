@@ -27,6 +27,7 @@
 //! window. Here each plugin has its own thread, which also takes its clicks, so a plugin waits
 //! only on itself; the window hears from it through [`Request`]s it drains once a frame.
 
+use mp_os::RecvTimeout as _;
 use std::path::{Path, PathBuf};
 use std::sync::mpsc::{self, Receiver, RecvTimeoutError, Sender};
 use std::sync::{Arc, PoisonError, RwLock};
@@ -466,7 +467,7 @@ impl Job {
         loop {
             let next = if running { plugin.next_run() } else { None };
             let command = match next {
-                Some(next) => inbox.recv_timeout(next.saturating_duration_since(Instant::now())),
+                Some(next) => inbox.os_recv_timeout(next.saturating_duration_since(Instant::now())),
                 None => inbox.recv().map_err(|_| RecvTimeoutError::Disconnected),
             };
             let result = match command {

@@ -59,6 +59,7 @@
 //!   (`:363-386`), each one a connect the vehicle's reader waits for.
 
 use mp_os::Lock as _;
+use mp_os::RecvTimeout as _;
 use std::collections::BTreeMap;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::mpsc::{Receiver, RecvTimeoutError, SyncSender, TrySendError, sync_channel};
@@ -303,7 +304,7 @@ fn run(
     // `lastReconnectTime` starts at `DateTime.MinValue`: the first try is at once.
     let mut next_reconnect = Instant::now();
     while shared.running.load(Ordering::Acquire) {
-        let packet = match packets.recv_timeout(IDLE) {
+        let packet = match packets.os_recv_timeout(IDLE) {
             Ok(packet) => Some(packet),
             Err(RecvTimeoutError::Timeout) => None,
             Err(RecvTimeoutError::Disconnected) => break,

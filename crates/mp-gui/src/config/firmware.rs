@@ -3196,6 +3196,7 @@ impl MissionPlanner {
 
 #[cfg(test)]
 mod tests {
+    use mp_os::RecvTimeout as _;
     use mp_os::Lock as _;
     use super::*;
 
@@ -3674,13 +3675,13 @@ mod tests {
         let watcher = page.watcher.as_ref().expect("the thread");
         let arrival = watcher
             .arrivals
-            .recv_timeout(Duration::from_secs(5))
+            .os_recv_timeout(Duration::from_secs(5))
             .expect("the port back is an arrival");
         assert_eq!(arrival, ["/dev/ttyS0", "/dev/ttyACM0"]);
         assert!(
             watcher
                 .arrivals
-                .recv_timeout(Duration::from_millis(100))
+                .os_recv_timeout(Duration::from_millis(100))
                 .is_err(),
             "the same ports again, or one fewer, are none"
         );

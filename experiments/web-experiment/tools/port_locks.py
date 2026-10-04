@@ -1,19 +1,20 @@
 #!/usr/bin/env python3
-# The browser build's locks: every `.lock()` in the planner's crates becomes `.os_lock()`, from
+# The browser build's waits: every `.lock()` in the planner's crates becomes `.os_lock()`, from
 # crates/mp-os's `Lock`, which is `Mutex::lock` on the desktop and on a Web Worker, and spins on the
 # page's main thread, where a browser never lets a thread wait (`Atomics.wait` throws there, and
-# leaves gpui's borrows held). Each file gets `use mp_os::Lock as _;`, each crate the dependency.
+# leaves gpui's borrows held); every `.recv_timeout(` becomes `.os_recv_timeout(`, which polls
+# against the page's clock where std's would read its own and panic. Each scope that calls one gets
+# its trait (`use mp_os::Lock as _;`, `use mp_os::RecvTimeout as _;`), each crate the dependency.
 #
 # Kept as a script so it can be run again on a newer tree:   python3 tools/port_locks.py <repo>
 import pathlib, re, sys
 
 repo = pathlib.Path(sys.argv[1] if len(sys.argv) > 1 else ".").resolve()
 crates = repo / "crates"
-IMPORT = "use mp_os::Lock as _;\n"
 DEPENDENCY = ('# The std calls that panic in a web page, std\'s on the desktop '
               '(experiments/web-experiment/tools/port_os.py).\nmp-os.workspace = true\n')
 
-def place_imports(text):
+def place_imports(text, method, IMPORT):
     """The trait imported into each scope that calls `os_lock` itself: the file, or an inline
     module (whose `use super::*;` brings the file's in, when the file has one)."""
     lines = text.splitlines(keepends=True)
@@ -28,7 +29,7 @@ def place_imports(text):
     def owner(n):
         inner = [span for span in spans if span[0] < n < span[1]]
         return max(inner, key=lambda span: span[0]) if inner else None
-    users = {owner(n) for n, line in enumerate(lines) if ".os_lock()" in line}
+    users = {owner(n) for n, line in enumerate(lines) if method in line}
     file_scope = None in users
     needed = set(users)
     for span in users:
@@ -66,24 +67,30 @@ def place_imports(text):
 
 changed_crates = set()
 files = 0
+# Each std method that waits, its replacement from mp-os, and the trait that brings it in.
+SWAPS = [
+    (".lock()", ".os_lock()", "use mp_os::Lock as _;\n"),
+    (".recv_timeout(", ".os_recv_timeout(", "use mp_os::RecvTimeout as _;\n"),
+]
 for source in sorted(crates.glob("*/src/**/*.rs")) + sorted(crates.glob("*/tests/**/*.rs")) + sorted(crates.glob("*/benches/**/*.rs")):
     crate = source.relative_to(crates).parts[0]
     if source.is_symlink() or crate in ("mp-os", "mp-cli"):
         continue
     text = source.read_text()
-    if re.search(r"\bfn lock\(&self\)", text):
-        # A type of this file has a `lock()` of its own, which its callers mean: only the Mutex
-        # lock that method makes, on the line under it, is swapped.
-        lines = text.splitlines(keepends=True)
-        for i in range(1, len(lines)):
-            if re.search(r"\bfn lock\(&self\)", lines[i - 1]):
-                lines[i] = lines[i].replace(".lock()", ".os_lock()")
-        new = "".join(lines)
-    else:
-        new = re.sub(r"\.lock\(\)", ".os_lock()", text)
-    if ".os_lock()" not in new:
-        continue
-    new = place_imports(new)
+    new = text
+    for old, method, import_line in SWAPS:
+        if old == ".lock()" and re.search(r"\bfn lock\(&self\)", new):
+            # A type of this file has a `lock()` of its own, which its callers mean: only the
+            # Mutex lock that method makes, on the line under it, is swapped.
+            lines = new.splitlines(keepends=True)
+            for i in range(1, len(lines)):
+                if re.search(r"\bfn lock\(&self\)", lines[i - 1]):
+                    lines[i] = lines[i].replace(old, method)
+            new = "".join(lines)
+        else:
+            new = new.replace(old, method)
+        if method in new:
+            new = place_imports(new, method, import_line)
     if new == text:
         continue
     source.write_text(new)

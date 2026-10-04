@@ -38,6 +38,7 @@
 #![cfg(unix)]
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::indexing_slicing)]
 
+use mp_os::RecvTimeout as _;
 use std::collections::HashMap;
 use std::io::Write;
 use std::os::unix::net::UnixStream;
@@ -133,7 +134,7 @@ fn flying(mapping: Mapping) -> (StickReader, UnixStream, Receiver<(Instant, Fram
     assert!(reader.set_enabled(true));
     // Switching on sends the current position at once; take it, so the first event's change is
     // not mistaken for it.
-    let (_, first) = frames.recv_timeout(PATIENCE).expect("a first frame");
+    let (_, first) = frames.os_recv_timeout(PATIENCE).expect("a first frame");
     assert_eq!(first.cause, Cause::Refresh);
     (reader, feed, frames)
 }
@@ -141,7 +142,7 @@ fn flying(mapping: Mapping) -> (StickReader, UnixStream, Receiver<(Instant, Fram
 /// The next change on the wire, skipping the resends that a held stick gets every 50 ms.
 fn next_change(frames: &Receiver<(Instant, Frame)>) -> (Instant, Frame) {
     loop {
-        let (at, frame) = frames.recv_timeout(PATIENCE).expect("a change on the wire");
+        let (at, frame) = frames.os_recv_timeout(PATIENCE).expect("a change on the wire");
         if frame.cause == Cause::Changed {
             return (at, frame);
         }
@@ -306,7 +307,7 @@ fn a_stick_stirred_at_one_kilohertz_is_sent_at_most_every_floor_and_never_stale(
     // Every frame, resends included: the floor is about what the link is asked to carry.
     let mut on_wire: Vec<(Instant, Frame)> = Vec::new();
     loop {
-        let (at, frame) = frames.recv_timeout(PATIENCE).expect("a frame");
+        let (at, frame) = frames.os_recv_timeout(PATIENCE).expect("a frame");
         on_wire.push((at, frame));
         if frame.cause == Cause::Changed && frame.channels.get(1) == Some(last_value) {
             break;

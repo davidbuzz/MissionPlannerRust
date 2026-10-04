@@ -73,6 +73,7 @@
 #![allow(unreachable_pub)]
 
 use mp_os::Lock as _;
+use mp_os::RecvTimeout as _;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{Receiver, RecvTimeoutError, Sender, channel};
@@ -330,7 +331,7 @@ impl GuiScriptHost {
             if left.is_zero() {
                 return None;
             }
-            match rx.recv_timeout(left.min(ABORT_LOOK)) {
+            match rx.os_recv_timeout(left.min(ABORT_LOOK)) {
                 Ok(reply) => return Some(reply),
                 Err(RecvTimeoutError::Timeout) => {}
                 Err(RecvTimeoutError::Disconnected) => return None,
