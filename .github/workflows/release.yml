@@ -1,9 +1,9 @@
 name: release builds
 
-# The Linux and Windows release planner, built natively from one commit, opened and painted once,
-# packaged with the licence files, and kept as this run's artifacts for the owner to publish. The
-# planner alone: headless-planner is an internal testing tool, not part of the application.
-# The macOS build is made on the owner's borrowed Mac from the same commit (DEV_MACOS.md).
+# The release planner for Linux, Windows and macOS, built natively from one commit, opened and
+# painted once, packaged with the licence files, and kept as this run's artifacts for the owner to
+# publish. The planner alone: headless-planner is an internal testing tool, not part of the
+# application. The owner's borrowed Mac builds the same commit by hand as a check (DEV_MACOS.md).
 # Run by hand: Actions > release builds > Run workflow, on the commit to release.
 on:
   workflow_dispatch:
@@ -127,3 +127,78 @@ jobs:
           path: |
             release/*.zip
             release/SHA256SUMS-windows
+
+  macos:
+    name: macOS (universal, arm64 + x86-64)
+    # Apple Silicon builds both architectures and lipo joins them: one planner for every Mac.
+    # GitHub's Intel images are being retired, and Apple's toolchain cross-compiles either way.
+    runs-on: macos-latest
+    timeout-minutes: 180
+    env:
+      # liblzma-sys takes Homebrew's xz through pkg-config when it is there, and the runner has it;
+      # built in, the planner links nothing outside macOS (DEV_MACOS.md).
+      LZMA_API_STATIC: "1"
+      # The shipped binary is stripped, so debug information changes nothing shipped, and it is
+      # most of a fat-LTO link's memory on a 7 GB runner.
+      CARGO_PROFILE_RELEASE_DEBUG: "0"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Both architectures' standard libraries
+        run: rustup target add aarch64-apple-darwin x86_64-apple-darwin
+      - name: Build for Apple Silicon
+        run: cargo build --release -p mp-gui --bin planner --target aarch64-apple-darwin
+      - name: Build for Intel
+        run: cargo build --release -p mp-gui --bin planner --target x86_64-apple-darwin
+      - name: One universal planner, stripped
+        run: |
+          mkdir -p dist
+          lipo -create -output dist/planner \
+            target/aarch64-apple-darwin/release/planner target/x86_64-apple-darwin/release/planner
+          strip dist/planner
+          lipo -info dist/planner
+          file dist/planner
+      - name: It links macOS alone
+        run: |
+          otool -L dist/planner
+          if otool -L dist/planner | grep -E '/opt/homebrew|/usr/local'; then
+            echo "the planner links a library outside macOS"; exit 1
+          fi
+      - name: The release planner opens and paints
+        env:
+          MP_SMOKE: "1"
+          MP_NO_TILES: "1"
+          MP_NO_RECORD: "1"
+        run: dist/planner
+      - name: Archive
+        run: |
+          V=$(grep -m1 '^version = ' Cargo.toml | sed 's/.*"\(.*\)"/\1/')
+          N=missionplanner-rust_${V}_macos-universal
+          mkdir -p release/$N
+          cp dist/planner LICENSE NOTICE THIRD_PARTY_LICENSES README.md release/$N/
+          {
+            echo "MissionPlannerRust $V for macOS, universal (Apple Silicon and Intel)"
+            echo
+            echo "Source:   https://github.com/${GITHUB_REPOSITORY}"
+            echo "Commit:   ${GITHUB_SHA}"
+            echo "Built:    $(date -u +%Y-%m-%d) on macOS $(sw_vers -productVersion), $(rustc --version)"
+            echo "Command:  LZMA_API_STATIC=1 cargo build --release -p mp-gui --bin planner, once per"
+            echo "          architecture (aarch64-apple-darwin, x86_64-apple-darwin), joined by lipo,"
+            echo "          then strip; DEV_MACOS.md in the source describes the process"
+            echo "Links:    macOS's own frameworks and /usr/lib only (no Homebrew library)"
+            echo "Plugins:  the ten plugins Mission Planner ships are built into the planner"
+            echo
+            echo "planner  the ground control station"
+            echo
+            echo "Unsigned and not notarised: macOS will hold the first launch until it is allowed in"
+            echo "System Settings > Privacy & Security. Licensed under the GNU GPL version 3 (LICENSE);"
+            echo "NOTICE and THIRD_PARTY_LICENSES record what it derives from and what it is built from."
+          } > release/$N/BUILD-INFO.txt
+          tar -C release -czf release/$N.tar.gz $N
+          (cd release && shasum -a 256 $N.tar.gz | tee SHA256SUMS-macos)
+      - uses: actions/upload-artifact@v4
+        with:
+          name: macos-release
+          path: |
+            release/*.tar.gz
+            release/SHA256SUMS-macos

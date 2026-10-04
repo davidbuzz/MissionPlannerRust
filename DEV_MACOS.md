@@ -186,6 +186,11 @@ Metal, OpenGL, QuartzCore, CoreGraphics, CoreVideo, ColorSync, CoreLocation, Use
 Security, SystemConfiguration, IOKit, Carbon, ApplicationServices, CoreServices, Foundation and
 CoreFoundation, with `libSystem`, `libobjc`, `libiconv` and `libffi` from `/usr/lib`.
 
+CI's release workflow (`.github/workflows/release.yml`, run by hand) makes the same build on
+GitHub's Apple Silicon runner for both architectures - `--target aarch64-apple-darwin` and
+`--target x86_64-apple-darwin` - and joins them with `lipo -create` into one universal planner
+that runs on every Mac, Intel ones included, which a build on an Apple Silicon Mac alone does not.
+
 That is the release binary. There is no `.dmg`, no bundle (`Planner.app`) and no code signing or
 notarisation yet; `README.md` lists them under what is not started. An unsigned binary downloaded
 from elsewhere will be held by Gatekeeper until it is allowed in System Settings, which is a reason
