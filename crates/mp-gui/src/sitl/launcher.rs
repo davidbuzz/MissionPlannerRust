@@ -33,6 +33,12 @@
 //!   [`NotAvailable`], whose note the page shows - under the owner's ruling D14 (PLAN.md §12),
 //!   until ArduPilot publishes a WebAssembly SITL (`wasm.rs`).
 //!
+//! - **The local WebAssembly build**, the owner's addition (2026-10-04): with SIMULATION's "try
+//!   local wasm" box ticked - by default on macOS, where it is the only simulator that runs -
+//!   the four pictures start the builds in `tools/sitl/wasm/` under Node, through
+//!   `bridge.mjs`, which serves their SERIAL0 on tcp:127.0.0.1:5760 for the usual connect
+//!   ([`LocalWasm`]; PLAN.md section 12 D21's bridge, given its word).
+//!
 //! Where the C# finds no manifest record on Linux it falls through to the Cygwin download, whose
 //! `.exe` cannot run there; here that is the same note instead (divergence).
 //!
@@ -466,6 +472,176 @@ impl Launcher for NotAvailable {
     fn kill_all(&self) {}
 }
 
+/// The folder holding the local WebAssembly builds and `bridge.mjs`: `MP_SITL_WASM`, else
+/// `sitl-wasm` beside the executable, else the source tree's `tools/sitl/wasm` this was built from.
+#[must_use]
+pub fn local_wasm_dir() -> Option<PathBuf> {
+    let candidates = [
+        std::env::var_os("MP_SITL_WASM").map(PathBuf::from),
+        std::env::current_exe()
+            .ok()
+            .and_then(|exe| exe.parent().map(|dir| dir.join("sitl-wasm"))),
+        Some(Path::new(env!("CARGO_MANIFEST_DIR")).join("../../tools/sitl/wasm")),
+    ];
+    candidates
+        .into_iter()
+        .flatten()
+        .find(|dir| dir.join(BRIDGE).is_file())
+}
+
+/// Node: `MP_NODE`, else `node` on `PATH`, else where Homebrew and the installers put it - a
+/// program started from the Finder has no shell's `PATH`.
+#[must_use]
+pub fn find_node() -> Option<PathBuf> {
+    if let Some(node) = std::env::var_os("MP_NODE").map(PathBuf::from) {
+        return node.is_file().then_some(node);
+    }
+    let name = if cfg!(windows) { "node.exe" } else { "node" };
+    let path = std::env::var_os("PATH").unwrap_or_default();
+    std::env::split_paths(&path)
+        .chain(
+            ["/opt/homebrew/bin", "/usr/local/bin", "/usr/bin"]
+                .into_iter()
+                .map(PathBuf::from),
+        )
+        .map(|dir| dir.join(name))
+        .find(|candidate| candidate.is_file())
+}
+
+/// The bridge script in the WebAssembly folder.
+pub const BRIDGE: &str = "bridge.mjs";
+/// The port the bridge serves, the C#'s SITL port (`model::SITL_LINK`).
+pub const LOCAL_WASM_PORT: u16 = 5760;
+
+/// The local WebAssembly module for a picture's file: all four vehicles are built, the heli as
+/// ArduPilot's `arducopter-heli` target names it.
+#[must_use]
+pub fn local_wasm_module(file: &str) -> Option<&'static str> {
+    match file {
+        "ArduCopter.elf" => Some("arducopter.js"),
+        "ArduPlane.elf" => Some("arduplane.js"),
+        "ArduRover.elf" => Some("ardurover.js"),
+        "ArduHeli.elf" => Some("arducopter-heli.js"),
+        _ => None,
+    }
+}
+
+/// The C#'s command line as the WebAssembly vehicle takes it: SERIAL0 the module's exports
+/// (`--serial0 wasm`, the others off, as ArduPilot's own smoke test starts it) where the C# gives
+/// `--serial0 tcp:0`, and no `--defaults` file - the module cannot read the disk, and loads its
+/// vehicle's defaults from its own ROMFS. The model, home, speed-up, extra line and `--wipe` stay.
+#[must_use]
+pub fn local_wasm_arguments(line: &str) -> Vec<String> {
+    let mut out = Vec::new();
+    let mut words = model::split_arguments(line).into_iter();
+    while let Some(word) = words.next() {
+        if word == "--serial0" || word == "--defaults" {
+            let _ = words.next();
+            continue;
+        }
+        out.push(word);
+    }
+    out.extend(
+        ["--serial0", "wasm", "--serial1", "none", "--serial2", "none"].map(str::to_owned),
+    );
+    out
+}
+
+/// A command-line word, quoted when it holds a space, for [`model::split_arguments`] and Windows.
+fn quote(word: &str) -> String {
+    if word.contains(' ') {
+        format!("\"{word}\"")
+    } else {
+        word.to_owned()
+    }
+}
+
+/// The owner's "try local wasm" (2026-10-04): the four vehicles' WebAssembly builds in
+/// `tools/sitl/wasm/`, started under Node by `bridge.mjs`, which serves their SERIAL0 on
+/// tcp:127.0.0.1:5760. Not in the C#.
+#[derive(Debug)]
+pub struct LocalWasm {
+    /// `simulator`: the bridges started.
+    processes: Processes,
+    /// The port the bridge serves: [`LOCAL_WASM_PORT`], another in a test.
+    port: u16,
+}
+
+impl Default for LocalWasm {
+    fn default() -> Self {
+        Self {
+            processes: Processes::default(),
+            port: LOCAL_WASM_PORT,
+        }
+    }
+}
+
+impl Launcher for LocalWasm {
+    fn name(&self) -> String {
+        "local wasm".to_owned()
+    }
+
+    fn image(
+        &self,
+        file: &str,
+        _release: Option<ReleaseType>,
+        _dir: &Path,
+        _fetch: &dyn Fetch,
+        _say: &dyn Fn(&str),
+    ) -> Image {
+        let Some(module) = local_wasm_module(file) else {
+            return Image::NotAvailable(format!(
+                "try local wasm: there is no local WebAssembly build of {file} in tools/sitl/wasm"
+            ));
+        };
+        let Some(dir) = local_wasm_dir() else {
+            return Image::NotAvailable(
+                "try local wasm: the WebAssembly builds are not here - tools/sitl/wasm, or a \
+                 folder named by MP_SITL_WASM"
+                    .to_owned(),
+            );
+        };
+        if find_node().is_none() {
+            return Image::NotAvailable(
+                "try local wasm: Node.js is needed to run the WebAssembly SITL, and none was \
+                 found (MP_NODE names one)"
+                    .to_owned(),
+            );
+        }
+        Image::Found(dir.join(module))
+    }
+
+    /// Node running the bridge over the module `spawn.program` names, with the command line
+    /// translated by [`local_wasm_arguments`].
+    fn spawn(&self, spawn: &Spawn) -> Result<(), String> {
+        let node = find_node().ok_or("Node.js was not found")?;
+        let bridge = spawn
+            .program
+            .parent()
+            .map(|dir| dir.join(BRIDGE))
+            .ok_or("the module has no folder")?;
+        let mut words = vec![
+            quote(&bridge.display().to_string()),
+            quote(&spawn.program.display().to_string()),
+            self.port.to_string(),
+        ];
+        words.extend(
+            local_wasm_arguments(&spawn.arguments)
+                .iter()
+                .map(|word| quote(word)),
+        );
+        self.processes.start(&Spawn {
+            program: node,
+            arguments: words.join(" "),
+            ..spawn.clone()
+        })
+    }
+
+    fn kill_all(&self) {
+        self.processes.kill_all();
+    }
+}
+
 /// The source `CheckandGetSITLImage` takes on the system this runs on.
 /// `// C#: GCSViews/SITL.cs:302-303, 340-341, 377`
 #[must_use]
@@ -671,6 +847,115 @@ pub mod tests {
     use super::*;
     use std::collections::HashMap;
     use std::sync::atomic::{AtomicUsize, Ordering};
+
+    /// The C#'s line as the WebAssembly vehicle takes it: SERIAL0 the exports, the others off,
+    /// no `--defaults` file; the model, home, speed-up, extra words and `--wipe` kept.
+    #[test]
+    fn the_command_line_is_translated_for_the_webassembly_vehicle() {
+        let extra = model::extra_arguments("/data/sitl/default_params/copter.parm", "--foo 1", true);
+        let line = model::arguments("quad", "-35.36,149.16,584,353", 1, &extra);
+        assert_eq!(
+            local_wasm_arguments(&line),
+            [
+                "-Mquad",
+                "-O-35.36,149.16,584,353",
+                "-s1",
+                "--foo",
+                "1",
+                "--wipe",
+                "--serial0",
+                "wasm",
+                "--serial1",
+                "none",
+                "--serial2",
+                "none",
+            ]
+        );
+        assert_eq!(local_wasm_module("ArduCopter.elf"), Some("arducopter.js"));
+        assert_eq!(local_wasm_module("ArduPlane.elf"), Some("arduplane.js"));
+        assert_eq!(local_wasm_module("ArduRover.elf"), Some("ardurover.js"));
+        assert_eq!(local_wasm_module("ArduHeli.elf"), Some("arducopter-heli.js"));
+        assert_eq!(local_wasm_module("ArduSub.elf"), None);
+        assert_eq!(quote("/a b/c.js"), "\"/a b/c.js\"");
+    }
+
+    /// A file with no local build: said so, nothing started.
+    #[test]
+    fn a_vehicle_with_no_local_build_says_so() {
+        let wasm = LocalWasm::default();
+        let image = wasm.image(
+            "ArduSub.elf",
+            None,
+            Path::new("/nowhere"),
+            &StubWeb::default(),
+            &|_| {},
+        );
+        assert!(
+            matches!(&image, Image::NotAvailable(note) if note.contains("no local WebAssembly build of ArduSub.elf")),
+            "{image:?}"
+        );
+    }
+
+    /// The path the box takes, end to end: the copter picture's start through [`LocalWasm`] - the
+    /// module found, Node running the bridge - and MAVLink from the WebAssembly vehicle on the
+    /// bridge's port. Skipped where Node or the builds are not here. (The plane, rover and heli
+    /// builds are checked the same way by hand: tools/sitl/wasm/README.md.)
+    #[test]
+    fn the_local_copter_speaks_mavlink_on_the_bridges_port() {
+        if find_node().is_none() || local_wasm_dir().is_none() {
+            eprintln!("skipped: needs Node and tools/sitl/wasm (MP_NODE, MP_SITL_WASM)");
+            return;
+        }
+        let port = std::net::TcpListener::bind("127.0.0.1:0")
+            .and_then(|listener| listener.local_addr())
+            .map(|address| address.port())
+            .expect("a free port");
+        let wasm = LocalWasm {
+            processes: Processes::default(),
+            port,
+        };
+        let dir = scratch("local-wasm");
+        let request = Request {
+            vehicle: Vehicle::Multirotor,
+            release: None,
+            model_text: String::new(),
+            home: "-35.363262,149.165237,584,353".to_owned(),
+            speedup: 1,
+            cmdline: String::new(),
+            wipe: false,
+            dir,
+            path: std::env::var("PATH").unwrap_or_default(),
+        };
+        let outcome = start(&wasm, &StubWeb::default(), &request, &|_| {}, &|_| {});
+        assert!(matches!(outcome, Outcome::Connect { .. }), "{outcome:?}");
+        let deadline = std::time::Instant::now() + Duration::from_secs(60);
+        let mut seen = Vec::new();
+        while std::time::Instant::now() < deadline && !seen.contains(&0xFD) {
+            if let Ok(mut socket) = std::net::TcpStream::connect(("127.0.0.1", port)) {
+                let _ = socket.set_read_timeout(Some(Duration::from_secs(2)));
+                let mut buffer = [0u8; 4096];
+                while std::time::Instant::now() < deadline {
+                    match std::io::Read::read(&mut socket, &mut buffer) {
+                        Ok(0) | Err(_) => break,
+                        Ok(read) => {
+                            seen.extend_from_slice(&buffer[..read]);
+                            if seen.contains(&0xFD) {
+                                break;
+                            }
+                        }
+                    }
+                }
+            } else {
+                std::thread::sleep(Duration::from_millis(200));
+            }
+        }
+        wasm.kill_all();
+        assert!(
+            seen.contains(&0xFD),
+            "no MAVLink 2 from the WebAssembly copter in 60 s ({} bytes)",
+            seen.len()
+        );
+    }
 
     /// A web of fixed files that records what was asked of it.
     #[derive(Debug, Default)]

@@ -240,6 +240,10 @@ pub struct Sitl {
     zoom_pending: bool,
     /// Where simulators come from on this desktop.
     launcher: Arc<dyn Launcher>,
+    /// The owner's "try local wasm" (2026-10-04): the WebAssembly builds under Node.
+    local_wasm: Arc<dyn Launcher>,
+    /// The box: ticked by default on macOS, where it is the only simulator that runs.
+    pub try_local_wasm: bool,
     /// A start on its way.
     worker: Option<Receiver<Progress>>,
     /// The loading box's text while a start downloads.
@@ -316,6 +320,8 @@ impl Sitl {
             press: None,
             zoom_pending: false,
             launcher,
+            local_wasm: Arc::new(launcher::LocalWasm::default()),
+            try_local_wasm: cfg!(target_os = "macos"),
             worker: None,
             saying: None,
             note: None,
@@ -381,7 +387,7 @@ impl Sitl {
         use_imagery(&self.map, imagery);
         self.active = true;
         if self.note.is_none() {
-            self.note = self.launcher.note();
+            self.note = self.chosen().note();
         }
         if self.note.is_some() && !self.probed {
             self.start_probe();
@@ -605,6 +611,22 @@ impl Sitl {
         self.wipe = !self.wipe;
     }
 
+    /// The "try local wasm" box clicked: the pictures' launcher changed, and the note with it.
+    pub fn toggle_local_wasm(&mut self) {
+        self.stop_typing();
+        self.try_local_wasm = !self.try_local_wasm;
+        self.note = self.chosen().note();
+    }
+
+    /// The launcher a picture's click uses: the local WebAssembly one with the box ticked.
+    fn chosen(&self) -> Arc<dyn Launcher> {
+        if self.try_local_wasm {
+            Arc::clone(&self.local_wasm)
+        } else {
+            Arc::clone(&self.launcher)
+        }
+    }
+
     /// The release `cmb_version` names; `None` for "Skip Download".
     #[must_use]
     pub fn release(&self) -> Option<mp_firmware::manifest::ReleaseType> {
@@ -798,7 +820,10 @@ impl MissionPlanner {
             path: std::env::var("PATH").unwrap_or_default(),
         };
         self.sitl.outcome = None;
-        let launcher = Arc::clone(&self.sitl.launcher);
+        // The other source's simulators go too: both serve 5760.
+        self.sitl.launcher.kill_all();
+        self.sitl.local_wasm.kill_all();
+        let launcher = self.sitl.chosen();
         self.sitl.worker = run(move |fetch, say| {
             launcher::start(launcher.as_ref(), fetch, &request, say, &std::thread::sleep)
         });
@@ -972,7 +997,8 @@ pub fn record_facts(sitl: &Sitl, persisted: &crate::settings::Persisted) {
             |home| format!("{},{}", home.latitude(), home.longitude()),
         ),
     );
-    record("sitl.launcher", sitl.launcher.name());
+    record("sitl.launcher", sitl.chosen().name());
+    record("sitl.local_wasm", sitl.try_local_wasm);
     record(
         "sitl.note",
         sitl.note.clone().unwrap_or_else(|| "none".to_owned()),

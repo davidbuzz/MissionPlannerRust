@@ -425,7 +425,8 @@ fn advanced(
             |this, event| this.sitl.key(event),
             cx,
         ))
-        .child(wipe(sitl.wipe, cx));
+        .child(wipe(sitl.wipe, cx))
+        .child(local_wasm(sitl.try_local_wasm, cx));
     // `cmb_model` at (169, 17), 121 by 21: a text to type into and a list to choose from.
     let place = (169.0, 17.0, 121.0, 21.0);
     let model_typing = typing(Field::Model);
@@ -594,6 +595,41 @@ fn wipe(checked: bool, cx: &mut Context<MissionPlanner>) -> AnyElement {
                 .child(model::WIPE)
                 .on_click(cx.listener(|this, _event, _window, cx| {
                     this.sitl.toggle_wipe();
+                    cx.notify();
+                })),
+        )
+        .into_any_element()
+}
+
+/// The owner's "try local wasm" box (2026-10-04), beside Wipe: the four pictures start the
+/// WebAssembly builds in `tools/sitl/wasm` under Node. Not in the C#.
+fn local_wasm(checked: bool, cx: &mut Context<MissionPlanner>) -> AnyElement {
+    div()
+        .absolute()
+        .left(px(700.0))
+        .top(px(17.0))
+        .child(
+            crate::probe::measured("sitl-local-wasm", div())
+                .id("sitl-local-wasm")
+                .flex()
+                .items_center()
+                .gap_1()
+                .cursor_pointer()
+                .text_color(rgb(theme::TEXT))
+                .child(
+                    div()
+                        .size(px(12.0))
+                        .flex()
+                        .items_center()
+                        .justify_center()
+                        .border_1()
+                        .border_color(rgb(theme::BORDER))
+                        .bg(rgb(theme::ACTION))
+                        .children(checked.then(|| div().size(px(6.0)).bg(rgb(theme::ACCENT)))),
+                )
+                .child("try local wasm")
+                .on_click(cx.listener(|this, _event, _window, cx| {
+                    this.sitl.toggle_local_wasm();
                     cx.notify();
                 })),
         )

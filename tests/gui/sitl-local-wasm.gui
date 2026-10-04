@@ -1,0 +1,35 @@
+# SIMULATION's "try local wasm" box (the owner's proposal of 2026-10-04): the copter picture
+# starts the WebAssembly ArduCopter in tools/sitl/wasm under Node, through bridge.mjs, which serves
+# its SERIAL0 on tcp:127.0.0.1:5760; FLIGHT DATA shows and connects as for a native SITL, and the
+# vehicle is heard and its parameters fetched.
+#
+# The box is unticked by default here (ticked by default on macOS only), so the script ticks it;
+# the launcher the pictures use changes with it. Needs Node (skipped without), and port 5760 free.
+screen simulation
+window 1600x1200
+budget 40
+env XDG_DATA_HOME $WORK
+env MP_CONFIG_XML $WORK/config.xml
+setup command -v node > /dev/null || { echo 'needs Node.js to run the WebAssembly SITL' >&2; exit 3; }
+linux: setup if ss -Hltn 'sport = :5760' | grep -q .; then echo 'port 5760 is busy: this test launches its own SITL there; stop the one running first' >&2; exit 3; fi
+
+expect screen simulation
+linux: expect sitl.local_wasm false
+linux: expect sitl.launcher manifest SITL_x86_64_linux_gnu
+click sitl-local-wasm
+expect sitl.local_wasm true
+expect sitl.launcher local wasm
+
+click sitl-picture-quad
+expect sitl.running true
+within 25
+expect sitl.outcome connect tcp:127.0.0.1:5760
+expect sitl.arguments ~ -O-35.36
+expect sitl.running false
+
+expect screen fly
+expect vehicle.connected true
+within 60
+expect vehicle.count > 0
+within 60
+expect params.held > 500
