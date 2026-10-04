@@ -51,7 +51,7 @@
 
 use gpui::{AnyElement, Context, div, prelude::*, px, rgb};
 
-use super::compass::{address, bus, bus_type_name, compass_dev_type, devtype};
+use super::compass::{address, bus, bus_type_name, compass_dev_type, compass_type_name, devtype};
 use crate::MissionPlanner;
 use crate::setup::Key;
 use crate::telemetry::TelemetryView;
@@ -211,6 +211,36 @@ pub fn dev_type(param: &str, devid: u32) -> String {
     } else {
         enum_name(&IMU_TYPES, kind)
     }
+}
+
+/// `DeviceStructure.ToString()`: the parameter's name, the id, its bus type, bus, address, and
+/// the device type the name says - compass, barometer, airspeed or IMU - else all four guesses,
+/// "compass or IMU or baro or IMU " as the C# writes them (the temp form's "decode HWIDs" passes
+/// no name). The C#'s trailing spaces kept.
+/// `// C#: ExtLibs/Utilities/Device.cs:86-98`
+#[must_use]
+pub fn device_structure(param: &str, devid: u32) -> String {
+    let kind = devtype(devid);
+    let compass = compass_type_name(kind);
+    let imu = enum_name(&IMU_TYPES, kind);
+    let baro = enum_name(&BARO_TYPES, kind);
+    let types = if param.contains("COMPASS") {
+        compass
+    } else if param.contains("BARO") {
+        baro
+    } else if param.contains("ASP") {
+        enum_name(&AIRSPEED_TYPES, kind)
+    } else if param.contains("INS") {
+        imu
+    } else {
+        format!("{compass} or {imu} or {baro} or {imu} ")
+    };
+    format!(
+        "{param} devid {devid} bus type {} bus {} address {} devtype {types} ",
+        bus_type_name(devid),
+        bus(devid),
+        address(devid),
+    )
 }
 
 /// `(uint)a.Value`: the double to a 64-bit integer, towards zero, and its low 32 bits - what the
@@ -494,6 +524,24 @@ mod tests {
         assert!(position("COMPASS_DEV_ID") < position("COMPASS_DEV_ID2"));
         assert!(names.contains(&"MOT_IDLE_SEC"));
         assert!(!names.iter().any(|name| name.contains("_IDX")));
+    }
+
+    /// `DeviceStructure.ToString()`: with no name, all four guesses at the type; with a compass's,
+    /// the compass's. 97539 is bus type 3 (UAVCAN), bus 0, address 125, device type 1.
+    #[test]
+    fn device_structure_is_the_csharps_to_string() {
+        assert_eq!(
+            device_structure("", 97_539),
+            format!(
+                " devid 97539 bus type UAVCAN bus 0 address 125 devtype HMC5883_OLD or {imu} or \
+                 BARO_SITL or {imu}  ",
+                imu = enum_name(&IMU_TYPES, 1)
+            )
+        );
+        assert_eq!(
+            device_structure("COMPASS_DEV_ID", 97_539),
+            "COMPASS_DEV_ID devid 97539 bus type UAVCAN bus 0 address 125 devtype HMC5883_OLD "
+        );
     }
 
     /// Each id taken apart as `Device.DeviceStructure` does, the type from the name.

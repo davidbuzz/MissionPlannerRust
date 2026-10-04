@@ -35,7 +35,9 @@
 //!   sure?", `doReboot(false, true)`), Force Accel Cal and Force Compass Cal (`PREFLIGHT_CALIBRATION`
 //!   with 76 as param 5 or param 2), DFU Mode (`doDFUBoot`), QNH (an `InputBox` for
 //!   GND_ABS_PRESS, else BARO1_GND_PRESS), Lockup MAV (asked twice); what the C# shows in a box
-//!   when one fails is said on the status line, by the owner's ruling;
+//!   when one fails is said on the status line, by the owner's ruling; and decode HWIDs, the ids
+//!   typed taken apart as `Device.DeviceStructure` does, in a box (one line of ids here, where
+//!   the C#'s box takes several);
 //! * out of scope by a ruling, dimmed, its press saying why on the status line: Follow Me, OSDVideo,
 //!   Moving Base and the four Swarm tools (PLAN.md section 12 D13, 2026-09-25), Lang Edit (the
 //!   translation editor, with languages muted, 2026-09-25), Custom GDAL (no GDAL bindings, the
@@ -50,7 +52,7 @@ use gpui::{
     StatefulInteractiveElement, Styled, Window, div, px, relative, rgb,
 };
 
-use crate::config::firmware::{BoxIds, DO_COMMAND_TIMEOUT, question_box};
+use crate::config::firmware::{BoxIds, DO_COMMAND_TIMEOUT, Waiting, message_box, question_box};
 use crate::config::optional::{InputBox, input_box};
 use crate::fly::{PLEASE_CONNECT, error_box};
 use crate::telemetry::Report;
@@ -234,6 +236,7 @@ pub(crate) fn tool(name: &str) -> Tool {
         "but_dfumode" => Tool::Act(Act::DfuMode),
         "BUT_QNH" => Tool::Act(Act::Qnh),
         "but_lockup" => Tool::Act(Act::Lockup),
+        "but_hwids" => Tool::Act(Act::DecodeHwids),
         "BUT_follow_me" | "but_osdvideo" | "BUT_movingbase" | "BUT_swarm" | "BUT_followleader"
         | "but_trimble" | "but_followswarm" => Tool::Unavailable(SECTION_12_D13),
         "BUT_lang_edit" => Tool::Unavailable(LANGUAGES_MUTED),
@@ -261,6 +264,29 @@ pub(crate) enum Act {
     /// `but_lockup_Click`: asked twice, then `PREFLIGHT_REBOOT_SHUTDOWN` 42, 24, 71, 93 not waited
     /// for. `// C#: temp.cs:1230-1239`
     Lockup,
+    /// `but_hwids_Click`: ids asked for, each taken apart as `Device.DeviceStructure` does.
+    /// `// C#: temp.cs:1120-1148`
+    DecodeHwids,
+}
+
+/// `but_hwids_Click`'s report: for every whole number in each line, the line (its tabs as
+/// spaces) and the device that id names, a line each.
+/// `// C#: temp.cs:1125-1145`
+#[must_use]
+fn decode_hwids(value: &str) -> String {
+    let mut out = String::new();
+    for line in value.split(['\r', '\n']).filter(|line| !line.is_empty()) {
+        for piece in line.split([' ', '\t']) {
+            if let Ok(id) = piece.parse::<u32>() {
+                out.push_str(&format!(
+                    "{} = {}\n",
+                    line.replace('\t', " "),
+                    crate::config::hw_ids::device_structure("", id)
+                ));
+            }
+        }
+    }
+    out
 }
 
 /// `MAV_CMD.PREFLIGHT_CALIBRATION` and `MAV_CMD.PREFLIGHT_REBOOT_SHUTDOWN`.
@@ -278,6 +304,8 @@ const LOCKUP_CAPTION: &str = "Lockup";
 const LOCKUP_TEXT: &str = "Lockup the autopilot??? this can cause a CRASH!!!!!!";
 const QNH_TITLE: &str = "QNH";
 const QNH_PROMPT: &str = "Enter the QNH in pascals (103040 = 1030.4 hPa)";
+const HWID_TITLE: &str = "hwid";
+const HWID_PROMPT: &str = "Enter the ID number";
 
 /// The parameter QNH sets: `GND_ABS_PRESS` where the vehicle has it, else `BARO1_GND_PRESS`.
 /// `// C#: temp.cs:670`
@@ -300,8 +328,19 @@ enum Asking {
         /// Lockup asks twice: whether this is the first time.
         again: bool,
     },
-    /// `InputBox.Show(title, prompt, ref value)`, for QNH: the parameter it sets.
-    Input { input: InputBox, param: &'static str },
+    /// `InputBox.Show(title, prompt, ref value)`, and what its OK goes on to.
+    Input { input: InputBox, then: Answered },
+    /// `CustomMessageBox.Show(text)`: what a tool found.
+    Message { text: String },
+}
+
+/// What an input box's answer is for.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Answered {
+    /// QNH: the parameter it sets.
+    Qnh(&'static str),
+    /// decode HWIDs.
+    Hwids,
 }
 
 /// The tab's state: the last button pressed, for the facts, and the question showing.
@@ -374,17 +413,29 @@ fn act(
                 .map_or_else(|| "0".to_owned(), |(_, value)| value.to_string());
             this.experimental.asking = Some(Asking::Input {
                 input: InputBox::new(QNH_TITLE, QNH_PROMPT, &current),
-                param,
+                then: Answered::Qnh(param),
             });
-            let focus = this
-                .experimental
-                .focus
-                .get_or_insert_with(|| cx.focus_handle())
-                .clone();
-            focus.focus(window, cx);
+            focus_input(this, window, cx);
+        }
+        Act::DecodeHwids => {
+            this.experimental.asking = Some(Asking::Input {
+                input: InputBox::new(HWID_TITLE, HWID_PROMPT, "0"),
+                then: Answered::Hwids,
+            });
+            focus_input(this, window, cx);
         }
         Act::ForceAccelCal | Act::ForceCompassCal | Act::DfuMode => send(this, what),
     }
+}
+
+/// The input box given the keyboard, its handle made the first time.
+fn focus_input(this: &mut MissionPlanner, window: &mut Window, cx: &mut Context<MissionPlanner>) {
+    let focus = this
+        .experimental
+        .focus
+        .get_or_insert_with(|| cx.focus_handle())
+        .clone();
+    focus.focus(window, cx);
 }
 
 /// A command sent, once its questions are answered: what the C# shows in a box on failure said
@@ -415,7 +466,7 @@ fn send(this: &mut MissionPlanner, what: Act) {
         Act::Lockup => this
             .telemetry
             .command_unacknowledged(PREFLIGHT_REBOOT_SHUTDOWN, LOCKUP),
-        Act::Qnh => true,
+        Act::Qnh | Act::DecodeHwids => true,
     };
     if !sent {
         this.file_status = Some(error_box(PLEASE_CONNECT));
@@ -446,7 +497,19 @@ fn answer(this: &mut MissionPlanner, yes: bool) {
             });
         }
         Asking::Confirm { then, .. } => send(this, then),
-        Asking::Input { input, param } => match input.field.value().trim().parse::<f64>() {
+        Asking::Message { .. } => {}
+        Asking::Input {
+            input,
+            then: Answered::Hwids,
+        } => {
+            this.experimental.asking = Some(Asking::Message {
+                text: decode_hwids(input.field.value()),
+            });
+        }
+        Asking::Input {
+            input,
+            then: Answered::Qnh(param),
+        } => match input.field.value().trim().parse::<f64>() {
             Ok(value) => {
                 let target = this.telemetry.send_handle().map(|(_, vehicle)| vehicle);
                 let sent = target.and_then(|vehicle| {
@@ -487,6 +550,17 @@ fn asking_box(
             Buttons::YesNo,
             window,
             answer,
+            cx,
+        )),
+        Asking::Message { text } => Some(message_box(
+            IDS,
+            &Waiting {
+                text: text.clone(),
+                caption: String::new(),
+                buttons: None,
+            },
+            window,
+            |this| this.experimental.asking = None,
             cx,
         )),
         Asking::Input { input, .. } => {
@@ -640,6 +714,7 @@ pub(crate) fn record_facts(state: &Experimental) {
             None => "none".to_owned(),
             Some(Asking::Confirm { text, .. }) => (*text).to_owned(),
             Some(Asking::Input { input, .. }) => format!("{}: {}", input.title, input.prompt),
+            Some(Asking::Message { text }) => format!("message: {}", text.trim_end()),
         },
     );
 }
@@ -685,7 +760,7 @@ mod tests {
                 Tool::Unavailable(why) => assert!(!why.is_empty()),
             }
         }
-        assert_eq!(opens, 15);
+        assert_eq!(opens, 16);
         assert_eq!(tool("BUT_swarm"), Tool::Unavailable(SECTION_12_D13));
         assert_eq!(tool("but_GDAL"), Tool::Unavailable(NO_GDAL));
         assert_eq!(tool("but_reboot"), Tool::Act(Act::Reboot));
@@ -702,6 +777,19 @@ mod tests {
         assert_eq!(FORCE_COMPASS.iter().filter(|p| **p != 0.0).count(), 1);
         assert_eq!(DFU_BOOT[..4], [42.0, 24.0, 71.0, 99.0]);
         assert_eq!(LOCKUP[..4], [42.0, 24.0, 71.0, 93.0]);
+    }
+
+    /// decode HWIDs: each whole number on a line, the line and its device; words skipped; a
+    /// line with two ids reported twice, as the C#'s loop reports the whole line for each.
+    #[test]
+    fn decode_hwids_takes_each_id_apart() {
+        let id = 97_539;
+        let expected = format!("{id} = {}\n", crate::config::hw_ids::device_structure("", id));
+        assert_eq!(decode_hwids("97539"), expected);
+        assert_eq!(decode_hwids("compass\n97539"), expected);
+        assert_eq!(decode_hwids("1\t2").lines().count(), 2);
+        assert!(decode_hwids("1\t2").starts_with("1 2 = "));
+        assert_eq!(decode_hwids(""), "");
     }
 
     /// QNH sets GND_ABS_PRESS where the vehicle has it, else BARO1_GND_PRESS.

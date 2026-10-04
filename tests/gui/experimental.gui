@@ -6,8 +6,8 @@
 # tab between LOGS and PLUGINS, and Ctrl+F shows it: temp.cs's table of 63 buttons, each beside
 # what it does, as temp.Designer.cs and temp.resx lay them out (crates/mp-gui/src/experimental.rs).
 #
-# The claim: Ctrl+F shows the tab; the 63 buttons are there, fifteen working - nine opening
-# windows this application has, six commands to the vehicle (experimental-actions.gui); NMEA opens
+# The claim: Ctrl+F shows the tab; the 63 buttons are there, sixteen working - nine opening
+# windows this application has, seven tools of its own (experimental-actions.gui); NMEA opens
 # the NMEA output window as CONFIG > Advanced's NMEA does; a ruled-out tool says why on the status
 # line, and one not yet ported says so.
 screen fly
@@ -20,7 +20,7 @@ expect screen fly
 key ctrl+f
 expect screen experimental
 expect experimental.buttons 63
-expect experimental.working 15
+expect experimental.working 16
 # A window this application has: the NMEA output, as Advanced's NMEA opens it.
 click experimental-BUT_outputnmea
 expect experimental.last BUT_outputnmea

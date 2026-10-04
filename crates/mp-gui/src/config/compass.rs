@@ -246,7 +246,15 @@ pub fn compass_dev_type(devid: u32) -> String {
     if devid & 0x7 == 3 {
         return format!("SENSOR_ID#{}", devtype(devid));
     }
-    match devtype(devid) {
+    compass_type_name(devtype(devid))
+}
+
+/// `compass_type`'s name without `DEVTYPE_`, or the number for one it does not name:
+/// `(compass_type)devtype`'s `ToString()`, as `DeviceStructure.ToString` writes it.
+/// `// C#: ExtLibs/Utilities/Device.cs:65, 101-127`
+#[must_use]
+pub fn compass_type_name(kind: u32) -> String {
+    match kind {
         0x01 => "HMC5883_OLD",
         0x07 => "HMC5883",
         0x02 => "LSM303D",
