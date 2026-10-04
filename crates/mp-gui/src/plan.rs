@@ -4004,12 +4004,14 @@ fn strip_checks(
         .child(checks)
 }
 
-/// The waypoint table.
+/// The waypoint table. `fill`: it takes the height it is given - the lower third under the map -
+/// and its rows scroll in what is left; otherwise the rows scroll past 280 pixels.
 pub fn items_panel(
     plan_items: &[MissionItem],
     selected: Option<u16>,
     strip: AnyElement,
     minimised: bool,
+    fill: bool,
     cx: &mut Context<MissionPlanner>,
 ) -> impl IntoElement {
     // `but_mincommands` at (938, 0), anchored top right: ˅ folds `panelWaypoints` to the
@@ -4124,31 +4126,38 @@ pub fn items_panel(
     // could see that item 40 existed, because the checks panel named it, and could not select it
     // to change or delete it.
     let count = plan_items.len();
-    panel(
-        "mission items",
-        div()
-            .flex()
-            .flex_col()
-            .gap_2()
-            .child(min_button)
-            .child(strip)
-            .child(
-                div()
-                    .id("plan-items")
-                    .flex()
-                    .flex_col()
-                    .max_h(px(280.0))
-                    .overflow_y_scroll()
-                    .child(rows),
-            )
-            .children((count > 8).then(|| {
-                div()
-                    .pt_1()
-                    .text_xs()
-                    .text_color(rgb(theme::DIM))
-                    .child(format!("{count} items - scroll for the rest"))
-            })),
-    )
+    let list = div()
+        .id("plan-items")
+        .flex()
+        .flex_col()
+        .overflow_y_scroll()
+        .child(rows);
+    let body = div()
+        .flex()
+        .flex_col()
+        .gap_2()
+        .child(min_button)
+        .child(strip)
+        .child(if fill {
+            list.flex_1().min_h(px(0.0))
+        } else {
+            list.max_h(px(280.0))
+        })
+        .children((count > 8).then(|| {
+            div()
+                .pt_1()
+                .text_xs()
+                .text_color(rgb(theme::DIM))
+                .child(format!("{count} items - scroll for the rest"))
+        }));
+    if fill {
+        panel("mission items", body.flex_1().min_h(px(0.0)))
+            .flex_1()
+            .min_w(px(0.0))
+            .min_h(px(0.0))
+    } else {
+        panel("mission items", body)
+    }
 }
 
 /// The editor for the selected item: what it does and how high.

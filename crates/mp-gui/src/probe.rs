@@ -221,6 +221,21 @@ pub fn clipped(name: &str) -> Option<bool> {
         .and_then(|registry| registry.get(name).map(|measured| measured.clipped))
 }
 
+/// Every control measured this frame whose paint was clipped, by name.
+#[must_use]
+pub fn clipped_names() -> Vec<String> {
+    registry().lock().map_or_else(
+        |_| Vec::new(),
+        |registry| {
+            registry
+                .iter()
+                .filter(|(_, measured)| measured.clipped)
+                .map(|(name, _)| name.clone())
+                .collect()
+        },
+    )
+}
+
 /// Where a control was laid out and what could be seen there, for saying why it was clipped;
 /// `None` for one not measured.
 #[must_use]
@@ -251,17 +266,19 @@ fn write() {
         let rect = measured.rect;
         let (cx, cy) = rect.centre();
         // `clipped`: the control was not wholly on screen - inside `visible_*`, what could be
-        // seen where it was laid out; `important`: one `layout_guard` says must be
-        // (`tests/layout.rs` reads them).
+        // seen where it was laid out; `important`: one `layout_guard` says each screen must
+        // have; `must_show`: one `layout_guard` does not let scroll out of sight - every control
+        // but a scrolling list's rows (`tests/layout.rs` reads them).
         let seen = measured.visible;
         out.push_str(&format!(
-            "  \"{name}\": {{ \"x\": {:.1}, \"y\": {:.1}, \"width\": {:.1}, \"height\": {:.1}, \"centre_x\": {cx:.1}, \"centre_y\": {cy:.1}, \"clipped\": {}, \"important\": {}, \"visible_x\": {:.1}, \"visible_y\": {:.1}, \"visible_width\": {:.1}, \"visible_height\": {:.1} }}",
+            "  \"{name}\": {{ \"x\": {:.1}, \"y\": {:.1}, \"width\": {:.1}, \"height\": {:.1}, \"centre_x\": {cx:.1}, \"centre_y\": {cy:.1}, \"clipped\": {}, \"important\": {}, \"must_show\": {}, \"visible_x\": {:.1}, \"visible_y\": {:.1}, \"visible_width\": {:.1}, \"visible_height\": {:.1} }}",
             rect.x,
             rect.y,
             rect.width,
             rect.height,
             measured.clipped,
             crate::layout_guard::is_important(name),
+            crate::layout_guard::must_show(name),
             seen.x,
             seen.y,
             seen.width,

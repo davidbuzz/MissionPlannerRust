@@ -1,0 +1,31 @@
+# The LOGS tab's pages (the owner, 2026-10-04): the flight screen's Telemetry Logs and DataFlash
+# Logs pages (tabTLogs, tablogbrowse) again here, and Review a Log - the log browser, which the
+# tab opens on, as it showed nothing else before. Each page's controls are the flight screen's
+# own (hovered, which finds them by name and presses nothing); the DataFlash page's Review a Log
+# button brings the browser's page back, as it brings the LOGS tab from the flight screen.
+#
+# Self-contained: a config.xml of its own.
+env MP_CONFIG_XML $WORK/config.xml
+screen logs
+window 1600x1200
+budget 8
+
+expect screen logs
+expect logs.page review
+hover log-name
+
+click logs-tab-tlogs
+expect logs.page tlogs
+hover fly-loadtelem
+hover fly-playlog
+hover fly-tracklog
+
+click logs-tab-dataflash
+expect logs.page dataflash
+hover fly-dfmavlink
+hover fly-logbrowse
+
+click fly-logbrowse
+expect screen logs
+expect logs.page review
+hover log-name

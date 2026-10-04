@@ -38,3 +38,13 @@ and the notification says when it ends.
 it. A guest booting, an installer running, a download: start the watcher with
 `run_in_background: true` (screenshots into a folder, a DONE line at the end), answer him
 meanwhile, and look at the pictures when the notification comes.
+
+**2026-10-04, Buzz: "do not forground wait".** It happened again: a background test run was
+still going, and to see its result I made a foreground Bash call holding
+`until grep -q TESTSDONE <output>; do sleep 5; done` with a 600 s timeout. He rejected it. A
+harness rule had already refused a plain `sleep 45` that turn. Don't get round that refusal by
+moving the sleep into an `until` loop in the foreground; that is the same wait. When a
+background job's result is what's needed next:
+- end the turn, or answer him;
+- or do the next independent piece of work;
+- the notification comes when the job ends.

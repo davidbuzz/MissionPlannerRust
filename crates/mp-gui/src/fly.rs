@@ -5697,10 +5697,12 @@ pub fn dataflash_page(data: &FlightData, cx: &mut Context<MissionPlanner>) -> An
                 fl!("flightdata-BUT_logbrowse-Text"),
                 theme::ACCENT,
                 true,
-                // `new LogBrowse().Show()`: the log browser, which is a screen of its own here.
+                // `new LogBrowse().Show()`: the log browser, which is the LOGS tab's Review a Log
+                // page here.
                 // `// C#: GCSViews/FlightData.cs:1380-1385`
                 cx.listener(|this, _event: &(), _window, cx| {
                     this.screen = crate::Screen::Logs;
+                    this.logs_page = crate::logs_tab::LogsPage::Review;
                     this.remember();
                     cx.notify();
                 }),

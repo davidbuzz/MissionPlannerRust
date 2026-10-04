@@ -64,6 +64,7 @@ mod layout_guard;
 
 mod logbrowse;
 mod logdownload;
+mod logs_tab;
 mod mapview;
 mod metadata;
 mod params;
@@ -172,12 +173,13 @@ fn dropdown(id: &'static str, rows: Vec<gpui::AnyElement>) -> gpui::AnyElement {
 /// Which of the planning screen's panels to build.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum PlanGroup {
-    /// Every panel, in the sidebar's order.
-    All,
     /// `panelAction`'s.
     Actions,
-    /// `panelWaypoints`'.
+    /// `panelWaypoints`', stacked in a column of their own (Switch Docking's).
     Waypoints,
+    /// `panelWaypoints`' under the map: the grid filling the height it is given, the editor
+    /// beside it.
+    Grid,
 }
 use telemetry::{Telemetry, TelemetryView};
 use ui::{action, theme};
@@ -428,6 +430,8 @@ struct MissionPlanner {
     log_name: textfield::TextField,
     /// Focus for that field.
     log_name_focus: gpui::FocusHandle,
+    /// The LOGS tab's page: Telemetry Logs, DataFlash Logs or Review a Log.
+    logs_page: logs_tab::LogsPage,
     /// Focus for the log browser's prompt: Ctrl+G's line, a field's scaler, an export's name.
     log_prompt_focus: gpui::FocusHandle,
     /// Focus for the log browser itself, which Ctrl+G is heard through.
@@ -865,6 +869,7 @@ impl MissionPlanner {
             log_browse: logbrowse::LogBrowse::new(),
             log_name: textfield::TextField::new("a .BIN or .log in the plan directory"),
             log_name_focus: cx.focus_handle(),
+            logs_page: logs_tab::LogsPage::default(),
             log_prompt_focus: cx.focus_handle(),
             log_screen_focus: cx.focus_handle(),
             log_info_focus: cx.focus_handle(),
@@ -2296,8 +2301,9 @@ impl MissionPlanner {
             rally_error: rally_error.as_deref(),
             fence_busy: self.plan.fence_busy(),
         };
-        let actions = group != PlanGroup::Waypoints;
+        let actions = group == PlanGroup::Actions;
         let waypoints = group != PlanGroup::Actions;
+        let fill = group == PlanGroup::Grid;
         let mut out = Vec::new();
         if actions {
             out.push(
@@ -2357,10 +2363,28 @@ impl MissionPlanner {
                 cx,
             );
             out.push(
-                plan::items_panel(&items, selected, strip, self.plan.commands_minimised(), cx)
-                    .into_any_element(),
+                plan::items_panel(
+                    &items,
+                    selected,
+                    strip,
+                    self.plan.commands_minimised(),
+                    fill,
+                    cx,
+                )
+                .into_any_element(),
             );
-            out.push(plan::editor_panel(&items, selected, cx).into_any_element());
+            let editor = plan::editor_panel(&items, selected, cx);
+            out.push(if fill {
+                div()
+                    .id("plan-editor")
+                    .flex_shrink_0()
+                    .w(px(340.0))
+                    .overflow_y_scroll()
+                    .child(editor)
+                    .into_any_element()
+            } else {
+                editor
+            });
         }
         if actions {
             out.push(plan::checks_panel(&items, view));
@@ -2368,7 +2392,9 @@ impl MissionPlanner {
         out
     }
 
-    /// The default docking: every panel in one column beside the map.
+    /// The default docking's `panelAction` (`DockStyle.Right`): the action panels in a column at
+    /// the map's right, scrolling when they are taller than the window.
+    /// `// C#: GCSViews/FlightPlanner.resx (panelAction: Dock Right, 975,0, 131x488)`
     fn plan_sidebar(
         &self,
         view: &TelemetryView,
@@ -2393,13 +2419,16 @@ impl MissionPlanner {
                     .pr_2()
                     .overflow_y_scroll()
                     .track_scroll(&self.plan_scroll)
-                    .children(self.plan_panels(PlanGroup::All, view, window, cx)),
+                    .children(self.plan_panels(PlanGroup::Actions, view, window, cx)),
             )
             .children(ui::scroll_indicator(&self.plan_scroll))
     }
 
-    /// The planning screen by its docking: the panels' column beside the map (`FP_docking`
-    /// "Right"), or - after Switch Docking - `panelWaypoints` at the right, half the window wide,
+    /// The planning screen by its docking: as Mission Planner lays it out (`FP_docking` "Right"),
+    /// the map over `panelWaypoints` - the mission grid in the lower third, under the map (the
+    /// owner, 2026-10-04: it had been at the foot of one long column beside the map, below the
+    /// window) - and `panelAction`'s column at the right; or - after Switch Docking -
+    /// `panelWaypoints` at the right, half the window wide,
     /// and `panelAction`'s panels in a row along the bottom (120 high in the C#; these panels are
     /// taller, so the row is as high as the tallest of them and scrolls sideways). The menus and dialogs go over either.
     /// `// C#: GCSViews/FlightPlanner.cs:6762-6778`
@@ -2426,8 +2455,45 @@ impl MissionPlanner {
                 .min_h(px(0.0))
                 .gap_2()
                 .p_2()
+                .child(
+                    div()
+                        .flex()
+                        .flex_col()
+                        .flex_1()
+                        .min_w(px(0.0))
+                        .min_h(px(0.0))
+                        .gap_2()
+                        // `panelMap`, `DockStyle.Fill`: what the grid leaves.
+                        .child(
+                            div()
+                                .flex()
+                                .flex_1()
+                                .min_h(px(0.0))
+                                .child(self.map_pane(window, cx)),
+                        )
+                        // `panelWaypoints`, `DockStyle.Bottom`: the grid fills the third and
+                        // scrolls its rows; the selected item's editor sits beside it. Folded
+                        // (`but_mincommands`), it is as high as the button and the map has the
+                        // rest.
+                        .child(
+                            div()
+                                .id("plan-waypoints")
+                                .flex()
+                                .flex_shrink_0()
+                                .when(!self.plan.commands_minimised(), |grid| {
+                                    grid.h(gpui::relative(1.0 / 3.0))
+                                })
+                                .min_h(px(0.0))
+                                .gap_2()
+                                .children(self.plan_panels(
+                                    PlanGroup::Grid,
+                                    view,
+                                    window,
+                                    cx,
+                                )),
+                        ),
+                )
                 .child(self.plan_sidebar(view, window, cx))
-                .child(self.map_pane(window, cx))
                 .children(overlays)
                 .into_any_element(),
             Docking::Bottom => {
@@ -3238,6 +3304,7 @@ impl Render for MissionPlanner {
         if facts::enabled() {
             let harness = std::time::Instant::now();
             facts::record("screen", self.screen.label());
+            logs_tab::record_facts(self.logs_page);
             self.persisted.record_facts();
             i18n::record_facts();
             // Where the map draws home, as `latitude,longitude`, read back from the map, and
@@ -3921,26 +3988,48 @@ impl Render for MissionPlanner {
                 .into_any_element(),
             Screen::Plan => self.plan_screen(&view, window, cx),
             Screen::Params => self.params_body(&view, window, cx),
+            // The flight screen's two log pages and the log browser, each a tab of its own
+            // (`logs_tab`, the owner's word of 2026-10-04).
             Screen::Logs => div()
-                .id("logs-body")
                 .flex()
+                .flex_col()
                 .flex_1()
                 .min_h(px(0.0))
                 .min_w(px(0.0))
-                .child(logbrowse::screen(
-                    &self.log_browse,
-                    &self.log_name,
-                    &logbrowse::Focus {
-                        name: &self.log_name_focus,
-                        name_focused: self.log_name_focus.is_focused(window),
-                        prompt: &self.log_prompt_focus,
-                        prompt_focused: self.log_prompt_focus.is_focused(window),
-                        screen: &self.log_screen_focus,
-                        info: &self.log_info_focus,
-                        info_focused: self.log_info_focus.is_focused(window),
-                    },
-                    cx,
-                ))
+                .child(logs_tab::strip(self.logs_page, cx))
+                .child(match self.logs_page {
+                    logs_tab::LogsPage::TLogs => logs_tab::page_box(
+                        "logs-tlogs",
+                        fly::playback_page(&self.fly_data.playback, cx),
+                    )
+                    .into_any_element(),
+                    logs_tab::LogsPage::DataFlash => logs_tab::page_box(
+                        "logs-dataflash",
+                        fly::dataflash_page(&self.fly_data, cx),
+                    )
+                    .into_any_element(),
+                    logs_tab::LogsPage::Review => div()
+                        .id("logs-body")
+                        .flex()
+                        .flex_1()
+                        .min_h(px(0.0))
+                        .min_w(px(0.0))
+                        .child(logbrowse::screen(
+                            &self.log_browse,
+                            &self.log_name,
+                            &logbrowse::Focus {
+                                name: &self.log_name_focus,
+                                name_focused: self.log_name_focus.is_focused(window),
+                                prompt: &self.log_prompt_focus,
+                                prompt_focused: self.log_prompt_focus.is_focused(window),
+                                screen: &self.log_screen_focus,
+                                info: &self.log_info_focus,
+                                info_focused: self.log_info_focus.is_focused(window),
+                            },
+                            cx,
+                        ))
+                        .into_any_element(),
+                })
                 .into_any_element(),
             // Each a backstage view: the list down the left, the chosen page beside it, each
             // scrolling on its own as `pnlMenu` and `pnlPages` do.
@@ -4255,6 +4344,22 @@ fn window_size(requested: Option<&str>, saved: Option<(u32, u32)>) -> (f32, f32)
     })
 }
 
+/// A remembered or default window size cut to the screen it opens on: no wider than the display's
+/// usable area (less the taskbar or dock and the menu bar), and no taller less a title bar, so the
+/// window's bottom edge - and every page's last row - is never below the screen. 1600x1200 on a
+/// 1440x900 laptop opened 300 pixels past its bottom edge, which no layout inside it can fix (the
+/// owner's cut-off reports of 2026-10-04).
+fn fit_to_display(wanted: (f32, f32), usable: (f32, f32)) -> (f32, f32) {
+    /// A title bar's height and a little: the size gpui opens is the content's.
+    const TITLE_BAR: f32 = 40.0;
+    /// Never below what `parse_window_size` accepts.
+    const SMALLEST: (f32, f32) = (640.0, 480.0);
+    (
+        wanted.0.min(usable.0).max(SMALLEST.0),
+        wanted.1.min(usable.1 - TITLE_BAR).max(SMALLEST.1),
+    )
+}
+
 /// Parses a `WIDTHxHEIGHT` window size.
 ///
 /// `None` for anything the caller should not act on, including sizes too small to lay out - the
@@ -4446,6 +4551,8 @@ fn main() {
     // What was remembered last time, under everything given explicitly. A settings file that is
     // missing, unreadable or full of rubbish yields defaults rather than stopping startup.
     let saved = settings::Settings::load();
+    // A size asked for is opened as asked; a remembered or default one is fitted to the screen.
+    let asked = arguments.window.is_some() || std::env::var_os("MP_WINDOW").is_some();
     let (width, height) = window_size(arguments.window.as_deref(), saved.window);
     let screen = Screen::initial(arguments.screen.as_deref(), saved.screen.as_deref());
     // A link given on the command line wins; otherwise offer the one last connected to.
@@ -4460,7 +4567,23 @@ fn main() {
         // MP_WINDOW overrides it, as WIDTHxHEIGHT. Trying a size should not need a rebuild, and a
         // screenshot at a particular size should not need a code change that then has to be
         // remembered and undone.
-        let bounds = Bounds::centered(None, size(px(width), px(height)), cx);
+        let usable = cx
+            .primary_display()
+            .map(|display| display.visible_bounds())
+            .filter(|_| !asked);
+        let bounds = match usable {
+            Some(usable) => {
+                let (width, height) = fit_to_display(
+                    (width, height),
+                    (
+                        f32::from(usable.size.width),
+                        f32::from(usable.size.height),
+                    ),
+                );
+                Bounds::centered_at(usable.center(), size(px(width), px(height)))
+            }
+            None => Bounds::centered(None, size(px(width), px(height)), cx),
+        };
         let options = WindowOptions {
             window_bounds: Some(WindowBounds::Windowed(bounds)),
             titlebar: Some(TitlebarOptions {
@@ -4546,6 +4669,22 @@ mod tests {
     }
 
     use super::*;
+
+    #[test]
+    fn a_window_too_big_for_the_screen_is_cut_to_it() {
+        // The default on a 1440x900 laptop whose dock and menu bar leave 1440x875.
+        assert_eq!(
+            fit_to_display((1600.0, 1200.0), (1440.0, 875.0)),
+            (1440.0, 835.0)
+        );
+        // One that fits is left alone.
+        assert_eq!(
+            fit_to_display((1280.0, 800.0), (2560.0, 1400.0)),
+            (1280.0, 800.0)
+        );
+        // A tiny screen still gets the smallest window the planner lays out.
+        assert_eq!(fit_to_display((1600.0, 1200.0), (600.0, 400.0)), (640.0, 480.0));
+    }
 
     #[test]
     fn a_malformed_window_size_falls_back_rather_than_refusing_to_start() {

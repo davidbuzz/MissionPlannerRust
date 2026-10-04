@@ -34,8 +34,15 @@
 //!
 //! "Important" is a judgement, kept here in one place: what the operator reaches for on each
 //! screen - the mission's read, write, save and load, the map, the connect box and button, the
-//! flight screen's page strip and column, the setup and config screens' bodies. Add to the list
-//! rather than argue about a control that was hidden.
+//! flight screen's page strip and column, the setup and config screens' bodies. Each must be
+//! measured on its screen, so a screen that lost one fails rather than passing on nothing.
+//!
+//! And no control may be cut off, important or not (the owner, 2026-10-04: the planner's column
+//! ran below the window and took the mission grid with it, past a guard that only watched the
+//! Mission box's buttons - "they need to be mandatory everywhere"). Every measured control counts
+//! as hidden when its paint is clipped, but for the rows of a list that scrolls as Mission
+//! Planner's does ([`MAY_SCROLL`]): a list whose fortieth row is below its edge is a list, a
+//! panel whose bottom is below the window is a bug.
 
 // This module is internal to the binary; `pub` here documents intent rather than exporting API.
 #![allow(unreachable_pub)]
@@ -78,7 +85,24 @@ pub const IMPORTANT: &[(Screen, &[&str])] = &[
         &["main-port", "main-connect", "plugin-manager"],
     ),
     (Screen::Params, &["main-port", "main-connect"]),
+    (Screen::Logs, &["main-port", "main-connect"]),
+    (Screen::Help, &["main-port", "main-connect"]),
 ];
+
+/// The rows of the lists that scroll, by the prefix of their probe names: the only controls
+/// allowed to be out of sight. A list is named here when Mission Planner's own scrolls - a
+/// `DataGridView`, a `ListBox` - never to excuse a panel that does not fit.
+pub const MAY_SCROLL: &[&str] = &[
+    // `Commands`, the mission grid (`FlightPlanner.Designer.cs`): its rows past the third.
+    "plan-row-",
+];
+
+/// Whether a control must be wholly on screen whenever it is measured: all but a scrolling
+/// list's rows.
+#[must_use]
+pub fn must_show(name: &str) -> bool {
+    !MAY_SCROLL.iter().any(|prefix| name.starts_with(prefix))
+}
 
 /// The important ids of a screen.
 #[must_use]
@@ -95,15 +119,16 @@ pub fn is_important(name: &str) -> bool {
     IMPORTANT.iter().any(|(_, ids)| ids.contains(&name))
 }
 
-/// The important controls of `screen` whose paint was clipped this frame: measured, and not
-/// wholly inside the window and the boxes above them. A control not measured - its screen not
-/// showing, a page not built - is not hidden, it is absent; this says nothing about those.
+/// The controls on screen whose paint was clipped this frame - measured, and not wholly inside
+/// the window and the boxes above them - but for the rows [`MAY_SCROLL`] lets go. A control not
+/// measured - its screen not showing, a page not built - is not hidden, it is absent; this says
+/// nothing about those. (The probe keeps only what was measured in the last frame, which is the
+/// screen showing.)
 #[must_use]
-pub fn hidden(screen: Screen) -> Vec<&'static str> {
-    important(screen)
-        .iter()
-        .copied()
-        .filter(|name| crate::probe::clipped(name) == Some(true))
+pub fn hidden(_screen: Screen) -> Vec<String> {
+    crate::probe::clipped_names()
+        .into_iter()
+        .filter(|name| must_show(name))
         .collect()
 }
 
@@ -131,7 +156,7 @@ pub fn record_facts(screen: Screen) {
                         "{name}[{:.0},{:.0} {:.0}x{:.0} in {:.0},{:.0} {:.0}x{:.0}]",
                         at.x, at.y, at.width, at.height, seen.x, seen.y, seen.width, seen.height
                     ),
-                    None => (*name).to_owned(),
+                    None => name.clone(),
                 })
                 .collect::<Vec<_>>()
                 .join(",")
@@ -154,6 +179,10 @@ mod tests {
             Screen::Config,
             Screen::Sitl,
             Screen::Params,
+            Screen::Logs,
+            Screen::Experimental,
+            Screen::Plugins,
+            Screen::Help,
         ] {
             let ids = important(screen);
             assert!(!ids.is_empty(), "{screen:?} has no important controls");
@@ -167,6 +196,23 @@ mod tests {
             !is_important("plan-items"),
             "a scrolling list is allowed to scroll"
         );
+    }
+
+    /// Everything must show but a scrolling list's rows: the planner's column, its panels and
+    /// the grid itself may not be cut off; the grid's fortieth row may.
+    #[test]
+    fn only_a_lists_rows_may_scroll_out_of_sight() {
+        for name in [
+            "plan-sidebar",
+            "panel:mission items",
+            "panel:home",
+            "plan-read",
+            "map",
+            "experimental-table",
+        ] {
+            assert!(must_show(name), "{name}");
+        }
+        assert!(!must_show("plan-row-40"));
     }
 
     /// The owner's case: the Mission box's buttons are on the planner's list, so a planner whose

@@ -35,11 +35,12 @@
 #                               of its window taken - <name>-hardstop.png in MP_GUI_SHOT_DIR,
 #                               /tmp by default; the suite puts it beside the logs - and is
 #                               killed, a failure (the owner's request of 2026-09-25)
-#   allow-hidden                the run may end with an important control hidden (every run
-#                               otherwise fails when the application's layout.hidden fact is not
-#                               0 at its end: crates/mp-gui/src/layout_guard.rs, the owner's
-#                               self-test of 2026-10-03 - a control that matters, clipped by the
-#                               window or a box above it, fails the script that left it so)
+#   allow-hidden                the run may end with a control cut off (every run otherwise
+#                               fails when the application's layout.hidden fact is not 0 at its
+#                               end: crates/mp-gui/src/layout_guard.rs, the owner's self-test of
+#                               2026-10-03, mandatory for every control since 2026-10-04 - one
+#                               clipped by the window or a box above it, but a scrolling list's
+#                               row, fails the script that left it so)
 #   within 45                   the next expect may wait this many seconds for its fact, for
 #                               the few things slower than MP_GUI_EXPECT_WAIT (a page's partial
 #                               refresh reads its parameters back one by one)
@@ -872,14 +873,14 @@ PY
     esac
 done < "$SCRIPT"
 
-# Nothing important hidden at the end: the application judges every named control's clipping
-# from gpui's own content mask and counts the ones that matter on the screen showing
-# (crates/mp-gui/src/layout_guard.rs); a script that leaves one hidden fails, unless it said
+# Nothing cut off at the end: the application judges every named control's clipping from gpui's
+# own content mask and counts the ones clipped on the screen showing, but a scrolling list's rows
+# (crates/mp-gui/src/layout_guard.rs); a script that leaves one cut off fails, unless it said
 # `allow-hidden`. "n/a" is a run without the probe, which has nothing to judge.
 if [ -z "${ALLOW_HIDDEN:-}" ]; then
     HIDDEN=$(fact layout.hidden || true)
     if [ -n "$HIDDEN" ] && [ "$HIDDEN" != "0" ] && [ "$HIDDEN" != "n/a" ]; then
-        echo "FAIL: $HIDDEN important control(s) hidden at the end: $(fact layout.hidden.names)" >&2
+        echo "FAIL: $HIDDEN control(s) cut off at the end: $(fact layout.hidden.names)" >&2
         FAILURES=$((FAILURES + 1))
     fi
 fi

@@ -54,6 +54,9 @@ struct Rect {
     clipped: bool,
     /// Whether the application names it as one that must never be hidden (`src/layout_guard.rs`).
     important: bool,
+    /// Whether the application lets it scroll out of sight - only a scrolling list's rows may
+    /// (`src/layout_guard.rs`, `MAY_SCROLL`).
+    must_show: bool,
 }
 
 impl Rect {
@@ -171,6 +174,7 @@ fn read(path: &Path) -> BTreeMap<String, Rect> {
                 height,
                 clipped: flag("clipped"),
                 important: flag("important"),
+                must_show: flag("must_show"),
             },
         );
     }
@@ -248,51 +252,53 @@ fn the_flight_screens_left_column_fits_without_scrolling() {
     );
 }
 
-/// The owner's self-test of 2026-10-03: on every screen, every control the application names as
-/// important (`src/layout_guard.rs`) is wholly on screen at the size the window opens at - the
-/// planner's Mission box had scrolled Read WPs, Write WPs and the file buttons below the window.
-/// The application judges the clipping itself, from gpui's content mask; this reads its verdict
-/// and demands that it found something to judge.
+/// The owner's self-test of 2026-10-03, made mandatory everywhere on 2026-10-04: on every screen,
+/// at the size the window opens at and at a laptop's, no control is cut off - not wholly inside
+/// the window and every box that clips it - but a scrolling list's rows (`src/layout_guard.rs`).
+/// The planner's Mission box had scrolled Read WPs, Write WPs and the file buttons below the
+/// window; then its column ran past the window's bottom with the mission grid in it, under a
+/// guard that watched only the Mission box's buttons; the EXPERIMENTAL tab's rows ran off the
+/// bottom of the owner's Mac window, which 1600x1200 never showed. The application judges the
+/// clipping itself, from gpui's content mask; this reads its verdict, and demands that each
+/// screen's important controls were there to judge.
 #[test]
 #[ignore = "opens a window; needs a display"]
-fn no_important_control_is_hidden_on_any_screen() {
+fn no_control_is_cut_off_on_any_screen() {
     let mut hidden = Vec::new();
-    // The tabs of 2026-10-04 at a smaller window too: the EXPERIMENTAL tab's rows ran off the
-    // bottom of the owner's Mac window, which 1600x1200 never showed.
-    let big: &[(u32, u32)] = &[(1600, 1200)];
-    let both: &[(u32, u32)] = &[(1600, 1200), (1280, 800)];
     let screens = [
-        ("fly", big),
-        ("plan", big),
-        ("setup", big),
-        ("config", big),
-        ("simulation", big),
-        ("params", big),
-        ("experimental", both),
-        ("plugins", both),
+        "fly",
+        "plan",
+        "setup",
+        "config",
+        "simulation",
+        "params",
+        "logs",
+        "experimental",
+        "plugins",
+        "help",
     ];
-    for (screen, sizes) in screens {
-        for &(width, height) in sizes {
+    for screen in screens {
+        for (width, height) in [(1600, 1200), (1280, 800)] {
             let measured = measure(width, height, screen);
-            let important: Vec<_> = measured.iter().filter(|(_, rect)| rect.important).collect();
+            let important = measured.values().filter(|rect| rect.important).count();
             assert!(
-                important.len() >= 2,
-                "{screen}: only {} important controls measured; the connect box alone is two",
-                important.len()
+                important >= 2,
+                "{screen}: only {important} important controls measured; the connect box alone is two",
             );
-            for (name, rect) in important {
-                if rect.clipped {
+            for (name, rect) in &measured {
+                if rect.clipped && rect.must_show {
                     hidden.push(format!(
-                    "{screen} at {width}x{height}: {name} at {:.0},{:.0} {:.0}x{:.0} is clipped",
-                    rect.x, rect.y, rect.width, rect.height
-                ));
+                        "{screen} at {width}x{height}: {name} at {:.0},{:.0} {:.0}x{:.0} is cut off",
+                        rect.x, rect.y, rect.width, rect.height
+                    ));
                 }
             }
         }
     }
     assert!(
         hidden.is_empty(),
-        "important controls hidden:\n  {}",
+        "{} controls cut off:\n  {}",
+        hidden.len(),
         hidden.join("\n  ")
     );
 }
