@@ -95,6 +95,8 @@ const UPDATER: &str = "headless-planner";
 
 /// `Resources.help_text`, the RTF's words: its paragraphs, a tab where it has one, the links as
 /// their addresses - with "Mission Planner" read "MissionPlannerRust" (the owner, 2026-10-04).
+/// The companies are Mission Planner's, not this port's: none yet, the owner asks them to get in
+/// touch (2026-10-04).
 /// `// C#: Properties/Resources.resx (help_text)`
 pub const HELP_TEXT: &str = "\n\
     \tWelcome to the MissionPlannerRust, mission planning for Unmanned Aerial Vehicles (UAV).\n\
@@ -110,7 +112,7 @@ pub const HELP_TEXT: &str = "\n\
     \tArduCopter Illustrations: Max Levine\n\
     Librarys: Gmap.net, Sharpkml, SharpZipLib, IronPython, KMLib, OpenTK, ZedGraph, alglib, BouncyCastle, DotSpatial, LibVLC, netDXF\n\
     \n\
-    Companys that have contributed to MissionPlannerRusts development: 3D Robotics, Falcon Unmanned, UAV Solutions\n\
+    Companies that have contributed to MissionPlannerRust's development: none yet, pls get in touch\n\
     \n\
     ShortCuts\n\
     \n\
@@ -934,6 +936,11 @@ mod tests {
             "Welcome to the MissionPlannerRust, mission planning for Unmanned Aerial Vehicles (UAV)."
         ));
         assert!(HELP_TEXT.contains("Control-T - Blind connect"));
+        // No company has contributed to this port yet; Mission Planner's three are its own.
+        assert!(HELP_TEXT.contains(
+            "Companies that have contributed to MissionPlannerRust's development: none yet, pls get in touch"
+        ));
+        assert!(!HELP_TEXT.contains("3D Robotics"), "{HELP_TEXT}");
     }
     use std::collections::HashMap;
 
