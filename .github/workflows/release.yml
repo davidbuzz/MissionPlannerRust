@@ -44,8 +44,17 @@ jobs:
           MP_SMOKE: "1"
           MP_NO_TILES: "1"
           MP_NO_RECORD: "1"
-          VK_ICD_FILENAMES: /usr/share/vulkan/icd.d/lvp_icd.json
-        run: xvfb-run -a --server-args="-screen 0 1600x1200x24" dist/planner
+        # Lavapipe, Mesa's software Vulkan device, draws it, as in CI. 22.04's Mesa (23.2) names its
+        # driver file for the architecture, lvp_icd.x86_64.json, where 24.04's and newer name it
+        # lvp_icd.json; naming the latter here, the v0_0_0 run (2026-10-04) built and packaged the
+        # planner and then stopped on "Failed to create surface for any enabled backend". Found by
+        # pattern, so either spelling serves.
+        run: |
+          VK_ICD_FILENAMES=$(ls /usr/share/vulkan/icd.d/lvp_icd*.json | head -1)
+          [ -f "$VK_ICD_FILENAMES" ] || { echo "no lavapipe driver file in /usr/share/vulkan/icd.d"; exit 1; }
+          echo "lavapipe: $VK_ICD_FILENAMES"
+          export VK_ICD_FILENAMES
+          xvfb-run -a --server-args="-screen 0 1600x1200x24" dist/planner
       - name: Archive
         run: |
           V=$(grep -m1 '^version = ' Cargo.toml | sed 's/.*"\(.*\)"/\1/')
