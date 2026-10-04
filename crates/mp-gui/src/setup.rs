@@ -835,6 +835,24 @@ impl MissionPlanner {
         }
     }
 
+    /// Every page of a list, by its index: what the layout tour shows (`crate::tour`).
+    pub(crate) fn backstage_pages(&self, list: List) -> Vec<usize> {
+        self.backstage(list)
+            .pages()
+            .iter()
+            .map(|row| row.index)
+            .collect()
+    }
+
+    /// The class of the page a list is showing: where the layout guard says a cut-off was.
+    pub(crate) fn backstage_page_class(&self, list: List) -> Option<&'static str> {
+        self.backstage(list)
+            .pages()
+            .into_iter()
+            .find(|row| row.selected)
+            .map(|row| row.class)
+    }
+
     fn backstage_mut(&mut self, list: List) -> &mut Backstage {
         match list {
             List::Setup => &mut self.setup_list,

@@ -2145,7 +2145,19 @@ fn text_box(
         .border_1()
         .text_xs()
         .overflow_hidden()
-        .child(text);
+        // The C#'s double as it prints - "12.6000003814697", its filter's `0.4f` and `0.6f`
+        // leaving the voltage unround (CurrentState.cs:1295-1301) - is longer than the 76-wide
+        // box: its start shows, and an ellipsis says there is more, where it ran past the box's
+        // edge (the layout guard on the owner's Mac, 2026-10-05).
+        .child(
+            div()
+                .flex_1()
+                .min_w(px(0.0))
+                .overflow_hidden()
+                .whitespace_nowrap()
+                .text_ellipsis()
+                .child(text),
+        );
     let base = match focus {
         Some((handle, field)) if enabled => base
             .track_focus(handle)

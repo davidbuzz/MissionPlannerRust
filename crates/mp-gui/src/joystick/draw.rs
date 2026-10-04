@@ -169,7 +169,8 @@ fn button(
                 .overflow_hidden()
                 .cursor_pointer()
                 .hover(|style| style.border_color(rgb(theme::ACCENT)))
-                .child(text.into())
+                // In a box the button's width, so a narrow button's text wraps in it.
+                .child(div().w_full().child(text.into()))
                 .on_click(cx.listener(move |this, _event, window, cx| {
                     on_click(this, window, cx);
                     cx.notify();

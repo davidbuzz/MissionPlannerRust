@@ -58,7 +58,7 @@ use super::servo_output::{
     Check, CheckState, Combo, NumberHandlers, check_box, combo_box, dropdown, modal, number_box,
 };
 use crate::MissionPlanner;
-use crate::ui::{action, panel, theme};
+use crate::ui::{action, theme};
 
 /// The page, `ConfigOSD.Size`. `// C#: ConfigOSD.Designer.cs:122`
 pub const PAGE_SIZE: (f32, f32) = (1147.0, 823.0);
@@ -144,7 +144,16 @@ pub fn page(
             (PADDING + control_width, PADDING),
             cx,
         ));
-    panel(TITLE, body).into_any_element()
+    // The Designer's 823 in a border, without a titled panel's heading and padding: with them it
+    // was 847 in the 835 a 920-high window leaves the page (the layout guard on the owner's Mac,
+    // 2026-10-05). The C#'s page has no heading of its own.
+    crate::probe::measured(format!("panel:{TITLE}"), div())
+        .border_1()
+        .border_color(rgb(theme::BORDER))
+        .rounded_md()
+        .bg(rgb(theme::PANEL))
+        .child(body)
+        .into_any_element()
 }
 
 /// `panel1`'s five controls at their places.

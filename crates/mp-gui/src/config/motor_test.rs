@@ -1009,7 +1009,9 @@ fn button(
         .border_1()
         .text_xs()
         .text_center()
-        .child(text.into());
+        // Wrapping in the button: centred on one line, "Test all in Sequence" hung past both
+        // its edges and the page's (the layout guard on the owner's Mac, 2026-10-05).
+        .child(div().w_full().child(text.into()));
     if enabled {
         body.bg(rgb(theme::ACTION))
             .border_color(rgb(theme::BORDER))

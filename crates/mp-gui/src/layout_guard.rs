@@ -104,6 +104,15 @@ pub const MAY_SCROLL: &[&str] = &[
     // The Full Parameter List's groups, `treeView1`'s nodes, which scroll in their list.
     // `// C#: GCSViews/ConfigurationView/ConfigRawParams.Designer.cs`
     "param-group-",
+    // SETUP's and CONFIG's page lists, the BackstageView's `pnlMenu`, which scrolls.
+    // `// C#: ExtLibs/Controls/BackstageView/BackstageView.Designer.cs (pnlMenu)`
+    "setup-list",
+    "setup-page-",
+    "config-list",
+    "config-page-",
+    // HW IDs' grid, `myDataGridView1`, which scrolls.
+    // `// C#: GCSViews/ConfigurationView/ConfigHWIDs.Designer.cs`
+    "hwids-grid",
     // HELP's text, `richTextBox1`, which scrolls in its box.
     // `// C#: GCSViews/Help.Designer.cs (richTextBox1)`
     "help-text",
@@ -234,11 +243,11 @@ pub struct Banner {
 
 impl Banner {
     /// This frame's verdict on `screen`, in a window `size` wide and high. Each cut-off the
-    /// strip comes to show also goes to the log and to [`RECORD_FILE`], with the time, the screen
-    /// and the window's size, so every run leaves a record of every one it met that outlives it
+    /// strip comes to show also goes to the log and to [`RECORD_FILE`], with the time, the
+    /// `place` - the screen, and the page within it - and the window's size, so every run leaves a record of every one it met that outlives it
     /// (the owner, 2026-10-04: "are you capturing *all the CUT OFF events into a log ... so you
     /// dont miss them").
-    pub fn update(&mut self, screen: Screen, size: (f32, f32)) {
+    pub fn update(&mut self, place: &str, screen: Screen, size: (f32, f32)) {
         let names = if crate::probe::enabled() {
             hidden(screen)
         } else {
@@ -250,7 +259,7 @@ impl Banner {
         if let Some(text) = self.newly_shown(now) {
             let line = record_line(
                 &chrono::Local::now().format("%Y-%m-%d %H:%M:%S").to_string(),
-                screen.label(),
+                place,
                 size,
                 &text,
             );

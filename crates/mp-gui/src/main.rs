@@ -102,6 +102,7 @@ mod stderr_log;
 mod storm;
 mod survey_ui;
 mod telemetry;
+mod tour;
 mod textfield;
 mod transponder;
 mod tuning;
@@ -454,6 +455,8 @@ struct MissionPlanner {
     logs_page: logs_tab::LogsPage,
     /// The debug build's cut-off guard, said in a red strip over the window's foot.
     cut_off: layout_guard::Banner,
+    /// The layout tour, under `MP_TOUR`.
+    tour: Option<tour::Tour>,
     /// Focus for the log browser's prompt: Ctrl+G's line, a field's scaler, an export's name.
     log_prompt_focus: gpui::FocusHandle,
     /// Focus for the log browser itself, which Ctrl+G is heard through.
@@ -893,6 +896,7 @@ impl MissionPlanner {
             log_name_focus: cx.focus_handle(),
             logs_page: logs_tab::LogsPage::default(),
             cut_off: layout_guard::Banner::default(),
+            tour: tour::Tour::from_env(),
             log_prompt_focus: cx.focus_handle(),
             log_screen_focus: cx.focus_handle(),
             log_info_focus: cx.focus_handle(),
@@ -1092,6 +1096,70 @@ impl MissionPlanner {
         if let Some(folder) = file.parent() {
             self.persisted
                 .set("WPFileDirectory", folder.to_string_lossy().into_owned());
+        }
+    }
+
+    /// Where the window is, for the layout guard's record: the screen, and on FLIGHT DATA, SETUP,
+    /// CONFIG and LOGS the page within it.
+    fn place(&self) -> String {
+        let screen = self.screen.label();
+        match self.screen {
+            Screen::Fly => format!("{screen}/{}", self.fly_pages.selected().id()),
+            Screen::Setup | Screen::Config => {
+                let list = if self.screen == Screen::Setup {
+                    setup::List::Setup
+                } else {
+                    setup::List::Config
+                };
+                match self.backstage_page_class(list) {
+                    Some(class) => format!("{screen}/{class}"),
+                    None => screen.to_owned(),
+                }
+            }
+            Screen::Logs => format!("{screen}/{}", self.logs_page.name()),
+            _ => screen.to_owned(),
+        }
+    }
+
+    /// The layout tour's frame: once the vehicle's parameters are in, the next stop when the one
+    /// showing has had its time, and the application closed after the last (`crate::tour`).
+    fn tour_step(&mut self, cx: &mut Context<Self>) {
+        let Some(mut tour) = self.tour.take() else {
+            return;
+        };
+        let now = std::time::Instant::now();
+        let view = self.telemetry.view();
+        if !tour.waiting(view.parameters.len(), usize::from(view.parameters_expected), now) {
+            if !tour.has_begun() {
+                let fly_pages = self.fly_pages.shown().to_vec();
+                tour.begin(tour::stops(&fly_pages), now);
+            }
+            match tour.next(now) {
+                // The list's pages, now its screen has shown and built it; the first next frame.
+                Some(Some(tour::Stop::Pages(list))) => {
+                    let pages = self.backstage_pages(list);
+                    tour.expand(tour::pages(list, &pages), now);
+                }
+                Some(Some(stop)) => self.tour_show(stop),
+                Some(None) => {
+                    log::warn!("layout tour done: {}", tour.progress());
+                    cx.quit();
+                }
+                None => {}
+            }
+        }
+        facts::record("tour.at", tour.progress());
+        self.tour = Some(tour);
+    }
+
+    /// Shows one of the tour's stops, as the tab or the list entry would.
+    fn tour_show(&mut self, stop: tour::Stop) {
+        match stop {
+            tour::Stop::Screen(screen) => self.choose_screen(screen),
+            tour::Stop::Fly(page) => self.fly_pages.select(page),
+            tour::Stop::Backstage(list, index) => self.choose_page(list, index),
+            tour::Stop::Pages(_) => {}
+            tour::Stop::Logs(page) => self.logs_page = page,
         }
     }
 
@@ -3006,10 +3074,13 @@ impl Render for MissionPlanner {
         probe::begin_frame();
         // What that frame left cut off, for the debug build's banner.
         let viewport = window.viewport_size();
+        let place = self.place();
         self.cut_off.update(
+            &place,
             self.screen,
             (f32::from(viewport.width), f32::from(viewport.height)),
         );
+        self.tour_step(cx);
         // Where the planner's file dialogs open, for their lists.
         self.plan_menus.dialog_directory = self.dialog_directory();
         // Under MP_STORM, the frame's cost is timed from here to the marker at the end of the

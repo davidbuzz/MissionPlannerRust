@@ -3301,7 +3301,9 @@ fn table(compass: &Compass, cx: &mut Context<MissionPlanner>) -> AnyElement {
         body = body.child(line);
     }
     let width = ROW_HEADER + COLUMNS.iter().map(|(_, width)| width).sum::<f32>();
-    at(3.0, 49.0, 672.0, 209.0)
+    // As wide as its columns and its border, where the Designer's 672 scrolled the Down column
+    // out of sight (the layout guard on the owner's Mac, 2026-10-05).
+    at(3.0, 49.0, width + 4.0, 209.0)
         .child(
             crate::probe::measured("compass-table", div())
                 .id("compass-table")
