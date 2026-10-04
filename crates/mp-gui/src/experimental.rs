@@ -31,6 +31,11 @@
 //! * a window this application has, opened as CONFIG > Advanced's button for the same tool opens
 //!   it (`MissionPlanner::open_advanced_tool`): Warning Manager, NMEA, Mavlink, MAVLink Inspector,
 //!   Param gen, FFT, signing, Proximity; and Geo ref images (`georef_ui::open`);
+//! * a command to the vehicle, ported here with its questions ([`Act`]): reboot pixhawk ("Are you
+//!   sure?", `doReboot(false, true)`), Force Accel Cal and Force Compass Cal (`PREFLIGHT_CALIBRATION`
+//!   with 76 as param 5 or param 2), DFU Mode (`doDFUBoot`), QNH (an `InputBox` for
+//!   GND_ABS_PRESS, else BARO1_GND_PRESS), Lockup MAV (asked twice); what the C# shows in a box
+//!   when one fails is said on the status line, by the owner's ruling;
 //! * out of scope by a ruling, dimmed, its press saying why on the status line: Follow Me, OSDVideo,
 //!   Moving Base and the four Swarm tools (PLAN.md section 12 D13, 2026-09-25), Lang Edit (the
 //!   translation editor, with languages muted, 2026-09-25), Custom GDAL (no GDAL bindings, the
@@ -45,7 +50,12 @@ use gpui::{
     StatefulInteractiveElement, Styled, Window, div, px, relative, rgb,
 };
 
+use crate::config::firmware::{BoxIds, DO_COMMAND_TIMEOUT, question_box};
+use crate::config::optional::{InputBox, input_box};
+use crate::fly::{PLEASE_CONNECT, error_box};
+use crate::telemetry::Report;
 use crate::{MissionPlanner, facts, theme};
+use mp_firmware::flow::Buttons;
 
 /// `tableLayoutPanel1`'s cells, row by row: (row, column, the control's name, its text, whether it
 /// is a button). Generated from temp.Designer.cs (`Controls.Add(control, column, row)`) and
@@ -195,6 +205,8 @@ pub(crate) enum Tool {
     Advanced(&'static str),
     /// Geo ref images: `new Georefimage().Show()`.
     Georef,
+    /// A command to the vehicle, ported here.
+    Act(Act),
     /// Not here, and why.
     Unavailable(&'static str),
 }
@@ -216,6 +228,12 @@ pub(crate) fn tool(name: &str) -> Tool {
         "but_signkey" => Tool::Advanced("but_signkey"),
         "but_proximity" => Tool::Advanced("but_proximity"),
         "BUT_georefimage" => Tool::Georef,
+        "but_reboot" => Tool::Act(Act::Reboot),
+        "BUT_forcecal_accel" => Tool::Act(Act::ForceAccelCal),
+        "BUT_forcecal_mag" => Tool::Act(Act::ForceCompassCal),
+        "but_dfumode" => Tool::Act(Act::DfuMode),
+        "BUT_QNH" => Tool::Act(Act::Qnh),
+        "but_lockup" => Tool::Act(Act::Lockup),
         "BUT_follow_me" | "but_osdvideo" | "BUT_movingbase" | "BUT_swarm" | "BUT_followleader"
         | "but_trimble" | "but_followswarm" => Tool::Unavailable(SECTION_12_D13),
         "BUT_lang_edit" => Tool::Unavailable(LANGUAGES_MUTED),
@@ -224,10 +242,284 @@ pub(crate) fn tool(name: &str) -> Tool {
     }
 }
 
-/// The tab's state: the last button pressed, for the facts.
-#[derive(Debug, Default)]
+/// The temp form's commands to the vehicle.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Act {
+    /// `but_reboot_Click`: "Are you sure?", then `doReboot(false, true)`. `// C#: temp.cs:662-666`
+    Reboot,
+    /// `BUT_forcecal_accel_Click`: `PREFLIGHT_CALIBRATION` with 76 as param 5, the accelerometers
+    /// marked calibrated. `// C#: temp.cs:1404-1416`
+    ForceAccelCal,
+    /// `BUT_forcecal_mag_Click`: `PREFLIGHT_CALIBRATION` with 76 as param 2, the compasses.
+    /// `// C#: temp.cs:1420-1432`
+    ForceCompassCal,
+    /// `but_dfumode_Click`: `doDFUBoot`, `PREFLIGHT_REBOOT_SHUTDOWN` 42, 24, 71, 99 not waited for.
+    /// `// C#: temp.cs:1397-1400; ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:2511-2517`
+    DfuMode,
+    /// `BUT_QNH_Click`: the QNH asked for, offered as it is, and set. `// C#: temp.cs:668-682`
+    Qnh,
+    /// `but_lockup_Click`: asked twice, then `PREFLIGHT_REBOOT_SHUTDOWN` 42, 24, 71, 93 not waited
+    /// for. `// C#: temp.cs:1230-1239`
+    Lockup,
+}
+
+/// `MAV_CMD.PREFLIGHT_CALIBRATION` and `MAV_CMD.PREFLIGHT_REBOOT_SHUTDOWN`.
+/// `// C#: ExtLibs/Mavlink/Mavlink.cs`
+const PREFLIGHT_CALIBRATION: u16 = 241;
+const PREFLIGHT_REBOOT_SHUTDOWN: u16 = 246;
+/// The commands' parameters, as the C# passes them.
+const FORCE_ACCEL: [f32; 7] = [0.0, 0.0, 0.0, 0.0, 76.0, 0.0, 0.0];
+const FORCE_COMPASS: [f32; 7] = [0.0, 76.0, 0.0, 0.0, 0.0, 0.0, 0.0];
+const DFU_BOOT: [f32; 7] = [42.0, 24.0, 71.0, 99.0, 0.0, 0.0, 0.0];
+const LOCKUP: [f32; 7] = [42.0, 24.0, 71.0, 93.0, 0.0, 0.0, 0.0];
+/// The questions' words.
+const ARE_YOU_SURE: &str = "Are you sure?";
+const LOCKUP_CAPTION: &str = "Lockup";
+const LOCKUP_TEXT: &str = "Lockup the autopilot??? this can cause a CRASH!!!!!!";
+const QNH_TITLE: &str = "QNH";
+const QNH_PROMPT: &str = "Enter the QNH in pascals (103040 = 1030.4 hPa)";
+
+/// The parameter QNH sets: `GND_ABS_PRESS` where the vehicle has it, else `BARO1_GND_PRESS`.
+/// `// C#: temp.cs:670`
+#[must_use]
+fn qnh_param(parameters: &[(String, f64)]) -> &'static str {
+    if parameters.iter().any(|(name, _)| name == "GND_ABS_PRESS") {
+        "GND_ABS_PRESS"
+    } else {
+        "BARO1_GND_PRESS"
+    }
+}
+
+/// A question showing, and what its Yes or OK goes on to.
+enum Asking {
+    /// `CustomMessageBox.Show(text, caption, YesNo)`.
+    Confirm {
+        caption: &'static str,
+        text: &'static str,
+        then: Act,
+        /// Lockup asks twice: whether this is the first time.
+        again: bool,
+    },
+    /// `InputBox.Show(title, prompt, ref value)`, for QNH: the parameter it sets.
+    Input { input: InputBox, param: &'static str },
+}
+
+/// The tab's state: the last button pressed, for the facts, and the question showing.
+#[derive(Default)]
 pub(crate) struct Experimental {
     last: Option<&'static str>,
+    asking: Option<Asking>,
+    /// The input box's keyboard, made the first time one shows.
+    focus: Option<gpui::FocusHandle>,
+}
+
+impl std::fmt::Debug for Experimental {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Experimental")
+            .field("last", &self.last)
+            .field("asking", &self.asking.is_some())
+            .finish_non_exhaustive()
+    }
+}
+
+/// The box ids of this tab's questions.
+const IDS: BoxIds = BoxIds {
+    question: "experimental-question",
+    yes: "experimental-question-yes",
+    no: "experimental-question-no",
+    message: "experimental-message",
+    ok: "experimental-message-ok",
+    path: "experimental-path",
+    path_value: "experimental-path-value",
+    path_ok: "experimental-path-ok",
+    path_cancel: "experimental-path-cancel",
+};
+
+/// A command pressed: its question asked, or sent.
+fn act(
+    this: &mut MissionPlanner,
+    what: Act,
+    window: &mut Window,
+    cx: &mut Context<MissionPlanner>,
+) {
+    match what {
+        Act::Reboot => {
+            this.experimental.asking = Some(Asking::Confirm {
+                caption: "",
+                text: ARE_YOU_SURE,
+                then: Act::Reboot,
+                again: false,
+            });
+        }
+        Act::Lockup => {
+            this.experimental.asking = Some(Asking::Confirm {
+                caption: LOCKUP_CAPTION,
+                text: LOCKUP_TEXT,
+                then: Act::Lockup,
+                again: true,
+            });
+        }
+        Act::Qnh => {
+            let view = this.telemetry.view();
+            if view.vehicle.is_none() {
+                // `GetParam` with no link throws: said on the status line.
+                this.file_status = Some(error_box(PLEASE_CONNECT));
+                return;
+            }
+            let param = qnh_param(&view.parameters);
+            let current = view
+                .parameters
+                .iter()
+                .find(|(name, _)| name == param)
+                .map_or_else(|| "0".to_owned(), |(_, value)| value.to_string());
+            this.experimental.asking = Some(Asking::Input {
+                input: InputBox::new(QNH_TITLE, QNH_PROMPT, &current),
+                param,
+            });
+            let focus = this
+                .experimental
+                .focus
+                .get_or_insert_with(|| cx.focus_handle())
+                .clone();
+            focus.focus(window, cx);
+        }
+        Act::ForceAccelCal | Act::ForceCompassCal | Act::DfuMode => send(this, what),
+    }
+}
+
+/// A command sent, once its questions are answered: what the C# shows in a box on failure said
+/// on the status line.
+fn send(this: &mut MissionPlanner, what: Act) {
+    let sent = match what {
+        Act::Reboot => this.telemetry.reboot(),
+        Act::ForceAccelCal | Act::ForceCompassCal => {
+            let params = if what == Act::ForceAccelCal {
+                FORCE_ACCEL
+            } else {
+                FORCE_COMPASS
+            };
+            this.telemetry.send_handle().is_some_and(|(_, vehicle)| {
+                this.telemetry
+                    .command(
+                        vehicle,
+                        PREFLIGHT_CALIBRATION,
+                        params,
+                        Report::on_timeout(error_box(DO_COMMAND_TIMEOUT)),
+                    )
+                    .is_some()
+            })
+        }
+        Act::DfuMode => this
+            .telemetry
+            .command_unacknowledged(PREFLIGHT_REBOOT_SHUTDOWN, DFU_BOOT),
+        Act::Lockup => this
+            .telemetry
+            .command_unacknowledged(PREFLIGHT_REBOOT_SHUTDOWN, LOCKUP),
+        Act::Qnh => true,
+    };
+    if !sent {
+        this.file_status = Some(error_box(PLEASE_CONNECT));
+    }
+}
+
+/// The question's Yes or No, OK or Cancel.
+fn answer(this: &mut MissionPlanner, yes: bool) {
+    let Some(asking) = this.experimental.asking.take() else {
+        return;
+    };
+    if !yes {
+        return;
+    }
+    match asking {
+        // Lockup's second asking.
+        Asking::Confirm {
+            caption,
+            text,
+            then,
+            again: true,
+        } => {
+            this.experimental.asking = Some(Asking::Confirm {
+                caption,
+                text,
+                then,
+                again: false,
+            });
+        }
+        Asking::Confirm { then, .. } => send(this, then),
+        Asking::Input { input, param } => match input.field.value().trim().parse::<f64>() {
+            Ok(value) => {
+                let target = this.telemetry.send_handle().map(|(_, vehicle)| vehicle);
+                let sent = target.and_then(|vehicle| {
+                    this.telemetry.set_parameter_on(
+                        vehicle,
+                        param,
+                        value,
+                        false,
+                        Report::on_failure(error_box(format!("Timeout on read - setParam {param}"))),
+                    )
+                });
+                if sent.is_none() {
+                    this.file_status = Some(error_box(PLEASE_CONNECT));
+                }
+            }
+            // `double.Parse` throws on what is not a number.
+            Err(_) => {
+                this.file_status = Some(error_box(format!(
+                    "Input string was not in a correct format. ({})",
+                    input.field.value()
+                )));
+            }
+        },
+    }
+}
+
+/// The question showing, over the tab.
+fn asking_box(
+    this: &MissionPlanner,
+    window: &Window,
+    cx: &mut Context<MissionPlanner>,
+) -> Option<AnyElement> {
+    match this.experimental.asking.as_ref()? {
+        Asking::Confirm { caption, text, .. } => Some(question_box(
+            IDS,
+            caption,
+            text,
+            Buttons::YesNo,
+            window,
+            answer,
+            cx,
+        )),
+        Asking::Input { input, .. } => {
+            let focus = this.experimental.focus.as_ref()?;
+            Some(input_box(
+                "experimental-input-box",
+                input,
+                focus,
+                window,
+                |this, event| {
+                    let outcome = match this.experimental.asking.as_mut() {
+                        Some(Asking::Input { input, .. }) => Some(input.field.key(event)),
+                        _ => None,
+                    };
+                    match outcome {
+                        Some(crate::textfield::KeyOutcome::Submitted) => {
+                            answer(this, true);
+                            true
+                        }
+                        Some(crate::textfield::KeyOutcome::Cancelled) => {
+                            answer(this, false);
+                            true
+                        }
+                        Some(crate::textfield::KeyOutcome::Changed) => true,
+                        _ => false,
+                    }
+                },
+                |this| answer(this, true),
+                |this| answer(this, false),
+                cx,
+            ))
+        }
+    }
 }
 
 /// A button pressed: its window opened, else why not on the status line.
@@ -245,6 +537,7 @@ fn press(
             this.open_advanced_tool(button, window, cx);
         }
         Tool::Georef => crate::georef_ui::open(this),
+        Tool::Act(what) => act(this, what, window, cx),
         Tool::Unavailable(why) => this.file_status = Some(format!("{text}: {why}")),
     }
 }
@@ -323,6 +616,7 @@ pub(crate) fn screen(
         // The windows the buttons open, over the tab as over the pages that open them elsewhere.
         .children(this.extra_setup_overlay(window, cx))
         .children(crate::georef_ui::window(this, window, cx))
+        .children(asking_box(this, window, cx))
         .into_any_element()
 }
 
@@ -340,6 +634,14 @@ pub(crate) fn record_facts(state: &Experimental) {
     facts::record("experimental.buttons", buttons.len());
     facts::record("experimental.working", working);
     facts::record("experimental.last", state.last.unwrap_or("none"));
+    facts::record(
+        "experimental.asking",
+        match state.asking.as_ref() {
+            None => "none".to_owned(),
+            Some(Asking::Confirm { text, .. }) => (*text).to_owned(),
+            Some(Asking::Input { input, .. }) => format!("{}: {}", input.title, input.prompt),
+        },
+    );
 }
 
 #[cfg(test)]
@@ -379,14 +681,41 @@ mod tests {
                     assert!(advanced.contains(&button), "{name} ({text}): {button}");
                     opens += 1;
                 }
-                Tool::Georef => opens += 1,
+                Tool::Georef | Tool::Act(_) => opens += 1,
                 Tool::Unavailable(why) => assert!(!why.is_empty()),
             }
         }
-        assert_eq!(opens, 9);
+        assert_eq!(opens, 15);
         assert_eq!(tool("BUT_swarm"), Tool::Unavailable(SECTION_12_D13));
         assert_eq!(tool("but_GDAL"), Tool::Unavailable(NO_GDAL));
-        assert_eq!(tool("but_reboot"), Tool::Unavailable(NOT_PORTED));
+        assert_eq!(tool("but_reboot"), Tool::Act(Act::Reboot));
+        assert_eq!(tool("but_structtest"), Tool::Unavailable(NOT_PORTED));
+    }
+
+    /// The commands' parameters are the C#'s: 76 as param 5 for the accelerometers and param 2
+    /// for the compasses; DFU's and Lockup's PREFLIGHT_REBOOT_SHUTDOWN magic.
+    #[test]
+    fn the_commands_are_the_csharps() {
+        assert_eq!(FORCE_ACCEL[4], 76.0);
+        assert_eq!(FORCE_ACCEL.iter().filter(|p| **p != 0.0).count(), 1);
+        assert_eq!(FORCE_COMPASS[1], 76.0);
+        assert_eq!(FORCE_COMPASS.iter().filter(|p| **p != 0.0).count(), 1);
+        assert_eq!(DFU_BOOT[..4], [42.0, 24.0, 71.0, 99.0]);
+        assert_eq!(LOCKUP[..4], [42.0, 24.0, 71.0, 93.0]);
+    }
+
+    /// QNH sets GND_ABS_PRESS where the vehicle has it, else BARO1_GND_PRESS.
+    #[test]
+    fn qnh_sets_the_parameter_the_vehicle_has() {
+        assert_eq!(qnh_param(&[]), "BARO1_GND_PRESS");
+        assert_eq!(
+            qnh_param(&[("GND_ABS_PRESS".to_owned(), 101_325.0)]),
+            "GND_ABS_PRESS"
+        );
+        assert_eq!(
+            qnh_param(&[("BARO1_GND_PRESS".to_owned(), 101_325.0)]),
+            "BARO1_GND_PRESS"
+        );
     }
 
     /// The words as Mission Planner shows them: the first row's, and the last button's.

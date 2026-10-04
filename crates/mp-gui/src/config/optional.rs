@@ -757,6 +757,12 @@ pub fn input_box(
         // ---- end FFT Setup ----
         // The MAVLink Inspector's "Points of history?".
         "nmea-prompt-box" => ("nmea-prompt-ok", "nmea-prompt-cancel", "nmea-prompt-value"),
+        // The EXPERIMENTAL tab's QNH.
+        "experimental-input-box" => (
+            "experimental-input-ok",
+            "experimental-input-cancel",
+            "experimental-input-value",
+        ),
         "dronecan-inspector-points-box" => (
             "dronecan-inspector-points-ok",
             "dronecan-inspector-points-cancel",

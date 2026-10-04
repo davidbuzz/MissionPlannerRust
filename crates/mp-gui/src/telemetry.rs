@@ -1144,6 +1144,17 @@ impl Telemetry {
         Some(self.awaiting(id, report))
     }
 
+    /// `doCommand` with `requireack` false: one `COMMAND_LONG` to the vehicle being flown, not
+    /// waited for. Whether there was a vehicle to send it to.
+    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:2688-2836`
+    pub fn command_unacknowledged(&self, command: u16, params: [f32; 7]) -> bool {
+        let Some((link, id)) = self.target() else {
+            return false;
+        };
+        link.command(id, command, params, false);
+        true
+    }
+
     /// `setParam` on `target`: `PARAM_SET` until the vehicle echoes the parameter, sent again every
     /// 700 ms up to three times, and `report` said when it ends. Refused without sending for a
     /// name the vehicle has not listed, and not sent for a value it already holds unless `force`.

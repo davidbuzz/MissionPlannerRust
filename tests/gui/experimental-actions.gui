@@ -1,0 +1,40 @@
+# The EXPERIMENTAL tab's commands to the vehicle, with no vehicle (the owner's request of
+# 2026-10-04: Ctrl+F's temp form as a tab).
+#
+# temp.cs's reboot pixhawk asks "Are you sure?" (temp.cs:662-666), Lockup MAV asks twice
+# (temp.cs:1230-1239); No sends nothing; with no link what the C# meets as an exception is said on
+# the status line (the owner's ruling: no box for it). QNH (temp.cs:668-682) and Force Accel Cal
+# (temp.cs:1404-1416) need a vehicle: "Please Connect First". The same commands against SITL are
+# experimental-sitl.gui.
+screen fly
+window 1600x1200
+budget 12
+env XDG_DATA_HOME $WORK
+env MP_CONFIG_XML $WORK/config.xml
+setup printf '<?xml version="1.0" encoding="utf-8"?><Config><tabcontrolactions>tabQuick;</tabcontrolactions></Config>' > "$WORK/config.xml"
+key ctrl+f
+expect screen experimental
+expect experimental.working 15
+# reboot pixhawk: asked; No sends nothing.
+click experimental-but_reboot
+expect experimental.asking Are you sure?
+click experimental-question-no
+expect experimental.asking none
+# Yes, with no vehicle: said on the status line.
+click experimental-but_reboot
+click experimental-question-yes
+expect experimental.asking none
+expect status Error: Please Connect First
+# Lockup MAV: asked twice.
+click experimental-but_lockup
+expect experimental.asking Lockup the autopilot??? this can cause a CRASH!!!!!!
+click experimental-question-yes
+expect experimental.asking Lockup the autopilot??? this can cause a CRASH!!!!!!
+click experimental-question-no
+expect experimental.asking none
+# QNH and Force Accel Cal need a vehicle.
+click experimental-BUT_QNH
+expect experimental.asking none
+expect status Error: Please Connect First
+click experimental-BUT_forcecal_accel
+expect status Error: Please Connect First

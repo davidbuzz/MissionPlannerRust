@@ -6,9 +6,10 @@
 # tab between LOGS and PLUGINS, and Ctrl+F shows it: temp.cs's table of 63 buttons, each beside
 # what it does, as temp.Designer.cs and temp.resx lay them out (crates/mp-gui/src/experimental.rs).
 #
-# The claim: Ctrl+F shows the tab; the 63 buttons are there, nine opening windows this application
-# has; NMEA opens the NMEA output window as CONFIG > Advanced's NMEA does; Geo ref images opens the
-# Geo Reference form; a ruled-out tool says why on the status line, and one not yet ported says so.
+# The claim: Ctrl+F shows the tab; the 63 buttons are there, fifteen working - nine opening
+# windows this application has, six commands to the vehicle (experimental-actions.gui); NMEA opens
+# the NMEA output window as CONFIG > Advanced's NMEA does; a ruled-out tool says why on the status
+# line, and one not yet ported says so.
 screen fly
 window 1600x1200
 budget 12
@@ -19,7 +20,7 @@ expect screen fly
 key ctrl+f
 expect screen experimental
 expect experimental.buttons 63
-expect experimental.working 9
+expect experimental.working 15
 # A window this application has: the NMEA output, as Advanced's NMEA opens it.
 click experimental-BUT_outputnmea
 expect experimental.last BUT_outputnmea
@@ -30,9 +31,9 @@ expect config.nmea.window false
 click experimental-BUT_swarm
 expect experimental.last BUT_swarm
 expect status ~ Swarm: out of scope, the owner's ruling (PLAN.md section 12 D13
-# Not ported yet: reboot pixhawk says so.
-click experimental-but_reboot
-expect status ~ reboot pixhawk: not ported yet
+# Not ported yet: structtest says so.
+click experimental-but_structtest
+expect status ~ structtest: not ported yet
 # The tab itself, from another screen.
 click tab-fly
 expect screen fly
