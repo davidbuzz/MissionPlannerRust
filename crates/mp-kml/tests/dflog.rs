@@ -177,7 +177,7 @@ fn a_log_that_does_not_open_with_a_header_is_read_as_text() {
     assert_matches_golden("dataflash_damaged.bin", &data, "dataflash/golden/kml");
 }
 
-/// The damaged log from its first header: flight paths per mode, the POS path, 52 aircraft, the
+/// The damaged log from its first header: flight paths per mode, the POS path, 62 aircraft, the
 /// GPX track and waypoints - and every duplicate line `DFLogBuffer` makes of an undecodable header.
 #[test]
 fn a_flight_writes_paths_aircraft_and_a_track() {

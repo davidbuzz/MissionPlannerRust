@@ -3,7 +3,7 @@
 # indigo with a marker per waypoint - drawn when the chart is labelled with the Map box ticked,
 # for the whole log with nothing plotted and for the lines the chart shows once something is.
 #
-# Self-contained: the damaged fixture, which logs 63 GPS points with a fix and 119 POS records and
+# Self-contained: the damaged fixture, which logs 408 GPS points with a fix and 815 POS records and
 # neither a second GPS nor a blend; and the healthy one, whose GPS never had a fix and whose
 # mission has six waypoints with a place. A config.xml of its own: ticking Map is remembered, as
 # LB_Map, and read back when the second log opens.
@@ -27,10 +27,10 @@ expect log.map.drawn.gps 0
 
 click log-chk-map
 expect log.check.map true
-expect log.map.drawn.gps 63
+expect log.map.drawn.gps 408
 expect log.map.drawn.gps2 0
 expect log.map.drawn.gpsb 0
-expect log.map.drawn.pos 119
+expect log.map.drawn.pos 815
 
 # On a line-number axis, with a curve and the wheel zoomed in, the map shows the stretch charted.
 click log-chk-time
@@ -38,7 +38,7 @@ click logfield-ATT.Roll
 expect log.plotted 1
 scroll log-chart up 3
 expect log.zoom.depth 3
-expect log.map.drawn.pos < 119
+expect log.map.drawn.pos < 815
 
 # The healthy log: the Map box is remembered, so its routes are drawn as it opens.
 click log-name

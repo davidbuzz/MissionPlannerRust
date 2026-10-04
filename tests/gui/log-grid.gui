@@ -89,4 +89,4 @@ key Return
 expect log.open true
 expect log.plotted 0
 expect log.map.points > 0
-expect log.map.points 63
+expect log.map.points 408

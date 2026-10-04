@@ -147,8 +147,8 @@ fn a_log_read_as_text_writes_empty_tables() {
     let data = std::fs::read(testdata("dataflash_damaged.bin")).unwrap();
     assert_matches_golden(
         &data,
-        "dataflash/golden/matlab/dataflash_damaged.bin-3047.mat",
-        3047,
+        "dataflash/golden/matlab/dataflash_damaged.bin-6404.mat",
+        6404,
     );
 }
 
@@ -158,8 +158,8 @@ fn a_damaged_log_matches_line_for_line() {
     let data = std::fs::read(testdata("dataflash_damaged.bin")).unwrap();
     assert_matches_golden(
         &data[18..],
-        "dataflash/golden/matlab/resync/resync.bin-33073.mat",
-        33073,
+        "dataflash/golden/matlab/resync/resync.bin-76757.mat",
+        76757,
     );
 }
 

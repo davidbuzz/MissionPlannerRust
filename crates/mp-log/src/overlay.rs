@@ -831,7 +831,9 @@ mod tests {
     /// The names a copter gives its modes, enough for the fixtures: what `onFlightMode` answers.
     fn copter_modes(firmware: Firmware, mode: u64) -> Option<String> {
         let name = match (firmware, mode) {
+            (Firmware::Copter, 0) => "Stabilize",
             (Firmware::Copter, 3) => "Auto",
+            (Firmware::Copter, 4) => "Guided",
             (Firmware::Copter, 5) => "Loiter",
             (Firmware::Plane, 4) => "ACRO",
             _ => return None,
@@ -947,20 +949,39 @@ mod tests {
         }
     }
 
-    /// The damaged fixture came off a vehicle in Loiter, whose EKF reset its yaw five times.
+    /// The damaged fixture's readable part is two boots of a SITL copter
+    /// (`tools/sitl/make-damaged-log.py`): each starts in Stabilize, resets its EKF's yaw twice,
+    /// sets home and logs one `ERR`; the second then arms in Guided, takes off and goes to
+    /// Loiter. What `dataflash/golden/dataflash_damaged.log` - Mission Planner's own conversion -
+    /// holds of them, the 47 `MSG`s included.
     #[test]
     fn the_damaged_fixture_has_its_events() {
         let data = testdata("dataflash_damaged.bin");
         let overlays = overlays(&data, copter_modes);
         assert_eq!(overlays.firmware, Some(Firmware::Copter));
-        assert_eq!(overlays.modes.len(), 1);
-        assert_eq!(overlays.modes[0].mark.text, "Loiter");
-        assert_eq!(overlays.events.len(), 5);
-        for event in &overlays.events {
-            assert_eq!(event.text, "EV: EKF_YAW_RESET");
-        }
-        assert_eq!(overlays.messages.len(), 144);
-        assert!(overlays.errors.is_empty());
+        let texts = |marks: &[Mark]| -> Vec<String> {
+            marks.iter().map(|mark| mark.text.clone()).collect()
+        };
+        let modes: Vec<&str> = overlays
+            .modes
+            .iter()
+            .map(|mode| mode.mark.text.as_str())
+            .collect();
+        assert_eq!(modes, ["Stabilize", "Stabilize", "Guided", "Guided", "Loiter"]);
+        let boot = ["EV: EKF_YAW_RESET", "EV: EKF_YAW_RESET", "EV: SET_HOME"];
+        let flight = [
+            "EV: ARMED",
+            "EV: AUTO_ARMED",
+            "EV: MOTORS_INTERLOCK_ENABLED",
+            "EV: NOT_LANDED",
+            "EV: EKF_YAW_RESET",
+        ];
+        assert_eq!(
+            texts(&overlays.events),
+            [&boot[..], &boot, &flight].concat()
+        );
+        assert_eq!(overlays.messages.len(), 47);
+        assert_eq!(overlays.errors.len(), 2);
     }
 
     /// With no name for a mode, its number is the label, as `onFlightMode` returning null leaves.
@@ -1196,7 +1217,7 @@ mod tests {
             .from_row(first.line)
             .expect("a place on its own line");
         assert!(
-            (lat + 27.5134).abs() < 0.01 && (lng - 153.0094).abs() < 0.01,
+            (lat + 35.3633).abs() < 0.01 && (lng - 149.1652).abs() < 0.01,
             "{lat},{lng}"
         );
     }

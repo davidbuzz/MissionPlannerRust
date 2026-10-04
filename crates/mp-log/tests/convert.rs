@@ -86,7 +86,7 @@ fn a_damaged_log_converts_byte_for_byte() {
 fn the_mode_is_named_for_the_firmware() {
     let golden =
         std::fs::read_to_string(testdata("dataflash/golden/dataflash_damaged.log")).unwrap();
-    assert!(golden.contains("\r\nMODE, 460372070, Loiter, 5, 2\r\n"));
+    assert!(golden.contains("\r\nMODE, 80421985, Loiter, 5, 2\r\n"));
 }
 
 /// The button writes `<name>.log` beside the `.bin`, and that is the file the product path reads.

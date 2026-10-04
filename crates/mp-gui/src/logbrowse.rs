@@ -5269,10 +5269,10 @@ mod tests {
         );
         let contents = browse.map_contents();
         assert_eq!(contents.source, "GPS");
-        assert_eq!(contents.points, 63);
+        assert_eq!(contents.points, 408);
         browse.toggle_check(Check::Map);
-        assert_eq!(browse.drawn().gps.len(), 63);
-        assert_eq!(browse.drawn().pos.len(), 119);
+        assert_eq!(browse.drawn().gps.len(), 408);
+        assert_eq!(browse.drawn().pos.len(), 815);
     }
 
     /// Opening another log replaces the map rather than adding to it.
@@ -5284,7 +5284,7 @@ mod tests {
                 .join("../../testdata/dataflash_damaged.bin"),
         );
         browse.toggle_check(Check::Map);
-        assert_eq!(browse.drawn().gps.len(), 63);
+        assert_eq!(browse.drawn().gps.len(), 408);
         browse.open(&fixture());
         assert!(browse.drawn().gps.is_empty());
         assert_eq!(browse.drawn().commands.len(), 6);
@@ -5367,8 +5367,8 @@ mod tests {
 
         let mut browse = LogBrowse::new();
         browse.open(&damaged());
-        assert_eq!(count(&browse, "events"), 5);
-        assert_eq!(count(&browse, "messages"), 144);
+        assert_eq!(count(&browse, "events"), 11);
+        assert_eq!(count(&browse, "messages"), 47);
     }
 
     /// Unticking a box takes its labels off, and ticking it puts them back.
@@ -5550,8 +5550,8 @@ mod tests {
         assert_eq!(browse.cursor_x(), Some(expected));
         let marker = browse.marker().expect("the damaged log has a fix");
         assert!(
-            (marker.latitude() + 27.5134).abs() < 0.01
-                && (marker.longitude() - 153.0094).abs() < 0.01,
+            (marker.latitude() + 35.3633).abs() < 0.01
+                && (marker.longitude() - 149.1652).abs() < 0.01,
             "{marker:?}"
         );
         assert!(browse.map_centred_on_marker());
@@ -5730,10 +5730,10 @@ mod tests {
             ("log.check.msg", "true"),
             ("log.check.events", "true"),
             ("log.axis", "time"),
-            ("log.overlays.modes", "1"),
-            ("log.overlays.messages", "144"),
-            ("log.overlays.events", "5"),
-            ("log.overlays.errors", "0"),
+            ("log.overlays.modes", "5"),
+            ("log.overlays.messages", "47"),
+            ("log.overlays.events", "11"),
+            ("log.overlays.errors", "2"),
             ("log.overlays.minutes", "0"),
             ("log.cursor.line", "none"),
             ("log.cursor.marker", "none"),
@@ -5758,8 +5758,8 @@ mod tests {
                 .parse::<usize>()
                 .is_ok_and(|line| line > 0)
         );
-        assert!(facts["log.cursor.marker"].contains("-27.51"));
-        assert!(facts["log.cursor.marker"].contains(",153.00"));
+        assert!(facts["log.cursor.marker"].contains("-35.36"));
+        assert!(facts["log.cursor.marker"].contains(",149.16"));
         assert_eq!(facts["log.cursor.centred"], "true");
         assert_eq!(facts["log.cursor.grid"], "true");
 
@@ -5767,9 +5767,9 @@ mod tests {
         let facts = facts_of(&browse);
         assert_eq!(facts["log.check.events"], "false");
         assert_eq!(facts["log.overlays.events"], "0");
-        assert_eq!(facts["log.overlays.messages"], "144");
+        assert_eq!(facts["log.overlays.messages"], "47");
         assert_eq!(facts["log.cursor.line"], "none");
-        assert!(facts["log.cursor.marker"].contains("-27.51"));
+        assert!(facts["log.cursor.marker"].contains("-35.36"));
 
         browse.toggle_check(Check::Time);
         let facts = facts_of(&browse);
@@ -5780,7 +5780,7 @@ mod tests {
         browse.toggle(&roll);
         browse.double_click(0.5);
         let facts = facts_of(&browse);
-        assert_eq!(facts["log.overlays.messages"], "144");
+        assert_eq!(facts["log.overlays.messages"], "47");
         assert_eq!(facts["log.overlays.minutes"], "0");
         assert!(
             facts["log.cursor.line"]
@@ -5788,7 +5788,7 @@ mod tests {
                 .is_ok_and(|line| line > 0)
         );
         assert_eq!(facts["log.cursor.grid"], "true");
-        assert!(facts["log.cursor.marker"].contains("-27.51"));
+        assert!(facts["log.cursor.marker"].contains("-35.36"));
 
         browse.open(&fixture());
         let facts = facts_of(&browse);

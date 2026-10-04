@@ -450,20 +450,23 @@ mod tests {
         assert_eq!(routes.commands[0].frame, Some(3));
     }
 
-    /// The damaged fixture came off a vehicle with a fix, and its route is a real one.
+    /// The damaged fixture came off a vehicle with a fix, and its route is a real one: SITL's,
+    /// at Canberra Model Aircraft Club.
     ///
     /// It holds two boots of the same vehicle, one after the other: `TimeUS` climbs through the
     /// first, goes back to the start of the second, and climbs again. The route keeps the log's
-    /// order, as `DrawMap` does, so time runs forward everywhere but that one seam.
+    /// order, as `DrawMap` does, so time runs forward everywhere but that one seam. (408 fixes
+    /// and 815 positions, as a header walk in Python counts them, `tools/sitl/make-damaged-log.py`
+    /// having made the log.)
     #[test]
     fn a_gps_with_a_fix_makes_a_route_in_log_order() {
         let routes = routes(&testdata("dataflash_damaged.bin"));
-        assert_eq!(routes.gps.len(), 63);
-        assert_eq!(routes.pos.len(), 119);
+        assert_eq!(routes.gps.len(), 408);
+        assert_eq!(routes.pos.len(), 815);
         for point in routes.gps.iter().chain(&routes.pos) {
             assert!(
-                (point.latitude + 27.5134).abs() < 0.01
-                    && (point.longitude - 153.0094).abs() < 0.01,
+                (point.latitude + 35.3633).abs() < 0.01
+                    && (point.longitude - 149.1652).abs() < 0.01,
                 "{point:?} is not where this vehicle was"
             );
         }

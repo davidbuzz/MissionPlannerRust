@@ -9,11 +9,10 @@
 #
 # Moving the pointer over the chart does nothing in the C# but debounce, so nothing here hovers.
 #
-# Self-contained: the damaged fixture, which came off a vehicle with a GPS fix and logs one mode,
-# 144 messages and five EKF yaw resets; and the healthy one, whose GPS never had a fix. Neither
-# logs an ERR, so the Errors box has no label to show here, and neither spans a minute of GPS time,
-# so an unticked Time box has no minute labels to show either: the unit tests cover both with logs
-# built for them.
+# Self-contained: the damaged fixture, which came off a vehicle with a GPS fix and logs five mode
+# changes, 47 messages, eleven events and two ERRs; and the healthy one, whose GPS never had a fix.
+# Neither spans a minute of GPS time, so an unticked Time box has no minute labels to show: the
+# unit tests cover those with logs built for them.
 
 env MP_PLAN_DIR $WORK/logs
 # A config.xml of its own: the boxes the log browser remembers start as the designer has them.
@@ -39,10 +38,10 @@ expect log.check.msg true
 expect log.check.events true
 expect log.axis time
 # Opening a log labels the chart with what the ticked boxes ask for.
-expect log.overlays.modes 1
-expect log.overlays.messages 144
-expect log.overlays.events 5
-expect log.overlays.errors 0
+expect log.overlays.modes 5
+expect log.overlays.messages 47
+expect log.overlays.events 11
+expect log.overlays.errors 2
 expect log.overlays.minutes 0
 expect log.cursor.line none
 expect log.cursor.marker none
@@ -61,8 +60,8 @@ expect log.plotted 1
 # vehicle was, the map centred on it, and the grid on its time cell.
 doubleclick log-chart@0.5x0.5
 expect log.cursor.line > 0
-expect log.cursor.marker ~ -27.51
-expect log.cursor.marker ~ ,153.00
+expect log.cursor.marker ~ -35.36
+expect log.cursor.marker ~ ,149.16
 expect log.cursor.centred true
 expect log.cursor.grid true
 
@@ -71,9 +70,9 @@ expect log.cursor.grid true
 click log-chk-events
 expect log.check.events false
 expect log.overlays.events 0
-expect log.overlays.messages 144
+expect log.overlays.messages 47
 expect log.cursor.line none
-expect log.cursor.marker ~ -27.51
+expect log.cursor.marker ~ -35.36
 
 # Unticking Time plots against line numbers, and clears the chart and its labels.
 click log-chk-time
@@ -83,13 +82,13 @@ expect log.overlays.messages 0
 
 click logfield-ATT.Roll
 expect log.plotted 1
-expect log.overlays.messages 144
+expect log.overlays.messages 47
 expect log.overlays.minutes 0
 
 doubleclick log-chart@0.5x0.5
 expect log.cursor.line > 0
 expect log.cursor.grid true
-expect log.cursor.marker ~ -27.51
+expect log.cursor.marker ~ -35.36
 
 # The healthy log, whose GPS never had a fix: the new log takes the old marker away, and a double
 # click gives a cursor and no marker.
@@ -100,7 +99,7 @@ key Return
 expect log.open true
 expect log.cursor.marker none
 expect log.cursor.line none
-expect log.overlays.modes 1
+expect log.overlays.modes 5
 expect log.overlays.messages 14
 
 click logfield-ATT.Roll
