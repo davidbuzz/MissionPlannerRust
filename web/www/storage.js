@@ -48,6 +48,30 @@ async function folder(parts, create) {
     return handle;
 }
 
+/// One file of the planner's as the browser keeps it, by the planner's own path ("/home/web/...");
+/// null when none is kept. For a file the page writes itself - the in-page SITL's eeprom.bin.
+export async function readKept(path) {
+    const parts = path.split("/").filter(Boolean);
+    const name = parts.pop();
+    try {
+        const dir = await folder(parts, false);
+        const file = await (await dir.getFileHandle(name)).getFile();
+        return new Uint8Array(await file.arrayBuffer());
+    } catch (_) {
+        return null;
+    }
+}
+
+/// Keeps one file of the planner's, written whole, by the planner's own path.
+export async function writeKept(path, bytes) {
+    const parts = path.split("/").filter(Boolean);
+    const name = parts.pop();
+    const dir = await folder(parts, true);
+    const writable = await (await dir.getFileHandle(name, { create: true })).createWritable();
+    await writable.write(bytes);
+    await writable.close();
+}
+
 /// The changes `encode` packed (crates/mp-os/src/fs/mem.rs): per change a kind byte (1 a write,
 /// 2 a removal), the path's length and UTF-8 bytes, and for a write the offset, the file's length
 /// and the data's length and bytes - each number a little-endian u32.

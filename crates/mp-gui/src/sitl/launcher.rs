@@ -718,6 +718,7 @@ impl Launcher for PageWasm {
     fn spawn(&self, spawn: &Spawn) -> Result<(), String> {
         mp_transport::page::start_sitl(
             &spawn.program.display().to_string(),
+            &spawn.working_directory.display().to_string(),
             &local_wasm_arguments(&spawn.arguments),
         );
         Ok(())

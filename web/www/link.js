@@ -6,6 +6,7 @@
 // binary frames both ways); and any other address over the tailnet (tailscale.js).
 
 import { dialTailscale } from "./tailscale.js";
+import { readKept, writeKept } from "./storage.js";
 
 const inbox = [];
 let status = "no link";
@@ -29,15 +30,21 @@ const VEHICLES = {
 let sitlWorker = null;
 
 // Starts `module` (a file of sitl/) with `args`, ending any SITL before it; its SERIAL0 becomes
-// the link's.
-function startSitlModule(module, args) {
+// the link's. `folder`, the vehicle's SITL folder, holds its eeprom.bin - its parameters - in the
+// browser's storage (storage.js): put into the module before it starts, and kept whenever the
+// worker says it changed, as the desktop's bridge keeps it on disk (tools/sitl/wasm/bridge.mjs).
+// Without one - a page opened with ?vehicle= - nothing is kept.
+function startSitlModule(module, args, folder) {
     stopSitl();
     status = `starting SITL ${module}`;
+    const eeprom = folder ? `${folder}/eeprom.bin` : null;
     const worker = new Worker(new URL("./sitl-worker.js", import.meta.url), { type: "module" });
     worker.onmessage = (event) => {
         const message = event.data;
         if (message.bytes) {
             if (active === "sitl") inbox.push(message.bytes);
+        } else if (message.eeprom) {
+            if (eeprom) writeKept(eeprom, message.eeprom).catch((err) => console.warn(`sitl: ${eeprom}: ${err}`));
         } else if (message.print !== undefined) {
             console.log(`sitl: ${message.print}`);
         } else if (message.started) {
@@ -47,7 +54,8 @@ function startSitlModule(module, args) {
             console.error(`sitl: ${message.failed}`);
         }
     };
-    worker.postMessage({ start: { module, args } });
+    (eeprom ? readKept(eeprom) : Promise.resolve(null))
+        .then((saved) => worker.postMessage({ start: { module, args, eeprom: saved } }));
     sitlSend = (bytes) => worker.postMessage({ bytes }, [bytes.buffer]);
     sitlWorker = worker;
 }
@@ -141,9 +149,9 @@ export function servePlanner(planner) {
             } else if (asked.startsWith("sitl\n")) {
                 // The SIMULATION screen's "try local wasm": a vehicle clicked, the module and its
                 // command line as the desktop's bridge is given them (crates/mp-transport/src/page.rs).
-                const [, module, ...args] = asked.split("\n");
+                const [, module, folder, ...args] = asked.split("\n");
                 inbox.length = 0;
-                startSitlModule(module, args);
+                startSitlModule(module, args, folder);
             } else if (asked === "sitl-stop") {
                 stopSitl();
             } else if (asked.startsWith("ws://") || asked.startsWith("wss://")) {

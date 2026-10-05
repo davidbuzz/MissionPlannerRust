@@ -78,9 +78,10 @@ pub fn page_link_requested() -> Option<String> {
 /// Asks the page to start ArduPilot's WebAssembly SITL `module` (a file of its `sitl/` folder,
 /// such as `arducopter.js`) with `arguments`, in place of any it runs: the browser build's
 /// "try local wasm", which the desktop starts under Node (mp-gui's `sitl::launcher`). Its SERIAL0
-/// is then what a `tcp:` link reaches.
-pub fn start_sitl(module: &str, arguments: &[String]) {
-    let mut request = format!("sitl\n{module}");
+/// is then what a `tcp:` link reaches. `folder` is the vehicle's SITL folder, where the page keeps
+/// its eeprom.bin - its parameters - as the desktop's bridge keeps it in the same folder on disk.
+pub fn start_sitl(module: &str, folder: &str, arguments: &[String]) {
+    let mut request = format!("sitl\n{module}\n{folder}");
     for argument in arguments {
         request.push('\n');
         request.push_str(argument);
