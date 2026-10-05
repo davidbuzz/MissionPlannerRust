@@ -1,1 +1,1 @@
-../../../../crates/mp-gui/src/hud/raster.rs
+../../../crates/mp-gui/src/hud/raster.rs
