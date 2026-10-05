@@ -67,11 +67,11 @@
 #![allow(unreachable_pub)]
 
 use std::cell::RefCell;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, VecDeque};
 use std::sync::OnceLock;
 use web_time::{Duration, Instant};
 
-use gpui::{IntoElement, Styled as _};
+use gpui::{IntoElement, ParentElement as _, Styled as _, div, rgb, rgba};
 
 use crate::storm::percentile;
 
@@ -80,6 +80,9 @@ const MAX_FRAMES: usize = 36_000;
 
 /// The facts are refreshed every this many frames on a screen.
 const PUBLISH_EVERY: usize = 10;
+
+/// The readout's span: the frames presented in the last second ([`readout`]).
+const READOUT_SPAN: Duration = Duration::from_secs(1);
 
 /// Whether frames are measured: `MP_FRAMES` set, and not to `0`.
 #[must_use]
@@ -237,6 +240,19 @@ struct Painted {
     data: Option<Shown>,
 }
 
+/// A frame presented, for the readout.
+#[derive(Debug, Clone, Copy)]
+struct Recent {
+    at: Instant,
+    /// Render and paint: the planner's and gpui's own work on the CPU.
+    cpu: Duration,
+    present: Duration,
+    /// A fresh frame's packet to pixel.
+    latency: Option<Duration>,
+    /// Whether it drew something new; `None` with no vehicle.
+    fresh: Option<bool>,
+}
+
 /// The frame being drawn and every screen's frames so far.
 #[derive(Debug, Default)]
 struct Clock {
@@ -251,6 +267,8 @@ struct Clock {
     /// The `messages_applied` of the last state presented, on whatever screen.
     applied: Option<u64>,
     screens: BTreeMap<&'static str, Screen>,
+    /// The last [`READOUT_SPAN`]'s frames, on whatever screen.
+    recent: VecDeque<Recent>,
 }
 
 impl Clock {
@@ -355,6 +373,30 @@ impl Clock {
         let fresh = frame
             .data
             .map(|shown| self.applied.replace(shown.applied) != Some(shown.applied));
+        let latency = match (fresh, frame.data) {
+            (
+                Some(true),
+                Some(Shown {
+                    packet_in: Some(packet_in),
+                    ..
+                }),
+            ) => Some(now.saturating_duration_since(packet_in)),
+            _ => None,
+        };
+        self.recent.push_back(Recent {
+            at: now,
+            cpu: frame.cost,
+            present,
+            latency,
+            fresh,
+        });
+        while self
+            .recent
+            .front()
+            .is_some_and(|recent| now.saturating_duration_since(recent.at) > READOUT_SPAN)
+        {
+            self.recent.pop_front();
+        }
         let counted = self.screens.entry(frame.screen).or_default();
         if frame.first {
             // Opening the page: kept apart, and the visit's facts published from nothing, so a
@@ -397,6 +439,57 @@ impl Clock {
             .len()
             .is_multiple_of(PUBLISH_EVERY)
             .then(|| counted.facts(frame.screen))
+    }
+}
+
+impl Clock {
+    /// The readout's line at `now`: the last second's frames a second; the CPU's time a frame,
+    /// median and 99th percentile; present's median; a fresh frame's packet to pixel, median and
+    /// 99th percentile; and the share of frames that drew something new.
+    fn readout(&self, now: Instant) -> String {
+        let frames: Vec<&Recent> = self
+            .recent
+            .iter()
+            .filter(|recent| now.saturating_duration_since(recent.at) <= READOUT_SPAN)
+            .collect();
+        let sorted = |part: fn(&Recent) -> Option<Duration>| {
+            let mut samples: Vec<Duration> =
+                frames.iter().filter_map(|recent| part(recent)).collect();
+            samples.sort_unstable();
+            samples
+        };
+        let (cpu, present, latency) = (
+            sorted(|recent| Some(recent.cpu)),
+            sorted(|recent| Some(recent.present)),
+            sorted(|recent| recent.latency),
+        );
+        let ms = |samples: &[Duration], pct: usize| percentile(samples, pct).as_secs_f64() * 1000.0;
+        let mut line = format!(
+            "{} fps  cpu {:.1}/{:.1} ms  present {:.1} ms",
+            frames.len(),
+            ms(&cpu, 50),
+            ms(&cpu, 99),
+            ms(&present, 50)
+        );
+        if !latency.is_empty() {
+            line.push_str(&format!(
+                "  packet to pixel {:.0}/{:.0} ms",
+                ms(&latency, 50),
+                ms(&latency, 99)
+            ));
+        }
+        let judged = frames
+            .iter()
+            .filter(|recent| recent.fresh.is_some())
+            .count();
+        let fresh = frames
+            .iter()
+            .filter(|recent| recent.fresh == Some(true))
+            .count();
+        if let Some(share) = (fresh * 100).checked_div(judged) {
+            line.push_str(&format!("  fresh {share}%"));
+        }
+        line
     }
 }
 
@@ -459,6 +552,32 @@ pub fn exclude(spent: Duration) {
     if enabled() {
         CLOCK.with_borrow_mut(|clock| clock.harness += spent);
     }
+}
+
+/// The readout over the window's bottom-right corner while frames are measured (the owner,
+/// 2026-10-05: the achieved frame rate on screen during testing) - [`Clock::readout`]'s line, as of
+/// the frame before; `None` without `MP_FRAMES`. Drawn last of the window's contents, but before
+/// [`marker`], so its own cost is in the frame it shows.
+#[must_use]
+pub fn readout() -> Option<impl IntoElement> {
+    enabled().then(|| {
+        let line = CLOCK.with_borrow(|clock| clock.readout(Instant::now()));
+        gpui::deferred(
+            div()
+                .absolute()
+                .right_2()
+                .bottom_2()
+                .px_2()
+                .py_1()
+                .rounded_sm()
+                .bg(rgba(0x0000_00c0))
+                .text_color(rgb(0x00ff_ff80))
+                .text_xs()
+                .font_family("monospace")
+                .child(line),
+        )
+        .with_priority(4)
+    })
 }
 
 /// The element whose paint ends the paint part, for the root's last child; `None` without
@@ -663,5 +782,42 @@ mod tests {
         assert_eq!(fact(&facts, "frames.fly.latency.max_us"), 19_000);
         assert_eq!(fact(&facts, "frames.fly.fresh"), 3);
         assert_eq!(fact(&facts, "frames.fly.stale"), 1);
+    }
+
+    /// The readout: the last second's frames only - its rate, the CPU's and present's times, a
+    /// fresh frame's packet to pixel, the share that drew something new.
+    #[test]
+    fn the_readout_says_the_last_seconds_frames() {
+        let t0 = Instant::now();
+        let mut clock = Clock::default();
+        // One frame long ago, then four in the last second: three fresh, one stale.
+        let mut show = |start: u64, applied: u64, arrived: u64| {
+            let at = t0 + ms(start);
+            clock.begin("fly", at);
+            if let Some(drawing) = clock.frame.as_mut() {
+                drawing.data = Some(Shown {
+                    applied,
+                    packet_in: Some(t0 + ms(arrived)),
+                });
+            }
+            clock.rendered(at + ms(1));
+            clock.painted(at + ms(4));
+            clock.presented(at + ms(6));
+        };
+        show(0, 1, 0);
+        show(2000, 2, 1990);
+        show(2100, 3, 2095);
+        show(2200, 3, 2095);
+        show(2300, 4, 2290);
+        let line = clock.readout(t0 + ms(2400));
+        assert_eq!(
+            line,
+            "4 fps  cpu 4.0/4.0 ms  present 2.0 ms  packet to pixel 16/16 ms  fresh 75%"
+        );
+        // Nothing for a second: nothing to say but that.
+        assert_eq!(
+            clock.readout(t0 + ms(4000)),
+            "0 fps  cpu 0.0/0.0 ms  present 0.0 ms"
+        );
     }
 }

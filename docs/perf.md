@@ -155,6 +155,32 @@ What it says:
   median and over it at the 99th percentile on this machine, so a GPU machine would draw most of a
   100 Hz stream's states and skip a few. To be measured on the owner's machine with a GPU.
 
+### On the owner's machine with a GPU (2026-10-05)
+
+The same release build on the owner's Linux desktop, the window on a 60 Hz monitor (all three
+of his run at 60 Hz), drawn by the laptop's Intel UHD graphics through Mesa's Vulkan (its NVIDIA
+Quadro's driver not loaded), 25 s each, with `MP_FRAMES`'s readout in the window's corner - the
+last second's frames a second, CPU and present times, packet to pixel and the share of fresh
+frames (`frametimes::readout`, the owner's wish to see the achieved rate while testing).
+Milliseconds, p50 / p99.
+
+| run | policy | fps | fresh / stale | packet to pixel | wait | whole frame | present |
+|---|---|---|---|---|---|---|---|
+| SITL 4 Hz | 100 ms (today) | 10 | 96 / **144** | 49 / **164** | 39 | 5.1 / 18.4 | 1.5 / 13.2 |
+| SITL 4 Hz | data | 5 | 120 / 0 | **16 / 36** | 5.6 | 5.4 / 12.6 | 1.6 / 5.8 |
+| storm 100 Hz | data | **57** | 1430 / 0 | 21 / 30 | 7.9 | 7.0 / 11.1 | 2.3 / 6.0 |
+| storm 200 Hz | data | **55** | 1370 / 0 | 19 / 28 | 5.8 | 7.3 / 13.6 | 2.5 / 7.9 |
+
+- On a GPU a whole frame - the planner, gpui and present - is 5-7 ms at the median; storm.rs's
+  render-and-paint 99th percentile is 6.5 ms. lavapipe's 110-170 ms present was all of the
+  difference.
+- A 100 or 200 Hz stream is drawn at the display's rate, every frame fresh, packet to pixel
+  ~20 ms - most of it the wait for the display's next refresh. On a 100 Hz display most frames
+  would fit the 10 ms budget and the slowest 1% (11-14 ms) would not.
+- Today's 10 Hz timer at a 4 Hz stream: 60% of its frames redraw what the frame before showed, and
+  the newest data on screen is 164 ms old at the 99th percentile; repainting on new data draws half
+  the frames, none stale, at 16 / 36 ms.
+
 Left before `data` could be the default: what changes without a vehicle's message - map tiles
 arriving, the demo's pointer, a progress bar - asks for its own frames rather than leaning on the
 10 Hz timer (found by the GUI suite run with `MP_REPAINT=data`); and the owner's choice.

@@ -4567,6 +4567,8 @@ impl Render for MissionPlanner {
                     )),
                 // ---- end row 96 ----
             )
+            // MP_FRAMES's readout of the last second's frames, over the bottom-right corner.
+            .children(frametimes::readout())
             // Last, so its paint ends the frame's measurement; absent without MP_STORM.
             .children(storm::marker(
                 view.frames,
