@@ -89,6 +89,23 @@ pub const IMPORTANT: &[(Screen, &[&str])] = &[
     (Screen::Help, &["main-port", "main-connect"]),
 ];
 
+/// The Survey (Grid) dialog's: while it shows it is FLIGHT PLAN's screen, so the mission's
+/// buttons are not there to be cut off (the owner's browser, 2026-10-05: "CUT OFF ... plan-read
+/// (missing)" over the open dialog). Its map and its close box are on every tab; Accept is on
+/// Simple only, and like every control drawn it may not be cut off when it shows.
+pub const SURVEY: &[&str] = &["main-port", "main-connect", "survey-map", "survey-close"];
+
+/// The important ids of what shows: `screen`'s, or the Survey (Grid) dialog's while it is open
+/// over FLIGHT PLAN.
+#[must_use]
+pub fn important_now(screen: Screen, survey_open: bool) -> &'static [&'static str] {
+    if screen == Screen::Plan && survey_open {
+        SURVEY
+    } else {
+        important(screen)
+    }
+}
+
 /// The rows of the lists that scroll, by the prefix of their probe names: the only controls
 /// allowed to be out of sight. A list is named here when Mission Planner's own scrolls - a
 /// `DataGridView`, a `ListBox` - never to excuse a panel that does not fit.
@@ -142,18 +159,18 @@ pub fn is_important(name: &str) -> bool {
 
 /// The controls on screen whose paint was clipped this frame - measured, and not wholly inside
 /// the window and the boxes above them - but for the rows [`MAY_SCROLL`] lets go; and the
-/// important controls of `screen`, the one showing, that were not laid out at all, as
+/// `important` controls of what shows ([`important_now`]) that were not laid out at all, as
 /// "`name` (missing)": a screen that lost its mission grid has hidden it as surely as one that
 /// scrolled it away. (The probe keeps only what was measured in the last frame, which is the
 /// screen showing; another screen's controls are not counted.)
 #[must_use]
-pub fn hidden(screen: Screen) -> Vec<String> {
+pub fn hidden(important: &[&str]) -> Vec<String> {
     let mut hidden: Vec<String> = crate::probe::clipped_names()
         .into_iter()
         .filter(|name| must_show(name))
         .collect();
     hidden.extend(
-        important(screen)
+        important
             .iter()
             .filter(|name| crate::probe::clipped(name).is_none())
             .map(|name| format!("{name} (missing)")),
@@ -161,15 +178,15 @@ pub fn hidden(screen: Screen) -> Vec<String> {
     hidden
 }
 
-/// `layout.hidden` and `layout.hidden.names`; "n/a" when the probe is off, since nothing is
-/// measured then.
-pub fn record_facts(screen: Screen) {
+/// `layout.hidden` and `layout.hidden.names`, judged by `important` ([`important_now`]); "n/a"
+/// when the probe is off, since nothing is measured then.
+pub fn record_facts(important: &[&str]) {
     if !crate::probe::enabled() {
         crate::facts::record("layout.hidden", "n/a");
         crate::facts::record("layout.hidden.names", "n/a");
         return;
     }
-    let hidden = hidden(screen);
+    let hidden = hidden(important);
     crate::facts::record("layout.hidden", hidden.len());
     crate::facts::record(
         "layout.hidden.names",
@@ -242,14 +259,15 @@ pub struct Banner {
 }
 
 impl Banner {
-    /// This frame's verdict on `screen`, in a window `size` wide and high. Each cut-off the
+    /// This frame's verdict on what shows, judged by `important` ([`important_now`]), in a window
+    /// `size` wide and high. Each cut-off the
     /// strip comes to show also goes to the log and to [`RECORD_FILE`], with the time, the
     /// `place` - the screen, and the page within it - and the window's size, so every run leaves a record of every one it met that outlives it
     /// (the owner, 2026-10-04: "are you capturing *all the CUT OFF events into a log ... so you
     /// dont miss them").
-    pub fn update(&mut self, place: &str, screen: Screen, size: (f32, f32)) {
+    pub fn update(&mut self, place: &str, important: &[&str], size: (f32, f32)) {
         let names = if crate::probe::enabled() {
-            hidden(screen)
+            hidden(important)
         } else {
             Vec::new()
         };
@@ -423,5 +441,20 @@ mod tests {
         ] {
             assert!(ids.contains(&id), "{id} is not guarded");
         }
+    }
+
+    /// The owner's browser, 2026-10-05: with the Survey (Grid) dialog open FLIGHT PLAN's
+    /// buttons are not drawn, and the guard said they were missing. The dialog is judged by its
+    /// own map and close box, and the connect box over it; closed, the planner by its own.
+    #[test]
+    fn the_survey_dialog_is_judged_by_its_own_controls() {
+        let open = important_now(Screen::Plan, true);
+        assert_eq!(open, SURVEY);
+        assert!(open.contains(&"main-connect"));
+        assert!(open.contains(&"survey-map"));
+        assert!(!open.contains(&"plan-write"));
+        assert_eq!(important_now(Screen::Plan, false), important(Screen::Plan));
+        // The survey belongs to FLIGHT PLAN; any other screen is its own.
+        assert_eq!(important_now(Screen::Fly, true), important(Screen::Fly));
     }
 }

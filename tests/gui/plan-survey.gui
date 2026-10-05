@@ -53,6 +53,9 @@ click map@0.50x0.50:right
 click menu-autoWP
 click menu-surveyGrid
 expect survey.dialog open
+# The layout guard judges the open dialog by its own controls, not FLIGHT PLAN's buttons it has
+# replaced (the owner's browser, 2026-10-05: "CUT OFF ... plan-read (missing)").
+expect layout.hidden 0
 expect survey.dialog.tabs tabSimple
 expect survey.dialog.tab tabSimple
 expect survey.dialog.NUM_altitude 100

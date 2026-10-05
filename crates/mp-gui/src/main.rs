@@ -1122,7 +1122,7 @@ impl MissionPlanner {
     }
 
     /// Where the window is, for the layout guard's record: the screen, and on FLIGHT DATA, SETUP,
-    /// CONFIG and LOGS the page within it.
+    /// CONFIG and LOGS the page within it, on FLIGHT PLAN the Survey (Grid) dialog when it shows.
     fn place(&self) -> String {
         let screen = self.screen.label();
         match self.screen {
@@ -1139,6 +1139,7 @@ impl MissionPlanner {
                 }
             }
             Screen::Logs => format!("{screen}/{}", self.logs_page.name()),
+            Screen::Plan if self.survey.is_open() => format!("{screen}/Survey (Grid)"),
             _ => screen.to_owned(),
         }
     }
@@ -3112,7 +3113,7 @@ impl Render for MissionPlanner {
         let place = self.place();
         self.cut_off.update(
             &place,
-            self.screen,
+            layout_guard::important_now(self.screen, self.survey.is_open()),
             (f32::from(viewport.width), f32::from(viewport.height)),
         );
         self.tour_step(cx);
@@ -3667,7 +3668,10 @@ impl Render for MissionPlanner {
                         connect::record_facts(&self.connect_box, view.connected);
             // The important controls of this screen that are not wholly on screen - the owner's
             // self-test of 2026-10-03, read by every GUI run (`layout_guard`).
-            layout_guard::record_facts(self.screen);
+            layout_guard::record_facts(layout_guard::important_now(
+                self.screen,
+                self.survey.is_open(),
+            ));
             prefetch_ui::record_facts(&self.plan_menus);
             facts::record("plan.docking", self.plan_docking.name());
             // The map's zoom and centre, its radius circles and what the pointer is over, and the

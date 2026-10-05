@@ -238,10 +238,22 @@ pub fn open(this: &mut MissionPlanner, window: &mut Window, cx: &mut Context<Mis
         tab: Tab::Simple,
         editing: None,
         dropdown: None,
-        prompt: unwritten.map(|error| Prompt::Message(error.to_string(), "")),
+        prompt: unwritten_box(unwritten, cfg!(target_family = "wasm")),
     });
     this.survey.added = 0;
     changed(this, window, cx);
+}
+
+/// What opening the dialog shows of its camera file's write, `page` in a web page: `xmlcamera`'s
+/// `catch`, a box of the error - but not a web page's having no files at all, which std answers
+/// for every path with "operation not supported on this platform" (the owner's bug of
+/// 2026-10-05: the box at every opening in the browser; the browser's storage is a row of its
+/// own). Nothing the operator can do about it; the built-in cameras are listed all the same.
+/// `// C#: Grid/GridUI.cs:122-124, 462-497`
+fn unwritten_box(error: Option<std::io::Error>, page: bool) -> Option<Prompt> {
+    error
+        .filter(|error| !(page && error.kind() == std::io::ErrorKind::Unsupported))
+        .map(|error| Prompt::Message(error.to_string(), ""))
 }
 
 /// What `loadsettings` reads: `plugin.Host.config[key]`, which is `Settings.Instance[key]` -
@@ -1977,6 +1989,26 @@ mod tests {
             dropdown: None,
             prompt: None,
         }
+    }
+
+    /// The owner's bug of 2026-10-05: in the browser the dialog opened on "operation not
+    /// supported on this platform", a web page having no files to write `cameras.xml` to. A page
+    /// shows no box for that; the desktop shows the C#'s box for any error, and a page for any
+    /// other.
+    #[test]
+    fn a_web_page_having_no_files_is_not_a_box() {
+        let unsupported = || Some(std::io::Error::from(std::io::ErrorKind::Unsupported));
+        assert!(unwritten_box(unsupported(), true).is_none());
+        assert!(matches!(
+            unwritten_box(unsupported(), false),
+            Some(Prompt::Message(..))
+        ));
+        let denied = Some(std::io::Error::from(std::io::ErrorKind::PermissionDenied));
+        assert!(matches!(
+            unwritten_box(denied, true),
+            Some(Prompt::Message(..))
+        ));
+        assert!(unwritten_box(None, true).is_none());
     }
 
     /// Save: the `InputBox` offering "Default", its OK saving the camera and writing
