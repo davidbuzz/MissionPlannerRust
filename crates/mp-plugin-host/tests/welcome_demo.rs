@@ -21,7 +21,7 @@
 //! The owner's Welcome-Demo-Sitl plugin (2026-10-05), not in the C#, driven through the host
 //! against a scripted screen: its clicks in order, the mission square, what it waits for, and
 //! that it stops asking for loops when done. The browser build's check
-//! (experiments/web-experiment/check/demo_check.js) runs it against the real planner.
+//! (web/check/demo_check.js) runs it against the real planner.
 
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::float_cmp)]
 

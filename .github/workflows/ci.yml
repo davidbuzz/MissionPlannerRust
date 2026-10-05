@@ -136,7 +136,7 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       # ring's C, under ureq's HTTPS, compiled for wasm32: the runner's clang has the target.
       - run: sudo apt-get update && sudo apt-get install -y clang llvm
-      # The whole planner for a web page (experiments/web-experiment/README.md), checked as the
+      # The whole planner for a web page (web/README.md), checked as the
       # browser build compiles it: std rebuilt with atomics for gpui_web's threads, which takes
       # nightly features - RUSTC_BOOTSTRAP on the pinned toolchain, as Zed's own CI checks gpui for
       # the web - and getrandom's browser backend. It replaces the check of seven core crates on

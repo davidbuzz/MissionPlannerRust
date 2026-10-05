@@ -13,7 +13,7 @@ import pathlib, re, sys
 repo = pathlib.Path(sys.argv[1] if len(sys.argv) > 1 else ".").resolve()
 crates = repo / "crates"
 DEPENDENCY = ('# Threads, std\'s on the desktop and Web Workers in a web page '
-              '(experiments/web-experiment/tools/port_threads.py).\n'
+              '(web/tools/port_threads.py).\n'
               'wasm_thread = { git = "https://github.com/zed-industries/wasm_thread", '
               'rev = "0cf96c7708dfb97ccf3da50347e25edcf75d6937" }\n')
 

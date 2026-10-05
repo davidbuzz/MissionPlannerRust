@@ -7,7 +7,7 @@
 # The target directory is the caller's CARGO_TARGET_DIR, else target/web.
 set -euo pipefail
 mode=${1:-check}; shift || true
-repo=$(cd "$(dirname "$0")/../../.." && pwd)
+repo=$(cd "$(dirname "$0")/../.." && pwd)
 emsdk=${EMSDK:-$HOME/emsdk}
 export CC_wasm32_unknown_unknown=$emsdk/upstream/bin/clang
 export AR_wasm32_unknown_unknown=$emsdk/upstream/bin/llvm-ar

@@ -11,7 +11,7 @@ repository.workspace = true
 workspace = true
 
 [dependencies]
-# The clock, std's on the desktop and the browser's in a web page (experiments/web-experiment/tools/port_clock.py).
+# The clock, std's on the desktop and the browser's in a web page (web/tools/port_clock.py).
 web-time = "1"
 mp-vehicle.workspace = true
 thiserror.workspace = true

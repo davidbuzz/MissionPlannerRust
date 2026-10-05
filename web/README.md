@@ -9,11 +9,11 @@ or anything on a Tailscale tailnet: a vehicle, its companion computer, a SITL on
 
 ```sh
 # 1. Build the planner for the web (nightly; std rebuilt with atomics; emsdk's clang for ring):
-experiments/web-experiment/tools/planner-wasm.sh build --release
-wasm-bindgen --target web --out-dir experiments/web-experiment/www/pkg-planner \
+web/tools/planner-wasm.sh build --release
+wasm-bindgen --target web --out-dir web/www/pkg-planner \
     target/web/wasm32-unknown-unknown/release/planner.wasm
 # 2. Serve the page with the cross-origin isolation headers threads need:
-python3 experiments/web-experiment/www/serve.py 8080
+python3 web/www/serve.py 8080
 # 3. Open http://127.0.0.1:8080/planner.html
 #    SIMULATION, then click Multirotor (or Plane, Rover, Helicopter): "try local wasm" is ticked,
 #    the SITL starts in the page and the planner connects to it, as on macOS.

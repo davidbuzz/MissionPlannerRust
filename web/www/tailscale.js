@@ -1,5 +1,5 @@
 // The page's Tailscale node: Tailscale's own Go client built for the browser
-// (experiments/web-experiment/tailscale, kept here as tailscale/tailscale.wasm.gz), started the
+// (web/tailscale, kept here as tailscale/tailscale.wasm.gz), started the
 // first time a link needs it. It joins the tailnet through Tailscale's coordination server and
 // carries its traffic over DERP relays on WebSockets, so the planner's tcp: and udpcl: links reach
 // a vehicle, a companion computer or a SITL anywhere on the tailnet.

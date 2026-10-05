@@ -25,7 +25,7 @@
 //! instead: `std::env::temp_dir` ("no filesystem on this platform"), `std::process::id` ("no
 //! pids on this platform") and `std::env::split_paths`. Here a web page gets an answer that leads
 //! to the ordinary error further on: a temporary folder no file can be made in, an id of 0, and
-//! no folders on the path. (experiments/web-experiment/tools/port_os.py puts these in place.)
+//! no folders on the path. (web/tools/port_os.py puts these in place.)
 //!
 //! And one the desktop has another way, [`http`]: a web page has no sockets, so the crates that
 //! fetch over ureq on the desktop fetch through the browser in a page. And one only a page has,
@@ -106,7 +106,7 @@ pub fn lock<T: ?Sized>(mutex: &Mutex<T>) -> LockResult<MutexGuard<'_, T>> {
 }
 
 /// [`lock`] as a method, so a call reads as `mutex.os_lock()` where it read `mutex.lock()`
-/// (experiments/web-experiment/tools/port_locks.py puts it in place).
+/// (web/tools/port_locks.py puts it in place).
 pub trait Lock<T: ?Sized> {
     /// [`lock`].
     ///
@@ -124,7 +124,7 @@ impl<T: ?Sized> Lock<T> for Mutex<T> {
 /// `Receiver::recv_timeout`, which reads std's clock for its deadline and so panics in a web
 /// page: there the channel is polled against the page's clock, a millisecond's sleep apart on a
 /// Web Worker and spinning on the page's main thread, which may not sleep. On the desktop it is
-/// `recv_timeout` itself (experiments/web-experiment/tools/port_locks.py puts it in place).
+/// `recv_timeout` itself (web/tools/port_locks.py puts it in place).
 pub trait RecvTimeout<T> {
     /// `recv_timeout`.
     ///

@@ -47,7 +47,7 @@ for crate in sorted(changed_crates):
         if re.search(r"^\[dependencies\][^\[]*^web-time\s*=", text, re.M | re.S):
             manifest.write_text(text)
             continue
-    text = text.replace("[dependencies]\n", "[dependencies]\n# The clock, std's on the desktop and the browser's in a web page (experiments/web-experiment/tools/port_clock.py).\n" + dependency, 1)
+    text = text.replace("[dependencies]\n", "[dependencies]\n# The clock, std's on the desktop and the browser's in a web page (web/tools/port_clock.py).\n" + dependency, 1)
     manifest.write_text(text)
 
 print(f"{files} files in {len(changed_crates)} crates: {' '.join(sorted(changed_crates))}")

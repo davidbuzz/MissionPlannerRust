@@ -5,7 +5,7 @@
 // (v1.104.0): the same node - Tailscale's own control client, WireGuard engine and netstack, its
 // traffic over DERP relays on WebSockets - with `ssh` and `fetch` replaced by `dial`, which hands
 // the page a TCP or UDP stream to a tailnet address for the planner's links
-// (experiments/web-experiment/www/link.js), and with logs kept to the console rather than uploaded.
+// (web/www/link.js), and with logs kept to the console rather than uploaded.
 //
 // When run in the browser, newIPN(config) is added to the global namespace. It returns an object
 // with run(callbacks), login(), logout() and dial(network, address, callbacks).

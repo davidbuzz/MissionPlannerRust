@@ -183,7 +183,7 @@ pub fn open_url(url: &LinkUrl) -> Result<Box<dyn Transport>, OpenError> {
         LinkUrl::TcpListen { port } => Ok(Box::new(TcpTransport::listen(*port)?)),
         LinkUrl::Udp { bind, port } => Ok(Box::new(UdpTransport::bind(bind, *port)?)),
         LinkUrl::File { path } => Ok(Box::new(ReplayTransport::open(path)?)),
-        // In a web page, over the tailnet (experiments/web-experiment/www/link.js).
+        // In a web page, over the tailnet (web/www/link.js).
         #[cfg(target_family = "wasm")]
         LinkUrl::UdpClient { host, port } => Ok(Box::new(page::PageTransport::open(&format!(
             "udpcl:{host}:{port}"

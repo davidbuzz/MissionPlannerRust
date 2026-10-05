@@ -12,7 +12,7 @@ import pathlib, re, sys
 repo = pathlib.Path(sys.argv[1] if len(sys.argv) > 1 else ".").resolve()
 crates = repo / "crates"
 DEPENDENCY = ('# The std calls that panic in a web page, std\'s on the desktop '
-              '(experiments/web-experiment/tools/port_os.py).\nmp-os.workspace = true\n')
+              '(web/tools/port_os.py).\nmp-os.workspace = true\n')
 
 def place_imports(text, method, IMPORT):
     """The trait imported into each scope that calls `os_lock` itself: the file, or an inline

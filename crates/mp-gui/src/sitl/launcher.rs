@@ -673,7 +673,7 @@ impl Launcher for LocalWasm {
 }
 
 /// The browser build's "try local wasm": the same four WebAssembly builds, started by the page
-/// itself in a Web Worker (experiments/web-experiment/www/link.js) where the desktop starts them
+/// itself in a Web Worker (web/www/link.js) where the desktop starts them
 /// under Node, through mp_transport::page. Its SERIAL0 is then what the start's
 /// `tcp:127.0.0.1:5760` reaches, as the desktop's bridge serves it there.
 #[cfg(target_family = "wasm")]

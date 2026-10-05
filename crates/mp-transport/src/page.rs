@@ -19,7 +19,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
 //! The browser build's links: a web page has no sockets, so a `tcp:`, `udpcl:` or `ws://` link is
-//! handed to the page (experiments/web-experiment/www/link.js), which reaches the vehicle its own
+//! handed to the page (web/www/link.js), which reaches the vehicle its own
 //! way - ArduPilot's WebAssembly SITL running in the same page for this machine's 127.0.0.1, the
 //! page's Tailscale node for any other address (www/tailscale.js), or the browser's WebSocket - and
 //! the bytes cross between the page and the link's thread here.

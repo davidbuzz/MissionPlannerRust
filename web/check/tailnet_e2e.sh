@@ -13,7 +13,7 @@
 #   check/tailnet_e2e.sh [work-dir]
 set -euo pipefail
 here=$(cd "$(dirname "$0")" && pwd)
-repo=$(cd "$here/../../.." && pwd)
+repo=$(cd "$here/../.." && pwd)
 work=${1:-$(mktemp -d)}
 mkdir -p "$work/bin" "$work/tsd" "$work/sitl"
 cd "$work"
