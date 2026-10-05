@@ -1055,6 +1055,28 @@ pub struct ParamWrite {
     pub force: bool,
     /// Said when every retry of the write goes unanswered.
     pub failure: String,
+    /// Its part in a Param Restore; `Plain` everywhere else.
+    pub role: Role,
+}
+
+/// A write's part in EXPERIMENTAL's Param Restore, `but_paramrestore_Click`: the "enable"
+/// parameters first, failures ignored; then each parameter of the file in turn, checked when its
+/// turn comes - left alone if the vehicle already holds its value - an `_id` one set to 0 first,
+/// then set, both forced.
+/// `// C#: temp.cs:1300-1350`
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum Role {
+    /// A write of any other list.
+    #[default]
+    Plain,
+    /// One of the "enable"s, written first; how it ends is not counted.
+    Enable,
+    /// A parameter of the file, to be compared with what the vehicle holds when its turn comes.
+    Check,
+    /// An `_id` parameter's 0, before its value.
+    Zero,
+    /// A parameter's value, counted as set once the vehicle echoes it.
+    Value,
 }
 
 /// What a list of writes says when it has finished.
@@ -1067,6 +1089,8 @@ pub enum Finish {
         /// Differences not written because this firmware has no such parameter.
         skipped: usize,
     },
+    /// Param Restore's counts: set, already set, and the names that failed.
+    Restore,
 }
 
 /// How one write ended: for the facts, so a test can see the retry from outside.
@@ -1131,6 +1155,26 @@ pub struct ParamWrites {
     finished: bool,
     /// The last write that ended and the value the vehicle now holds for it.
     reported: Option<(String, f64)>,
+    /// Param Restore's counts.
+    restored: Restored,
+}
+
+/// Param Restore's `set`, `alreadyset` and `fails`.
+/// `// C#: temp.cs:1289-1291`
+#[derive(Debug, Default)]
+struct Restored {
+    set: usize,
+    already: usize,
+    failed: Vec<String>,
+}
+
+impl Restored {
+    /// `fails.Add(d.Key)`, once a name.
+    fn fail(&mut self, name: &str) {
+        if !self.failed.iter().any(|failed| failed == name) {
+            self.failed.push(name.to_owned());
+        }
+    }
 }
 
 impl ParamWrites {
@@ -1143,6 +1187,7 @@ impl ParamWrites {
             finish,
             finished: false,
             reported: None,
+            restored: Restored::default(),
         }
     }
 
@@ -1157,6 +1202,7 @@ impl ParamWrites {
                 value,
                 force: false,
                 failure: format!("Set {name} Failed"),
+                role: Role::Plain,
             }],
             Finish::Nudge,
         )
@@ -1174,9 +1220,33 @@ impl ParamWrites {
                 name,
                 value,
                 force: false,
+                role: Role::Plain,
             })
             .collect();
         Self::new(writes, Finish::Apply { skipped })
+    }
+
+    /// EXPERIMENTAL's Param Restore of a file's parameters, in its order: every one whose name
+    /// has "enable" in it written first, then each checked in turn ([`Role`]).
+    /// `// C#: temp.cs:1283-1359`
+    #[must_use]
+    pub fn restore(file: impl IntoIterator<Item = (String, f64)>) -> Self {
+        let file: Vec<(String, f64)> = file.into_iter().collect();
+        let write = |name: &str, value: f64, force: bool, role: Role| ParamWrite {
+            name: name.to_owned(),
+            value,
+            force,
+            failure: String::new(),
+            role,
+        };
+        let enables = file
+            .iter()
+            .filter(|(name, _)| name.to_lowercase().contains("enable"))
+            .map(|(name, value)| write(name, *value, false, Role::Enable));
+        let checks = file
+            .iter()
+            .map(|(name, value)| write(name, *value, true, Role::Check));
+        Self::new(enables.chain(checks).collect(), Finish::Restore)
     }
 
     /// The writes not yet started, and the values they ask for.
@@ -1230,6 +1300,8 @@ impl ParamWrites {
                     // The vehicle has no such parameter. `setParam` returns false for that
                     // without an exception, which none of its callers counts as a failure.
                     Step::Reading(_) => {
+                        // Param Restore's `GetParam` throws for a name the vehicle has not got.
+                        self.restore_failed(&write);
                         progress.written = Some(Written {
                             name: write.name,
                             outcome: RequestOutcome::UnknownParameter,
@@ -1237,10 +1309,26 @@ impl ParamWrites {
                         });
                     }
                     Step::Writing(_) => {
-                        if outcome == RequestOutcome::TimedOut
-                            && !self.failures.contains(&write.failure)
-                        {
-                            self.failures.push(write.failure.clone());
+                        match write.role {
+                            Role::Plain => {
+                                if outcome == RequestOutcome::TimedOut
+                                    && !self.failures.contains(&write.failure)
+                                {
+                                    self.failures.push(write.failure.clone());
+                                }
+                            }
+                            // `catch { }`.
+                            Role::Enable | Role::Check => {}
+                            Role::Zero | Role::Value => {
+                                if matches!(
+                                    outcome,
+                                    RequestOutcome::TimedOut | RequestOutcome::UnknownParameter
+                                ) {
+                                    self.restore_failed(&write);
+                                } else if write.role == Role::Value {
+                                    self.restored.set += 1;
+                                }
+                            }
                         }
                         let held = match outcome {
                             RequestOutcome::Accepted { value: Some(value) } => value.as_f64(),
@@ -1260,7 +1348,35 @@ impl ParamWrites {
                 progress.status = self.summary();
                 return progress;
             };
-            if !matches!(self.finish, Finish::Nudge) {
+            if next.role == Role::Check {
+                // "Set NAME", then: already the vehicle's value, counted and left; else an
+                // `_id` one set to 0 first, then the value, both forced.
+                // `// C#: temp.cs:1317-1341`
+                progress.status = Some(format!("Set {}", next.name));
+                if telemetry.held_parameter(&next.name) == Some(next.value) {
+                    self.restored.already += 1;
+                    continue;
+                }
+                let zero = next.name.to_lowercase().contains("_id");
+                self.queue.push_front(ParamWrite {
+                    role: Role::Value,
+                    ..next.clone()
+                });
+                if zero {
+                    self.queue.push_front(ParamWrite {
+                        value: 0.0,
+                        role: Role::Zero,
+                        ..next
+                    });
+                }
+                continue;
+            }
+            if matches!(self.finish, Finish::Restore) {
+                // The C#'s progress says "Set Enable's" while the enables go, "Set NAME" after.
+                if next.role == Role::Enable {
+                    progress.status = Some("Set Enable's".to_owned());
+                }
+            } else if !matches!(self.finish, Finish::Nudge) {
                 progress.status = Some(format!(
                     "writing {} of {}: {}",
                     self.total - self.queue.len(),
@@ -1292,8 +1408,33 @@ impl ParamWrites {
 
     /// No link to write on: the write fails as one never echoed does.
     fn fail_to_start(&mut self, write: ParamWrite) {
-        if !self.failures.contains(&write.failure) {
-            self.failures.push(write.failure);
+        match write.role {
+            Role::Plain => {
+                if !self.failures.contains(&write.failure) {
+                    self.failures.push(write.failure);
+                }
+            }
+            _ => self.restore_failed(&write),
+        }
+    }
+
+    /// A Param Restore write that failed: its name among the fails, and after a 0 that failed,
+    /// its value not written - the C#'s `catch` skips the rest of that parameter's turn.
+    /// `// C#: temp.cs:1335-1349`
+    fn restore_failed(&mut self, write: &ParamWrite) {
+        match write.role {
+            Role::Zero => {
+                self.restored.fail(&write.name);
+                if self
+                    .queue
+                    .front()
+                    .is_some_and(|next| next.role == Role::Value && next.name == write.name)
+                {
+                    self.queue.pop_front();
+                }
+            }
+            Role::Value => self.restored.fail(&write.name),
+            Role::Plain | Role::Enable | Role::Check => {}
         }
     }
 
@@ -1310,6 +1451,22 @@ impl ParamWrites {
             Finish::Nudge => failed,
             // "Set X Failed" for each, then the summary box.
             // `// C#: GCSViews/ConfigurationView/ConfigRawParams.cs:362-371`
+            // `CustomMessageBox.Show("Set " + set + " params \nAlready Set " + alreadyset +
+            // " params \nFailed to set " + ...)`: on the status line, each line after a "; ".
+            // `// C#: temp.cs:1352-1359`
+            Finish::Restore => {
+                let Restored {
+                    set,
+                    already,
+                    failed,
+                } = &self.restored;
+                let said = format!("Set {set} params; Already Set {already} params");
+                if failed.is_empty() {
+                    said
+                } else {
+                    format!("{said}; Failed to set {}", failed.join(", "))
+                }
+            }
             Finish::Apply { skipped } => {
                 let said = if failed.is_empty() {
                     format!("{} parameters successfully saved.", self.total)
@@ -2002,6 +2159,87 @@ mod tests {
         assert_eq!(
             outcomes,
             [("RTL_ALT", "timed out", 4), ("WPNAV_SPEED", "accepted", 1)]
+        );
+    }
+
+    /// EXPERIMENTAL's Param Restore: the "enable"s first; then each parameter in its turn - left
+    /// alone if the vehicle already holds its value (FENCE_ENABLE, which the first pass wrote,
+    /// among them), an `_id` one set to 0 before its value, both forced; one never echoed named
+    /// among the failures; and the C#'s counts at the end.
+    /// `// C#: temp.cs:1283-1359`
+    #[test]
+    fn param_restore_writes_the_enables_first_and_counts_what_it_set() {
+        let (telemetry, mut vehicle) = Vehicle::connect(fast());
+        for (name, value) in [
+            ("ARMING_CHECK", 1.0),
+            ("COMPASS_DEV_ID", 0.0),
+            ("FENCE_ENABLE", 0.0),
+            ("RTL_ALT", 1500.0),
+            ("SERIAL1_PROTOCOL", 2.0),
+        ] {
+            vehicle.send(&param(name, value, INT32));
+            until(name, || telemetry.holds_parameter(name));
+        }
+        let mut writes = ParamWrites::restore([
+            ("ARMING_CHECK".to_owned(), 1.0),
+            ("COMPASS_DEV_ID".to_owned(), 97539.0),
+            ("FENCE_ENABLE".to_owned(), 1.0),
+            ("RTL_ALT".to_owned(), 2000.0),
+            ("SERIAL1_PROTOCOL".to_owned(), 5.0),
+        ]);
+        // Every write echoed but RTL_ALT's.
+        let (said, _) = run(&mut writes, &telemetry, &mut vehicle, |vehicle, message| {
+            if let MavMessage::ParamSet(set) = message {
+                let name = mp_params::decode_param_id(&set.param_id);
+                if name != "RTL_ALT" {
+                    vehicle.send(&param(&name, set.param_value, INT32));
+                }
+            }
+        });
+
+        assert_eq!(
+            traffic(&vehicle),
+            [
+                "set FENCE_ENABLE",
+                "set COMPASS_DEV_ID",
+                "set COMPASS_DEV_ID",
+                "set RTL_ALT",
+                "set RTL_ALT",
+                "set RTL_ALT",
+                "set RTL_ALT",
+                "set SERIAL1_PROTOCOL",
+            ]
+        );
+        assert_eq!(said.first().map(String::as_str), Some("Set Enable's"));
+        assert_eq!(
+            said.last().map(String::as_str),
+            Some("Set 2 params; Already Set 2 params; Failed to set RTL_ALT")
+        );
+        assert_eq!(telemetry.held_parameter("COMPASS_DEV_ID"), Some(97539.0));
+        assert_eq!(telemetry.held_parameter("SERIAL1_PROTOCOL"), Some(5.0));
+    }
+
+    /// With no link, every parameter that differs fails, and nothing is counted as set.
+    #[test]
+    fn param_restore_with_no_link_fails_every_parameter() {
+        let telemetry = Telemetry::idle();
+        let mut writes = ParamWrites::restore([
+            ("BRD_SAFETY_ENABLE".to_owned(), 0.0),
+            ("SYSID_THISMAV".to_owned(), 2.0),
+        ]);
+        let mut said = None;
+        until("the list to end", || {
+            let progress = writes.advance(&telemetry);
+            if progress.status.is_some() {
+                said = progress.status;
+            }
+            writes.is_finished()
+        });
+        assert_eq!(
+            said.as_deref(),
+            Some(
+                "Set 0 params; Already Set 0 params; Failed to set BRD_SAFETY_ENABLE, SYSID_THISMAV"
+            )
         );
     }
 

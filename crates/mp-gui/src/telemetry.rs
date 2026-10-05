@@ -1216,13 +1216,19 @@ impl Telemetry {
         Some(link.read_param(id, name))
     }
 
+    /// The value the vehicle being flown last reported for `name`, if it has listed it.
+    #[must_use]
+    pub fn held_parameter(&self, name: &str) -> Option<f64> {
+        let (link, id) = self.target()?;
+        link.param_value(id, name)
+            .map(mp_params::ParamValue::as_f64)
+    }
+
     /// Whether the vehicle being flown has listed a parameter of this name - which `setParam`
-    /// needs before it will send one.
+    /// needs before it will send one. Looked up in the link's table, not a copy of it.
     #[must_use]
     pub fn holds_parameter(&self, name: &str) -> bool {
-        self.target()
-            .and_then(|(link, id)| link.params(id))
-            .is_some_and(|table| table.get(name).is_some())
+        self.held_parameter(name).is_some()
     }
 
     /// Where a request is, as the link has it. `None` once the link has forgotten it, or with

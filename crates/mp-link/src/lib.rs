@@ -1006,6 +1006,12 @@ impl Link {
         self.shared.params.os_lock().ok()?.get(&target).cloned()
     }
 
+    /// One parameter of a vehicle's table, as it was last heard, without copying the table.
+    #[must_use]
+    pub fn param_value(&self, target: VehicleId, name: &str) -> Option<ParamValue> {
+        self.shared.params.os_lock().ok()?.get(&target)?.get(name)
+    }
+
     /// Which state a vehicle's parameter table is in, without copying it: its
     /// [`ParamTable::generation`], which moves each time a parameter arrives.
     ///

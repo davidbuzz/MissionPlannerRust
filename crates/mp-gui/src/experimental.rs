@@ -238,6 +238,7 @@ pub(crate) fn tool(name: &str) -> Tool {
         "but_proximity" => Tool::Advanced("but_proximity"),
         "BUT_georefimage" => Tool::Georef,
         "but_messageinterval" => Tool::MessageInterval,
+        "but_paramrestore" => Tool::Act(Act::ParamRestore),
         "but_reboot" => Tool::Act(Act::Reboot),
         "BUT_forcecal_accel" => Tool::Act(Act::ForceAccelCal),
         "BUT_forcecal_mag" => Tool::Act(Act::ForceCompassCal),
@@ -275,7 +276,18 @@ pub(crate) enum Act {
     /// `but_hwids_Click`: ids asked for, each taken apart as `Device.DeviceStructure` does.
     /// `// C#: temp.cs:1120-1148`
     DecodeHwids,
+    /// `but_paramrestore_Click`: "This process make take a some time", a parameter file asked
+    /// for, and its parameters written as Param Restore writes them (params.rs's `restore`).
+    /// `// C#: temp.cs:1267-1362`
+    ParamRestore,
 }
+
+/// Param Restore's first box.
+/// `// C#: temp.cs:1269`
+const RESTORE_NOTICE: &str = "This process make take a some time";
+/// `ParamFile.FileMask`, the file dialog's filter.
+/// `// C#: ExtLibs/Utilities/ParamFile.cs:15`
+const PARAM_FILE_MASK: &str = "Parameter File|*.param;*.parm|All Files|*.*";
 
 /// `but_hwids_Click`'s report: for every whole number in each line, the line (its tabs as
 /// spaces) and the device that id names, a line each.
@@ -340,6 +352,10 @@ enum Asking {
     Input { input: InputBox, then: Answered },
     /// `CustomMessageBox.Show(text)`: what a tool found.
     Message { text: String },
+    /// Param Restore's notice, whose OK asks for the file.
+    Notice,
+    /// Param Restore's `OpenFileDialog`, the path typed (as every file dialog here).
+    Path(crate::config::firmware::PathBox),
 }
 
 /// What an input box's answer is for.
@@ -448,6 +464,10 @@ fn act(
             focus_input(this, window, cx);
         }
         Act::ForceAccelCal | Act::ForceCompassCal | Act::DfuMode => send(this, what),
+        Act::ParamRestore => {
+            this.experimental.asking = Some(Asking::Notice);
+            focus_input(this, window, cx);
+        }
     }
 }
 
@@ -489,7 +509,7 @@ fn send(this: &mut MissionPlanner, what: Act) {
         Act::Lockup => this
             .telemetry
             .command_unacknowledged(PREFLIGHT_REBOOT_SHUTDOWN, LOCKUP),
-        Act::Qnh | Act::DecodeHwids => true,
+        Act::Qnh | Act::DecodeHwids | Act::ParamRestore => true,
     };
     if !sent {
         this.file_status = Some(error_box(PLEASE_CONNECT));
@@ -520,7 +540,7 @@ fn answer(this: &mut MissionPlanner, yes: bool) {
             });
         }
         Asking::Confirm { then, .. } => send(this, then),
-        Asking::Message { .. } => {}
+        Asking::Message { .. } | Asking::Notice | Asking::Path(_) => {}
         Asking::Input {
             input,
             then: Answered::Hwids,
@@ -559,6 +579,40 @@ fn answer(this: &mut MissionPlanner, yes: bool) {
     }
 }
 
+/// Param Restore's notice answered: the file asked for, in a box with the parameter files' filter.
+/// `// C#: temp.cs:1269-1281`
+fn notice_ok(this: &mut MissionPlanner) {
+    this.experimental.asking = Some(Asking::Path(crate::config::firmware::PathBox::new(
+        "",
+        PARAM_FILE_MASK,
+    )));
+}
+
+/// Param Restore's file dialog answered: with a file, `ParamFile.loadParamFile` and its parameters
+/// restored (params.rs's `restore`, on the status line as it goes); Cancel does nothing. A name
+/// that is no file keeps the box, as `OpenFileDialog` keeps asking. The file's parameters go in
+/// their name order, which the planner's file reader keeps, where the C#'s dictionary keeps the
+/// file's - the same for every file Mission Planner writes, which it writes sorted.
+/// `// C#: temp.cs:1279-1290`
+fn restore_file(this: &mut MissionPlanner, ok: bool) {
+    let Some(Asking::Path(path)) = this.experimental.asking.take() else {
+        return;
+    };
+    if !ok {
+        return;
+    }
+    let Some(file) = path.chosen() else {
+        this.experimental.asking = Some(Asking::Path(path));
+        return;
+    };
+    match mp_params::param_file::ParamFile::load(&file) {
+        Ok(params) => this.start_param_writes(crate::params::ParamWrites::restore(
+            params.iter().map(|(name, value)| (name.to_owned(), value)),
+        )),
+        Err(err) => this.file_status = Some(error_box(format!("{}: {err}", file.display()))),
+    }
+}
+
 /// The question showing, over the tab.
 fn asking_box(
     this: &MissionPlanner,
@@ -586,6 +640,41 @@ fn asking_box(
             |this| this.experimental.asking = None,
             cx,
         )),
+        Asking::Notice => Some(message_box(
+            IDS,
+            &Waiting {
+                text: RESTORE_NOTICE.to_owned(),
+                caption: String::new(),
+                buttons: None,
+            },
+            window,
+            notice_ok,
+            cx,
+        )),
+        Asking::Path(path) => {
+            let focus = this.experimental.focus.as_ref()?;
+            Some(crate::config::firmware::path_box(
+                IDS,
+                path,
+                focus,
+                window,
+                |this, event| {
+                    let outcome = match this.experimental.asking.as_mut() {
+                        Some(Asking::Path(path)) => path.field.key(event),
+                        _ => return false,
+                    };
+                    match outcome {
+                        crate::textfield::KeyOutcome::Submitted => restore_file(this, true),
+                        crate::textfield::KeyOutcome::Cancelled => restore_file(this, false),
+                        crate::textfield::KeyOutcome::Changed => {}
+                        crate::textfield::KeyOutcome::Ignored => return false,
+                    }
+                    true
+                },
+                restore_file,
+                cx,
+            ))
+        }
         Asking::Input { input, .. } => {
             let focus = this.experimental.focus.as_ref()?;
             Some(input_box(
@@ -762,6 +851,8 @@ pub(crate) fn record_facts(state: &Experimental) {
             Some(Asking::Confirm { text, .. }) => (*text).to_owned(),
             Some(Asking::Input { input, .. }) => format!("{}: {}", input.title, input.prompt),
             Some(Asking::Message { text }) => format!("message: {}", text.trim_end()),
+            Some(Asking::Notice) => RESTORE_NOTICE.to_owned(),
+            Some(Asking::Path(path)) => format!("{}: {}", path.caption, path.field.value()),
         },
     );
 }
@@ -807,7 +898,8 @@ mod tests {
                 Tool::Unavailable(why) => assert!(!why.is_empty()),
             }
         }
-        assert_eq!(opens, 17);
+        assert_eq!(opens, 18);
+        assert_eq!(tool("but_paramrestore"), Tool::Act(Act::ParamRestore));
         assert_eq!(tool("but_messageinterval"), Tool::MessageInterval);
         assert_eq!(tool("BUT_swarm"), Tool::Unavailable(SECTION_12_D13));
         assert_eq!(tool("but_GDAL"), Tool::Unavailable(NO_GDAL));
