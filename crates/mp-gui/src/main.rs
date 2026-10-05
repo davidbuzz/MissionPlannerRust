@@ -109,6 +109,8 @@ mod frametimes;
 mod page_files;
 // The browser's serial ports (WebSerial), in a page.
 mod page_serial;
+// The fonts a page draws with.
+mod page_fonts;
 #[cfg(target_family = "wasm")]
 mod page_storage;
 mod repaint;
@@ -4947,18 +4949,14 @@ fn main() {
 
     platform::application().run(move |cx: &mut App| {
         // A web page has no system fonts for gpui to find, so the browser build brings its own
-        // (the experiment's IBM Plex Sans, OFL), as Zed's web examples do.
+        // (page_fonts.rs: IBM Plex Sans, and DejaVu's symbols Plex has not got).
         #[cfg(target_family = "wasm")]
-        if let Err(err) = cx.text_system().add_fonts(vec![
-            std::borrow::Cow::Borrowed(
-                include_bytes!("../fonts/IBMPlexSans-Regular.ttf")
-                    .as_slice(),
-            ),
-            std::borrow::Cow::Borrowed(
-                include_bytes!("../fonts/IBMPlexSans-SemiBold.ttf")
-                    .as_slice(),
-            ),
-        ]) {
+        if let Err(err) = cx.text_system().add_fonts(
+            page_fonts::FONTS
+                .iter()
+                .map(|font| std::borrow::Cow::Borrowed(*font))
+                .collect(),
+        ) {
             log::error!("planner: the fonts did not load: {err:#}");
         }
         // 1600x1200. Room for the panel columns and a map worth looking at side by side. Smaller
