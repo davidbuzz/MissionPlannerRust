@@ -1,0 +1,40 @@
+# Ctrl+Z: Mission Planner's camera test, MainV2.ProcessCmdKey's `new Camera().test(MainV2.comPort)`
+# (MainV2.cs:4154-4159; ExtLibs/ArduPilot/Camera.cs:12-35; crates/mp-gui/src/cmd_keys/camera.rs).
+#
+# The claim: against tests/gui/camera-vehicle.py - a copter, system 1 component 1, with a camera,
+# component 100, that acknowledges every command sent to it and refuses the second - Ctrl+Z finds
+# the camera and sends it the six commands one after another, each once the last is answered, the
+# refusal moved on from as `doCommand`'s false is: REQUEST_CAMERA_INFORMATION,
+# REQUEST_VIDEO_STREAM_INFORMATION, REQUEST_CAMERA_SETTINGS, SET_CAMERA_MODE,
+# REQUEST_STORAGE_INFORMATION, VIDEO_START_STREAMING. A second press runs it again.
+#
+# Run from the repository root:
+#   tools/gui-test.sh tests/gui/keys-camera-test.gui -- tcp:127.0.0.1:5797
+#
+# Not yet run: the budget is a guess, set by hand until a passing run records one.
+setup python3 tests/gui/camera-vehicle.py --work $WORK --port 5797
+env XDG_DATA_HOME $WORK
+screen fly
+window 1600x1200
+budget 8
+
+# The copter and its camera, both heard.
+expect vehicle.count 2
+expect camera.test.started 0
+expect camera.test.ended none
+
+# The key, on the flight screen with nothing focused: the six, to the camera.
+key ctrl+z
+expect camera.test.started 1
+expect camera.test.camera 1:100
+within 5
+expect camera.test.ended done
+expect camera.test.sent 6
+expect camera.test.running false
+
+# Again: six more.
+key ctrl+z
+expect camera.test.started 2
+within 5
+expect camera.test.sent 12
+expect camera.test.ended done

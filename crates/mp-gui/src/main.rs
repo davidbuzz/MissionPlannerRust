@@ -658,6 +658,8 @@ struct MissionPlanner {
     /// The Geo Reference Images form (`GeoRef/georefimage.cs`) the DataFlash Logs page opens.
     georef: georef_ui::GeorefUi,
     // ---- end Geo Reference ----
+    /// The forms `ProcessCmdKey`'s Ctrl+X, Ctrl+W and Ctrl+J open, and Ctrl+Z's camera test.
+    key_forms: cmd_keys::KeyForms,
     // ---- SITL ----
     /// The SIMULATION screen's page object (`GCSViews/SITL.cs`), and its keyboard focus.
     sitl: sitl::Sitl,
@@ -1011,6 +1013,7 @@ impl MissionPlanner {
             // ---- Geo Reference ----
             georef: georef_ui::GeorefUi::new(cx),
             // ---- end Geo Reference ----
+            key_forms: cmd_keys::KeyForms::new(cx),
             // ---- SITL ----
             sitl: sitl::Sitl::new(),
             sitl_focus: sitl::Focus::new(cx),
@@ -3296,6 +3299,8 @@ impl Render for MissionPlanner {
         // and the writes.
         self.extra_setup_tick(&view, window);
         // ---- end SETUP's small pages ----
+        // `ProcessCmdKey`'s forms: the box the focus left, DevOps' answer, the camera test.
+        self.key_forms_tick(window);
         // ---- RTK/GPS Inject ----
         // The page object disposed with its screen, what its thread did, its timer, and where
         // its thread sends.
@@ -3779,6 +3784,7 @@ impl Render for MissionPlanner {
             // ---- Geo Reference ----
             georef_ui::record_facts(&self.georef);
             // ---- end Geo Reference ----
+            cmd_keys::record_facts(&self.key_forms, &self.persisted);
             // ---- SITL ----
             sitl::record_facts(&self.sitl, &self.persisted);
             help::record_facts(&self.help);
@@ -4506,6 +4512,8 @@ impl Render for MissionPlanner {
                         window,
                         cx,
                     ))
+                    // `ProcessCmdKey`'s forms, free forms in the C#: over whichever screen shows.
+                    .children(cmd_keys::overlay(self, window, cx))
                     // ---- row 96 ----
                     // The plugins' questions and forms, and the flight map's plugin entries.
                     .children(plugins_ui::overlay(

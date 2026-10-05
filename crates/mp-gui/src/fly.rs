@@ -5397,6 +5397,40 @@ impl Playback {
         self.speed_label = format!("x {}", mp_params::param_file::invariant_double(speed));
     }
 
+    /// `MainV2.comPort.logplaybackfile != null`: a log is loaded, playing or not.
+    #[must_use]
+    pub const fn loaded(&self) -> bool {
+        self.control.is_some()
+    }
+
+    /// The keypad's - and + on the flight screen: `LogPlayBackSpeed` one less or more above 1,
+    /// else halved or doubled; then `updateLogPlayPosition` - the track bar, the percentage and
+    /// the speed said again, which it does only with a log loaded (it throws on the missing file,
+    /// or on an empty one's 0 / 0, before the labels).
+    /// `// C#: GCSViews/FlightData.cs:925-941, 5544-5571`
+    pub fn step_speed(&mut self, faster: bool) {
+        let speed = match (faster, self.speed > 1.0) {
+            (false, true) => self.speed - 1.0,
+            (false, false) => self.speed / 2.0,
+            (true, true) => self.speed + 1.0,
+            (true, false) => self.speed * 2.0,
+        };
+        self.speed = speed;
+        let Some(control) = self.control.clone() else {
+            return;
+        };
+        control.set_speed(speed);
+        if control.is_empty() {
+            return;
+        }
+        #[allow(clippy::cast_precision_loss, clippy::cast_possible_truncation)]
+        #[allow(clippy::cast_sign_loss)]
+        let value = (control.position() as f64 / control.len() as f64 * 100.0) as u8;
+        self.tracklog = value.min(100);
+        self.percent_label = percent(&control);
+        self.speed_label = format!("x {}", mp_params::param_file::invariant_double(speed));
+    }
+
     /// `tracklog_Scroll`: the file moved to the value's percentage of its length, and the percent
     /// label said again. `// C#: GCSViews/FlightData.cs:5361-5378`
     pub fn scroll(&mut self, value: u8) {
@@ -10920,6 +10954,41 @@ mod tests {
         playback.load("/somewhere/flight.tlog", Arc::clone(&control));
         assert_eq!(control.speed(), 10.0);
         assert_eq!(playback.file_name, "flight.tlog");
+    }
+
+    /// The keypad's - and +: one less or more above 1, half or double at 1 and under; the label
+    /// said again only with a log loaded, and the log played at the new speed.
+    #[test]
+    fn the_keypad_steps_the_speed_as_flight_datas_keys_do() {
+        let mut playback = Playback::default();
+        assert!(!playback.loaded());
+        playback.step_speed(false);
+        playback.step_speed(false);
+        // No log: `updateLogPlayPosition` throws before the label.
+        assert_eq!(playback.speed_label, "x 1.0");
+        let control = control(10);
+        playback.load("flight.tlog", Arc::clone(&control));
+        assert!(playback.loaded());
+        assert_eq!(control.speed(), 0.25);
+        playback.step_speed(true);
+        assert_eq!(playback.speed_label, "x 0.5");
+        assert_eq!(control.speed(), 0.5);
+        playback.step_speed(true);
+        playback.step_speed(true);
+        assert_eq!(playback.speed_label, "x 2");
+        playback.step_speed(true);
+        playback.step_speed(true);
+        assert_eq!(playback.speed_label, "x 4");
+        assert_eq!(control.speed(), 4.0);
+        playback.step_speed(false);
+        playback.step_speed(false);
+        playback.step_speed(false);
+        assert_eq!(playback.speed_label, "x 1");
+        playback.step_speed(false);
+        assert_eq!(playback.speed_label, "x 0.5");
+        assert_eq!(playback.percent_label, "0.00%");
+        playback.close();
+        assert!(!playback.loaded());
     }
 
     #[test]

@@ -1,0 +1,80 @@
+# Ctrl+J: Mission Planner's DevOps window, MainV2.ProcessCmdKey's `new DevopsUI()
+# .ShowUserControl()` (MainV2.cs:4195-4200; Controls/DevopsUI.cs; crates/mp-gui/src/cmd_keys/
+# devops_ui.rs).
+#
+# The claim: the form opens as its Designer leaves it - sysid 1, compid 1, bus type SPI, the name
+# icm20948_ext, bus 0, address 0, regstart 255, count 0, every box enabled. The bus type's down
+# arrow, from no item chosen, chooses I2C: the name disabled, the bus and the address enabled; down
+# again, SPI, the other way round (dom_bustype_SelectedItemChanged, DevopsUI.cs:34-50). count's up
+# arrow twice reads 2. Do It sends DEVICE_OP_READ (MAVLinkInterface.cs:1012-1111) and, with no
+# vehicle to answer, the second passes and the line is "No Response - 0" (DevopsUI.cs:20-32). test
+# writes, then reads, a second each, and its read brought nothing: `Aggregate`'s throw on the
+# status line by the owner's ruling, no line added (DevopsUI.cs:52-62).
+#
+# No vehicle: nothing answers, which is what the claim needs. Run from the repository root:
+#   tools/gui-test.sh tests/gui/keys-devops.gui
+#
+# Not yet run: the budget is a guess, set by hand until a passing run records one.
+env XDG_DATA_HOME $WORK
+screen fly
+window 1600x1200
+budget 12
+
+expect devops.window false
+# The key, on the flight screen with nothing focused: the Designer's values.
+key ctrl+j
+expect devops.window true
+expect devops.opened 1
+expect devops.sysid 1
+expect devops.compid 1
+expect devops.busno 0
+expect devops.address 0
+expect devops.regstart 255
+expect devops.count 0
+expect devops.bustype SPI
+expect devops.spiname icm20948_ext
+expect devops.spiname.enabled true
+expect devops.busno.enabled true
+expect devops.address.enabled true
+expect devops.lines 0
+expect devops.busy none
+
+# The bus type's arrows.
+click devops-dom_bustype-down
+expect devops.bustype I2C
+expect devops.spiname.enabled false
+expect devops.busno.enabled true
+expect devops.address.enabled true
+click devops-dom_bustype-down
+expect devops.bustype SPI
+expect devops.spiname.enabled true
+expect devops.busno.enabled false
+expect devops.address.enabled false
+
+# count: two up.
+click devops-num_count-up
+click devops-num_count-up
+expect devops.count 2
+
+# Do It: the read sent, a second with no answer, the line.
+click devops-but_doit
+expect devops.sent 1
+within 3
+expect devops.busy none
+expect devops.lines 1
+expect devops.last No Response - 0
+
+# test: the write's second, the read's, then the throw on the status line.
+click devops-but_test
+expect devops.busy test-write
+within 3
+expect devops.busy test-read
+within 3
+expect status Sequence contains no elements
+expect devops.busy none
+expect devops.sent 3
+expect devops.lines 1
+
+# The close box.
+click devops-close
+expect devops.window false

@@ -31,9 +31,21 @@
 //! * A key compares as `keyData ==` does: the F keys with no modifier, the letters with Control
 //!   and nothing else. Control on every platform, as Mission Planner under mono on a Mac.
 //!
-//! `// C#: MainV2.cs:4067-4182`
+//! The forms the Control keys open that nothing else opens are ported under this module: Ctrl+X's
+//! map cache (`gmap_cache`), Ctrl+J's DevOps (`devops_ui`), Ctrl+W's propagation settings
+//! (`propagation_settings`), and Ctrl+Z's camera test (`camera`). Ctrl+G's NMEA output and Ctrl+L's
+//! spectrogram are CONFIG > Advanced's windows (`config::nmea_output`, `config::spectrogram`),
+//! opened as its buttons open them and drawn here over every screen but the two that draw the
+//! Advanced page's windows already.
+//!
+//! `// C#: MainV2.cs:4067-4208`
 
-use gpui::{Context, Keystroke, Window};
+mod camera;
+mod devops_ui;
+mod gmap_cache;
+mod propagation_settings;
+
+use gpui::{AnyElement, Context, Keystroke, Window};
 
 use crate::{MissionPlanner, Screen};
 
@@ -53,6 +65,249 @@ pub(crate) fn fly_tab_key(keystroke: &Keystroke) -> Option<usize> {
             .filter(|n| (1..=9).contains(n))
             .map(|n| n - 1),
     }
+}
+
+/// `FlightData.ProcessCmdKey`'s keys for a log being played.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum PlaybackKey {
+    /// `Keys.Space`: `BUT_playlog_Click`, with a log loaded.
+    PlayPause,
+    /// `Keys.Subtract`, the keypad's -: `LogPlayBackSpeed` down.
+    Slower,
+    /// `Keys.Add`, the keypad's +: `LogPlayBackSpeed` up.
+    Faster,
+}
+
+/// Whether gpui names the keypad's - and + apart from the main keyboard's: on Linux it gives them
+/// the keysym's name less `KP_`, `subtract` and `add`; on Windows, macOS and in a browser it gives
+/// the character, `-` and `+`, the main keyboard's too, so there those are taken as the keypad's.
+const KEYPAD_NAMED: bool = cfg!(target_os = "linux");
+
+/// The playback key `keystroke` is, compared as `keyData ==` does: the key alone.
+/// `// C#: GCSViews/FlightData.cs:918-941`
+#[must_use]
+pub(crate) fn playback_key(keystroke: &Keystroke, keypad_named: bool) -> Option<PlaybackKey> {
+    let modifiers = &keystroke.modifiers;
+    if modifiers.control || modifiers.alt || modifiers.shift || modifiers.platform {
+        return None;
+    }
+    match keystroke.key.as_str() {
+        "space" => Some(PlaybackKey::PlayPause),
+        "subtract" => Some(PlaybackKey::Slower),
+        "add" => Some(PlaybackKey::Faster),
+        "-" if !keypad_named => Some(PlaybackKey::Slower),
+        "+" if !keypad_named => Some(PlaybackKey::Faster),
+        _ => None,
+    }
+}
+
+/// The forms `ProcessCmdKey` opens that nothing else does, the camera test it runs, and the
+/// keyboard focus of their boxes.
+pub(crate) struct KeyForms {
+    /// Ctrl+X: `GMAPCache`.
+    map_cache: gmap_cache::MapCache,
+    /// Ctrl+J: `DevopsUI`.
+    devops: devops_ui::Devops,
+    devops_focus: devops_ui::FocusHandles,
+    /// Ctrl+W: `PropagationSettings`, and its number being typed into.
+    propagation: propagation_settings::Propagation,
+    propagation_focus: gpui::FocusHandle,
+    /// Ctrl+Z: `Camera.test`.
+    camera: camera::CameraTest,
+}
+
+impl KeyForms {
+    /// None open.
+    pub(crate) fn new(cx: &mut Context<MissionPlanner>) -> Self {
+        Self {
+            map_cache: gmap_cache::MapCache::default(),
+            devops: devops_ui::Devops::default(),
+            devops_focus: devops_ui::FocusHandles::new(cx),
+            propagation: propagation_settings::Propagation::default(),
+            propagation_focus: cx.focus_handle(),
+            camera: camera::CameraTest::default(),
+        }
+    }
+}
+
+/// Facts a UI test asserts on: each form's, and the camera test's.
+pub(crate) fn record_facts(forms: &KeyForms, settings: &crate::settings::Persisted) {
+    gmap_cache::record_facts(&forms.map_cache);
+    devops_ui::record_facts(&forms.devops);
+    propagation_settings::record_facts(&forms.propagation, settings);
+    camera::record_facts(&forms.camera);
+}
+
+/// Whether this module draws Ctrl+G's and Ctrl+L's windows over `screen`: every screen but SETUP,
+/// whose Advanced page opens them, and EXPERIMENTAL, which opens them as that page does - both
+/// draw them with that page's other windows (`extra_setup_overlay`), and twice would be two.
+#[must_use]
+const fn draws_advanced_windows(screen: Screen) -> bool {
+    !matches!(screen, Screen::Setup | Screen::Experimental)
+}
+
+/// The forms over the window, whichever screen shows: the first open of Ctrl+X's, Ctrl+W's and
+/// Ctrl+J's; then Ctrl+L's spectrogram and Ctrl+G's NMEA output, which SETUP and EXPERIMENTAL
+/// draw with the Advanced page's other windows (`extra_setup_overlay`), so here only elsewhere.
+/// `// C#: MainV2.cs:4124-4152, 4195-4200`
+pub(crate) fn overlay(
+    this: &MissionPlanner,
+    window: &Window,
+    cx: &mut Context<MissionPlanner>,
+) -> Option<AnyElement> {
+    let forms = &this.key_forms;
+    gmap_cache::overlay(&forms.map_cache, window, cx)
+        .or_else(|| {
+            propagation_settings::overlay(&forms.propagation, &forms.propagation_focus, window, cx)
+        })
+        .or_else(|| devops_ui::overlay(&forms.devops, &forms.devops_focus, window, cx))
+        .or_else(|| {
+            if !draws_advanced_windows(this.screen) {
+                return None;
+            }
+            crate::config::spectrogram::overlay(
+                &this.extra.spectrogram,
+                &this.extra_focus.spectrogram,
+                window,
+                cx,
+            )
+            .or_else(|| {
+                crate::config::nmea_output::overlay(
+                    &this.extra.nmea_output,
+                    &this.extra_focus.nmea_prompt,
+                    window,
+                    cx,
+                )
+            })
+        })
+}
+
+/// What a form's box does when it is used: clicked into, a key while it has the keyboard, and,
+/// for a number, an arrow (up when true).
+struct BoxHandlers<B, K, S> {
+    begin: B,
+    key: K,
+    step: S,
+}
+
+/// A form's box at its place, `(x, y, width, height)`: its text - typed into, with a caret, while
+/// it has the keyboard - and for a number its arrows, `<id>-up` and `<id>-down`; dimmed and inert
+/// while disabled. While it has the keyboard every key is its own, kept from the main window: the
+/// C#'s forms are windows of their own, whose keys `MainV2.ProcessCmdKey` never sees.
+#[allow(clippy::too_many_arguments)]
+fn form_box<B, K, S>(
+    id: &'static str,
+    text: String,
+    (x, y, width, height): (f32, f32, f32, f32),
+    arrows: bool,
+    editing: bool,
+    enabled: bool,
+    handle: &gpui::FocusHandle,
+    handlers: BoxHandlers<B, K, S>,
+    window: &Window,
+    cx: &mut Context<MissionPlanner>,
+) -> AnyElement
+where
+    B: Fn(&mut MissionPlanner) + 'static,
+    K: Fn(&mut MissionPlanner, &gpui::KeyDownEvent) -> bool + 'static,
+    S: Fn(&mut MissionPlanner, bool) + Clone + 'static,
+{
+    use crate::ui::theme;
+    use gpui::{SharedString, div, prelude::*, px, rgb};
+
+    let focused = enabled && editing && handle.is_focused(window);
+    let body = crate::probe::measured(id, div())
+        .id(id)
+        .flex_1()
+        .h_full()
+        .flex()
+        .items_center()
+        .px_1()
+        .overflow_hidden()
+        .whitespace_nowrap()
+        .text_xs()
+        .text_color(rgb(if enabled { theme::TEXT } else { theme::DIM }))
+        .child(text)
+        .children(focused.then(|| div().w(px(1.0)).h(px(12.0)).bg(rgb(theme::ACCENT))));
+    let body = if !enabled {
+        body
+    } else if editing {
+        let key = handlers.key;
+        body.track_focus(handle)
+            .key_context("TextField")
+            .cursor_text()
+            .on_key_down(
+                cx.listener(move |this, event: &gpui::KeyDownEvent, _window, cx| {
+                    cx.stop_propagation();
+                    if key(this, event) {
+                        cx.notify();
+                    }
+                }),
+            )
+    } else {
+        let begin = handlers.begin;
+        let handle = handle.clone();
+        body.cursor_text()
+            .on_click(cx.listener(move |this, _event, window, cx| {
+                begin(this);
+                handle.focus(window, cx);
+                cx.notify();
+            }))
+    };
+    let mut boxed = div()
+        .absolute()
+        .left(px(x))
+        .top(px(y))
+        .w(px(width))
+        .h(px(height))
+        .flex()
+        .rounded_sm()
+        .border_1()
+        .border_color(rgb(if focused {
+            theme::ACCENT
+        } else {
+            theme::BORDER
+        }))
+        .bg(rgb(if enabled { theme::ACTION } else { theme::PANEL }))
+        .child(body);
+    if arrows {
+        let mut column = div()
+            .w(px(14.0))
+            .h_full()
+            .flex()
+            .flex_col()
+            .border_l_1()
+            .border_color(rgb(theme::BORDER));
+        for (suffix, glyph, up) in [("up", "\u{25b2}", true), ("down", "\u{25bc}", false)] {
+            let arrow_id = format!("{id}-{suffix}");
+            let base = crate::probe::measured(arrow_id.clone(), div())
+                .id(SharedString::from(arrow_id))
+                .flex_1()
+                .flex()
+                .items_center()
+                .justify_center()
+                .text_size(px(7.0));
+            column = column.child(if enabled {
+                let step = handlers.step.clone();
+                base.text_color(rgb(theme::TEXT))
+                    .cursor_pointer()
+                    .hover(|style| style.bg(rgb(theme::BORDER)))
+                    .child(glyph)
+                    .on_click(cx.listener(move |this, _event, window, cx| {
+                        window.blur(cx);
+                        step(this, up);
+                        cx.notify();
+                    }))
+                    .into_any_element()
+            } else {
+                base.text_color(rgb(theme::DIM))
+                    .child(glyph)
+                    .into_any_element()
+            });
+        }
+        boxed = boxed.child(column);
+    }
+    boxed.into_any_element()
 }
 
 /// Ctrl+Y's message once the command has been answered or refused, and when it went unanswered
@@ -96,7 +351,7 @@ pub(crate) enum CmdKey {
 }
 
 /// The key `keystroke` is to `ProcessCmdKey`, if any.
-/// `// C#: MainV2.cs:4073-4177`
+/// `// C#: MainV2.cs:4073-4200`
 #[must_use]
 pub(crate) fn cmd_key(keystroke: &Keystroke) -> Option<CmdKey> {
     let modifiers = &keystroke.modifiers;
@@ -134,7 +389,7 @@ pub(crate) fn cmd_key(keystroke: &Keystroke) -> Option<CmdKey> {
 impl MissionPlanner {
     /// `ProcessCmdKey`: whether the key was one of its, and taken. The flight screen's own come
     /// first, as its control's `ProcessCmdKey` runs before the form's.
-    /// `// C#: MainV2.cs:4067-4182; GCSViews/FlightData.cs:865-943`
+    /// `// C#: MainV2.cs:4067-4208; GCSViews/FlightData.cs:865-943`
     pub(crate) fn process_cmd_key(
         &mut self,
         keystroke: &Keystroke,
@@ -146,6 +401,14 @@ impl MissionPlanner {
         {
             self.fly_pages.select_index(index);
             return true;
+        }
+        // Only with the window itself holding the keyboard: a space or a minus typed into a box
+        // reaches the window too, and is the box's.
+        if self.screen == Screen::Fly
+            && self.root_focus.is_focused(window)
+            && let Some(key) = playback_key(keystroke, KEYPAD_NAMED)
+        {
+            return self.run_playback_key(key, cx);
         }
         let Some(key) = cmd_key(keystroke) else {
             return false;
@@ -163,15 +426,72 @@ impl MissionPlanner {
             CmdKey::StorageWrite => self.storage_write(),
             // The owner's (2026-10-04): the EXPERIMENTAL tab, where the C# opens the temp form.
             CmdKey::Temp => self.choose_screen(Screen::Experimental),
-            // Their forms are not ported yet (NOT_DONE_YET_MATRIX.md, ProcessCmdKey's row).
-            CmdKey::NmeaOut
-            | CmdKey::MapCache
-            | CmdKey::Spectrogram
-            | CmdKey::Propagation
-            | CmdKey::CameraTest
-            | CmdKey::Devops => return false,
+            // `new SerialOutputNMEA().Show()` and `new SpectrogramUI().Show()`: the Advanced
+            // page's NMEA and Spectrogram buttons' own. `// C#: MainV2.cs:4124-4130, 4138-4145`
+            CmdKey::NmeaOut => {
+                self.open_advanced_tool("BUT_outputnmea", window, cx);
+            }
+            CmdKey::Spectrogram => {
+                self.open_advanced_tool("BUT_spect", window, cx);
+            }
+            // `new GMAPCache().ShowUserControl()`, over `CacheLocator.Location`, the map's cache.
+            // `// C#: MainV2.cs:4132-4136`
+            CmdKey::MapCache => self
+                .key_forms
+                .map_cache
+                .show(&mp_tiles::TileCache::default_root()),
+            // `new PropagationSettings().Show()`; what its constructor throws, on the status line.
+            // `// C#: MainV2.cs:4147-4152`
+            CmdKey::Propagation => {
+                if let Err(why) = self.key_forms.propagation.show(&mut self.persisted) {
+                    self.file_status = Some(why);
+                }
+            }
+            // `new Camera().test(MainV2.comPort)`. `// C#: MainV2.cs:4154-4159`
+            CmdKey::CameraTest => self.key_forms.camera.press(&mut self.telemetry),
+            // `new DevopsUI().ShowUserControl()`. `// C#: MainV2.cs:4195-4200`
+            CmdKey::Devops => self.key_forms.devops.show(),
         }
         true
+    }
+
+    /// `FlightData.ProcessCmdKey`'s playback keys: Space toggles a loaded log's play and pause,
+    /// and is taken; the keypad's - and + step `LogPlayBackSpeed` and leave the key untaken, as
+    /// the C# returns false after them.
+    /// `// C#: GCSViews/FlightData.cs:918-943`
+    fn run_playback_key(&mut self, key: PlaybackKey, cx: &mut Context<Self>) -> bool {
+        let playback = &mut self.fly_data.playback;
+        match key {
+            PlaybackKey::PlayPause => {
+                if !playback.loaded() {
+                    return false;
+                }
+                playback.toggle();
+                true
+            }
+            PlaybackKey::Slower | PlaybackKey::Faster => {
+                playback.step_speed(key == PlaybackKey::Faster);
+                cx.notify();
+                false
+            }
+        }
+    }
+
+    /// Once a frame: the forms' boxes the keyboard has left, DevOps' answer awaited, and the
+    /// camera test's next command; what DevOps' test throws, on the status line.
+    pub(crate) fn key_forms_tick(&mut self, window: &Window) {
+        let forms = &mut self.key_forms;
+        forms.devops_focus.tick(&mut forms.devops, window);
+        propagation_settings::tick(
+            &mut forms.propagation,
+            &mut self.persisted,
+            &forms.propagation_focus,
+            window,
+        );
+        if let Some(why) = forms.devops.tick(&self.telemetry, web_time::Instant::now()) {
+            self.file_status = Some(why);
+        }
+        forms.camera.tick(&mut self.telemetry);
     }
 
     /// F5: `comPort.getParamList()`, then `MyView.ShowScreen(MyView.current.Name)`. With no
@@ -262,6 +582,106 @@ mod tests {
         assert_eq!(fly_tab_key(&key("ctrl-0")), Some(9));
         for text in ["1", "ctrl-shift-1", "alt-1", "ctrl-p", "ctrl-f1"] {
             assert_eq!(fly_tab_key(&key(text)), None, "{text}");
+        }
+    }
+
+    /// The playback keys: Space, and the keypad's - and + by gpui's Linux names; by the
+    /// characters only where the keypad is not named apart; nothing with a modifier.
+    #[test]
+    fn the_playback_keys() {
+        assert_eq!(
+            playback_key(&key("space"), true),
+            Some(PlaybackKey::PlayPause)
+        );
+        assert_eq!(
+            playback_key(&key("subtract"), true),
+            Some(PlaybackKey::Slower)
+        );
+        assert_eq!(playback_key(&key("add"), true), Some(PlaybackKey::Faster));
+        assert_eq!(playback_key(&key("-"), true), None);
+        assert_eq!(playback_key(&key("+"), true), None);
+        assert_eq!(playback_key(&key("-"), false), Some(PlaybackKey::Slower));
+        assert_eq!(playback_key(&key("+"), false), Some(PlaybackKey::Faster));
+        assert_eq!(
+            playback_key(&key("subtract"), false),
+            Some(PlaybackKey::Slower)
+        );
+        for text in [
+            "ctrl-space",
+            "shift-space",
+            "alt-subtract",
+            "ctrl-add",
+            "p",
+            "enter",
+        ] {
+            assert_eq!(playback_key(&key(text), true), None, "{text}");
+        }
+        // The keypad is named apart on Linux, where the GUI scripts press KP_Subtract and KP_Add.
+        assert_eq!(KEYPAD_NAMED, cfg!(target_os = "linux"));
+    }
+
+    /// Ctrl+G's and Ctrl+L's windows over every screen, drawn here but where the Advanced page's
+    /// windows are drawn already.
+    #[test]
+    fn the_advanced_windows_are_drawn_once_on_every_screen() {
+        for screen in [
+            Screen::Fly,
+            Screen::Plan,
+            Screen::Config,
+            Screen::Params,
+            Screen::Logs,
+            Screen::Sitl,
+            Screen::Help,
+            Screen::Plugins,
+        ] {
+            assert!(draws_advanced_windows(screen), "{screen:?}");
+        }
+        assert!(!draws_advanced_windows(Screen::Setup));
+        assert!(!draws_advanced_windows(Screen::Experimental));
+    }
+
+    /// Each key's form is in `ProcessCmdKey` as this module opens it, and the playback keys in
+    /// the flight screen's, read from the tree when it is here.
+    #[test]
+    fn the_forms_are_the_keys_csharp() {
+        let Some(main) = crate::config_coverage::source::csharp("MainV2.cs") else {
+            eprintln!(
+                "skipped: MP_SRC does not name a clone of https://github.com/ArduPilot/MissionPlanner"
+            );
+            return;
+        };
+        let body = main
+            .split("protected override bool ProcessCmdKey")
+            .nth(1)
+            .and_then(|rest| rest.split("ProcessCmdKeyCallback != null").next())
+            .unwrap_or_default();
+        let opened = |letter: &str, call: &str| {
+            body.split(&format!("(Keys.Control | Keys.{letter})"))
+                .nth(1)
+                .and_then(|rest| rest.split("return true;").next())
+                .is_some_and(|arm| arm.contains(call))
+        };
+        assert!(opened("G", "new SerialOutputNMEA()"));
+        assert!(opened("X", "new GMAPCache().ShowUserControl()"));
+        assert!(opened("L", "new SpectrogramUI().Show()"));
+        assert!(opened("W", "new PropagationSettings().Show()"));
+        assert!(opened("Z", "new Camera().test(MainV2.comPort)"));
+        assert!(opened("J", "new DevopsUI().ShowUserControl()"));
+        let Some(flight) = crate::config_coverage::source::csharp("GCSViews/FlightData.cs") else {
+            return;
+        };
+        for (keys, call) in [
+            ("Keys.Space", "BUT_playlog_Click(null, null)"),
+            ("Keys.Subtract", "LogPlayBackSpeed /= 2"),
+            ("Keys.Add", "LogPlayBackSpeed *= 2"),
+        ] {
+            assert!(
+                flight
+                    .split(&format!("keyData == ({keys})"))
+                    .nth(1)
+                    .is_some_and(|rest| rest.contains(call)),
+                "{keys}"
+            );
         }
     }
 

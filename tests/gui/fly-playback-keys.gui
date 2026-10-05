@@ -1,0 +1,53 @@
+# The flight screen's playback keys: FlightData.ProcessCmdKey's Space, which plays or pauses a
+# loaded log (BUT_playlog_Click), and the keypad's - and +, which take LogPlayBackSpeed one down or
+# up above 1 and halve or double it at 1 and under, then say it on lbl_playbackspeed
+# (updateLogPlayPosition) (GCSViews/FlightData.cs:918-943, 5544-5571; crates/mp-gui/src/
+# cmd_keys.rs, fly.rs Playback::step_speed). gpui names the keypad's keys apart on Linux, which
+# xdotool's KP_Subtract and KP_Add press.
+#
+# The claim: a log given as the link plays at 1x; Space pauses it and plays it again; the keypad's
+# - halves 1 to 0.5 and to 0.25, its + doubles back to 1, then 2, then one more, 3; the Telemetry
+# Logs page says each speed. The main keyboard's - is not the keypad's, and does nothing.
+#
+# Plays the recorded copter flight, so it needs no vehicle. Run from the repository root:
+#   tools/gui-test.sh tests/gui/fly-playback-keys.gui -- file:testdata/mavlink/autotest.tlog
+#
+# Not yet run: the budget is a guess, set by hand until a passing run records one.
+screen fly
+window 1600x1200
+budget 8
+
+expect fly.playback.file autotest.tlog
+expect fly.playback.playing true
+expect fly.playback.button Pause
+expect fly.playback.speed x 1
+
+# Space, with the window itself holding the keyboard: pause, then play.
+key space
+expect fly.playback.playing false
+expect fly.playback.button Play
+key space
+expect fly.playback.playing true
+expect fly.playback.button Pause
+
+# The keypad's -: halved at 1 and under.
+key KP_Subtract
+expect fly.playback.speed x 0.5
+key KP_Subtract
+expect fly.playback.speed x 0.25
+
+# The keypad's +: doubled up to 1 and 2, then one more.
+key KP_Add
+expect fly.playback.speed x 0.5
+key KP_Add
+expect fly.playback.speed x 1
+key KP_Add
+expect fly.playback.speed x 2
+key KP_Add
+expect fly.playback.speed x 3
+
+# The main keyboard's minus is not Keys.Subtract.
+key minus
+expect fly.playback.speed x 3
+key space
+expect fly.playback.playing false

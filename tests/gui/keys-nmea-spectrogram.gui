@@ -1,0 +1,60 @@
+# Ctrl+G and Ctrl+L: MainV2.ProcessCmdKey's `new SerialOutputNMEA().Show()` and `new
+# SpectrogramUI().Show()` (MainV2.cs:4124-4130, 4138-4145) - the windows CONFIG > Advanced's NMEA
+# and Spectrogram buttons open (ConfigAdvanced.cs:47-50, 119-122; config-nmea.gui and
+# config-spectrogram.gui test them there), opened here by the key over any screen
+# (crates/mp-gui/src/cmd_keys.rs).
+#
+# The claim: Ctrl+G on the flight screen shows the NMEA output as the button opens it - Connect,
+# 5hz, 4800 - over that screen; its close box puts it away. Ctrl+L shows the spectrogram, ACC1,
+# -80 to -20, nothing loaded, over the flight screen and then over the planning screen. On SETUP,
+# which draws the Advanced page's windows itself, Ctrl+G's window shows once, as there.
+#
+# No vehicle. Run from the repository root:
+#   tools/gui-test.sh tests/gui/keys-nmea-spectrogram.gui
+#
+# Not yet run: the budget is a guess, set by hand until a passing run records one.
+env XDG_DATA_HOME $WORK
+screen fly
+window 1600x1200
+budget 10
+
+expect config.nmea.window false
+expect config.spectrogram.window false
+
+# Ctrl+G over the flight screen.
+key ctrl+g
+expect screen fly
+expect config.nmea.window true
+expect config.nmea.opened 1
+expect config.nmea.button Connect
+expect config.nmea.ratetext 5hz
+expect config.nmea.baud 4800
+click nmea-close
+expect config.nmea.window false
+
+# Ctrl+L over the flight screen, then over the planning screen.
+key ctrl+l
+expect config.spectrogram.window true
+expect config.spectrogram.opened 1
+expect config.spectrogram.sensor ACC1
+expect config.spectrogram.min -80
+expect config.spectrogram.max -20
+expect config.spectrogram.log none
+click spect-close
+expect config.spectrogram.window false
+click tab-plan
+expect screen plan
+key ctrl+l
+expect config.spectrogram.window true
+expect config.spectrogram.opened 2
+click spect-close
+expect config.spectrogram.window false
+
+# Over SETUP, which draws the Advanced page's windows: the same window, once.
+click tab-setup
+expect screen setup
+key ctrl+g
+expect config.nmea.window true
+expect config.nmea.opened 2
+click nmea-close
+expect config.nmea.window false

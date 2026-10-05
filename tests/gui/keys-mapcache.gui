@@ -1,0 +1,70 @@
+# Ctrl+X: Mission Planner's map cache window, MainV2.ProcessCmdKey's `new GMAPCache()
+# .ShowUserControl()` (MainV2.cs:4132-4136; Controls/GMAPCache.cs; crates/mp-gui/src/cmd_keys/
+# gmap_cache.rs).
+#
+# The claim: over a cache laid out as Mission Planner lays it out (TileDBv3/en/<provider>/...) -
+# OpenStreetMap with two .jpg tiles, a .png and a half-written .part, BingMap with one tile of
+# 1.5 MB - the grid lists each provider by name with its size in whole megabytes and its files,
+# then Total (GMAPCache.cs:29-93, 125-146). "Remove 30+days" on OpenStreetMap removes nothing just
+# made; "Remove All" removes its three tiles, not the .part (MyImageCache.cs:132-184); each says
+# how many in a box, and the grid is filled again when the box is closed. Total names no provider:
+# `GMapProviders.List.First`'s throw, on the status line by the owner's ruling. The key opens the
+# window over the planning screen too.
+#
+# No vehicle; no tiles fetched, so nothing is written to the cache but what the setup lays out.
+# Run from the repository root:
+#   tools/gui-test.sh tests/gui/keys-mapcache.gui
+#
+# Not yet run: the budget is a guess, set by hand until a passing run records one.
+env XDG_DATA_HOME $WORK
+env MP_TILE_CACHE $WORK/gmapcache
+setup mkdir -p $WORK/gmapcache/TileDBv3/en/OpenStreetMap/16/39658 $WORK/gmapcache/TileDBv3/en/OpenStreetMap/16/39659 $WORK/gmapcache/TileDBv3/en/BingMap/3/1 && head -c 1000 /dev/zero > $WORK/gmapcache/TileDBv3/en/OpenStreetMap/16/39658/59922.jpg && head -c 1000 /dev/zero > $WORK/gmapcache/TileDBv3/en/OpenStreetMap/16/39658/59923.jpg && head -c 1000 /dev/zero > $WORK/gmapcache/TileDBv3/en/OpenStreetMap/16/39659/59922.png && head -c 10 /dev/zero > $WORK/gmapcache/TileDBv3/en/OpenStreetMap/16/39659/59923.jpg.part && head -c 1572864 /dev/zero > $WORK/gmapcache/TileDBv3/en/BingMap/3/1/2.jpg
+screen fly
+window 1600x1200
+budget 10
+
+expect mapcache.window false
+# The key, on the flight screen with nothing focused: the grid, a row a provider, then Total.
+key ctrl+x
+expect mapcache.window true
+expect mapcache.opened 1
+expect mapcache.rows 3
+expect mapcache.row.0 BingMap|2MB|1
+expect mapcache.row.1 OpenStreetMap|0MB|4
+expect mapcache.row.2 Total|2MB|5
+expect mapcache.message none
+
+# Remove 30+days: nothing made before thirty days ago.
+click mapcache-remove-old-1
+expect mapcache.message Removed 0 images
+click mapcache-message-ok
+expect mapcache.message none
+expect mapcache.row.1 OpenStreetMap|0MB|4
+
+# Remove All: the three tiles; the grid as it was until the box is closed.
+click mapcache-remove-all-1
+expect mapcache.message Removed 3 images
+expect mapcache.row.1 OpenStreetMap|0MB|4
+click mapcache-message-ok
+expect mapcache.message none
+expect mapcache.row.1 OpenStreetMap|0MB|1
+expect mapcache.row.2 Total|2MB|2
+expect mapcache.row.0 BingMap|2MB|1
+
+# Total is no provider: the throw, on the status line; no box.
+click mapcache-remove-all-2
+expect status Sequence contains no matching element
+expect mapcache.message none
+
+# The close box; and the key again over the planning screen, a fresh form.
+click mapcache-close
+expect mapcache.window false
+click tab-plan
+expect screen plan
+key ctrl+x
+expect mapcache.window true
+expect mapcache.opened 2
+expect mapcache.rows 3
+click mapcache-close
+expect mapcache.window false
+expect screen plan

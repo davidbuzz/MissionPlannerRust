@@ -1,0 +1,103 @@
+# Ctrl+W: Mission Planner's Propagation Settings, MainV2.ProcessCmdKey's `new
+# PropagationSettings().Show()` (MainV2.cs:4147-4152; Controls/PropagationSettings.cs; crates/
+# mp-gui/src/cmd_keys/propagation_settings.rs).
+#
+# The claim: over a config.xml holding Propagation_Termap True and Propagation_Range 12.5, the
+# form opens with each control set from its key, as the constructor sets them
+# (PropagationSettings.cs:40-64): the numbers at their GetFloat defaults at one place - Clearance
+# 5.0, Base Height 2.0, Tolerance 0.8, Min Alt 100.0, Max Alt 400.0 - and Range 12.5; the lists at
+# 4, 1 and 1; Terrain indeterminate (Checked already, so `Checked = true` leaves the Designer's
+# Indeterminate), the other boxes unticked. Each handler the constructor fires writes its key:
+# Clearance "5", Tolerance "0.8", Resolution "4", Elevation "False" - Terrain's stays "True".
+# Tolerance's up arrow steps a tenth in decimal and is held at its Maximum, 1; Terrain's box
+# unticks, then ticks, writing "False" and "True"; Azimuth Step's list chooses 0.5; Max Alt typed
+# 2500 is held to 2000 when the box is left. The key opens it over SETUP too, from the keys as
+# they now are - Azimuth Step's "0.5" read back by `GetInt32` as its default, 1, the C#'s own.
+#
+# No vehicle. Run from the repository root:
+#   tools/gui-test.sh tests/gui/keys-propagation.gui
+#
+# Not yet run: the budget is a guess, set by hand until a passing run records one.
+env XDG_DATA_HOME $WORK
+env MP_CONFIG_XML $WORK/config.xml
+setup printf '<?xml version="1.0" encoding="utf-8"?><Config><Propagation_Termap>True</Propagation_Termap><Propagation_Range>12.5</Propagation_Range></Config>' > "$WORK/config.xml"
+screen fly
+window 1600x1200
+budget 12
+
+expect propagation.window false
+expect propagation.setting.Propagation_Clearance none
+expect propagation.setting.Propagation_Termap True
+
+# The key, on the flight screen with nothing focused: each control from its key.
+key ctrl+w
+expect propagation.window true
+expect propagation.opened 1
+expect propagation.Clearance 5.0
+expect propagation.NUM_range 12.5
+expect propagation.NUM_height 2.0
+expect propagation.Tolerance 0.8
+expect propagation.NUM_min 100.0
+expect propagation.NUM_max 400.0
+expect propagation.CMB_Resolution 4
+expect propagation.CMB_Rotational 1
+expect propagation.CMB_Angular 1
+expect propagation.chk_terrain indeterminate
+expect propagation.chk_ele unchecked
+expect propagation.cb_showscale unchecked
+expect propagation.setting.Propagation_Clearance 5
+expect propagation.setting.Propagation_Range 12.5
+expect propagation.setting.Propagation_Tolerance 0.8
+expect propagation.setting.Propagation_Resolution 4
+expect propagation.setting.Propagation_Termap True
+expect propagation.setting.Propagation_Elemap False
+
+# Tolerance: a tenth up, then held at 1.
+click propagation-Tolerance-up
+expect propagation.Tolerance 0.9
+expect propagation.setting.Propagation_Tolerance 0.9
+click propagation-Tolerance-up
+click propagation-Tolerance-up
+expect propagation.Tolerance 1.0
+expect propagation.setting.Propagation_Tolerance 1.0
+
+# Terrain: the indeterminate box unticks, then ticks.
+click propagation-chk_terrain
+expect propagation.chk_terrain unchecked
+expect propagation.setting.Propagation_Termap False
+click propagation-chk_terrain
+expect propagation.chk_terrain checked
+expect propagation.setting.Propagation_Termap True
+
+# Azimuth Step: 0.5 from its list.
+click propagation-CMB_Rotational
+expect propagation.list CMB_Rotational
+click propagation-CMB_Rotational-0
+expect propagation.list none
+expect propagation.CMB_Rotational 0.5
+expect propagation.setting.Propagation_Rotational 0.5
+
+# Max Alt typed past its Maximum: held to 2000 when the box is left - the close box leaves it.
+click propagation-NUM_max
+expect propagation.editing NUM_max
+key ctrl+u
+type 2500
+expect propagation.NUM_max 2500
+click propagation-close
+expect propagation.window false
+expect propagation.setting.Propagation_Maxalt 2000
+
+# The key over SETUP: a fresh form, from the keys as they are now - but Azimuth Step's, which
+# `GetInt32` cannot read as "0.5" and so takes as its default, 1, and writes back.
+click tab-setup
+expect screen setup
+key ctrl+w
+expect propagation.window true
+expect propagation.opened 2
+expect propagation.NUM_max 2000.0
+expect propagation.Tolerance 1.0
+expect propagation.CMB_Rotational 1
+expect propagation.setting.Propagation_Rotational 1
+expect propagation.chk_terrain indeterminate
+click propagation-close
+expect propagation.window false
