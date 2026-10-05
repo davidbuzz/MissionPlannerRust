@@ -13,7 +13,7 @@
 //   NODE_PATH=<a node_modules holding playwright> node check/demo_check.js [out-dir] [url]
 const { chromium } = require("playwright");
 const out = process.argv[2] || ".";
-const url = process.argv[3] || "http://127.0.0.1:8080/planner.html?facts=1";
+const url = process.argv[3] || "http://127.0.0.1:8080/?facts=1";
 const fail = (why) => { console.log(`FAIL: ${why}`); process.exitCode = 1; };
 // The demo's script (welcomedemositl.rs, SCRIPT): thirty-three clicks of its own, the last FLY -
 // two more when the copter disarmed before its climb and was armed again.

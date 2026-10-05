@@ -30,7 +30,7 @@
 //!
 //! Off unless `MP_FACTS` names a file. Nothing is recorded and nothing is written otherwise, so a
 //! normal run pays for none of it. In a web page, which has neither, the page turns them on
-//! (`planner_facts_enable`, from planner.html's `?facts=1`) and reads them (`planner_facts`).
+//! (`planner_facts_enable`, from the page's `?facts=1`) and reads them (`planner_facts`).
 //!
 //! The format is the flat `key = value` of `settings.rs`, for the same reasons: greppable by eye,
 //! parseable by a shell with no dependency, and impossible to get subtly wrong in the way a nested
@@ -75,7 +75,7 @@ mod web {
         ENABLED.load(Ordering::Relaxed)
     }
 
-    /// The page: start recording facts (planner.html with `?facts=1`, for its checks).
+    /// The page: start recording facts (web/www/index.html with `?facts=1`, for its checks).
     #[wasm_bindgen]
     pub fn planner_facts_enable() {
         ENABLED.store(true, Ordering::Relaxed);

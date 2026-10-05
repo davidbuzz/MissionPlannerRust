@@ -7,7 +7,7 @@
 //   ?link=ws://host:port/path                     a vehicle behind a WebSocket: Mission Planner's
 //                     "WS" link (ExtLibs/Comms/CommsWebSocket.cs), binary frames both ways.
 //
-// The whole planner (planner.html) asks for its link itself, through crates/mp-transport/src/page.rs:
+// The whole planner (index.html) asks for its link itself, through crates/mp-transport/src/page.rs:
 // `servePlanner` answers a `tcp:` link with the SITL in this page, started on the first one, and a
 // `ws://` link with a WebSocket.
 
@@ -162,7 +162,7 @@ function splitLink(link) {
     return [scheme, host, rest.slice(colon + 1)];
 }
 
-// The planner's side (planner.html): what it asks for, and the bytes both ways, every 5 ms. The
+// The planner's side (index.html): what it asks for, and the bytes both ways, every 5 ms. The
 // planner's calls never wait (page.rs), so a refused hand-over is kept for the next turn.
 export function servePlanner(planner) {
     const query = new URLSearchParams(location.search);

@@ -1,12 +1,12 @@
 // The planner's built-in plugins in a web page: wasmtime's Pulley interpreter running the plugins
 // mp-gui's build script compiled to Pulley bytecode (crates/mp-plugin-host/src/web.rs). Fails
-// unless the planner's own facts (planner.html's ?facts=1, MP_FACTS's in a page) count the nine
+// unless the planner's own facts (index.html's ?facts=1, MP_FACTS's in a page) count the nine
 // loaded - the demo left out by ?demo=0 and Open Drone ID off - and the page has no error.
 //
 //   NODE_PATH=<a node_modules holding playwright> node check/plugins_check.js [out-dir] [url]
 const { chromium } = require("playwright");
 const out = process.argv[2] || ".";
-const url = process.argv[3] || "http://127.0.0.1:8080/planner.html?facts=1&demo=0";
+const url = process.argv[3] || "http://127.0.0.1:8080/?facts=1&demo=0";
 const fail = (why) => { console.log(`FAIL: ${why}`); process.exitCode = 1; };
 // The plugins the browser build carries (crates/mp-gui/build.rs: SHIPPED, and WEB_ONLY's demo),
 // less the demo (?demo=0) and Open Drone ID, off until a user turns it on (the owner, 2026-10-05).

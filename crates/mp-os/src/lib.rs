@@ -206,7 +206,7 @@ pub fn http(method: &str, url: &str, body: Option<&str>) -> Result<(u16, Vec<u8>
     Ok((status, js_sys::Uint8Array::new(&answer).to_vec()))
 }
 
-/// The value the web page's address gives `name` after its `?` (`planner.html?demo=0`), from
+/// The value the web page's address gives `name` after its `?` (`?demo=0`), from
 /// the page's main thread; none on the desktop, which has no page, and none for a name the
 /// address does not carry. The value as written, not percent-decoded.
 #[must_use]

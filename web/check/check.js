@@ -7,10 +7,10 @@
 //
 // The default is the copter in the page, which starts in Stabilize. Another vehicle or link names
 // the mode it starts in: a plane behind tools/ws_relay.py is
-//   check/check.js . "http://127.0.0.1:8080/?link=ws://127.0.0.1:5800" Manual
+//   check/check.js . "http://127.0.0.1:8080/hud.html?link=ws://127.0.0.1:5800" Manual
 const { chromium } = require("playwright");
 const out = process.argv[2] || ".";
-const url = process.argv[3] || "http://127.0.0.1:8080/?link=sitl&vehicle=copter";
+const url = process.argv[3] || "http://127.0.0.1:8080/hud.html?link=sitl&vehicle=copter";
 const mode = process.argv[4] || "Stabilize";
 // The colour of a 1x1 PNG: its one row inflated, past the filter byte (every filter leaves a lone
 // pixel as it is).

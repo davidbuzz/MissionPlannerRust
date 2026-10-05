@@ -14,7 +14,7 @@ wasm-bindgen --target web --out-dir web/www/pkg-planner \
     target/web/wasm32-unknown-unknown/release/planner.wasm
 # 2. Serve the page with the cross-origin isolation headers threads need:
 python3 web/www/serve.py 8080
-# 3. Open http://127.0.0.1:8080/planner.html
+# 3. Open http://127.0.0.1:8080/
 #    SIMULATION, then click Multirotor (or Plane, Rover, Helicopter): "try local wasm" is ticked,
 #    the SITL starts in the page and the planner connects to it, as on macOS.
 ```
@@ -29,7 +29,7 @@ goes back to FLY, and its pointer goes. Where the planner refuses something - Wr
 say - it answers the box and stops, saying why on the status line. It is a
 plugin like the others, built into the browser build only, and the PLUGINS tab turns it off.
 The page keeps its settings (below), so it runs at a first visit and then not again until it is
-ticked on PLUGINS. `planner.html?demo=0` starts without it, as every check but `demo_check.js`
+ticked on PLUGINS. `?demo=0` (`http://127.0.0.1:8080/?demo=0`) starts without it, as every check but `demo_check.js`
 does.
 
 ## Files kept between visits
@@ -74,7 +74,7 @@ names), after a change to that file or to the Tailscale version; the result is c
 `tools/sitl/wasm` keeps ArduPilot's builds. `check/tailnet_e2e.sh` also uses Go, to build the
 Headscale and tailscaled its test tailnet runs.
 
-`www/index.html` is the smaller first step: the planner's HUD alone (`src/lib.rs`, with hud.rs
+`www/hud.html` is the smaller first step: the planner's HUD alone (`src/lib.rs`, with hud.rs
 linked in unchanged), fed by the SITL in the page (`?link=sitl`) or a WebSocket
 (`?link=ws://...`, with `tools/ws_relay.py` in front of a TCP port).
 
@@ -83,11 +83,11 @@ linked in unchanged), fed by the SITL in the page (`?link=sitl`) or a WebSocket
 `.github/workflows/pages.yml` builds the planner as above on every push to main and publishes it at
 https://davidbuzz.github.io/MissionPlannerRust/ (the repository's Pages settings publish from a
 workflow). `tools/pages-site.sh <dir>` assembles the site from `www/`: the page, `pkg-planner/`,
-`link.js`, the SITL's modules, the Tailscale node, `planner.html` as the index too - and
+`link.js`, the SITL's modules, the Tailscale node - and
 coi-serviceworker (MIT, from npm at a pinned version). The planner's threads need SharedArrayBuffer,
 which a page has only when cross-origin isolated by the COOP and COEP headers `www/serve.py`
 sends; GitHub Pages sends no headers of a site's choosing, so the service worker adds them to every
-response and reloads the page once it is in charge, and `planner.html` starts the planner only
+response and reloads the page once it is in charge, and `index.html` starts the planner only
 once the page is isolated. `check/pages_check.js` serves the assembled site as Pages does - under
 `/MissionPlannerRust/`, with no header - and fails unless the page is isolated and the planner up.
 
