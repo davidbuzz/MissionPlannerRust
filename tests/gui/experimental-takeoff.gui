@@ -1,0 +1,45 @@
+# EXPERIMENTAL's arm and takeoff (temp.cs:614-634), "quad: arm and takeoff": setMode("Stabilize"),
+# doARM(true) waited for, then - armed - setMode("GUIDED"), 300 ms, and doCommand(TAKEOFF) to 10 m.
+# With no question asked, as the C# asks none.
+#
+# THIS FLIES SITL: it arms, climbs and lands. Needs a copter SITL:
+#   tools/gui-test.sh tests/gui/experimental-takeoff.gui -- tcp:127.0.0.1:5760
+screen fly
+window 1600x1200
+budget 60
+# 60: one run took 41.5 s (2026-10-06), most of it SITL readying to arm.
+env XDG_DATA_HOME $WORK
+env MP_CONFIG_XML $WORK/config.xml
+setup printf '<?xml version="1.0" encoding="utf-8"?><Config><tabcontrolactions>tabQuick;tabActions;</tabcontrolactions></Config>' > "$WORK/config.xml"
+
+within 30
+expect vehicle.count > 0
+expect vehicle.armed false
+# SITL passes its pre-arm checks once its EKF and GPS are ready (fly-takeoff.gui), and Guided
+# wants an absolute position once armed.
+within 60
+expect hud.prearm Ready to Arm
+within 60
+expect fly.ekf.flags ~ pos_horiz_abs On
+
+key ctrl+f
+expect screen experimental
+expect experimental.takeoff none
+click experimental-but_armandtakeoff
+within 15
+expect vehicle.armed true
+within 10
+expect vehicle.mode Guided
+within 10
+expect experimental.takeoff takeoff: accepted
+
+# Down again, and left in Stabilize, as the next test finds a fresh SITL.
+click tab-fly
+expect screen fly
+click fly-tab-actions
+expect fly.tab tabActions
+click land
+within 40
+expect vehicle.armed false
+click Stabilize
+expect vehicle.mode Stabilize

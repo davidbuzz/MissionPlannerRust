@@ -34,7 +34,8 @@
 //! * a command to the vehicle, ported here with its questions ([`Act`]): reboot pixhawk ("Are you
 //!   sure?", `doReboot(false, true)`), Force Accel Cal and Force Compass Cal (`PREFLIGHT_CALIBRATION`
 //!   with 76 as param 5 or param 2), DFU Mode (`doDFUBoot`), QNH (an `InputBox` for
-//!   GND_ABS_PRESS, else BARO1_GND_PRESS), Lockup MAV (asked twice), Bootloader Upgrade (the "BL
+//!   GND_ABS_PRESS, else BARO1_GND_PRESS), Lockup MAV (asked twice), arm and takeoff (Stabilize,
+//!   armed, Guided and a take-off to 10 m, each in turn), Bootloader Upgrade (the "BL
 //!   Update" questions, then `FLASH_BOOTLOADER`), Toggle Safety Switch ("Are you sure?", then the
 //!   flight screen's Toggle_Safety_Switch, the same `setMode` with `SAFETY_ARMED`); what the C#
 //!   shows in a box when one fails is said on the status line, by the owner's ruling; and decode
@@ -267,6 +268,7 @@ pub(crate) fn tool(name: &str) -> Tool {
         "myButton1" => Tool::Act(Act::SplitDfLog),
         "BUT_clearcustommaps" => Tool::Act(Act::ClearCustomMaps),
         "but_agemapdata" => Tool::Act(Act::AgeMapData),
+        "but_armandtakeoff" => Tool::Act(Act::ArmAndTakeoff),
         "BUT_follow_me" | "but_osdvideo" | "BUT_movingbase" | "BUT_swarm" | "BUT_followleader"
         | "but_trimble" | "but_followswarm" => Tool::Unavailable(SECTION_12_D13),
         "but_anonlog" => Tool::Unavailable(ANON_LOG_RULED),
@@ -326,7 +328,38 @@ pub(crate) enum Act {
     /// `but_agemapdata_Click`: the flight map's provider's tiles older than thirty days deleted,
     /// and "Removed N images" in a box. `// C#: temp.cs:710-718`
     AgeMapData,
+    /// `but_armandtakeoff_Click`: `setMode("Stabilize")`, then `doARM(true)` waited for; armed,
+    /// `setMode("GUIDED")`, 300 ms, and `doCommand(TAKEOFF)` to 10 m, waited for, its answer not
+    /// read. A refusal to arm ends it quietly, as `doARM`'s false does; a command never answered
+    /// is the `catch`'s box, on the status line. `// C#: temp.cs:614-634`
+    ArmAndTakeoff,
 }
+
+/// arm and takeoff's steps, which the C#'s handler blocks on in turn.
+#[derive(Debug, Clone, Copy)]
+enum Takeoff {
+    /// `doARM(true)` sent, its answer awaited.
+    Arming {
+        id: mp_link::RequestId,
+        made: web_time::Instant,
+        target: mp_vehicle::VehicleId,
+    },
+    /// Armed and Guided asked for: `Thread.Sleep(300)`, until `until`.
+    Sleeping {
+        until: web_time::Instant,
+        target: mp_vehicle::VehicleId,
+    },
+    /// The take-off sent, its answer awaited - for the facts; the C# does not read it.
+    TakingOff {
+        id: mp_link::RequestId,
+        made: web_time::Instant,
+    },
+}
+
+/// `Thread.Sleep(300)` between Guided and the take-off. `// C#: temp.cs:625`
+const TAKEOFF_PAUSE: web_time::Duration = web_time::Duration::from_millis(300);
+/// The take-off's height, `doCommand(..., TAKEOFF, 0, 0, 0, 0, 0, 0, 10)`. `// C#: temp.cs:627`
+const TAKEOFF_ALTITUDE: f32 = 10.0;
 
 /// Param Restore's first box.
 /// `// C#: temp.cs:1269`
@@ -477,6 +510,10 @@ pub(crate) struct Experimental {
     magcal: Option<std::sync::mpsc::Receiver<Processed>>,
     /// What the last one came to, for the facts.
     magcal_last: Option<String>,
+    /// arm and takeoff's step under way.
+    takeoff: Option<Takeoff>,
+    /// How its last step ended, for the facts.
+    takeoff_last: Option<&'static str>,
     /// Split DFLog's splitting, on its thread, until its answer comes.
     split: Option<std::sync::mpsc::Receiver<Result<usize, String>>>,
     /// What the last one came to, for the facts.
@@ -495,6 +532,8 @@ impl Default for Experimental {
             magcal_last: None,
             split: None,
             split_last: None,
+            takeoff: None,
+            takeoff_last: None,
         }
     }
 }
@@ -620,6 +659,7 @@ fn act(
                 text: removed_images(removed),
             });
         }
+        Act::ArmAndTakeoff => arm_and_takeoff(this),
         // `InitialDirectory = Settings.Instance.LogDir`.
         Act::SplitDfLog => {
             let folder = crate::fly::log_directory()
@@ -705,7 +745,8 @@ fn send(this: &mut MissionPlanner, what: Act) {
         | Act::MagCalLog
         | Act::SplitDfLog
         | Act::ClearCustomMaps
-        | Act::AgeMapData => true,
+        | Act::AgeMapData
+        | Act::ArmAndTakeoff => true,
     };
     if !sent {
         this.file_status = Some(error_box(PLEASE_CONNECT));
@@ -875,6 +916,7 @@ fn read_mag_log(this: &mut MissionPlanner, file: std::path::PathBuf) {
 /// shows nothing. `// C#: MagCalib.cs:115-130`
 pub(crate) fn tick(this: &mut MissionPlanner) {
     split_tick(this);
+    takeoff_tick(this);
     let Some(receiver) = this.experimental.magcal.as_ref() else {
         return;
     };
@@ -905,6 +947,105 @@ pub(crate) fn tick(this: &mut MissionPlanner) {
         }
         Processed::Said(text) => this.file_status = Some(text.to_owned()),
         Processed::Quiet(why) => log::debug!("mag calb log: {why}"),
+    }
+}
+
+/// arm and takeoff pressed: Stabilize asked for, then the arming sent - with no vehicle, what the
+/// C#'s `catch` meets said on the status line, as this tab's other commands say it.
+/// `// C#: temp.cs:618-620`
+fn arm_and_takeoff(this: &mut MissionPlanner) {
+    let Some((_, target)) = this.telemetry.send_handle() else {
+        this.file_status = Some(error_box(PLEASE_CONNECT));
+        return;
+    };
+    let family = crate::fly::family(&this.telemetry.view());
+    for message in crate::fly::set_mode_messages(target, family, "Stabilize") {
+        this.telemetry.send(&message);
+    }
+    let arm = mp_link::commands::arm(target, true, false);
+    if let Some(id) = this
+        .telemetry
+        .command_message(&arm, Report::on_timeout(error_box(DO_COMMAND_TIMEOUT)))
+    {
+        this.experimental.takeoff = Some(Takeoff::Arming {
+            id,
+            made: web_time::Instant::now(),
+            target,
+        });
+        this.experimental.takeoff_last = None;
+    }
+}
+
+/// How a request the tab waits on ended: `None` while it has not; a request the link has let go
+/// as timed out, which its report has said.
+fn ended(
+    telemetry: &crate::telemetry::Telemetry,
+    id: mp_link::RequestId,
+    made: web_time::Instant,
+) -> Option<mp_link::requests::RequestOutcome> {
+    match telemetry.lookup(id, made) {
+        crate::telemetry::Lookup::Found(request) => request.outcome(),
+        crate::telemetry::Lookup::PickingUp => None,
+        crate::telemetry::Lookup::Gone => Some(mp_link::requests::RequestOutcome::TimedOut),
+    }
+}
+
+/// arm and takeoff's next step, once a frame: armed, Guided and the pause; the pause over, the
+/// take-off; refused or unanswered, the end. `// C#: temp.cs:620-628`
+fn takeoff_tick(this: &mut MissionPlanner) {
+    use mp_link::requests::RequestOutcome;
+    let Some(step) = this.experimental.takeoff else {
+        return;
+    };
+    crate::repaint::in_flight();
+    match step {
+        Takeoff::Arming { id, made, target } => {
+            let Some(outcome) = ended(&this.telemetry, id, made) else {
+                return;
+            };
+            this.experimental.takeoff = None;
+            if !matches!(outcome, RequestOutcome::Accepted { .. }) {
+                // `doARM` false, or its throw, which the report has said.
+                this.experimental.takeoff_last = Some(if outcome == RequestOutcome::TimedOut {
+                    "arm: timed out"
+                } else {
+                    "arm: refused"
+                });
+                return;
+            }
+            let family = crate::fly::family(&this.telemetry.view());
+            for message in crate::fly::set_mode_messages(target, family, "GUIDED") {
+                this.telemetry.send(&message);
+            }
+            this.experimental.takeoff = Some(Takeoff::Sleeping {
+                until: web_time::Instant::now() + TAKEOFF_PAUSE,
+                target,
+            });
+        }
+        Takeoff::Sleeping { until, target } => {
+            if web_time::Instant::now() < until {
+                return;
+            }
+            let takeoff = mp_link::commands::takeoff(target, TAKEOFF_ALTITUDE);
+            this.experimental.takeoff = this
+                .telemetry
+                .command_message(&takeoff, Report::on_timeout(error_box(DO_COMMAND_TIMEOUT)))
+                .map(|id| Takeoff::TakingOff {
+                    id,
+                    made: web_time::Instant::now(),
+                });
+        }
+        Takeoff::TakingOff { id, made } => {
+            let Some(outcome) = ended(&this.telemetry, id, made) else {
+                return;
+            };
+            this.experimental.takeoff = None;
+            this.experimental.takeoff_last = Some(match outcome {
+                RequestOutcome::Accepted { .. } => "takeoff: accepted",
+                RequestOutcome::TimedOut => "takeoff: timed out",
+                _ => "takeoff: refused",
+            });
+        }
     }
 }
 
@@ -1190,6 +1331,16 @@ pub(crate) fn record_facts(state: &Experimental) {
             Some(Asking::Path(path, _)) => format!("{}: {}", path.caption, path.field.value()),
         },
     );
+    // arm and takeoff: the step under way, or how the last one ended.
+    facts::record(
+        "experimental.takeoff",
+        match state.takeoff {
+            Some(Takeoff::Arming { .. }) => "arming",
+            Some(Takeoff::Sleeping { .. }) => "sleeping",
+            Some(Takeoff::TakingOff { .. }) => "taking off",
+            None => state.takeoff_last.unwrap_or("none"),
+        },
+    );
     // Split DFLog: splitting, or what the last split came to.
     facts::record(
         "experimental.split",
@@ -1251,12 +1402,13 @@ mod tests {
                 Tool::Unavailable(why) => assert!(!why.is_empty()),
             }
         }
-        assert_eq!(opens, 24);
+        assert_eq!(opens, 25);
         assert_eq!(tool("but_paramrestore"), Tool::Act(Act::ParamRestore));
         assert_eq!(tool("BUT_magfit2"), Tool::Act(Act::MagCalLog));
         assert_eq!(tool("myButton1"), Tool::Act(Act::SplitDfLog));
         assert_eq!(tool("BUT_clearcustommaps"), Tool::Act(Act::ClearCustomMaps));
         assert_eq!(tool("but_agemapdata"), Tool::Act(Act::AgeMapData));
+        assert_eq!(tool("but_armandtakeoff"), Tool::Act(Act::ArmAndTakeoff));
         assert_eq!(tool("but_blupdate"), Tool::Act(Act::BootloaderUpgrade));
         assert_eq!(tool("but_disablearmswitch"), Tool::Act(Act::ToggleSafety));
         assert_eq!(tool("but_messageinterval"), Tool::MessageInterval);

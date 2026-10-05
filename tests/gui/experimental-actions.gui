@@ -5,8 +5,8 @@
 # (temp.cs:1230-1239), Bootloader Upgrade asks its two "BL Update" questions (temp.cs:969-993), Toggle
 # Safety Switch asks "Are you sure?" (temp.cs:1105-1118); No sends nothing; with no link what the C#
 # meets as an exception is said on the status line (the owner's ruling: no box for it), but Toggle
-# Safety Switch's sysid 0 is only logged. QNH (temp.cs:668-682) and Force Accel Cal
-# (temp.cs:1404-1416) need a vehicle: "Please Connect First". Bootloader Upgrade and Toggle Safety
+# Safety Switch's sysid 0 is only logged. QNH (temp.cs:668-682), Force Accel Cal
+# (temp.cs:1404-1416) and arm and takeoff (temp.cs:614-634) need a vehicle: "Please Connect First". Bootloader Upgrade and Toggle Safety
 # Switch against SITL are experimental-sitl.gui.
 screen fly
 window 1600x1200
@@ -17,7 +17,7 @@ env MP_CONFIG_XML $WORK/config.xml
 setup printf '<?xml version="1.0" encoding="utf-8"?><Config><tabcontrolactions>tabQuick;</tabcontrolactions></Config>' > "$WORK/config.xml"
 key ctrl+f
 expect screen experimental
-expect experimental.working 24
+expect experimental.working 25
 # reboot pixhawk: asked; No sends nothing.
 click experimental-but_reboot
 expect experimental.asking Are you sure?
@@ -73,3 +73,9 @@ click experimental-question-yes
 click experimental-question-yes
 expect experimental.asking none
 expect status Error: Please Connect First
+# arm and takeoff with no vehicle: what the C#'s catch meets, said; nothing under way.
+click experimental-BUT_swarm
+expect status ~ Swarm: out of scope
+click experimental-but_armandtakeoff
+expect status Error: Please Connect First
+expect experimental.takeoff none
