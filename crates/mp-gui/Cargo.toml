@@ -50,6 +50,8 @@ mp-tiles.workspace = true
 mp-mavlink-dialects.workspace = true
 # The MAVLink Inspector's field values and declarations: mp_mavlink::field.
 mp-mavlink.workspace = true
+# LogMap's pictures of where a log flew (log_map.rs).
+tiny-skia.workspace = true
 mp-input.workspace = true
 mp-chart.workspace = true
 mp-log.workspace = true

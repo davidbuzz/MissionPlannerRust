@@ -1,0 +1,45 @@
+# EXPERIMENTAL's map logs (temp.cs:529-540, LogMap.MapLogs): a folder asked for, the log directory
+# offered, and a picture beside every .tlog, .bin and .log in and under it of where it flew -
+# offline here, over a tile cache with nothing in it, so the tracks are drawn on black. A log with a
+# track and one with no GPS fix: two pictures; again, both there already: none; a folder that is
+# not there: the C#'s error box's words, on the status line. What the pictures hold is log_map's
+# tests'.
+#
+# Run as: tools/gui-headless.sh experimental-maplogs
+screen fly
+window 1600x1200
+budget 12
+# 12: one run took 5.0 s (2026-10-06).
+tiles offline
+env XDG_DATA_HOME $WORK
+env MP_CONFIG_XML $WORK/config.xml
+env MP_LOG_DIR $WORK/logs
+env MP_TILE_CACHE $WORK/cache
+setup printf '<?xml version="1.0" encoding="utf-8"?><Config><tabcontrolactions>tabQuick;</tabcontrolactions></Config>' > "$WORK/config.xml"
+setup mkdir -p "$WORK/logs/deep" "$WORK/cache" && cp testdata/georef/camera.bin "$WORK/logs/flight.bin" && cp testdata/dataflash.bin "$WORK/logs/deep/bench.bin"
+
+key ctrl+f
+expect screen experimental
+expect experimental.maplogs none
+
+click experimental-but_maplogs
+expect experimental.asking ~ Browse For Folder
+key Return
+expect experimental.asking none
+within 60
+expect experimental.maplogs drew 2
+
+# Again: the pictures are there.
+click experimental-but_maplogs
+key Return
+within 60
+expect experimental.maplogs drew 0
+
+# A folder that is not there.
+click experimental-but_maplogs
+key ctrl+a
+type $WORK/nowhere
+key Return
+within 20
+expect experimental.maplogs ~ failed: Could not find a part of the path
+expect status ~ Could not find a part of the path

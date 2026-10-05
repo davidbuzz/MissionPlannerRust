@@ -44,7 +44,7 @@
 //! * a tool with files: Param Restore (a parameter file written as `but_paramrestore_Click` writes
 //!   it), mag calb log (`MagCalib.ProcessLog`: a log read and fitted, `magoffset.dxf` drawn, and
 //!   the offsets to the compass page's `SaveOffsets`), Split DFLog (`DFLogBuffer.SplitLog`), and
-//!   Sort TLogs and ReSort All logs (`LogSort.SortLogs`);
+//!   Sort TLogs and ReSort All logs (`LogSort.SortLogs`), and map logs (`LogMap.MapLogs`);
 //! * the map cache's two: Clear Custom Maps (every Custom tile) and Age Map Data (the map's
 //!   provider's tiles older than thirty days), each "Removed N images" in a box;
 //! * out of scope by a ruling, dimmed, its press saying why on the status line: Follow Me, OSDVideo,
@@ -272,6 +272,7 @@ pub(crate) fn tool(name: &str) -> Tool {
         "but_armandtakeoff" => Tool::Act(Act::ArmAndTakeoff),
         "BUT_sorttlogs" => Tool::Act(Act::SortTlogs),
         "but_sortlogs" => Tool::Act(Act::ResortAllLogs),
+        "but_maplogs" => Tool::Act(Act::MapLogs),
         "BUT_follow_me" | "but_osdvideo" | "BUT_movingbase" | "BUT_swarm" | "BUT_followleader"
         | "but_trimble" | "but_followswarm" => Tool::Unavailable(SECTION_12_D13),
         "but_anonlog" => Tool::Unavailable(ANON_LOG_RULED),
@@ -343,6 +344,10 @@ pub(crate) enum Act {
     /// `but_sortlogs_Click`: every `.tlog`, `.bin`, `.log` and `.rlog` in the log directory and
     /// under it sorted again, there. `// C#: temp.cs:859-869`
     ResortAllLogs,
+    /// `but_maplogs_Click`: a folder asked for (the log directory offered), and a picture of where
+    /// each `.tlog`, `.bin` and `.log` in and under it flew (log_map.rs's `LogMap`), off the
+    /// window's thread. `// C#: temp.cs:529-540`
+    MapLogs,
 }
 
 /// arm and takeoff's steps, which the C#'s handler blocks on in turn.
@@ -506,6 +511,8 @@ enum Answered {
     SplitPieces(std::path::PathBuf),
     /// Sort TLogs' `FolderBrowserDialog`.
     SortFolder,
+    /// map logs' `FolderBrowserDialog`.
+    MapFolder,
 }
 
 /// The tab's state: the last button pressed, for the facts, the question showing, and where the
@@ -526,6 +533,10 @@ pub(crate) struct Experimental {
     sort: Option<std::sync::mpsc::Receiver<std::io::Result<usize>>>,
     /// What the last one came to, for the facts.
     sort_last: Option<String>,
+    /// map logs' drawing, on its thread, until its answer comes.
+    map_logs: Option<std::sync::mpsc::Receiver<std::io::Result<usize>>>,
+    /// What the last one came to, for the facts.
+    map_logs_last: Option<String>,
     /// arm and takeoff's step under way.
     takeoff: Option<Takeoff>,
     /// How its last step ended, for the facts.
@@ -552,6 +563,8 @@ impl Default for Experimental {
             takeoff_last: None,
             sort: None,
             sort_last: None,
+            map_logs: None,
+            map_logs_last: None,
         }
     }
 }
@@ -690,6 +703,17 @@ fn act(
             });
             focus_input(this, window, cx);
         }
+        // `fbd.SelectedPath = Settings.Instance.LogDir`, as Sort TLogs asks.
+        Act::MapLogs => {
+            let folder = crate::fly::log_directory()
+                .map(|folder| folder.to_string_lossy().into_owned())
+                .unwrap_or_default();
+            this.experimental.asking = Some(Asking::Input {
+                input: InputBox::new(crate::inject_map::FOLDER_TITLE, "", &folder),
+                then: Answered::MapFolder,
+            });
+            focus_input(this, window, cx);
+        }
         Act::ResortAllLogs => {
             if let Some(folder) = crate::fly::log_directory() {
                 sort_logs(this, move || mp_log::log_sort::resort_all(&folder));
@@ -783,7 +807,8 @@ fn send(this: &mut MissionPlanner, what: Act) {
         | Act::AgeMapData
         | Act::ArmAndTakeoff
         | Act::SortTlogs
-        | Act::ResortAllLogs => true,
+        | Act::ResortAllLogs
+        | Act::MapLogs => true,
     };
     if !sent {
         this.file_status = Some(error_box(PLEASE_CONNECT));
@@ -827,6 +852,10 @@ fn answer(this: &mut MissionPlanner, yes: bool) {
             input,
             then: Answered::SplitPieces(file),
         } => split_df_log(this, file, input.field.value()),
+        Asking::Input {
+            input,
+            then: Answered::MapFolder,
+        } => map_logs(this, std::path::PathBuf::from(input.field.value().trim())),
         Asking::Input {
             input,
             then: Answered::SortFolder,
@@ -962,6 +991,7 @@ pub(crate) fn tick(this: &mut MissionPlanner) {
     split_tick(this);
     takeoff_tick(this);
     sort_tick(this);
+    map_logs_tick(this);
     let Some(receiver) = this.experimental.magcal.as_ref() else {
         return;
     };
@@ -1113,6 +1143,59 @@ fn sort_logs(
         Ok(_) => this.experimental.sort = Some(receiver),
         Err(error) => log::debug!("LogSort: {error}"),
     }
+}
+
+/// map logs' folder chosen: the pictures drawn on a thread of its own, where the C#'s window waits
+/// on them, over Google's imagery from the cache - and from the server too, unless the map is to
+/// fetch nothing, as `GMaps.Instance`'s mode decides; [`tick`] takes the answer. One at a time.
+/// `// C#: temp.cs:534-539`
+fn map_logs(this: &mut MissionPlanner, folder: std::path::PathBuf) {
+    if this.experimental.map_logs.is_some() {
+        return;
+    }
+    let fetch = std::env::var("MP_OFFLINE").is_err()
+        && !crate::config::planner::cache_only(&this.persisted);
+    let (sender, receiver) = std::sync::mpsc::channel();
+    let spawned = wasm_thread::Builder::new()
+        .name("mp-map-logs".to_owned())
+        .spawn(move || {
+            let cache = mp_tiles::TileCache::new(mp_tiles::TileCache::default_root());
+            let fetcher = fetch.then(mp_tiles::TileFetcher::new);
+            let made = crate::log_map::map_logs(&folder, &mut |id| {
+                crate::log_map::cached_or_fetched(&cache, fetcher.as_ref(), id)
+            });
+            let _ = sender.send(made);
+        });
+    match spawned {
+        Ok(_) => this.experimental.map_logs = Some(receiver),
+        Err(error) => log::debug!("LogMap: {error}"),
+    }
+}
+
+/// map logs' answer, when it comes: nothing said, as the C# says nothing; a folder that is not
+/// there is the C#'s error box (`Directory.GetFiles` throws), on the status line.
+fn map_logs_tick(this: &mut MissionPlanner) {
+    let Some(receiver) = this.experimental.map_logs.as_ref() else {
+        return;
+    };
+    let made = match receiver.try_recv() {
+        Ok(made) => made,
+        Err(std::sync::mpsc::TryRecvError::Empty) => {
+            crate::repaint::in_flight();
+            return;
+        }
+        Err(std::sync::mpsc::TryRecvError::Disconnected) => Err(std::io::Error::other(
+            "the drawing stopped without an answer",
+        )),
+    };
+    this.experimental.map_logs = None;
+    this.experimental.map_logs_last = Some(match made {
+        Ok(count) => format!("drew {count}"),
+        Err(why) => {
+            this.file_status = Some(error_box(&why));
+            format!("failed: {why}")
+        }
+    });
 }
 
 /// A sort's answer, when it comes: nothing said, as the C# says nothing - Sort TLogs' `catch`
@@ -1426,6 +1509,15 @@ pub(crate) fn record_facts(state: &Experimental) {
             Some(Asking::Path(path, _)) => format!("{}: {}", path.caption, path.field.value()),
         },
     );
+    // map logs: drawing, or what the last drawing came to.
+    facts::record(
+        "experimental.maplogs",
+        if state.map_logs.is_some() {
+            "drawing"
+        } else {
+            state.map_logs_last.as_deref().unwrap_or("none")
+        },
+    );
     // Sort TLogs and ReSort All logs: sorting, or what the last sort came to.
     facts::record(
         "experimental.sort",
@@ -1506,7 +1598,7 @@ mod tests {
                 Tool::Unavailable(why) => assert!(!why.is_empty()),
             }
         }
-        assert_eq!(opens, 27);
+        assert_eq!(opens, 28);
         assert_eq!(tool("but_paramrestore"), Tool::Act(Act::ParamRestore));
         assert_eq!(tool("BUT_magfit2"), Tool::Act(Act::MagCalLog));
         assert_eq!(tool("myButton1"), Tool::Act(Act::SplitDfLog));
@@ -1515,6 +1607,7 @@ mod tests {
         assert_eq!(tool("but_armandtakeoff"), Tool::Act(Act::ArmAndTakeoff));
         assert_eq!(tool("BUT_sorttlogs"), Tool::Act(Act::SortTlogs));
         assert_eq!(tool("but_sortlogs"), Tool::Act(Act::ResortAllLogs));
+        assert_eq!(tool("but_maplogs"), Tool::Act(Act::MapLogs));
         assert_eq!(tool("but_blupdate"), Tool::Act(Act::BootloaderUpgrade));
         assert_eq!(tool("but_disablearmswitch"), Tool::Act(Act::ToggleSafety));
         assert_eq!(tool("but_messageinterval"), Tool::MessageInterval);

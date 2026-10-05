@@ -2499,7 +2499,7 @@ impl LatLngRect {
 
 /// `MercatorProjection.FromLatLngToPixel`: a position's pixel at a whole zoom.
 /// `// C#: ExtLibs/GMap.NET.Core/GMap.NET.Projections/MercatorProjection.cs:52-71`
-fn mercator_pixel(lat: f64, lng: f64, zoom: i32) -> (i64, i64) {
+pub(crate) fn mercator_pixel(lat: f64, lng: f64, zoom: i32) -> (i64, i64) {
     let lat = lat.clamp(-85.051_128_78, 85.051_128_78);
     let lng = lng.clamp(-180.0, 180.0);
     let x = (lng + 180.0) / 360.0;

@@ -4656,6 +4656,7 @@ dependencies = [
  "roxmltree 0.20.0",
  "serde_json",
  "sha1_smol",
+ "tiny-skia",
  "ttf-parser",
  "unic-langid",
  "wasm-bindgen",

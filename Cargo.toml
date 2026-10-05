@@ -72,6 +72,9 @@ levenberg-marquardt = "0.15"
 nalgebra = { version = "0.34", default-features = false, features = ["std"] }
 # netDxf's place (PLAN.md's vendored-replacements table): `MagCalib.doDXF`'s `magoffset.dxf`.
 dxf = "0.6"
+# Drawing into a picture off the screen - LogMap's tracks over the map - where the C# draws with
+# GDI+ and SkiaSharp. Already in the tree under resvg; without its PNG writer.
+tiny-skia = { version = "0.11", default-features = false, features = ["std", "simd"] }
 # Tile fetching. Blocking and small: the tile thread is a dedicated thread that is allowed to
 # block, exactly like the link's I/O thread, so an async runtime would be machinery with no user.
 # rustls rather than the system TLS, so a Windows build needs no extra toolchain and a Linux one

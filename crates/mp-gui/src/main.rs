@@ -113,6 +113,8 @@ mod page_files;
 mod page_serial;
 // The fonts a page draws with.
 mod page_fonts;
+// LogMap: a picture of where a log flew.
+mod log_map;
 #[cfg(target_family = "wasm")]
 mod page_storage;
 mod repaint;
