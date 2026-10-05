@@ -90,8 +90,15 @@ fn a_lone_message_is_published_within_the_interval() {
     waits.sort_unstable();
     let median = waits[waits.len() / 2];
     // The interval and a little for the machine; the read timeout it waited before is 100 ms.
+    // Windows rounds a socket's timeout and a sleep up to its timer's tick, 15.6 ms: there the
+    // median was 30 ms on CI's runner (2026-10-05), so three ticks - half the old wait still.
+    let bound = if cfg!(windows) {
+        Duration::from_millis(50)
+    } else {
+        DEFAULT_PUBLISH_INTERVAL * 4
+    };
     assert!(
-        median < DEFAULT_PUBLISH_INTERVAL * 4,
+        median < bound,
         "a lone message waited {median:?} to be published (every wait: {waits:?})"
     );
 }
