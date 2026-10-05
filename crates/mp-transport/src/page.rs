@@ -39,8 +39,9 @@ use crate::{OpenError, Transport};
 
 /// What the page and the link's thread share.
 struct Shared {
-    /// The link the planner asked for, until the page takes it.
-    request: Option<String>,
+    /// What the planner asked of the page, oldest first, until the page takes it: a link's URL,
+    /// `close`, or a SITL to start or stop ([`start_sitl`], [`stop_sitl`]).
+    requests: VecDeque<String>,
     /// Bytes from the vehicle, until the link reads them.
     inbox: VecDeque<u8>,
     /// Bytes for the vehicle, until the page takes them.
@@ -48,7 +49,7 @@ struct Shared {
 }
 
 static SHARED: Mutex<Shared> = Mutex::new(Shared {
-    request: None,
+    requests: VecDeque::new(),
     inbox: VecDeque::new(),
     outbox: Vec::new(),
 });
@@ -61,14 +62,34 @@ fn shared() -> MutexGuard<'static, Shared> {
         .unwrap_or_else(std::sync::PoisonError::into_inner)
 }
 
-/// The page: the link the planner opened since it last asked, if any - its URL as typed.
+/// The page: the next thing the planner asked of it, if any - a link's URL as typed, `close`,
+/// or a SITL's start (`sitl`, then the module and each argument on a line of its own) or stop
+/// (`sitl-stop`).
 #[wasm_bindgen]
 #[must_use]
 pub fn page_link_requested() -> Option<String> {
     SHARED
         .try_lock()
         .ok()
-        .and_then(|mut shared| shared.request.take())
+        .and_then(|mut shared| shared.requests.pop_front())
+}
+
+/// Asks the page to start ArduPilot's WebAssembly SITL `module` (a file of its `sitl/` folder,
+/// such as `arducopter.js`) with `arguments`, in place of any it runs: the browser build's
+/// "try local wasm", which the desktop starts under Node (mp-gui's `sitl::launcher`). Its SERIAL0
+/// is then what a `tcp:` link reaches.
+pub fn start_sitl(module: &str, arguments: &[String]) {
+    let mut request = format!("sitl\n{module}");
+    for argument in arguments {
+        request.push('\n');
+        request.push_str(argument);
+    }
+    shared().requests.push_back(request);
+}
+
+/// Asks the page to stop the SITL it runs, if any.
+pub fn stop_sitl() {
+    shared().requests.push_back("sitl-stop".to_owned());
 }
 
 /// The page: bytes from the vehicle. False when the link's thread holds the buffer this moment;
@@ -111,7 +132,7 @@ impl PageTransport {
     /// None today: the page answers by sending bytes or not.
     pub fn open(url: &str) -> Result<Self, OpenError> {
         let mut shared = shared();
-        shared.request = Some(url.to_owned());
+        shared.requests.push_back(url.to_owned());
         shared.inbox.clear();
         shared.outbox.clear();
         Ok(Self {
@@ -160,7 +181,7 @@ impl Transport for PageTransport {
     fn close(&mut self) {
         if self.open {
             self.open = false;
-            shared().request = Some("close".to_owned());
+            shared().requests.push_back("close".to_owned());
         }
     }
 }

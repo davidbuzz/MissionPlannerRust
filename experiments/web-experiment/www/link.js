@@ -48,54 +48,45 @@ const VEHICLES = {
     heli: ["arducopter-heli.js", "heli"],
 };
 
-let sitlStarting = null;
+// The SITL running, in a Web Worker of its own (sitl-worker.js), so another start ends it.
+let sitlWorker = null;
 
-async function startSitl(vehicle) {
+// Starts `module` (a file of sitl/) with `args`, ending any SITL before it; its SERIAL0 becomes
+// the link's.
+function startSitlModule(module, args) {
+    stopSitl();
+    status = `starting SITL ${module}`;
+    const worker = new Worker(new URL("./sitl-worker.js", import.meta.url), { type: "module" });
+    worker.onmessage = (event) => {
+        const message = event.data;
+        if (message.bytes) {
+            inbox.push(message.bytes);
+        } else if (message.print !== undefined) {
+            console.log(`sitl: ${message.print}`);
+        } else if (message.started) {
+            status = `SITL ${message.started} in this page`;
+        } else if (message.failed) {
+            status = `SITL failed: ${message.failed}`;
+            console.error(`sitl: ${message.failed}`);
+        }
+    };
+    worker.postMessage({ start: { module, args } });
+    sendTo = (bytes) => worker.postMessage({ bytes }, [bytes.buffer]);
+    sitlWorker = worker;
+}
+
+function stopSitl() {
+    if (sitlWorker !== null) {
+        sitlWorker.terminate();
+        sitlWorker = null;
+        status = "SITL stopped";
+    }
+}
+
+// A vehicle by name, with the bridge's command line from tools/sitl/wasm/README.md, less the port.
+function startSitl(vehicle) {
     const [file, model] = VEHICLES[vehicle] ?? VEHICLES.copter;
-    status = `starting SITL ${vehicle}`;
-    const { default: createModule } = await import(`./sitl/${file}`);
-    // The bridge's command line from tools/sitl/wasm/README.md, less the port.
-    const sitl = await createModule({
-        arguments: [`-M${model}`, "-O-35.36,149.16,584,353", "-s1", "--serial0", "wasm", "--serial1", "none", "--serial2", "none"],
-        print: (text) => console.log(`sitl: ${text}`),
-        printErr: (text) => console.warn(`sitl: ${text}`),
-    });
-    const SERIAL0 = 0;
-    const BUFFER = 4096;
-    const malloc = sitl.cwrap("ardupilot_malloc", "number", ["number"]);
-    const read = sitl.cwrap("ardupilot_serial_read", "number", ["number", "number", "number"]);
-    const write = sitl.cwrap("ardupilot_serial_write", "number", ["number", "number", "number"]);
-    const fromVehicle = malloc(BUFFER);
-    const toVehicle = malloc(BUFFER);
-    const waiting = [];
-    sendTo = (bytes) => waiting.push(bytes);
-    status = `SITL ${vehicle} in this page`;
-    setInterval(() => {
-        for (;;) {
-            const length = read(SERIAL0, fromVehicle, BUFFER);
-            if (length <= 0) {
-                break;
-            }
-            inbox.push(sitl.HEAPU8.slice(fromVehicle, fromVehicle + length));
-            if (length < BUFFER) {
-                break;
-            }
-        }
-        while (waiting.length > 0) {
-            const chunk = waiting[0];
-            const take = Math.min(chunk.length, BUFFER);
-            sitl.HEAPU8.set(chunk.subarray(0, take), toVehicle);
-            const written = write(SERIAL0, toVehicle, take);
-            if (written <= 0) {
-                break;
-            }
-            if (written < chunk.length) {
-                waiting[0] = chunk.subarray(written);
-            } else {
-                waiting.shift();
-            }
-        }
-    }, 5);
+    startSitlModule(file, [`-M${model}`, "-O-35.36,149.16,584,353", "-s1", "--serial0", "wasm", "--serial1", "none", "--serial2", "none"]);
 }
 
 function openWebSocket(url) {
@@ -123,10 +114,7 @@ export function startLink() {
     if (link.startsWith("ws://") || link.startsWith("wss://")) {
         openWebSocket(link);
     } else {
-        startSitl(query.get("vehicle") ?? "copter").catch((err) => {
-            status = `SITL failed: ${err}`;
-            console.error(err);
-        });
+        startSitl(query.get("vehicle") ?? "copter");
     }
 }
 
@@ -146,20 +134,25 @@ export function servePlanner(planner) {
             if (asked === "close") {
                 forwarding = false;
                 status = "closed";
+            } else if (asked.startsWith("sitl\n")) {
+                // The SIMULATION screen's "try local wasm": a vehicle clicked, the module and its
+                // command line as the desktop's bridge is given them (crates/mp-transport/src/page.rs).
+                const [, module, ...args] = asked.split("\n");
+                inbox.length = 0;
+                startSitlModule(module, args);
+            } else if (asked === "sitl-stop") {
+                stopSitl();
             } else if (asked.startsWith("ws://") || asked.startsWith("wss://")) {
                 inbox.length = 0;
                 openWebSocket(asked);
                 forwarding = true;
             } else {
                 // A tcp: (or udpcl:) link: the SITL in this page, as a SITL already running is
-                // reached on the desktop. Started once; a second connect finds it running.
+                // reached on the desktop - started here, with ?vehicle=, when none runs yet.
                 inbox.length = 0;
                 forwarding = true;
-                if (sitlStarting === null) {
-                    sitlStarting = startSitl(query.get("vehicle") ?? "copter").catch((err) => {
-                        status = `SITL failed: ${err}`;
-                        console.error(err);
-                    });
+                if (sitlWorker === null) {
+                    startSitl(query.get("vehicle") ?? "copter");
                 }
             }
         }

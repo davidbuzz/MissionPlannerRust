@@ -320,8 +320,9 @@ impl Sitl {
             press: None,
             zoom_pending: false,
             launcher,
-            local_wasm: Arc::new(launcher::LocalWasm::default()),
-            try_local_wasm: cfg!(target_os = "macos"),
+            local_wasm: local_wasm_launcher(),
+            // Ticked where it is the only simulator that runs: macOS, and a web page.
+            try_local_wasm: cfg!(any(target_os = "macos", target_family = "wasm")),
             worker: None,
             saying: None,
             note: None,
@@ -389,7 +390,9 @@ impl Sitl {
         if self.note.is_none() {
             self.note = self.chosen().note();
         }
-        if self.note.is_some() && !self.probed {
+        // The probe asks ArduPilot's manifest for a WebAssembly SITL a desktop could bundle; a web
+        // page runs the local builds itself and has nothing to ask.
+        if self.note.is_some() && !self.probed && !cfg!(target_family = "wasm") {
             self.start_probe();
         }
     }
@@ -1036,6 +1039,18 @@ pub fn record_facts(sitl: &Sitl, persisted: &crate::settings::Persisted) {
     }
 }
 
+/// "try local wasm"'s launcher: Node and the bridge on a desktop, the page itself in a browser.
+fn local_wasm_launcher() -> Arc<dyn Launcher> {
+    #[cfg(target_family = "wasm")]
+    {
+        Arc::new(launcher::PageWasm)
+    }
+    #[cfg(not(target_family = "wasm"))]
+    {
+        Arc::new(launcher::LocalWasm::default())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1244,3 +1259,4 @@ mod tests {
         assert_eq!(sitl.connect.as_deref(), Some("tcp:127.0.0.1:5760"));
     }
 }
+

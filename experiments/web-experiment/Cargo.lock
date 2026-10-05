@@ -3045,6 +3045,7 @@ dependencies = [
  "wasm-bindgen",
  "wasm_thread",
  "web-sys",
+ "web-time",
 ]
 
 [[package]]

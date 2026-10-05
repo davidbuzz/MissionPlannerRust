@@ -442,6 +442,20 @@ fn make_executable(path: &Path) {
     }
 }
 
+/// The note where nothing runs a SITL: the desktop's (the C#'s Cygwin, and the WebAssembly SITL
+/// ArduPilot does not publish yet), and in a web page what does run there.
+fn not_available_note() -> String {
+    if cfg!(target_family = "wasm") {
+        PAGE_NOTE.to_owned()
+    } else {
+        wasm::note(&wasm::Probe::NotYetAsked)
+    }
+}
+
+/// The browser build's note with "try local wasm" unticked: the page's own SITL is the only one.
+pub const PAGE_NOTE: &str = "In a web page the simulator is ArduPilot's WebAssembly SITL, which \
+     the page runs itself: tick \"try local wasm\" and click a vehicle.";
+
 /// A desktop with no SITL to run: the owner's ruling D14's note, and nothing started.
 #[derive(Debug, Default)]
 pub struct NotAvailable;
@@ -452,7 +466,7 @@ impl Launcher for NotAvailable {
     }
 
     fn note(&self) -> Option<String> {
-        Some(wasm::note(&wasm::Probe::NotYetAsked))
+        Some(not_available_note())
     }
 
     fn image(
@@ -463,11 +477,11 @@ impl Launcher for NotAvailable {
         _fetch: &dyn Fetch,
         _say: &dyn Fn(&str),
     ) -> Image {
-        Image::NotAvailable(wasm::note(&wasm::Probe::NotYetAsked))
+        Image::NotAvailable(not_available_note())
     }
 
     fn spawn(&self, _spawn: &Spawn) -> Result<(), String> {
-        Err(wasm::note(&wasm::Probe::NotYetAsked))
+        Err(not_available_note())
     }
 
     fn kill_all(&self) {}
@@ -658,6 +672,53 @@ impl Launcher for LocalWasm {
     }
 }
 
+/// The browser build's "try local wasm": the same four WebAssembly builds, started by the page
+/// itself in a Web Worker (experiments/web-experiment/www/link.js) where the desktop starts them
+/// under Node, through mp_transport::page. Its SERIAL0 is then what the start's
+/// `tcp:127.0.0.1:5760` reaches, as the desktop's bridge serves it there.
+#[cfg(target_family = "wasm")]
+#[derive(Debug, Default)]
+pub struct PageWasm;
+
+#[cfg(target_family = "wasm")]
+impl Launcher for PageWasm {
+    fn name(&self) -> String {
+        "local wasm".to_owned()
+    }
+
+    fn image(
+        &self,
+        file: &str,
+        _release: Option<ReleaseType>,
+        _dir: &Path,
+        _fetch: &dyn Fetch,
+        _say: &dyn Fn(&str),
+    ) -> Image {
+        local_wasm_module(file).map_or_else(
+            || {
+                Image::NotAvailable(format!(
+                    "try local wasm: there is no WebAssembly build of {file}"
+                ))
+            },
+            |module| Image::Found(PathBuf::from(module)),
+        )
+    }
+
+    /// The page asked to start the module, with the command line [`local_wasm_arguments`]
+    /// makes, as the desktop's bridge is given it.
+    fn spawn(&self, spawn: &Spawn) -> Result<(), String> {
+        mp_transport::page::start_sitl(
+            &spawn.program.display().to_string(),
+            &local_wasm_arguments(&spawn.arguments),
+        );
+        Ok(())
+    }
+
+    fn kill_all(&self) {
+        mp_transport::page::stop_sitl();
+    }
+}
+
 /// The source `CheckandGetSITLImage` takes on the system this runs on.
 /// `// C#: GCSViews/SITL.cs:302-303, 340-341, 377`
 #[must_use]
@@ -736,7 +797,8 @@ pub fn start(
             return Outcome::Failed(format!("{FAILED_TO_DOWNLOAD_AND_START}\n{reason}"));
         }
     };
-    if !image.is_file() {
+    // A web page has no files: its module is the page's own (PageWasm).
+    if !cfg!(target_family = "wasm") && !image.is_file() {
         return Outcome::Failed(model::FAILED_TO_DOWNLOAD.to_owned());
     }
     launcher.kill_all();
