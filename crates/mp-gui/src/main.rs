@@ -4176,7 +4176,12 @@ impl Render for MissionPlanner {
                 // `ShowDialog()`: the quick view's chooser, over everything.
                 .children(quick::chooser(&self.fly_data.quick, window, cx))
                 // The HUD's menu and its User Items form, and Auto Analysis's report.
-                .children(fly::overlays(&self.fly_data, window, cx))
+                .children(fly::overlays(
+                    &self.fly_data,
+                    &self.plugins.flight_entries(),
+                    window,
+                    cx,
+                ))
                 // ---- Geo Reference ----
                 // `new Georefimage().Show()`: its form over the screen, which stays usable.
                 .children(georef_ui::window(self, window, cx))
@@ -4563,13 +4568,8 @@ impl Render for MissionPlanner {
                     // `ProcessCmdKey`'s forms, free forms in the C#: over whichever screen shows.
                     .children(cmd_keys::overlay(self, window, cx))
                     // ---- row 96 ----
-                    // The plugins' questions and forms, and the flight map's plugin entries.
-                    .children(plugins_ui::overlay(
-                        self,
-                        self.screen == Screen::Fly,
-                        window,
-                        cx,
-                    )),
+                    // The plugins' questions and forms.
+                    .children(plugins_ui::overlay(self, window, cx)),
                 // ---- end row 96 ----
             )
             // MP_FRAMES's readout of the last second's frames, over the bottom-right corner.

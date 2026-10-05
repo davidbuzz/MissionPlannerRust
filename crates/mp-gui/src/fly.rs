@@ -7525,6 +7525,7 @@ fn hud_items_chooser(
 /// Analysis's report, Customize's form, and the strip's and quick views' menus.
 pub fn overlays(
     data: &FlightData,
+    plugin_entries: &[crate::plugins_ui::Entry],
     window: &Window,
     cx: &mut Context<MissionPlanner>,
 ) -> Vec<AnyElement> {
@@ -7544,6 +7545,7 @@ pub fn overlays(
             menu,
             data.menu_sub,
             data.camera_overlap,
+            plugin_entries,
             window,
             cx,
         ));
@@ -8965,6 +8967,39 @@ fn menu_row(
     }
 }
 
+/// A plugin's entry on the map's menu, drawn as the menu's own: clicked, the menu closes and the
+/// plugin hears it with where the map was pressed to open the menu, `Host.FDMenuMapPosition`.
+/// `// C#: Plugin/Plugin.cs:135-141`
+fn plugin_row(entry: &crate::plugins_ui::Entry, cx: &mut Context<MissionPlanner>) -> AnyElement {
+    let (plugin, id) = (entry.plugin, entry.id);
+    crate::probe::measured(entry.probe_id(), div())
+        .id(entry.probe_id())
+        .h(px(HUD_MENU_ROW))
+        .px_2()
+        .flex()
+        .items_center()
+        .gap_1()
+        .text_xs()
+        .text_color(rgb(theme::TEXT))
+        .bg(rgb(theme::PANEL))
+        .cursor_pointer()
+        .hover(|style| style.bg(rgb(theme::BORDER)))
+        // The check mark's column, as the menu's own entries keep it.
+        .child(div().w(px(10.0)))
+        .child(entry.label())
+        .on_click(cx.listener(move |this, _event, _window, cx| {
+            this.fly_data.menu = None;
+            this.fly_data.menu_sub = None;
+            let at = this
+                .fly_data
+                .mouse_down_start
+                .map_or((0.0, 0.0), |(at, _)| (at.latitude(), at.longitude()));
+            this.plugins.run_entry(plugin, id, at.0, at.1);
+            cx.notify();
+        }))
+        .into_any_element()
+}
+
 /// A press that closes the strip's or the quick views' menu.
 fn close_menu(
     cx: &mut Context<MissionPlanner>,
@@ -8983,16 +9018,25 @@ fn context_menu(
     (kind, (x, y)): (MenuKind, (f32, f32)),
     sub: Option<MenuEntry>,
     camera_overlap: bool,
+    plugin_entries: &[crate::plugins_ui::Entry],
     window: &Window,
     cx: &mut Context<MissionPlanner>,
 ) -> AnyElement {
     let size = window.viewport_size();
     let entries = kind.entries();
-    #[allow(clippy::cast_precision_loss)] // a dozen rows at most
-    let height = 2.0f32.mul_add(HUD_MENU_PADDING, 2.0) + entries.len() as f32 * HUD_MENU_ROW;
+    // `Host.FDMenuMap` is this menu, `contextMenuStripMap`: an enabled plugin's entries at its
+    // end, as `Items.Add` puts them. `// C#: Plugin/Plugin.cs:127-133`
+    let plugin_entries = if kind == MenuKind::Map {
+        plugin_entries
+    } else {
+        &[]
+    };
+    #[allow(clippy::cast_precision_loss)] // a few dozen rows at most
+    let height = 2.0f32.mul_add(HUD_MENU_PADDING, 2.0)
+        + (entries.len() + plugin_entries.len()) as f32 * HUD_MENU_ROW;
     let left = x.min(f32::from(size.width) - HUD_MENU_WIDTH).max(0.0);
     let top = y.min(f32::from(size.height) - height).max(0.0);
-    let rows = entries
+    let mut rows: Vec<AnyElement> = entries
         .iter()
         .map(|entry| {
             menu_row(
@@ -9003,6 +9047,7 @@ fn context_menu(
             )
         })
         .collect();
+    rows.extend(plugin_entries.iter().map(|entry| plugin_row(entry, cx)));
     let id = match kind {
         MenuKind::Tabs => "fly-tabs-menu",
         MenuKind::Quick => "fly-quick-menu",

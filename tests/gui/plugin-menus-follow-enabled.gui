@@ -1,0 +1,53 @@
+# The flight map's plugin entries on its own right-click menu, at its end, as `Host.FDMenuMap`'s
+# are - `FlightData.contextMenuStripMap`, clicked with `MouseDownStart` as `FDMenuMapPosition`
+# (Plugin/Plugin.cs:127-141) - where a panel in the window's bottom-right corner had held them
+# (the owner, 2026-10-06: "if possible, move then to the 'FLY map's right-click menu'"). And each
+# map's entries only while their plugin is enabled ("each of them needs to appear and dissapear
+# depending wether its respective plugin is enabled or disabled"): unticked in the plugin manager
+# and saved, a plugin's entries go at once - it runs on till the restart, as the C#'s does - and
+# ticked and saved again, they are back.
+#
+# MapIconDesc's Change icon Description (mapicondesc.wasm, plugin 4): on the FLY map's menu,
+# clicked there it asks what the vehicle's map icon should show.
+# The config holds `tabcontrolactions`, so the Drone ID plugin's message does not show at start,
+# and an empty `DisabledPlugins`: every plugin on.
+# The built-in plugins: the runner leaves them out unless a script asks for them.
+env MP_BUILTIN_PLUGINS 1
+screen fly
+window 1600x1200
+budget 15
+env XDG_DATA_HOME $WORK
+env MP_CONFIG_XML $WORK/config.xml
+setup printf '<?xml version="1.0" encoding="utf-8"?><Config><tabcontrolactions>tabQuick;</tabcontrolactions><DisabledPlugins></DisabledPlugins></Config>' > "$WORK/config.xml"
+expect plugins.MapIconDesc.state running
+expect plugins.MapIconDesc.entries Change icon Description
+expect plugins.menu.flight-data ~ Change icon Description
+# On the map's own menu, and run from there.
+click map@0.5x0.5:right
+expect fly.menu map
+click plugin-menu-4-0
+expect fly.menu none
+expect plugins.question ~ What do you want it to show?
+type tested
+key Return
+expect plugins.question none
+# Unticked and saved: its entry gone at once, the others' still there.
+key ctrl+p
+expect screen plugins
+expect plugin-manager.row.3 MapIconDesc|mapicondesc.wasm|enabled|green
+click plugin-manager-enabled-3
+click plugin-manager-save
+expect plugin-manager.row.3 MapIconDesc|mapicondesc.wasm|disabled|dark-orange
+expect plugins.MapIconDesc.state running
+expect plugins.MapIconDesc.entries none
+expect plugins.menu.flight-data ~ Draw Fence Dist
+# Ticked and saved again: back, and runs from the map's menu as before.
+click plugin-manager-enabled-3
+click plugin-manager-save
+expect plugins.MapIconDesc.entries Change icon Description
+click tab-fly
+click map@0.5x0.5:right
+expect fly.menu map
+click plugin-menu-4-0
+expect plugins.question ~ What do you want it to show?
+key Escape

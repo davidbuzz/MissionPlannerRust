@@ -192,8 +192,10 @@ fn wasm_files(dir: &Path) -> Vec<PathBuf> {
     files
 }
 
-/// Whether `file` is on the disable list (`DisabledPluginNames`, compared without case).
-fn is_disabled(file: &str, disabled: &[String]) -> bool {
+/// Whether `file` is on the disable list (`DisabledPluginNames`, compared without case): the
+/// loader's rule, and the planner's for whether a loaded plugin's map menu entries show.
+#[must_use]
+pub fn is_disabled(file: &str, disabled: &[String]) -> bool {
     let file = file.to_lowercase();
     disabled.iter().any(|off| off.to_lowercase() == file)
 }

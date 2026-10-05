@@ -120,6 +120,16 @@ fn disabled_list(persisted: &crate::settings::Persisted) -> Vec<String> {
     }
 }
 
+/// A disabled list as it is in force: in a page opened with `?demo=0` - the browser build's
+/// checks - the Welcome-Demo-Sitl as well, which then never starts, and the plugin manager does
+/// not list it.
+fn in_force(mut disabled: Vec<String>) -> Vec<String> {
+    if mp_os::page_query("demo").as_deref() == Some("0") {
+        disabled.push(DEMO_FILE.to_owned());
+    }
+    disabled
+}
+
 /// Where the plugins are: `MP_PLUGINS`, else `plugins` beside the executable.
 /// `// C#: Plugin/PluginLoader.cs:205-206`
 #[must_use]
@@ -222,6 +232,12 @@ struct Form {
 pub struct Plugins {
     host: PluginHost,
     entries: Vec<Entry>,
+    /// The disabled list in force: as loaded, then as the plugin manager last saved it. A loaded
+    /// plugin on it keeps running till the restart, as the C#'s does, but its map menu entries
+    /// go at once and come back when it is enabled again (the owner, 2026-10-06: "each of them
+    /// needs to appear and dissapear depending wether its respective plugin is enabled or
+    /// disabled").
+    disabled: Vec<String>,
     questions: VecDeque<Question>,
     /// The showing question's text box.
     field: TextField,
@@ -253,12 +269,7 @@ impl Plugins {
     /// thread, its terrain and parameter documentation readers set once.
     /// `// C#: MainV2.cs:3185-3196`
     pub fn start(persisted: &crate::settings::Persisted, cx: &mut gpui::App) -> Self {
-        let mut disabled = disabled_list(persisted);
-        // A page opened with `?demo=0` - the browser build's checks - starts without the
-        // Welcome-Demo-Sitl, and the plugin manager does not list it.
-        if mp_os::page_query("demo").as_deref() == Some("0") {
-            disabled.push(DEMO_FILE.to_owned());
-        }
+        let disabled = in_force(disabled_list(persisted));
         // `PluginLoader.LoadAll` at start: the shipped plugins and the folder's, less the
         // disabled ones. `// C#: Plugin/PluginLoader.cs:203-311`
         let host = PluginHost::load_with_builtins(
@@ -286,6 +297,7 @@ impl Plugins {
         Self {
             host,
             entries: Vec::new(),
+            disabled,
             questions: VecDeque::new(),
             field: TextField::new(""),
             focus: cx.focus_handle(),
@@ -334,14 +346,31 @@ impl Plugins {
         !self.host.plugins().is_empty()
     }
 
-    /// The planning map's entries, for its menu.
+    /// The planning map's entries, for its menu: an enabled plugin's.
     #[must_use]
     pub fn planner_entries(&self) -> Vec<Entry> {
+        self.shown(MapMenu::FlightPlanner).cloned().collect()
+    }
+
+    /// The flight map's entries, for its menu: an enabled plugin's.
+    #[must_use]
+    pub fn flight_entries(&self) -> Vec<Entry> {
+        self.shown(MapMenu::FlightData).cloned().collect()
+    }
+
+    /// A map's entries whose plugin is enabled, in the order they were added.
+    fn shown(&self, menu: MapMenu) -> impl Iterator<Item = &Entry> {
         self.entries
             .iter()
-            .filter(|entry| entry.menu == MapMenu::FlightPlanner)
-            .cloned()
-            .collect()
+            .filter(move |entry| entry.menu == menu && self.enabled(entry.plugin))
+    }
+
+    /// Whether a loaded plugin is enabled: its file not on the disabled list in force.
+    fn enabled(&self, plugin: usize) -> bool {
+        self.host
+            .plugins()
+            .get(plugin)
+            .is_some_and(|status| !mp_plugin_host::is_disabled(&status.file, &self.disabled))
     }
 
     /// The name a plugin goes by in facts and on the status line.
@@ -429,9 +458,24 @@ impl Plugins {
                 },
             );
         }
-        for status in self.host.plugins() {
+        for (index, status) in self.host.plugins().iter().enumerate() {
             let name = status.name().replace(' ', "_");
             facts::record(format!("plugins.{name}.state"), status.state.word());
+            // What its map menus show of it, both maps': none while it is disabled.
+            let shown: Vec<&str> = [MapMenu::FlightData, MapMenu::FlightPlanner]
+                .into_iter()
+                .flat_map(|menu| self.shown(menu))
+                .filter(|entry| entry.plugin == index)
+                .map(|entry| entry.text.as_str())
+                .collect();
+            facts::record(
+                format!("plugins.{name}.entries"),
+                if shown.is_empty() {
+                    "none".to_owned()
+                } else {
+                    shown.join(",")
+                },
+            );
             if let Some(info) = &status.info {
                 facts::record(format!("plugins.{name}.version"), &info.version);
                 facts::record(format!("plugins.{name}.author"), &info.author);
@@ -444,12 +488,7 @@ impl Plugins {
             (MapMenu::FlightData, "plugins.menu.flight-data"),
             (MapMenu::FlightPlanner, "plugins.menu.flight-planner"),
         ] {
-            let texts: Vec<&str> = self
-                .entries
-                .iter()
-                .filter(|entry| entry.menu == menu)
-                .map(|entry| entry.text.as_str())
-                .collect();
+            let texts: Vec<&str> = self.shown(menu).map(|entry| entry.text.as_str()).collect();
             facts::record(
                 key,
                 if texts.is_empty() {
@@ -563,6 +602,7 @@ impl MissionPlanner {
         if let Some(list) = self.plugins.manager.save() {
             let value = crate::raw_params_grid::set_list(&list).unwrap_or_default();
             self.persisted.set(DISABLED, value);
+            self.plugins.disabled = in_force(list);
         }
     }
 
@@ -1022,24 +1062,18 @@ impl MissionPlanner {
 
 /// The width of a plugin's form.
 const FORM_WIDTH: f32 = 340.0;
-/// The width of the flight map's entries' panel.
-const MENU_WIDTH: f32 = 200.0;
 /// One entry's height.
 const MENU_ROW: f32 = 22.0;
 
-/// The plugins' part of the window: the question showing, the forms, and on the flight screen the
-/// flight map's entries.
+/// The plugins' part of the window: the question showing and the forms. (The flight map's
+/// entries are on its right-click menu, `fly::context_menu`, as `Host.FDMenuMap`'s are.)
 pub fn overlay(
     this: &MissionPlanner,
-    fly_screen: bool,
     window: &Window,
     cx: &mut Context<MissionPlanner>,
 ) -> Vec<AnyElement> {
     let plugins = &this.plugins;
     let mut out = Vec::new();
-    if fly_screen {
-        out.extend(flight_menu(this, window, cx));
-    }
     let size = window.viewport_size();
     let mut top = 72.0;
     // A plugin with a page of its own draws its form there (`page_form`), not over the window.
@@ -1086,72 +1120,6 @@ fn row(
         .cursor_pointer()
         .hover(|style| style.bg(rgb(theme::BORDER)))
         .child(text)
-}
-
-/// The flight map's entries: `FDMenuMap`'s items a plugin added, clicked with the flight map's
-/// last press as `Host.FDMenuMapPosition`.
-fn flight_menu(
-    this: &MissionPlanner,
-    window: &Window,
-    cx: &mut Context<MissionPlanner>,
-) -> Option<AnyElement> {
-    let entries: Vec<&Entry> = this
-        .plugins
-        .entries
-        .iter()
-        .filter(|entry| entry.menu == MapMenu::FlightData)
-        .collect();
-    if entries.is_empty() {
-        return None;
-    }
-    #[allow(clippy::cast_precision_loss)]
-    let height = MENU_ROW * entries.len() as f32 + 28.0;
-    let size = window.viewport_size();
-    let rows: Vec<AnyElement> = entries
-        .into_iter()
-        .map(|entry| {
-            let (plugin, id) = (entry.plugin, entry.id);
-            row(entry.probe_id(), entry.label(), cx)
-                .on_click(cx.listener(move |this, _event, _window, cx| {
-                    let at = this
-                        .fly_data
-                        .mouse_down_start
-                        .map_or((0.0, 0.0), |(at, _)| (at.latitude(), at.longitude()));
-                    this.plugins.host.menu_click(plugin, id, at.0, at.1);
-                    cx.notify();
-                }))
-                .into_any_element()
-        })
-        .collect();
-    let panel = crate::probe::measured("plugin-flight-menu", div())
-        .flex()
-        .flex_col()
-        .w(px(MENU_WIDTH))
-        .py_1()
-        .bg(rgb(theme::PANEL))
-        .border_1()
-        .border_color(rgb(theme::BORDER))
-        .rounded_sm()
-        .child(
-            div()
-                .px_3()
-                .text_xs()
-                .text_color(rgb(theme::DIM))
-                .child("Map menu - plugins"),
-        )
-        .children(rows);
-    Some(
-        gpui::deferred(
-            gpui::anchored()
-                .position(gpui::point(
-                    px(f32::from(size.width) - MENU_WIDTH - 16.0),
-                    px(f32::from(size.height) - height - 40.0),
-                ))
-                .child(panel),
-        )
-        .with_priority(1)
-        .into_any_element(),
-    )
 }
 
 /// One control of a form.
