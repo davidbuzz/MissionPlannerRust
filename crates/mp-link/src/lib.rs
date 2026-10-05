@@ -1563,6 +1563,10 @@ fn run_link(
     let mut request_sends: Vec<requests::Outgoing> = Vec::new();
     let mut ftp_sends: Vec<(VehicleId, mp_ftp::mavftp::wire::Header)> = Vec::new();
     let mut last_publish = Instant::now();
+    // Bytes read since the last publish, and whether the transport's reads have been cut short
+    // to when that publish is due (see the publish below).
+    let mut unpublished = false;
+    let mut read_cut_short = false;
     let mut last_heartbeat = Instant::now() - config.heartbeat_interval;
     // Every vehicle heard, with `UpdateCurrentSettings`' clocks for it (see `current_settings`).
     let mut known: BTreeMap<VehicleId, current_settings::Clocks> = BTreeMap::new();
@@ -1580,6 +1584,8 @@ fn run_link(
             Ok(0) => {
                 if !transport.is_open() {
                     if reopen_transport(&mut reopen, shared, &mut transport) {
+                        // A transport opened again reads at its own timeout.
+                        read_cut_short = false;
                         continue;
                     }
                     break;
@@ -1593,6 +1599,7 @@ fn run_link(
                 }
             }
             Ok(n) => {
+                unpublished = true;
                 stats.bytes_read += n as u64;
                 // Each packet is stamped with when it was sent before it is applied: now on a
                 // live link, the recording's clock in a replay, whose reads never cross a record.
@@ -2102,6 +2109,7 @@ fn run_link(
             }
             Err(_) => {
                 if reopen_transport(&mut reopen, shared, &mut transport) {
+                    read_cut_short = false;
                     continue;
                 }
                 break;
@@ -2417,6 +2425,7 @@ fn run_link(
             }
             stats.publishes += 1;
             last_publish = Instant::now();
+            unpublished = false;
 
             // Expose a handle for each vehicle whose heartbeat has been heard: the C# lists a
             // component on its first packet in MAVList's hidden list and moves it to the visible
@@ -2426,6 +2435,25 @@ fn run_link(
             // before the heartbeat was decoded by the wrong rule, the autopilot being unknown
             // (CI's SITL run, 2026-10-03: BATT_CAPACITY read as 1,162,756,096).
             expose_handles(shared, &registry, detected.iter());
+        }
+
+        // What was read since the last publish is published once the interval is up - when a
+        // read returns, which on a quiet link was when the transport's read timeout ran out
+        // (100 ms): a vehicle's packet arriving on its own just after a publish waited that long
+        // for the screen (the owner's question of 2026-10-05, packet to pixel;
+        // tests/publish_latency.rs). Until it is published the read waits only until it is due.
+        if unpublished != read_cut_short {
+            let wait = if unpublished {
+                config
+                    .publish_interval
+                    .saturating_sub(last_publish.elapsed())
+                    .max(IDLE_POLL)
+            } else {
+                mp_transport::DEFAULT_READ_TIMEOUT
+            };
+            if transport.set_read_timeout(wait).is_ok() {
+                read_cut_short = unpublished;
+            }
         }
 
         // Heartbeat, so the vehicle does not declare GCS failsafe.
