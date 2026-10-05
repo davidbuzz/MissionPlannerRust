@@ -52,6 +52,9 @@ followed it.
 
 ## A vehicle on a tailnet
 
+New to Tailscale, or to the planner? [using_tailscale.md](../using_tailscale.md) walks through it
+step by step, for the desktop app and the browser alike.
+
 A web page has no sockets, so the page carries a Tailscale node of its own (`www/tailscale.js`):
 Tailscale's own Go client built for the browser (`tailscale/main.go`, from tailscale.com's
 `cmd/tsconnect`, v1.104.0), kept built in `www/tailscale/` (8 MB, gzipped) and loaded the first time
