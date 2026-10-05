@@ -139,7 +139,23 @@ pub const MAY_SCROLL: &[&str] = &[
 /// list's rows.
 #[must_use]
 pub fn must_show(name: &str) -> bool {
-    !MAY_SCROLL.iter().any(|prefix| name.starts_with(prefix))
+    !MAY_SCROLL.iter().any(|prefix| name.starts_with(prefix)) && !is_parameter_row(name)
+}
+
+/// The Full Parameter List's rows, `Params`' rows, which scroll in their grid: `param-{name}`
+/// and its cells `param-value-{name}`, `param-desc-{name}` and `param-fav-{name}`, told from the
+/// screen's own `param-` controls by the parameter's name, in capitals as no control's is. The
+/// grid fills the height the screen leaves it, so its last row is mostly part in view (the
+/// owner's banner of 2026-10-05: "CUT OFF (the layout guard): param-COMPASS_DIA_X[...]").
+/// `// C#: GCSViews/ConfigurationView/ConfigRawParams.Designer.cs:57, 241 (Params)`
+fn is_parameter_row(name: &str) -> bool {
+    name.strip_prefix("param-").is_some_and(|rest| {
+        ["value-", "desc-", "fav-"]
+            .iter()
+            .find_map(|cell| rest.strip_prefix(cell))
+            .unwrap_or(rest)
+            .starts_with(|first: char| first.is_ascii_uppercase())
+    })
 }
 
 /// The important ids of a screen.
@@ -373,6 +389,24 @@ mod tests {
 
     /// The banner names a cut-off once it has lasted, not the frame a screen is switched to; a
     /// change starts the time again, and nothing cut off takes it away.
+        // The parameter grid's rows and their cells scroll; the screen's controls do not.
+        for row in [
+            "param-COMPASS_DIA_X",
+            "param-value-COMPASS_DIA_X",
+            "param-desc-COMPASS_DIA_X",
+            "param-fav-COMPASS_DIA_X",
+        ] {
+            assert!(!must_show(row), "{row}");
+        }
+        for control in [
+            "param-values",
+            "param-value-edit",
+            "param-col-Desc",
+            "param-search",
+            "param-refresh",
+        ] {
+            assert!(must_show(control), "{control}");
+        }
     #[test]
     fn the_banner_names_what_stays_cut_off() {
         let start = web_time::Instant::now();
