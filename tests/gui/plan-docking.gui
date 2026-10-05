@@ -28,4 +28,6 @@ expect plan-mincommands right-of map
 click map@0.45x0.40:right
 click menu-switchDocking
 expect plan.docking Right
-expect plan-write left-of map
+# `panelAction.Dock = DockStyle.Right`: the action panel to the map's right, as the plan screen
+# has drawn it since its panels took Mission Planner's arrangement (this line said left-of).
+expect plan-write right-of map

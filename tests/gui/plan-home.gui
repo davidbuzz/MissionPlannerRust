@@ -19,7 +19,8 @@ setup mkdir -p "$WORK/MissionPlannerRust" && printf '<?xml version="1.0" encodin
 
 screen plan
 window 1600x1200
-budget 19
+budget 22
+# 22 since Save File and Load File ask for the file (2026-10-06): the dialogs cost some 3 s.
 
 # The saved home is in the boxes, and the grid is empty.
 expect plan.home -35.3632621,149.1652374,584.10
@@ -54,13 +55,21 @@ expect mission.written.home 51.5000000,7.2500000,100.000000
 
 # Saved and read back: record 0 goes back to home, not into the rows, and matches the boxes, so
 # nothing is asked.
+# Save File and Load File ask for the file since 2026-10-04 (plan-file-load-save.gui): Save As
+# at its default name, Open naming it.
 click plan-save
+expect plan.prompt Save As
+click plan-prompt-ok
+expect plan.prompt none
 expect status ~ saved 2 items
 click map@0.30x0.70:right
 click menu-clearMission
 expect mission.items 0
 expect mission.home true
 click plan-load
+expect plan.prompt Open
+type mission.waypoints
+key Return
 expect status ~ loaded 2 items
 expect mission.items 2
 expect mission.commands 16,16
@@ -74,6 +83,9 @@ click plan-prompt-ok
 key ctrl+u
 type 50
 click plan-load
+expect plan.prompt Open
+type mission.waypoints
+key Return
 expect plan.prompt Reset Home Coords
 expect plan.prompt.text Reset Home to loaded coords
 click plan-prompt-ok

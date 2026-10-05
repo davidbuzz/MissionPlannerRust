@@ -50,13 +50,24 @@ click hud@0.5x0.4:right
 click fly-hud-groundcolor
 expect fly.hud.ground green
 
-# Video shows its drop-down; its rows and the other three not ported are dimmed and say why.
+# Video shows its drop-down. Record Hud to AVI, ported since (960be85, fly-hud-avi.gui has the
+# whole of it), asks its notice and closes the menu; its recording is stopped again from the same
+# drop-down. The rows not ported are dimmed and say why.
 click hud@0.5x0.4:right
 click fly-hud-video
 expect fly.hud.menu.video true
 click fly-hud-recordavi
-expect status ~ Record Hud to AVI is not ported
-expect fly.hud.menu true
+expect fly.hud.menu false
+expect fly.prompt Output avi will be saved to the log folder
+click fly-prompt-ok
+expect fly.prompt none
+expect fly.hud.avi recording
+click hud@0.5x0.4:right
+click fly-hud-video
+click fly-hud-stoprecord
+expect fly.hud.avi none
+click hud@0.5x0.4:right
+click fly-hud-video
 click fly-hud-aspect
 expect status ~ Set Aspect Ratio is not ported
 expect fly.hud.menu true
