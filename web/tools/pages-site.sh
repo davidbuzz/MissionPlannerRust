@@ -28,6 +28,11 @@ rm -rf "$tmp"
 # First in the head, before the planner's module: it must be in charge before anything loads.
 sed -i 's|<head>|<head>\n<script src="coi-serviceworker.min.js"></script>|' "$out/index.html"
 grep -q 'coi-serviceworker.min.js' "$out/index.html"
+# The planner's size as built, for the loading screen's percentage: GitHub Pages sends it gzipped,
+# with only the compressed length, and the page counts it as it unpacks.
+size=$(wc -c < "$out/pkg-planner/planner_bg.wasm")
+sed -i "s|^const WASM_BYTES = 0;|const WASM_BYTES = $size;|" "$out/index.html"
+grep -q "^const WASM_BYTES = $size;" "$out/index.html"
 # GitHub Pages runs Jekyll over a site unless told not to; nothing here is Jekyll's.
 touch "$out/.nojekyll"
 du -sh "$out"

@@ -3,10 +3,85 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#0d1117">
 <title>MissionPlannerRust in the browser</title>
-<style>html, body { margin: 0; height: 100%; background: #0d1117; } canvas { display: block; }</style>
+<style>
+html, body { margin: 0; height: 100%; background: #0d1117; } canvas { display: block; }
+/* The loading screen: shown from the first byte of this page until the planner's own canvas is
+   up - the planner is tens of megabytes, a long wait on a phone's link (the owner's request,
+   2026-10-06). Everything here is inline: nothing more to fetch before it shows. */
+#mpr-loader {
+  --cyan: #38bdf8; --green: #34d399; --dim: #8b949e; --track: #1c2532;
+  position: fixed; inset: 0; z-index: 20; display: flex; flex-direction: column;
+  align-items: center; justify-content: center; gap: 22px; padding: 16px;
+  background: radial-gradient(ellipse 80% 60% at 50% 42%, #16202e 0%, #0d1117 65%);
+  color: #e6edf3; font: 14px/1.4 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  transition: opacity .6s ease, visibility .6s;
+}
+#mpr-loader.done { opacity: 0; visibility: hidden; }
+#mpr-loader .dial { position: relative; width: min(46vmin, 190px); aspect-ratio: 1; }
+#mpr-loader .dial svg { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
+#mpr-loader .sweep {
+  position: absolute; inset: 9%; border-radius: 50%;
+  background: conic-gradient(from 0deg, transparent 0deg, transparent 290deg, rgba(56,189,248,.28) 360deg);
+  animation: mpr-spin 2.6s linear infinite;
+}
+#mpr-loader .grid { stroke: #22303f; stroke-width: .6; fill: none; }
+#mpr-loader .track { stroke: var(--track); stroke-width: 3.2; fill: none; }
+#mpr-loader .arc {
+  stroke: url(#mpr-arc); stroke-width: 3.2; fill: none; stroke-linecap: round;
+  transform: rotate(-90deg); transform-origin: 60px 60px;
+  filter: drop-shadow(0 0 4px rgba(56,189,248,.65)); transition: stroke-dashoffset .3s ease;
+}
+#mpr-loader.unknown .arc { animation: mpr-spin 1.3s linear infinite; transform-origin: 60px 60px; }
+#mpr-loader .frame { stroke: #c9d6e3; stroke-width: 2.2; stroke-linecap: round; fill: none; }
+#mpr-loader .body { fill: #c9d6e3; }
+#mpr-loader .rotor { fill: none; stroke: var(--cyan); stroke-width: 1.4; stroke-dasharray: 9 4.2;
+  transform-box: fill-box; transform-origin: center; animation: mpr-spin .5s linear infinite; }
+#mpr-loader .name { font-size: 21px; font-weight: 300; letter-spacing: .09em; }
+#mpr-loader .name b { font-weight: 600; background: linear-gradient(90deg, var(--cyan), var(--green));
+  -webkit-background-clip: text; background-clip: text; color: transparent; }
+#mpr-loader .phase { min-height: 1.4em; color: #c9d6e3; font-variant-numeric: tabular-nums; text-align: center; }
+#mpr-loader .bar { width: min(72vw, 300px); height: 3px; border-radius: 3px; background: var(--track); overflow: hidden; }
+#mpr-loader .bar i { display: block; height: 100%; width: 0; border-radius: 3px;
+  background: linear-gradient(90deg, var(--cyan), var(--green)); box-shadow: 0 0 8px rgba(52,211,153,.6);
+  transition: width .3s ease; }
+#mpr-loader.unknown .bar i { width: 30%; animation: mpr-slide 1.4s ease-in-out infinite; }
+#mpr-loader .hint { max-width: 340px; color: var(--dim); font-size: 12px; text-align: center; }
+#mpr-loader.failed .phase { color: #f0883e; }
+@keyframes mpr-spin { to { transform: rotate(360deg); } }
+@keyframes mpr-slide { from { transform: translateX(-100%); } to { transform: translateX(340%); } }
+@media (prefers-reduced-motion: reduce) {
+  #mpr-loader .sweep, #mpr-loader .rotor, #mpr-loader.unknown .arc, #mpr-loader.unknown .bar i { animation: none; }
+}
+</style>
 </head>
 <body>
+<div id="mpr-loader" class="unknown" role="status" aria-live="polite">
+  <div class="dial">
+    <div class="sweep"></div>
+    <svg viewBox="0 0 120 120" aria-hidden="true">
+      <defs>
+        <linearGradient id="mpr-arc" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0" stop-color="#38bdf8"/><stop offset="1" stop-color="#34d399"/>
+        </linearGradient>
+      </defs>
+      <circle class="grid" cx="60" cy="60" r="36"/>
+      <circle class="grid" cx="60" cy="60" r="20"/>
+      <path class="grid" d="M60 8V112M8 60H112"/>
+      <circle class="track" cx="60" cy="60" r="52"/>
+      <circle class="arc" cx="60" cy="60" r="52" stroke-dasharray="326.73" stroke-dashoffset="245"/>
+      <path class="frame" d="M47 47L73 73M73 47L47 73"/>
+      <rect class="body" x="55" y="55" width="10" height="10" rx="3"/>
+      <circle class="rotor" cx="45" cy="45" r="7"/><circle class="rotor" cx="75" cy="45" r="7"/>
+      <circle class="rotor" cx="45" cy="75" r="7"/><circle class="rotor" cx="75" cy="75" r="7"/>
+    </svg>
+  </div>
+  <div class="name">Mission<b>Planner</b>Rust</div>
+  <div class="bar"><i></i></div>
+  <div class="phase">Preparing&hellip;</div>
+  <div class="hint"></div>
+</div>
 <script type="module">
 // The whole planner, crates/mp-gui, built for a web page by tools/planner-wasm.sh build and
 // wasm-bindgen into pkg-planner/. Its main() runs when the module starts; its links go through
@@ -16,29 +91,95 @@ Error.stackTraceLimit = 200;
 import { servePlanner } from "./link.js";
 import { loadFiles, keepFiles, keepFaults } from "./storage.js";
 import init, { page_link_requested, page_link_push, page_link_take, planner_facts, planner_facts_enable, planner_storage_take } from "./pkg-planner/planner.js";
+
+// The planner's size as built, which tools/pages-site.sh writes here: a server that compresses
+// it (GitHub Pages sends it gzipped) gives only the compressed length, and the download is
+// counted as it unpacks. 0: the server's own length, as www/serve.py sends it.
+const WASM_BYTES = 0;
+const loader = document.getElementById("mpr-loader");
+const phase = loader.querySelector(".phase");
+const hint = loader.querySelector(".hint");
+const bar = loader.querySelector(".bar i");
+const arc = loader.querySelector(".arc");
+const RING = 326.73;
+const megabytes = (bytes) => (bytes / 1048576).toFixed(1);
+const show = (text, fraction) => {
+    phase.textContent = text;
+    loader.classList.toggle("unknown", fraction === null);
+    if (fraction !== null) {
+        bar.style.width = `${(fraction * 100).toFixed(1)}%`;
+        arc.style.strokeDashoffset = `${RING * (1 - fraction)}`;
+    }
+};
+const fail = (why) => {
+    loader.classList.add("failed");
+    show(`The planner could not start: ${why}`, null);
+    loader.classList.remove("unknown");
+};
+
+// The planner's module fetched here rather than by wasm-bindgen's init, so the bytes can be
+// counted as they come; init compiles it from the same stream.
+async function plannerModule() {
+    const response = await fetch(new URL("./pkg-planner/planner_bg.wasm", import.meta.url));
+    if (!response.ok || !response.body) return response;
+    const packed = (response.headers.get("content-encoding") ?? "identity") !== "identity";
+    const length = Number(response.headers.get("content-length")) || 0;
+    const total = packed ? WASM_BYTES : length;
+    // On the wire: the compressed share of what has unpacked, when both lengths are known.
+    const wire = packed && WASM_BYTES && length ? length / WASM_BYTES : 1;
+    let loaded = 0;
+    const counted = response.body.pipeThrough(new TransformStream({
+        transform(chunk, controller) {
+            loaded += chunk.byteLength;
+            if (total) {
+                const fraction = Math.min(loaded / total, 1);
+                show(`Downloading the planner — ${Math.round(fraction * 100)}% · ` +
+                    `${megabytes(loaded * wire)} / ${megabytes(total * wire)} MB`, fraction);
+            } else {
+                show(`Downloading the planner — ${megabytes(loaded)} MB`, null);
+            }
+            controller.enqueue(chunk);
+        },
+        flush() { show("Starting the planner…", null); },
+    }));
+    return new Response(counted, { headers: { "content-type": "application/wasm" } });
+}
+
+// Away as soon as the planner draws: gpui_web adds its canvas to the page.
+new MutationObserver((changes, observer) => {
+    if (changes.some((change) => [...change.addedNodes].some((node) => node.nodeName === "CANVAS"))) {
+        observer.disconnect();
+        requestAnimationFrame(() => requestAnimationFrame(() => loader.classList.add("done")));
+        setTimeout(() => loader.remove(), 1000);
+    }
+}).observe(document.body, { childList: true, subtree: true });
+
 // The planner's threads need SharedArrayBuffer, which a page has only when cross-origin isolated
 // by the COOP and COEP headers: www/serve.py sends them; on GitHub Pages, which sends none of a
 // site's choosing, coi-serviceworker adds them and reloads the page (tools/pages-site.sh). Until
-// then the planner is not started, nor its 40 MB fetched.
+// then the planner is not started, nor its tens of megabytes fetched.
 if (!globalThis.crossOriginIsolated) {
-    document.body.insertAdjacentHTML("beforeend",
-        '<p style="color:#8b949e;font:14px sans-serif;margin:16px">Starting... (if this stays, the ' +
-        "browser has refused the service worker the planner's threads need here)</p>");
-} else (keepFaults(), loadFiles())
-    // The files the last visit kept, for the planner to take in as it starts (storage.js).
-    .catch((err) => { console.warn("storage: " + err); return []; })
-    .then((files) => { globalThis.mpStorageFiles = files; return init(); })
-    .then(() => {
-        keepFiles(planner_storage_take);
-        // `?facts=1`: the planner's facts, as MP_FACTS gives them on the desktop, for the checks.
-        if (new URLSearchParams(location.search).get("facts")) {
-            planner_facts_enable();
-            globalThis.mpFacts = () =>
-                Object.fromEntries(planner_facts().split("\n").filter(Boolean).map((line) => line.split(" = ", 2)));
-        }
-        servePlanner({ requested: page_link_requested, push: page_link_push, take: page_link_take });
-    })
-    .catch((err) => console.error("planner: " + err));
+    setTimeout(() => {
+        hint.textContent = "If this stays, the browser has refused the service worker the planner's threads need here.";
+    }, 8000);
+} else {
+    hint.textContent = "The first visit downloads the whole planner; later visits start from the browser's cache.";
+    (keepFaults(), loadFiles())
+        // The files the last visit kept, for the planner to take in as it starts (storage.js).
+        .catch((err) => { console.warn("storage: " + err); return []; })
+        .then((files) => { globalThis.mpStorageFiles = files; return init({ module_or_path: plannerModule() }); })
+        .then(() => {
+            keepFiles(planner_storage_take);
+            // `?facts=1`: the planner's facts, as MP_FACTS gives them on the desktop, for the checks.
+            if (new URLSearchParams(location.search).get("facts")) {
+                planner_facts_enable();
+                globalThis.mpFacts = () =>
+                    Object.fromEntries(planner_facts().split("\n").filter(Boolean).map((line) => line.split(" = ", 2)));
+            }
+            servePlanner({ requested: page_link_requested, push: page_link_push, take: page_link_take });
+        })
+        .catch((err) => { console.error("planner: " + err); fail(err.message ?? String(err)); });
+}
 </script>
 </body>
 </html>
