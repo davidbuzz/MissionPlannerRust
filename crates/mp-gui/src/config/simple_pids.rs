@@ -1111,7 +1111,7 @@ fn track_bar(
 /// `TXT_info`: the note, or the "set" lines of the last change.
 fn info_box(text: &str) -> gpui::Div {
     let (x, y, width, height) = INFO_BOX;
-    let mut info = crate::probe::measured("simplepids-info", at(x, y, width, height))
+    let info = crate::probe::measured("simplepids-info", at(x, y, width, height))
         .flex()
         .flex_col()
         .px_1()
@@ -1122,10 +1122,15 @@ fn info_box(text: &str) -> gpui::Div {
         .bg(rgb(theme::BG))
         .text_xs()
         .text_color(rgb(theme::TEXT));
+    // The lines in a child of the box's own size, clipped there as the C#'s multi-line TextBox
+    // keeps lines past its foot: the box is what is measured, not the lines a change's "set"
+    // notes added (simplepids-info 64 high in its 56, config-simple-pids.gui, 2026-10-06).
+    // `// C#: GCSViews/ConfigurationView/ConfigSimplePids.resx:134, 165 (ScrollBars, Multiline)`
+    let mut lines = div().flex().flex_col().min_h(px(0.0)).overflow_hidden();
     for line in text.split("\r\n").filter(|line| !line.is_empty()) {
-        info = info.child(div().whitespace_nowrap().child(line.to_owned()));
+        lines = lines.child(div().whitespace_nowrap().child(line.to_owned()));
     }
-    info
+    info.child(lines)
 }
 
 #[cfg(test)]

@@ -219,6 +219,7 @@ where
     let body = crate::probe::measured(id, div())
         .id(id)
         .flex_1()
+        .min_w(px(0.0))
         .h_full()
         .flex()
         .items_center()
@@ -227,7 +228,10 @@ where
         .whitespace_nowrap()
         .text_xs()
         .text_color(rgb(if enabled { theme::TEXT } else { theme::DIM }))
-        .child(text)
+        // The value clipped at the box, as a NumericUpDown or a TextBox clips it, in a child that
+        // can shrink to the box: so the box is what is measured, not a value a pixel wider than it
+        // (propagation-NUM_max, keys-propagation.gui, 2026-10-06).
+        .child(div().min_w(px(0.0)).overflow_hidden().child(text))
         .children(focused.then(|| div().w(px(1.0)).h(px(12.0)).bg(rgb(theme::ACCENT))));
     let body = if !enabled {
         body

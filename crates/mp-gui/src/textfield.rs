@@ -1016,7 +1016,16 @@ fn field_box(
         .bg(rgb(theme::ACTION))
         .text_color(rgb(if empty { theme::DIM } else { theme::TEXT }))
         .cursor_text()
-        .child(text)
+        // The text clipped at the box's edge, as a TextBox clips a value longer than itself - in a
+        // child of the box's own size, so what is measured is the box, not the value: a long
+        // public key read as a control cut off (secure-txt_pubkey, config-secure.gui, 2026-10-06).
+        .child(
+            div()
+                .min_w(px(0.0))
+                .min_h(px(0.0))
+                .overflow_hidden()
+                .child(text),
+        )
         // A caret only while focused, where the layout put the character after it.
         .children(focused.then(|| {
             #[cfg(target_family = "wasm")]

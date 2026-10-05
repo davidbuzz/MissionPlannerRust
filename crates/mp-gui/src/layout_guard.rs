@@ -133,28 +133,64 @@ pub const MAY_SCROLL: &[&str] = &[
     // HELP's text, `richTextBox1`, which scrolls in its box.
     // `// C#: GCSViews/Help.Designer.cs (richTextBox1)`
     "help-text",
+    // The MAVLink Inspector's and the DroneCAN Inspector's trees, each a `MyTreeView`, whose
+    // nodes scroll in it (config-mavlink-inspector.gui: 56 nodes below the tree's box, 2026-10-06).
+    // `// C#: Controls/MAVLinkInspector.cs:20, 179; Controls/DroneCANInspector.cs:21, 205`
+    "inspector-node-",
+    "dronecan-inspector-node-",
+    // The OSD page's left side, `tableLeft`, which scrolls, and what scrolls in it: the screen's
+    // canvas (`layoutControl`) and the item list (`panelItemList`) - 720 by 874 in a 593 by 762
+    // page at 1600 by 1200 (config-onboard-osd.gui, 2026-10-06). A scrolling box is measured by
+    // what it holds, so it too.
+    // `// C#: ExtLibs/OSDConfigurator/GUI/ScreenControl.Designer.cs:179, 184-185 (tableLeft)`
+    "osd-left",
+    "osd-layout",
+    "osd-items",
+    // The log browser's fields, `treeView1`'s nodes and their expanders, which scroll in it
+    // (log-params.gui and three others: the GPS and IMU fields below its box, 2026-10-06).
+    // `// C#: Log/LogBrowse.designer.cs:63, 445 (treeView1)`
+    "logfield-",
+    // FLIGHT DATA's quick view chooser, `selectform`, every property a check box in a form that
+    // scrolls (fly-quick.gui: 186 below it, 2026-10-06).
+    // `// C#: GCSViews/FlightData.cs:4556-4566 (AutoScroll = true)`
+    "fly-quick-choice-",
+];
+
+/// The rows of the lists that scroll and are named by what they hold - a parameter's name, an
+/// OSD item's - in capitals, as no control's is: so told from the screen's own controls under the
+/// same prefix (`param-search`, `osd-item-options`).
+const NAMED_ROWS: &[&str] = &[
+    // The Full Parameter List's rows and their cells, `Params`' rows, which scroll in their grid.
+    // The grid fills the height the screen leaves it, so its last row is mostly part in view (the
+    // owner's banner of 2026-10-05: "CUT OFF (the layout guard): param-COMPASS_DIA_X[...]").
+    // `// C#: GCSViews/ConfigurationView/ConfigRawParams.Designer.cs:57, 241 (Params)`
+    "param-",
+    "param-value-",
+    "param-desc-",
+    "param-fav-",
+    // Standard Params' and Advanced Params' rows, in `flowLayoutPanel1`, which scrolls
+    // (config-advanced-params.gui: AHRS_GPS_MINSATS at the window's foot, 2026-10-06).
+    // `// C#: GCSViews/ConfigurationView/ConfigFriendlyParams.resx:125-126 (AutoScroll True)`
+    "standardparams-",
+    "advancedparams-",
+    // The OSD page's items and their check boxes, in `panelItemList`, which scrolls
+    // (config-onboard-osd.gui: 21 below it, 2026-10-06).
+    // `// C#: ExtLibs/OSDConfigurator/GUI/ScreenControl.Designer.cs:53 (AutoScroll)`
+    "osd-item-",
 ];
 
 /// Whether a control must be wholly on screen whenever it is measured: all but a scrolling
 /// list's rows.
 #[must_use]
 pub fn must_show(name: &str) -> bool {
-    !MAY_SCROLL.iter().any(|prefix| name.starts_with(prefix)) && !is_parameter_row(name)
+    !MAY_SCROLL.iter().any(|prefix| name.starts_with(prefix)) && !is_named_row(name)
 }
 
-/// The Full Parameter List's rows, `Params`' rows, which scroll in their grid: `param-{name}`
-/// and its cells `param-value-{name}`, `param-desc-{name}` and `param-fav-{name}`, told from the
-/// screen's own `param-` controls by the parameter's name, in capitals as no control's is. The
-/// grid fills the height the screen leaves it, so its last row is mostly part in view (the
-/// owner's banner of 2026-10-05: "CUT OFF (the layout guard): param-COMPASS_DIA_X[...]").
-/// `// C#: GCSViews/ConfigurationView/ConfigRawParams.Designer.cs:57, 241 (Params)`
-fn is_parameter_row(name: &str) -> bool {
-    name.strip_prefix("param-").is_some_and(|rest| {
-        ["value-", "desc-", "fav-"]
-            .iter()
-            .find_map(|cell| rest.strip_prefix(cell))
-            .unwrap_or(rest)
-            .starts_with(|first: char| first.is_ascii_uppercase())
+/// Whether a control is a row of one of [`NAMED_ROWS`]' lists: its prefix, then a name in capitals.
+fn is_named_row(name: &str) -> bool {
+    NAMED_ROWS.iter().any(|prefix| {
+        name.strip_prefix(prefix)
+            .is_some_and(|rest| rest.starts_with(|first: char| first.is_ascii_uppercase()))
     })
 }
 
@@ -404,6 +440,28 @@ mod tests {
             "param-col-Desc",
             "param-search",
             "param-refresh",
+        ] {
+            assert!(must_show(control), "{control}");
+        }
+        // The inspectors' tree nodes and the OSD page's items scroll, and its scrolling side with
+        // them; the OSD page's options box does not.
+        for row in [
+            "inspector-node-1-1-0",
+            "dronecan-inspector-node-125",
+            "osd-item-ALTITUDE",
+            "osd-item-ALTITUDE-check",
+            "osd-items",
+            "osd-left",
+            "fly-quick-choice-battery_temp",
+            "logfield-GPS.HDop",
+        ] {
+            assert!(!must_show(row), "{row}");
+        }
+        assert!(!must_show("advancedparams-AHRS_GPS_MINSATS"));
+        for control in [
+            "osd-item-options",
+            "advancedparams-write",
+            "advancedparams-find-box",
         ] {
             assert!(must_show(control), "{control}");
         }

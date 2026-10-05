@@ -316,7 +316,9 @@ pub fn layer(
     // Each marker's rectangle, `fly-poi-<index>`, measured for the harness: the pointer over it is
     // the pointer over the C#'s marker (`OnMarkerEnter`'s `CurrentPOIMarker`), which the map's
     // menu acts on. Where the map drew the point last frame, in the layer's own coordinates;
-    // nothing listens on them.
+    // nothing listens on them. Only a marker wholly on the map has one: the map clips the rest as
+    // it pans, as GMap does, and a box beyond its edge read as a control cut off (fly-poi-0 at
+    // x 1837 on a map ending at 1592, config-import.gui, 2026-10-06).
     let boxes: Vec<(usize, f32, f32)> = {
         let map = map.borrow();
         points
@@ -325,7 +327,8 @@ pub fn layer(
             .filter_map(|(index, at)| {
                 let (x, y) = map.screen_of(*at)?;
                 let (x, y) = map.to_viewport(x, y);
-                Some((index, x, y))
+                map.holds(x - MARKER / 2.0, y - MARKER, MARKER, MARKER)
+                    .then_some((index, x, y))
             })
             .collect()
     };

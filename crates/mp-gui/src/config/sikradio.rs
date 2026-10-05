@@ -3038,11 +3038,16 @@ fn combo(
         .border_1()
         .border_color(rgb(theme::BORDER))
         .text_xs()
+        // The value clipped at the box, as a ComboBox clips it: without `min_w(0)` a flex item is
+        // never narrower than its text, and a 217-wide AES key ran past its 172-wide box
+        // (config-sikradio.gui, 2026-10-06).
         .child(
             div()
                 .flex_1()
+                .min_w(px(0.0))
                 .overflow_hidden()
                 .whitespace_nowrap()
+                .text_ellipsis()
                 .child(ctl.shown()),
         )
         .child(div().text_size(px(7.0)).child("▼"));

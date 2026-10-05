@@ -629,6 +629,10 @@ fn cell(
         .text_xs()
         .whitespace_nowrap()
         .overflow_hidden()
+        // Text wider than its column ends in an ellipsis rather than mid-letter: "Started" in the
+        // C#'s 40-wide Go column (SerialOutputPass.cs:184) is 41 at this size, and was cut
+        // (config-mirror.gui, 2026-10-06).
+        .text_ellipsis()
         .text_color(rgb(theme::TEXT));
     if editing {
         let handle = typing.clone();

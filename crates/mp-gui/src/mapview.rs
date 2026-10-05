@@ -1135,6 +1135,13 @@ impl MapViewport {
         (x - self.last_origin.0, y - self.last_origin.1)
     }
 
+    /// Whether a rectangle, in the map's own coordinates ([`MapViewport::to_viewport`]'s), lies
+    /// wholly on the map as last painted.
+    pub(crate) fn holds(&self, left: f32, top: f32, width: f32, height: f32) -> bool {
+        let (map_width, map_height) = self.last_viewport;
+        left >= 0.0 && top >= 0.0 && left + width <= map_width && top + height <= map_height
+    }
+
     /// Zooms by a number of scroll steps, keeping the world under the cursor in place.
     ///
     /// Zooming to the window centre instead is the difference between a map that feels direct and
@@ -4720,6 +4727,18 @@ mod tests {
         let centre = map.position_at(400.0, 300.0).expect("a position");
         assert!((centre.latitude() - -35.363).abs() < 1e-9, "{centre:?}");
         assert!((centre.longitude() - 149.165).abs() < 1e-9, "{centre:?}");
+    }
+
+    /// A rectangle is held only when it lies wholly on the map as last painted.
+    #[test]
+    fn a_rectangle_is_held_only_wholly_on_the_map() {
+        let mut map = viewport();
+        map.last_viewport = (100.0, 80.0);
+        assert!(map.holds(0.0, 0.0, 10.0, 10.0));
+        assert!(map.holds(90.0, 70.0, 10.0, 10.0));
+        assert!(!map.holds(95.0, 0.0, 10.0, 10.0));
+        assert!(!map.holds(-1.0, 0.0, 10.0, 10.0));
+        assert!(!map.holds(0.0, 75.0, 10.0, 10.0));
     }
 
     #[test]
