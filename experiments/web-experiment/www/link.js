@@ -11,9 +11,16 @@
 // `servePlanner` answers a `tcp:` link with the SITL in this page, started on the first one, and a
 // `ws://` link with a WebSocket.
 
+import { dialTailscale } from "./tailscale.js";
+
 const inbox = [];
 let status = "no link";
 let sendTo = () => {};
+// Which source's bytes are the link's: "sitl", "ws" or "tailscale". A SITL left running while the
+// planner talks to the tailnet keeps its bytes to itself.
+let active = null;
+// The bytes for the SITL in the page, while it runs.
+let sitlSend = () => {};
 
 export const mpLink = {
     take() {
@@ -60,7 +67,7 @@ function startSitlModule(module, args) {
     worker.onmessage = (event) => {
         const message = event.data;
         if (message.bytes) {
-            inbox.push(message.bytes);
+            if (active === "sitl") inbox.push(message.bytes);
         } else if (message.print !== undefined) {
             console.log(`sitl: ${message.print}`);
         } else if (message.started) {
@@ -71,8 +78,34 @@ function startSitlModule(module, args) {
         }
     };
     worker.postMessage({ start: { module, args } });
-    sendTo = (bytes) => worker.postMessage({ bytes }, [bytes.buffer]);
+    sitlSend = (bytes) => worker.postMessage({ bytes }, [bytes.buffer]);
     sitlWorker = worker;
+}
+
+// The SITL in the page becomes the link.
+function useSitl() {
+    active = "sitl";
+    sendTo = (bytes) => sitlSend(bytes);
+}
+
+// A tailnet address becomes the link: `network` "tcp" or "udp", `address` "host:port".
+let tailnet = null;
+function openTailnet(network, address) {
+    tailnet?.close();
+    active = "tailscale";
+    status = `connecting ${network} ${address} over the tailnet`;
+    const stream = dialTailscale(network, address, {
+        onOpen: () => (status = `tailnet ${network} ${address}`),
+        onData: (bytes) => {
+            if (active === "tailscale" && tailnet === stream) inbox.push(bytes);
+        },
+        onClose: (reason) => {
+            if (tailnet === stream) status = `tailnet closed: ${reason}`;
+            console.log(`tailscale: ${network} ${address} closed: ${reason}`);
+        },
+    });
+    tailnet = stream;
+    sendTo = (bytes) => stream.write(bytes);
 }
 
 function stopSitl() {
@@ -85,6 +118,7 @@ function stopSitl() {
 
 // A vehicle by name, with the bridge's command line from tools/sitl/wasm/README.md, less the port.
 function startSitl(vehicle) {
+    useSitl();
     const [file, model] = VEHICLES[vehicle] ?? VEHICLES.copter;
     startSitlModule(file, [`-M${model}`, "-O-35.36,149.16,584,353", "-s1", "--serial0", "wasm", "--serial1", "none", "--serial2", "none"]);
 }
@@ -94,8 +128,9 @@ function openWebSocket(url) {
     const socket = new WebSocket(url);
     socket.binaryType = "arraybuffer";
     socket.onopen = () => (status = `WS ${url}`);
+    active = "ws";
     socket.onmessage = (event) => {
-        if (event.data instanceof ArrayBuffer) {
+        if (event.data instanceof ArrayBuffer && active === "ws") {
             inbox.push(new Uint8Array(event.data));
         }
     };
@@ -116,6 +151,15 @@ export function startLink() {
     } else {
         startSitl(query.get("vehicle") ?? "copter");
     }
+}
+
+// "tcp:host:port" or "udpcl:host:port" as its scheme, host and port; an IPv6 host in brackets.
+function splitLink(link) {
+    const scheme = link.slice(0, link.indexOf(":"));
+    const rest = link.slice(scheme.length + 1);
+    const colon = rest.lastIndexOf(":");
+    const host = rest.slice(0, colon).replace(/^\[(.*)\]$/, "$1");
+    return [scheme, host, rest.slice(colon + 1)];
 }
 
 // The planner's side (planner.html): what it asks for, and the bytes both ways, every 5 ms. The
@@ -147,12 +191,22 @@ export function servePlanner(planner) {
                 openWebSocket(asked);
                 forwarding = true;
             } else {
-                // A tcp: (or udpcl:) link: the SITL in this page, as a SITL already running is
-                // reached on the desktop - started here, with ?vehicle=, when none runs yet.
                 inbox.length = 0;
                 forwarding = true;
-                if (sitlWorker === null) {
-                    startSitl(query.get("vehicle") ?? "copter");
+                const [scheme, host, port] = splitLink(asked);
+                if (scheme === "tcp" && (host === "127.0.0.1" || host === "localhost")) {
+                    // This machine's 5760, as a SITL already running is reached on the desktop:
+                    // the SITL in this page - started here, with ?vehicle=, when none runs yet.
+                    useSitl();
+                    if (sitlWorker === null) {
+                        startSitl(query.get("vehicle") ?? "copter");
+                    }
+                } else if (scheme === "tcp" || scheme === "udpcl") {
+                    // Anywhere else: over the tailnet.
+                    openTailnet(scheme === "tcp" ? "tcp" : "udp", `${host}:${port}`);
+                } else {
+                    status = `no way to ${asked} from a web page`;
+                    console.warn(`link: ${status}`);
                 }
             }
         }
