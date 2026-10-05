@@ -556,6 +556,104 @@ struct Exchange {
 
 thread_local! {
     static EXCHANGE: RefCell<Exchange> = RefCell::new(Exchange::default());
+    /// The text of the browser's last paste, for the Ctrl+V [`PagePaste`] sends the box with it.
+    static PAGE_PASTE: RefCell<Option<String>> = const { RefCell::new(None) };
+}
+
+/// A page's paste (the owner's report, 2026-10-05: text copied on the desktop would not paste into
+/// a box in the browser). A page cannot read the clipboard when it likes - gpui's web platform
+/// reads none - and the browser hands the text over only in its own `paste` event, which gpui
+/// passes to the input handler the focused element registered. So in a page the focused box
+/// registers this one, and leaves a Ctrl+V it has no text for to the browser; the browser's paste
+/// brings the text here, and it goes back to the box as a Ctrl+V with the text in hand, pasted as
+/// the desktop's clipboard is. Typing reaches the box as keys, as it always has: the rest of the
+/// handler takes nothing.
+#[cfg(target_family = "wasm")]
+struct PagePaste;
+
+/// What a paste chord pastes: the clipboard's text, or in a page what the browser's paste brought
+/// [`PagePaste`] - taken, so it is pasted once.
+fn paste_text(clipboard: Option<String>) -> Option<String> {
+    clipboard.or_else(|| PAGE_PASTE.with(|paste| paste.borrow_mut().take()))
+}
+
+#[cfg(target_family = "wasm")]
+impl gpui::InputHandler for PagePaste {
+    fn selected_text_range(
+        &mut self,
+        _ignore_disabled_input: bool,
+        _window: &mut gpui::Window,
+        _cx: &mut gpui::App,
+    ) -> Option<gpui::UTF16Selection> {
+        None
+    }
+
+    fn marked_text_range(
+        &mut self,
+        _window: &mut gpui::Window,
+        _cx: &mut gpui::App,
+    ) -> Option<std::ops::Range<usize>> {
+        None
+    }
+
+    fn text_for_range(
+        &mut self,
+        _range_utf16: std::ops::Range<usize>,
+        _adjusted_range: &mut Option<std::ops::Range<usize>>,
+        _window: &mut gpui::Window,
+        _cx: &mut gpui::App,
+    ) -> Option<String> {
+        None
+    }
+
+    fn replace_text_in_range(
+        &mut self,
+        _replacement_range: Option<std::ops::Range<usize>>,
+        _text: &str,
+        _window: &mut gpui::Window,
+        _cx: &mut gpui::App,
+    ) {
+    }
+
+    fn replace_and_mark_text_in_range(
+        &mut self,
+        _range_utf16: Option<std::ops::Range<usize>>,
+        _new_text: &str,
+        _new_selected_range: Option<std::ops::Range<usize>>,
+        _window: &mut gpui::Window,
+        _cx: &mut gpui::App,
+    ) {
+    }
+
+    fn unmark_text(&mut self, _window: &mut gpui::Window, _cx: &mut gpui::App) {}
+
+    fn paste(&mut self, item: ClipboardItem, window: &mut gpui::Window, cx: &mut gpui::App) {
+        let Some(text) = item.text() else {
+            return;
+        };
+        PAGE_PASTE.with(|paste| *paste.borrow_mut() = Some(text));
+        window.dispatch_keystroke(Keystroke::parse("ctrl-v").expect("a keystroke"), cx);
+        // A box that took no paste leaves none for the next Ctrl+V.
+        PAGE_PASTE.with(|paste| paste.borrow_mut().take());
+    }
+
+    fn bounds_for_range(
+        &mut self,
+        _range_utf16: std::ops::Range<usize>,
+        _window: &mut gpui::Window,
+        _cx: &mut gpui::App,
+    ) -> Option<Bounds<gpui::Pixels>> {
+        None
+    }
+
+    fn character_index_for_point(
+        &mut self,
+        _point: gpui::Point<gpui::Pixels>,
+        _window: &mut gpui::Window,
+        _cx: &mut gpui::App,
+    ) -> Option<usize> {
+        None
+    }
 }
 
 /// The system clipboard, through the [`Exchange`].
@@ -871,9 +969,17 @@ fn field_box(
         .key_context("TextField")
         .on_key_down(move |event, window, cx| {
             // The owner's handler has the field and not the clipboard; this has the clipboard.
-            let paste = is_paste(&event.keystroke)
-                .then(|| cx.read_from_clipboard().and_then(|item| item.text()))
-                .flatten();
+            let paste = if is_paste(&event.keystroke) {
+                let text = paste_text(cx.read_from_clipboard().and_then(|item| item.text()));
+                // A page's Ctrl+V goes on to the browser, whose paste brings the text to
+                // `PagePaste`: kept here, the browser would paste nothing.
+                if text.is_none() && cfg!(target_family = "wasm") {
+                    return;
+                }
+                text
+            } else {
+                None
+            };
             EXCHANGE.with(|exchange| {
                 *exchange.borrow_mut() = Exchange {
                     paste,
@@ -913,9 +1019,16 @@ fn field_box(
         .child(text)
         // A caret only while focused, where the layout put the character after it.
         .children(focused.then(|| {
+            #[cfg(target_family = "wasm")]
+            let focus = focus.clone();
             canvas(
                 |_bounds, _window, _cx| {},
-                move |_bounds, (), window, _cx| {
+                move |_bounds, (), window, cx| {
+                    // In a page, the browser's paste comes to the focused box through this.
+                    #[cfg(target_family = "wasm")]
+                    window.handle_input(&focus, PagePaste, cx);
+                    #[cfg(not(target_family = "wasm"))]
+                    let _ = cx;
                     if let Some(origin) = layout.position_for_index(caret_byte) {
                         window.paint_quad(fill(
                             Bounds::new(origin, size(px(1.0), layout.line_height())),
@@ -1421,6 +1534,16 @@ mod tests {
         field.key_with(&chord("v"), &mut clipboard);
         field.key_with(&chord("v"), &mut clipboard);
         assert_eq!(field.value(), "BATTBATT");
+    }
+
+    #[test]
+    fn a_pages_paste_is_pasted_once_when_the_clipboard_has_nothing() {
+        // The page's clipboard reads nothing; the browser's paste is what `PagePaste` holds.
+        PAGE_PASTE.with(|paste| *paste.borrow_mut() = Some("127.0.0.2".to_owned()));
+        assert_eq!(paste_text(None).as_deref(), Some("127.0.0.2"));
+        assert_eq!(paste_text(None), None);
+        // A clipboard that reads something is the clipboard.
+        assert_eq!(paste_text(Some("x".to_owned())).as_deref(), Some("x"));
     }
 
     #[test]
