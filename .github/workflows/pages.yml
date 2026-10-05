@@ -1,0 +1,69 @@
+# The planner in a web page, published on GitHub Pages: https://davidbuzz.github.io/MissionPlannerRust/
+#
+# The whole planner, crates/mp-gui, built for wasm32 as web/tools/planner-wasm.sh builds it here
+# (std rebuilt with atomics for gpui_web's threads, on nightly), wasm-bindgen at the version
+# Cargo.lock holds, and the site assembled by web/tools/pages-site.sh - which adds
+# coi-serviceworker, since the page's threads need the COOP and COEP headers and GitHub Pages
+# sends none of a site's choosing. The repository's Pages settings publish from a workflow
+# (build_type "workflow"), which this is.
+name: pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# One deployment at a time; a newer push replaces one still building.
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: the planner for a web page
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@nightly
+        with:
+          targets: wasm32-unknown-unknown
+          components: rust-src
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: pages
+          workspaces: ". -> target/web"
+      # ring's C, under ureq's HTTPS, compiled for wasm32: the runner's clang has the target.
+      - run: sudo apt-get update && sudo apt-get install -y clang llvm
+      - name: wasm-bindgen, the version Cargo.lock holds
+        run: |
+          version=$(grep -A1 '^name = "wasm-bindgen"$' Cargo.lock | sed -n 's/^version = "\(.*\)"$/\1/p')
+          cargo install wasm-bindgen-cli --version "$version" --locked
+      - name: the planner
+        env:
+          CC_wasm32_unknown_unknown: clang
+          AR_wasm32_unknown_unknown: llvm-ar
+        run: web/tools/planner-wasm.sh build --release
+      - name: its bindings
+        run: wasm-bindgen --target web --out-dir web/www/pkg-planner target/web/wasm32-unknown-unknown/release/planner.wasm
+      - name: the site
+        run: web/tools/pages-site.sh _site
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+  deploy:
+    name: publish
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

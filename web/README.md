@@ -62,6 +62,19 @@ Headscale and tailscaled its test tailnet runs.
 linked in unchanged), fed by the SITL in the page (`?link=sitl`) or a WebSocket
 (`?link=ws://...`, with `tools/ws_relay.py` in front of a TCP port).
 
+## On GitHub Pages
+
+`.github/workflows/pages.yml` builds the planner as above on every push to main and publishes it at
+https://davidbuzz.github.io/MissionPlannerRust/ (the repository's Pages settings publish from a
+workflow). `tools/pages-site.sh <dir>` assembles the site from `www/`: the page, `pkg-planner/`,
+`link.js`, the SITL's modules, the Tailscale node, `planner.html` as the index too - and
+coi-serviceworker (MIT, from npm at a pinned version). The planner's threads need SharedArrayBuffer,
+which a page has only when cross-origin isolated by the COOP and COEP headers `www/serve.py`
+sends; GitHub Pages sends no headers of a site's choosing, so the service worker adds them to every
+response and reloads the page once it is in charge, and `planner.html` starts the planner only
+once the page is isolated. `check/pages_check.js` serves the assembled site as Pages does - under
+`/MissionPlannerRust/`, with no header - and fails unless the page is isolated and the planner up.
+
 ## Tests
 
 ```sh
@@ -71,6 +84,7 @@ NODE_PATH=<node_modules with playwright> node check/tour_check.js      # every s
 NODE_PATH=<node_modules with playwright> node check/plugins_check.js   # the built-in plugins, as on the desktop
 NODE_PATH=<node_modules with playwright> node check/demo_check.js      # the Welcome-Demo-Sitl, start to finish
 NODE_PATH=<node_modules with playwright> node check/check.js           # the HUD page
+NODE_PATH=<node_modules with playwright> node check/pages_check.js <dir> # the GitHub Pages site, no headers
 NODE_PATH=<node_modules with playwright> check/tailnet_e2e.sh          # over a tailnet (needs Go)
 ```
 

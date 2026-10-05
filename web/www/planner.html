@@ -15,7 +15,15 @@
 Error.stackTraceLimit = 200;
 import { servePlanner } from "./link.js";
 import init, { page_link_requested, page_link_push, page_link_take, planner_facts, planner_facts_enable } from "./pkg-planner/planner.js";
-init()
+// The planner's threads need SharedArrayBuffer, which a page has only when cross-origin isolated
+// by the COOP and COEP headers: www/serve.py sends them; on GitHub Pages, which sends none of a
+// site's choosing, coi-serviceworker adds them and reloads the page (tools/pages-site.sh). Until
+// then the planner is not started, nor its 40 MB fetched.
+if (!globalThis.crossOriginIsolated) {
+    document.body.insertAdjacentHTML("beforeend",
+        '<p style="color:#8b949e;font:14px sans-serif;margin:16px">Starting... (if this stays, the ' +
+        "browser has refused the service worker the planner's threads need here)</p>");
+} else init()
     .then(() => {
         // `?facts=1`: the planner's facts, as MP_FACTS gives them on the desktop, for the checks.
         if (new URLSearchParams(location.search).get("facts")) {
