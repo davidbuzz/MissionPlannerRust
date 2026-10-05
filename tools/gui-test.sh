@@ -90,7 +90,9 @@
 # every frame. `crates/mp-gui/src/facts.rs` lists them, and an unknown key is an error rather than
 # a silent pass - a test asserting on a fact that no longer exists must fail, not succeed. With
 # MP_FACTS_KEEP=<file> the run's last facts are copied there at the end, for numbers a script
-# measures rather than asserts (tests/gui/perf-*.gui, crates/mp-gui/src/frametimes.rs).
+# measures rather than asserts (tests/gui/perf-*.gui, crates/mp-gui/src/frametimes.rs). With
+# MP_PROBE_KEEP=<file> the run's last probe file - every measured control's place - is copied
+# there too, for a cut-off to be read control by control.
 set -uo pipefail
 # Script words are text: `set -- $LINE` must not turn `MAV[0]` into a file glob.
 set -f
@@ -134,6 +136,7 @@ cleanup() {
         kill "$APP_PID" 2>/dev/null
         wait "$APP_PID" 2>/dev/null
     fi
+    [ -n "$PROBE_FILE" ] && [ -n "${MP_PROBE_KEEP:-}" ] && cp "$PROBE_FILE" "$MP_PROBE_KEEP"
     [ -n "$PROBE_FILE" ] && rm -f "$PROBE_FILE"
     [ -n "$FACTS_FILE" ] && [ -n "${MP_FACTS_KEEP:-}" ] && cp "$FACTS_FILE" "$MP_FACTS_KEEP"
     [ -n "$FACTS_FILE" ] && rm -f "$FACTS_FILE" "${FACTS_FILE%.conf}.facts.tmp"
@@ -932,6 +935,13 @@ PY
             ;;
     esac
 done < "$SCRIPT"
+
+# The application settled first: a control laid out in the last frame is in the facts only from
+# the frame after (crates/mp-gui/src/probe.rs asks for it), and reading at once read the layout of
+# the frame before - fly-hudmenu.gui's EKF box where the swapped HUD had it, setup-list.gui's
+# CONFIG body missing, on either timer (2026-10-06). Waits for no new frame in 150 ms, a second at
+# most - on the 10 Hz timer, whose frames never stop, the second.
+wait_publishes 1000
 
 # Nothing cut off at the end: the application judges every named control's clipping from gpui's
 # own content mask and counts the ones clipped on the screen showing, but a scrolling list's rows

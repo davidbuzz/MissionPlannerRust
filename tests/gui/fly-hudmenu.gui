@@ -19,7 +19,8 @@
 
 screen fly
 window 1600x1200
-budget 20
+budget 23
+# 23 since Record Hud to AVI records and stops (2026-10-06): 20.5 s, over the 20 it had.
 
 expect fly.hud.menu false
 expect fly.swapped false

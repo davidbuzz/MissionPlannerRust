@@ -371,9 +371,12 @@ pub fn measured(name: impl Into<String>, element: Div) -> Div {
         // frame's controls are measured - catch up with it. Without it a planner that draws only
         // on a change (repaint on new data) published the screen it had switched to with the
         // layout of the one before, and a script ending there read the new screen's controls
-        // as missing (config-basic-tuning.gui's "config-body (missing)", 2026-10-06).
+        // as missing (config-basic-tuning.gui's "config-body (missing)", 2026-10-06). Asked of the
+        // repaint loop, which refreshes the window between frames: gpui drops a refresh asked
+        // while it draws, and its `request_animation_frame` schedules none of its own (the HUD's
+        // EKF box after Swap with Map, right in this file and cut off in the facts, 2026-10-06).
         if record(&name, judge(&rects, visible), visible) {
-            window.request_animation_frame();
+            crate::repaint::again_in(std::time::Duration::ZERO);
         }
         crate::storm::exclude(started.elapsed());
     })

@@ -4606,7 +4606,8 @@ impl Render for MissionPlanner {
         // Without it the caret came a second late, and a script's keys waited out the floor
         // (plan-circle-survey.gui's prompts, 2026-10-06).
         if window.focused(cx) != focused_at_start {
-            window.request_animation_frame();
+            // Asked of the repaint loop: gpui drops a refresh asked while it draws.
+            repaint::again_in(std::time::Duration::ZERO);
         }
         root
     }
