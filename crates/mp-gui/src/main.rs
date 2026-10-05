@@ -2106,7 +2106,9 @@ impl MissionPlanner {
     /// interrupting anyone over.
     fn remember(&mut self) {
         self.settings.screen = Some(self.screen.label().to_owned());
-        if let Some(link) = link_to_remember(self.telemetry.view().target, storm::enabled()) {
+        // The URL opened, not the link's description: the browser's "tcp:127.0.0.1:5760 (through
+        // the page)", remembered, failed to open at the next visit (the owner's report, 2026-10-05).
+        if let Some(link) = link_to_remember(self.telemetry.url().to_owned(), storm::enabled()) {
             self.settings.link = Some(link);
         }
         if let Err(err) = self.settings.save() {

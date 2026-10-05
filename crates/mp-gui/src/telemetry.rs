@@ -575,6 +575,14 @@ impl Telemetry {
         applied.wrapping_mul(4) | u64::from(link.is_running()) << 1 | u64::from(link.reconnecting())
     }
 
+    /// The link's URL as it was opened - `tcp:127.0.0.1:5760` - where a view's `target` is the
+    /// link's description, which can say more (`... (through the page)`, a UDP link's peer) and
+    /// would not open again.
+    #[must_use]
+    pub fn url(&self) -> &str {
+        &self.target
+    }
+
     /// Takes a consistent view for this frame.
     #[must_use]
     pub fn view(&self) -> TelemetryView {
@@ -2377,6 +2385,18 @@ mod tests {
 
     /// `MAV_RESULT_DENIED`.
     const DENIED: u8 = 2;
+
+    /// The link remembered for the next start is the URL it was opened from, not its
+    /// description: the browser's link describes itself as "tcp:127.0.0.1:5760 (through the
+    /// page)", which, remembered, would not open at the next visit (the owner's report,
+    /// 2026-10-05).
+    #[test]
+    fn the_url_is_what_was_opened_not_the_links_description() {
+        let (telemetry, _vehicle) = Vehicle::connect_as(fast(), "tcp:127.0.0.1:5760");
+        assert_eq!(telemetry.url(), "tcp:127.0.0.1:5760");
+        assert_ne!(telemetry.view().target, telemetry.url(), "described otherwise");
+        assert_eq!(Telemetry::idle().url(), "");
+    }
 
     /// What the screens are told a loopback link was opened from, for what is done only on a
     /// serial port. Never opened: the tests hand their own link to the reopen.
