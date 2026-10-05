@@ -35,9 +35,11 @@ expect plan.wprad 2.00
 expect plan.loiterrad.enabled false
 expect plan.prompt none
 
-# A home from the vehicle, one waypoint, a radius of 3, and Write.
+# A home from the vehicle, one waypoint, a radius of 3, and Write. The link then zooms to home,
+# in to 17, as label4_LinkClicked calls zoomToHomeToolStripMenuItem_Click.
 click plan-home-link
 expect mission.home true
+expect map.zoom >= 17
 # The map first: a press before its first paint records nothing.
 expect map.ready true
 click map@0.45x0.40

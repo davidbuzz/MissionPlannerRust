@@ -2198,7 +2198,7 @@ impl Plan {
 
     /// The Home Location link, `label4_LinkClicked`: home is where the vehicle is, at its
     /// altitude above sea level - or, with no position, the C#'s advice about getting one. (It
-    /// then zooms to home, which is `zoomToHomeToolStripMenuItem`'s and not ported.)
+    /// then zooms to home, `zoomToHomeToolStripMenuItem`'s, which its handler does.)
     /// `// C#: GCSViews/FlightPlanner.cs:4283-4300`
     pub fn home_from_vehicle(
         &mut self,
@@ -6496,9 +6496,17 @@ fn home_link_clicked(
             .position
             .map(|position| (position, state.altitude_msl.0))
     });
-    if let Err(why) = this.plan.home_from_vehicle(vehicle) {
-        this.plan_menus.say("", why);
-        this.plan_prompt_focus.focus(window, cx);
+    match this.plan.home_from_vehicle(vehicle) {
+        // Then `zoomToHomeToolStripMenuItem_Click`: the map on home, in to 17.
+        Ok(()) => zoom_to_home(
+            &mut this.map.borrow_mut(),
+            view.state.as_ref().and_then(|state| state.home),
+            this.plan.planned_home_location(),
+        ),
+        Err(why) => {
+            this.plan_menus.say("", why);
+            this.plan_prompt_focus.focus(window, cx);
+        }
     }
     cx.notify();
 }
