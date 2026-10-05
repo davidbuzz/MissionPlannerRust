@@ -1,0 +1,58 @@
+# Rendering performance, connected (the owner's request of 2026-10-05): as perf-screens.gui, with a
+# SITL copter's telemetry arriving, and the moments the owner named - the flight map panned and
+# zoomed, the planning map panned, the parameter tree scrolled. Frames are measured by the planner
+# (MP_FRAMES, crates/mp-gui/src/frametimes.rs); run it with MP_FACTS_KEEP=<file> and read frames.*
+# there (docs/perf.md). Needs a SITL on 5760 (tools/sitl/start-sitl.sh). Run as:
+#   tools/gui-test.sh tests/gui/perf-connected.gui -- tcp:127.0.0.1:5760
+env MP_FRAMES 1
+env XDG_DATA_HOME $WORK
+screen fly
+window 1600x1200
+budget 150
+within 30
+expect vehicle.count > 0
+expect map.ready true
+# The flight map: dragged across and back five times, then zoomed in and out by the wheel.
+drag map@0.30x0.50 map@0.70x0.50
+drag map@0.70x0.50 map@0.30x0.50
+drag map@0.30x0.40 map@0.70x0.60
+drag map@0.70x0.60 map@0.30x0.40
+drag map@0.50x0.30 map@0.50x0.70
+scroll map up 8 40
+scroll map down 8 40
+within 15
+expect frames.fly.count >= 60
+click tab-plan
+expect map.ready true
+drag map@0.30x0.50 map@0.70x0.50
+drag map@0.70x0.50 map@0.30x0.50
+scroll map up 6 40
+scroll map down 6 40
+within 15
+expect frames.plan.count >= 30
+click tab-setup
+within 15
+expect frames.setup.count >= 20
+click tab-config
+within 15
+expect frames.config.count >= 20
+click tab-simulation
+within 15
+expect frames.simulation.count >= 20
+click tab-params
+# The C#'s warning on opening the full parameter list, modal until OK.
+click raw-param-warning-ok
+within 60
+expect params.held > 1000
+scroll params-tree down 40 30
+within 15
+expect frames.params.count >= 30
+click tab-logs
+within 15
+expect frames.logs.count >= 20
+click tab-plugins
+within 15
+expect frames.plugins.count >= 20
+click tab-help
+within 15
+expect frames.help.count >= 20

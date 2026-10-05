@@ -6286,6 +6286,7 @@ pub fn hud_panel(
             gpui::canvas(
                 move |laid_out, _window, _cx| bounds.set(Some(laid_out)),
                 move |bounds, (), window, cx| {
+                    let started = web_time::Instant::now();
                     let height = f32::from(bounds.size.height);
                     // Over a picture there is no sky or ground to colour (`bgon = false`), so
                     // Ground Color's is left out and the ground fill is the one the camera
@@ -6300,6 +6301,8 @@ pub fn hud_panel(
                         window,
                         cx,
                     );
+                    // The display's own time, for MP_FRAMES (frametimes.rs).
+                    crate::frametimes::spent("hud", started.elapsed());
                 },
             )
             .size_full(),

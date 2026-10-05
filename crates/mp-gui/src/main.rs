@@ -102,6 +102,8 @@ mod smoke;
 mod srtm;
 mod stderr_log;
 mod storm;
+// What each screen's frames cost in an ordinary run (`MP_FRAMES`).
+mod frametimes;
 mod survey_ui;
 mod telemetry;
 mod tour;
@@ -3110,9 +3112,11 @@ impl Render for MissionPlanner {
         // Where the planner's file dialogs open, for their lists.
         self.plan_menus.dialog_directory = self.dialog_directory();
         // Under MP_STORM, the frame's cost is timed from here to the marker at the end of the
-        // root, less the facts' own work: storm.rs.
+        // root, less the facts' own work: storm.rs. Under MP_FRAMES, each screen's: frametimes.rs.
         storm::frame_started();
+        frametimes::begin(self.screen.label());
         let view = self.telemetry.view();
+        frametimes::lap("view");
 
         // The sticks send from their own thread; this keeps them addressed to the vehicle being
         // flown, notices a device that has gone, runs the Joystick page's timer and does the
@@ -3151,6 +3155,7 @@ impl Render for MissionPlanner {
             rc,
         });
         self.persisted.kindex_downloaded();
+        frametimes::lap("state");
         // SETUP's and CONFIG's lists: built when their screen shows, built again when MainV2
         // would reload it, closed - deactivating the page showing - when it is left.
         self.backstage_tick(&view);
@@ -3328,6 +3333,7 @@ impl Render for MissionPlanner {
         let banner = self.telemetry.firmware_banner().map(str::to_owned);
         let mav_type = view.state.as_ref().map_or(0, |state| state.vehicle_type);
         self.metadata.advance(banner.as_deref(), mav_type);
+        frametimes::lap("pages");
         // The flight screen's clock: `cs.lastautowp`, a Resume Mission moved on a step, and the
         // Transponder page's look for a status.
         self.fly_tick(&view, window);
@@ -3335,10 +3341,12 @@ impl Render for MissionPlanner {
         self.raw_sensor_tick(&view);
         // The built-in HTTP server's clients: their commands, the packet tap, the snapshot.
         self.http_tick(&view);
+        frametimes::lap("fly");
         // ---- row 96 ----
         // The plugins' snapshot, and what they did and asked since the last frame.
         self.plugins_tick(&view, window, cx);
         // ---- end row 96 ----
+        frametimes::lap("plugins");
         // The sets and commands the link is retrying: what those that ended say goes on the
         // status line, where this application says what the C# puts in a message box, and
         // parameter writes move on to their next.
@@ -3436,6 +3444,7 @@ impl Render for MissionPlanner {
         self.persisted.observe_quick_views(&self.fly_data.quick);
         // Map Tool > Zoom To's answer, once the geocoder has sent it.
         plan::drive_geocode(self, window, cx);
+        frametimes::lap("plan");
 
         // Facts a UI test can assert on. Recorded from render because that is where every one of
         // them is already in hand, and published at the end of the frame so a reader never sees
@@ -4073,6 +4082,7 @@ impl Render for MissionPlanner {
             (format!("{}  -  closed", view.target), theme::ALERT)
         };
 
+        frametimes::lap("feeds");
         let body = match self.screen {
             Screen::Fly => probe::measured("body", div())
                 .flex()
@@ -4322,12 +4332,13 @@ impl Render for MissionPlanner {
             Screen::Experimental => experimental::screen(self, window, cx),
             Screen::Plugins => plugin_manager::screen(self, cx),
         };
+        frametimes::lap("body");
 
         let cut_off = self
             .cut_off
             .text_at(web_time::Instant::now())
             .map(ToOwned::to_owned);
-        probe::measured("root", div())
+        let root = probe::measured("root", div())
             .relative()
             .flex()
             .flex_col()
@@ -4529,6 +4540,10 @@ impl Render for MissionPlanner {
                 view.frames,
                 view.state.as_ref().and_then(|state| state.packet_in),
             ))
+            // The same for MP_FRAMES; absent without it.
+            .children(frametimes::marker());
+        frametimes::rendered();
+        root
     }
 }
 
@@ -4668,6 +4683,8 @@ ENVIRONMENT:
                  directory (tests: the application saves it as Mission Planner does)
     MP_STORM     development only: replace the link with a synthetic vehicle sending this many
                  Hz of telemetry, and measure each frame (see crates/mp-gui/src/storm.rs)
+    MP_FRAMES    development only: 1 measures each screen's frames in an ordinary run, as
+                 facts (see crates/mp-gui/src/frametimes.rs)
     MP_PLUGINS   load the WebAssembly plugins from this folder rather than plugins/ beside the
                  executable (tests)
 ";
@@ -5054,6 +5071,7 @@ mod tests {
             "MP_NO_TILES",
             "MP_CONFIG_XML",
             "MP_STORM",
+            "MP_FRAMES",
         ] {
             assert!(
                 USAGE.contains(variable),

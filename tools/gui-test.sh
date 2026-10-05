@@ -88,7 +88,9 @@
 #
 # The facts come from the application itself: set MP_FACTS and it writes what it believes after
 # every frame. `crates/mp-gui/src/facts.rs` lists them, and an unknown key is an error rather than
-# a silent pass - a test asserting on a fact that no longer exists must fail, not succeed.
+# a silent pass - a test asserting on a fact that no longer exists must fail, not succeed. With
+# MP_FACTS_KEEP=<file> the run's last facts are copied there at the end, for numbers a script
+# measures rather than asserts (tests/gui/perf-*.gui, crates/mp-gui/src/frametimes.rs).
 set -uo pipefail
 # Script words are text: `set -- $LINE` must not turn `MAV[0]` into a file glob.
 set -f
@@ -133,6 +135,7 @@ cleanup() {
         wait "$APP_PID" 2>/dev/null
     fi
     [ -n "$PROBE_FILE" ] && rm -f "$PROBE_FILE"
+    [ -n "$FACTS_FILE" ] && [ -n "${MP_FACTS_KEEP:-}" ] && cp "$FACTS_FILE" "$MP_FACTS_KEEP"
     [ -n "$FACTS_FILE" ] && rm -f "$FACTS_FILE" "${FACTS_FILE%.conf}.facts.tmp"
     [ -n "$SETTINGS_FILE" ] && rm -f "$SETTINGS_FILE" "${SETTINGS_FILE%.conf}.tmp"
     rm -rf "$WORK"

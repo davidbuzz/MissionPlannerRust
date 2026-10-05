@@ -1363,6 +1363,7 @@ impl MapViewport {
     }
 
     fn record(&mut self, elapsed: Duration) {
+        crate::frametimes::spent("map", elapsed);
         self.paints += 1;
         // Ignore the first few paints: shader compilation and atlas warm-up are one-off costs
         // that would otherwise dominate the average and flatter nothing.

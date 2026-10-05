@@ -1,0 +1,39 @@
+# Rendering performance, idle (the owner's request of 2026-10-05: assess the rendering and find
+# the easy speedups, measured first). Every screen shown in turn with no vehicle, each one's frames
+# measured by the planner itself (MP_FRAMES, crates/mp-gui/src/frametimes.rs): the frame rate, the
+# render, paint and present parts, the gap, and the first frame on arriving. It asserts only that
+# each screen was measured; the numbers are the point - run it with MP_FACTS_KEEP=<file> and read
+# frames.* there (docs/perf.md).
+env MP_FRAMES 1
+env XDG_DATA_HOME $WORK
+screen fly
+window 1600x1200
+budget 90
+within 15
+expect frames.fly.count >= 20
+click tab-plan
+within 15
+expect frames.plan.count >= 20
+click tab-setup
+within 15
+expect frames.setup.count >= 20
+click tab-config
+within 15
+expect frames.config.count >= 20
+click tab-simulation
+within 15
+expect frames.simulation.count >= 20
+click tab-params
+# The C#'s warning on opening the full parameter list, modal until OK.
+click raw-param-warning-ok
+within 15
+expect frames.params.count >= 20
+click tab-logs
+within 15
+expect frames.logs.count >= 20
+click tab-plugins
+within 15
+expect frames.plugins.count >= 20
+click tab-help
+within 15
+expect frames.help.count >= 20

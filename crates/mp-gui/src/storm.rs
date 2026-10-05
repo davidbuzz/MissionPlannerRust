@@ -478,8 +478,10 @@ pub fn frame_started() {
     CLOCK.with_borrow_mut(|clock| clock.begin(now));
 }
 
-/// Time the test harness spent inside the frame being drawn, to leave out of its cost.
+/// Time the test harness spent inside the frame being drawn, to leave out of its cost - here
+/// and in frametimes.rs's measure.
 pub fn exclude(spent: Duration) {
+    crate::frametimes::exclude(spent);
     if !enabled() {
         return;
     }
