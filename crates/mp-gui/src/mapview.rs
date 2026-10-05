@@ -2633,7 +2633,10 @@ const TOOLTIP_TEXT: u32 = 0x00_00_80;
 /// Paints a marker's tooltip as `GMapRoundedToolTip` does: a rounded box of radius 10 whose text
 /// is padded 10 each side and 10 in all, placed 14 right of and 44 above the marker's point with
 /// its bottom edge there, and a line from the point to the box's lower left. (The line's
-/// `RoundAnchor` start cap is not drawn.)
+/// `RoundAnchor` start cap is not drawn.) The text may run over several lines - a photo's has
+/// them - which `MeasureString` and `DrawString` take whole, one under another, each centred; gpui
+/// shapes a line at a time, so each is shaped and drawn apart (shaping a text with a newline in it
+/// was a panic: hovering a photo marker ended the planner, 2026-10-05).
 /// `// C#: ExtLibs/GMap.NET.Drawing/GMap.NET.WindowsForms/ToolTips/GMapRoundedToolTip.cs:16-64;
 /// ExtLibs/GMap.NET.Drawing/GMap.NET.WindowsForms/GMapToolTip.cs:44-111`
 fn paint_tooltip(window: &mut Window, cx: &mut App, at: Point<Pixels>, text: &str) {
@@ -2641,23 +2644,36 @@ fn paint_tooltip(window: &mut Window, cx: &mut App, at: Point<Pixels>, text: &st
     const OFFSET: (f32, f32) = (14.0, -44.0);
     let mut font = window.text_style().font();
     font.weight = gpui::FontWeight::BOLD;
-    let run = TextRun {
-        len: text.len(),
-        font,
-        color: Hsla::from(rgb(TOOLTIP_TEXT)),
-        background_color: None,
-        underline: None,
-        strikethrough: None,
-    };
-    let line = window.text_system().shape_line(
-        SharedString::from(text.to_owned()),
-        px(TOOLTIP_FONT_SIZE),
-        &[run],
-        None,
-    );
-    // `MeasureString(...).ToSize()`: whole pixels.
-    let text_width = f32::from(line.width).ceil();
-    let text_height = (TOOLTIP_FONT_SIZE * 1.2).floor();
+    let lines: Vec<_> = tooltip_lines(text)
+        .map(|line| {
+            let run = TextRun {
+                len: line.len(),
+                font: font.clone(),
+                color: Hsla::from(rgb(TOOLTIP_TEXT)),
+                background_color: None,
+                underline: None,
+                strikethrough: None,
+            };
+            window.text_system().shape_line(
+                SharedString::from(line.to_owned()),
+                px(TOOLTIP_FONT_SIZE),
+                &[run],
+                None,
+            )
+        })
+        .collect();
+    // `MeasureString(...).ToSize()`: whole pixels, the widest line by the lines' height.
+    let line_height = (TOOLTIP_FONT_SIZE * 1.2).floor();
+    let text_width = lines
+        .iter()
+        .map(|line| f32::from(line.width))
+        .fold(0.0, f32::max)
+        .ceil();
+    let text_height = lines
+        .iter()
+        .map(|_| line_height)
+        .sum::<f32>()
+        .max(line_height);
     let width = text_width + RADIUS * 2.0;
     let height = text_height + RADIUS;
     let left = at.x + px(OFFSET.0);
@@ -2683,12 +2699,25 @@ fn paint_tooltip(window: &mut Window, cx: &mut App, at: Point<Pixels>, text: &st
         gpui::rgba(TOOLTIP_STROKE),
         gpui::BorderStyle::default(),
     ));
-    // `StringAlignment.Center` both ways.
-    let origin = point(
-        left + px((width - text_width) / 2.0),
-        top + px((height - text_height) / 2.0),
-    );
-    let _ = line.paint(origin, px(text_height), TextAlign::Left, None, window, cx);
+    // `StringAlignment.Center` both ways: the block centred, each line centred across it.
+    let mut y = top + px((height - text_height) / 2.0);
+    for line in &lines {
+        let x = left + px((width - f32::from(line.width).ceil()) / 2.0);
+        let _ = line.paint(
+            point(x, y),
+            px(line_height),
+            TextAlign::Left,
+            None,
+            window,
+            cx,
+        );
+        y += px(line_height);
+    }
+}
+
+/// A tooltip's lines, as `DrawString` breaks them: at each `\n`, a `\r` before it dropped.
+fn tooltip_lines(text: &str) -> impl Iterator<Item = &str> {
+    text.lines()
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -4325,6 +4354,16 @@ pub fn map_element(map: std::rc::Rc<std::cell::RefCell<MapViewport>>) -> impl gp
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A tooltip's lines are shaped one at a time: a photo's several lines, split where
+    /// `DrawString` breaks them, with no newline left in any (gpui's `shape_line` panics on one).
+    #[test]
+    fn a_tooltips_lines_are_split_where_drawstring_breaks_them() {
+        let lines: Vec<&str> = tooltip_lines("Photo 3\r\nLat -35.36\nAlt 584").collect();
+        assert_eq!(lines, ["Photo 3", "Lat -35.36", "Alt 584"]);
+        assert!(lines.iter().all(|line| !line.contains(['\n', '\r'])));
+        assert_eq!(tooltip_lines("one").collect::<Vec<_>>(), ["one"]);
+    }
 
     /// With nothing to frame, the map starts where Mission Planner's does: the equator and the
     /// meridian at zoom 3, so a press converts to a place from the first paint.
