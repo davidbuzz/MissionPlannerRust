@@ -10,7 +10,8 @@
 # Run as: tools/gui-test.sh tests/gui/experimental-paramrestore.gui -- tcp:127.0.0.1:5760
 screen fly
 window 1600x1200
-budget 40
+budget 20
+# 20: one run took 8.6 s (2026-10-06).
 env XDG_DATA_HOME $WORK
 env MP_CONFIG_XML $WORK/config.xml
 setup printf '<?xml version="1.0" encoding="utf-8"?><Config><tabcontrolactions>tabQuick;</tabcontrolactions></Config>' > "$WORK/config.xml"

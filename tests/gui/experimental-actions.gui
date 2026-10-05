@@ -2,19 +2,22 @@
 # 2026-10-04: Ctrl+F's temp form as a tab).
 #
 # temp.cs's reboot pixhawk asks "Are you sure?" (temp.cs:662-666), Lockup MAV asks twice
-# (temp.cs:1230-1239); No sends nothing; with no link what the C# meets as an exception is said on
-# the status line (the owner's ruling: no box for it). QNH (temp.cs:668-682) and Force Accel Cal
-# (temp.cs:1404-1416) need a vehicle: "Please Connect First". The same commands against SITL are
-# experimental-sitl.gui.
+# (temp.cs:1230-1239), Bootloader Upgrade asks its two "BL Update" questions (temp.cs:969-993), Toggle
+# Safety Switch asks "Are you sure?" (temp.cs:1105-1118); No sends nothing; with no link what the C#
+# meets as an exception is said on the status line (the owner's ruling: no box for it), but Toggle
+# Safety Switch's sysid 0 is only logged. QNH (temp.cs:668-682) and Force Accel Cal
+# (temp.cs:1404-1416) need a vehicle: "Please Connect First". Bootloader Upgrade and Toggle Safety
+# Switch against SITL are experimental-sitl.gui.
 screen fly
 window 1600x1200
 budget 20
+# 20: one run took 14.9 s (2026-10-06).
 env XDG_DATA_HOME $WORK
 env MP_CONFIG_XML $WORK/config.xml
 setup printf '<?xml version="1.0" encoding="utf-8"?><Config><tabcontrolactions>tabQuick;</tabcontrolactions></Config>' > "$WORK/config.xml"
 key ctrl+f
 expect screen experimental
-expect experimental.working 18
+expect experimental.working 20
 # reboot pixhawk: asked; No sends nothing.
 click experimental-but_reboot
 expect experimental.asking Are you sure?
@@ -48,3 +51,25 @@ key Return
 expect experimental.asking ~ bus type UAVCAN bus 0 address 125 devtype HMC5883_OLD or 1 or BARO_SITL or 1
 click experimental-message-ok
 expect experimental.asking none
+# Toggle Safety Switch with no vehicle: asked, and on Yes nothing said - the status is still what
+# the ruled-out Swarm said.
+click experimental-BUT_swarm
+expect status ~ Swarm: out of scope
+click experimental-but_disablearmswitch
+expect experimental.asking Are you sure?
+click experimental-question-yes
+expect experimental.asking none
+expect status ~ Swarm: out of scope
+# Bootloader Upgrade: asked twice, No at the second sends nothing; Yes to both with no vehicle, said.
+click experimental-but_blupdate
+expect experimental.asking Are you sure you want to upgrade the bootloader? This can brick your board
+click experimental-question-yes
+expect experimental.asking Are you sure you want to upgrade the bootloader? This can brick your board, Please allow 5 mins for this process
+click experimental-question-no
+expect experimental.asking none
+expect status ~ Swarm: out of scope
+click experimental-but_blupdate
+click experimental-question-yes
+click experimental-question-yes
+expect experimental.asking none
+expect status Error: Please Connect First

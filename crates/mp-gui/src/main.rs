@@ -3628,6 +3628,12 @@ impl Render for MissionPlanner {
             facts::record("vehicle.rally", view.rally_points.len());
             facts::record("vehicle.connected", view.connected);
             facts::record("vehicle.count", view.vehicle_count);
+            // `cs.sensors_enabled.motor_control && seen`: the safety off, which Toggle Safety
+            // Switch reads and changes.
+            facts::record(
+                "vehicle.motor_control",
+                fly::motor_outputs_enabled(view.state.as_deref()),
+            );
             // `cs.HomeLocation`, once the vehicle has sent HOME_POSITION.
             facts::record(
                 "vehicle.home",

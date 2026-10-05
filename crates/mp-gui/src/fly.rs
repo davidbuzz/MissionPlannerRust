@@ -1291,6 +1291,36 @@ pub struct ActionContext {
     pub now_unix_usec: u64,
 }
 
+/// `cs.sensors_enabled.motor_control && cs.sensors_enabled.seen`: whether the vehicle's last
+/// `SYS_STATUS` said its motor outputs are enabled - its safety off.
+/// `MAV_SYS_STATUS_SENSOR.MOTOR_OUTPUTS` is bit 15. Read here from the dialect's own constant:
+/// `Sensors::motor_outputs_enabled` in mp-vehicle tests bit 14.
+#[must_use]
+pub(crate) fn motor_outputs_enabled(state: Option<&mp_vehicle::VehicleState>) -> bool {
+    state.is_some_and(|state| {
+        state.sensors.reported
+            && state.sensors.enabled
+                & mp_mavlink_dialects::all::MavSysStatusSensor::MAV_SYS_STATUS_SENSOR_MOTOR_OUTPUTS
+                    .0
+                != 0
+    })
+}
+
+/// What Do Action needs to know of the vehicle `target`, from what the link last heard.
+#[must_use]
+pub(crate) fn action_context(target: VehicleId, view: &TelemetryView) -> ActionContext {
+    ActionContext {
+        target,
+        copter: family(view) == Some(VehicleFamily::Copter),
+        motor_outputs_enabled: motor_outputs_enabled(view.state.as_deref()),
+        now_unix_usec: web_time::SystemTime::now()
+            .duration_since(web_time::UNIX_EPOCH)
+            .map_or(0, |since| {
+                u64::try_from(since.as_micros()).unwrap_or(u64::MAX)
+            }),
+    }
+}
+
 /// The messages Do Action sends for one `CMB_action` entry, once any question has been answered.
 ///
 /// Each branch is the C#'s, in its order. `Trigger_Camera`'s fallback - a `DIGICAM_CONTROL`
@@ -4214,23 +4244,7 @@ impl MissionPlanner {
             .map(|(_, target)| action_report(action, target))
             .unwrap_or_default();
         self.fly_press(&report, |_, target, view| {
-            let state = view.state.as_deref();
-            let context = ActionContext {
-                target,
-                copter: family(view) == Some(VehicleFamily::Copter),
-                // `MAV_SYS_STATUS_SENSOR.MOTOR_OUTPUTS` is bit 15. Read here from the dialect's
-                // own constant: `Sensors::motor_outputs_enabled` in mp-vehicle tests bit 14.
-                motor_outputs_enabled: state.is_some_and(|state| {
-                    state.sensors.reported
-                        && state.sensors.enabled
-                            & mp_mavlink_dialects::all::MavSysStatusSensor::MAV_SYS_STATUS_SENSOR_MOTOR_OUTPUTS.0
-                            != 0
-                }),
-                now_unix_usec: web_time::SystemTime::now()
-                    .duration_since(web_time::UNIX_EPOCH)
-                    .map_or(0, |since| u64::try_from(since.as_micros()).unwrap_or(u64::MAX)),
-            };
-            action_messages(action, &context)
+            action_messages(action, &action_context(target, view))
         });
     }
 

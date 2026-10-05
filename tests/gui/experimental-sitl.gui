@@ -1,0 +1,48 @@
+# EXPERIMENTAL's Toggle Safety Switch and Bootloader Upgrade, against SITL.
+#
+# Toggle Safety Switch (temp.cs:1105-1118): "Are you sure?", then setMode with SAFETY_ARMED as the
+# base mode and, as the custom mode, 1 while the motor outputs are enabled (the safety off) and 0
+# while they are not - DO_SET_MODE not waited for, then SET_MODE twice, as the flight screen's
+# Toggle_Safety_Switch sends them. The copter's SYS_STATUS says its motor outputs off, then on
+# again, which leaves it as the scripts after this one expect.
+#
+# Bootloader Upgrade (temp.cs:969-993): the two "BL Update" questions, then FLASH_BOOTLOADER with
+# 290876 as param 5, waited for. SITL has no bootloader to rewrite and refuses it: "Failed to
+# upgrade bootloader", on the status line where the C# shows a box.
+#
+# Run as: tools/gui-test.sh tests/gui/experimental-sitl.gui -- tcp:127.0.0.1:5760
+screen fly
+window 1600x1200
+budget 15
+# 15: one run took 4.9 s (2026-10-06).
+env XDG_DATA_HOME $WORK
+env MP_CONFIG_XML $WORK/config.xml
+setup printf '<?xml version="1.0" encoding="utf-8"?><Config><tabcontrolactions>tabQuick;</tabcontrolactions></Config>' > "$WORK/config.xml"
+
+within 30
+expect vehicle.count > 0
+within 10
+expect vehicle.motor_control true
+key ctrl+f
+expect screen experimental
+
+# The safety on, then off again.
+click experimental-but_disablearmswitch
+expect experimental.asking Are you sure?
+click experimental-question-yes
+expect experimental.asking none
+within 10
+expect vehicle.motor_control false
+click experimental-but_disablearmswitch
+click experimental-question-yes
+within 10
+expect vehicle.motor_control true
+
+# Bootloader Upgrade, refused.
+click experimental-but_blupdate
+expect experimental.asking Are you sure you want to upgrade the bootloader? This can brick your board
+click experimental-question-yes
+click experimental-question-yes
+expect experimental.asking none
+within 20
+expect status Failed to upgrade bootloader

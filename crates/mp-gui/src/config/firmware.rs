@@ -161,7 +161,7 @@ pub const BL_QUESTIONS: [&str; 2] = [
 ];
 
 /// Their caption. `// C#: GCSViews/ConfigurationView/ConfigFirmwareDisabled.cs:27`
-const BL_UPDATE: &str = "BL Update";
+pub const BL_UPDATE: &str = "BL Update";
 
 /// `Strings.TrunkWarning`: Ctrl+Q's box, before the `DEV` release.
 /// `// C#: ExtLibs/Strings/Strings.resx:483-485; GCSViews/ConfigurationView/ConfigFirmwareManifest.cs:403`

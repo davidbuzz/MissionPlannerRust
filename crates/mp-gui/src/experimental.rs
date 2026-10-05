@@ -34,7 +34,10 @@
 //! * a command to the vehicle, ported here with its questions ([`Act`]): reboot pixhawk ("Are you
 //!   sure?", `doReboot(false, true)`), Force Accel Cal and Force Compass Cal (`PREFLIGHT_CALIBRATION`
 //!   with 76 as param 5 or param 2), DFU Mode (`doDFUBoot`), QNH (an `InputBox` for
-//!   GND_ABS_PRESS, else BARO1_GND_PRESS), Lockup MAV (asked twice); what the C# shows in a box
+//!   GND_ABS_PRESS, else BARO1_GND_PRESS), Lockup MAV (asked twice), Bootloader Upgrade (the "BL
+//!   Update" questions, then `FLASH_BOOTLOADER`), Toggle Safety Switch ("Are you sure?", then the
+//!   flight screen's Toggle_Safety_Switch, the same `setMode` with `SAFETY_ARMED`); what the C#
+//!   shows in a box
 //!   when one fails is said on the status line, by the owner's ruling; and decode HWIDs, the ids
 //!   typed taken apart as `Device.DeviceStructure` does, in a box (one line of ids here, where
 //!   the C#'s box takes several);
@@ -52,12 +55,16 @@ use gpui::{
     StatefulInteractiveElement, Styled, Window, div, px, relative, rgb,
 };
 
-use crate::config::firmware::{BoxIds, DO_COMMAND_TIMEOUT, Waiting, message_box, question_box};
+use crate::config::firmware::{
+    BL_QUESTIONS, BL_UPDATE, BoxIds, DO_COMMAND_TIMEOUT, FAILED_TO_UPGRADE_BOOTLOADER,
+    UPGRADED_BOOTLOADER, Waiting, message_box, question_box,
+};
 use crate::config::optional::{InputBox, input_box};
 use crate::fly::{PLEASE_CONNECT, error_box};
 use crate::telemetry::Report;
 use crate::{MissionPlanner, facts, theme};
 use mp_firmware::flow::Buttons;
+use mp_link::requests::CMD_FLASH_BOOTLOADER;
 
 /// `tableLayoutPanel1`'s cells, row by row: (row, column, the control's name, its text, whether it
 /// is a button). Generated from temp.Designer.cs (`Controls.Add(control, column, row)`) and
@@ -246,6 +253,8 @@ pub(crate) fn tool(name: &str) -> Tool {
         "BUT_QNH" => Tool::Act(Act::Qnh),
         "but_lockup" => Tool::Act(Act::Lockup),
         "but_hwids" => Tool::Act(Act::DecodeHwids),
+        "but_blupdate" => Tool::Act(Act::BootloaderUpgrade),
+        "but_disablearmswitch" => Tool::Act(Act::ToggleSafety),
         "BUT_follow_me" | "but_osdvideo" | "BUT_movingbase" | "BUT_swarm" | "BUT_followleader"
         | "but_trimble" | "but_followswarm" => Tool::Unavailable(SECTION_12_D13),
         "BUT_lang_edit" => Tool::Unavailable(LANGUAGES_MUTED),
@@ -280,6 +289,14 @@ pub(crate) enum Act {
     /// for, and its parameters written as Param Restore writes them (params.rs's `restore`).
     /// `// C#: temp.cs:1267-1362`
     ParamRestore,
+    /// `but_blupdate_Click`: the two "BL Update" questions, then `FLASH_BOOTLOADER` with 290876 as
+    /// param 5, waited for: "Upgraded bootloader" or "Failed to upgrade bootloader".
+    /// `// C#: temp.cs:969-993`
+    BootloaderUpgrade,
+    /// `but_disablearmswitch_Click`: "Are you sure?", then `setMode` with `SAFETY_ARMED` and the
+    /// motor outputs' state as the custom mode - the flight screen's Toggle_Safety_Switch, which
+    /// is the same code. `// C#: temp.cs:1105-1118; GCSViews/FlightData.cs:1819-1830`
+    ToggleSafety,
 }
 
 /// Param Restore's first box.
@@ -318,6 +335,8 @@ const FORCE_ACCEL: [f32; 7] = [0.0, 0.0, 0.0, 0.0, 76.0, 0.0, 0.0];
 const FORCE_COMPASS: [f32; 7] = [0.0, 76.0, 0.0, 0.0, 0.0, 0.0, 0.0];
 const DFU_BOOT: [f32; 7] = [42.0, 24.0, 71.0, 99.0, 0.0, 0.0, 0.0];
 const LOCKUP: [f32; 7] = [42.0, 24.0, 71.0, 93.0, 0.0, 0.0, 0.0];
+/// `FLASH_BOOTLOADER`'s: the bootloader's magic number as param 5.
+const FLASH_BOOTLOADER: [f32; 7] = [0.0, 0.0, 0.0, 0.0, 290_876.0, 0.0, 0.0];
 /// The questions' words.
 const ARE_YOU_SURE: &str = "Are you sure?";
 const LOCKUP_CAPTION: &str = "Lockup";
@@ -345,8 +364,8 @@ enum Asking {
         caption: &'static str,
         text: &'static str,
         then: Act,
-        /// Lockup asks twice: whether this is the first time.
-        again: bool,
+        /// The commands asked twice: the words a Yes asks next.
+        again: Option<&'static str>,
     },
     /// `InputBox.Show(title, prompt, ref value)`, and what its OK goes on to.
     Input { input: InputBox, then: Answered },
@@ -426,7 +445,7 @@ fn act(
                 caption: "",
                 text: ARE_YOU_SURE,
                 then: Act::Reboot,
-                again: false,
+                again: None,
             });
         }
         Act::Lockup => {
@@ -434,7 +453,24 @@ fn act(
                 caption: LOCKUP_CAPTION,
                 text: LOCKUP_TEXT,
                 then: Act::Lockup,
-                again: true,
+                again: Some(LOCKUP_TEXT),
+            });
+        }
+        Act::BootloaderUpgrade => {
+            let [first, second] = BL_QUESTIONS;
+            this.experimental.asking = Some(Asking::Confirm {
+                caption: BL_UPDATE,
+                text: first,
+                then: Act::BootloaderUpgrade,
+                again: Some(second),
+            });
+        }
+        Act::ToggleSafety => {
+            this.experimental.asking = Some(Asking::Confirm {
+                caption: "",
+                text: ARE_YOU_SURE,
+                then: Act::ToggleSafety,
+                again: None,
             });
         }
         Act::Qnh => {
@@ -509,6 +545,33 @@ fn send(this: &mut MissionPlanner, what: Act) {
         Act::Lockup => this
             .telemetry
             .command_unacknowledged(PREFLIGHT_REBOOT_SHUTDOWN, LOCKUP),
+        // `doCommand` waited for, its answer said where the C# shows a box; unanswered, the
+        // `catch`'s exception.
+        Act::BootloaderUpgrade => this.telemetry.send_handle().is_some_and(|(_, vehicle)| {
+            let report = Report {
+                accepted: Some(UPGRADED_BOOTLOADER.to_owned()),
+                refused: Some(FAILED_TO_UPGRADE_BOOTLOADER.to_owned()),
+                timed_out: Some(error_box(DO_COMMAND_TIMEOUT)),
+                fallback: None,
+            };
+            this.telemetry
+                .command(vehicle, CMD_FLASH_BOOTLOADER, FLASH_BOOTLOADER, report)
+                .is_some()
+        }),
+        // No vehicle is `sysidcurrent` 0, which the C# only logs.
+        Act::ToggleSafety => {
+            if this.telemetry.send_handle().is_some() {
+                this.fly_press(&Report::default(), |_, target, view| {
+                    crate::fly::action_messages(
+                        "Toggle_Safety_Switch",
+                        &crate::fly::action_context(target, view),
+                    )
+                });
+            } else {
+                log::info!("Not toggling safety on sysid 0");
+            }
+            true
+        }
         Act::Qnh | Act::DecodeHwids | Act::ParamRestore => true,
     };
     if !sent {
@@ -525,18 +588,18 @@ fn answer(this: &mut MissionPlanner, yes: bool) {
         return;
     }
     match asking {
-        // Lockup's second asking.
+        // Lockup's and Bootloader Upgrade's second asking.
         Asking::Confirm {
             caption,
-            text,
             then,
-            again: true,
+            again: Some(text),
+            ..
         } => {
             this.experimental.asking = Some(Asking::Confirm {
                 caption,
                 text,
                 then,
-                again: false,
+                again: None,
             });
         }
         Asking::Confirm { then, .. } => send(this, then),
@@ -898,8 +961,10 @@ mod tests {
                 Tool::Unavailable(why) => assert!(!why.is_empty()),
             }
         }
-        assert_eq!(opens, 18);
+        assert_eq!(opens, 20);
         assert_eq!(tool("but_paramrestore"), Tool::Act(Act::ParamRestore));
+        assert_eq!(tool("but_blupdate"), Tool::Act(Act::BootloaderUpgrade));
+        assert_eq!(tool("but_disablearmswitch"), Tool::Act(Act::ToggleSafety));
         assert_eq!(tool("but_messageinterval"), Tool::MessageInterval);
         assert_eq!(tool("BUT_swarm"), Tool::Unavailable(SECTION_12_D13));
         assert_eq!(tool("but_GDAL"), Tool::Unavailable(NO_GDAL));
@@ -917,6 +982,9 @@ mod tests {
         assert_eq!(FORCE_COMPASS.iter().filter(|p| **p != 0.0).count(), 1);
         assert_eq!(DFU_BOOT[..4], [42.0, 24.0, 71.0, 99.0]);
         assert_eq!(LOCKUP[..4], [42.0, 24.0, 71.0, 93.0]);
+        assert_eq!(FLASH_BOOTLOADER[4], 290_876.0);
+        assert_eq!(FLASH_BOOTLOADER.iter().filter(|p| **p != 0.0).count(), 1);
+        assert_eq!(CMD_FLASH_BOOTLOADER, 42_650);
     }
 
     /// decode HWIDs: each whole number on a line, the line and its device; words skipped; a
