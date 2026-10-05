@@ -1,0 +1,15 @@
+# FLIGHT DATA's map follows the vehicle as Mission Planner's Auto Pan check box does (CHK_autopan,
+# ticked by default): the button at the map's top right ticks and unticks it. While it is ticked
+# the vehicle is kept in the view's centre at the zoom the pilot has - mapview.rs's tests hold the
+# rules - and a zoom does not untick it (the owner's bug, 2026-10-05).
+# `GCSViews/FlightData.Designer.cs:2856-2864, GCSViews/FlightData.cs:1929-1933, 4242-4247`
+
+screen fly
+window 1600x1200
+budget 5
+
+expect map.following true
+click map-follow
+expect map.following false
+click map-follow
+expect map.following true

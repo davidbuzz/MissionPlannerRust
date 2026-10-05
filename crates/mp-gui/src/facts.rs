@@ -29,7 +29,8 @@
 //! stopped adding waypoints would still produce a PNG, and the run would still exit zero.
 //!
 //! Off unless `MP_FACTS` names a file. Nothing is recorded and nothing is written otherwise, so a
-//! normal run pays for none of it.
+//! normal run pays for none of it. In a web page, which has neither, the page turns them on
+//! (`planner_facts_enable`, from planner.html's `?facts=1`) and reads them (`planner_facts`).
 //!
 //! The format is the flat `key = value` of `settings.rs`, for the same reasons: greppable by eye,
 //! parseable by a shell with no dependency, and impossible to get subtly wrong in the way a nested
@@ -57,7 +58,47 @@ fn destination() -> Option<&'static PathBuf> {
 /// Whether anything is being recorded.
 #[must_use]
 pub fn enabled() -> bool {
-    destination().is_some()
+    destination().is_some() || web::enabled()
+}
+
+/// The browser build's facts: no environment names a file, so the page asks for them, and reads
+/// them as the file would hold them.
+#[cfg(target_family = "wasm")]
+mod web {
+    use std::sync::atomic::{AtomicBool, Ordering};
+
+    use wasm_bindgen::prelude::wasm_bindgen;
+
+    static ENABLED: AtomicBool = AtomicBool::new(false);
+
+    pub(super) fn enabled() -> bool {
+        ENABLED.load(Ordering::Relaxed)
+    }
+
+    /// The page: start recording facts (planner.html with `?facts=1`, for its checks).
+    #[wasm_bindgen]
+    pub fn planner_facts_enable() {
+        ENABLED.store(true, Ordering::Relaxed);
+    }
+
+    /// The page: the facts recorded so far, `key = value` a line as `MP_FACTS`'s file has them;
+    /// empty while a planner thread holds them, since the page's main thread may not wait.
+    #[wasm_bindgen]
+    #[must_use]
+    pub fn planner_facts() -> String {
+        super::FACTS
+            .get()
+            .and_then(|facts| facts.try_lock().ok())
+            .map(|facts| super::text(&facts))
+            .unwrap_or_default()
+    }
+}
+
+#[cfg(not(target_family = "wasm"))]
+mod web {
+    pub(super) const fn enabled() -> bool {
+        false
+    }
 }
 
 /// Records one fact.
@@ -89,16 +130,22 @@ pub fn publish() {
     let Ok(facts) = facts.os_lock() else {
         return;
     };
-    let mut text = String::new();
-    for (key, value) in facts.iter() {
-        // A newline in a value would split one fact into two. Replaced rather than escaped: no
-        // fact worth asserting on contains one, and an escaping scheme is a thing to get wrong.
-        text.push_str(&format!("{key} = {}\n", value.replace('\n', " ")));
-    }
+    let text = text(&facts);
     let temporary = path.with_extension("facts.tmp");
     if std::fs::write(&temporary, text).is_ok() {
         let _ = std::fs::rename(&temporary, path);
     }
+}
+
+/// The facts as the file holds them: `key = value`, a line each, in key order.
+fn text(facts: &BTreeMap<String, String>) -> String {
+    let mut text = String::new();
+    for (key, value) in facts {
+        // A newline in a value would split one fact into two. Replaced rather than escaped: no
+        // fact worth asserting on contains one, and an escaping scheme is a thing to get wrong.
+        text.push_str(&format!("{key} = {}\n", value.replace('\n', " ")));
+    }
+    text
 }
 
 #[cfg(test)]

@@ -48,3 +48,10 @@ background job's result is what's needed next:
 - end the turn, or answer him;
 - or do the next independent piece of work;
 - the notification comes when the job ends.
+
+**2026-10-05, Buzz: "always run in hte background."** He backgrounded my foreground calls by hand
+several times that day: a 10-minute wasm build, a browser test, a foreground `until` wait. The rule
+is now every command that is not instant: builds, test runs, browser checks, anything with a
+`timeout` above a few seconds. Each goes in a `run_in_background` call, and the notification is
+read when it comes. Only quick reads, edits and greps run in the foreground.
+

@@ -120,14 +120,56 @@ pub struct Info {
     pub file: String,
 }
 
-/// The engine every plugin is compiled with: Cranelift, fuel on.
+/// The engine every plugin is compiled with: Cranelift, fuel on; in a web page, [`web_config`]'s.
 ///
 /// # Errors
 /// When wasmtime cannot make an engine for this machine.
 pub fn engine() -> Result<Engine, Fault> {
-    let mut config = Config::new();
-    config.consume_fuel(true);
+    #[cfg(not(target_family = "wasm"))]
+    let config = {
+        let mut config = Config::new();
+        config.consume_fuel(true);
+        config
+    };
+    #[cfg(target_family = "wasm")]
+    let config = web_config()?;
     Engine::new(&config).map_err(|err| Fault::Load(format!("{err:#}")))
+}
+
+/// The settings a web page's engine runs plugins with (the browser build): Pulley's 32-bit
+/// bytecode on wasmtime's interpreter, since a page cannot run machine code wasmtime makes; no
+/// signal handlers, no virtual memory reserved, guarded or copied on write, which a page has none
+/// of; and fuel on, as on the desktop. [`precompile_for_web`] compiles with the same, and wasmtime
+/// refuses bytecode compiled under any other.
+///
+/// # Errors
+/// When this wasmtime was built without Pulley.
+pub fn web_config() -> Result<Config, Fault> {
+    let mut config = Config::new();
+    config
+        .target("pulley32")
+        .map_err(|err| Fault::Load(format!("{err:#}")))?;
+    config.signals_based_traps(false);
+    config.memory_reservation(0);
+    config.memory_guard_size(0);
+    config.memory_init_cow(false);
+    config.consume_fuel(true);
+    Ok(config)
+}
+
+/// A plugin - a component, or a core module carrying the world - compiled to the Pulley bytecode a
+/// web page's engine runs ([`web_config`]): what mp-gui's build script carries into the browser
+/// build for each built-in plugin.
+///
+/// # Errors
+/// [`Fault::Load`] when the bytes are not a plugin of this world.
+#[cfg(not(target_family = "wasm"))]
+pub fn precompile_for_web(bytes: &[u8]) -> Result<Vec<u8>, Fault> {
+    let engine = Engine::new(&web_config()?).map_err(|err| Fault::Load(format!("{err:#}")))?;
+    let component = componentized(bytes)?;
+    engine
+        .precompile_component(&component)
+        .map_err(|err| Fault::Load(format!("{err:#}")))
 }
 
 /// What a plugin's store holds: its surface, and the limits its memory is held to.
@@ -158,21 +200,31 @@ impl fmt::Debug for Plugin {
 }
 
 /// The component in `bytes`: as it is when it is one, made one when it is a core module that
-/// carries the world (a plugin built for `wasm32-unknown-unknown` with wit-bindgen).
+/// carries the world (a plugin built for `wasm32-unknown-unknown` with wit-bindgen). In a web page,
+/// the Pulley bytecode the desktop compiled it to ([`precompile_for_web`]).
+#[cfg(not(target_family = "wasm"))]
 fn component(engine: &Engine, bytes: &[u8]) -> Result<Component, Fault> {
+    let bytes = componentized(bytes)?;
+    Component::new(engine, &bytes).map_err(|err| Fault::Load(format!("{err:#}")))
+}
+
+#[cfg(target_family = "wasm")]
+fn component(engine: &Engine, bytes: &[u8]) -> Result<Component, Fault> {
+    crate::web::deserialize(engine, bytes)
+}
+
+/// `bytes` as a component: as they are when they are one, encoded when they are a core module.
+#[cfg(not(target_family = "wasm"))]
+fn componentized(bytes: &[u8]) -> Result<std::borrow::Cow<'_, [u8]>, Fault> {
     // The preamble's version and layer: `01 00 00 00` is a core module; a component's layer is 1.
-    let core = bytes.get(4..8) == Some(&[1, 0, 0, 0][..]);
-    let encoded;
-    let bytes = if core {
-        encoded = wit_component::ComponentEncoder::default()
-            .module(bytes)
-            .and_then(|encoder| encoder.validate(true).encode())
-            .map_err(|err| Fault::Load(format!("{err:#}")))?;
-        &encoded[..]
-    } else {
-        bytes
-    };
-    Component::new(engine, bytes).map_err(|err| Fault::Load(format!("{err:#}")))
+    if bytes.get(4..8) != Some(&[1, 0, 0, 0][..]) {
+        return Ok(std::borrow::Cow::Borrowed(bytes));
+    }
+    wit_component::ComponentEncoder::default()
+        .module(bytes)
+        .and_then(|encoder| encoder.validate(true).encode())
+        .map(std::borrow::Cow::Owned)
+        .map_err(|err| Fault::Load(format!("{err:#}")))
 }
 
 impl Plugin {

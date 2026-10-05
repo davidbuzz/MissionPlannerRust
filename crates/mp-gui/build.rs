@@ -118,7 +118,9 @@ fn build_shipped_plugins() {
         // host's, and under `cargo clippy` its wrapper would lint the plugins too.
         .env_remove("CARGO_ENCODED_RUSTFLAGS")
         .env_remove("RUSTC_WORKSPACE_WRAPPER")
-        .env_remove("CARGO_BUILD_TARGET");
+        .env_remove("CARGO_BUILD_TARGET")
+        // Nor the browser build's for wasm32 (shared memory, atomics): a plugin is a plain module.
+        .env_remove("CARGO_TARGET_WASM32_UNKNOWN_UNKNOWN_RUSTFLAGS");
     let status = command
         .status()
         .unwrap_or_else(|err| panic!("building the shipped plugins: cargo did not start: {err}"));
@@ -128,6 +130,12 @@ fn build_shipped_plugins() {
          installed with the toolchain rust-toolchain.toml names"
     );
     let built = target.join("wasm32-unknown-unknown/release/examples");
+    // The browser build runs plugins on wasmtime's interpreter, which cannot compile: they are
+    // compiled here, to Pulley bytecode, by the plugin host's own precompile at the same wasmtime.
+    let web = std::env::var("TARGET").is_ok_and(|target| target.starts_with("wasm32"));
+    if web {
+        precompile_for_web(&root, &target, &built, &out);
+    }
     let mut table = String::from(
         "/// The plugins Mission Planner ships, built for WebAssembly by `build.rs`: file name and\n\
          /// component bytes, in name order.\n\
@@ -136,9 +144,13 @@ fn build_shipped_plugins() {
     for name in SHIPPED {
         let from = built.join(format!("{name}.wasm"));
         let to = out.join(format!("{name}.wasm"));
-        std::fs::copy(&from, &to).unwrap_or_else(|err| {
-            panic!("the shipped plugin {} is not there: {err}", from.display())
-        });
+        // For the browser build precompile_for_web has written the bytecode there already, under
+        // the plugin's own file name.
+        if !web {
+            std::fs::copy(&from, &to).unwrap_or_else(|err| {
+                panic!("the shipped plugin {} is not there: {err}", from.display())
+            });
+        }
         table.push_str(&format!(
             "    (\"{name}.wasm\", include_bytes!({:?})),\n",
             to.display().to_string()
@@ -147,6 +159,60 @@ fn build_shipped_plugins() {
     table.push_str("];\n");
     std::fs::write(out.join("builtin_plugins.rs"), table)
         .unwrap_or_else(|err| panic!("writing builtin_plugins.rs: {err}"));
+}
+
+/// For the browser build: each of [`SHIPPED`], built into `built`, compiled to Pulley bytecode in
+/// `out` (as `<name>.wasm`, the file name the planner shows) by mp-plugin-host's
+/// precompile-web-plugins, run for this machine in a target folder of its own beside `plugins`.
+fn precompile_for_web(
+    root: &std::path::Path,
+    plugins: &std::path::Path,
+    built: &std::path::Path,
+    out: &std::path::Path,
+) {
+    use std::process::Command;
+
+    for watched in [
+        "crates/mp-plugin-host/src",
+        "crates/mp-plugin-host/Cargo.toml",
+    ] {
+        println!("cargo:rerun-if-changed={}", root.join(watched).display());
+    }
+    let target = plugins.with_file_name("plugin-precompile");
+    let cargo = std::env::var("CARGO").unwrap_or_else(|_| "cargo".to_owned());
+    let mut command = Command::new(cargo);
+    command
+        .args([
+            "run",
+            "--release",
+            "--locked",
+            "-p",
+            "mp-plugin-host",
+            "--bin",
+            "precompile-web-plugins",
+            "--",
+        ])
+        .args(SHIPPED.iter().flat_map(|name| {
+            [
+                built.join(format!("{name}.wasm")),
+                out.join(format!("{name}.wasm")),
+            ]
+        }))
+        .current_dir(root)
+        .env("CARGO_TARGET_DIR", &target)
+        // This machine's build, whatever the planner's target and flags.
+        .env_remove("CARGO_ENCODED_RUSTFLAGS")
+        .env_remove("RUSTC_WORKSPACE_WRAPPER")
+        .env_remove("CARGO_BUILD_TARGET")
+        .env_remove("CARGO_TARGET_WASM32_UNKNOWN_UNKNOWN_RUSTFLAGS")
+        .env_remove("RUSTC_BOOTSTRAP");
+    let status = command.status().unwrap_or_else(|err| {
+        panic!("compiling the shipped plugins for the browser: cargo did not start: {err}")
+    });
+    assert!(
+        status.success(),
+        "compiling the shipped plugins to Pulley bytecode for the browser build failed ({status})"
+    );
 }
 
 #[cfg(target_os = "linux")]

@@ -14,9 +14,17 @@
 // A panic's stack in full: Chrome keeps ten frames by default.
 Error.stackTraceLimit = 200;
 import { servePlanner } from "./link.js";
-import init, { page_link_requested, page_link_push, page_link_take } from "./pkg-planner/planner.js";
+import init, { page_link_requested, page_link_push, page_link_take, planner_facts, planner_facts_enable } from "./pkg-planner/planner.js";
 init()
-    .then(() => servePlanner({ requested: page_link_requested, push: page_link_push, take: page_link_take }))
+    .then(() => {
+        // `?facts=1`: the planner's facts, as MP_FACTS gives them on the desktop, for the checks.
+        if (new URLSearchParams(location.search).get("facts")) {
+            planner_facts_enable();
+            globalThis.mpFacts = () =>
+                Object.fromEntries(planner_facts().split("\n").filter(Boolean).map((line) => line.split(" = ", 2)));
+        }
+        servePlanner({ requested: page_link_requested, push: page_link_push, take: page_link_take });
+    })
     .catch((err) => console.error("planner: " + err));
 </script>
 </body>

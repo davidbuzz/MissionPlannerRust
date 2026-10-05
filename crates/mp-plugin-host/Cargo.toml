@@ -17,12 +17,23 @@ mp-os.workspace = true
 wasm_thread = { git = "https://github.com/zed-industries/wasm_thread", rev = "0cf96c7708dfb97ccf3da50347e25edcf75d6937" }
 # The clock, std's on the desktop and the browser's in a web page (experiments/web-experiment/tools/port_clock.py).
 web-time = "1"
+anyhow.workspace = true
+
 # The experiment's wasmtime (PLAN.md §13.6 row 95), with the component model: the WIT world in
 # `wit/` is the plugin interface, typed strings, records and lists across it. Cranelift compiles;
-# fuel stops a runaway plugin.
-wasmtime = { version = "48", default-features = false, features = ["cranelift", "runtime", "std", "anyhow", "component-model"] }
+# fuel stops a runaway plugin. "pulley" too: the desktop compiles the built-in plugins to Pulley
+# bytecode for the browser build (precompile_for_web, run by mp-gui's build script for wasm32).
+[target.'cfg(not(target_family = "wasm"))'.dependencies]
+wasmtime = { version = "48", default-features = false, features = ["cranelift", "runtime", "std", "anyhow", "component-model", "pulley"] }
 # A plugin built for wasm32-unknown-unknown with wit-bindgen is a core module carrying its WIT;
 # this makes it the component the host loads, so a plugin author needs no second tool. At the
 # wasmparser and wit-parser wasmtime 48 already builds (0.254).
 wit-component = "0.254"
-anyhow.workspace = true
+
+# A web page runs plugins precompiled to Pulley bytecode, on wasmtime's own interpreter (src/web.rs).
+# It runs them with no compiler, and without std, whose platform layer maps memory, which a page
+# cannot do.
+[target.'cfg(target_family = "wasm")'.dependencies]
+# Its locks are this crate's (src/web.rs, "custom-sync-primitives"): wasmtime's own, without std,
+# panic when two threads meet in one, and the planner loads its plugins on threads of their own.
+wasmtime = { version = "48", default-features = false, features = ["runtime", "anyhow", "component-model", "pulley", "custom-sync-primitives"] }

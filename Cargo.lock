@@ -4633,6 +4633,7 @@ dependencies = [
  "sha1_smol",
  "ttf-parser",
  "unic-langid",
+ "wasm-bindgen",
  "wasm_thread",
  "web-time",
 ]

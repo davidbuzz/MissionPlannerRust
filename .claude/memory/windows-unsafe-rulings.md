@@ -1,6 +1,6 @@
 ---
 name: windows-unsafe-rulings
-description: Buzz's rulings on Windows-only ports that need unsafe FFI - camera capture yes (one file), joystick not now (2026-09-27)
+description: Buzz's per-file rulings on unsafe - Windows camera capture yes (one file), joystick not now (2026-09-27); browser plugins on wasmtime/Pulley yes, mp-plugin-host/src/web.rs only (2026-10-05)
 metadata:
   type: project
 ---
@@ -14,6 +14,11 @@ route. Standing so far:
   tested with a webcam passed through to the VM. Asked and answered 2026-09-27.
 - **Joystick on Windows** (JoystickWindows.cs, DirectInput) - **not now** (2026-09-27). The matrix
   row stays open; do not start it without asking again.
+- **Plugins in the browser build** - **yes, unsafe in one wasm-only file,
+  `crates/mp-plugin-host/src/web.rs`** (2026-10-05). It covers wasmtime's `Component::deserialize`
+  of our own build-time Pulley bytecode, and the two `#[unsafe(no_mangle)]` exports
+  `wasmtime_tls_get` and `wasmtime_tls_set` that wasmtime's custom platform needs. Asked and
+  answered; the desktop is unchanged.
 
 **Why:** his call on where `unsafe` goes; see [[delegate-to-opus-subagents]] for who ports it.
 

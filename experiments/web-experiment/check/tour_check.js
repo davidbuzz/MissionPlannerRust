@@ -25,6 +25,10 @@ const PORT_BOX = [996, 36], TCP = [964, 97], CONNECT = [1187, 36];
   page.on("pageerror", (e) => events.push(`error: ${e.message.slice(0, 120)} @ ${frames(e.stack || "")}`));
   await page.goto(url, { waitUntil: "load" });
   await page.waitForTimeout(8000);
+  // The built-in Drone ID plugin asks its question at every start in a page, which keeps no
+  // settings yet: its OK, over the flight screen's map at 1400x900 (a click on the map otherwise).
+  await page.mouse.click(854, 484);
+  await page.waitForTimeout(800);
   await page.mouse.click(...PORT_BOX); await page.waitForTimeout(800);
   await page.mouse.click(...TCP); await page.waitForTimeout(800);
   await page.mouse.click(...CONNECT); await page.waitForTimeout(1500);

@@ -83,17 +83,7 @@ mod planner_coverage;
 mod plotline;
 // ---- row 96 ----
 mod experimental;
-// The plugins run on wasmtime, which does not build for a web page: there the browser build
-// carries the same names with no plugins behind them.
-#[cfg(not(target_family = "wasm"))]
 mod plugin_manager;
-#[cfg(target_family = "wasm")]
-#[path = "plugin_manager_web.rs"]
-mod plugin_manager;
-#[cfg(not(target_family = "wasm"))]
-mod plugins_ui;
-#[cfg(target_family = "wasm")]
-#[path = "plugins_ui_web.rs"]
 mod plugins_ui;
 // ---- end row 96 ----
 mod platform;
@@ -196,6 +186,10 @@ use ui::{action, theme};
 /// How often to repaint. 10 Hz is plenty for numeric readouts and keeps an idle GCS cheap; the
 /// map and HUD (Deliverable 7-Deliverable 9) will drive their own higher-rate rendering.
 const REFRESH: Duration = Duration::from_millis(100);
+
+/// Auto Pan's setting, `CHK_autopan`, as the C#'s `bool.ToString()` writes it: "True" or "False".
+/// `// C#: GCSViews/FlightData.cs:1929-1933`
+const AUTO_PAN_SETTING: &str = "CHK_autopan";
 
 /// The mission file name used when nothing has been typed.
 const DEFAULT_PLAN_FILE: &str = "mission.waypoints";
@@ -780,6 +774,11 @@ impl MissionPlanner {
         // `// C#: GCSViews/FlightData.cs:524-548`
         if let Some((at, zoom)) = persisted.flight_map_start() {
             map.start_at(at, zoom);
+        }
+        // `CHK_autopan.Checked = Settings.Instance.GetBoolean("CHK_autopan")` when it is set.
+        // `// C#: GCSViews/FlightData.cs:2732-2733`
+        if let Some(ticked) = persisted.get(AUTO_PAN_SETTING) {
+            map.set_auto_pan(raw_params::get_boolean(Some(ticked)));
         }
         if std::env::var("MP_NO_TILES").is_err() {
             let cache = TileCache::new(TileCache::default_root());
@@ -2980,7 +2979,10 @@ impl MissionPlanner {
                             .text_color(rgb(theme::DIM))
                             .child(text)
                     }))
-                    .child(
+                    // Auto Pan (`CHK_autopan`) is the flight screen's: Mission Planner's planning
+                    // map has none, and a button there would say it follows while nothing pans.
+                    .when(!planning, |pane| {
+                        pane.child(
                         div()
                             .absolute()
                             .top_2()
@@ -2995,16 +2997,19 @@ impl MissionPlanner {
                                     "follow vehicle"
                                 },
                                 if following { theme::OK } else { theme::ACCENT },
-                                !following,
+                                // `CHK_autopan`, a check box: a click ticks or unticks it.
+                                true,
                                 {
                                     let map = self.map.clone();
                                     move |_event: &(), window: &mut Window, _cx: &mut gpui::App| {
-                                        map.borrow_mut().follow_vehicle();
+                                        let ticked = map.borrow().is_following();
+                                        map.borrow_mut().set_auto_pan(!ticked);
                                         window.refresh();
                                     }
                                 },
                             )),
-                    ),
+                        )
+                    }),
             )
             .child(self.map_status());
         let pane = div()
@@ -3818,12 +3823,24 @@ impl Render for MissionPlanner {
                 radius: quick::value("radius", state).unwrap_or(0.0) as f32,
             };
             let settings = self.marker_settings();
+            let on_flight_screen = self.screen == Screen::Fly;
             let mut map = self.map.borrow_mut();
                         // A position at 0,0 - a GPS before its fix - draws no marker and no route point,
             // as `addMAVMarker` and the route add none (the owner's report, 2026-10-03).
             match state.position.filter(|position| mapview::is_fixed(*position)) {
                 Some(position) => {
                     map.observe(position, mp_units::Bearing(mp_units::Degrees(yaw)));
+                    // Auto Pan, the flight screen's alone, as Mission Planner's planning map has
+                    // none. `// C#: GCSViews/FlightData.cs:4242-4253`
+                    if on_flight_screen {
+                        map.auto_pan(web_time::Instant::now());
+                    }
+                    // `Settings.Instance["CHK_autopan"] = CHK_autopan.Checked.ToString()` on a
+                    // change. `// C#: GCSViews/FlightData.cs:1929-1933`
+                    let ticked = if map.is_following() { "True" } else { "False" };
+                    if self.persisted.get(AUTO_PAN_SETTING) != Some(ticked) {
+                        self.persisted.set(AUTO_PAN_SETTING, ticked);
+                    }
                 }
                 None => map.vehicle_unfixed(),
             }

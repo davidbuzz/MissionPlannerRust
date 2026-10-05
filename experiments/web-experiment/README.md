@@ -56,6 +56,7 @@ linked in unchanged), fed by the SITL in the page (`?link=sitl`) or a WebSocket
 NODE_PATH=<node_modules with playwright> node check/sim_check.js       # SIMULATION: click, start, connect
 NODE_PATH=<node_modules with playwright> node check/planner_check.js   # connect through the port box
 NODE_PATH=<node_modules with playwright> node check/tour_check.js      # every screen, connected, no error
+NODE_PATH=<node_modules with playwright> node check/plugins_check.js   # the built-in plugins, as on the desktop
 NODE_PATH=<node_modules with playwright> node check/check.js           # the HUD page
 NODE_PATH=<node_modules with playwright> check/tailnet_e2e.sh          # over a tailnet (needs Go)
 ```
@@ -64,7 +65,8 @@ NODE_PATH=<node_modules with playwright> check/tailnet_e2e.sh          # over a 
 `check/cors_proxy.py` (which adds the `access-control-allow-origin: *` Tailscale's own control
 server sends), and a userspace tailscaled named sitl-box serving a SITL on its 5760 - then connects
 the planner in a page to sitl-box over it (`tailscale_check.js`), and checks the sign-in a pilot
-without a key meets (`tailscale_login_check.js`). All of them run headless Chromium. Without a GPU it has no WebGPU adapter, so gpui falls back to WebGL2
+without a key meets (`tailscale_login_check.js`). All of them run headless Chromium. The planner's facts - what `MP_FACTS` writes on the desktop for
+the GUI scripts - are readable in the page with `?facts=1` (`globalThis.mpFacts()`). Without a GPU, headless Chromium has no WebGPU adapter, so gpui falls back to WebGL2
 on SwiftShader.
 
 ## What it took
@@ -82,7 +84,11 @@ no-op on the desktop: the replacement is std's own item there.
 By hand:
 - `mp-os::http`: a synchronous XHR from a worker, for tiles, terrain and catalogues.
 - `mp-transport/src/page.rs`: the link through the page, `www/link.js` on the other side.
-- Plugins (wasmtime) are not built for a page, and a stand-in carries the same names.
+- Plugins: the same plugin host, on wasmtime's Pulley interpreter in a page. The planner's build
+  script compiles the built-in plugins to Pulley bytecode for a wasm32 build
+  (mp-plugin-host's `precompile-web-plugins`), and `crates/mp-plugin-host/src/web.rs`, the one
+  file of unsafe by the owner's ruling, gives wasmtime the platform functions it needs and loads
+  the bytecode.
 - RustPython loses `host_env`.
 - A font is bundled.
 
@@ -98,5 +104,5 @@ By hand:
 - UDP listening (`udp:0.0.0.0:14550`), where a vehicle sends first: the page's Tailscale node
   dials out (TCP, UDPCl) but does not listen yet.
 - Serial: WebSerial.
-- Plugins: wasmtime does not build for a page; next, wasmtime's Pulley interpreter in the page, or
-  jco's JavaScript glue.
+- Settings are not kept, so the built-in Drone ID plugin asks its start-up question at every visit
+  (the storage row above would end it).

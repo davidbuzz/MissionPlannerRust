@@ -248,6 +248,14 @@ impl Default for MarkerSettings {
     }
 }
 
+/// How often Auto Pan looks: `mapupdate.AddSeconds(3) < DateTime.Now`.
+/// `// C#: GCSViews/FlightData.cs:4243`
+const AUTO_PAN_EVERY: Duration = Duration::from_secs(3);
+/// How far the vehicle may be from the view's centre, in degrees of latitude or longitude, before
+/// Auto Pan moves it: `Math.Abs(currentloc.Lat - gMapControl1.Position.Lat) > 0.0001`.
+/// `// C#: GCSViews/FlightData.cs:5581-5582`
+const AUTO_PAN_MOVED: f64 = 0.0001;
+
 /// A synthetic flight track and the state needed to draw it.
 pub struct MapViewport {
     /// Track points in normalised 0..1 space, scaled to the viewport when painted.
@@ -361,6 +369,13 @@ pub struct MapViewport {
     /// then it is infuriating: every pan is undone on the next telemetry packet. Panning therefore
     /// takes control, and keeps it until the user gives it back.
     camera: Option<Camera>,
+    /// `CHK_autopan`, Mission Planner's Auto Pan box (ticked by default): while it is ticked the
+    /// flight screen keeps the vehicle in the view's centre, at the zoom the view has
+    /// ([`MapViewport::auto_pan`]). A zoom or a pan does not untick it.
+    /// `// C#: GCSViews/FlightData.Designer.cs:2856-2864`
+    auto_pan: bool,
+    /// When Auto Pan last looked: Mission Planner's `mapupdate`, three seconds apart.
+    panned_at: Option<Instant>,
     /// Where the map starts, from the settings' `maplast_lat`, `maplast_lng` and `maplast_zoom`
     /// (`FlightData.cs:524-548`): a place and a zoom, made a camera on the first paint, when the
     /// viewport's width is known. `None` once used or when the settings had none.
@@ -529,6 +544,8 @@ impl MapViewport {
             tiles_approximate: 0,
             tiles_missing: 0,
             camera: None,
+            auto_pan: true,
+            panned_at: None,
             start: None,
             drag_from: None,
             last_viewport: (1.0, 1.0),
@@ -861,15 +878,58 @@ impl MapViewport {
         });
     }
 
-    /// Whether the map is following the vehicle rather than a view the user chose.
+    /// Whether the map follows the vehicle: Auto Pan ticked.
     #[must_use]
     pub const fn is_following(&self) -> bool {
-        self.camera.is_none()
+        self.auto_pan
     }
 
-    /// Returns to following the vehicle.
+    /// Follows the vehicle: Auto Pan ticked, and it looks at the next update.
     pub fn follow_vehicle(&mut self) {
-        self.camera = None;
+        self.set_auto_pan(true);
+    }
+
+    /// `CHK_autopan.Checked`: ticked, the next update looks at once.
+    /// `// C#: GCSViews/FlightData.cs:1929-1933`
+    pub fn set_auto_pan(&mut self, on: bool) {
+        self.auto_pan = on;
+        self.panned_at = None;
+    }
+
+    /// The flight screen's map loop for the vehicle it shows, at `now`:
+    /// - its first fix, with the map at the default zoom 3, is centred and zoomed to 17;
+    /// - while Auto Pan is ticked, at most every three seconds, the view is centred on the
+    ///   vehicle - at the zoom it has - when the vehicle is more than 0.0001 degrees of latitude
+    ///   or longitude from the view's centre (`updateMapPosition`).
+    ///
+    /// Only the flight screen calls this: Mission Planner's planning map has no Auto Pan.
+    /// `// C#: GCSViews/FlightData.cs:4242-4253, 5573-5596`
+    pub fn auto_pan(&mut self, now: Instant) {
+        let Some(at) = self
+            .vehicle
+            .and_then(|(projected, _)| LatLon::from_web_mercator(projected).ok())
+        else {
+            return;
+        };
+        if self.path.len() == 1 && self.zoom_level().is_some_and(|zoom| zoom == 3.0) {
+            self.centre_on(at);
+            self.set_zoom(17.0);
+        }
+        if !self.auto_pan
+            || self
+                .panned_at
+                .is_some_and(|then| now.saturating_duration_since(then) < AUTO_PAN_EVERY)
+        {
+            return;
+        }
+        let away = self.centre().is_none_or(|centre| {
+            (centre.latitude() - at.latitude()).abs() > AUTO_PAN_MOVED
+                || (centre.longitude() - at.longitude()).abs() > AUTO_PAN_MOVED
+        });
+        if away {
+            self.centre_on(at);
+        }
+        self.panned_at = Some(now);
     }
 
     /// Centres the view on a position at the current zoom: `GMapControl.Position = point`.
@@ -2339,6 +2399,7 @@ impl MapViewport {
             ),
             ("map.vehicle.sysid", self.marker.sysid.to_string()),
             ("map.vehicle.drawn", self.vehicle.is_some().to_string()),
+            ("map.following", self.auto_pan.to_string()),
         ]
     }
 }
@@ -4290,13 +4351,17 @@ mod tests {
         map.end_drag();
         map.follow_vehicle();
 
-        // A vehicle heard: the fit frames it, ahead of the idle view.
+        // A vehicle heard: Auto Pan centres it, at the zoom the view holds.
         map.observe(canberra, Bearing::default());
-        map.observe(
-            LatLon::new(-35.37, 149.17).expect("near"),
-            Bearing::default(),
+        let near = LatLon::new(-35.37, 149.17).expect("near");
+        map.observe(near, Bearing::default());
+        map.auto_pan(Instant::now());
+        let camera = map.camera.expect("a view");
+        assert!(
+            (gmap_zoom(camera.span, 800.0) - 16.0).abs() < 1e-6,
+            "the zoom held"
         );
-        assert!(map.camera.is_none(), "still following");
+        assert!((camera.centre.x - near.to_web_mercator().x).abs() < 1e-12);
         assert!(map.view_box().is_some(), "the vehicle's track is framed");
 
         // Not a number: the default's zoom, not a NaN span.
@@ -4349,27 +4414,152 @@ mod tests {
         assert!(map.is_following());
     }
 
+    /// A drag holds the view it starts from, and does not untick Auto Pan: as in Mission Planner,
+    /// the next look (three seconds on) brings the vehicle back to the centre.
+    /// `// C#: GCSViews/FlightData.cs:4242-4247`
     #[test]
-    fn dragging_takes_control_from_follow_mode() {
-        // Otherwise the next telemetry frame snaps the view back and the drag appears to fail.
+    fn a_drag_does_not_untick_auto_pan_and_the_next_look_brings_the_vehicle_back() {
         let mut map = viewport();
         painted(&mut map, 0.001);
         map.camera = None;
-        map.observe(
-            LatLon::new(-35.363, 149.165).expect("valid position"),
-            Bearing(mp_units::Degrees(0.0)),
-        );
+        let vehicle = LatLon::new(-35.363, 149.165).expect("valid position");
+        map.observe(vehicle, Bearing(mp_units::Degrees(0.0)));
+        let t0 = Instant::now();
+        map.auto_pan(t0);
         map.begin_drag(400.0, 300.0);
-        assert!(!map.is_following());
+        map.drag_to(200.0, 100.0);
+        map.end_drag();
+        assert!(map.is_following());
+        let dragged = map.camera().expect("a view").centre;
+        assert!(
+            (dragged.x - vehicle.to_web_mercator().x).abs() > 1e-9,
+            "the drag moved the view"
+        );
+        map.auto_pan(t0 + AUTO_PAN_EVERY);
+        let back = map.camera().expect("a view").centre;
+        assert!((back.x - vehicle.to_web_mercator().x).abs() < 1e-12);
+        assert!((back.y - vehicle.to_web_mercator().y).abs() < 1e-12);
     }
 
+    /// The button is `CHK_autopan`: a click unticks it, and another ticks it again.
     #[test]
-    fn follow_vehicle_gives_control_back() {
+    fn auto_pan_ticks_and_unticks() {
         let mut map = viewport();
         painted(&mut map, 0.001);
+        assert!(map.is_following());
+        map.set_auto_pan(false);
         assert!(!map.is_following());
         map.follow_vehicle();
         assert!(map.is_following());
+    }
+
+    /// While Auto Pan is ticked the vehicle is centred at the zoom the view has: the owner's bug of
+    /// 2026-10-05 was a "following" that zoomed out to the whole path.
+    /// `// C#: GCSViews/FlightData.cs:5573-5596`
+    #[test]
+    fn auto_pan_centres_the_vehicle_and_keeps_the_zoom() {
+        let mut map = viewport();
+        painted(&mut map, 0.001);
+        let far = LatLon::new(-35.30, 149.10).expect("valid position");
+        map.observe(far, Bearing(mp_units::Degrees(0.0)));
+        map.auto_pan(Instant::now());
+        let camera = map.camera().expect("a view");
+        assert!(
+            (camera.span - 0.001).abs() < f64::EPSILON,
+            "the zoom is the pilot's"
+        );
+        assert!((camera.centre.x - far.to_web_mercator().x).abs() < 1e-12);
+        assert!((camera.centre.y - far.to_web_mercator().y).abs() < 1e-12);
+    }
+
+    /// A zoom - the wheel's - keeps Auto Pan ticked, and the vehicle is centred at the new zoom.
+    #[test]
+    fn a_zoom_does_not_stop_auto_pan() {
+        let mut map = viewport();
+        painted(&mut map, 0.001);
+        let t0 = Instant::now();
+        map.zoom(100.0, 100.0, 2.0);
+        assert!(map.is_following());
+        let zoomed = map.camera().expect("a view").span;
+        let far = LatLon::new(-35.30, 149.10).expect("valid position");
+        map.observe(far, Bearing(mp_units::Degrees(0.0)));
+        map.auto_pan(t0);
+        let camera = map.camera().expect("a view");
+        assert!(
+            (camera.span - zoomed).abs() < f64::EPSILON,
+            "the wheel's zoom stays"
+        );
+        assert!((camera.centre.x - far.to_web_mercator().x).abs() < 1e-12);
+    }
+
+    /// Auto Pan looks every three seconds, not on every packet: `mapupdate.AddSeconds(3)`.
+    #[test]
+    fn auto_pan_looks_every_three_seconds() {
+        let mut map = viewport();
+        painted(&mut map, 0.001);
+        let t0 = Instant::now();
+        let first = LatLon::new(-35.30, 149.10).expect("valid position");
+        map.observe(first, Bearing(mp_units::Degrees(0.0)));
+        map.auto_pan(t0);
+        let second = LatLon::new(-35.20, 149.00).expect("valid position");
+        map.observe(second, Bearing(mp_units::Degrees(0.0)));
+        map.auto_pan(t0 + Duration::from_secs(1));
+        let held = map.camera().expect("a view").centre;
+        assert!(
+            (held.x - first.to_web_mercator().x).abs() < 1e-12,
+            "not yet"
+        );
+        map.auto_pan(t0 + AUTO_PAN_EVERY);
+        let moved = map.camera().expect("a view").centre;
+        assert!((moved.x - second.to_web_mercator().x).abs() < 1e-12);
+    }
+
+    /// A vehicle within 0.0001 degrees of the centre leaves the view alone.
+    /// `// C#: GCSViews/FlightData.cs:5581-5582`
+    #[test]
+    fn a_vehicle_near_the_centre_leaves_the_view_alone() {
+        let mut map = viewport();
+        painted(&mut map, 0.001);
+        let before = map.camera().expect("a view").centre;
+        let near = LatLon::new(-35.363_05, 149.165_05).expect("valid position");
+        map.observe(near, Bearing(mp_units::Degrees(0.0)));
+        map.auto_pan(Instant::now());
+        let after = map.camera().expect("a view").centre;
+        assert!((after.x - before.x).abs() < f64::EPSILON);
+        assert!((after.y - before.y).abs() < f64::EPSILON);
+    }
+
+    /// Unticked, the view stays where the pilot left it.
+    #[test]
+    fn unticked_auto_pan_leaves_the_view_alone() {
+        let mut map = viewport();
+        painted(&mut map, 0.001);
+        map.set_auto_pan(false);
+        let before = map.camera().expect("a view").centre;
+        map.observe(
+            LatLon::new(-35.30, 149.10).expect("valid position"),
+            Bearing(mp_units::Degrees(0.0)),
+        );
+        map.auto_pan(Instant::now());
+        let after = map.camera().expect("a view").centre;
+        assert!((after.x - before.x).abs() < f64::EPSILON);
+    }
+
+    /// The first fix, with the map at the default zoom 3, is centred and zoomed to 17, Auto Pan or
+    /// not. `// C#: GCSViews/FlightData.cs:4249-4253`
+    #[test]
+    fn the_first_fix_at_the_default_zoom_goes_to_zoom_17() {
+        let mut map = viewport();
+        // Zoom 3 on an 800-wide view: 800 / (256 * 2^3) of the world.
+        painted(&mut map, 800.0 / (256.0 * 8.0));
+        assert_eq!(map.zoom_level(), Some(3.0));
+        map.set_auto_pan(false);
+        let fix = LatLon::new(-35.30, 149.10).expect("valid position");
+        map.observe(fix, Bearing(mp_units::Degrees(0.0)));
+        map.auto_pan(Instant::now());
+        assert_eq!(map.zoom_level(), Some(17.0));
+        let centre = map.camera().expect("a view").centre;
+        assert!((centre.x - fix.to_web_mercator().x).abs() < 1e-9);
     }
 
     #[test]
@@ -4573,10 +4763,13 @@ mod tests {
             LatLon::new(-35.363, 149.165).expect("valid"),
             Bearing(mp_units::Degrees(0.0)),
         );
-        assert!(map.is_following());
+        assert!(map.camera.is_none(), "fitting itself");
 
         map.freeze_view();
-        assert!(!map.is_following(), "the view should now be the operator's");
+        assert!(
+            map.camera.is_some(),
+            "the view should now be the operator's"
+        );
     }
 
     #[test]
@@ -4604,7 +4797,6 @@ mod tests {
         let centre = target.to_web_mercator();
         assert!((camera.centre.x - centre.x).abs() < 1e-12);
         assert!((camera.centre.y - centre.y).abs() < 1e-12);
-        assert!(!map.is_following());
     }
 
     /// With nothing framed yet there is still somewhere to centre.
