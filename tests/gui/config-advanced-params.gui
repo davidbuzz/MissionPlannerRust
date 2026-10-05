@@ -25,7 +25,8 @@ env MP_CONFIG_XML $WORK/config.xml
 setup printf '{\n  "displayAdvancedParams": true,\n  "isAdvancedMode": true\n}\n' > $WORK/custom.displayview
 screen params
 window 1600x1200
-budget 26
+budget 32
+# 32: 29.0 s on the 10 Hz timer (2026-10-06), over the 26 it had - the parameter documentation's first lookup after the filter takes some 8 s in a debug build.
 # RawParamWarning, on the Full Parameter List's Activate (ConfigRawParams.cs:92): "Show me
 # again?" unticked, so no later visit asks, and OK.
 # The vehicle first: a click before its first heartbeat is a click the screen may forget

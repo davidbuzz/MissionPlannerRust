@@ -80,7 +80,8 @@ expect config.dronecan.nodes 1
 expect config.dronecan.node.127.health OK
 expect config.dronecan.node.127.mode OPERATIONAL
 expect config.dronecan.node.127.name org.missionplanner
-expect config.dronecan.node.127.swversion ~ 0.1.
+# Its software version is the planner's, the workspace's 0.0.0 since e959c59 (the owner, 2026-10-04).
+expect config.dronecan.node.127.swversion 0.0.0
 
 # The row, and its menu.
 click dronecan-row-127
