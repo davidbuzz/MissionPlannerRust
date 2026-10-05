@@ -79,3 +79,26 @@ scrolling box that showed ten. Now it is a `uniform_list` and builds the rows in
 With 16 to 22 messages held. Before, the cost grew with every message up to 200; after, it is the
 box's ten rows whatever the list holds.
 
+## Looked at, not easy wins (2026-10-05)
+
+Found by leaving one part of a page out at a time and measuring the rest (each the median of a
+visit's paint, release build, lavapipe):
+
+- **The flight screen's Actions page: 44.1 ms of paint against Quick's 5.4.** Without its arm and
+  disarm row 45.1, without the mode list 38.6, without the C#'s action grid 12.5: the grid is ~32
+  ms. Its twenty-odd buttons wrap their labels in a fifth of the column, as the C#'s
+  `TableLayoutPanel` does, and gpui keeps a text's size only for the one wrap width it was last
+  asked about - so each label is wrapped anew for every width taffy tries in a frame, and its font
+  resolved again each time (gpui's `TextLayout::layout`). Tried: the grid as rows of equal columns
+  in flex - 66.0 ms, worse; the buttons' and mode chips' labels unwrapped - 44.1, no change. Not
+  taken.
+- **FLIGHT PLAN: 9.6 ms of paint idle.** Without the waypoint grid and its editor 5.3, without the
+  sidebar 4.8: the cost is spread over many controls, none at fault alone.
+
+What would take these down is not a local change. gpui lays out the whole window every frame
+because the planner is one view; a page that changes rarely - the Actions page, PLAN's sidebar -
+could be a view of its own drawn with gpui's view caching (`AnyView::cached`), which reuses last
+frame's layout and paint until that view is told it changed. That is how Zed keeps its large
+windows cheap; here it means moving each such page's state behind its own entity - a refactor, not
+an easy win.
+
