@@ -1247,6 +1247,26 @@ impl MapViewport {
         LatLon::from_web_mercator(projected).ok()
     }
 
+    /// Where `at` is in the window, in pixels, when the last paint showed it: [`Self::position_at`]
+    /// the other way. For the demo pointer's clicks on the map (the owner's Welcome-Demo-Sitl).
+    #[must_use]
+    pub fn window_point(&self, at: LatLon) -> Option<(f32, f32)> {
+        let (x, y, width, height) = self.last_view?;
+        let (view_width, view_height) = self.last_viewport;
+        if view_width <= 0.0 || view_height <= 0.0 || width <= 0.0 || height <= 0.0 {
+            return None;
+        }
+        let projected = at.to_web_mercator();
+        let (fx, fy) = ((projected.x - x) / width, (projected.y - y) / height);
+        if !(0.0..=1.0).contains(&fx) || !(0.0..=1.0).contains(&fy) {
+            return None;
+        }
+        // Pixels, f32 as the window has them.
+        #[allow(clippy::cast_possible_truncation)]
+        let (px_x, px_y) = (fx as f32 * view_width, fy as f32 * view_height);
+        Some((self.last_origin.0 + px_x, self.last_origin.1 + px_y))
+    }
+
     /// The view currently displayed, whether chosen by the user or fitted automatically.
     fn current_view(&self) -> Option<Camera> {
         if let Some(camera) = self.camera {

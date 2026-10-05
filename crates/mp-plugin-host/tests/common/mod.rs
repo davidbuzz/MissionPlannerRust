@@ -24,7 +24,7 @@
 #![allow(dead_code, unreachable_pub, clippy::unwrap_used, clippy::expect_used)]
 
 use mp_os::Lock as _;
-use std::collections::{BTreeMap, VecDeque};
+use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::path::PathBuf;
 use std::process::Command;
 use std::sync::{Arc, Mutex, MutexGuard, OnceLock};
@@ -91,6 +91,11 @@ pub struct Record {
     pub fence: Vec<FencePoint>,
     pub config: BTreeMap<String, String>,
     pub view_area: Option<Area>,
+    /// The controls on screen, by the planner's names, for the demo pointer; `map` on screen
+    /// takes a click anywhere on the map.
+    pub shown: BTreeSet<String>,
+    /// A demo gesture under way.
+    pub demo_busy: bool,
     /// The terrain's height everywhere, when set.
     pub terrain: Option<f64>,
     pub set_param_ok: bool,
@@ -116,6 +121,9 @@ pub struct Record {
     pub form: Option<(String, Vec<Control>)>,
     pub forms_closed: usize,
     pub terrain_reads: usize,
+    /// The demo pointer's clicks, in order: a control's name, or `map lat,lng`.
+    pub demo_clicks: Vec<String>,
+    pub demo_typed: Vec<String>,
 }
 
 /// A scripted application: a [`Surface`] over a shared [`Record`].
@@ -224,6 +232,33 @@ impl Surface for Scripted {
         self.record()
             .config
             .insert("tabcontrolactions".to_owned(), "tabQuick;".to_owned());
+    }
+    // The demo pointer over the script's screen: a click lands on a control shown, and is
+    // recorded.
+    fn demo_click(&mut self, control: &str, _millis: u32) -> bool {
+        let mut r = self.record();
+        let shown = r.shown.contains(control);
+        if shown {
+            r.demo_clicks.push(control.to_owned());
+        }
+        shown
+    }
+    fn demo_click_map(&mut self, lat: f64, lng: f64, _millis: u32) -> bool {
+        let mut r = self.record();
+        let shown = r.shown.contains("map");
+        if shown {
+            r.demo_clicks.push(format!("map {lat:.6},{lng:.6}"));
+        }
+        shown
+    }
+    fn demo_type(&mut self, text: &str) {
+        self.record().demo_typed.push(text.to_owned());
+    }
+    fn demo_busy(&mut self) -> bool {
+        self.record().demo_busy
+    }
+    fn demo_visible(&mut self, control: &str) -> bool {
+        self.record().shown.contains(control)
     }
     fn fp_selected_area(&mut self) -> Option<Area> {
         None

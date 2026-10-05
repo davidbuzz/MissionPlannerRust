@@ -116,6 +116,16 @@ pub trait Surface: Send + 'static {
     fn config_set(&mut self, key: &str, value: &str);
     /// `Host.MainForm.FlightData.saveTabControlActions()`, then `Settings.Instance.Save()`.
     fn save_tab_control_actions(&mut self);
+    /// The demo pointer to a named control, and its click (the owner's Welcome-Demo-Sitl).
+    fn demo_click(&mut self, control: &str, millis: u32) -> bool;
+    /// The demo pointer to a place on the map, and its click.
+    fn demo_click_map(&mut self, lat: f64, lng: f64, millis: u32) -> bool;
+    /// Text typed into what has the keyboard, then Enter.
+    fn demo_type(&mut self, text: &str);
+    /// Whether a demo gesture is under way.
+    fn demo_busy(&mut self) -> bool;
+    /// Whether a named control is on screen.
+    fn demo_visible(&mut self, control: &str) -> bool;
     /// `Host.FPGMapControl.SelectedArea`.
     fn fp_selected_area(&mut self) -> Option<Area>;
     /// `Host.FPGMapControl.ViewArea`.
@@ -195,6 +205,21 @@ impl wit::missionplanner::plugin::host::Host for plugin::State {
     }
     fn save_tab_control_actions(&mut self) {
         self.surface.save_tab_control_actions();
+    }
+    fn demo_click(&mut self, control: String, millis: u32) -> bool {
+        self.surface.demo_click(&control, millis)
+    }
+    fn demo_click_map(&mut self, lat: f64, lng: f64, millis: u32) -> bool {
+        self.surface.demo_click_map(lat, lng, millis)
+    }
+    fn demo_type(&mut self, text: String) {
+        self.surface.demo_type(&text);
+    }
+    fn demo_busy(&mut self) -> bool {
+        self.surface.demo_busy()
+    }
+    fn demo_visible(&mut self, control: String) -> bool {
+        self.surface.demo_visible(&control)
     }
     fn fp_selected_area(&mut self) -> Option<Area> {
         self.surface.fp_selected_area()

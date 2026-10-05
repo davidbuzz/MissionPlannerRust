@@ -229,6 +229,38 @@ pub enum RequestBody {
     },
     /// `FlightData.saveTabControlActions()`, then `Settings.Instance.Save()`.
     SaveTabControlActions,
+    /// The demo pointer to a named control, and its click: whether the control is on screen.
+    /// The owner's Welcome-Demo-Sitl, not in the C#.
+    DemoClick {
+        /// The control's probe name.
+        control: String,
+        /// How long the pointer takes to get there.
+        millis: u32,
+        /// Whether it is on screen.
+        reply: Reply<bool>,
+    },
+    /// The demo pointer to a place on the map, and its click: whether the map shows it.
+    DemoClickMap {
+        /// Latitude, degrees.
+        lat: f64,
+        /// Longitude, degrees.
+        lng: f64,
+        /// How long the pointer takes to get there.
+        millis: u32,
+        /// Whether the map is on screen and shows the place.
+        reply: Reply<bool>,
+    },
+    /// Text typed into what has the keyboard, then Enter.
+    DemoType(String),
+    /// Whether a demo gesture is under way.
+    DemoBusy(Reply<bool>),
+    /// Whether a named control is on screen.
+    DemoVisible {
+        /// The control's probe name.
+        control: String,
+        /// Whether it is.
+        reply: Reply<bool>,
+    },
     /// `OpenFileDialog` and the read.
     OpenFile {
         /// The dialog's title.
@@ -465,6 +497,49 @@ impl Surface for ChannelSurface {
 
     fn save_tab_control_actions(&mut self) {
         self.tell(RequestBody::SaveTabControlActions);
+    }
+
+    fn demo_click(&mut self, control: &str, millis: u32) -> bool {
+        let control = control.to_owned();
+        self.ask(
+            |reply| RequestBody::DemoClick {
+                control,
+                millis,
+                reply,
+            },
+            false,
+            Some(ANSWER_WAIT),
+        )
+    }
+
+    fn demo_click_map(&mut self, lat: f64, lng: f64, millis: u32) -> bool {
+        self.ask(
+            |reply| RequestBody::DemoClickMap {
+                lat,
+                lng,
+                millis,
+                reply,
+            },
+            false,
+            Some(ANSWER_WAIT),
+        )
+    }
+
+    fn demo_type(&mut self, text: &str) {
+        self.tell(RequestBody::DemoType(text.to_owned()));
+    }
+
+    fn demo_busy(&mut self) -> bool {
+        self.ask(RequestBody::DemoBusy, false, Some(ANSWER_WAIT))
+    }
+
+    fn demo_visible(&mut self, control: &str) -> bool {
+        let control = control.to_owned();
+        self.ask(
+            |reply| RequestBody::DemoVisible { control, reply },
+            false,
+            Some(ANSWER_WAIT),
+        )
     }
 
     // This map has no rubber band: `SelectedArea` is always empty (plan.rs's Prefetch says so).

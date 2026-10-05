@@ -87,7 +87,16 @@ pub fn enabled() -> bool {
     *ON.get_or_init(|| match std::env::var_os("MP_PROBE") {
         Some(value) => value != "off",
         None => cfg!(debug_assertions),
-    })
+    }) || ASKED.load(std::sync::atomic::Ordering::Relaxed)
+}
+
+/// Turned on at run time by what needs controls' places in any build: the demo pointer, which
+/// clicks the planner's own controls by name (the owner's Welcome-Demo-Sitl, demo_pointer.rs).
+static ASKED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// Measures controls from the next frame on, whatever the build.
+pub fn enable() {
+    ASKED.store(true, std::sync::atomic::Ordering::Relaxed);
 }
 
 /// The positions recorded, each with the frame it was last measured in.

@@ -6,7 +6,7 @@
 //   NODE_PATH=<a node_modules holding playwright> node check/tour_check.js [out-dir] [url]
 const { chromium } = require("playwright");
 const out = process.argv[2] || ".";
-const url = process.argv[3] || "http://127.0.0.1:8080/planner.html?vehicle=copter";
+const url = process.argv[3] || "http://127.0.0.1:8080/planner.html?vehicle=copter&demo=0";
 // The top tabs' x at 1400x900 (y 43), and the port box, its TCP entry and CONNECT.
 const TABS = [["plan", 281], ["setup", 340], ["config", 406], ["params", 577], ["logs", 636], ["simulation", 487], ["experimental", 719], ["help", 877], ["fly", 230]];
 const PORT_BOX = [996, 36], TCP = [964, 97], CONNECT = [1187, 36];

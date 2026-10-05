@@ -74,3 +74,8 @@ test = true
 [[example]]
 name = "dowding"
 crate-type = ["cdylib"]
+
+# Not in the C#: the owner's Welcome-Demo-Sitl (2026-10-05), built into the browser build only.
+[[example]]
+name = "welcomedemositl"
+crate-type = ["cdylib"]

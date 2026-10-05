@@ -40,7 +40,9 @@
 //! Not shipped: `payloadconfig`, which Mission Planner ships with an empty payload table and so
 //! never loads, where the port fills the table with the two payloads the file comments out (a
 //! user who wants it builds it and puts it in `plugins/`); and `misbehave`, the host's test of
-//! a plugin that panics and spins.
+//! a plugin that panics and spins. The browser build carries one more, not in the C#: the
+//! owner's Welcome-Demo-Sitl (2026-10-05), a first visit's demonstration, enabled there by
+//! default; on the desktop it runs only from a file put in `plugins/`.
 //!
 //! gpui's X11 backend links `-lxkbcommon-x11`. Distributions ship the runtime library as
 //! `libxkbcommon-x11.so.0` and the bare `.so` symlink only in the `-dev` package, so a machine
@@ -72,7 +74,12 @@ const SHIPPED: &[&str] = &[
     "terrainmaker",
 ];
 
-/// Builds [`SHIPPED`] for WebAssembly and writes `builtin_plugins.rs` into `OUT_DIR`.
+/// The plugins the browser build carries besides [`SHIPPED`]: the owner's Welcome-Demo-Sitl
+/// (2026-10-05), not in the C#, a first visit's demonstration. Name order after [`SHIPPED`]'s.
+const WEB_ONLY: &[&str] = &["welcomedemositl"];
+
+/// Builds [`SHIPPED`], and for the browser build [`WEB_ONLY`] too, for WebAssembly and writes
+/// `builtin_plugins.rs` into `OUT_DIR`.
 ///
 /// A failure fails the planner's build: a planner without its plugins is the bug this exists to
 /// end, not a degraded build to carry on with.
@@ -99,6 +106,14 @@ fn build_shipped_plugins() {
         .ancestors()
         .find(|dir| dir.join("CACHEDIR.TAG").is_file())
         .map_or_else(|| out.join("plugin-target"), |dir| dir.join("plugin-wasm"));
+    // The browser build runs plugins on wasmtime's interpreter, which cannot compile: they are
+    // compiled below, to Pulley bytecode, by the plugin host's own precompile at the same wasmtime.
+    let web = std::env::var("TARGET").is_ok_and(|target| target.starts_with("wasm32"));
+    let shipped: Vec<&str> = SHIPPED
+        .iter()
+        .chain(if web { WEB_ONLY } else { &[] })
+        .copied()
+        .collect();
     let cargo = std::env::var("CARGO").unwrap_or_else(|_| "cargo".to_owned());
     let mut command = Command::new(cargo);
     command
@@ -111,7 +126,7 @@ fn build_shipped_plugins() {
             "--target",
             "wasm32-unknown-unknown",
         ])
-        .args(SHIPPED.iter().flat_map(|name| ["--example", name]))
+        .args(shipped.iter().flat_map(|name| ["--example", name]))
         .current_dir(&root)
         .env("CARGO_TARGET_DIR", &target)
         // The planner's own build settings are not the plugins': its encoded flags carry the
@@ -130,18 +145,15 @@ fn build_shipped_plugins() {
          installed with the toolchain rust-toolchain.toml names"
     );
     let built = target.join("wasm32-unknown-unknown/release/examples");
-    // The browser build runs plugins on wasmtime's interpreter, which cannot compile: they are
-    // compiled here, to Pulley bytecode, by the plugin host's own precompile at the same wasmtime.
-    let web = std::env::var("TARGET").is_ok_and(|target| target.starts_with("wasm32"));
     if web {
-        precompile_for_web(&root, &target, &built, &out);
+        precompile_for_web(&shipped, &root, &target, &built, &out);
     }
     let mut table = String::from(
         "/// The plugins Mission Planner ships, built for WebAssembly by `build.rs`: file name and\n\
          /// component bytes, in name order.\n\
          pub const BUILTIN: &[(&str, &[u8])] = &[\n",
     );
-    for name in SHIPPED {
+    for name in &shipped {
         let from = built.join(format!("{name}.wasm"));
         let to = out.join(format!("{name}.wasm"));
         // For the browser build precompile_for_web has written the bytecode there already, under
@@ -161,10 +173,11 @@ fn build_shipped_plugins() {
         .unwrap_or_else(|err| panic!("writing builtin_plugins.rs: {err}"));
 }
 
-/// For the browser build: each of [`SHIPPED`], built into `built`, compiled to Pulley bytecode in
+/// For the browser build: each of `shipped`, built into `built`, compiled to Pulley bytecode in
 /// `out` (as `<name>.wasm`, the file name the planner shows) by mp-plugin-host's
 /// precompile-web-plugins, run for this machine in a target folder of its own beside `plugins`.
 fn precompile_for_web(
+    shipped: &[&str],
     root: &std::path::Path,
     plugins: &std::path::Path,
     built: &std::path::Path,
@@ -192,7 +205,7 @@ fn precompile_for_web(
             "precompile-web-plugins",
             "--",
         ])
-        .args(SHIPPED.iter().flat_map(|name| {
+        .args(shipped.iter().flat_map(|name| {
             [
                 built.join(format!("{name}.wasm")),
                 out.join(format!("{name}.wasm")),

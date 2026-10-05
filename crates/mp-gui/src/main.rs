@@ -85,6 +85,8 @@ mod plotline;
 mod experimental;
 mod plugin_manager;
 mod plugins_ui;
+// The owner's Welcome-Demo-Sitl plugin's pointer: a drawn cursor and real clicks (not in the C#).
+mod demo_pointer;
 // ---- end row 96 ----
 mod platform;
 mod poi;
@@ -4348,6 +4350,14 @@ impl Render for MissionPlanner {
                 )
                 .with_priority(3)
             }))
+            // The demo pointer's cursor (the owner's Welcome-Demo-Sitl): over everything, the
+            // dialogs and the guard's strip too, as a mouse pointer is.
+            .children(
+                self.plugins
+                    .demo
+                    .cursor(web_time::Instant::now())
+                    .map(|cursor| gpui::deferred(cursor).with_priority(4)),
+            )
             .bg(rgb(theme::BG))
             .text_color(rgb(theme::TEXT))
             // `MainV2.ProcessCmdKey`: a key no element inside took, on its way out.

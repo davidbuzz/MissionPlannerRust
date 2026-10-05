@@ -28,7 +28,8 @@
 //! no folders on the path. (experiments/web-experiment/tools/port_os.py puts these in place.)
 //!
 //! And one the desktop has another way, [`http`]: a web page has no sockets, so the crates that
-//! fetch over ureq on the desktop fetch through the browser in a page.
+//! fetch over ureq on the desktop fetch through the browser in a page. And one only a page has,
+//! [`page_query`]: what its address asks for.
 
 use std::ffi::OsStr;
 use std::path::PathBuf;
@@ -202,6 +203,35 @@ pub fn http(method: &str, url: &str, body: Option<&str>) -> Result<(u16, Vec<u8>
     Ok((status, js_sys::Uint8Array::new(&answer).to_vec()))
 }
 
+/// The value the web page's address gives `name` after its `?` (`planner.html?demo=0`), from
+/// the page's main thread; none on the desktop, which has no page, and none for a name the
+/// address does not carry. The value as written, not percent-decoded.
+#[must_use]
+pub fn page_query(name: &str) -> Option<String> {
+    #[cfg(target_family = "wasm")]
+    {
+        let location = js_sys::Reflect::get(&js_sys::global(), &"location".into()).ok()?;
+        let search = js_sys::Reflect::get(&location, &"search".into())
+            .ok()?
+            .as_string()?;
+        query_value(&search, name)
+    }
+    #[cfg(not(target_family = "wasm"))]
+    {
+        let _ = name;
+        None
+    }
+}
+
+/// `name`'s value in an address's query (`?a=1&b`), a name without `=` giving an empty one.
+#[cfg_attr(not(target_family = "wasm"), allow(dead_code))]
+fn query_value(search: &str, name: &str) -> Option<String> {
+    search.trim_start_matches('?').split('&').find_map(|pair| {
+        let (key, value) = pair.split_once('=').unwrap_or((pair, ""));
+        (key == name).then(|| value.to_owned())
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -235,6 +265,20 @@ mod tests {
         })
         .join();
         assert!(lock(&poisoned).is_err());
+    }
+
+    #[test]
+    fn a_query_gives_each_name_its_value() {
+        assert_eq!(query_value("?facts=1&demo=0", "demo").as_deref(), Some("0"));
+        assert_eq!(
+            query_value("?facts=1&demo=0", "facts").as_deref(),
+            Some("1")
+        );
+        assert_eq!(query_value("?facts&demo=0", "facts").as_deref(), Some(""));
+        assert_eq!(query_value("?facts=1", "demo"), None);
+        assert_eq!(query_value("", "demo"), None);
+        // On the desktop there is no page.
+        assert_eq!(page_query("demo"), None);
     }
 
     #[test]

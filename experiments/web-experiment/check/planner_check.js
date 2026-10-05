@@ -7,7 +7,7 @@
 //   NODE_PATH=<a node_modules holding playwright> node check/planner_check.js [out-dir] [url]
 const { chromium } = require("playwright");
 const out = process.argv[2] || ".";
-const url = process.argv[3] || "http://127.0.0.1:8080/planner.html?vehicle=copter";
+const url = process.argv[3] || "http://127.0.0.1:8080/planner.html?vehicle=copter&demo=0";
 const fail = (why) => { console.log(`FAIL: ${why}`); process.exitCode = 1; };
 // Where the window puts the port box, its TCP entry and CONNECT at 1400x900.
 const PORT_BOX = [996, 36], TCP = [964, 97], CONNECT = [1187, 36];

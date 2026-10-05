@@ -93,6 +93,10 @@ fn builtins() -> &'static [(&'static str, &'static [u8])] {
 /// The setting `PluginLoader.DisabledPluginNames` is read from. `// C#: MainV2.cs:3192-3194`
 const DISABLED: &str = "DisabledPlugins";
 
+/// The owner's Welcome-Demo-Sitl (2026-10-05), not in the C#: built into the browser build only
+/// (build.rs), enabled there.
+const DEMO_FILE: &str = "welcomedemositl.wasm";
+
 /// Where the plugins are: `MP_PLUGINS`, else `plugins` beside the executable.
 /// `// C#: Plugin/PluginLoader.cs:205-206`
 #[must_use]
@@ -206,6 +210,8 @@ pub struct Plugins {
     status: Option<String>,
     /// Ctrl+P's plugin manager (`Plugin/PluginUI.cs`).
     pub manager: crate::plugin_manager::PluginManager,
+    /// The demo pointer plugins drive (the owner's Welcome-Demo-Sitl): its cursor and clicks.
+    pub demo: crate::demo_pointer::DemoPointer,
 }
 
 impl std::fmt::Debug for Plugins {
@@ -224,7 +230,12 @@ impl Plugins {
     /// thread, its terrain and parameter documentation readers set once.
     /// `// C#: MainV2.cs:3185-3196`
     pub fn start(persisted: &crate::settings::Persisted, cx: &mut gpui::App) -> Self {
-        let disabled = crate::raw_params_grid::get_list(persisted.get(DISABLED));
+        let mut disabled = crate::raw_params_grid::get_list(persisted.get(DISABLED));
+        // A page opened with `?demo=0` - the browser build's checks - starts without the
+        // Welcome-Demo-Sitl, and the plugin manager does not list it.
+        if mp_os::page_query("demo").as_deref() == Some("0") {
+            disabled.push(DEMO_FILE.to_owned());
+        }
         // `PluginLoader.LoadAll` at start: the shipped plugins and the folder's, less the
         // disabled ones. `// C#: Plugin/PluginLoader.cs:203-311`
         let host = PluginHost::load_with_builtins(
@@ -259,6 +270,7 @@ impl Plugins {
             forms: Vec::new(),
             status: None,
             manager: crate::plugin_manager::PluginManager::default(),
+            demo: crate::demo_pointer::DemoPointer::default(),
         }
     }
 
@@ -544,6 +556,12 @@ impl MissionPlanner {
         for request in self.plugins.host.drain() {
             self.serve(request.plugin, request.body, view);
         }
+        // The demo pointer's move, click or typing for this frame, and frames while it moves.
+        let now = web_time::Instant::now();
+        self.plugins.demo.tick(now, window, cx);
+        if self.plugins.demo.active(now) {
+            window.request_animation_frame();
+        }
         // A planning map entry chosen: `Host.FPMenuMapPosition` with it.
         if let Some((plugin, id, at)) = self.plan_menus.plugin_click.take() {
             self.plugins
@@ -571,6 +589,15 @@ impl MissionPlanner {
         }
         if facts::enabled() {
             self.plugins.record_facts();
+            // What the plugin manager's Save && Close left for the next start, and the demo
+            // pointer's clicks (the owner's Welcome-Demo-Sitl).
+            facts::record(
+                "plugins.disabled",
+                self.persisted.get(DISABLED).unwrap_or("none"),
+            );
+            let (clicks, last) = self.plugins.demo.clicks();
+            facts::record("demo.clicks", clicks);
+            facts::record("demo.last", last.unwrap_or("none"));
         }
     }
 
@@ -711,6 +738,37 @@ impl MissionPlanner {
                 let names = self.fly_pages.save_tab_control_actions();
                 self.persisted.set(crate::fly::TAB_SETTING, names);
                 self.save_config(crate::settings::SaveEvent::Plugin);
+            }
+            // The demo pointer (the owner's Welcome-Demo-Sitl, not in the C#).
+            RequestBody::DemoClick {
+                control,
+                millis,
+                reply,
+            } => {
+                let now = web_time::Instant::now();
+                reply.send(self.plugins.demo.click_control(&control, millis, now));
+            }
+            RequestBody::DemoClickMap {
+                lat,
+                lng,
+                millis,
+                reply,
+            } => {
+                let at = mp_units::LatLon::new(lat, lng)
+                    .ok()
+                    .and_then(|at| self.map.borrow().window_point(at));
+                if let Some(at) = at {
+                    self.plugins
+                        .demo
+                        .click_at(at, "map", millis, web_time::Instant::now());
+                }
+                reply.send(at.is_some());
+            }
+            RequestBody::DemoType(text) => self.plugins.demo.type_text(text),
+            RequestBody::DemoBusy(reply) => reply.send(self.plugins.demo.busy()),
+            RequestBody::DemoVisible { control, reply } => {
+                crate::probe::enable();
+                reply.send(crate::demo_pointer::visible(&control));
             }
             RequestBody::WriteUserData { path, data, reply } => {
                 reply.send(write_user_data(
@@ -1166,19 +1224,24 @@ fn form_panel(
                 .text_color(rgb(theme::DIM))
                 .child(form.title.to_uppercase()),
         )
-        .child(
-            crate::probe::measured(close, div())
-                .id(close)
-                .px_1()
-                .text_sm()
-                .text_color(rgb(theme::DIM))
-                .cursor_pointer()
-                .child("\u{d7}")
-                .on_click(cx.listener(move |this, _event, _window, cx| {
-                    this.plugins.forms.retain(|form| form.plugin != plugin);
-                    cx.notify();
-                })),
-        );
+        // The close box named by the form's title too, so a plugin can find it: the
+        // Welcome-Demo-Sitl closes Drone ID's, which covers the planning screen's Write.
+        .child(crate::probe::measured(
+            format!("plugin-form-{}-close", form.title.replace(' ', "_")),
+            div().child(
+                crate::probe::measured(close, div())
+                    .id(close)
+                    .px_1()
+                    .text_sm()
+                    .text_color(rgb(theme::DIM))
+                    .cursor_pointer()
+                    .child("\u{d7}")
+                    .on_click(cx.listener(move |this, _event, _window, cx| {
+                        this.plugins.forms.retain(|form| form.plugin != plugin);
+                        cx.notify();
+                    })),
+            ),
+        ));
     let rows: Vec<AnyElement> = form
         .controls
         .iter()

@@ -6,7 +6,7 @@
 //   NODE_PATH=<a node_modules holding playwright> node check/plugins_check.js [out-dir] [url]
 const { chromium } = require("playwright");
 const out = process.argv[2] || ".";
-const url = process.argv[3] || "http://127.0.0.1:8080/planner.html?facts=1";
+const url = process.argv[3] || "http://127.0.0.1:8080/planner.html?facts=1&demo=0";
 const fail = (why) => { console.log(`FAIL: ${why}`); process.exitCode = 1; };
 // The plugins Mission Planner ships, built into the planner (crates/mp-gui/build.rs, SHIPPED).
 const SHIPPED = 10;

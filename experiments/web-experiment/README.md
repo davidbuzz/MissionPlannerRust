@@ -19,6 +19,14 @@ python3 experiments/web-experiment/www/serve.py 8080
 #    the SITL starts in the page and the planner connects to it, as on macOS.
 ```
 
+At a first visit the Welcome-Demo-Sitl plugin (the owner's, 2026-10-05; not in Mission Planner)
+shows the planner at work: a drawn pointer clicks SIMULATION and Multirotor, PLAN and four
+waypoints around the copter, Write, FLY and Actions, force arm, TakeOff and Auto, so the copter
+flies the mission; then it unticks itself on PLUGINS and saves, and goes back to FLY. It is a
+plugin like the others, built into the browser build only, and the PLUGINS tab turns it off.
+Until the page keeps its settings, every visit runs it again. `planner.html?demo=0` starts
+without it, as every check but `demo_check.js` does.
+
 ## A vehicle on a tailnet
 
 A web page has no sockets, so the page carries a Tailscale node of its own (`www/tailscale.js`):
@@ -57,6 +65,7 @@ NODE_PATH=<node_modules with playwright> node check/sim_check.js       # SIMULAT
 NODE_PATH=<node_modules with playwright> node check/planner_check.js   # connect through the port box
 NODE_PATH=<node_modules with playwright> node check/tour_check.js      # every screen, connected, no error
 NODE_PATH=<node_modules with playwright> node check/plugins_check.js   # the built-in plugins, as on the desktop
+NODE_PATH=<node_modules with playwright> node check/demo_check.js      # the Welcome-Demo-Sitl, start to finish
 NODE_PATH=<node_modules with playwright> node check/check.js           # the HUD page
 NODE_PATH=<node_modules with playwright> check/tailnet_e2e.sh          # over a tailnet (needs Go)
 ```

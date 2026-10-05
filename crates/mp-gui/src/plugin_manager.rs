@@ -476,7 +476,16 @@ fn panel(this: &MissionPlanner, cx: &mut Context<MissionPlanner>) -> Option<AnyE
                 .child(cell(widths[1], row.author.clone()))
                 .child(cell(widths[2], row.version.clone()))
                 .child(cell(widths[3], row.dll.clone()))
-                .child(cell(widths[4], "").justify_center().child(tick))
+                // The box named by its file too, so a plugin finds its own row: the
+                // Welcome-Demo-Sitl unticks itself (the owner, 2026-10-05).
+                .child(
+                    cell(widths[4], "")
+                        .justify_center()
+                        .child(crate::probe::measured(
+                            format!("plugin-manager-enabled-{}", row.dll),
+                            div().child(tick),
+                        )),
+                )
                 .child(exercise),
         );
     }
