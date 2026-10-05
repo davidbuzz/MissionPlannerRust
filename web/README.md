@@ -99,6 +99,12 @@ else goes over the tailnet. The first time, the page shows "sign in to Tailscale
 tab) and approve the device, and the link goes on. The node's keys are kept in the browser's
 localStorage, so the page stays on the tailnet across reloads.
 
+For a vehicle that sends first - a companion computer's MAVLink router, a radio bridge - the port
+box's UDP and its Listen Port (14550) listen on the page's own tailnet address (`tailscale.js`'s
+`listenTailscale`, `main.go`'s `listen`), and the planner answers whoever sent last, as Mission
+Planner's UDP link does: send to the page's `100.x.y.z:14550`. `check/tailscale_udp_check.js`,
+in `tailnet_e2e.sh`, has `tailscale/udpvehicle` relay a SITL to it as datagrams.
+
 Page options: `?tscontrol=<url>` for a coordination server other than Tailscale's (Headscale),
 `?tsauthkey=<key>` to join with an auth key, `?tshostname=<name>` for the node's name (default
 `mpr-<words>`), and `?tsderphttp=1` for a test tailnet whose DERP relay has no TLS.
@@ -182,8 +188,6 @@ By hand:
 
 ## Not done
 
-- UDP listening (`udp:0.0.0.0:14550`), where a vehicle sends first: the page's Tailscale node
-  dials out (TCP, UDPCl) but does not listen yet.
 - Install Firmware over a page's serial port: its rates and DTR go to the port as the SiK radio
   page's do (above), but no board's bootloader, real or stand-in, has been programmed through
   it; and its firmware downloads come from ardupilot.org, which refuses a page's origin.

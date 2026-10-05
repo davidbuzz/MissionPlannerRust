@@ -3,8 +3,10 @@
 # Headscale (coordination, with its embedded DERP on plain HTTP) behind check/cors_proxy.py, a
 # userspace tailscaled named sitl-box, and ArduCopter's WebAssembly SITL on that machine's 5760 -
 # then check/tailscale_check.js: the planner in a page joins the tailnet with an auth key and
-# connects to sitl-box:5760 over it; then, without a key, check/tailscale_login_check.js: the page
-# shows the coordination server's sign-in link. Everything it starts is stopped when it ends.
+# connects to sitl-box:5760 over it; check/tailscale_udp_check.js: the planner listens on UDP on
+# its own tailnet address and a vehicle there sends first (tailscale/udpvehicle, the SITL relayed);
+# then, without a key, check/tailscale_login_check.js: the page shows the coordination server's
+# sign-in link. Everything it starts is stopped when it ends.
 #
 # Needs Go (a development dependency of the browser's Tailscale networking only: it builds Headscale
 # and tailscaled here), Node with Playwright (NODE_PATH), and the page served on 127.0.0.1:8080 with
@@ -25,6 +27,8 @@ trap cleanup EXIT
 tsver=$(cd "$here/../tailscale" && go list -m -f '{{.Version}}' tailscale.com)
 GOBIN=$work/bin go install "tailscale.com/cmd/tailscaled@$tsver" "tailscale.com/cmd/tailscale@$tsver"
 GOBIN=$work/bin go install github.com/juanfont/headscale/cmd/headscale@v0.29.4
+# A vehicle that sends first over UDP, for tailscale_udp_check.js (tailscale/udpvehicle).
+(cd "$here/../tailscale" && go build -o "$work/bin/udp-vehicle" ./udpvehicle)
 
 cat > config.yaml <<YAML
 server_url: http://127.0.0.1:8090
@@ -76,5 +80,8 @@ for _ in $(seq 60); do ss -ltn | grep -q "127.0.0.1:5760 " && break; sleep 0.5; 
 
 echo "tailnet up: sitl-box at $address; the page joins through http://127.0.0.1:8091"
 node "$here/tailscale_check.js" "$work" http://127.0.0.1:8091 "$key" "$address" 5760
+# A vehicle on the tailnet sending first to the page's own address over UDP: the planner listening
+# as the port box's UDP asks, answering whoever sent last. The SITL relayed by tailscale/udpvehicle.
+node "$here/tailscale_udp_check.js" "$work" http://127.0.0.1:8091 "$key" "$work/bin/udp-vehicle" http://127.0.0.1:8090
 # And without a key: the sign-in a pilot meets.
 node "$here/tailscale_login_check.js" "$work" http://127.0.0.1:8091 "$address"

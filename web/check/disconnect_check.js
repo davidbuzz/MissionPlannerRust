@@ -7,10 +7,10 @@
 //
 //   NODE_PATH=<a node_modules holding playwright> node check/disconnect_check.js [out-dir] [url]
 const { chromium } = require("playwright");
+const { clickNamed } = require("./clicks");
 const out = process.argv[2] || ".";
 const url = process.argv[3] || "http://127.0.0.1:8080/?facts=1&demo=0";
 const fail = (why) => { console.log(`FAIL: ${why}`); process.exitCode = 1; };
-const PORT_BOX = [996, 36], TCP = [964, 97], CONNECT = [1187, 36];
 (async () => {
   const browser = await chromium.launch({
     headless: true,
@@ -35,9 +35,9 @@ const PORT_BOX = [996, 36], TCP = [964, 97], CONNECT = [1187, 36];
   await page.goto(url, { waitUntil: "load" });
   await until("the planner up", (f) => f.screen === "fly", 60000);
   const connect = async () => {
-    await page.mouse.click(...PORT_BOX); await page.waitForTimeout(800);
-    await page.mouse.click(...TCP); await page.waitForTimeout(800);
-    await page.mouse.click(...CONNECT); await page.waitForTimeout(1500);
+    await clickNamed(page, "main-port"); await page.waitForTimeout(800);
+    await clickNamed(page, "main-port-TCP"); await page.waitForTimeout(800);
+    await clickNamed(page, "main-connect"); await page.waitForTimeout(1500);
     await page.keyboard.press("Enter"); await page.waitForTimeout(1500);
     await page.keyboard.press("Enter");
   };
@@ -45,7 +45,7 @@ const PORT_BOX = [996, 36], TCP = [964, 97], CONNECT = [1187, 36];
   await until("connected", (f) => f["link.button"] === "DISCONNECT" && Number(f.frames ?? f["link.frames"] ?? 0) > 0 || f["link.button"] === "DISCONNECT", 60000);
   await page.waitForTimeout(5000);
   console.log("connected; DISCONNECT");
-  await page.mouse.click(...CONNECT);
+  await clickNamed(page, "main-connect");
   let f = await until("disconnected", (f) => f["link.button"] === "CONNECT", 15000);
   console.log(`after DISCONNECT: link.button ${f["link.button"]}, status "${f.status}"`);
   // The page still takes input: CONNECT again, and connected again.

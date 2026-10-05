@@ -188,6 +188,13 @@ pub fn open_url(url: &LinkUrl) -> Result<Box<dyn Transport>, OpenError> {
         #[cfg(not(target_family = "wasm"))]
         LinkUrl::Tcp { host, port } => Ok(Box::new(TcpTransport::connect(host, *port)?)),
         LinkUrl::TcpListen { port } => Ok(Box::new(TcpTransport::listen(*port)?)),
+        // In a web page, on the page's own tailnet address (web/www/link.js), answering whoever
+        // sent last as the desktop's does.
+        #[cfg(target_family = "wasm")]
+        LinkUrl::Udp { bind, port } => Ok(Box::new(page::PageTransport::open(&format!(
+            "udp:{bind}:{port}"
+        ))?)),
+        #[cfg(not(target_family = "wasm"))]
         LinkUrl::Udp { bind, port } => Ok(Box::new(UdpTransport::bind(bind, *port)?)),
         LinkUrl::File { path } => Ok(Box::new(ReplayTransport::open(path)?)),
         // In a web page, over the tailnet (web/www/link.js).

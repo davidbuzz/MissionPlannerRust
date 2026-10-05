@@ -144,6 +144,7 @@ func newIPN(jsConfig js.Value) map[string]any {
 	srv.SetLocalBackend(lb)
 
 	jsIPN := &jsIPN{
+		ns:         ns,
 		dialer:     dialer,
 		srv:        srv,
 		lb:         lb,
@@ -176,10 +177,18 @@ func newIPN(jsConfig js.Value) map[string]any {
 			}
 			return jsIPN.dial(args[0].String(), args[1].String(), args[2])
 		}),
+		"listen": js.FuncOf(func(this js.Value, args []js.Value) any {
+			if len(args) != 3 {
+				log.Print("Usage: listen(network, port, {onOpen, onData, onClose})")
+				return nil
+			}
+			return jsIPN.listen(args[0].String(), args[1].Int(), args[2])
+		}),
 	}
 }
 
 type jsIPN struct {
+	ns         *netstack.Impl
 	dialer     *tsdial.Dialer
 	srv        *ipnserver.Server
 	lb         *ipnlocal.LocalBackend
@@ -328,6 +337,127 @@ func (i *jsIPN) dial(network, address string, callbacks js.Value) map[string]any
 			stream.close()
 			return nil
 		}),
+	}
+}
+
+// listen takes datagrams sent to port on this node's tailnet IPv4 address ("udp" only: Mission
+// Planner's UDP link, which waits for a vehicle to send first, udp:0.0.0.0:14550) and hands them
+// to the page as dial hands its stream: callbacks.onOpen(address) once listening, onData(Uint8Array)
+// for each datagram, onClose(reason) once. The object returned has write(Uint8Array), which sends
+// to whoever sent last - as Mission Planner's UdpSerial answers the last sender - and close().
+// It waits up to 30 s for the node to have its address.
+func (i *jsIPN) listen(network string, port int, callbacks js.Value) map[string]any {
+	listener := &jsListener{closed: make(chan struct{})}
+	go listener.run(i, network, port, callbacks)
+	return map[string]any{
+		"write": js.FuncOf(func(this js.Value, args []js.Value) any {
+			if len(args) != 1 {
+				return false
+			}
+			data := make([]byte, args[0].Get("length").Int())
+			js.CopyBytesToGo(data, args[0])
+			return listener.write(data)
+		}),
+		"close": js.FuncOf(func(this js.Value, args []js.Value) any {
+			listener.close()
+			return nil
+		}),
+	}
+}
+
+type jsListener struct {
+	closed    chan struct{}
+	closeOnce sync.Once
+	mu        sync.Mutex
+	conn      net.PacketConn
+	peer      net.Addr
+}
+
+func (l *jsListener) close() {
+	l.closeOnce.Do(func() {
+		close(l.closed)
+		l.mu.Lock()
+		if l.conn != nil {
+			l.conn.Close()
+		}
+		l.mu.Unlock()
+	})
+}
+
+// write sends data to the last sender; nothing before anyone has sent.
+func (l *jsListener) write(data []byte) bool {
+	l.mu.Lock()
+	conn, peer := l.conn, l.peer
+	l.mu.Unlock()
+	if conn == nil || peer == nil {
+		return false
+	}
+	_, err := conn.WriteTo(data, peer)
+	return err == nil
+}
+
+func (l *jsListener) run(i *jsIPN, network string, port int, callbacks js.Value) {
+	if network != "udp" {
+		callbacks.Call("onClose", fmt.Sprintf("listen %s: only udp", network))
+		l.close()
+		return
+	}
+	var self netip.Addr
+	for deadline := time.Now().Add(30 * time.Second); !self.IsValid(); {
+		if nm := i.lb.NetMapWithPeers(); nm != nil {
+			for _, prefix := range nm.GetAddresses().All() {
+				if prefix.Addr().Is4() {
+					self = prefix.Addr()
+					break
+				}
+			}
+		}
+		if self.IsValid() {
+			break
+		}
+		if time.Now().After(deadline) {
+			callbacks.Call("onClose", "listen: the node has no tailnet address")
+			l.close()
+			return
+		}
+		select {
+		case <-l.closed:
+			return
+		case <-time.After(250 * time.Millisecond):
+		}
+	}
+	conn, err := i.ns.ListenPacket("udp4", netip.AddrPortFrom(self, uint16(port)).String())
+	if err != nil {
+		callbacks.Call("onClose", fmt.Sprintf("listen udp %s:%d: %v", self, port, err))
+		l.close()
+		return
+	}
+	l.mu.Lock()
+	l.conn = conn
+	l.mu.Unlock()
+	select {
+	case <-l.closed:
+		conn.Close()
+		return
+	default:
+	}
+	callbacks.Call("onOpen", netip.AddrPortFrom(self, uint16(port)).String())
+	buf := make([]byte, 65536)
+	for {
+		n, from, err := conn.ReadFrom(buf)
+		if n > 0 {
+			l.mu.Lock()
+			l.peer = from
+			l.mu.Unlock()
+			array := js.Global().Get("Uint8Array").New(n)
+			js.CopyBytesToJS(array, buf[:n])
+			callbacks.Call("onData", array)
+		}
+		if err != nil {
+			callbacks.Call("onClose", err.Error())
+			l.close()
+			return
+		}
 	}
 }
 

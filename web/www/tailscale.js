@@ -135,6 +135,41 @@ export function dialTailscale(network, address, { onOpen, onData, onClose }) {
     };
 }
 
+/**
+ * Listens for datagrams to `port` on this node's tailnet address ("udp": Mission Planner's UDP
+ * link, which waits for a vehicle to send first), once the node is on the tailnet. Returns
+ * { write(Uint8Array), close() }: a write goes to whoever sent last, and is dropped before anyone
+ * has. `onOpen(address)` once listening, `onData(Uint8Array)` for each datagram, `onClose(reason)`
+ * once.
+ */
+export function listenTailscale(network, port, { onOpen, onData, onClose }) {
+    let listener = null;
+    let closed = false;
+    const open = () => {
+        if (closed) return;
+        listener = ipn.listen(network, port, {
+            onOpen: (address) => onOpen?.(address),
+            onData: (bytes) => onData(bytes),
+            onClose: (reason) => {
+                closed = true;
+                onClose(reason);
+            },
+        });
+    };
+    startTailscale();
+    if (state === "Running") open();
+    else running.push(open);
+    return {
+        write(bytes) {
+            listener?.write(bytes);
+        },
+        close() {
+            closed = true;
+            listener?.close();
+        },
+    };
+}
+
 // --- what the pilot sees: the sign-in link, and the node's state -------------------------------
 
 function banner() {

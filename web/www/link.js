@@ -4,9 +4,10 @@
 // as tools/sitl/wasm/bridge.mjs pumps it, with no TCP in between), started on the first one; a
 // `ws://` link with a WebSocket (Mission Planner's "WS" link, ExtLibs/Comms/CommsWebSocket.cs,
 // binary frames both ways); a `serial:` link with a port the browser has let the page use
-// (WebSerial, serial.js); and any other address over the tailnet (tailscale.js).
+// (WebSerial, serial.js); any other address over the tailnet (tailscale.js); and a `udp:` link,
+// which waits for a vehicle to send first, on the page's own tailnet address.
 
-import { dialTailscale } from "./tailscale.js";
+import { dialTailscale, listenTailscale } from "./tailscale.js";
 import { readKept, writeKept } from "./storage.js";
 import { openSerial } from "./serial.js";
 
@@ -99,6 +100,29 @@ function useSitl() {
 
 // A tailnet address becomes the link: `network` "tcp" or "udp", `address` "host:port".
 let tailnet = null;
+// "udp:0.0.0.0:<port>": Mission Planner's UDP link, which waits for a vehicle to send first - in a
+// page, on the page's own tailnet address, answering whoever sent last.
+function listenTailnet(port) {
+    tailnet?.close();
+    active = "tailscale";
+    status = `listening on udp ${port} over the tailnet`;
+    const listener = listenTailscale("udp", Number(port), {
+        onOpen: (address) => {
+            status = `tailnet udp ${address}`;
+            console.log(`tailscale: listening on udp ${address}`);
+        },
+        onData: (bytes) => {
+            if (active === "tailscale" && tailnet === listener) inbox.push(bytes);
+        },
+        onClose: (reason) => {
+            if (tailnet === listener) status = `tailnet closed: ${reason}`;
+            console.log(`tailscale: udp ${port} closed: ${reason}`);
+        },
+    });
+    tailnet = listener;
+    sendTo = (bytes) => listener.write(bytes);
+}
+
 function openTailnet(network, address) {
     tailnet?.close();
     active = "tailscale";
@@ -217,6 +241,9 @@ export function servePlanner(planner) {
                 } else if (scheme === "tcp" || scheme === "udpcl") {
                     // Anywhere else: over the tailnet.
                     openTailnet(scheme === "tcp" ? "tcp" : "udp", `${host}:${port}`);
+                } else if (scheme === "udp") {
+                    // A vehicle that sends first: on the page's tailnet address.
+                    listenTailnet(port);
                 } else {
                     status = `no way to ${asked} from a web page`;
                     console.warn(`link: ${status}`);

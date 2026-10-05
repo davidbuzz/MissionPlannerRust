@@ -10,9 +10,9 @@
 // DERP over HTTP, tsderphttp), reached through check/cors_proxy.py, which adds the CORS header
 // Tailscale's own control server sends (access-control-allow-origin: *).
 const { chromium } = require("playwright");
+const { clickNamed } = require("./clicks");
 const [out = ".", control, authKey, host, port] = process.argv.slice(2);
 const fail = (why) => { console.log(`FAIL: ${why}`); process.exitCode = 1; };
-const PORT_BOX = [996, 36], TCP = [964, 97], CONNECT = [1187, 36];
 (async () => {
   const browser = await chromium.launch({
     headless: true,
@@ -26,16 +26,16 @@ const PORT_BOX = [996, 36], TCP = [964, 97], CONNECT = [1187, 36];
     if (t.startsWith("tailscale:") || t.startsWith("link:")) console.log(t.slice(0, 200));
   });
   page.on("pageerror", (e) => errors.push(e.message));
-  const query = new URLSearchParams({ tscontrol: control, tsauthkey: authKey, tshostname: "mpr-browser", tsderphttp: "1" });
+  const query = new URLSearchParams({ facts: "1", tscontrol: control, tsauthkey: authKey, tshostname: "mpr-browser", tsderphttp: "1" });
   await page.goto(`http://127.0.0.1:8080/?demo=0&${query}`, { waitUntil: "load" });
   await page.waitForTimeout(8000);
   // The built-in Drone ID plugin asks its question at every start in a page, which keeps no
   // settings yet: its OK, over the flight screen's map at 1400x900 (a click on the map otherwise).
   await page.mouse.click(854, 484);
   await page.waitForTimeout(800);
-  await page.mouse.click(...PORT_BOX); await page.waitForTimeout(800);
-  await page.mouse.click(...TCP); await page.waitForTimeout(800);
-  await page.mouse.click(...CONNECT); await page.waitForTimeout(1500);
+  await clickNamed(page, "main-port"); await page.waitForTimeout(800);
+  await clickNamed(page, "main-port-TCP"); await page.waitForTimeout(800);
+  await clickNamed(page, "main-connect"); await page.waitForTimeout(1500);
   // Mission Planner's boxes offer 127.0.0.1 and 5760: emptied, then the tailnet's address typed.
   const replace = async (text) => {
     await page.keyboard.press("End");
