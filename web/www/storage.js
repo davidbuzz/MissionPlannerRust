@@ -110,3 +110,53 @@ export function keepFiles(take) {
     addEventListener("pagehide", flush);
     globalThis.mpStorageFlushed = () => chain;
 }
+
+/// The page's own faults as crash reports. A WebAssembly fault in the planner - out of memory, an
+/// unreachable - ends it without passing through Rust's panic hook, so no report says why; what
+/// the planner reports next ("RefCell already borrowed", gpui's state left mid-update) is only
+/// its consequence (the owner's browsers, 2026-10-05). The browser's own error, with its stack,
+/// is written where the planner keeps its reports (crates/mp-gui/src/crash.rs: the data
+/// folder's crash-reports/, named by the local time to the second), and the next start asks
+/// about it first.
+const REPORTS = "home/web/.local/share/MissionPlannerRust/crash-reports";
+
+function stamp(date) {
+    const two = (n) => String(n).padStart(2, "0");
+    return `${date.getFullYear()}-${two(date.getMonth() + 1)}-${two(date.getDate())}T` +
+        `${two(date.getHours())}-${two(date.getMinutes())}-${two(date.getSeconds())}`;
+}
+
+async function writeReport(text) {
+    const dir = await folder(REPORTS.split("/"), true);
+    const base = stamp(new Date());
+    let name = `${base}.txt`;
+    for (let counter = 1; ; counter++) {
+        try {
+            await dir.getFileHandle(name);
+            name = `${base}-${counter}.txt`;
+        } catch (_) {
+            break;
+        }
+    }
+    const writable = await (await dir.getFileHandle(name, { create: true })).createWritable();
+    await writable.write(text);
+    await writable.close();
+}
+
+export function keepFaults() {
+    let written = 0;
+    const report = (kind, error) => {
+        // One fault's echoes are not reports of their own.
+        if (written >= 3) return;
+        written += 1;
+        const name = error?.name ?? kind;
+        const message = error?.message ?? String(error);
+        const stack = (error?.stack ?? "").replace(/\n/g, " | ");
+        const text = `message=${navigator.userAgent}\nException ${name}: ${message}\nStack: ${stack}\n` +
+            `TargetSite the page (${kind})\ndata \n`;
+        console.error(`planner fault (${kind}): ${name}: ${message}`);
+        writeReport(text).catch((err) => console.warn(`storage: the fault's report: ${err}`));
+    };
+    addEventListener("error", (event) => report("error", event.error ?? event.message));
+    addEventListener("unhandledrejection", (event) => report("unhandled rejection", event.reason));
+}

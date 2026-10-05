@@ -14,7 +14,7 @@
 // A panic's stack in full: Chrome keeps ten frames by default.
 Error.stackTraceLimit = 200;
 import { servePlanner } from "./link.js";
-import { loadFiles, keepFiles } from "./storage.js";
+import { loadFiles, keepFiles, keepFaults } from "./storage.js";
 import init, { page_link_requested, page_link_push, page_link_take, planner_facts, planner_facts_enable, planner_storage_take } from "./pkg-planner/planner.js";
 // The planner's threads need SharedArrayBuffer, which a page has only when cross-origin isolated
 // by the COOP and COEP headers: www/serve.py sends them; on GitHub Pages, which sends none of a
@@ -24,7 +24,7 @@ if (!globalThis.crossOriginIsolated) {
     document.body.insertAdjacentHTML("beforeend",
         '<p style="color:#8b949e;font:14px sans-serif;margin:16px">Starting... (if this stays, the ' +
         "browser has refused the service worker the planner's threads need here)</p>");
-} else loadFiles()
+} else (keepFaults(), loadFiles())
     // The files the last visit kept, for the planner to take in as it starts (storage.js).
     .catch((err) => { console.warn("storage: " + err); return []; })
     .then((files) => { globalThis.mpStorageFiles = files; return init(); })

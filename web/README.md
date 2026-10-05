@@ -45,7 +45,10 @@ so a log is written by what it grew. They live in OPFS's `planner` folder under 
 paths (`home/web/.local/share/MissionPlannerRust/config.xml`). Every visit loads all of them, logs
 too, so the map's tile cache is not kept (`mp_os::fs::mem::NOT_KEPT`; the browser's own cache keeps
 the tiles' downloads); a browser's site settings clear them. `check/storage_check.js` holds it to
-a reload: config.xml, saved at start-up, in the browser's storage, and read back.
+a reload: config.xml, saved at start-up, in the browser's storage, and read back. A fault of the
+page's own - a WebAssembly fault ends the planner without its panic hook - is written there as a
+crash report too (`keepFaults`), so the next start asks about the real cause rather than what
+followed it.
 
 ## A vehicle on a tailnet
 
@@ -100,6 +103,7 @@ NODE_PATH=<node_modules with playwright> node check/plugins_check.js   # the bui
 NODE_PATH=<node_modules with playwright> node check/demo_check.js      # the Welcome-Demo-Sitl, start to finish
 NODE_PATH=<node_modules with playwright> node check/pages_check.js <dir> # the GitHub Pages site, no headers
 NODE_PATH=<node_modules with playwright> node check/storage_check.js   # config.xml kept across a reload
+NODE_PATH=<node_modules with playwright> node check/fault_check.js     # a fault of the page's own, asked about at the next start
 NODE_PATH=<node_modules with playwright> check/tailnet_e2e.sh          # over a tailnet (needs Go)
 ```
 
