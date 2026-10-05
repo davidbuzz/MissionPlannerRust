@@ -32,7 +32,7 @@ controlled; the per-project memory directory holds symlinks to them.
 - [rustfmt follows children](rustfmt-follows-children.md) — rustfmt on main.rs/lib.rs rewrites every module they declare and the tree is not fmt-clean: format leaf files, revert the rest (2026-10-03)
 - [Verify before committing](verify-before-committing.md) — clippy is its own command, read it, then commit
 - [Autotests mandatory](autotests-mandatory.md) — every change ships with a test that fails if it stops working; test the path the product takes
-- [No new subagents](delegate-to-opus-subagents.md) — NONE new since 2026-10-02 (Buzz: "when each of these current subagents is finished it job, dont create new ones"); the six running then finish and are merged by me
+- [One Opus subagent](delegate-to-opus-subagents.md) — ONE new subagent for coding help (Buzz, 2026-10-05): own worktree, disjoint files, no window, no commit; none from 2026-10-02 to then
 - [Worktree agents share the target dir](worktree-agents-share-the-target-dir.md) — touch a crate's lib.rs before an integration build while agents run
 - [Drop-downs escape the page](dropdowns-escape-the-page.md) — deferred+anchored, thirty rows, wheel-scrolled; the page clips anything else
 - [Kill by PID, not pattern](kill-by-pid-not-pattern.md) — pkill -f matches the calling shell; pgrep -fa, then kill the PIDs

@@ -1,11 +1,16 @@
 ---
 name: delegate-to-opus-subagents
-description: NONE new since 2026-10-02 ~21:50 local - Buzz: "when each of these current subagents is finished it job, dont create new ones"; the six running then finish and are merged (the order was three, six, none, three, six, none, two, none, six, none)
+description: ONE new Opus subagent for coding help since 2026-10-05 (Buzz: "1 new opus subagent is allowed for coding assistnce"); before that none since 2026-10-02 (the order: three, six, none, three, six, none, two, none, six, none, one)
 metadata:
   type: feedback
 ---
 
-**STOP (current), 2026-10-02 ~21:50 local: "when each of these current subagents is finished it
+**ONE (current), 2026-10-05: "modificiation: 1 new opus subagent is allowed for coding
+assistnce."** - Buzz, while the browser work was on `main`. At most one agent at a time, for
+coding: its own worktree, files disjoint from mine, no window, no commit; I verify, merge and
+commit. All the "How to apply" rules below hold. Order: ... → six → none → one (this).
+
+**STOP (2026-10-02 ~21:50 local, lifted 2026-10-05): "when each of these current subagents is finished it
 job, dont create new ones."** - Buzz. The six running then (DroneCAN/UAVCAN page, MAVFtp
 remainder, Sik Radio, Warning Manager, Spectrogram + Support Proxy, Proximity + MAVLink Signing)
 finish, their worktrees are reviewed, applied to main as patches, verified and committed by the
