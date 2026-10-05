@@ -75,6 +75,11 @@ pub const COULD_NOT_SEND: &str =
 /// How many of the report's lines the question shows.
 const SHOWN_LINES: usize = 8;
 
+/// The most of each line the question shows: a page's report has the browser's whole stack on
+/// one line, which, shown whole, made the box taller than the window and put its Yes and No out
+/// of reach (the owner's browsers, 2026-10-05). The report itself keeps every line whole.
+const SHOWN_LINE_CHARS: usize = 200;
+
 /// The ids of the question.
 const BOXES: BoxIds = BoxIds {
     question: "crash-question",
@@ -324,7 +329,15 @@ impl Crash {
         let Flow::Question { report, .. } = &self.flow else {
             return None;
         };
-        let shown: Vec<&str> = report.lines().skip(1).take(SHOWN_LINES).collect();
+        let shown: Vec<String> = report
+            .lines()
+            .skip(1)
+            .take(SHOWN_LINES)
+            .map(|line| match line.char_indices().nth(SHOWN_LINE_CHARS) {
+                Some((cut, _)) => format!("{}...", &line[..cut]),
+                None => line.to_owned(),
+            })
+            .collect();
         Some(format!("{HEAD}\n{}\n\n{TAIL}", shown.join("\n")))
     }
 
@@ -411,7 +424,10 @@ impl Crash {
         };
         let outcome = match receiver.try_recv() {
             Ok(outcome) => outcome,
-            Err(TryRecvError::Empty) => return None,
+            Err(TryRecvError::Empty) => {
+                crate::repaint::in_flight();
+                return None;
+            }
             Err(TryRecvError::Disconnected) => Err("the post stopped without an answer".to_owned()),
         };
         let path = path.clone();
@@ -598,6 +614,26 @@ mod tests {
 
         /// Two reports of one second: the counter orders them, not the names' characters (`-` sorts
     /// before `.`, so a plain sort would list `<stamp>-1.txt` before `<stamp>.txt`).
+    /// A page's report has the browser's whole stack on one line; the question shows the start
+    /// of it, so its box fits the window and Yes and No can be reached (the owner's browsers,
+    /// 2026-10-05: the box ran off the bottom of the page).
+    #[test]
+    fn a_long_line_is_cut_short_in_the_question() {
+        let dir = scratch("long-line");
+        let stack = "at planner.wasm.f | ".repeat(500);
+        write_report(
+            &dir,
+            &format!("message=page\nException RuntimeError: unreachable\nStack: {stack}\n"),
+        )
+        .expect("written");
+        let crash = Crash::new(Some(dir.as_path()));
+        let text = crash.question_text().expect("asked");
+        assert!(text.contains("Exception RuntimeError: unreachable"));
+        let longest = text.lines().map(|line| line.chars().count()).max().unwrap_or(0);
+        assert!(longest <= SHOWN_LINE_CHARS + 3, "a line of {longest} characters");
+        assert!(text.contains("Stack: at planner.wasm.f"));
+    }
+
     #[test]
     fn reports_of_one_second_list_in_the_order_written() {
         let dir = scratch("order");
