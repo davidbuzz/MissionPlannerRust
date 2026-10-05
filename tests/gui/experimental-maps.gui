@@ -1,0 +1,35 @@
+# EXPERIMENTAL's Clear Custom Maps (temp.cs:149-161) and Age Map Data (temp.cs:710-718), over a
+# tile cache of this run's own. Clear Custom Maps deletes every tile of the Custom provider - the
+# imagery Inject GE puts in the cache, here a .jpg and a .png - and says "Removed 2 images" in a
+# box, then "Removed 0 images" when pressed again. Age Map Data deletes the map's provider's tiles
+# made before thirty days ago, and a file cannot be made older than its creation here: none, said
+# the same way (the unit test moves the clock on to see it take them).
+#
+# Run as: tools/gui-headless.sh experimental-maps
+screen fly
+window 1600x1200
+budget 10
+# 10: one run took 4.5 s (2026-10-06).
+tiles offline
+env XDG_DATA_HOME $WORK
+env MP_CONFIG_XML $WORK/config.xml
+env MP_TILE_CACHE $WORK/cache
+setup printf '<?xml version="1.0" encoding="utf-8"?><Config><tabcontrolactions>tabQuick;</tabcontrolactions></Config>' > "$WORK/config.xml"
+setup mkdir -p "$WORK/cache/TileDBv3/en/Custom/1/2" && printf tile > "$WORK/cache/TileDBv3/en/Custom/1/2/3.jpg" && printf tile > "$WORK/cache/TileDBv3/en/Custom/1/2/4.png"
+
+key ctrl+f
+expect screen experimental
+
+click experimental-BUT_clearcustommaps
+expect experimental.asking message: Removed 2 images
+click experimental-message-ok
+expect experimental.asking none
+click experimental-BUT_clearcustommaps
+expect experimental.asking message: Removed 0 images
+click experimental-message-ok
+expect experimental.asking none
+
+click experimental-but_agemapdata
+expect experimental.asking message: Removed 0 images
+click experimental-message-ok
+expect experimental.asking none

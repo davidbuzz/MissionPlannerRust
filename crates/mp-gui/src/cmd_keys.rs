@@ -43,6 +43,8 @@
 mod camera;
 mod devops_ui;
 mod gmap_cache;
+// EXPERIMENTAL's Clear Custom Maps and Age Map Data call `MyImageCache.DeleteOlderThan` too.
+pub(crate) use gmap_cache::delete_older_than;
 mod propagation_settings;
 
 use gpui::{AnyElement, Context, Keystroke, Window};

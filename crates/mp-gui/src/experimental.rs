@@ -43,6 +43,8 @@
 //! * a tool with files: Param Restore (a parameter file written as `but_paramrestore_Click` writes
 //!   it), mag calb log (`MagCalib.ProcessLog`: a log read and fitted, `magoffset.dxf` drawn, and
 //!   the offsets to the compass page's `SaveOffsets`) and Split DFLog (`DFLogBuffer.SplitLog`);
+//! * the map cache's two: Clear Custom Maps (every Custom tile) and Age Map Data (the map's
+//!   provider's tiles older than thirty days), each "Removed N images" in a box;
 //! * out of scope by a ruling, dimmed, its press saying why on the status line: Follow Me, OSDVideo,
 //!   Moving Base and the four Swarm tools (PLAN.md section 12 D13, 2026-09-25), Anon Log (the same
 //!   section, 2026-10-02: `Privacy.anonymise`, "beta and not interesting"), Lang Edit (the
@@ -263,6 +265,8 @@ pub(crate) fn tool(name: &str) -> Tool {
         "but_disablearmswitch" => Tool::Act(Act::ToggleSafety),
         "BUT_magfit2" => Tool::Act(Act::MagCalLog),
         "myButton1" => Tool::Act(Act::SplitDfLog),
+        "BUT_clearcustommaps" => Tool::Act(Act::ClearCustomMaps),
+        "but_agemapdata" => Tool::Act(Act::AgeMapData),
         "BUT_follow_me" | "but_osdvideo" | "BUT_movingbase" | "BUT_swarm" | "BUT_followleader"
         | "but_trimble" | "but_followswarm" => Tool::Unavailable(SECTION_12_D13),
         "but_anonlog" => Tool::Unavailable(ANON_LOG_RULED),
@@ -315,6 +319,13 @@ pub(crate) enum Act {
     /// `DFLogBuffer.SplitLog` writing `<log>_split<i>.bin` beside it, off the window's thread
     /// (mp-log's `split_file`). `// C#: temp.cs:720-734; ExtLibs/Utilities/DFLogBuffer.cs:417-501`
     SplitDfLog,
+    /// `BUT_clearcustommaps_Click`: every tile of the Custom provider - the imagery Inject GE and
+    /// Inject Custom Map put in the cache - deleted (`DeleteOlderThan(DateTime.Now, Custom)`), and
+    /// "Removed N images" in a box. `// C#: temp.cs:149-161; ExtLibs/Maps/MyImageCache.cs:132-184`
+    ClearCustomMaps,
+    /// `but_agemapdata_Click`: the flight map's provider's tiles older than thirty days deleted,
+    /// and "Removed N images" in a box. `// C#: temp.cs:710-718`
+    AgeMapData,
 }
 
 /// Param Restore's first box.
@@ -331,6 +342,33 @@ const DFLOG_FILE_MASK: &str = "Log Files|*.log;*.bin;*.BIN;*.LOG";
 const SPLIT_TITLE: &str = "How Many";
 const SPLIT_PROMPT: &str = "Enter how many pieces to split into";
 const SPLIT_OFFERED: i32 = 10;
+/// Age Map Data's age: `DateTime.Now.AddDays(-30)`. `// C#: temp.cs:712`
+const AGE_MAP_DATA: web_time::Duration = web_time::Duration::from_secs(30 * 24 * 60 * 60);
+
+/// Clear Custom Maps' and Age Map Data's deletions at `now`, with the map showing the provider
+/// `source`: every Custom tile made before now, or the provider's made before thirty days ago.
+/// `// C#: temp.cs:154, 712-713`
+fn removed_by(
+    what: Act,
+    tile_root: &std::path::Path,
+    source: Option<&str>,
+    now: web_time::SystemTime,
+) -> usize {
+    if what == Act::ClearCustomMaps {
+        crate::cmd_keys::delete_older_than(tile_root, mp_tiles::source::CUSTOM.cache_name, now)
+    } else {
+        source
+            .and_then(mp_tiles::source::source_by_id)
+            .map_or(0, |source| {
+                crate::cmd_keys::delete_older_than(tile_root, source.cache_name, now - AGE_MAP_DATA)
+            })
+    }
+}
+
+/// The box both map tools show, and log. `// C#: temp.cs:156-158, 715-717`
+fn removed_images(removed: usize) -> String {
+    format!("Removed {removed} images")
+}
 
 /// `but_hwids_Click`'s report: for every whole number in each line, the line (its tabs as
 /// spaces) and the device that id names, a line each.
@@ -566,6 +604,22 @@ fn act(
             ));
             focus_input(this, window, cx);
         }
+        // The cache `MyImageCache` keeps, under `CacheLocator.Location`; the provider the one map
+        // both screens show, `FlightData.instance.gMapControl1.MapProvider`.
+        Act::ClearCustomMaps | Act::AgeMapData => {
+            let tile_root =
+                mp_tiles::TileCache::new(mp_tiles::TileCache::default_root()).tile_root();
+            let removed = removed_by(
+                what,
+                &tile_root,
+                this.tile_source_id(),
+                web_time::SystemTime::now(),
+            );
+            log::info!("{}", removed_images(removed));
+            this.experimental.asking = Some(Asking::Message {
+                text: removed_images(removed),
+            });
+        }
         // `InitialDirectory = Settings.Instance.LogDir`.
         Act::SplitDfLog => {
             let folder = crate::fly::log_directory()
@@ -645,7 +699,13 @@ fn send(this: &mut MissionPlanner, what: Act) {
             }
             true
         }
-        Act::Qnh | Act::DecodeHwids | Act::ParamRestore | Act::MagCalLog | Act::SplitDfLog => true,
+        Act::Qnh
+        | Act::DecodeHwids
+        | Act::ParamRestore
+        | Act::MagCalLog
+        | Act::SplitDfLog
+        | Act::ClearCustomMaps
+        | Act::AgeMapData => true,
     };
     if !sent {
         this.file_status = Some(error_box(PLEASE_CONNECT));
@@ -1191,10 +1251,12 @@ mod tests {
                 Tool::Unavailable(why) => assert!(!why.is_empty()),
             }
         }
-        assert_eq!(opens, 22);
+        assert_eq!(opens, 24);
         assert_eq!(tool("but_paramrestore"), Tool::Act(Act::ParamRestore));
         assert_eq!(tool("BUT_magfit2"), Tool::Act(Act::MagCalLog));
         assert_eq!(tool("myButton1"), Tool::Act(Act::SplitDfLog));
+        assert_eq!(tool("BUT_clearcustommaps"), Tool::Act(Act::ClearCustomMaps));
+        assert_eq!(tool("but_agemapdata"), Tool::Act(Act::AgeMapData));
         assert_eq!(tool("but_blupdate"), Tool::Act(Act::BootloaderUpgrade));
         assert_eq!(tool("but_disablearmswitch"), Tool::Act(Act::ToggleSafety));
         assert_eq!(tool("but_messageinterval"), Tool::MessageInterval);
@@ -1245,6 +1307,34 @@ mod tests {
             qnh_param(&[("BARO1_GND_PRESS".to_owned(), 101_325.0)]),
             "BARO1_GND_PRESS"
         );
+    }
+
+    /// Clear Custom Maps takes every Custom tile, `.jpg` and `.png`, and no other provider's; Age
+    /// Map Data takes the map's provider's tiles made before thirty days ago - none of them now,
+    /// all of them thirty-one days on - and none with no provider.
+    #[test]
+    fn the_map_tools_delete_what_the_csharp_does() {
+        let root = mp_os::temp_dir().join(format!("mp-experimental-maps-{}", std::process::id()));
+        let _ = mp_os::fs::remove_dir_all(&root);
+        let osm = mp_tiles::source::source_by_id("osm").expect("osm");
+        for (provider, file) in [
+            ("Custom", "1/2/3.jpg"),
+            ("Custom", "4/5/6.png"),
+            (osm.cache_name, "1/2/3.png"),
+        ] {
+            let path = root.join(provider).join(file);
+            mp_os::fs::create_dir_all(path.parent().expect("a folder")).expect("folder");
+            mp_os::fs::write(&path, b"tile").expect("tile");
+        }
+        let now = web_time::SystemTime::now() + web_time::Duration::from_secs(1);
+        assert_eq!(removed_by(Act::AgeMapData, &root, Some("osm"), now), 0);
+        assert_eq!(removed_by(Act::AgeMapData, &root, None, now), 0);
+        assert_eq!(removed_by(Act::ClearCustomMaps, &root, Some("osm"), now), 2);
+        assert_eq!(removed_by(Act::ClearCustomMaps, &root, Some("osm"), now), 0);
+        let later = now + web_time::Duration::from_secs(31 * 24 * 60 * 60);
+        assert_eq!(removed_by(Act::AgeMapData, &root, Some("osm"), later), 1);
+        assert_eq!(removed_images(2), "Removed 2 images");
+        let _ = mp_os::fs::remove_dir_all(&root);
     }
 
     /// The words as Mission Planner shows them: the first row's, and the last button's.
