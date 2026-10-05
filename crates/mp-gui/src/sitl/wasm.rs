@@ -231,6 +231,39 @@ mod tests {
         let _ = mp_os::fs::remove_dir_all(dir);
     }
 
+    /// The Linux launcher says "Downloading sitl software" before it asks the web for anything -
+    /// the manifest a session's first click fetches included - with a release to download and
+    /// with "Skip Download" alike (the owner's bug of 2026-10-06: three or four seconds after the
+    /// click before the page said anything).
+    #[test]
+    fn the_linux_launcher_says_downloading_before_the_manifest() {
+        use crate::sitl::launcher::{Launcher as _, ManifestSitl};
+        for release in [Some(ReleaseType::Official), None] {
+            let dir = crate::sitl::launcher::tests::scratch("manifest-say");
+            let web = StubWeb::default()
+                .serve(PROBE_URL, &gzipped(&format!("{SITL_WASM}, {SITL_LINUX}")))
+                .serve(
+                    "https://firmware.ardupilot.org/Copter/stable/SITL_x86_64_linux_gnu/arducopter",
+                    b"\x7fELF",
+                );
+            let said = std::cell::RefCell::new(Vec::new());
+            let _ = ManifestSitl::new("SITL_x86_64_linux_gnu").image(
+                "ArduCopter.elf",
+                release,
+                &dir,
+                &web,
+                &|text| said.borrow_mut().push((text.to_owned(), web.asked().len())),
+            );
+            assert_eq!(
+                said.into_inner(),
+                vec![(crate::sitl::model::DOWNLOADING.to_owned(), 0)],
+                "{release:?}"
+            );
+            assert!(!web.asked().is_empty(), "the manifest is fetched after");
+            let _ = mp_os::fs::remove_dir_all(dir);
+        }
+    }
+
     /// The Linux launcher with its record: downloaded to the name without `.elf`, executable.
     #[test]
     fn the_linux_launcher_downloads_its_platforms_record() {

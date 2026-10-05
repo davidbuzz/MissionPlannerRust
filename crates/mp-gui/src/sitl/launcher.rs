@@ -378,6 +378,11 @@ impl Launcher for ManifestSitl {
         say: &dyn Fn(&str),
     ) -> Image {
         let mav_type = mav_type_of(file);
+        // "Downloading sitl software" first, before the manifest: the first click of a session
+        // fetches it (two files, three seconds or more), and the page said nothing until then (the
+        // owner's bug and word, 2026-10-06). The C#'s Linux path shows no box at all; this is the
+        // Windows path's (`SITL.cs:422`).
+        say(model::DOWNLOADING);
         let Ok(mut held) = self.manifest.os_lock() else {
             return Image::Failed("the manifest's lock is poisoned".to_owned());
         };
@@ -411,7 +416,6 @@ impl Launcher for ManifestSitl {
         };
         let path = dir.join(stem(file));
         if release.is_some() {
-            say(model::DOWNLOADING);
             if let Some(url) = fw.url.as_deref() {
                 let _ = mp_firmware::flow::get_file_from_net(fetch, url, &path, &mut |_, _| {});
             }

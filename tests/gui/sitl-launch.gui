@@ -46,6 +46,10 @@ expect sitl.outcome none
 # The copter picture: the fetch and the start, on a thread, the page busy meanwhile.
 click sitl-picture-quad
 expect sitl.running true
+# Said at once, before the manifest is fetched - the owner's bug of 2026-10-06: three or four
+# seconds after the click before the page said anything, the manifest fetched first.
+within 1
+expect sitl.saying Downloading sitl software
 # The manifest, the 7 MB download, the start and its two seconds: inside the budget, which
 # stops the run three seconds past itself.
 within 25
