@@ -93,6 +93,9 @@ pub fn screen(
             cx.listener(|this, _event, window, cx| {
                 if this.sitl.typing.is_none() {
                     this.sitl_focus.page.focus(window, cx);
+                    // Kept: the window's own focusable element takes the keyboard on the same
+                    // press unless told not to (gpui's div.rs).
+                    window.prevent_default();
                 }
             }),
         )

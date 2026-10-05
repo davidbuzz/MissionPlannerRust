@@ -2106,6 +2106,9 @@ fn combo_box(
                         cx.listener(move |this, _event, window, cx| {
                             this.battery_monitor.close_list();
                             focus.focus(window, cx);
+                            // Kept: the window's own focusable element takes the keyboard on the
+                            // same press unless told not to (gpui's div.rs).
+                            window.prevent_default();
                             cx.notify();
                         }),
                     ),

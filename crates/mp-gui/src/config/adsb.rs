@@ -2322,6 +2322,9 @@ pub fn list_body(
             MouseButton::Left,
             cx.listener(move |_this, _event: &MouseDownEvent, window, cx| {
                 page_handle.focus(window, cx);
+                // Kept: the window's own focusable element takes the keyboard on the same press
+                // unless told not to (gpui's div.rs).
+                window.prevent_default();
             }),
         )
         .relative()

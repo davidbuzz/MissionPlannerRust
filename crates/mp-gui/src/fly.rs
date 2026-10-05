@@ -7925,6 +7925,10 @@ fn gauges_page(
                         if event.click_count == 2 {
                             this.fly_actions.ask(Prompt::GaugeMax, "60");
                             this.fly_focus.prompt.focus(window, cx);
+                            // The keyboard kept by the prompt: a focusable element round the gauge
+                            // - the window's own - takes it on the same press unless told not to
+                            // (gpui's div.rs), and typing went nowhere (fly-gauges.gui, 2026-10-06).
+                            window.prevent_default();
                             cx.notify();
                         }
                     }),
