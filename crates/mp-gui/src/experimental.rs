@@ -43,7 +43,8 @@
 //!   here, where the C#'s box takes several);
 //! * a tool with files: Param Restore (a parameter file written as `but_paramrestore_Click` writes
 //!   it), mag calb log (`MagCalib.ProcessLog`: a log read and fitted, `magoffset.dxf` drawn, and
-//!   the offsets to the compass page's `SaveOffsets`) and Split DFLog (`DFLogBuffer.SplitLog`);
+//!   the offsets to the compass page's `SaveOffsets`), Split DFLog (`DFLogBuffer.SplitLog`), and
+//!   Sort TLogs and ReSort All logs (`LogSort.SortLogs`);
 //! * the map cache's two: Clear Custom Maps (every Custom tile) and Age Map Data (the map's
 //!   provider's tiles older than thirty days), each "Removed N images" in a box;
 //! * out of scope by a ruling, dimmed, its press saying why on the status line: Follow Me, OSDVideo,
@@ -69,9 +70,9 @@ use crate::config::optional::{InputBox, input_box};
 use crate::fly::{PLEASE_CONNECT, error_box};
 use crate::telemetry::Report;
 use crate::{MissionPlanner, facts, theme};
-use mp_log::magcal_log::{DXF_NAME, Processed, process_log};
 use mp_firmware::flow::Buttons;
 use mp_link::requests::CMD_FLASH_BOOTLOADER;
+use mp_log::magcal_log::{DXF_NAME, Processed, process_log};
 
 /// `tableLayoutPanel1`'s cells, row by row: (row, column, the control's name, its text, whether it
 /// is a button). Generated from temp.Designer.cs (`Controls.Add(control, column, row)`) and
@@ -269,6 +270,8 @@ pub(crate) fn tool(name: &str) -> Tool {
         "BUT_clearcustommaps" => Tool::Act(Act::ClearCustomMaps),
         "but_agemapdata" => Tool::Act(Act::AgeMapData),
         "but_armandtakeoff" => Tool::Act(Act::ArmAndTakeoff),
+        "BUT_sorttlogs" => Tool::Act(Act::SortTlogs),
+        "but_sortlogs" => Tool::Act(Act::ResortAllLogs),
         "BUT_follow_me" | "but_osdvideo" | "BUT_movingbase" | "BUT_swarm" | "BUT_followleader"
         | "but_trimble" | "but_followswarm" => Tool::Unavailable(SECTION_12_D13),
         "but_anonlog" => Tool::Unavailable(ANON_LOG_RULED),
@@ -333,6 +336,13 @@ pub(crate) enum Act {
     /// read. A refusal to arm ends it quietly, as `doARM`'s false does; a command never answered
     /// is the `catch`'s box, on the status line. `// C#: temp.cs:614-634`
     ArmAndTakeoff,
+    /// `BUT_sorttlogs_Click`: a folder asked for (the log directory offered), and its `.tlog`s
+    /// sorted into folders by what flew them (mp-log's `log_sort`), off the window's thread; the
+    /// `catch` shows nothing. `// C#: temp.cs:224-239`
+    SortTlogs,
+    /// `but_sortlogs_Click`: every `.tlog`, `.bin`, `.log` and `.rlog` in the log directory and
+    /// under it sorted again, there. `// C#: temp.cs:859-869`
+    ResortAllLogs,
 }
 
 /// arm and takeoff's steps, which the C#'s handler blocks on in turn.
@@ -494,6 +504,8 @@ enum Answered {
     Hwids,
     /// Split DFLog's count: the log it splits.
     SplitPieces(std::path::PathBuf),
+    /// Sort TLogs' `FolderBrowserDialog`.
+    SortFolder,
 }
 
 /// The tab's state: the last button pressed, for the facts, the question showing, and where the
@@ -510,6 +522,10 @@ pub(crate) struct Experimental {
     magcal: Option<std::sync::mpsc::Receiver<Processed>>,
     /// What the last one came to, for the facts.
     magcal_last: Option<String>,
+    /// Sort TLogs' or ReSort All logs' sorting, on its thread, until its answer comes.
+    sort: Option<std::sync::mpsc::Receiver<std::io::Result<usize>>>,
+    /// What the last one came to, for the facts.
+    sort_last: Option<String>,
     /// arm and takeoff's step under way.
     takeoff: Option<Takeoff>,
     /// How its last step ended, for the facts.
@@ -534,6 +550,8 @@ impl Default for Experimental {
             split_last: None,
             takeoff: None,
             takeoff_last: None,
+            sort: None,
+            sort_last: None,
         }
     }
 }
@@ -660,6 +678,23 @@ fn act(
             });
         }
         Act::ArmAndTakeoff => arm_and_takeoff(this),
+        // `fbd.SelectedPath = Settings.Instance.LogDir`: the folder typed, as every folder dialog
+        // here (Inject Custom Map's).
+        Act::SortTlogs => {
+            let folder = crate::fly::log_directory()
+                .map(|folder| folder.to_string_lossy().into_owned())
+                .unwrap_or_default();
+            this.experimental.asking = Some(Asking::Input {
+                input: InputBox::new(crate::inject_map::FOLDER_TITLE, "", &folder),
+                then: Answered::SortFolder,
+            });
+            focus_input(this, window, cx);
+        }
+        Act::ResortAllLogs => {
+            if let Some(folder) = crate::fly::log_directory() {
+                sort_logs(this, move || mp_log::log_sort::resort_all(&folder));
+            }
+        }
         // `InitialDirectory = Settings.Instance.LogDir`.
         Act::SplitDfLog => {
             let folder = crate::fly::log_directory()
@@ -746,7 +781,9 @@ fn send(this: &mut MissionPlanner, what: Act) {
         | Act::SplitDfLog
         | Act::ClearCustomMaps
         | Act::AgeMapData
-        | Act::ArmAndTakeoff => true,
+        | Act::ArmAndTakeoff
+        | Act::SortTlogs
+        | Act::ResortAllLogs => true,
     };
     if !sent {
         this.file_status = Some(error_box(PLEASE_CONNECT));
@@ -790,6 +827,13 @@ fn answer(this: &mut MissionPlanner, yes: bool) {
             input,
             then: Answered::SplitPieces(file),
         } => split_df_log(this, file, input.field.value()),
+        Asking::Input {
+            input,
+            then: Answered::SortFolder,
+        } => {
+            let folder = std::path::PathBuf::from(input.field.value().trim());
+            sort_logs(this, move || mp_log::log_sort::sort_folder(&folder));
+        }
         Asking::Input {
             input,
             then: Answered::Hwids,
@@ -917,6 +961,7 @@ fn read_mag_log(this: &mut MissionPlanner, file: std::path::PathBuf) {
 pub(crate) fn tick(this: &mut MissionPlanner) {
     split_tick(this);
     takeoff_tick(this);
+    sort_tick(this);
     let Some(receiver) = this.experimental.magcal.as_ref() else {
         return;
     };
@@ -1047,6 +1092,56 @@ fn takeoff_tick(this: &mut MissionPlanner) {
             });
         }
     }
+}
+
+/// A sort started on a thread of its own, where the C#'s window waits on it; [`tick`] takes its
+/// answer. One at a time.
+fn sort_logs(
+    this: &mut MissionPlanner,
+    sort: impl FnOnce() -> std::io::Result<usize> + Send + 'static,
+) {
+    if this.experimental.sort.is_some() {
+        return;
+    }
+    let (sender, receiver) = std::sync::mpsc::channel();
+    let spawned = wasm_thread::Builder::new()
+        .name("mp-log-sort".to_owned())
+        .spawn(move || {
+            let _ = sender.send(sort());
+        });
+    match spawned {
+        Ok(_) => this.experimental.sort = Some(receiver),
+        Err(error) => log::debug!("LogSort: {error}"),
+    }
+}
+
+/// A sort's answer, when it comes: nothing said, as the C# says nothing - Sort TLogs' `catch`
+/// swallows a folder it cannot read; ReSort All logs' unread log directory is the C#'s error box,
+/// on the status line. `// C#: temp.cs:231-237, 861`
+fn sort_tick(this: &mut MissionPlanner) {
+    let Some(receiver) = this.experimental.sort.as_ref() else {
+        return;
+    };
+    let sorted = match receiver.try_recv() {
+        Ok(sorted) => sorted,
+        Err(std::sync::mpsc::TryRecvError::Empty) => {
+            crate::repaint::in_flight();
+            return;
+        }
+        Err(std::sync::mpsc::TryRecvError::Disconnected) => {
+            Err(std::io::Error::other("the sort stopped without an answer"))
+        }
+    };
+    this.experimental.sort = None;
+    this.experimental.sort_last = Some(match sorted {
+        Ok(count) => format!("sorted {count}"),
+        Err(why) => {
+            if this.experimental.last == Some("but_sortlogs") {
+                this.file_status = Some(error_box(&why));
+            }
+            format!("failed: {why}")
+        }
+    });
 }
 
 /// Split DFLog's answer, when it comes: nothing said when it is done, as the C# says nothing; what
@@ -1331,6 +1426,15 @@ pub(crate) fn record_facts(state: &Experimental) {
             Some(Asking::Path(path, _)) => format!("{}: {}", path.caption, path.field.value()),
         },
     );
+    // Sort TLogs and ReSort All logs: sorting, or what the last sort came to.
+    facts::record(
+        "experimental.sort",
+        if state.sort.is_some() {
+            "sorting"
+        } else {
+            state.sort_last.as_deref().unwrap_or("none")
+        },
+    );
     // arm and takeoff: the step under way, or how the last one ended.
     facts::record(
         "experimental.takeoff",
@@ -1402,13 +1506,15 @@ mod tests {
                 Tool::Unavailable(why) => assert!(!why.is_empty()),
             }
         }
-        assert_eq!(opens, 25);
+        assert_eq!(opens, 27);
         assert_eq!(tool("but_paramrestore"), Tool::Act(Act::ParamRestore));
         assert_eq!(tool("BUT_magfit2"), Tool::Act(Act::MagCalLog));
         assert_eq!(tool("myButton1"), Tool::Act(Act::SplitDfLog));
         assert_eq!(tool("BUT_clearcustommaps"), Tool::Act(Act::ClearCustomMaps));
         assert_eq!(tool("but_agemapdata"), Tool::Act(Act::AgeMapData));
         assert_eq!(tool("but_armandtakeoff"), Tool::Act(Act::ArmAndTakeoff));
+        assert_eq!(tool("BUT_sorttlogs"), Tool::Act(Act::SortTlogs));
+        assert_eq!(tool("but_sortlogs"), Tool::Act(Act::ResortAllLogs));
         assert_eq!(tool("but_blupdate"), Tool::Act(Act::BootloaderUpgrade));
         assert_eq!(tool("but_disablearmswitch"), Tool::Act(Act::ToggleSafety));
         assert_eq!(tool("but_messageinterval"), Tool::MessageInterval);

@@ -18,6 +18,8 @@ wasm_thread = { git = "https://github.com/zed-industries/wasm_thread", rev = "0c
 # The clock, std's on the desktop and the browser's in a web page (web/tools/port_clock.py).
 web-time = "1"
 mp-mavlink.workspace = true
+# `log_sort`'s "Move log" lines, as LogSort.cs logs them.
+log.workspace = true
 thiserror.workspace = true
 # The .kmz "Create KML + gpx" writes and the analyzer zip "Auto Analysis" unpacks.
 flate2.workspace = true

@@ -51,6 +51,7 @@ pub mod dflogbuffer;
 pub mod expression;
 pub mod fft;
 pub mod index;
+pub mod log_sort;
 pub mod logfile;
 pub mod logparams;
 pub mod magcal_log;

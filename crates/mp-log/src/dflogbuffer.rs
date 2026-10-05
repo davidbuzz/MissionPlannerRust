@@ -578,6 +578,26 @@ impl<'a> DfLogBuffer<'a> {
         Ok(out)
     }
 
+    /// `SeenMessageTypes`: the name of every type the log has a message of and a format for, in
+    /// the order of their type numbers. `// C#: ExtLibs/Utilities/DFLogBuffer.cs:805-819`
+    #[must_use]
+    pub fn seen_message_types(&self) -> Vec<String> {
+        let mut seen: Vec<(u8, String)> = self
+            .dflog
+            .logformat
+            .values()
+            .map(|label| (label.id.to_le_bytes()[0], label))
+            .filter(|(msg_type, _)| {
+                self.index_lines
+                    .get(usize::from(*msg_type))
+                    .is_some_and(|lines| !lines.is_empty())
+            })
+            .map(|(msg_type, label)| (msg_type, label.name.clone()))
+            .collect();
+        seen.sort();
+        seen.into_iter().map(|(_, name)| name).collect()
+    }
+
     /// `GetEnumeratorType`: every line of the named types, in line order, as items - read now, in
     /// the order the C#'s lazy enumeration reads them. Each comes with its line number.
     /// `// C#: ExtLibs/Utilities/DFLogBuffer.cs:701-774`
