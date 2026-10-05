@@ -290,6 +290,10 @@ impl Banner {
         let text = (!names.is_empty()).then(|| describe(&names));
         let now = web_time::Instant::now();
         self.observe(text, now);
+        // A cut-off not yet shown: drawn again when the strip is due (repaint.rs).
+        if self.showing.is_some() && self.text_at(now).is_none() {
+            crate::repaint::again_in(BANNER_AFTER);
+        }
         if let Some(text) = self.newly_shown(now) {
             let line = record_line(
                 &chrono::Local::now().format("%Y-%m-%d %H:%M:%S").to_string(),
@@ -385,10 +389,6 @@ mod tests {
             assert!(must_show(name), "{name}");
         }
         assert!(!must_show("plan-row-40"));
-    }
-
-    /// The banner names a cut-off once it has lasted, not the frame a screen is switched to; a
-    /// change starts the time again, and nothing cut off takes it away.
         // The parameter grid's rows and their cells scroll; the screen's controls do not.
         for row in [
             "param-COMPASS_DIA_X",
@@ -407,6 +407,10 @@ mod tests {
         ] {
             assert!(must_show(control), "{control}");
         }
+    }
+
+    /// The banner names a cut-off once it has lasted, not the frame a screen is switched to; a
+    /// change starts the time again, and nothing cut off takes it away.
     #[test]
     fn the_banner_names_what_stays_cut_off() {
         let start = web_time::Instant::now();

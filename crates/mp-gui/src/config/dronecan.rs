@@ -2875,6 +2875,10 @@ impl DroneCan {
 
     /// The bus's input to the node.
     fn read_bus(&mut self, telemetry: &Telemetry, view: &TelemetryView, now: Instant) {
+        // A bus open is heard every frame: the page drawn as often as the timer drew it.
+        if self.bus.is_some() {
+            crate::repaint::in_flight();
+        }
         let mut lines: Vec<String> = Vec::new();
         let mut opened = false;
         let mut failed = None;
@@ -3120,6 +3124,7 @@ impl DroneCan {
         let Some(flow) = self.update.take() else {
             return;
         };
+        crate::repaint::in_flight();
         match flow {
             UpdateFlow::Fetching {
                 node,
@@ -3217,6 +3222,7 @@ impl DroneCan {
         let Some(mut passthrough) = self.passthrough.take() else {
             return;
         };
+        crate::repaint::in_flight();
         let Some(node) = self.can.as_mut() else {
             self.passthrough = Some(passthrough);
             return;

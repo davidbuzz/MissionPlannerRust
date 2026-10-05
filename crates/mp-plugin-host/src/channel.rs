@@ -382,6 +382,8 @@ impl ChannelSurface {
             plugin: self.plugin,
             body,
         });
+        // The window serves requests as it draws: drawn now, not at its next second.
+        mp_os::wake();
     }
 
     /// A request that waits for its answer: `default` when the window is gone, or, with `wait`,

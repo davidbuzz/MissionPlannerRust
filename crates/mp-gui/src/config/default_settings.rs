@@ -423,7 +423,7 @@ impl<H: Copy> DefaultSettings<H> {
                     self.fetching = None;
                     self.arrive(arrived, parameters);
                 }
-                Err(TryRecvError::Empty) => {}
+                Err(TryRecvError::Empty) => crate::repaint::in_flight(),
                 Err(TryRecvError::Disconnected) => {
                     self.fetching = None;
                 }

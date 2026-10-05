@@ -2556,7 +2556,10 @@ impl SikRadio {
         while let Some(job) = &self.job {
             match job.events.try_recv() {
                 Ok(event) => self.event(event),
-                Err(mpsc::TryRecvError::Empty) => break,
+                Err(mpsc::TryRecvError::Empty) => {
+                    crate::repaint::in_flight();
+                    break;
+                }
                 Err(mpsc::TryRecvError::Disconnected) => {
                     // The thread went without its end: the port with it.
                     self.job = None;

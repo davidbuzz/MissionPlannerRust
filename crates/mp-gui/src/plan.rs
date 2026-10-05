@@ -9151,7 +9151,10 @@ impl PlanMenus {
         let pending = self.geocoding.as_ref()?;
         let outcome = match pending.answer.try_recv() {
             Ok(outcome) => outcome,
-            Err(std::sync::mpsc::TryRecvError::Empty) => return None,
+            Err(std::sync::mpsc::TryRecvError::Empty) => {
+                crate::repaint::in_flight();
+                return None;
+            }
             Err(std::sync::mpsc::TryRecvError::Disconnected) => {
                 (mapview::GeocoderStatus::ExceptionInCode, None)
             }

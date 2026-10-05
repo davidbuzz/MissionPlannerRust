@@ -669,7 +669,10 @@ impl ParamGen {
         if let Some((_, receiver)) = self.running.as_ref() {
             let done = match receiver.try_recv() {
                 Ok(outcome) => Some(outcome),
-                Err(TryRecvError::Empty) => None,
+                Err(TryRecvError::Empty) => {
+                    crate::repaint::in_flight();
+                    None
+                }
                 Err(TryRecvError::Disconnected) => {
                     Some(Err("the run ended with no answer".to_owned()))
                 }

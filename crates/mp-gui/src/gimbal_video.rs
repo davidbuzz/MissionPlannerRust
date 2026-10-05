@@ -2380,6 +2380,12 @@ fn video_box(
 ) -> AnyElement {
     let latest = control.stream.latest();
     let no_video = latest.is_none();
+    // Its frames drawn as they come; while none has, looked for as a job in flight (repaint.rs).
+    crate::repaint::again_in(if no_video {
+        crate::repaint::IN_FLIGHT
+    } else {
+        crate::repaint::VIDEO_FRAME
+    });
     let image_cache = Rc::clone(&control.image);
     let box_bounds = Rc::clone(&control.box_bounds);
     let drag = control.drag;

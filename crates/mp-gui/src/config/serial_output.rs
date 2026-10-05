@@ -273,7 +273,10 @@ pub fn open(kind: Kind, host_port: u16, baud: u32, answers: Vec<String>) -> Open
 pub fn poll(opening: &Opening) -> Option<Result<Box<dyn Transport>, String>> {
     match opening.try_recv() {
         Ok(opened) => Some(opened),
-        Err(TryRecvError::Empty) => None,
+        Err(TryRecvError::Empty) => {
+            crate::repaint::in_flight();
+            None
+        }
         Err(TryRecvError::Disconnected) => Some(Err("no answer".to_owned())),
     }
 }

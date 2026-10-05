@@ -1557,6 +1557,11 @@ fn paint_tiles(
             }
         }
     }
+    // Tiles still to come - missing, or drawn from a coarser one - are fetched on threads of
+    // their own: the map is drawn again as the timer drew it until they are in (repaint.rs).
+    if (map.tiles_missing > 0 || map.tiles_approximate > 0) && !store.is_offline() {
+        crate::repaint::in_flight();
+    }
     true
 }
 

@@ -765,6 +765,10 @@ impl Sticks {
     /// Keeps the reader pointed at the vehicle, the joystick holding the vehicle's ranges, notices
     /// a device lost, and runs the page's timer and a detection.
     pub fn tick(&mut self, target: Target, view: &TelemetryView, banner: Option<&str>) {
+        // A joystick in use: its sticks read on their own thread, drawn as the timer drew them.
+        if self.joystick.is_some() {
+            crate::repaint::in_flight();
+        }
         *self.wire.target.os_lock().unwrap_or_else(PoisonError::into_inner) = target;
         // `cs.firmware`, which starts as ArduCopter2 before any vehicle is heard.
         self.firmware = view.state.as_ref().map_or(Firmware::ArduCopter2, |state| {

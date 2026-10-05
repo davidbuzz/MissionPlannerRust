@@ -291,7 +291,7 @@ impl Fetch {
                     self.status = Some(why);
                     self.receiver = None;
                 }
-                Err(std::sync::mpsc::TryRecvError::Empty) => {}
+                Err(std::sync::mpsc::TryRecvError::Empty) => crate::repaint::in_flight(),
                 Err(std::sync::mpsc::TryRecvError::Disconnected) => {
                     self.receiver = None;
                 }

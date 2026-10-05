@@ -449,7 +449,10 @@ impl SupportProxy {
             let protocol = *protocol;
             let opened = match receiver.try_recv() {
                 Ok(opened) => Some(opened),
-                Err(TryRecvError::Empty) => None,
+                Err(TryRecvError::Empty) => {
+                    crate::repaint::in_flight();
+                    None
+                }
                 Err(TryRecvError::Disconnected) => Some(Err("no answer".to_owned())),
             };
             if let Some(opened) = opened {

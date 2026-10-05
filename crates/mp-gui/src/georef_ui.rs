@@ -1697,7 +1697,10 @@ impl Form {
                     done = Some((*georef, Some(outcome)));
                     break;
                 }
-                Err(mpsc::TryRecvError::Empty) => break,
+                Err(mpsc::TryRecvError::Empty) => {
+                    crate::repaint::in_flight();
+                    break;
+                }
                 Err(mpsc::TryRecvError::Disconnected) => {
                     done = Some((self.fresh_georef(), None));
                     break;

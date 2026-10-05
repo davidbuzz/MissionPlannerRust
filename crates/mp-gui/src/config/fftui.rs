@@ -1253,7 +1253,10 @@ impl FftUi {
         let run = *run;
         let result = match receiver.try_recv() {
             Ok(result) => result,
-            Err(TryRecvError::Empty) => return None,
+            Err(TryRecvError::Empty) => {
+                crate::repaint::in_flight();
+                return None;
+            }
             Err(TryRecvError::Disconnected) => {
                 Err("the FFT thread ended without a result".to_owned())
             }

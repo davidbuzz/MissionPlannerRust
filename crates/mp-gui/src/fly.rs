@@ -5039,6 +5039,7 @@ pub fn gst_download_tick(
         said = Some(words);
     }
     if !download.thread.is_finished() {
+        crate::repaint::in_flight();
         return said;
     }
     let download = data.gst_download.take()?;
@@ -6208,7 +6209,10 @@ impl Conversions {
         let (kind, log, receiver) = self.running.as_ref()?;
         let result = match receiver.try_recv() {
             Ok(result) => result,
-            Err(std::sync::mpsc::TryRecvError::Empty) => return None,
+            Err(std::sync::mpsc::TryRecvError::Empty) => {
+                crate::repaint::in_flight();
+                return None;
+            }
             Err(std::sync::mpsc::TryRecvError::Disconnected) => {
                 Err("the conversion stopped without an answer".to_owned())
             }
@@ -8398,6 +8402,10 @@ impl MissionPlanner {
 
     /// Once a frame: the GStreamer runtime's download ([`gst_download_tick`]).
     pub(crate) fn hud_video_tick(&mut self) {
+        // The HUD's video, its frames drawn as they come (repaint.rs).
+        if self.fly_data.hud_video_running() {
+            crate::repaint::again_in(crate::repaint::VIDEO_FRAME);
+        }
         if let Some(words) =
             gst_download_tick(&mut self.fly_data, &mut self.persisted, &look_for_gstreamer)
         {

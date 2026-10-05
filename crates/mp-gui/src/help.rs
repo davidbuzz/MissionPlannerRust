@@ -507,7 +507,7 @@ impl Help {
                     self.check = None;
                     status = self.checked(outcome);
                 }
-                Err(TryRecvError::Empty) => {}
+                Err(TryRecvError::Empty) => crate::repaint::in_flight(),
                 Err(TryRecvError::Disconnected) => {
                     self.check = None;
                     self.flow = Flow::Idle;
@@ -529,7 +529,10 @@ impl Help {
                         status = self.updated(outcome);
                         break;
                     }
-                    Err(TryRecvError::Empty) => break,
+                    Err(TryRecvError::Empty) => {
+                        crate::repaint::in_flight();
+                        break;
+                    }
                     Err(TryRecvError::Disconnected) => {
                         self.updating = None;
                         self.flow = Flow::Idle;

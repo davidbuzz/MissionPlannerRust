@@ -437,7 +437,10 @@ impl Sitl {
                         self.finished(outcome);
                         break;
                     }
-                    Err(TryRecvError::Empty) => break,
+                    Err(TryRecvError::Empty) => {
+                        crate::repaint::in_flight();
+                        break;
+                    }
                     Err(TryRecvError::Disconnected) => {
                         self.worker = None;
                         self.saying = None;
@@ -453,7 +456,7 @@ impl Sitl {
                     self.probe = None;
                 }
                 Err(TryRecvError::Disconnected) => self.probe = None,
-                Err(TryRecvError::Empty) => {}
+                Err(TryRecvError::Empty) => crate::repaint::in_flight(),
             }
         }
         if self.zoom_pending && self.map.borrow().painted() {

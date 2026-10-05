@@ -705,7 +705,10 @@ impl Worker {
                 Ok(Said::Progress(percent, status)) => progress.set(percent, &status),
                 Ok(Said::Ask(waiting) | Said::Show(waiting)) => self.waiting = Some(waiting),
                 Ok(Said::Done(reached)) => return Some(*reached),
-                Err(TryRecvError::Empty) => return None,
+                Err(TryRecvError::Empty) => {
+                    crate::repaint::in_flight();
+                    return None;
+                }
                 Err(TryRecvError::Disconnected) => return Some(Reached::default()),
             }
         }
@@ -1321,7 +1324,7 @@ impl InstallFirmware {
                         self.label();
                     }
                 }
-                Err(TryRecvError::Empty) => {}
+                Err(TryRecvError::Empty) => crate::repaint::in_flight(),
                 Err(TryRecvError::Disconnected) => self.receiver = None,
             }
         }
@@ -1340,6 +1343,8 @@ impl InstallFirmware {
     /// latest arrival, for the probe, while the manifest page is active.
     fn hear_arrival(&mut self) -> Option<Vec<String>> {
         let watcher = self.watcher.as_ref()?;
+        // Watching the ports: an arrival looked for as the timer looked for it.
+        crate::repaint::in_flight();
         let latest = watcher.arrivals.try_iter().last()?;
         (self.open && !self.connected).then_some(latest)
     }

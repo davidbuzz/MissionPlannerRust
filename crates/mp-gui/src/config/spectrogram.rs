@@ -1124,7 +1124,10 @@ impl Spectrogram {
         if let Some((_, receiver)) = self.running.as_ref() {
             let result = match receiver.try_recv() {
                 Ok(result) => Some(result),
-                Err(TryRecvError::Empty) => None,
+                Err(TryRecvError::Empty) => {
+                    crate::repaint::in_flight();
+                    None
+                }
                 Err(TryRecvError::Disconnected) => Some(Err(
                     "the spectrogram thread ended without a result".to_owned(),
                 )),

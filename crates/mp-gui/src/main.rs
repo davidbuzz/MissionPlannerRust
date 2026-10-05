@@ -191,10 +191,6 @@ enum PlanGroup {
 use telemetry::{Telemetry, TelemetryView};
 use ui::{action, theme};
 
-/// How often to repaint. 10 Hz is plenty for numeric readouts and keeps an idle GCS cheap; the
-/// map and HUD (Deliverable 7-Deliverable 9) will drive their own higher-rate rendering.
-const REFRESH: Duration = Duration::from_millis(100);
-
 /// Auto Pan's setting, `CHK_autopan`, as the C#'s `bool.ToString()` writes it: "True" or "False".
 /// `// C#: GCSViews/FlightData.cs:1929-1933`
 const AUTO_PAN_SETTING: &str = "CHK_autopan";
@@ -749,21 +745,23 @@ impl MissionPlanner {
         // ever reads one, so this cannot block on I/O. MP_REPAINT chooses another way, to be
         // measured: repaint.rs.
         cx.spawn(async move |this, cx| {
-            let policy = repaint::Policy::from_env().unwrap_or_else(|| {
-                repaint::Policy::Tick(refresh_interval(
-                    std::env::var("MP_BENCH").is_ok(),
-                    storm::enabled(),
-                ))
-            });
+            let policy = repaint::Policy::chosen(
+                std::env::var("MP_BENCH").is_ok().then_some(REFRESH_BENCH),
+                storm::enabled().then_some(storm::REFRESH),
+            );
             let mut watch = repaint::Watch::new(web_time::Instant::now());
             loop {
-                cx.background_executor().timer(policy.wake()).await;
+                cx.background_executor().timer(policy.between_looks()).await;
                 let looked = this.update(cx, |this, cx| {
-                    let mark = match policy {
-                        repaint::Policy::Tick(_) => 0,
-                        repaint::Policy::Data { .. } => this.telemetry.change_mark(),
+                    let now = web_time::Instant::now();
+                    let (mark, asked) = match policy {
+                        repaint::Policy::Tick(_) => (0, false),
+                        repaint::Policy::Data { .. } => (
+                            this.telemetry.change_mark() ^ mp_os::wakes().rotate_left(32),
+                            repaint::take_due(now),
+                        ),
                     };
-                    if watch.repaint(policy, mark, web_time::Instant::now()) {
+                    if watch.repaint(policy, mark, asked, now) {
                         cx.notify();
                     }
                 });
@@ -1169,6 +1167,8 @@ impl MissionPlanner {
         let Some(mut tour) = self.tour.take() else {
             return;
         };
+        // The tour's stops are timed: looked at as the timer looked (repaint.rs).
+        crate::repaint::in_flight();
         let now = web_time::Instant::now();
         let view = self.telemetry.view();
         if !tour.waiting(view.parameters.len(), usize::from(view.parameters_expected), now) {
@@ -4586,17 +4586,6 @@ impl Render for MissionPlanner {
     }
 }
 
-/// How often to repaint: as fast as possible for `MP_BENCH`, at display rate during a storm
-/// (`MP_STORM`, storm.rs), and at [`REFRESH`] otherwise.
-const fn refresh_interval(bench: bool, storm: bool) -> Duration {
-    if bench {
-        REFRESH_BENCH
-    } else if storm {
-        storm::REFRESH
-    } else {
-        REFRESH
-    }
-}
 
 /// The link to remember for the next launch: the one in use, unless there is none or it is the
 /// storm's in-memory link, which no later launch could open.
@@ -5185,11 +5174,24 @@ mod tests {
     #[test]
     fn a_storm_repaints_at_display_rate_and_is_never_remembered() {
         // The storm's frames are what is measured, so there have to be display-rate frames of
-        // them; a normal run keeps its 10 Hz, and a benchmark still repaints flat out.
-        assert_eq!(refresh_interval(false, false), REFRESH);
-        assert_eq!(refresh_interval(false, true), storm::REFRESH);
-        assert!(storm::REFRESH < REFRESH);
-        assert_eq!(refresh_interval(true, true), REFRESH_BENCH);
+        // them; a benchmark still repaints flat out; a normal run on new data (repaint.rs).
+        if std::env::var("MP_REPAINT").is_err() {
+            let chosen = |bench: bool, storm: bool| {
+                repaint::Policy::chosen(
+                    bench.then_some(REFRESH_BENCH),
+                    storm.then_some(storm::REFRESH),
+                )
+            };
+            assert_eq!(
+                chosen(false, false),
+                repaint::Policy::Data {
+                    floor: repaint::FLOOR
+                }
+            );
+            assert_eq!(chosen(false, true), repaint::Policy::Tick(storm::REFRESH));
+            assert!(storm::REFRESH < repaint::IN_FLIGHT);
+            assert_eq!(chosen(true, true), repaint::Policy::Tick(REFRESH_BENCH));
+        }
         // Remembering the storm's in-memory link would have the next launch try to open it.
         assert_eq!(
             link_to_remember("tcp:127.0.0.1:5760".to_owned(), false).as_deref(),

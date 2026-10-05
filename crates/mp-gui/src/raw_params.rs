@@ -695,14 +695,17 @@ impl MissionPlanner {
                     presets.take_list(result);
                 }
                 Err(TryRecvError::Disconnected) => presets.listing = None,
-                Err(TryRecvError::Empty) => {}
+                Err(TryRecvError::Empty) => crate::repaint::in_flight(),
             }
         }
         if let Some(loading) = &presets.loading {
             let result = match loading.try_recv() {
                 Ok(result) => Some(result),
                 Err(TryRecvError::Disconnected) => Some(Err("the fetch ended".to_owned())),
-                Err(TryRecvError::Empty) => None,
+                Err(TryRecvError::Empty) => {
+                    crate::repaint::in_flight();
+                    None
+                }
             };
             if let Some(result) = result {
                 presets.loading = None;

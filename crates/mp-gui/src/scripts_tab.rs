@@ -1083,6 +1083,8 @@ impl ScriptsTab {
         let Some(asks) = &self.asks else {
             return;
         };
+        // A script running: its output and requests looked for as the timer looked for them.
+        crate::repaint::in_flight();
         // `MainV2.comPort` and `sysidcurrent` as they stand, for the script's thread.
         *self.link.os_lock().unwrap_or_else(PoisonError::into_inner) = telemetry.send_handle();
         let mut taken: Option<TelemetryView> = None;

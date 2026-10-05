@@ -581,7 +581,10 @@ impl FirmwareLegacy {
                         arrived = Some(list);
                         break;
                     }
-                    Err(TryRecvError::Empty) => break,
+                    Err(TryRecvError::Empty) => {
+                        crate::repaint::in_flight();
+                        break;
+                    }
                     Err(TryRecvError::Disconnected) => {
                         arrived = Some(Err("the list's thread ended".to_owned()));
                         break;
