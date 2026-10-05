@@ -44,7 +44,8 @@
 //!   it) and mag calb log (`MagCalib.ProcessLog`: a log read and fitted, `magoffset.dxf` drawn, and
 //!   the offsets to the compass page's `SaveOffsets`);
 //! * out of scope by a ruling, dimmed, its press saying why on the status line: Follow Me, OSDVideo,
-//!   Moving Base and the four Swarm tools (PLAN.md section 12 D13, 2026-09-25), Lang Edit (the
+//!   Moving Base and the four Swarm tools (PLAN.md section 12 D13, 2026-09-25), Anon Log (the same
+//!   section, 2026-10-02: `Privacy.anonymise`, "beta and not interesting"), Lang Edit (the
 //!   translation editor, with languages muted, 2026-09-25), Custom GDAL (no GDAL bindings, the
 //!   matrix's GDAL row);
 //! * not ported yet, dimmed, its press saying so - the matrix's EXPERIMENTAL row lists them, to be
@@ -211,6 +212,8 @@ const ROW_GAP: f32 = 2.0;
 const SECTION_12_D13: &str = "out of scope, the owner's ruling (PLAN.md section 12 D13, 2026-09-25)";
 const LANGUAGES_MUTED: &str =
     "out of scope: translation is muted by the owner's ruling (2026-09-25)";
+const ANON_LOG_RULED: &str = "out of scope, the owner's ruling (PLAN.md section 12 D13, 2026-10-02: \
+     beta and not interesting)";
 const NO_GDAL: &str =
     "not available: this application has no GDAL (NOT_DONE_YET_MATRIX.md, the GDAL row)";
 const NOT_PORTED: &str = "not ported yet (NOT_DONE_YET_MATRIX.md, the EXPERIMENTAL row)";
@@ -261,6 +264,7 @@ pub(crate) fn tool(name: &str) -> Tool {
         "BUT_magfit2" => Tool::Act(Act::MagCalLog),
         "BUT_follow_me" | "but_osdvideo" | "BUT_movingbase" | "BUT_swarm" | "BUT_followleader"
         | "but_trimble" | "but_followswarm" => Tool::Unavailable(SECTION_12_D13),
+        "but_anonlog" => Tool::Unavailable(ANON_LOG_RULED),
         "BUT_lang_edit" => Tool::Unavailable(LANGUAGES_MUTED),
         "but_GDAL" => Tool::Unavailable(NO_GDAL),
         _ => Tool::Unavailable(NOT_PORTED),
@@ -1082,6 +1086,7 @@ mod tests {
         assert_eq!(tool("but_messageinterval"), Tool::MessageInterval);
         assert_eq!(tool("BUT_swarm"), Tool::Unavailable(SECTION_12_D13));
         assert_eq!(tool("but_GDAL"), Tool::Unavailable(NO_GDAL));
+        assert_eq!(tool("but_anonlog"), Tool::Unavailable(ANON_LOG_RULED));
         assert_eq!(tool("but_reboot"), Tool::Act(Act::Reboot));
         assert_eq!(tool("but_structtest"), Tool::Unavailable(NOT_PORTED));
     }

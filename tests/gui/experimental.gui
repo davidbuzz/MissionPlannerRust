@@ -33,6 +33,9 @@ expect config.nmea.window false
 click experimental-BUT_swarm
 expect experimental.last BUT_swarm
 expect status ~ Swarm: out of scope, the owner's ruling (PLAN.md section 12 D13
+# Anon Log, ruled out on 2026-10-02.
+click experimental-but_anonlog
+expect status ~ Anon Log: out of scope, the owner's ruling (PLAN.md section 12 D13, 2026-10-02
 # Not ported yet: structtest says so.
 click experimental-but_structtest
 expect status ~ structtest: not ported yet
