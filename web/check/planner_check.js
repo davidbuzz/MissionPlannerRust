@@ -6,11 +6,10 @@
 //
 //   NODE_PATH=<a node_modules holding playwright> node check/planner_check.js [out-dir] [url]
 const { chromium } = require("playwright");
+const { clickNamed } = require("./clicks");
 const out = process.argv[2] || ".";
-const url = process.argv[3] || "http://127.0.0.1:8080/?vehicle=copter&demo=0";
+const url = process.argv[3] || "http://127.0.0.1:8080/?vehicle=copter&demo=0&facts=1";
 const fail = (why) => { console.log(`FAIL: ${why}`); process.exitCode = 1; };
-// Where the window puts the port box, its TCP entry and CONNECT at 1400x900.
-const PORT_BOX = [996, 36], TCP = [964, 97], CONNECT = [1187, 36];
 (async () => {
   const browser = await chromium.launch({
     headless: true,
@@ -29,11 +28,11 @@ const PORT_BOX = [996, 36], TCP = [964, 97], CONNECT = [1187, 36];
   // settings yet: its OK, over the flight screen's map at 1400x900 (a click on the map otherwise).
   await page.mouse.click(854, 484);
   await page.waitForTimeout(800);
-  await page.mouse.click(...PORT_BOX);
+  await clickNamed(page, "main-port");
   await page.waitForTimeout(800);
-  await page.mouse.click(...TCP);
+  await clickNamed(page, "main-port-TCP");
   await page.waitForTimeout(800);
-  await page.mouse.click(...CONNECT);
+  await clickNamed(page, "main-connect");
   await page.waitForTimeout(1500);
   await page.keyboard.press("Enter"); // the host: 127.0.0.1
   await page.waitForTimeout(1500);

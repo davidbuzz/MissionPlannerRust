@@ -91,7 +91,8 @@ Error.stackTraceLimit = 200;
 import { servePlanner } from "./link.js";
 import { loadFiles, keepFiles, keepFaults } from "./storage.js";
 import { serveFiles } from "./files.js";
-import init, { page_link_requested, page_link_push, page_link_take, planner_facts, planner_facts_enable, planner_storage_take, planner_file_picked, planner_probe } from "./pkg-planner/planner.js";
+import { serveSerial } from "./serial.js";
+import init, { page_link_requested, page_link_push, page_link_take, planner_facts, planner_facts_enable, planner_storage_take, planner_file_picked, planner_probe, planner_serial_chosen } from "./pkg-planner/planner.js";
 
 // The planner's size as built, which tools/pages-site.sh writes here: a server that compresses
 // it (GitHub Pages sends it gzipped) gives only the compressed length, and the download is
@@ -174,6 +175,8 @@ if (!globalThis.crossOriginIsolated) {
             keepFiles(planner_storage_take);
             // The computer's files: the browser's picker and downloads for the file boxes.
             serveFiles(planner_file_picked);
+            // The computer's serial ports, where the browser has WebSerial.
+            serveSerial(planner_serial_chosen);
             // `?facts=1`: the planner's facts, as MP_FACTS gives them on the desktop, for the checks.
             if (new URLSearchParams(location.search).get("facts")) {
                 planner_facts_enable();
@@ -182,8 +185,10 @@ if (!globalThis.crossOriginIsolated) {
                 // Where each control is - the point to click, and its size - by its name.
                 globalThis.mpProbe = () =>
                     Object.fromEntries(planner_probe().split("\n").filter(Boolean).map((line) => {
-                        const [name, x, y, width, height] = line.split(" ");
-                        return [name, { x: Number(x), y: Number(y), width: Number(width), height: Number(height) }];
+                        // The four numbers last: a control's name may have spaces in it.
+                        const parts = line.split(" ");
+                        const [x, y, width, height] = parts.splice(-4).map(Number);
+                        return [parts.join(" "), { x, y, width, height }];
                     }));
             }
             servePlanner({ requested: page_link_requested, push: page_link_push, take: page_link_take });

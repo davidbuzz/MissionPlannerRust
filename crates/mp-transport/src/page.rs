@@ -47,12 +47,16 @@ struct Shared {
     inbox: VecDeque<u8>,
     /// Bytes for the vehicle, until the page takes them.
     outbox: Vec<u8>,
+    /// The link the page carries now, counted from the first: one closed after another has
+    /// opened is not the page's to close.
+    current: u64,
 }
 
 static SHARED: Mutex<Shared> = Mutex::new(Shared {
     requests: VecDeque::new(),
     inbox: VecDeque::new(),
     outbox: Vec::new(),
+    current: 0,
 });
 /// Rung when the page hands bytes over.
 static ARRIVED: Condvar = Condvar::new();
@@ -87,6 +91,42 @@ pub fn start_sitl(module: &str, folder: &str, arguments: &[String]) {
         request.push_str(argument);
     }
     shared().requests.push_back(request);
+}
+
+/// The serial ports the browser has let the page use (WebSerial: web/www/serial.js publishes
+/// them as `globalThis.mprSerialPorts`, `[name, vid, pid]` each, -1 for an id it does not know),
+/// as `list_ports` gives the desktop's. None in a browser without WebSerial, or from a thread
+/// other than the page's main one, whose global this is not.
+#[must_use]
+pub fn serial_ports() -> Vec<crate::PortInfo> {
+    let Ok(ports) = js_sys::Reflect::get(&js_sys::global(), &"mprSerialPorts".into()) else {
+        return Vec::new();
+    };
+    if !js_sys::Array::is_array(&ports) {
+        return Vec::new();
+    }
+    let id = |value: wasm_bindgen::JsValue| {
+        value
+            .as_f64()
+            .filter(|id| (0.0..=f64::from(u16::MAX)).contains(id))
+            .map(|id| {
+                #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+                let id = id as u16;
+                id
+            })
+    };
+    js_sys::Array::from(&ports)
+        .iter()
+        .filter_map(|port| {
+            let port = js_sys::Array::from(&port);
+            let name = port.get(0).as_string()?;
+            Some(crate::PortInfo {
+                vid: id(port.get(1)),
+                pid: id(port.get(2)),
+                ..crate::PortInfo::bare(name)
+            })
+        })
+        .collect()
 }
 
 /// Asks the page to stop the SITL it runs, if any.
@@ -125,6 +165,8 @@ pub struct PageTransport {
     description: String,
     timeout: Duration,
     open: bool,
+    /// Which of the page's links this is.
+    link: u64,
 }
 
 impl PageTransport {
@@ -137,10 +179,12 @@ impl PageTransport {
         shared.requests.push_back(url.to_owned());
         shared.inbox.clear();
         shared.outbox.clear();
+        shared.current += 1;
         Ok(Self {
             description: format!("{url} (through the page)"),
             timeout: Duration::from_millis(100),
             open: true,
+            link: shared.current,
         })
     }
 }
@@ -183,7 +227,20 @@ impl Transport for PageTransport {
     fn close(&mut self) {
         if self.open {
             self.open = false;
-            shared().requests.push_back("close".to_owned());
+            let mut shared = shared();
+            // A link opened since is the page's now, and not this one's to end.
+            if shared.current == self.link {
+                shared.requests.push_back("close".to_owned());
+            }
         }
+    }
+}
+
+/// Dropped - its link's thread ended, the link closed - the page is told to end what carries it,
+/// a serial port or a socket, as dropping a desktop transport closes its handle. Without it a
+/// serial port stayed open after DISCONNECT (web/check/serial_check.js, 2026-10-06).
+impl Drop for PageTransport {
+    fn drop(&mut self) {
+        self.close();
     }
 }

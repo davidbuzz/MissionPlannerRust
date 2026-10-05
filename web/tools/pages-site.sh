@@ -15,7 +15,7 @@ COI_VERSION=0.1.7
 [ -f "$www/pkg-planner/planner_bg.wasm" ] || { echo "no $www/pkg-planner: build the planner first" >&2; exit 1; }
 rm -rf "$out"
 mkdir -p "$out"
-cp -rL "$www/index.html" "$www/link.js" "$www/storage.js" "$www/files.js" "$www/sitl-worker.js" "$www/tailscale.js" \
+cp -rL "$www/index.html" "$www/link.js" "$www/storage.js" "$www/files.js" "$www/serial.js" "$www/sitl-worker.js" "$www/tailscale.js" \
     "$www/tailscale" "$www/sitl" "$www/pkg-planner" "$out/"
 # Only what a page loads: the SITL's README and Node bridge stay behind.
 rm -f "$out/sitl/README.md" "$out/sitl/bridge.mjs"

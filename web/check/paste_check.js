@@ -7,10 +7,10 @@
 //
 //   NODE_PATH=<a node_modules holding playwright> node check/paste_check.js [out-dir] [url]
 const { chromium } = require("playwright");
+const { clickNamed } = require("./clicks");
 const out = process.argv[2] || ".";
 const url = process.argv[3] || "http://127.0.0.1:8080/?facts=1&demo=0";
 const fail = (why) => { console.log(`FAIL: ${why}`); process.exitCode = 1; };
-const PORT_BOX = [996, 36], TCP = [964, 97], CONNECT = [1187, 36];
 const HOST = "localhost";
 (async () => {
   const browser = await chromium.launch({
@@ -44,9 +44,9 @@ const HOST = "localhost";
     });
     addEventListener("paste", () => { globalThis.pasteSeen.pastes += 1; }, true);
   });
-  await page.mouse.click(...PORT_BOX); await page.waitForTimeout(800);
-  await page.mouse.click(...TCP); await page.waitForTimeout(800);
-  await page.mouse.click(...CONNECT);
+  await clickNamed(page, "main-port"); await page.waitForTimeout(800);
+  await clickNamed(page, "main-port-TCP"); await page.waitForTimeout(800);
+  await clickNamed(page, "main-connect");
   await until("the host question", (f) => f["link.prompt"] && f["link.prompt"] !== "none", 15000);
   await page.evaluate((text) => navigator.clipboard.writeText(text), HOST);
   await page.keyboard.press("Control+A");

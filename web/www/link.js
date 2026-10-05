@@ -3,10 +3,12 @@
 // with ArduPilot's WebAssembly SITL in this page (tools/sitl/wasm, served at sitl/, SERIAL0 pumped
 // as tools/sitl/wasm/bridge.mjs pumps it, with no TCP in between), started on the first one; a
 // `ws://` link with a WebSocket (Mission Planner's "WS" link, ExtLibs/Comms/CommsWebSocket.cs,
-// binary frames both ways); and any other address over the tailnet (tailscale.js).
+// binary frames both ways); a `serial:` link with a port the browser has let the page use
+// (WebSerial, serial.js); and any other address over the tailnet (tailscale.js).
 
 import { dialTailscale } from "./tailscale.js";
 import { readKept, writeKept } from "./storage.js";
+import { openSerial } from "./serial.js";
 
 const inbox = [];
 let status = "no link";
@@ -16,6 +18,35 @@ let sendTo = () => {};
 let active = null;
 // The bytes for the SITL in the page, while it runs.
 let sitlSend = () => {};
+// A serial port the page has open (serial.js), closed before any other link: a port open is a
+// port no other link, nor the next visit, may open.
+let serialLink = null;
+// Its closing, which the next open waits for: a port still closing will not open again.
+let serialClosing = Promise.resolve();
+
+function closeSerial() {
+    if (serialLink) serialClosing = serialLink.close();
+    serialLink = null;
+}
+
+// "serial:<name>:<baud>": the port the planner named, at the baud box's rate.
+function openSerialLink(asked) {
+    const rest = asked.slice("serial:".length);
+    const colon = rest.lastIndexOf(":");
+    const name = colon > 0 ? rest.slice(0, colon) : rest;
+    const baud = (colon > 0 && Number(rest.slice(colon + 1))) || 115200;
+    active = "serial";
+    status = `opening serial ${name}`;
+    serialClosing.then(() => openSerial(name, baud, (bytes) => {
+        if (active === "serial") inbox.push(bytes);
+    }, (text) => {
+        status = text;
+        console.log(`link: ${text}`);
+    })).then((link) => {
+        serialLink = link;
+        sendTo = link ? link.send : () => {};
+    });
+}
 
 
 // The vehicles tools/sitl/wasm carries, and the model each starts with (README.md there).
@@ -143,9 +174,15 @@ export function servePlanner(planner) {
         if (asked !== undefined && asked !== null) {
             console.log(`link: the planner asks for ${asked}`);
             crossed.asked.push(asked);
+            // Any link asked for, or none, ends the serial port the page had open.
+            if (!asked.startsWith("sitl")) closeSerial();
             if (asked === "close") {
                 forwarding = false;
                 status = "closed";
+            } else if (asked.startsWith("serial:")) {
+                inbox.length = 0;
+                forwarding = true;
+                openSerialLink(asked);
             } else if (asked.startsWith("sitl\n")) {
                 // The SIMULATION screen's "try local wasm": a vehicle clicked, the module and its
                 // command line as the desktop's bridge is given them (crates/mp-transport/src/page.rs).

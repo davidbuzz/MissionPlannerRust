@@ -107,6 +107,8 @@ mod storm;
 mod frametimes;
 // The browser's file picker and downloads for the file boxes, in a page.
 mod page_files;
+// The browser's serial ports (WebSerial), in a page.
+mod page_serial;
 #[cfg(target_family = "wasm")]
 mod page_storage;
 mod repaint;
@@ -1250,6 +1252,15 @@ impl MissionPlanner {
         };
     }
 
+    /// `CMB_serialport_SelectedIndexChanged`: `comPortName`, and the baud saved for the port put
+    /// back.
+    /// `// C#: MainV2.cs:1962-1984`
+    fn select_port(&mut self, port: &str) {
+        self.connect_box.port = port.to_owned();
+        self.persisted.select_port(port);
+        self.connect_box.baud = self.persisted.baud().to_owned();
+    }
+
     /// Reads a waypoint file: `readQGC110wpfile`, once Load File's dialog has returned it.
     fn load_plan_from(&mut self, path: &std::path::Path) {
         let text = match mp_os::fs::read_to_string(path) {
@@ -1503,7 +1514,12 @@ impl MissionPlanner {
                         .into_iter()
                         .map(|port| port.name)
                         .collect();
-                    this.connect_box.ports = connect::port_list(&serial);
+                    // In a page, the browser's serial chooser after the ports it has granted.
+                    this.connect_box.ports = page_serial::with_choose(
+                        connect::port_list(&serial),
+                        serial.len(),
+                        page_serial::available(),
+                    );
                     this.connect_box.ports_open = !this.connect_box.ports_open;
                     this.connect_box.bauds_open = false;
                     cx.notify();
@@ -1526,13 +1542,14 @@ impl MissionPlanner {
                                 .hover(|style| style.bg(rgb(theme::BORDER)))
                                 .child(name.clone())
                                 .on_click(cx.listener(move |this, _event, _window, cx| {
-                                    // `CMB_serialport_SelectedIndexChanged`: `comPortName`,
-                                    // and the baud saved for the port put back.
-                                    // `// C#: MainV2.cs:1962-1984`
-                                    this.connect_box.port.clone_from(&choice);
-                                    this.persisted.select_port(&choice);
-                                    this.connect_box.baud = this.persisted.baud().to_owned();
                                     this.connect_box.ports_open = false;
+                                    if choice == page_serial::CHOOSE {
+                                        // The browser's chooser, while the click is the
+                                        // user's; the port it gives is selected when it comes.
+                                        page_serial::choose();
+                                    } else {
+                                        this.select_port(&choice);
+                                    }
                                     cx.notify();
                                 }))
                                 .into_any_element()
@@ -3144,6 +3161,10 @@ impl Render for MissionPlanner {
         }
         // In a page, a file the browser's picker gave, typed into the box that asked for it.
         page_files::deliver(window, cx);
+        // And a serial port its chooser gave, selected in the port box.
+        if let Some(port) = page_serial::take_chosen() {
+            self.select_port(&port);
+        }
         // Who holds the keyboard as this frame starts; see the end of `render`.
         let focused_at_start = window.focused(cx);
         // Counted here because this is the one place that only runs when a frame is actually

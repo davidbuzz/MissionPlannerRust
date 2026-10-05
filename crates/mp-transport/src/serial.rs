@@ -29,6 +29,7 @@ use mp_os::fs::FsExt as _;
 use std::io::{self, Read, Write};
 use std::time::Duration;
 
+#[cfg(not(target_family = "wasm"))]
 use crate::enumerate;
 pub use crate::enumerate::PortInfo;
 use crate::{DEFAULT_READ_TIMEOUT, OpenError, Transport};
@@ -44,15 +45,23 @@ use crate::{DEFAULT_READ_TIMEOUT, OpenError, Transport};
 /// with no serial hardware is a normal environment, not a failure.
 #[must_use]
 pub fn list_ports() -> Vec<PortInfo> {
-    let known = usb_ports();
-    let names = port_names(&known);
-    enumerate::with_usb_metadata(names, device_node, &known)
+    #[cfg(target_family = "wasm")]
+    {
+        crate::page::serial_ports()
+    }
+    #[cfg(not(target_family = "wasm"))]
+    {
+        let known = usb_ports();
+        let names = port_names(&known);
+        enumerate::with_usb_metadata(names, device_node, &known)
+    }
 }
 
 /// What the `serialport` crate knows about each device node, for its USB ids - on Windows with
 /// Windows' own record of each port over it, the hardware id, description and bus-reported name
 /// Mission Planner reads (`win32.rs`). Its own list is not the one shown: its order is its own,
 /// and it has no by-id names.
+#[cfg(not(target_family = "wasm"))]
 fn usb_ports() -> Vec<PortInfo> {
     let ports = crate_ports();
     #[cfg(windows)]
@@ -61,6 +70,7 @@ fn usb_ports() -> Vec<PortInfo> {
 }
 
 /// The `serialport` crate's list, as the crate reports it.
+#[cfg(not(target_family = "wasm"))]
 fn crate_ports() -> Vec<PortInfo> {
     let Ok(ports) = serialport::available_ports() else {
         return Vec::new();
@@ -91,7 +101,7 @@ fn port_names(_known: &[PortInfo]) -> Vec<String> {
     enumerate::get_port_names(&entries, &runtime)
 }
 
-#[cfg(not(unix))]
+#[cfg(all(not(unix), not(target_family = "wasm")))]
 fn port_names(known: &[PortInfo]) -> Vec<String> {
     // .NET reads the SERIALCOMM registry key here; the serialport crate asks SetupAPI. The two
     // normally name the same COM ports, and a driver that registers with only one of them would
@@ -134,7 +144,7 @@ fn device_node(name: &str) -> Option<String> {
 
 /// On Windows a port name is already the device. canonicalize() would open it to find out, and
 /// opening a COM port can reset the board on the other end.
-#[cfg(not(unix))]
+#[cfg(all(not(unix), not(target_family = "wasm")))]
 fn device_node(_name: &str) -> Option<String> {
     None
 }

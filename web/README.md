@@ -64,6 +64,18 @@ QGroundControl's plan in FLIGHT PLAN's Load File and saves the mission both ways
 With `?facts=1` the page also gives each control's place by name (`mpProbe()`), for the checks to
 click.
 
+## A serial port
+
+Where the browser has WebSerial (Chromium, Edge; not Firefox or Safari), a USB autopilot plugged
+into the computer is a serial port of the page's. A page sees only the ports the browser has let it
+use, each chosen once in the browser's own chooser, which only a click may open: the port box lists
+those as its serial ports, and "Choose a serial port..." after them opens the chooser - the port
+chosen joins the list, selected (`www/serial.js`, `crates/mp-gui/src/page_serial.rs`). CONNECT
+opens it at the baud box's rate and carries it as any other link; DISCONNECT closes it.
+`check/serial_check.js` holds it to that with a stand-in for WebSerial, a headless browser having
+no USB: the port granted only from the click, its heartbeats heard, the planner's bytes written to
+it, the port closed after.
+
 ## A vehicle on a tailnet
 
 New to Tailscale, or to the planner? [using_tailscale.md](../using_tailscale.md) walks through it
@@ -122,6 +134,7 @@ NODE_PATH=<node_modules with playwright> node check/pages_check.js <dir> # the G
 NODE_PATH=<node_modules with playwright> node check/storage_check.js   # config.xml kept across a reload
 NODE_PATH=<node_modules with playwright> node check/files_check.js     # the browser's picker and downloads
 NODE_PATH=<node_modules with playwright> node check/storage_budget_check.js # the logs a visit loads, newest first
+NODE_PATH=<node_modules with playwright> node check/serial_check.js    # a serial link through WebSerial
 NODE_PATH=<node_modules with playwright> node check/fault_check.js     # a fault of the page's own, asked about at the next start
 NODE_PATH=<node_modules with playwright> check/tailnet_e2e.sh          # over a tailnet (needs Go)
 ```
@@ -163,9 +176,8 @@ By hand:
 - `RwLock` and blocking `recv`/`join` on the page's main thread are not swept. The paths exercised
   so far are proven: startup, every top screen with and without a vehicle, the map, connect, the
   HUD, and the full parameter download.
-- The in-page SITL's eeprom.bin: its parameters do not survive a reload (the desktop's bridge
-  keeps them in the vehicle's sitl folder). The planner's files are kept now (above); the SITL's
-  own are not yet.
 - UDP listening (`udp:0.0.0.0:14550`), where a vehicle sends first: the page's Tailscale node
   dials out (TCP, UDPCl) but does not listen yet.
-- Serial: WebSerial.
+- Serial for Install Firmware and SiK radios: they open their ports themselves, at bauds they
+  change and with DTR they toggle, which the page's serial ports do not take yet (the link does,
+  above).

@@ -5,11 +5,11 @@
 //
 //   NODE_PATH=<a node_modules holding playwright> node check/tour_check.js [out-dir] [url]
 const { chromium } = require("playwright");
+const { clickNamed } = require("./clicks");
 const out = process.argv[2] || ".";
-const url = process.argv[3] || "http://127.0.0.1:8080/?vehicle=copter&demo=0";
-// The top tabs' x at 1400x900 (y 43), and the port box, its TCP entry and CONNECT.
+const url = process.argv[3] || "http://127.0.0.1:8080/?vehicle=copter&demo=0&facts=1";
+// The top tabs' x at 1400x900 (y 43); the port box, its TCP entry and CONNECT are clicked by name.
 const TABS = [["plan", 281], ["setup", 340], ["config", 406], ["params", 577], ["logs", 636], ["simulation", 487], ["experimental", 719], ["help", 877], ["fly", 230]];
-const PORT_BOX = [996, 36], TCP = [964, 97], CONNECT = [1187, 36];
 (async () => {
   const browser = await chromium.launch({
     headless: true,
@@ -29,9 +29,9 @@ const PORT_BOX = [996, 36], TCP = [964, 97], CONNECT = [1187, 36];
   // settings yet: its OK, over the flight screen's map at 1400x900 (a click on the map otherwise).
   await page.mouse.click(854, 484);
   await page.waitForTimeout(800);
-  await page.mouse.click(...PORT_BOX); await page.waitForTimeout(800);
-  await page.mouse.click(...TCP); await page.waitForTimeout(800);
-  await page.mouse.click(...CONNECT); await page.waitForTimeout(1500);
+  await clickNamed(page, "main-port"); await page.waitForTimeout(800);
+  await clickNamed(page, "main-port-TCP"); await page.waitForTimeout(800);
+  await clickNamed(page, "main-connect"); await page.waitForTimeout(1500);
   await page.keyboard.press("Enter"); await page.waitForTimeout(1500);
   await page.keyboard.press("Enter");
   await page.waitForTimeout(25000);

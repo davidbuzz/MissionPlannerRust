@@ -163,6 +163,13 @@ pub fn open(url: &str) -> Result<Box<dyn Transport>, OpenError> {
 /// Opens a transport from an already-parsed link URL.
 pub fn open_url(url: &LinkUrl) -> Result<Box<dyn Transport>, OpenError> {
     match url {
+        // In a web page, a port the browser has let the page use, opened there (WebSerial,
+        // web/www/serial.js).
+        #[cfg(target_family = "wasm")]
+        LinkUrl::Serial { path, baud } => Ok(Box::new(page::PageTransport::open(&format!(
+            "serial:{path}:{baud}"
+        ))?)),
+        #[cfg(not(target_family = "wasm"))]
         LinkUrl::Serial { path, baud } => {
             #[cfg(feature = "serial")]
             {
