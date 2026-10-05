@@ -282,75 +282,107 @@ const fn severity_colour(severity: Severity) -> u32 {
 ///
 /// `STATUSTEXT` is how ArduPilot explains a refusal, so this pane is the difference between a pilot
 /// who fixes a failed pre-arm check and one who keeps pressing the button.
-pub fn messages_panel(view: &TelemetryView) -> impl IntoElement {
-    let mut lines = div().flex().flex_col().gap_1();
-
-    if view.messages.is_empty() {
-        lines = lines.child(
-            div()
-                .text_xs()
-                .text_color(rgb(theme::DIM))
-                .child("nothing from the vehicle yet"),
-        );
-    }
-
-    for message in view.messages.iter().rev() {
-        lines = lines.child(
-            div()
-                .flex()
-                .flex_shrink_0()
-                .gap_2()
-                .text_xs()
-                .child(
-                    div()
-                        .flex_shrink_0()
-                        .w(px(58.0))
-                        .text_color(rgb(theme::DIM))
-                        .child(time_of_day(message.received)),
-                )
-                .child(
-                    div()
-                        .flex_shrink_0()
-                        .w(px(52.0))
-                        .text_color(rgb(theme::DIM))
-                        .child(message.severity.label()),
-                )
-                .child(
-                    // One line per message, truncated. Wrapping would make each row a different
-                    // height, which rules out virtualising the list later and stops the timestamp
-                    // column lining up.
-                    div()
-                        .flex_1()
-                        .min_w(px(0.0))
-                        .truncate()
-                        .text_color(rgb(severity_colour(message.severity)))
-                        .child(message.text.clone()),
-                ),
-        );
-    }
+///
+/// Only the rows in view are built (`uniform_list`): the pane keeps up to 200 messages, and
+/// building every one - three runs of text that gpui's layout measures - each frame was a large
+/// part of the flight screen's frame (docs/perf.md).
+pub fn messages_panel(view: &TelemetryView, cx: &mut Context<MissionPlanner>) -> impl IntoElement {
+    MESSAGES_DRAWN.with(|drawn| drawn.set(0));
+    let lines = if view.messages.is_empty() {
+        div()
+            .h(px(190.0))
+            .text_xs()
+            .text_color(rgb(theme::DIM))
+            .child("nothing from the vehicle yet")
+            .into_any_element()
+    } else {
+        let messages = Arc::new(view.messages.clone());
+        gpui::uniform_list(
+            "messages",
+            messages.len(),
+            cx.processor(
+                move |_this: &mut MissionPlanner, range: std::ops::Range<usize>, _window, _cx| {
+                    let rows: Vec<_> = newest_first(&messages, range).map(message_row).collect();
+                    MESSAGES_DRAWN.with(|drawn| drawn.set(drawn.get().max(rows.len())));
+                    rows
+                },
+            ),
+        )
+        .h(px(190.0))
+        .into_any_element()
+    };
 
     panel(
         "messages",
-        div()
-            .flex()
-            .flex_col()
-            .child(
-                div()
-                    .id("messages")
-                    .flex()
-                    .flex_col()
-                    .h(px(190.0))
-                    .overflow_y_scroll()
-                    .child(lines),
-            )
-            .child(
-                div()
-                    .pt_1()
-                    .text_xs()
-                    .text_color(rgb(theme::DIM))
-                    .child(message_footer(view)),
-            ),
+        div().flex().flex_col().child(lines).child(
+            div()
+                .pt_1()
+                .text_xs()
+                .text_color(rgb(theme::DIM))
+                .child(message_footer(view)),
+        ),
     )
+}
+
+thread_local! {
+    /// The most rows the message list built at one asking since the pane was last built: the rows
+    /// in its box. The fact `fly.messages.drawn`.
+    static MESSAGES_DRAWN: Cell<usize> = const { Cell::new(0) };
+}
+
+/// How many rows the message list built for its box the last time it was drawn.
+#[must_use]
+pub fn messages_drawn() -> usize {
+    MESSAGES_DRAWN.with(Cell::get)
+}
+
+/// The messages at `rows` of the list, newest first: row 0 the last message held.
+pub fn newest_first(
+    messages: &[LogMessage],
+    rows: std::ops::Range<usize>,
+) -> impl Iterator<Item = &LogMessage> {
+    rows.filter_map(|row| {
+        messages
+            .len()
+            .checked_sub(row + 1)
+            .and_then(|at| messages.get(at))
+    })
+}
+
+/// One message's row: its UTC time, its severity and its text on one line, truncated; the
+/// space under it the gap the rows had between them.
+fn message_row(message: &LogMessage) -> AnyElement {
+    div()
+        .flex()
+        .flex_shrink_0()
+        .gap_2()
+        .pb_1()
+        .text_xs()
+        .child(
+            div()
+                .flex_shrink_0()
+                .w(px(58.0))
+                .text_color(rgb(theme::DIM))
+                .child(time_of_day(message.received)),
+        )
+        .child(
+            div()
+                .flex_shrink_0()
+                .w(px(52.0))
+                .text_color(rgb(theme::DIM))
+                .child(message.severity.label()),
+        )
+        .child(
+            // One line per message, truncated: every row the same height, which the list's
+            // virtualising needs, and the timestamp column lined up.
+            div()
+                .flex_1()
+                .min_w(px(0.0))
+                .truncate()
+                .text_color(rgb(severity_colour(message.severity)))
+                .child(message.text.clone()),
+        )
+        .into_any_element()
 }
 
 /// The line under the message list: how much is shown, and how much was lost.
@@ -2373,6 +2405,13 @@ impl Actions {
     pub fn record_facts(&self, view: &TelemetryView) {
         crate::facts::record("fly.sent", &self.last_sent);
         crate::facts::record("fly.ack", self.ack(&view.messages));
+        // The message list: how many it holds, the rows it built for its box, and its first row.
+        crate::facts::record("fly.messages.count", view.messages.len());
+        crate::facts::record("fly.messages.drawn", messages_drawn());
+        crate::facts::record(
+            "fly.messages.newest",
+            view.messages.last().map_or("none", |message| message.text.as_str()),
+        );
         // The session's take-off altitude, and how many take-offs have gone (D24).
         crate::facts::record(
             "fly.takeoff.remembered",
@@ -8996,6 +9035,28 @@ fn customize_form(
 
 #[cfg(test)]
 mod tests {
+
+    /// The message list's rows, newest first: row 0 the last message held, a range past the end
+    /// giving what there is.
+    #[test]
+    fn the_message_rows_are_newest_first() {
+        let message = |seq: u64| LogMessage {
+            from: VehicleId { sysid: 1, compid: 1 },
+            severity: Severity::Info,
+            text: format!("m{seq}"),
+            seq,
+            received: 0,
+        };
+        let messages: Vec<LogMessage> = (0..5).map(message).collect();
+        let texts = |rows: std::ops::Range<usize>| -> Vec<String> {
+            newest_first(&messages, rows)
+                .map(|m| m.text.clone())
+                .collect()
+        };
+        assert_eq!(texts(0..2), ["m4", "m3"]);
+        assert_eq!(texts(3..9), ["m1", "m0"]);
+        assert!(texts(5..7).is_empty());
+    }
     use super::*;
 
     fn target() -> VehicleId {

@@ -62,3 +62,20 @@ The flight screen connected, by the page showing under the HUD (paint): Quick 19
 ## The easy wins
 
 Each with its before and after, as they are taken.
+
+### 1. The flight screen's message list builds only the rows in view (2026-10-05)
+
+The list keeps up to 200 of the vehicle's messages and built every one each frame - a row of three
+text runs, the message itself truncated to the column, which means shaping all of it - inside a
+scrolling box that showed ten. Now it is a `uniform_list` and builds the rows in its box
+(`fly::messages_panel`; the facts `fly.messages.count` and `fly.messages.drawn`;
+`tests/gui/fly-messages.gui`).
+
+| connected flight screen, Quick page (perf-connected.gui) | before | after |
+|---|---|---|
+| paint, median | 17.1 ms | 5.5 ms |
+| frame, median (lavapipe's present included) | 103.7 ms | 86.3 ms |
+
+With 16 to 22 messages held. Before, the cost grew with every message up to 200; after, it is the
+box's ten rows whatever the list holds.
+

@@ -1,0 +1,15 @@
+# The flight screen's message list builds only the rows in its box (docs/perf.md: building all of
+# the up to 200 it keeps, every frame, was a large part of the flight screen's frame). With a SITL's
+# start-up messages held, the list holds more than its box shows and builds the box's rows only;
+# the newest is its first row.
+#   tools/gui-test.sh tests/gui/fly-messages.gui -- tcp:127.0.0.1:5760
+env XDG_DATA_HOME $WORK
+screen fly
+window 1600x1200
+budget 40
+within 30
+expect vehicle.count > 0
+within 30
+expect fly.messages.count >= 15
+expect fly.messages.drawn > 0
+expect fly.messages.drawn < 13

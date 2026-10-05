@@ -4114,7 +4114,7 @@ impl Render for MissionPlanner {
                         } else {
                             self.map_pane(window, cx).into_any_element()
                         })
-                        .child(div().flex_shrink_0().child(fly::messages_panel(&view))),
+                        .child(div().flex_shrink_0().child(fly::messages_panel(&view, cx))),
                 )
                 // The flight screen's dialogs and forms, drawn over the window: hung from a box of
                 // no size, so their backdrops are not read as this body running past the window
