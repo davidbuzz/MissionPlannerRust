@@ -1,15 +1,9 @@
-// The page's link to a vehicle, as globalThis.mpLink: what mp-transport's Transport is on the
-// desktop. The planner (src/lib.rs) drains `take()` on a timer and writes with `send(bytes)`.
-//
-//   ?link=sitl[&vehicle=copter|plane|rover|heli]  ArduPilot's WebAssembly SITL in this page:
-//                     tools/sitl/wasm (served at sitl/), SERIAL0 pumped as tools/sitl/wasm/bridge.mjs
-//                     pumps it, with no TCP in between. The default.
-//   ?link=ws://host:port/path                     a vehicle behind a WebSocket: Mission Planner's
-//                     "WS" link (ExtLibs/Comms/CommsWebSocket.cs), binary frames both ways.
-//
-// The whole planner (index.html) asks for its link itself, through crates/mp-transport/src/page.rs:
-// `servePlanner` answers a `tcp:` link with the SITL in this page, started on the first one, and a
-// `ws://` link with a WebSocket.
+// The page's link to a vehicle, for the planner (index.html), which asks for its link itself
+// through crates/mp-transport/src/page.rs: `servePlanner` answers a `tcp:` link to this machine
+// with ArduPilot's WebAssembly SITL in this page (tools/sitl/wasm, served at sitl/, SERIAL0 pumped
+// as tools/sitl/wasm/bridge.mjs pumps it, with no TCP in between), started on the first one; a
+// `ws://` link with a WebSocket (Mission Planner's "WS" link, ExtLibs/Comms/CommsWebSocket.cs,
+// binary frames both ways); and any other address over the tailnet (tailscale.js).
 
 import { dialTailscale } from "./tailscale.js";
 
@@ -22,30 +16,6 @@ let active = null;
 // The bytes for the SITL in the page, while it runs.
 let sitlSend = () => {};
 
-export const mpLink = {
-    take() {
-        if (inbox.length === 0) {
-            return new Uint8Array(0);
-        }
-        const total = inbox.reduce((sum, chunk) => sum + chunk.length, 0);
-        const out = new Uint8Array(total);
-        let at = 0;
-        for (const chunk of inbox) {
-            out.set(chunk, at);
-            at += chunk.length;
-        }
-        inbox.length = 0;
-        return out;
-    },
-    // `bytes` is a view of the planner's shared memory: copied before it is kept.
-    send(bytes) {
-        sendTo(bytes.slice());
-    },
-    status() {
-        return status;
-    },
-};
-globalThis.mpLink = mpLink;
 
 // The vehicles tools/sitl/wasm carries, and the model each starts with (README.md there).
 const VEHICLES = {
@@ -141,16 +111,6 @@ function openWebSocket(url) {
             socket.send(bytes);
         }
     };
-}
-
-export function startLink() {
-    const query = new URLSearchParams(location.search);
-    const link = query.get("link") ?? "sitl";
-    if (link.startsWith("ws://") || link.startsWith("wss://")) {
-        openWebSocket(link);
-    } else {
-        startSitl(query.get("vehicle") ?? "copter");
-    }
 }
 
 // "tcp:host:port" or "udpcl:host:port" as its scheme, host and port; an IPv6 host in brackets.

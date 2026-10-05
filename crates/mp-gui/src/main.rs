@@ -4868,11 +4868,11 @@ fn main() {
         #[cfg(target_family = "wasm")]
         if let Err(err) = cx.text_system().add_fonts(vec![
             std::borrow::Cow::Borrowed(
-                include_bytes!("../../../web/fonts/IBMPlexSans-Regular.ttf")
+                include_bytes!("../fonts/IBMPlexSans-Regular.ttf")
                     .as_slice(),
             ),
             std::borrow::Cow::Borrowed(
-                include_bytes!("../../../web/fonts/IBMPlexSans-SemiBold.ttf")
+                include_bytes!("../fonts/IBMPlexSans-SemiBold.ttf")
                     .as_slice(),
             ),
         ]) {

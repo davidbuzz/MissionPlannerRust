@@ -74,9 +74,8 @@ names), after a change to that file or to the Tailscale version; the result is c
 `tools/sitl/wasm` keeps ArduPilot's builds. `check/tailnet_e2e.sh` also uses Go, to build the
 Headscale and tailscaled its test tailnet runs.
 
-`www/hud.html` is the smaller first step: the planner's HUD alone (`src/lib.rs`, with hud.rs
-linked in unchanged), fed by the SITL in the page (`?link=sitl`) or a WebSocket
-(`?link=ws://...`, with `tools/ws_relay.py` in front of a TCP port).
+`tools/ws_relay.py` puts a WebSocket in front of a TCP port, for the planner's `ws://` link
+(Mission Planner's WS, which `www/link.js` answers with a WebSocket).
 
 ## On GitHub Pages
 
@@ -99,7 +98,6 @@ NODE_PATH=<node_modules with playwright> node check/planner_check.js   # connect
 NODE_PATH=<node_modules with playwright> node check/tour_check.js      # every screen, connected, no error
 NODE_PATH=<node_modules with playwright> node check/plugins_check.js   # the built-in plugins, as on the desktop
 NODE_PATH=<node_modules with playwright> node check/demo_check.js      # the Welcome-Demo-Sitl, start to finish
-NODE_PATH=<node_modules with playwright> node check/check.js           # the HUD page
 NODE_PATH=<node_modules with playwright> node check/pages_check.js <dir> # the GitHub Pages site, no headers
 NODE_PATH=<node_modules with playwright> node check/storage_check.js   # config.xml kept across a reload
 NODE_PATH=<node_modules with playwright> check/tailnet_e2e.sh          # over a tailnet (needs Go)
@@ -135,7 +133,7 @@ By hand:
   file of unsafe by the owner's ruling, gives wasmtime the platform functions it needs and loads
   the bytecode.
 - RustPython loses `host_env`.
-- A font is bundled.
+- A font is bundled (`crates/mp-gui/fonts`): a page has none of the system's.
 
 ## Not done
 
