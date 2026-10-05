@@ -42,6 +42,7 @@
 use mp_os::Lock as _;
 use std::collections::BTreeMap;
 use std::path::PathBuf;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Mutex, OnceLock};
 
 /// The facts recorded this frame, and where to write them.
@@ -121,13 +122,19 @@ pub fn record(key: impl Into<String>, value: impl std::fmt::Display) {
 /// test that polls this file would otherwise read a state that never existed - half the old facts
 /// and half the new ones - which is the kind of flake nobody can reproduce.
 pub fn publish() {
-    let Some(path) = destination() else {
-        return;
-    };
     let Some(facts) = FACTS.get() else {
         return;
     };
-    let Ok(facts) = facts.os_lock() else {
+    let Ok(mut facts) = facts.os_lock() else {
+        return;
+    };
+    // The frames published so far, one a frame: a GUI script's runner counts the frames drawn
+    // since it sent a click or a key (tools/gui-test.sh, `wait_publishes`), where the time of the
+    // file's last write told it only that one had been.
+    static PUBLISHED: AtomicU64 = AtomicU64::new(0);
+    let frame = PUBLISHED.fetch_add(1, Ordering::Relaxed) + 1;
+    facts.insert("ui.frame".to_owned(), frame.to_string());
+    let Some(path) = destination() else {
         return;
     };
     let text = text(&facts);
@@ -167,5 +174,22 @@ mod tests {
         record("key", "value");
         publish();
         assert!(!enabled());
+    }
+
+    /// Every publish is a frame, and `ui.frame` counts them: one more each time.
+    #[test]
+    fn each_publish_counts_a_frame() {
+        // The facts as a frame's first `record` makes them, which `cargo test` (no MP_FACTS) skips.
+        let facts = FACTS.get_or_init(|| Mutex::new(BTreeMap::new()));
+        let frame = || {
+            facts
+                .os_lock()
+                .ok()
+                .and_then(|facts| facts.get("ui.frame")?.parse::<u64>().ok())
+        };
+        publish();
+        let first = frame().expect("a frame counted");
+        publish();
+        assert_eq!(frame(), Some(first + 1));
     }
 }

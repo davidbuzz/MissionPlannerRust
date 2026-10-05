@@ -185,12 +185,28 @@ NEXT_WAIT_MS=""
 now_ms() { date +%s%3N; }
 # Milliseconds as "1.234".
 seconds() { printf '%d.%03d' $(($1 / 1000)) $(($1 % 1000)); }
-# Waits for the application to publish its facts $1 more times - $1 frames - up to a second.
+# Waits until the application has drawn $1 frames since the input sent last, up to a second.
 # What a key or typed text needs before it is sent: the box a click opened is drawn on the
 # next frame and takes the focus on the one after, and keys sent before that go nowhere
-# (config-battery2.gui, 2026-09-25, once the pauses after clicks were short).
+# (config-battery2.gui, 2026-09-25, once the pauses after clicks were short). The frames are
+# counted by the `ui.frame` fact, one a frame, so frames drawn already are not waited for again:
+# an application that draws only when something changes - repaint on new data, the planner's
+# default since 2026-10-05 - draws no more till it does, and waiting for new writes of the file
+# waited out its one-a-second floor before every click and key (2026-10-06). Before any input,
+# or from an application without the count, $1 new writes of the facts file.
+INPUT_FRAME=""
 wait_publishes() {
-    local seen=0 last now
+    local seen=0 last now frame
+    if [[ "$INPUT_FRAME" =~ ^[0-9]+$ ]]; then
+        for _ in $(seq 1 20); do
+            frame=$(fact ui.frame)
+            if [[ "$frame" =~ ^[0-9]+$ ]] && [ "$frame" -ge $((INPUT_FRAME + $1)) ]; then
+                return 0
+            fi
+            sleep 0.05
+        done
+        return 0
+    fi
     last=$(stat -c '%.9Y' "$FACTS_FILE" 2>/dev/null || echo "")
     for _ in $(seq 1 20); do
         sleep 0.05
@@ -201,6 +217,12 @@ wait_publishes() {
             [ "$seen" -ge "$1" ] && return 0
         fi
     done
+}
+# Notes the frame an input goes in, for `wait_publishes`: read just before the input is sent (a
+# click's after the pointer has moved and paused), since the frame that shows it can be drawn
+# before a read after it - and then the next step waited for a frame that was not coming.
+sent_input() {
+    INPUT_FRAME=$(fact ui.frame || true)
 }
 SCAN_NO=0
 
@@ -646,6 +668,7 @@ while IFS= read -r RAW; do
                 # shellcheck disable=SC2086 # "x y", two words on purpose
                 xdotool mousemove --window "$WIN_ID" $COORDS
                 sleep 0.03
+                sent_input
                 xdotool click "$BUTTON"
             else
                 echo "line $LINE_NO: could not click '$TARGET'" >&2
@@ -664,6 +687,7 @@ while IFS= read -r RAW; do
                 # shellcheck disable=SC2086 # "x y", two words on purpose
                 xdotool mousemove --window "$WIN_ID" $COORDS
                 sleep 0.05
+                sent_input
                 xdotool click --repeat 2 --delay 80 1
             else
                 echo "line $LINE_NO: could not double-click '$TARGET'" >&2
@@ -687,6 +711,7 @@ while IFS= read -r RAW; do
                 # shellcheck disable=SC2086 # "x y", two words on purpose
                 xdotool mousemove --window "$WIN_ID" $COORDS
                 sleep 0.05
+                sent_input
                 xdotool click --repeat 45 --delay 60 4
                 sleep 0.1
             fi
@@ -718,6 +743,7 @@ PY
                     # shellcheck disable=SC2086 # "x y", two words on purpose
                     xdotool mousemove --window "$WIN_ID" $COORDS
                     sleep 0.05
+                    sent_input
                     xdotool click "$WHEEL"
                     sleep 0.12
                 else
@@ -753,6 +779,7 @@ PY
                     xdotool mousemove --window "$WIN_ID" $(( X0 + (X1 - X0) * STEP / 8 )) $(( Y0 + (Y1 - Y0) * STEP / 8 ))
                 done
                 sleep 0.05
+                sent_input
                 xdotool mouseup 1
             else
                 echo "line $LINE_NO: could not drag '$FROM' to '$TO'" >&2
@@ -791,6 +818,7 @@ PY
                 # shellcheck disable=SC2086 # "x y", two words on purpose
                 xdotool mousemove --window "$WIN_ID" $COORDS
                 sleep 0.05
+                sent_input
                 xdotool click --repeat "$NOTCHES" --delay "$GAP" "$WHEEL"
             else
                 echo "line $LINE_NO: could not scroll '$TARGET'" >&2
@@ -802,6 +830,7 @@ PY
             shift
             wait_publishes 2
             raise_window
+            sent_input
             xdotool type --window "$WIN_ID" --clearmodifiers --delay 60 "$*"
             # Keystrokes reach the application through the input method when one is running
             # (ibus over XIM here) and come back after a round trip; a click or a key sent next
@@ -815,6 +844,7 @@ PY
         key)
             wait_publishes 2
             raise_window
+            sent_input
             xdotool key --window "$WIN_ID" --clearmodifiers "${2:?key needs a name}"
             sleep 0.1
             ;;
