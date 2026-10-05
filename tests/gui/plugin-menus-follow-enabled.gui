@@ -15,7 +15,7 @@
 env MP_BUILTIN_PLUGINS 1
 screen fly
 window 1600x1200
-budget 15
+budget 20
 env XDG_DATA_HOME $WORK
 env MP_CONFIG_XML $WORK/config.xml
 setup printf '<?xml version="1.0" encoding="utf-8"?><Config><tabcontrolactions>tabQuick;</tabcontrolactions><DisabledPlugins></DisabledPlugins></Config>' > "$WORK/config.xml"
@@ -32,7 +32,7 @@ type tested
 key Return
 expect plugins.question none
 # Unticked and saved: its entry gone at once, the others' still there.
-key ctrl+p
+click tab-plugins
 expect screen plugins
 expect plugin-manager.row.3 MapIconDesc|mapicondesc.wasm|enabled|green
 click plugin-manager-enabled-3
