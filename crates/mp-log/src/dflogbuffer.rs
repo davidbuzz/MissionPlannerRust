@@ -307,6 +307,42 @@ impl DfItem {
     }
 }
 
+/// `SplitLog`'s refusal of a count of 0 or less. `// C#: ExtLibs/Utilities/DFLogBuffer.cs:499`
+pub const INVALID_PIECES: &str = "Invalid pieces parameters";
+
+/// `Dictionary`'s `KeyNotFoundException` on .NET Framework, which Mission Planner runs on: what
+/// `SplitLog` throws for a log without one of the formats it copies.
+pub const KEY_NOT_FOUND: &str = "The given key was not present in the dictionary.";
+
+/// The temp form's Split DFLog once it has its file and count: `new DFLogBuffer(file)
+/// .SplitLog(pieces)`, each piece written to the file's name with `_split<i>.bin` after it, as
+/// `File.OpenWrite` writes - over an older file of that name from its start, a longer one's tail
+/// left as it was. Returns how many pieces were written.
+///
+/// # Errors
+///
+/// The log unreadable, [`DfLogBuffer::split_log`]'s, or a piece that could not be written.
+/// `// C#: temp.cs:731-732; ExtLibs/Utilities/DFLogBuffer.cs:417-501`
+pub fn split_file(path: &std::path::Path, pieces: i32) -> Result<usize, String> {
+    let data = mp_os::fs::read(path).map_err(|error| error.to_string())?;
+    let buffer = DfLogBuffer::new(&data, &crate::convert::flight_mode_name);
+    let split = buffer.split_log(pieces)?;
+    for (i, piece) in split.iter().enumerate() {
+        let mut name = path.as_os_str().to_owned();
+        name.push(format!("_split{i}.bin"));
+        let target = std::path::PathBuf::from(name);
+        let mut bytes = piece.clone();
+        if let Ok(old) = mp_os::fs::read(&target)
+            && let Some(tail) = old.get(bytes.len()..)
+        {
+            bytes.extend_from_slice(tail);
+        }
+        mp_os::fs::write(&target, bytes)
+            .map_err(|error| format!("{}: {error}", target.display()))?;
+    }
+    Ok(split.len())
+}
+
 /// `DFLogBuffer`: a log as numbered lines of text.
 /// `// C#: ExtLibs/Utilities/DFLogBuffer.cs:18-846`
 pub struct DfLogBuffer<'a> {
@@ -468,6 +504,80 @@ impl<'a> DfLogBuffer<'a> {
         }
     }
 
+    /// `SplitLog(pieces)`: the log cut into `pieces` shares of `length / pieces` bytes, each piece
+    /// opening with every `FMT`, `FMTU`, `UNIT` and `MULT` record of the whole log, then the
+    /// messages that start within its share - each piece's bytes, for `<log>_split<i>.bin`.
+    ///
+    /// As the C# copies them: from the share's first message start in reads of 256 KiB, until a
+    /// read ends at or past its last message start, and never past the share's end. So the message
+    /// at the last start is cut at the share's end, or left out when the reads end exactly on it,
+    /// and a share with one message start copies nothing after the formats.
+    ///
+    /// # Errors
+    ///
+    /// `pieces` of 0 or less, the C#'s "Invalid pieces parameters"; a log with no `FMT`, `FMTU`,
+    /// `UNIT` or `MULT` format, where `logformat[name]` throws.
+    /// `// C#: ExtLibs/Utilities/DFLogBuffer.cs:417-501`
+    pub fn split_log(&self, pieces: i32) -> Result<Vec<Vec<u8>>, String> {
+        /// `new byte[1024 * 256]`.
+        const READ: usize = 1024 * 256;
+        let Ok(count) = usize::try_from(pieces) else {
+            return Err(INVALID_PIECES.to_owned());
+        };
+        if count == 0 {
+            return Err(INVALID_PIECES.to_owned());
+        }
+        let length = self.data.len();
+        let size = length / count;
+        // "fmt from entire file": each record of the four types, `type.Length` bytes from its start
+        // (what is there, at the file's end).
+        let mut formats = Vec::new();
+        for name in ["FMT", "FMTU", "UNIT", "MULT"] {
+            let label = self
+                .dflog
+                .label(name)
+                .ok_or_else(|| KEY_NOT_FOUND.to_owned())?;
+            let record = usize::try_from(label.length).unwrap_or(0);
+            let lines = self
+                .index_lines
+                .get(usize::from(label.id.to_le_bytes()[0]))
+                .map_or(&[][..], Vec::as_slice);
+            for &line in lines {
+                let start = self
+                    .line_starts
+                    .get(line)
+                    .copied()
+                    .unwrap_or(length)
+                    .min(length);
+                let end = start.saturating_add(record).min(length);
+                formats.extend_from_slice(self.data.get(start..end).unwrap_or_default());
+            }
+        }
+        let mut out = Vec::with_capacity(count);
+        for i in 0..count {
+            let start = i * size;
+            let end = start + size;
+            let mut piece = formats.clone();
+            // "got min and max valid": the share's first and last message starts.
+            let starts = self
+                .line_starts
+                .iter()
+                .copied()
+                .filter(|&at| at >= start && at < end);
+            if let (Some(min), Some(max)) = (starts.clone().min(), starts.max()) {
+                let mut position = min;
+                while position < max {
+                    let read = (end - position).min(READ);
+                    let to = (position + read).min(length);
+                    piece.extend_from_slice(self.data.get(position..to).unwrap_or_default());
+                    position = to;
+                }
+            }
+            out.push(piece);
+        }
+        Ok(out)
+    }
+
     /// `GetEnumeratorType`: every line of the named types, in line order, as items - read now, in
     /// the order the C#'s lazy enumeration reads them. Each comes with its line number.
     /// `// C#: ExtLibs/Utilities/DFLogBuffer.cs:701-774`
@@ -624,5 +734,148 @@ mod tests {
         assert_eq!(civil_from_days(0), (1970, 1, 1));
         assert_eq!(civil_from_days(20_681), (2026, 8, 16));
         assert_eq!(civil_from_days(-719_162), (1, 1, 1));
+    }
+
+    fn testdata(name: &str) -> Vec<u8> {
+        mp_os::fs::read(
+            std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+                .join("../../testdata")
+                .join(name),
+        )
+        .unwrap()
+    }
+
+    /// The four formats' records `SplitLog` copies first: `Length` bytes from each record's start.
+    fn formats(buffer: &DfLogBuffer<'_>) -> Vec<u8> {
+        let mut out = Vec::new();
+        for name in ["FMT", "FMTU", "UNIT", "MULT"] {
+            let label = buffer.dflog.label(name).unwrap();
+            let length = usize::try_from(label.length).unwrap();
+            for &line in &buffer.index_lines[usize::from(label.id.to_le_bytes()[0])] {
+                let start = buffer.line_starts[line];
+                out.extend_from_slice(&buffer.data[start..(start + length).min(buffer.data.len())]);
+            }
+        }
+        out
+    }
+
+    /// The message starts within `[start, end)`.
+    fn starts_in(buffer: &DfLogBuffer<'_>, start: usize, end: usize) -> Vec<usize> {
+        buffer
+            .line_starts
+            .iter()
+            .copied()
+            .filter(|&at| at >= start && at < end)
+            .collect()
+    }
+
+    /// Split DFLog on a dataflash log: every piece opens with all of the log's `FMT`, `FMTU`,
+    /// `UNIT` and `MULT` records, then the bytes from the first message starting in its share, in
+    /// order and not past the share's end - so each piece reads back as a log of the same formats.
+    #[test]
+    fn split_log_gives_each_piece_the_formats_then_its_share() {
+        let data = testdata("dataflash.bin");
+        let buffer = DfLogBuffer::new(&data, &no_mode_names);
+        let formats = formats(&buffer);
+        assert!(!formats.is_empty());
+        let pieces = buffer.split_log(3).unwrap();
+        assert_eq!(pieces.len(), 3);
+        let size = data.len() / 3;
+        for (i, piece) in pieces.iter().enumerate() {
+            assert!(piece.starts_with(&formats), "piece {i}");
+            let body = &piece[formats.len()..];
+            let (start, end) = (i * size, (i + 1) * size);
+            let starts = starts_in(&buffer, start, end);
+            let first = starts[0];
+            let last = *starts.last().unwrap();
+            assert!(
+                body.len() >= last - first,
+                "piece {i} stops short of its last start"
+            );
+            assert!(first + body.len() <= end, "piece {i} runs past its share");
+            assert_eq!(body, &data[first..first + body.len()], "piece {i}");
+            let read = DfLogBuffer::new(piece, &no_mode_names);
+            assert!(read.is_binary());
+            assert_eq!(read.dflog.len(), buffer.dflog.len(), "piece {i}");
+            assert!(read.count() > 0);
+        }
+    }
+
+    /// As the C# reads: a share with one message start copies nothing after the formats, and one
+    /// with more copies from its first start - here on a text log, its lines easy to follow.
+    #[test]
+    fn a_share_with_one_message_start_copies_nothing() {
+        let mut text = String::from(
+            "FMT, 128, 4, FMT, BBnNZ, Type,Length,Name,Format,Columns\n\
+             FMT, 172, 4, FMTU, QBNN, TimeUS,FmtType,UnitIds,MultIds\n\
+             FMT, 177, 4, UNIT, QbZ, TimeUS,Id,Label\n\
+             FMT, 178, 4, MULT, Qbd, TimeUS,Id,Mult\n\
+             1\n2\n3\n4\n5\n",
+        );
+        // Lines of ten bytes, a start in every share of ten.
+        for line in 0..20 {
+            text.push_str(&format!("{line:09}\n"));
+        }
+        let buffer = DfLogBuffer::new(text.as_bytes(), &no_mode_names);
+        // Each FMT line's first four bytes; no FMTU, UNIT or MULT lines to copy.
+        let formats = formats(&buffer);
+        assert_eq!(formats, b"FMT,FMT,FMT,FMT,");
+        let count = text.len() / 10;
+        let pieces = buffer.split_log(i32::try_from(count).unwrap()).unwrap();
+        let size = text.len() / count;
+        let mut checked = [false; 2];
+        for (i, piece) in pieces.iter().enumerate() {
+            assert!(piece.starts_with(&formats));
+            let body = &piece[formats.len()..];
+            let starts = starts_in(&buffer, i * size, (i + 1) * size);
+            if starts.len() <= 1 {
+                assert!(body.is_empty(), "piece {i}: {starts:?}");
+                checked[0] |= starts.len() == 1;
+            } else {
+                assert_eq!(&body[..1], &text.as_bytes()[starts[0]..=starts[0]]);
+                checked[1] = true;
+            }
+        }
+        assert_eq!(checked, [true, true]);
+    }
+
+    /// `SplitLog` refuses a count of 0 or less, and a log without the formats it copies throws as
+    /// `logformat["FMTU"]` does.
+    #[test]
+    fn split_log_refuses_as_the_csharp_throws() {
+        let data = testdata("dataflash.bin");
+        let buffer = DfLogBuffer::new(&data, &no_mode_names);
+        assert_eq!(buffer.split_log(0), Err(INVALID_PIECES.to_owned()));
+        assert_eq!(buffer.split_log(-1), Err(INVALID_PIECES.to_owned()));
+        let edge = testdata("dataflash/edge.bin");
+        let buffer = DfLogBuffer::new(&edge, &no_mode_names);
+        assert_eq!(buffer.split_log(2), Err(KEY_NOT_FOUND.to_owned()));
+    }
+
+    /// The pieces land beside the log as `<log>_split<i>.bin`, written as `File.OpenWrite` writes:
+    /// over a longer older file from its start, its tail left.
+    #[test]
+    fn split_file_writes_the_pieces_beside_the_log() {
+        let directory = mp_os::temp_dir().join(format!("mp-split-{}", std::process::id()));
+        let _ = mp_os::fs::remove_dir_all(&directory);
+        mp_os::fs::create_dir_all(&directory).unwrap();
+        let log = directory.join("flight.bin");
+        let data = testdata("dataflash.bin");
+        mp_os::fs::write(&log, &data).unwrap();
+        let older = vec![b'z'; data.len() * 2];
+        mp_os::fs::write(directory.join("flight.bin_split0.bin"), &older).unwrap();
+        assert_eq!(split_file(&log, 2), Ok(2));
+        let pieces = DfLogBuffer::new(&data, &no_mode_names)
+            .split_log(2)
+            .unwrap();
+        let first = mp_os::fs::read(directory.join("flight.bin_split0.bin")).unwrap();
+        assert_eq!(&first[..pieces[0].len()], pieces[0].as_slice());
+        assert_eq!(&first[pieces[0].len()..], &older[pieces[0].len()..]);
+        assert_eq!(
+            mp_os::fs::read(directory.join("flight.bin_split1.bin")).unwrap(),
+            pieces[1]
+        );
+        assert!(split_file(&directory.join("gone.bin"), 2).is_err());
+        let _ = mp_os::fs::remove_dir_all(&directory);
     }
 }

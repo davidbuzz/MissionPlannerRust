@@ -41,8 +41,8 @@
 //!   HWIDs, the ids typed taken apart as `Device.DeviceStructure` does, in a box (one line of ids
 //!   here, where the C#'s box takes several);
 //! * a tool with files: Param Restore (a parameter file written as `but_paramrestore_Click` writes
-//!   it) and mag calb log (`MagCalib.ProcessLog`: a log read and fitted, `magoffset.dxf` drawn, and
-//!   the offsets to the compass page's `SaveOffsets`);
+//!   it), mag calb log (`MagCalib.ProcessLog`: a log read and fitted, `magoffset.dxf` drawn, and
+//!   the offsets to the compass page's `SaveOffsets`) and Split DFLog (`DFLogBuffer.SplitLog`);
 //! * out of scope by a ruling, dimmed, its press saying why on the status line: Follow Me, OSDVideo,
 //!   Moving Base and the four Swarm tools (PLAN.md section 12 D13, 2026-09-25), Anon Log (the same
 //!   section, 2026-10-02: `Privacy.anonymise`, "beta and not interesting"), Lang Edit (the
@@ -262,6 +262,7 @@ pub(crate) fn tool(name: &str) -> Tool {
         "but_blupdate" => Tool::Act(Act::BootloaderUpgrade),
         "but_disablearmswitch" => Tool::Act(Act::ToggleSafety),
         "BUT_magfit2" => Tool::Act(Act::MagCalLog),
+        "myButton1" => Tool::Act(Act::SplitDfLog),
         "BUT_follow_me" | "but_osdvideo" | "BUT_movingbase" | "BUT_swarm" | "BUT_followleader"
         | "but_trimble" | "but_followswarm" => Tool::Unavailable(SECTION_12_D13),
         "but_anonlog" => Tool::Unavailable(ANON_LOG_RULED),
@@ -310,6 +311,10 @@ pub(crate) enum Act {
     /// handed to `SaveOffsets` (the compass page's, its boxes over every screen).
     /// `// C#: temp.cs:410-413; MagCalib.cs:93-133`
     MagCalLog,
+    /// `myButton1_Click_2`: a log asked for, "How Many" pieces asked (10 offered), and
+    /// `DFLogBuffer.SplitLog` writing `<log>_split<i>.bin` beside it, off the window's thread
+    /// (mp-log's `split_file`). `// C#: temp.cs:720-734; ExtLibs/Utilities/DFLogBuffer.cs:417-501`
+    SplitDfLog,
 }
 
 /// Param Restore's first box.
@@ -320,6 +325,12 @@ const RESTORE_NOTICE: &str = "This process make take a some time";
 const PARAM_FILE_MASK: &str = "Parameter File|*.param;*.parm|All Files|*.*";
 /// `ProcessLog`'s dialog's filter. `// C#: MagCalib.cs:97`
 const LOG_FILE_MASK: &str = "Log Files|*.tlog;*.log;*.bin";
+/// Split DFLog's dialog's filter, and its question with the count it offers.
+/// `// C#: temp.cs:723, 730-731`
+const DFLOG_FILE_MASK: &str = "Log Files|*.log;*.bin;*.BIN;*.LOG";
+const SPLIT_TITLE: &str = "How Many";
+const SPLIT_PROMPT: &str = "Enter how many pieces to split into";
+const SPLIT_OFFERED: i32 = 10;
 
 /// `but_hwids_Click`'s report: for every whole number in each line, the line (its tabs as
 /// spaces) and the device that id names, a line each.
@@ -399,15 +410,19 @@ enum Opened {
     ParamRestore,
     /// mag calb log's log.
     MagCalLog,
+    /// Split DFLog's log.
+    SplitDfLog,
 }
 
 /// What an input box's answer is for.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 enum Answered {
     /// QNH: the parameter it sets.
     Qnh(&'static str),
     /// decode HWIDs.
     Hwids,
+    /// Split DFLog's count: the log it splits.
+    SplitPieces(std::path::PathBuf),
 }
 
 /// The tab's state: the last button pressed, for the facts, the question showing, and where the
@@ -424,6 +439,10 @@ pub(crate) struct Experimental {
     magcal: Option<std::sync::mpsc::Receiver<Processed>>,
     /// What the last one came to, for the facts.
     magcal_last: Option<String>,
+    /// Split DFLog's splitting, on its thread, until its answer comes.
+    split: Option<std::sync::mpsc::Receiver<Result<usize, String>>>,
+    /// What the last one came to, for the facts.
+    split_last: Option<String>,
 }
 
 impl Default for Experimental {
@@ -436,6 +455,8 @@ impl Default for Experimental {
             scroll: gpui::ScrollHandle::new(),
             magcal: None,
             magcal_last: None,
+            split: None,
+            split_last: None,
         }
     }
 }
@@ -545,6 +566,17 @@ fn act(
             ));
             focus_input(this, window, cx);
         }
+        // `InitialDirectory = Settings.Instance.LogDir`.
+        Act::SplitDfLog => {
+            let folder = crate::fly::log_directory()
+                .map(|folder| folder.to_string_lossy().into_owned())
+                .unwrap_or_default();
+            this.experimental.asking = Some(Asking::Path(
+                crate::config::firmware::PathBox::new(&folder, DFLOG_FILE_MASK),
+                Opened::SplitDfLog,
+            ));
+            focus_input(this, window, cx);
+        }
     }
 }
 
@@ -613,7 +645,7 @@ fn send(this: &mut MissionPlanner, what: Act) {
             }
             true
         }
-        Act::Qnh | Act::DecodeHwids | Act::ParamRestore | Act::MagCalLog => true,
+        Act::Qnh | Act::DecodeHwids | Act::ParamRestore | Act::MagCalLog | Act::SplitDfLog => true,
     };
     if !sent {
         this.file_status = Some(error_box(PLEASE_CONNECT));
@@ -626,6 +658,14 @@ fn answer(this: &mut MissionPlanner, yes: bool) {
         return;
     };
     if !yes {
+        // Split DFLog never reads the box's answer: Cancel splits into the count it offered.
+        if let Asking::Input {
+            then: Answered::SplitPieces(file),
+            ..
+        } = asking
+        {
+            split_df_log(this, file, &SPLIT_OFFERED.to_string());
+        }
         return;
     }
     match asking {
@@ -645,6 +685,10 @@ fn answer(this: &mut MissionPlanner, yes: bool) {
         }
         Asking::Confirm { then, .. } => send(this, then),
         Asking::Message { .. } | Asking::Notice | Asking::Path(..) => {}
+        Asking::Input {
+            input,
+            then: Answered::SplitPieces(file),
+        } => split_df_log(this, file, input.field.value()),
         Asking::Input {
             input,
             then: Answered::Hwids,
@@ -708,6 +752,39 @@ fn path_answered(this: &mut MissionPlanner, ok: bool) {
     match opened {
         Opened::ParamRestore => restore_file(this, &file),
         Opened::MagCalLog => read_mag_log(this, file),
+        // `InputBox.Show("How Many", ..., ref a)` with `a = 10`.
+        Opened::SplitDfLog => {
+            this.experimental.asking = Some(Asking::Input {
+                input: InputBox::new(SPLIT_TITLE, SPLIT_PROMPT, &SPLIT_OFFERED.to_string()),
+                then: Answered::SplitPieces(file),
+            });
+        }
+    }
+}
+
+/// Split DFLog's count answered: `int.Parse(answer)` - a count that is no number throws, said on
+/// the status line as QNH's is - then `new DFLogBuffer(file).SplitLog(a)` on a thread of its own,
+/// where the C#'s window waits on it; [`tick`] takes its answer. One at a time.
+/// `// C#: temp.cs:730-732; ExtLibs/Controls/InputBox.cs:21-27`
+fn split_df_log(this: &mut MissionPlanner, file: std::path::PathBuf, answer: &str) {
+    let Ok(pieces) = answer.trim().parse::<i32>() else {
+        this.file_status = Some(error_box(format!(
+            "Input string was not in a correct format. ({answer})"
+        )));
+        return;
+    };
+    if this.experimental.split.is_some() {
+        return;
+    }
+    let (sender, receiver) = std::sync::mpsc::channel();
+    let spawned = wasm_thread::Builder::new()
+        .name("mp-split-dflog".to_owned())
+        .spawn(move || {
+            let _ = sender.send(mp_log::dflogbuffer::split_file(&file, pieces));
+        });
+    match spawned {
+        Ok(_) => this.experimental.split = Some(receiver),
+        Err(error) => log::debug!("Split DFLog: {error}"),
     }
 }
 
@@ -737,6 +814,7 @@ fn read_mag_log(this: &mut MissionPlanner, file: std::path::PathBuf) {
 /// C# shows on the status line (the owner's ruling: no box for it), or nothing, as its `catch`
 /// shows nothing. `// C#: MagCalib.cs:115-130`
 pub(crate) fn tick(this: &mut MissionPlanner) {
+    split_tick(this);
     let Some(receiver) = this.experimental.magcal.as_ref() else {
         return;
     };
@@ -767,6 +845,32 @@ pub(crate) fn tick(this: &mut MissionPlanner) {
         }
         Processed::Said(text) => this.file_status = Some(text.to_owned()),
         Processed::Quiet(why) => log::debug!("mag calb log: {why}"),
+    }
+}
+
+/// Split DFLog's answer, when it comes: nothing said when it is done, as the C# says nothing; what
+/// `SplitLog` threw on the status line, where the C#'s error box shows it.
+fn split_tick(this: &mut MissionPlanner) {
+    let Some(receiver) = this.experimental.split.as_ref() else {
+        return;
+    };
+    let split = match receiver.try_recv() {
+        Ok(split) => split,
+        Err(std::sync::mpsc::TryRecvError::Empty) => {
+            crate::repaint::in_flight();
+            return;
+        }
+        Err(std::sync::mpsc::TryRecvError::Disconnected) => {
+            Err("the split stopped without an answer".to_owned())
+        }
+    };
+    this.experimental.split = None;
+    match split {
+        Ok(pieces) => this.experimental.split_last = Some(format!("wrote {pieces}")),
+        Err(why) => {
+            this.experimental.split_last = Some(format!("failed: {why}"));
+            this.file_status = Some(error_box(why));
+        }
     }
 }
 
@@ -1026,6 +1130,15 @@ pub(crate) fn record_facts(state: &Experimental) {
             Some(Asking::Path(path, _)) => format!("{}: {}", path.caption, path.field.value()),
         },
     );
+    // Split DFLog: splitting, or what the last split came to.
+    facts::record(
+        "experimental.split",
+        if state.split.is_some() {
+            "splitting"
+        } else {
+            state.split_last.as_deref().unwrap_or("none")
+        },
+    );
     // mag calb log: reading, or what the last reading came to.
     facts::record(
         "experimental.magcal",
@@ -1078,9 +1191,10 @@ mod tests {
                 Tool::Unavailable(why) => assert!(!why.is_empty()),
             }
         }
-        assert_eq!(opens, 21);
+        assert_eq!(opens, 22);
         assert_eq!(tool("but_paramrestore"), Tool::Act(Act::ParamRestore));
         assert_eq!(tool("BUT_magfit2"), Tool::Act(Act::MagCalLog));
+        assert_eq!(tool("myButton1"), Tool::Act(Act::SplitDfLog));
         assert_eq!(tool("but_blupdate"), Tool::Act(Act::BootloaderUpgrade));
         assert_eq!(tool("but_disablearmswitch"), Tool::Act(Act::ToggleSafety));
         assert_eq!(tool("but_messageinterval"), Tool::MessageInterval);

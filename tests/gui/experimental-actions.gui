@@ -17,7 +17,7 @@ env MP_CONFIG_XML $WORK/config.xml
 setup printf '<?xml version="1.0" encoding="utf-8"?><Config><tabcontrolactions>tabQuick;</tabcontrolactions></Config>' > "$WORK/config.xml"
 key ctrl+f
 expect screen experimental
-expect experimental.working 21
+expect experimental.working 22
 # reboot pixhawk: asked; No sends nothing.
 click experimental-but_reboot
 expect experimental.asking Are you sure?

@@ -1,0 +1,73 @@
+# EXPERIMENTAL's Split DFLog (temp.cs:720-734): the log asked for in the log directory with the
+# C#'s filter, "How Many" asked with 10 offered, and DFLogBuffer.SplitLog writing <log>_split<i>.bin
+# beside the log, on a thread of its own. Three pieces of testdata's dataflash log; then Cancel,
+# whose answer the C# never reads - it splits into the 10 it offered; then 0, which SplitLog
+# refuses ("Invalid pieces parameters"), and a count that is no number (int.Parse throws), both
+# said on the status line where the C#'s error box shows them, by the owner's ruling.
+#
+# Run as: tools/gui-headless.sh experimental-splitlog
+screen fly
+window 1600x1200
+budget 30
+# 30: one run took 21.6 s (2026-10-06), four long paths typed.
+env XDG_DATA_HOME $WORK
+env MP_CONFIG_XML $WORK/config.xml
+env MP_LOG_DIR $WORK/logs
+setup printf '<?xml version="1.0" encoding="utf-8"?><Config><tabcontrolactions>tabQuick;</tabcontrolactions></Config>' > "$WORK/config.xml"
+setup mkdir -p "$WORK/logs" && cp testdata/dataflash.bin "$WORK/logs/flight.bin"
+
+key ctrl+f
+expect screen experimental
+expect experimental.split none
+
+# Three pieces.
+click experimental-myButton1
+expect experimental.asking Open: $WORK/logs/
+click experimental-path-value
+key ctrl+a
+type $WORK/logs/flight.bin
+key Return
+expect experimental.asking How Many: Enter how many pieces to split into
+key ctrl+a
+type 3
+key Return
+expect experimental.asking none
+within 30
+expect experimental.split wrote 3
+
+# Cancel: the 10 offered.
+click experimental-myButton1
+click experimental-path-value
+key ctrl+a
+type $WORK/logs/flight.bin
+key Return
+expect experimental.asking How Many: Enter how many pieces to split into
+key Escape
+expect experimental.asking none
+within 30
+expect experimental.split wrote 10
+
+# 0, refused.
+click experimental-myButton1
+click experimental-path-value
+key ctrl+a
+type $WORK/logs/flight.bin
+key Return
+key ctrl+a
+type 0
+key Return
+within 30
+expect experimental.split failed: Invalid pieces parameters
+expect status Error: Invalid pieces parameters
+
+# No number.
+click experimental-myButton1
+click experimental-path-value
+key ctrl+a
+type $WORK/logs/flight.bin
+key Return
+key ctrl+a
+type many
+key Return
+expect experimental.asking none
+expect status Error: Input string was not in a correct format. (many)
