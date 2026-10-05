@@ -13,3 +13,7 @@
 
 # Python bytecode of the GUI scripts' helpers (tests/gui/gui_background.py and its importers).
 __pycache__/
+
+# Playwright for the browser checks, installed beside them (web/check/ci.sh).
+/web/check/node_modules/
+/web/check/package-lock.json

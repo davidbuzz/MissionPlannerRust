@@ -5,7 +5,8 @@
 # Cargo.lock holds, and the site assembled by web/tools/pages-site.sh - which adds
 # coi-serviceworker, since the page's threads need the COOP and COEP headers and GitHub Pages
 # sends none of a site's choosing. The repository's Pages settings publish from a workflow
-# (build_type "workflow"), which this is.
+# (build_type "workflow"), which this is. The browser checks run on the site before it is
+# published (web/check/ci.sh).
 name: pages
 
 on:
@@ -53,6 +54,22 @@ jobs:
         run: wasm-bindgen --target web --out-dir web/www/pkg-planner target/web/wasm32-unknown-unknown/release/planner.wasm
       - name: the site
         run: web/tools/pages-site.sh _site
+      # The browser checks on what is about to be published (web/check/ci.sh): a failing one
+      # holds the site back. Playwright at the version the checks are written against.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Playwright and its Chromium
+        run: |
+          npm install --no-save --prefix web/check playwright@1.60.0
+          npx --prefix web/check playwright install --with-deps chromium
+      - name: the browser checks
+        run: web/check/ci.sh _site browser-checks
+      - if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: browser-checks
+          path: browser-checks
       - uses: actions/upload-pages-artifact@v3
         with:
           path: _site
