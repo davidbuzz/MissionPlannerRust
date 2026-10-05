@@ -287,11 +287,22 @@ impl LogFile {
             .index
             .len()
             .min(usize::try_from(u64::from(u32::MAX) + 1).unwrap_or(usize::MAX));
-        let threads = if lines < 1 << 20 {
+        // One thread where this one may not wait for others - a web page's main thread, where
+        // a scope may not even be made (mp_os::may_block) - and then no scope at all.
+        let threads = if lines < 1 << 20 || !mp_os::may_block() {
             1
         } else {
             wasm_thread::available_parallelism().map_or(1, |threads| threads.get().min(8))
         };
+        if threads == 1 {
+            let found = self.count_instances(&plans, segments.len(), 0..lines);
+            for (total, found) in counts.iter_mut().zip(found) {
+                for (instance, records) in found {
+                    tally(total, instance, records);
+                }
+            }
+            return counts;
+        }
         let per_thread = lines.div_ceil(threads);
         let parts: Vec<Vec<Counts>> = wasm_thread::scope(|scope| {
             let handles: Vec<_> = (0..threads)

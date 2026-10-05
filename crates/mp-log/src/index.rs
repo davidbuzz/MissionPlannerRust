@@ -168,10 +168,15 @@ impl Split {
     /// pass `u32::MAX` while its pieces are joined: a record is at least three bytes.
     const PARALLEL_TO: usize = 8 << 30;
 
-    /// How a log of `len` bytes is split on this machine.
+    /// How a log of `len` bytes is split on this machine: in one piece where this thread may not
+    /// wait for others - a web page's main thread, where a scope may not even be made
+    /// (mp_os::may_block) - since a split's pieces are walked in threads of a scope.
     fn of(len: usize) -> Self {
-        let threads =
-            wasm_thread::available_parallelism().map_or(1, |threads| threads.get().min(8));
+        let threads = if mp_os::may_block() {
+            wasm_thread::available_parallelism().map_or(1, |threads| threads.get().min(8))
+        } else {
+            1
+        };
         Self {
             pieces: if (Self::PARALLEL_FROM..Self::PARALLEL_TO).contains(&len) {
                 threads
