@@ -383,7 +383,14 @@ impl PluginHost {
         for handle in &self.handles {
             let _ = handle.commands.send(Command::Exit);
         }
-        let deadline = Instant::now() + EXIT_WAIT;
+        // On a web page's main thread nothing may wait (`mp_os::may_block`): each plugin's
+        // thread, told to exit, ends on its own.
+        let deadline = Instant::now()
+            + if mp_os::may_block() {
+                EXIT_WAIT
+            } else {
+                Duration::ZERO
+            };
         for handle in &mut self.handles {
             if let Some(thread) = handle.thread.take() {
                 while !thread.is_finished() && Instant::now() < deadline {

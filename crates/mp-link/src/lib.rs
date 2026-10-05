@@ -1353,7 +1353,11 @@ impl Link {
     pub fn close(&mut self) {
         self.shared.running.store(false, Ordering::Release);
         if let Some(thread) = self.thread.take() {
-            let _ = thread.join();
+            // On a web page's main thread nothing may wait (`mp_os::may_block`): the thread, told
+            // to stop, ends on its own at its next read.
+            if mp_os::may_block() {
+                let _ = thread.join();
+            }
         }
     }
 }

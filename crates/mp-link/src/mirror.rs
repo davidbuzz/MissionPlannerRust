@@ -243,7 +243,14 @@ impl Mirror {
     pub fn close(&mut self) {
         self.shared.running.store(false, Ordering::Release);
         if let Some(thread) = self.thread.take() {
-            let deadline = Instant::now() + CLOSE_WAIT;
+            // On a web page's main thread nothing may wait (`mp_os::may_block`): told to stop,
+            // the thread ends on its own.
+            let deadline = Instant::now()
+                + if mp_os::may_block() {
+                    CLOSE_WAIT
+                } else {
+                    Duration::ZERO
+                };
             while !thread.is_finished() && Instant::now() < deadline {
                 wasm_thread::sleep(Duration::from_millis(1));
             }

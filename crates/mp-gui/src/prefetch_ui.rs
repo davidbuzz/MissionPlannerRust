@@ -257,7 +257,11 @@ impl PrefetchJob {
 impl Drop for PrefetchJob {
     fn drop(&mut self) {
         self.cancel();
-        if let Some(handle) = self.handle.take() {
+        if let Some(handle) = self.handle.take()
+            // On a web page's main thread nothing may wait (`mp_os::may_block`): cancelled, the
+            // thread ends on its own.
+            && (mp_os::may_block() || handle.is_finished())
+        {
             let _ = handle.join();
         }
     }

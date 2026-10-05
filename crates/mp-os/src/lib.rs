@@ -34,6 +34,40 @@
 
 pub mod fs;
 
+/// Whether this thread may wait - for a thread's end, a sleep, a lock held elsewhere: always on
+/// the desktop; in a web page not on its main thread, where the browser forbids it and std's wait
+/// (`memory.atomic.wait`) traps. A trap there ends the planner mid-update and leaves gpui's state
+/// borrowed for good - the next update panics "RefCell already borrowed" (the owner's DISCONNECT
+/// in two browsers, 2026-10-05: Link::close joined the link's thread). What would wait there is
+/// told to stop and left to end on its own.
+#[must_use]
+pub fn may_block() -> bool {
+    #[cfg(target_family = "wasm")]
+    {
+        !on_main_thread()
+    }
+    #[cfg(not(target_family = "wasm"))]
+    {
+        true
+    }
+}
+
+/// [`wake`]s so far.
+static WAKES: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
+/// Something a window shows has changed off the window's thread - a plugin's request sent, a
+/// result handed over: the window's repaint loop, which looks at [`wakes`], draws at its next look
+/// rather than at its floor (crates/mp-gui/src/repaint.rs). One atomic add, from any thread.
+pub fn wake() {
+    WAKES.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+}
+
+/// How many [`wake`]s there have been.
+#[must_use]
+pub fn wakes() -> u64 {
+    WAKES.load(std::sync::atomic::Ordering::Relaxed)
+}
+
 use std::ffi::OsStr;
 use std::path::PathBuf;
 #[cfg(target_family = "wasm")]
