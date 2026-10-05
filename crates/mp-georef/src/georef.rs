@@ -185,7 +185,7 @@ fn parse_int(item: &Item, index: Option<usize>, what: &str) -> Result<i32, Geore
 }
 
 fn read_file(path: &str) -> Result<Vec<u8>, GeorefError> {
-    std::fs::read(path).map_err(|e| GeorefError::Io {
+    mp_os::fs::read(path).map_err(|e| GeorefError::Io {
         path: path.to_owned(),
         message: e.to_string(),
     })

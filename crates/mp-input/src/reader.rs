@@ -265,7 +265,7 @@ impl StickReader {
     where
         S: FnMut(&Frame) -> bool + Send + 'static,
     {
-        let device = std::fs::File::open(path)?;
+        let device = mp_os::fs::File::open(path)?;
         Self::spawn(device, mapping, sink)
     }
 

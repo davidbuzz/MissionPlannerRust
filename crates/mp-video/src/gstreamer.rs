@@ -39,6 +39,7 @@
 //! ([`crate::multipart`]). Without an `appsink name=outsink` the pipeline plays as it is and
 //! hands the HUD nothing, as the C#'s waits for its end.
 
+use mp_os::fs::FsExt as _;
 use mp_os::Lock as _;
 use std::ffi::OsString;
 use std::io::{BufRead as _, BufReader};
@@ -231,7 +232,7 @@ pub fn drives() -> Vec<PathBuf> {
     }
     (b'C'..=b'Z')
         .map(|letter| PathBuf::from(format!("{}:\\", char::from(letter))))
-        .filter(|root| root.is_dir())
+        .filter(|root| root.os_is_dir())
         .collect()
 }
 
@@ -249,7 +250,7 @@ fn fits(path: &Path, windows: bool, is64: bool) -> bool {
 /// The launcher in `dir` or any directory under it: `Directory.GetFiles(dir, "*.*",
 /// AllDirectories)`, a directory's own files before its subdirectories'.
 fn find_under(dir: &Path, windows: bool, is64: bool) -> Option<PathBuf> {
-    let entries = std::fs::read_dir(dir).ok()?;
+    let entries = mp_os::fs::read_dir(dir).ok()?;
     let mut subdirs = Vec::new();
     let mut found = None;
     for entry in entries.flatten() {
@@ -257,7 +258,7 @@ fn find_under(dir: &Path, windows: bool, is64: bool) -> Option<PathBuf> {
             continue;
         };
         let path = entry.path();
-        if kind.is_dir() {
+        if kind.os_is_dir() {
             subdirs.push(path);
         } else if found.is_none()
             && entry
@@ -289,10 +290,10 @@ pub fn look_for_gstreamer(on_path: &[PathBuf], dirs: &[PathBuf]) -> Option<PathB
     on_path
         .iter()
         .map(|dir| dir.join(LAUNCHER))
-        .find(|launcher| launcher.is_file())
+        .find(|launcher| launcher.os_is_file())
         .or_else(|| {
             dirs.iter()
-                .filter(|dir| dir.is_dir())
+                .filter(|dir| dir.os_is_dir())
                 .find_map(|dir| find_under(dir, windows, is64))
         })
 }
@@ -301,7 +302,7 @@ pub fn look_for_gstreamer(on_path: &[PathBuf], dirs: &[PathBuf]) -> Option<PathB
 /// `// C#: ExtLibs/Utilities/GStreamer.cs:1407-1415`
 #[must_use]
 pub fn gst_launch_exists(gst_launch: &str) -> bool {
-    !gst_launch.is_empty() && Path::new(gst_launch).is_file()
+    !gst_launch.is_empty() && Path::new(gst_launch).os_is_file()
 }
 
 /// `SetGSTPath`'s environment, for a runtime whose launcher is `<root>\bin\<launcher>`: its
@@ -611,7 +612,7 @@ pub fn download_gstreamer(
         if !get_file(url, &output, status) {
             continue;
         }
-        let extracted = std::fs::read(&output)
+        let extracted = mp_os::fs::read(&output)
             .map_err(|why| why.to_string())
             .and_then(|archive| {
                 status(50, "Extracting..");
@@ -624,7 +625,7 @@ pub fn download_gstreamer(
             }
             Err(why) => {
                 status(-1, &format!("Error downloading file {why}"));
-                let _ = std::fs::remove_file(&output);
+                let _ = mp_os::fs::remove_file(&output);
                 status(-1, "Retry");
             }
         }
@@ -635,6 +636,7 @@ pub fn download_gstreamer(
 mod tests {
     #![allow(clippy::unwrap_used, clippy::expect_used, clippy::indexing_slicing)]
 
+    use mp_os::fs::FsExt as _;
     use web_time::{Duration, Instant};
 
     use super::*;
@@ -732,8 +734,8 @@ mod tests {
 
     fn scratch(name: &str) -> PathBuf {
         let dir = mp_os::temp_dir().join(format!("mp-video-gst-{name}-{}", mp_os::process_id()));
-        let _ = std::fs::remove_dir_all(&dir);
-        std::fs::create_dir_all(&dir).unwrap();
+        let _ = mp_os::fs::remove_dir_all(&dir);
+        mp_os::fs::create_dir_all(&dir).unwrap();
         dir
     }
 
@@ -751,7 +753,7 @@ mod tests {
             &mut |url, to, status| {
                 fetched.push(url.to_owned());
                 status(40, "Downloading.. ETA: 1 Seconds");
-                std::fs::write(to, &zip).is_ok()
+                mp_os::fs::write(to, &zip).is_ok()
             },
             &|_, _| Err("nothing is deflated".to_owned()),
             &mut |percent, words| said.push(format!("{percent} {words}")),
@@ -766,14 +768,14 @@ mod tests {
                 "100 Done."
             ]
         );
-        assert!(data.join("gstreamer-1.0-x86_64-1.14.4.zip").is_file());
+        assert!(data.join("gstreamer-1.0-x86_64-1.14.4.zip").os_is_file());
         let (_, dirs) = search_dirs(None, None, Some(&data), &[]);
         assert_eq!(
             look_for_gstreamer(&[], &dirs),
             Some(data.join(&launcher)),
             "{dirs:?}"
         );
-        let _ = std::fs::remove_dir_all(&data);
+        let _ = mp_os::fs::remove_dir_all(&data);
     }
 
     /// Three tries, each a failure said, the zip deleted after a bad extraction.
@@ -787,7 +789,7 @@ mod tests {
             true,
             &mut |_, to, _| {
                 tries += 1;
-                std::fs::write(to, b"not a zip").is_ok()
+                mp_os::fs::write(to, b"not a zip").is_ok()
             },
             &|_, _| Err("unused".to_owned()),
             &mut |percent, words| said.push(format!("{percent} {words}")),
@@ -795,14 +797,14 @@ mod tests {
         assert_eq!(tries, 3);
         assert_eq!(said.iter().filter(|line| *line == "-1 Retry").count(), 3);
         assert!(said.contains(&"-1 Error downloading file not a zip archive".to_owned()));
-        assert!(!data.join("gstreamer-1.0-x86_64-1.14.4.zip").exists());
-        let _ = std::fs::remove_dir_all(&data);
+        assert!(!data.join("gstreamer-1.0-x86_64-1.14.4.zip").os_exists());
+        let _ = mp_os::fs::remove_dir_all(&data);
     }
 
     #[test]
     fn the_launcher_is_looked_for_on_the_path_first() {
         let bin = scratch("path");
-        std::fs::write(bin.join(LAUNCHER), b"").unwrap();
+        mp_os::fs::write(bin.join(LAUNCHER), b"").unwrap();
         let path = std::env::join_paths([bin.clone()]).unwrap();
         let (on_path, dirs) = search_dirs(Some(&path), None, None, &[]);
         assert_eq!(on_path, std::slice::from_ref(&bin));
@@ -817,7 +819,7 @@ mod tests {
         assert!(gst_launch_exists(&bin.join(LAUNCHER).display().to_string()));
         assert!(!gst_launch_exists(""));
         assert_eq!(look_for_gstreamer(&[], &[bin.join("none")]), None);
-        let _ = std::fs::remove_dir_all(&bin);
+        let _ = mp_os::fs::remove_dir_all(&bin);
     }
 
     #[test]

@@ -359,6 +359,7 @@ fn compare(a: &str, b: &str) -> Ordering {
 
 #[cfg(test)]
 mod tests {
+    use mp_os::fs::FsExt as _;
     use super::*;
 
     /// The shipped copies are the reference tree's, byte for byte.
@@ -370,15 +371,15 @@ mod tests {
             return;
         };
         let reference = std::path::PathBuf::from(tree).join("graphs");
-        if !reference.is_dir() {
+        if !reference.os_is_dir() {
             eprintln!("skipped: MP_SRC does not name a clone of https://github.com/ArduPilot/MissionPlanner");
             return;
         }
         for (name, shipped) in SHIPPED {
-            let original = std::fs::read_to_string(reference.join(name)).expect("reference file");
+            let original = mp_os::fs::read_to_string(reference.join(name)).expect("reference file");
             assert!(original == shipped, "{name} differs from the reference");
         }
-        let mut xml: Vec<String> = std::fs::read_dir(&reference)
+        let mut xml: Vec<String> = mp_os::fs::read_dir(&reference)
             .expect("graphs directory")
             .filter_map(Result::ok)
             .map(|entry| entry.file_name().to_string_lossy().into_owned())

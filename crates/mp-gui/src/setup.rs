@@ -2002,10 +2002,10 @@ mod tests {
             "headless-planner-setup-view-{}",
             mp_os::process_id()
         ));
-        let _ = std::fs::create_dir_all(&dir);
+        let _ = mp_os::fs::create_dir_all(&dir);
         let mut settings = crate::settings::Persisted::at(Some(dir.join("config.xml")));
         let file = dir.join(crate::display_view::CUSTOM_FILE);
-        let _ = std::fs::write(
+        let _ = mp_os::fs::write(
             &file,
             "{\"displayStandardParams\": true, \"displayAdvancedParams\": true, \"isAdvancedMode\": true}",
         );
@@ -2017,7 +2017,7 @@ mod tests {
         assert!(shown.contains(&"ConfigFriendlyParams"), "{shown:?}");
         assert!(shown.contains(&"ConfigFriendlyParamsAdv"), "{shown:?}");
         // Without the Advanced mode, the advanced page is added and not drawn.
-        let _ = std::fs::write(
+        let _ = mp_os::fs::write(
             &file,
             "{\"displayStandardParams\": true, \"displayAdvancedParams\": true}",
         );
@@ -2041,7 +2041,7 @@ mod tests {
         setup.load(&vehicle, KEY);
         assert!(!classes(&setup.pages()).contains(&"ConfigTerminal"));
         crate::display_view::set(crate::display_view::DisplayView::advanced(), &mut settings);
-        let _ = std::fs::remove_dir_all(&dir);
+        let _ = mp_os::fs::remove_dir_all(&dir);
     }
 
     const KEY: Key = Key {
@@ -2181,7 +2181,7 @@ mod tests {
     /// The script checks the same list against SITL, so the two cannot drift apart.
     #[test]
     fn the_scripts_copter_list_is_this_one() {
-        let script = std::fs::read_to_string(workspace().join("tests/gui/setup-list.gui"))
+        let script = mp_os::fs::read_to_string(workspace().join("tests/gui/setup-list.gui"))
             .expect("tests/gui/setup-list.gui");
         let listed = script
             .lines()

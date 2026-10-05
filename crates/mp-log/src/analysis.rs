@@ -132,13 +132,13 @@ pub fn xml_path_for(log: &Path) -> PathBuf {
 /// [`AnalysisError::BadInputFile`] when the log does not open or read, or the XML cannot be
 /// written: the runner then leaves no XML.
 pub fn run_analyzer(log: &Path, xml: &Path) -> Result<String, AnalysisError> {
-    let bytes = std::fs::read(log).map_err(|_| AnalysisError::BadInputFile)?;
+    let bytes = mp_os::fs::read(log).map_err(|_| AnalysisError::BadInputFile)?;
     // The Python reads bytes; a log that is not UTF-8 is read with its bad bytes replaced, which
     // counts those bytes differently in the size.
     let text = String::from_utf8_lossy(&bytes);
     let written = analyse_text(&text, &log.display().to_string())
         .map_err(|_| AnalysisError::BadInputFile)?;
-    std::fs::write(xml, &written).map_err(|_| AnalysisError::BadInputFile)?;
+    mp_os::fs::write(xml, &written).map_err(|_| AnalysisError::BadInputFile)?;
     Ok(written)
 }
 
@@ -197,7 +197,7 @@ pub fn analyse_to(
     let outcome =
         run_analyzer(file, &xml).and_then(|text| results(&text).map_err(AnalysisError::Results));
     if let Some(temp) = converted {
-        let _ = std::fs::remove_file(temp);
+        let _ = mp_os::fs::remove_file(temp);
     }
     outcome
 }
@@ -409,6 +409,7 @@ pub fn report(analysis: &Analysis) -> String {
 
 #[cfg(test)]
 mod tests {
+    use mp_os::fs::FsExt as _;
     use super::*;
 
     #[test]
@@ -441,7 +442,7 @@ mod tests {
             mp_os::temp_dir().join(format!("mp-log-missing-{}.log", mp_os::process_id()));
         let outcome = run_analyzer(&missing, &xml_path_for(&missing));
         assert!(matches!(outcome, Err(AnalysisError::BadInputFile)));
-        assert!(!xml_path_for(&missing).exists());
+        assert!(!xml_path_for(&missing).os_exists());
     }
 
     /// A log that never names a vehicle: the XML is cut at its duration, as the Python's crash
@@ -449,9 +450,9 @@ mod tests {
     #[test]
     fn an_unknown_vehicle_is_a_truncated_xml_that_fails_to_load() {
         let dir = mp_os::temp_dir().join(format!("mp-log-novehicle-{}", mp_os::process_id()));
-        std::fs::create_dir_all(&dir).unwrap();
+        mp_os::fs::create_dir_all(&dir).unwrap();
         let log = dir.join("sub.log");
-        std::fs::write(
+        mp_os::fs::write(
             &log,
             "FMT, 128, 89, FMT, BBnNZ, Type,Length,Name,Format,Columns\n\
              FMT, 10, 10, MSG, QZ, TimeUS,Message\nMSG, 1, ArduSub V4.5.7 (1a2b3c4d)\n",
@@ -462,11 +463,11 @@ mod tests {
             matches!(outcome, Err(AnalysisError::Results(_))),
             "{outcome:?}"
         );
-        let written = std::fs::read_to_string(xml_path_for(&log)).unwrap();
+        let written = mp_os::fs::read_to_string(xml_path_for(&log)).unwrap();
         assert!(
             written.ends_with("<duration>0:00:00</duration>\n"),
             "{written}"
         );
-        std::fs::remove_dir_all(&dir).unwrap();
+        mp_os::fs::remove_dir_all(&dir).unwrap();
     }
 }

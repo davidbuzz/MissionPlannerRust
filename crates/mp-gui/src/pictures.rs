@@ -938,7 +938,7 @@ mod tests {
     #[test]
     fn assets_images_holds_what_is_embedded() {
         let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets/images");
-        let mut files: Vec<String> = std::fs::read_dir(&dir)
+        let mut files: Vec<String> = mp_os::fs::read_dir(&dir)
             .map(|entries| {
                 entries
                     .filter_map(Result::ok)
@@ -1123,7 +1123,7 @@ mod tests {
         for resource in resources {
             let file = resource_file(&hudt, &hudt_resx, resource)
                 .unwrap_or_else(|| panic!("{resource} is not in HUDT.resx"));
-            let on_disk = std::fs::read(root.join("ExtLibs/Controls").join(&file))
+            let on_disk = mp_os::fs::read(root.join("ExtLibs/Controls").join(&file))
                 .unwrap_or_else(|_| panic!("{file} is not in the C# tree"));
             assert!(
                 bytes(resource) == Some(on_disk.as_slice()),
@@ -1137,12 +1137,12 @@ mod tests {
     fn call_sites() -> Vec<(String, String, String)> {
         let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src/config");
         let mut found = Vec::new();
-        let mut files: Vec<_> = std::fs::read_dir(&dir)
+        let mut files: Vec<_> = mp_os::fs::read_dir(&dir)
             .map(|entries| entries.filter_map(Result::ok).map(|e| e.path()).collect())
             .unwrap_or_default();
         files.sort();
         for path in files {
-            let Ok(source) = std::fs::read_to_string(&path) else {
+            let Ok(source) = mp_os::fs::read_to_string(&path) else {
                 continue;
             };
             let file = path
@@ -1414,7 +1414,7 @@ mod tests {
                     assert!(designer.contains(&line), "{}: no `{line}`", site.designer);
                     let file = resource_file(&resources, &resources_resx, site.resource)
                         .unwrap_or_else(|| panic!("{} is not in Resources.resx", site.resource));
-                    std::fs::read(root.join(&file))
+                    mp_os::fs::read(root.join(&file))
                         .unwrap_or_else(|_| panic!("{file} is not in the C# tree"))
                 }
                 Source::Resx => {

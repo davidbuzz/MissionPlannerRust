@@ -123,7 +123,7 @@ impl Pois {
     pub fn kept_in(file: Option<PathBuf>) -> Self {
         let points = file
             .as_deref()
-            .and_then(|path| std::fs::read(path).ok())
+            .and_then(|path| mp_os::fs::read(path).ok())
             .map(|bytes| parse(&String::from_utf8_lossy(&bytes)))
             .unwrap_or_default();
         Self {
@@ -241,9 +241,9 @@ pub fn render(points: &[Poi]) -> String {
 /// Writes the list, making the directory the C# application makes when it starts.
 fn write(path: &Path, points: &[Poi]) -> std::io::Result<()> {
     if let Some(parent) = path.parent() {
-        std::fs::create_dir_all(parent)?;
+        mp_os::fs::create_dir_all(parent)?;
     }
-    std::fs::write(path, render(points))
+    mp_os::fs::write(path, render(points))
 }
 
 /// The file as `LoadFile` reads it: each line split on tabs, a line with fewer than three parts
@@ -444,19 +444,19 @@ mod tests {
         pois.add(-35.0, 149.0, 0.0, "a");
         pois.add(-35.5, 149.5, 10.0, "b");
         assert_eq!(pois.error, None);
-        let written = std::fs::read_to_string(&path).unwrap();
+        let written = mp_os::fs::read_to_string(&path).unwrap();
         assert_eq!(written, "-35\t149\ta\r\n-35.5\t149.5\tb\r\n");
         assert!(pois.delete(0));
         assert!(!pois.delete(5));
         assert_eq!(
-            std::fs::read_to_string(&path).unwrap(),
+            mp_os::fs::read_to_string(&path).unwrap(),
             "-35.5\t149.5\tb\r\n"
         );
         // A new screen reads what the last one left.
         let again = Pois::kept_in(Some(path.clone()));
         assert_eq!(again.points().len(), 1);
         assert_eq!(again.points()[0].id(), "b");
-        let _ = std::fs::remove_dir_all(path.parent().unwrap().parent().unwrap());
+        let _ = mp_os::fs::remove_dir_all(path.parent().unwrap().parent().unwrap());
     }
 
     #[test]

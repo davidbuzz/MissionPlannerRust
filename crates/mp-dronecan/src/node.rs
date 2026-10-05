@@ -505,7 +505,7 @@ impl Node {
         };
         // `File.OpenRead`, `Seek(offset)`, `Read(buffer, 0, 256)`; a file that will not open
         // throws out of the handler, which answers nothing.
-        let Ok(mut handle) = std::fs::File::open(file) else {
+        let Ok(mut handle) = mp_os::fs::File::open(file) else {
             return;
         };
         let Ok(length) = handle.metadata().map(|meta| meta.len()) else {
@@ -750,12 +750,12 @@ mod tests {
     #[test]
     fn the_file_server_answers_reads() {
         let dir = mp_os::temp_dir().join(format!("mp-dronecan-fs-{}", mp_os::process_id()));
-        std::fs::create_dir_all(&dir).expect("a directory");
+        mp_os::fs::create_dir_all(&dir).expect("a directory");
         let path = dir.join("image.bin");
         let image: Vec<u8> = (0..300u32)
             .map(|i| u8::try_from(i % 251).unwrap())
             .collect();
-        std::fs::write(&path, &image).expect("written");
+        mp_os::fs::write(&path, &image).expect("written");
 
         let now = Instant::now();
         let mut node = Node::new(Identity::default(), now);
@@ -813,7 +813,7 @@ mod tests {
             node.receive_line(&line);
         }
         assert!(node.take_outgoing().is_empty());
-        std::fs::remove_dir_all(&dir).ok();
+        mp_os::fs::remove_dir_all(&dir).ok();
     }
 
     /// The allocator: a node's three anonymous messages - six bytes of its unique id, six more,

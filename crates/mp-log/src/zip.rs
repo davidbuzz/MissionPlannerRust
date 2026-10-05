@@ -162,13 +162,13 @@ pub fn extract(data: &[u8], dir: &Path) -> Result<(), ZipError> {
         }
         let target = dir.join(relative);
         if entry.name.ends_with('/') {
-            std::fs::create_dir_all(&target)?;
+            mp_os::fs::create_dir_all(&target)?;
             continue;
         }
         if let Some(parent) = target.parent() {
-            std::fs::create_dir_all(parent)?;
+            mp_os::fs::create_dir_all(parent)?;
         }
-        std::fs::write(target, entry.data)?;
+        mp_os::fs::write(target, entry.data)?;
     }
     Ok(())
 }
@@ -376,8 +376,8 @@ mod tests {
 
         let dir = mp_os::temp_dir().join(format!("mp-log-zip-{}", mp_os::process_id()));
         extract(&zip, &dir).unwrap();
-        assert_eq!(std::fs::read(dir.join("dir/runner.exe")).unwrap(), b"MZ");
-        std::fs::remove_dir_all(&dir).unwrap();
+        assert_eq!(mp_os::fs::read(dir.join("dir/runner.exe")).unwrap(), b"MZ");
+        mp_os::fs::remove_dir_all(&dir).unwrap();
     }
 
     #[test]

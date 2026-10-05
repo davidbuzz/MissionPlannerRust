@@ -29,7 +29,10 @@
 //!
 //! And one the desktop has another way, [`http`]: a web page has no sockets, so the crates that
 //! fetch over ureq on the desktop fetch through the browser in a page. And one only a page has,
-//! [`page_query`]: what its address asks for.
+//! [`page_query`]: what its address asks for. And [`fs`]: std's files on the desktop, the page's
+//! own in a page, kept between visits.
+
+pub mod fs;
 
 use std::ffi::OsStr;
 use std::path::PathBuf;

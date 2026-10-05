@@ -125,7 +125,7 @@ impl MetaData {
     pub fn load(data_directory: &Path) -> Self {
         let mut meta = Self::default();
         for vehicle in VEHICLES {
-            if let Ok(bytes) = std::fs::read(xml_file(data_directory, vehicle)) {
+            if let Ok(bytes) = mp_os::fs::read(xml_file(data_directory, vehicle)) {
                 meta.parse(&String::from_utf8_lossy(&bytes));
             }
         }
@@ -210,12 +210,12 @@ pub fn xml_file(data_directory: &Path, vehicle: &str) -> PathBuf {
 
 /// Whether a download is young enough to keep: its last write within [`FRESH`] of `now`.
 fn fresh(path: &Path, now: web_time::SystemTime) -> bool {
-    std::fs::metadata(path)
+    mp_os::fs::metadata(path)
         .and_then(|meta| meta.modified())
         .is_ok_and(|written| {
             // A file's time is std's, `now` the page's clock in a browser: the same instant,
             // counted from the same epoch (one type on the desktop).
-            let epoch = std::time::UNIX_EPOCH; // port_clock: keep
+            let epoch = web_time::UNIX_EPOCH;
             let written = web_time::UNIX_EPOCH + written.duration_since(epoch).unwrap_or_default();
             now.duration_since(written).map_or(true, |age| age < FRESH)
         })
@@ -251,11 +251,11 @@ pub fn get_meta_data(data_directory: &Path, fetch: Option<&dyn mp_firmware::mani
 
 /// One `.xml.xz` to its `.xml`, if it is an xz stream.
 fn unpack(file: &Path, fileout: &Path) -> std::io::Result<()> {
-    let packed = std::fs::read(file)?;
+    let packed = mp_os::fs::read(file)?;
     if !packed.starts_with(&XZ_MAGIC) {
         return Ok(());
     }
-    let mut out = std::io::BufWriter::new(std::fs::File::create(fileout)?);
+    let mut out = std::io::BufWriter::new(mp_os::fs::File::create(fileout)?);
     let unpacked = lzma_rs::xz_decompress(&mut packed.as_slice(), &mut out);
     std::io::Write::flush(&mut out)?;
     unpacked.map_err(|err| std::io::Error::other(err.to_string()))
@@ -291,6 +291,7 @@ pub fn shared() -> Option<&'static MetaData> {
 
 #[cfg(test)]
 mod tests {
+    use mp_os::fs::FsExt as _;
     use super::*;
 
     /// The shape of autotest's `LogMessages.xml`, cut down.
@@ -329,8 +330,8 @@ mod tests {
 
     fn scratch(test: &str) -> PathBuf {
         let dir = mp_os::temp_dir().join(format!("mp-gui-logmeta-{test}-{}", mp_os::process_id()));
-        let _ = std::fs::remove_dir_all(&dir);
-        std::fs::create_dir_all(&dir).expect("scratch");
+        let _ = mp_os::fs::remove_dir_all(&dir);
+        mp_os::fs::create_dir_all(&dir).expect("scratch");
         dir
     }
 
@@ -401,15 +402,15 @@ mod tests {
         let one = |text: &str| {
             format!("<f><logformat name=\"GPS\"><description>{text}</description></logformat></f>")
         };
-        std::fs::write(xml_file(&dir, "Copter"), one("copter")).unwrap();
-        std::fs::write(xml_file(&dir, "Rover"), one("rover")).unwrap();
+        mp_os::fs::write(xml_file(&dir, "Copter"), one("copter")).unwrap();
+        mp_os::fs::write(xml_file(&dir, "Rover"), one("rover")).unwrap();
         let meta = MetaData::load(&dir);
         assert_eq!(
             meta.field("GPS", DESCRIPTION)
                 .map(|f| f.description.as_str()),
             Some("rover")
         );
-        let _ = std::fs::remove_dir_all(&dir);
+        let _ = mp_os::fs::remove_dir_all(&dir);
     }
 
     /// Offline, a `.xml.xz` already downloaded is unpacked to its `.xml` and read; a file that
@@ -420,20 +421,20 @@ mod tests {
         let mut packed = Vec::new();
         lzma_rs::xz_compress(&mut SAMPLE.as_bytes(), &mut packed).unwrap();
         assert!(packed.starts_with(&XZ_MAGIC));
-        std::fs::write(xz_file(&dir, "Plane"), &packed).unwrap();
-        std::fs::write(xz_file(&dir, "Rover"), b"not xz").unwrap();
+        mp_os::fs::write(xz_file(&dir, "Plane"), &packed).unwrap();
+        mp_os::fs::write(xz_file(&dir, "Rover"), b"not xz").unwrap();
         get_meta_data(&dir, None);
         assert_eq!(
-            std::fs::read_to_string(xml_file(&dir, "Plane")).unwrap(),
+            mp_os::fs::read_to_string(xml_file(&dir, "Plane")).unwrap(),
             SAMPLE
         );
-        assert!(!xml_file(&dir, "Rover").exists());
+        assert!(!xml_file(&dir, "Rover").os_exists());
         let meta = MetaData::load(&dir);
         assert_eq!(
             meta.field("ACC", "TimeUS").map(|f| f.description.as_str()),
             Some("Time since system startup")
         );
-        let _ = std::fs::remove_dir_all(&dir);
+        let _ = mp_os::fs::remove_dir_all(&dir);
     }
 
     /// A download under seven days old is kept; an older one, or none, is fetched again.
@@ -443,10 +444,10 @@ mod tests {
         let file = xz_file(&dir, "Copter");
         let now = web_time::SystemTime::now();
         assert!(!fresh(&file, now));
-        std::fs::write(&file, b"x").unwrap();
+        mp_os::fs::write(&file, b"x").unwrap();
         assert!(fresh(&file, now));
         assert!(!fresh(&file, now + FRESH + Duration::from_secs(1)));
-        let _ = std::fs::remove_dir_all(&dir);
+        let _ = mp_os::fs::remove_dir_all(&dir);
     }
 
     /// `(uint)` on a bit's value: digits, white space either side, nothing else.

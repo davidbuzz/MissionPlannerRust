@@ -27,6 +27,7 @@
 // This module is internal to the binary; `pub` here documents intent rather than exporting API.
 #![allow(unreachable_pub)]
 
+use mp_os::fs::FsExt as _;
 use mp_os::Lock as _;
 use std::sync::{Arc, Mutex, PoisonError};
 use web_time::{Duration, Instant};
@@ -413,7 +414,7 @@ impl Telemetry {
         }
         let directory = std::env::var_os("MP_LOG_DIR")
             .map_or_else(Self::log_directory, std::path::PathBuf::from);
-        if std::fs::create_dir_all(&directory).is_err() {
+        if mp_os::fs::create_dir_all(&directory).is_err() {
             return None;
         }
 
@@ -474,14 +475,14 @@ impl Telemetry {
     /// variable is `unsafe` in this edition and denied by the workspace.
     fn recording_path_in(directory: &std::path::Path, stamp: &str) -> Option<std::path::PathBuf> {
         let first = directory.join(format!("{stamp}.tlog"));
-        if !first.exists() {
+        if !first.os_exists() {
             return Some(first);
         }
         // Bounded, because an unbounded loop looking for a free name is a hang waiting for a full
         // disk. Ninety-nine flights in one second is not a case worth serving.
         (1..100)
             .map(|index| directory.join(format!("{stamp}-{index}.tlog")))
-            .find(|candidate| !candidate.exists())
+            .find(|candidate| !candidate.os_exists())
     }
 
     /// Opens a link. A failure here is shown in the UI rather than killing the process: a ground
@@ -2283,7 +2284,7 @@ mod shared_parameters {
     fn send_sitl(vehicle: &mut Vehicle) -> Vec<(String, f64)> {
         let fixture = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("../../testdata/params/sitl-copter.param");
-        let text = std::fs::read_to_string(&fixture).expect("the SITL dump");
+        let text = mp_os::fs::read_to_string(&fixture).expect("the SITL dump");
         let sent: Vec<(String, f64)> = text
             .lines()
             .filter_map(|line| {
@@ -2866,18 +2867,18 @@ mod tests {
             "headless-planner-record-test-{}",
             mp_os::process_id()
         ));
-        let _ = std::fs::remove_dir_all(&directory);
-        std::fs::create_dir_all(&directory).expect("a writable temp directory");
+        let _ = mp_os::fs::remove_dir_all(&directory);
+        mp_os::fs::create_dir_all(&directory).expect("a writable temp directory");
 
         let first = Telemetry::recording_path_in(&directory, "stamp").expect("a free name");
         assert!(first.ends_with("stamp.tlog"), "{}", first.display());
-        std::fs::write(&first, b"").expect("writable");
+        mp_os::fs::write(&first, b"").expect("writable");
 
         let second = Telemetry::recording_path_in(&directory, "stamp").expect("a free name");
         assert!(second.ends_with("stamp-1.tlog"), "{}", second.display());
         assert_ne!(first, second);
 
-        let _ = std::fs::remove_dir_all(&directory);
+        let _ = mp_os::fs::remove_dir_all(&directory);
     }
 
     /// Recordings go in this application's own data directory's `logs` (PLAN.md section 12, D11).
@@ -2930,16 +2931,16 @@ mod tests {
             "headless-planner-record-full-{}",
             mp_os::process_id()
         ));
-        let _ = std::fs::remove_dir_all(&directory);
-        std::fs::create_dir_all(&directory).expect("a writable temp directory");
+        let _ = mp_os::fs::remove_dir_all(&directory);
+        mp_os::fs::create_dir_all(&directory).expect("a writable temp directory");
 
-        std::fs::write(directory.join("full.tlog"), b"").expect("writable");
+        mp_os::fs::write(directory.join("full.tlog"), b"").expect("writable");
         for index in 1..100 {
-            std::fs::write(directory.join(format!("full-{index}.tlog")), b"").expect("writable");
+            mp_os::fs::write(directory.join(format!("full-{index}.tlog")), b"").expect("writable");
         }
         assert!(Telemetry::recording_path_in(&directory, "full").is_none());
 
-        let _ = std::fs::remove_dir_all(&directory);
+        let _ = mp_os::fs::remove_dir_all(&directory);
     }
 }
 

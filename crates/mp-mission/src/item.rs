@@ -169,7 +169,7 @@ mod tests {
                 // `MP_SRC` names a clone of https://github.com/ArduPilot/MissionPlanner.
         let tree = std::env::var_os("MP_SRC")?;
         let path = std::path::PathBuf::from(tree).join("ExtLibs/Mavlink/Mavlink.cs");
-        let source = std::fs::read_to_string(path).ok()?;
+        let source = mp_os::fs::read_to_string(path).ok()?;
         let start = source.find("public enum MAV_CMD: ushort")?;
         let body = &source[start..];
         let end = body.find("\n    }")?;

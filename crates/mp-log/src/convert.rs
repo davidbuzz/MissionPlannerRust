@@ -689,8 +689,8 @@ pub fn convert_bin_file(
     output: &Path,
     mode_name: ModeName<'_>,
 ) -> std::io::Result<()> {
-    let data = std::fs::read(input)?;
-    std::fs::write(output, convert_bin(&data, mode_name))
+    let data = mp_os::fs::read(input)?;
+    mp_os::fs::write(output, convert_bin(&data, mode_name))
 }
 
 #[cfg(test)]

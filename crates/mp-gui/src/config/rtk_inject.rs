@@ -2560,13 +2560,13 @@ pub mod worker {
     fn open_basedata(
         log_dir: Option<PathBuf>,
         shared: &Shared,
-    ) -> Option<io::BufWriter<std::fs::File>> {
+    ) -> Option<io::BufWriter<mp_os::fs::File>> {
         let dir = log_dir?;
         let path = dir.join(format!(
             "{}.gpsbase",
             chrono::Local::now().format("%Y-%m-%d %H-%M-%S")
         ));
-        match std::fs::OpenOptions::new()
+        match mp_os::fs::OpenOptions::new()
             .read(true)
             .write(true)
             .create_new(true)
@@ -2601,7 +2601,7 @@ pub mod worker {
         run: &AtomicBool,
         open: &AtomicBool,
         port: Option<&Arc<Mutex<Port>>>,
-        basedata: &mut Option<io::BufWriter<std::fs::File>>,
+        basedata: &mut Option<io::BufWriter<mp_os::fs::File>>,
     ) {
         let mut lastrecv = Instant::now();
         let (mut isrtcm, mut issbp) = (false, false);
@@ -3801,7 +3801,7 @@ impl RtkInject {
         // `loadBasePosList()`: a file that does not parse is the C#'s "Failed to load Base
         // Position List" box.
         if let Some(path) = page.list_file.clone()
-            && let Ok(text) = std::fs::read_to_string(&path)
+            && let Ok(text) = mp_os::fs::read_to_string(&path)
         {
             match basepos_list_from(&text) {
                 Some(list) => page.list = list,
@@ -4224,7 +4224,7 @@ fn prompt_of(title: &'static str, question: &'static str, value: &str, purpose: 
 fn log_directory(persisted: &Persisted) -> Option<std::path::PathBuf> {
     persisted.config().log_directory().or_else(|| {
         let dir = mp_settings::default_log_directory()?;
-        let _ = std::fs::create_dir_all(&dir);
+        let _ = mp_os::fs::create_dir_all(&dir);
         Some(dir)
     })
 }
@@ -4327,7 +4327,7 @@ impl Page {
     /// `saveBasePosList`.
     fn save_list(&self) {
         if let Some(path) = self.list_file.as_ref() {
-            let _ = std::fs::write(path, basepos_list_xml(&self.list));
+            let _ = mp_os::fs::write(path, basepos_list_xml(&self.list));
         }
     }
 
@@ -6153,7 +6153,7 @@ mod tests {
             mp_os::process_id(),
             line!()
         ));
-        std::fs::create_dir_all(&dir).expect("the log directory");
+        mp_os::fs::create_dir_all(&dir).expect("the log directory");
         let spec = OpenSpec {
             kind: Kind::TcpClient,
             name: String::new(),
@@ -6184,13 +6184,13 @@ mod tests {
         let log = shared.counts().log.clone().expect("the .gpsbase file");
         assert_eq!(log.extension().and_then(|e| e.to_str()), Some("gpsbase"));
         until("the log flushed", || {
-            std::fs::read(&log).is_ok_and(|bytes| bytes == STREAM)
+            mp_os::fs::read(&log).is_ok_and(|bytes| bytes == STREAM)
         });
         assert_eq!(shared.counts().logged, STREAM.len() as u64);
         worker.stop();
         assert!(!worker.is_open());
         until("the loop to end", || !worker.is_running());
-        let _ = std::fs::remove_dir_all(&dir);
+        let _ = mp_os::fs::remove_dir_all(&dir);
     }
 
     // ---- sbp.cs, nmea.cs ----
@@ -6837,7 +6837,7 @@ mod tests {
     fn scratch(tag: &str) -> std::path::PathBuf {
         let dir =
             mp_os::temp_dir().join(format!("headless-planner-rtk-{}-{tag}", mp_os::process_id()));
-        std::fs::create_dir_all(&dir).expect("scratch");
+        mp_os::fs::create_dir_all(&dir).expect("scratch");
         dir
     }
 
@@ -6857,7 +6857,7 @@ mod tests {
     fn the_constructor_restores_the_saved_choices() {
         let dir = scratch("restore");
         let list = dir.join("baseposlist.xml");
-        std::fs::write(
+        mp_os::fs::write(
             &list,
             basepos_list_xml(&[BasePos {
                 lat: -35.1,
@@ -6909,7 +6909,7 @@ mod tests {
             persisted.get("SerialInjectGPS_SeptentrioRTCMLevel"),
             Some("2")
         );
-        let _ = std::fs::remove_dir_all(&dir);
+        let _ = mp_os::fs::remove_dir_all(&dir);
     }
 
     /// Connect on NTRIP asks for the caster's URL, the saved one in the box; cancelled, it is
@@ -7015,7 +7015,7 @@ mod tests {
             rtk.messages.pop_front().map(|m| m.text),
             Some(INVALID_BAUD_RATE.to_owned())
         );
-        let _ = std::fs::remove_dir_all(&dir);
+        let _ = mp_os::fs::remove_dir_all(&dir);
     }
 
     /// Every question the page asks keeps its OK's answer under `InputBox`'s key for it: the
@@ -7068,7 +7068,7 @@ mod tests {
         }
         rtk.answer(true, &mut persisted, LatLngAlt::ZERO);
         assert_eq!(persisted.get(questions[4].2), Some("a%2C+b"));
-        let _ = std::fs::remove_dir_all(&dir);
+        let _ = mp_os::fs::remove_dir_all(&dir);
     }
 
     /// The grid: Save Current Position asks for a name and adds `cs.Base`; Use makes a row the
@@ -7101,7 +7101,7 @@ mod tests {
             persisted.get("InputBoxEnterLocationEnterafriendlynameforthislocation"),
             Some("roof")
         );
-        let saved = std::fs::read_to_string(&list).expect("saved");
+        let saved = mp_os::fs::read_to_string(&list).expect("saved");
         assert_eq!(
             saved,
             "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n<ArrayOfPointLatLngAlt xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\" xmlns:xsd=\"http://www.w3.org/2001/XMLSchema\">\n  <PointLatLngAlt>\n    <Lat>-35.363261</Lat>\n    <Lng>149.16523</Lng>\n    <Alt>584</Alt>\n    <Tag>roof</Tag>\n    <Tag2 />\n    <color />\n  </PointLatLngAlt>\n</ArrayOfPointLatLngAlt>"
@@ -7143,7 +7143,7 @@ mod tests {
         // The new row cannot be deleted.
         rtk.cell_click(1, 5, &mut persisted);
         assert_eq!(rtk.page.as_ref().map(|page| page.grid.len()), Some(1));
-        let _ = std::fs::remove_dir_all(&dir);
+        let _ = mp_os::fs::remove_dir_all(&dir);
     }
 
     /// `base_pos` read back: four fields, the last the name; anything else Zero.
@@ -7338,7 +7338,7 @@ mod tests {
         assert_eq!((counts.bps, counts.bpsusefull), (0, 0));
         assert!(rtk.shared.flush.load(std::sync::atomic::Ordering::Acquire));
         drop(counts);
-        let _ = std::fs::remove_dir_all(&dir);
+        let _ = mp_os::fs::remove_dir_all(&dir);
     }
 
     /// The facts the script reads, on a page with nothing connected.
@@ -7349,7 +7349,7 @@ mod tests {
         let rtk = page_on(&mut persisted, dir.join("list.xml"));
         crate::facts::record("config.rtk.button", "unset");
         record_facts(&rtk, &view(), &persisted);
-        let _ = std::fs::remove_dir_all(&dir);
+        let _ = mp_os::fs::remove_dir_all(&dir);
         assert!(rtk.is_active());
         assert_eq!(TITLE, "RTK/GPS Inject");
         assert_eq!(

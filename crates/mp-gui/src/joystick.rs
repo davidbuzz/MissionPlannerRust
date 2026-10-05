@@ -65,6 +65,7 @@
 // This module is internal to the binary; `pub` here documents intent rather than exporting API.
 #![allow(unreachable_pub)]
 
+use mp_os::fs::FsExt as _;
 mod draw;
 pub mod forms;
 
@@ -268,7 +269,7 @@ impl DeviceSource for Machine {
         #[cfg(target_os = "linux")]
         {
             // Blocking: the reader has a thread whose whole job is to wait on it.
-            Ok(Box::new(std::fs::File::open(&device.id)?))
+            Ok(Box::new(mp_os::fs::File::open(&device.id)?))
         }
         #[cfg(not(target_os = "linux"))]
         {
@@ -1106,7 +1107,7 @@ impl Sticks {
             .parent()
             .filter(|dir| !dir.as_os_str().is_empty())
         {
-            let _ = std::fs::create_dir_all(dir);
+            let _ = mp_os::fs::create_dir_all(dir);
         }
         match joystick.mapping.config.save(&joystick.files) {
             Ok(()) => {
@@ -1870,11 +1871,11 @@ fn mount_mode_options() -> Vec<(i64, String)> {
 /// `// C#: ExtLibs/ArduPilot/Joystick/JoystickBase.cs:1308-1335`
 pub fn export_config(dir: &Path, to: &Path) -> Result<usize, String> {
     let names = |prefix: &str| {
-        let mut names: Vec<String> = std::fs::read_dir(dir)
+        let mut names: Vec<String> = mp_os::fs::read_dir(dir)
             .map(|entries| {
                 entries
                     .filter_map(Result::ok)
-                    .filter(|entry| entry.path().is_file())
+                    .filter(|entry| entry.path().os_is_file())
                     .filter_map(|entry| entry.file_name().to_str().map(str::to_owned))
                     .filter(|name| name.starts_with(prefix) && name.ends_with(".xml"))
                     .collect()
@@ -1892,7 +1893,7 @@ pub fn export_config(dir: &Path, to: &Path) -> Result<usize, String> {
     }
     let mut entries = Vec::new();
     for name in &files {
-        let data = std::fs::read(dir.join(name)).map_err(|err| format!("{name}: {err}"))?;
+        let data = mp_os::fs::read(dir.join(name)).map_err(|err| format!("{name}: {err}"))?;
         entries.push(mp_log::zip::Entry {
             name: name.clone(),
             data,
@@ -1912,10 +1913,10 @@ pub fn export_config(dir: &Path, to: &Path) -> Result<usize, String> {
         }
     };
     let zip = mp_log::zip::write(&entries, stamp).map_err(|err| err.to_string())?;
-    if to.exists() {
-        std::fs::remove_file(to).map_err(|err| format!("{}: {err}", to.display()))?;
+    if to.os_exists() {
+        mp_os::fs::remove_file(to).map_err(|err| format!("{}: {err}", to.display()))?;
     }
-    std::fs::write(to, zip).map_err(|err| format!("{}: {err}", to.display()))?;
+    mp_os::fs::write(to, zip).map_err(|err| format!("{}: {err}", to.display()))?;
     Ok(files.len())
 }
 
@@ -1933,7 +1934,7 @@ fn entry_name(full: &str) -> &str {
 /// Not a zip, or a file not written: what the C# throws, as words.
 /// `// C#: ExtLibs/ArduPilot/Joystick/JoystickBase.cs:1337-1360`
 pub fn import_config(dir: &Path, from: &Path) -> Result<usize, String> {
-    let bytes = std::fs::read(from).map_err(|err| format!("{}: {err}", from.display()))?;
+    let bytes = mp_os::fs::read(from).map_err(|err| format!("{}: {err}", from.display()))?;
     let entries = mp_log::zip::read(&bytes).map_err(|err| err.to_string())?;
     let mut count = 0;
     for entry in entries {
@@ -1941,8 +1942,8 @@ pub fn import_config(dir: &Path, from: &Path) -> Result<usize, String> {
         if !mp_input::config::is_config_file(name) {
             continue;
         }
-        let _ = std::fs::create_dir_all(dir);
-        std::fs::write(dir.join(name), &entry.data)
+        let _ = mp_os::fs::create_dir_all(dir);
+        mp_os::fs::write(dir.join(name), &entry.data)
             .map_err(|err| format!("{name}: {err}"))?;
         count += 1;
     }

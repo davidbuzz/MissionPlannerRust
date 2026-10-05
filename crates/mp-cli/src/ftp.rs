@@ -32,6 +32,7 @@
 
 #![allow(clippy::print_stdout, clippy::print_stderr)]
 
+use mp_os::fs::FsExt as _;
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 use web_time::{Duration, Instant};
@@ -62,7 +63,7 @@ pub(crate) fn run(args: &[String]) -> ExitCode {
         (Some("get"), Some(url), Some(remote), local) => {
             with_link(url, |link, id| get(link, id, remote, local.map(Path::new)))
         }
-        (Some("put"), Some(url), Some(local), Some(remote)) => match std::fs::read(local) {
+        (Some("put"), Some(url), Some(local), Some(remote)) => match mp_os::fs::read(local) {
             Ok(data) => with_link(url, |link, id| put(link, id, remote, data)),
             Err(err) => Err(format!("could not read {local}: {err}")),
         },
@@ -198,7 +199,7 @@ fn get(link: &Link, id: VehicleId, remote: &str, local: Option<&Path>) -> Result
         Some(path) => path.to_path_buf(),
         None => unused_name(Path::new(""), remote),
     };
-    std::fs::write(&path, &data)
+    mp_os::fs::write(&path, &data)
         .map_err(|err| format!("could not write {}: {err}", path.display()))?;
     Ok(format!(
         "{remote}: {} bytes to {}\n",
@@ -214,7 +215,7 @@ fn unused_name(dir: &Path, remote: &str) -> PathBuf {
     let name = if name.is_empty() { "download" } else { name };
     let mut path = dir.join(name);
     let mut a = 0u32;
-    while path.exists() {
+    while path.os_exists() {
         path = dir.join(format!("{name}{a}"));
         a += 1;
     }
@@ -397,7 +398,7 @@ mod tests {
             "headless-planner-ftp-{}-{name}",
             mp_os::process_id()
         ));
-        std::fs::create_dir_all(&dir).unwrap();
+        mp_os::fs::create_dir_all(&dir).unwrap();
         dir
     }
 
@@ -428,7 +429,7 @@ mod tests {
         let out = dir.join("param.pck");
         let report = get(&link, VEHICLE, "/APM/param.pck", Some(&out)).unwrap();
         assert!(report.starts_with("/APM/param.pck: 1500 bytes"), "{report}");
-        assert_eq!(std::fs::read(&out).unwrap(), param);
+        assert_eq!(mp_os::fs::read(&out).unwrap(), param);
 
         let report = put(&link, VEHICLE, "/APM/up.bin", b"123456789".to_vec()).unwrap();
         assert_eq!(report, "/APM/up.bin: 9 bytes, CRC 0x2DFD2D88\n");
@@ -450,25 +451,25 @@ mod tests {
         let fake = script.join().unwrap();
         assert!(!fake.files.contains_key("/APM/old.txt"));
         assert_eq!(fake.files["/APM/up.bin"], b"123456789");
-        let _ = std::fs::remove_dir_all(dir);
+        let _ = mp_os::fs::remove_dir_all(dir);
     }
 
     #[test]
     fn a_download_does_not_overwrite_what_is_there() {
         let dir = scratch("names");
         let taken = dir.join("threads.txt");
-        std::fs::write(&taken, b"x").unwrap();
+        mp_os::fs::write(&taken, b"x").unwrap();
         assert_eq!(
             unused_name(&dir, "@SYS/threads.txt"),
             dir.join("threads.txt0")
         );
-        std::fs::write(dir.join("threads.txt0"), b"x").unwrap();
+        mp_os::fs::write(dir.join("threads.txt0"), b"x").unwrap();
         assert_eq!(
             unused_name(&dir, "@SYS/threads.txt"),
             dir.join("threads.txt1")
         );
         assert_eq!(unused_name(&dir, "@SYS/uarts.txt"), dir.join("uarts.txt"));
-        let _ = std::fs::remove_dir_all(dir);
+        let _ = mp_os::fs::remove_dir_all(dir);
     }
 
     /// Against ArduPilot SITL on `tcp:127.0.0.1:5763`, the port kept for this test: the root and
@@ -523,7 +524,7 @@ mod tests {
 
         let dir = scratch("sitl");
         get(&link, id, "@SYS/uarts.txt", Some(&dir.join("uarts.txt"))).unwrap();
-        let burst = std::fs::read(dir.join("uarts.txt")).unwrap();
+        let burst = mp_os::fs::read(dir.join("uarts.txt")).unwrap();
         assert!(String::from_utf8_lossy(&burst).contains("SERIAL0"));
 
         // SITL lists threads.txt but has nothing to put in it: its HAL keeps the empty default
@@ -541,7 +542,7 @@ mod tests {
         ) {
             Ok(report) => {
                 println!("{report}");
-                assert!(!std::fs::read(dir.join("threads.txt")).unwrap().is_empty());
+                assert!(!mp_os::fs::read(dir.join("threads.txt")).unwrap().is_empty());
             }
             Err(error) => {
                 println!("threads.txt: {error}, after {:?}", started.elapsed());
@@ -601,7 +602,7 @@ mod tests {
             "the parameters never held still for a read, a CRC and a read"
         );
         link.close();
-        let _ = std::fs::remove_dir_all(dir);
+        let _ = mp_os::fs::remove_dir_all(dir);
     }
 
     /// A whole file by burst read at `readsize`, as `GetFile` makes it.

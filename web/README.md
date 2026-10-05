@@ -28,8 +28,24 @@ TakeOff and Auto, so the copter flies the mission; then it unticks itself on PLU
 goes back to FLY, and its pointer goes. Where the planner refuses something - Write's message box,
 say - it answers the box and stops, saying why on the status line. It is a
 plugin like the others, built into the browser build only, and the PLUGINS tab turns it off.
-Until the page keeps its settings, every visit runs it again. `planner.html?demo=0` starts
-without it, as every check but `demo_check.js` does.
+The page keeps its settings (below), so it runs at a first visit and then not again until it is
+ticked on PLUGINS. `planner.html?demo=0` starts without it, as every check but `demo_check.js`
+does.
+
+## Files kept between visits
+
+A page has no file system: std's file calls answer every path with "operation not supported on this
+platform". In the page the planner's files - config.xml, missions, logs, everything it writes - are
+held in memory by `crates/mp-os/src/fs/mem.rs`, std's calls with std's names and errors, and kept
+in the browser's own storage, the origin private file system (OPFS), by `www/storage.js`: before
+the planner starts it reads every file kept into the page (`loadFiles`), which the planner takes in
+at the top of its `main()` (`mp_os::fs::preload_from_page`); once it runs, every half second it asks
+the planner what changed (`planner_storage_take`) and writes it, a file from where it first differs,
+so a log is written by what it grew. They live in OPFS's `planner` folder under the planner's own
+paths (`home/web/.local/share/MissionPlannerRust/config.xml`). Every visit loads all of them, logs
+too, so the map's tile cache is not kept (`mp_os::fs::mem::NOT_KEPT`; the browser's own cache keeps
+the tiles' downloads); a browser's site settings clear them. `check/storage_check.js` holds it to
+a reload: config.xml, saved at start-up, in the browser's storage, and read back.
 
 ## A vehicle on a tailnet
 
@@ -85,6 +101,7 @@ NODE_PATH=<node_modules with playwright> node check/plugins_check.js   # the bui
 NODE_PATH=<node_modules with playwright> node check/demo_check.js      # the Welcome-Demo-Sitl, start to finish
 NODE_PATH=<node_modules with playwright> node check/check.js           # the HUD page
 NODE_PATH=<node_modules with playwright> node check/pages_check.js <dir> # the GitHub Pages site, no headers
+NODE_PATH=<node_modules with playwright> node check/storage_check.js   # config.xml kept across a reload
 NODE_PATH=<node_modules with playwright> check/tailnet_e2e.sh          # over a tailnet (needs Go)
 ```
 
@@ -106,6 +123,7 @@ no-op on the desktop: the replacement is std's own item there.
 | `tools/port_clock.py` | std's clock panics | `web_time::{Instant, SystemTime}` |
 | `tools/port_threads.py` | std cannot spawn threads | `wasm_thread`, Web Workers on shared memory |
 | `tools/port_os.py` | `temp_dir`, `process::id` and `split_paths` panic | `mp_os::*` |
+| `tools/port_fs.py` | std's files fail; `Path::exists`, `is_file`, `is_dir` ask the system | `mp_os::fs`; `.os_exists()`, `.os_is_file()`, `.os_is_dir()` |
 | `tools/port_locks.py` | the main thread may never wait (`Atomics.wait` throws); `recv_timeout` reads std's clock | `.os_lock()`, `.os_recv_timeout()`: they spin on the main thread only |
 
 By hand:
@@ -124,12 +142,9 @@ By hand:
 - `RwLock` and blocking `recv`/`join` on the page's main thread are not swept. The paths exercised
   so far are proven: startup, every top screen with and without a vehicle, the map, connect, the
   HUD, and the full parameter download.
-- Files: std::fs fails in a page, so settings, logs and parameter files are not kept between
-  visits. The browser's own storage (OPFS) would be the place.
 - The in-page SITL's eeprom.bin: its parameters do not survive a reload (the desktop's bridge
-  keeps them in the vehicle's sitl folder). The same storage would keep them.
+  keeps them in the vehicle's sitl folder). The planner's files are kept now (above); the SITL's
+  own are not yet.
 - UDP listening (`udp:0.0.0.0:14550`), where a vehicle sends first: the page's Tailscale node
   dials out (TCP, UDPCl) but does not listen yet.
 - Serial: WebSerial.
-- Settings are not kept, so the built-in Drone ID plugin asks its start-up question at every visit
-  (the storage row above would end it).

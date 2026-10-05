@@ -45,7 +45,8 @@
 // This module is internal to the binary; `pub` here documents intent rather than exporting API.
 #![allow(unreachable_pub)]
 
-use std::fs::File;
+use mp_os::fs::FsExt as _;
+use mp_os::fs::File;
 use std::io::{BufWriter, Write as _};
 use std::path::{Path, PathBuf};
 use web_time::{Duration, Instant};
@@ -275,7 +276,7 @@ impl RawSensor {
     /// `// C#: Controls/RAW_Sensor.cs:278-298`
     pub fn save_csv_to(&mut self, text: &str) -> Result<(), String> {
         let name = text.trim();
-        if name.is_empty() || Path::new(name).is_dir() {
+        if name.is_empty() || Path::new(name).os_is_dir() {
             return Ok(());
         }
         let mut path = PathBuf::from(name);
@@ -1000,7 +1001,7 @@ mod tests {
     #[test]
     fn save_csv_names_the_file_and_the_samples_fill_it() {
         let dir = mp_os::temp_dir().join(format!("mp-raw-sensor-{}", mp_os::process_id()));
-        std::fs::create_dir_all(&dir).unwrap();
+        mp_os::fs::create_dir_all(&dir).unwrap();
         let mut raw = RawSensor::new();
         raw.open(true).unwrap();
         raw.save_csv_to("").unwrap();
@@ -1016,13 +1017,13 @@ mod tests {
         state.imu[0].gyro = [0.25, 0.0, -6.0];
         raw.tick(&view(true, Some(state)));
         raw.close();
-        let text = std::fs::read_to_string(dir.join("samples.csv")).unwrap();
+        let text = mp_os::fs::read_to_string(dir.join("samples.csv")).unwrap();
         let line = text.lines().next().unwrap();
         let fields: Vec<&str> = line.split(',').collect();
         assert_eq!(fields.len(), 7);
         assert!(fields[0].contains('/') && fields[0].contains(':'), "{line}");
         assert_eq!(&fields[1..], ["1.5", "-2", "3", "0.25", "0", "-6"]);
-        let _ = std::fs::remove_dir_all(&dir);
+        let _ = mp_os::fs::remove_dir_all(&dir);
     }
 
     /// `CMB_rawupdaterate`: the text kept and parsed.

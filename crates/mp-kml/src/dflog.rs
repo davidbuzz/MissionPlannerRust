@@ -1393,7 +1393,7 @@ pub fn dflog_to_kml_at(
     mode_name: ModeName<'_>,
     zone: Zone<'_>,
 ) -> Result<Vec<PathBuf>, DflogKmlError> {
-    let data = std::fs::read(log)?;
+    let data = mp_os::fs::read(log)?;
     let mut output = LogOutput::new();
     process_log(log, &data, mode_name, &mut output);
     let written = output.write_kml(kml, zone, NEWLINE, dos_now(zone));
@@ -1403,7 +1403,7 @@ pub fn dflog_to_kml_at(
     };
     let mut paths = Vec::with_capacity(files.len());
     for (path, contents) in files {
-        std::fs::write(&path, contents)?;
+        mp_os::fs::write(&path, contents)?;
         paths.push(path);
     }
     if complete {

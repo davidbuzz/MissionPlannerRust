@@ -507,7 +507,7 @@ impl GeoRefImageBase {
 /// Where a file cannot be written.
 pub fn write_report_files(dir: &str, files: &ReportFiles) -> std::io::Result<()> {
     for (name, contents) in &files.files {
-        std::fs::write(format!("{dir}{SEPARATOR}{name}"), contents)?;
+        mp_os::fs::write(format!("{dir}{SEPARATOR}{name}"), contents)?;
     }
     Ok(())
 }
@@ -553,7 +553,7 @@ pub fn write_locations_xml(
     locations: &OrderedMap<i64, Location>,
 ) -> std::io::Result<()> {
     let text = locations_xml(locations);
-    let mut file = std::fs::OpenOptions::new()
+    let mut file = mp_os::fs::OpenOptions::new()
         .write(true)
         .create(true)
         .truncate(false)

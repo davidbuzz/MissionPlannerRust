@@ -162,14 +162,14 @@ mod tests {
             "headless-planner-srtm-{test}-{}",
             mp_os::process_id()
         ));
-        std::fs::create_dir_all(&dir).expect("scratch folder");
+        mp_os::fs::create_dir_all(&dir).expect("scratch folder");
         let mut bytes = Vec::with_capacity(size * size * 2);
         for row in 0..size {
             for column in 0..size {
                 bytes.extend_from_slice(&height(column, row).to_be_bytes());
             }
         }
-        std::fs::write(dir.join(name), bytes).expect("write the tile");
+        mp_os::fs::write(dir.join(name), bytes).expect("write the tile");
         dir
     }
 

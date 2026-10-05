@@ -488,6 +488,7 @@ pub fn keys_in(source: &str) -> Vec<&str> {
 
 #[cfg(test)]
 mod tests {
+    use mp_os::fs::FsExt as _;
     use super::*;
 
     /// The flight screen's sources, as the lint reads them.
@@ -523,13 +524,13 @@ mod tests {
     #[test]
     fn the_embedded_files_are_every_file_in_assets() {
         let mut on_disk = Vec::new();
-        for entry in std::fs::read_dir(assets()).expect("assets/i18n") {
+        for entry in mp_os::fs::read_dir(assets()).expect("assets/i18n") {
             let path = entry.expect("entry").path();
-            if !path.is_dir() {
+            if !path.os_is_dir() {
                 continue;
             }
             let culture = path.file_name().and_then(|n| n.to_str()).expect("name");
-            for file in std::fs::read_dir(&path).expect("culture dir") {
+            for file in mp_os::fs::read_dir(&path).expect("culture dir") {
                 let file = file.expect("file").path();
                 if let Some(stem) = file
                     .file_name()
@@ -549,7 +550,7 @@ mod tests {
         for &(culture, stem, text) in FILES {
             let path = assets().join(culture).join(format!("{stem}.ftl"));
             assert_eq!(
-                std::fs::read_to_string(&path).expect("read"),
+                mp_os::fs::read_to_string(&path).expect("read"),
                 text,
                 "{}",
                 path.display()
@@ -698,7 +699,7 @@ mod tests {
     /// The flight screen's row of `assets/i18n/report.md`'s table for one culture: how many of
     /// the screen's keys the culture's own files lack.
     fn reported(culture: &str) -> Option<usize> {
-        let report = std::fs::read_to_string(assets().join("report.md")).expect("report.md");
+        let report = mp_os::fs::read_to_string(assets().join("report.md")).expect("report.md");
         let section = report.split("## Screens through Fluent").nth(1)?;
         section.lines().find_map(|line| {
             let cells: Vec<&str> = line.split('|').map(str::trim).collect();

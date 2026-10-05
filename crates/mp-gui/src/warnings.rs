@@ -59,6 +59,7 @@
 // This module is internal to the binary; `pub` here documents intent rather than exporting API.
 #![allow(unreachable_pub)]
 
+use mp_os::fs::FsExt as _;
 use std::path::PathBuf;
 use std::sync::OnceLock;
 use web_time::{Duration, Instant};
@@ -726,10 +727,10 @@ impl WarningEngine {
         let Some(file) = self.file.as_ref() else {
             return Ok(());
         };
-        if !file.exists() {
+        if !file.os_exists() {
             return Ok(());
         }
-        let text = std::fs::read_to_string(file).map_err(|error| error.to_string())?;
+        let text = mp_os::fs::read_to_string(file).map_err(|error| error.to_string())?;
         self.warnings = from_xml(&text)?;
         Ok(())
     }
@@ -746,11 +747,11 @@ impl WarningEngine {
             return Err("no user data directory to save warnings.xml in".to_owned());
         };
         if let Some(dir) = file.parent() {
-            std::fs::create_dir_all(dir).map_err(|error| error.to_string())?;
+            mp_os::fs::create_dir_all(dir).map_err(|error| error.to_string())?;
         }
-        std::fs::write(&file, to_xml(&self.warnings)).map_err(|error| error.to_string())?;
+        mp_os::fs::write(&file, to_xml(&self.warnings)).map_err(|error| error.to_string())?;
         self.saved += 1;
-        self.saved_rules = std::fs::read_to_string(&file)
+        self.saved_rules = mp_os::fs::read_to_string(&file)
             .ok()
             .and_then(|text| from_xml(&text).ok())
             .map(|rules| rules.len());
@@ -1375,7 +1376,7 @@ mod tests {
             .os_lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner);
         let dir = mp_os::temp_dir().join(format!("mp-warnings-{}", mp_os::process_id()));
-        let _ = std::fs::remove_dir_all(&dir);
+        let _ = mp_os::fs::remove_dir_all(&dir);
         let file = dir.join("data").join(FILE_NAME);
         let mut engine = WarningEngine {
             file: Some(file.clone()),
@@ -1394,10 +1395,10 @@ mod tests {
         assert_eq!(again.load_config(), Ok(()));
         assert_eq!(again.warnings, engine.warnings);
         // A file that throws leaves the rules as they were.
-        std::fs::write(&file, "<ArrayOfCustomWarning><CustomWarning><type>x</type>").expect("w");
+        mp_os::fs::write(&file, "<ArrayOfCustomWarning><CustomWarning><type>x</type>").expect("w");
         assert!(again.load_config().is_err());
         assert_eq!(again.warnings.len(), 1);
-        let _ = std::fs::remove_dir_all(&dir);
+        let _ = mp_os::fs::remove_dir_all(&dir);
     }
 
     /// The options are the held numeric properties in declaration order: `satcount` and `alt`

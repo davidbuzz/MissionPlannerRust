@@ -668,7 +668,7 @@ mod tests {
     #[test]
     fn an_offline_job_over_an_empty_cache_ends_with_nothing_and_says_so() {
         let dir = mp_os::temp_dir().join(format!("mp-prefetch-{}", mp_os::process_id()));
-        let _ = std::fs::remove_dir_all(&dir);
+        let _ = mp_os::fs::remove_dir_all(&dir);
         let cache = TileCache::new(&dir);
         let area = Area::between(
             LatLon::new(-35.36, 149.16).expect("a"),
@@ -690,6 +690,6 @@ mod tests {
         assert_eq!(job.saving(), "all tiles saved");
         assert_eq!(job.state_name(), "done");
         assert!(job.label().starts_with("Fetching tile at zoom (4): 1 of 1"));
-        let _ = std::fs::remove_dir_all(&dir);
+        let _ = mp_os::fs::remove_dir_all(&dir);
     }
 }

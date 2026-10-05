@@ -906,7 +906,7 @@ mod tests {
         };
         let path = std::path::PathBuf::from(tree)
             .join("ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs");
-        let Ok(source) = std::fs::read_to_string(&path) else {
+        let Ok(source) = mp_os::fs::read_to_string(&path) else {
             eprintln!("skipped: no C# tree at {}", path.display());
             return;
         };

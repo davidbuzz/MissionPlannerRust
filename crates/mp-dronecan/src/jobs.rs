@@ -364,7 +364,7 @@ impl Update {
     /// # Errors
     /// The file cannot be read: the C#'s `File.OpenRead` throws out of `Update`.
     pub fn new(node: u8, firmware: &Path, can: &mut Node, now: Instant) -> std::io::Result<Self> {
-        let image = std::fs::read(firmware)?;
+        let image = mp_os::fs::read(firmware)?;
         for name in SERVED_NAMES {
             can.serve_file(PathBuf::from(firmware), name);
         }
@@ -731,12 +731,12 @@ mod tests {
     #[test]
     fn an_update_runs_to_the_end() {
         let dir = mp_os::temp_dir().join(format!("mp-dronecan-update-{}", mp_os::process_id()));
-        std::fs::create_dir_all(&dir).expect("a directory");
+        mp_os::fs::create_dir_all(&dir).expect("a directory");
         let path = dir.join("firmware.bin");
         let image: Vec<u8> = (0..600u32)
             .map(|i| u8::try_from(i % 256).unwrap())
             .collect();
-        std::fs::write(&path, &image).expect("written");
+        mp_os::fs::write(&path, &image).expect("written");
 
         let (mut node, now) = started();
         node.setup_file_server();
@@ -849,7 +849,7 @@ mod tests {
             }
         }
         assert_eq!(received_image, image);
-        std::fs::remove_dir_all(&dir).ok();
+        mp_os::fs::remove_dir_all(&dir).ok();
     }
 
     /// A begin refused: the C#'s exception, at the next pass.
@@ -857,9 +857,9 @@ mod tests {
     fn a_refused_begin_is_an_error() {
         let (mut node, now) = started();
         let dir = mp_os::temp_dir().join(format!("mp-dronecan-refused-{}", mp_os::process_id()));
-        std::fs::create_dir_all(&dir).expect("a directory");
+        mp_os::fs::create_dir_all(&dir).expect("a directory");
         let path = dir.join("fw.bin");
-        std::fs::write(&path, [0u8; 16]).expect("written");
+        mp_os::fs::write(&path, [0u8; 16]).expect("written");
         let mut job = Update::new(10, &path, &mut node, now).expect("readable");
         for (frame, payload) in package(
             10,
@@ -888,6 +888,6 @@ mod tests {
                 "10 Begin Firmware Update returned an error".to_owned()
             ))
         );
-        std::fs::remove_dir_all(&dir).ok();
+        mp_os::fs::remove_dir_all(&dir).ok();
     }
 }

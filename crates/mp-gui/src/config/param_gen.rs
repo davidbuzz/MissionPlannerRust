@@ -376,7 +376,7 @@ impl<'a> Reader<'a> {
         } else {
             // `address.Replace("file:///", "")`: on Windows that leaves `C:/...`; here the
             // path keeps its root.
-            std::fs::read_to_string(address.replace("file://", "")).unwrap_or_default()
+            mp_os::fs::read_to_string(address.replace("file://", "")).unwrap_or_default()
         };
         self.cache.insert(address.to_owned(), data.clone());
         data
@@ -571,9 +571,9 @@ pub fn generate(locations: &[String], http: &dyn Http, file: &Path) -> Result<Ou
     }
     text.push_str("</Params>");
     if let Some(parent) = file.parent() {
-        std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+        mp_os::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
     }
-    std::fs::write(file, text).map_err(|e| e.to_string())?;
+    mp_os::fs::write(file, text).map_err(|e| e.to_string())?;
     Ok(Outcome {
         file: file.to_path_buf(),
         vehicles,
@@ -766,26 +766,27 @@ pub fn overlay(
 
 #[cfg(test)]
 mod tests {
+    use mp_os::fs::FsExt as _;
     use super::*;
 
     /// A fixture: a copter's `Parameters.cpp`, a library its group's `@Path` names, and the
     /// file that library's `AP_NESTEDGROUPINFO` names.
     fn fixture(dir: &Path) {
-        std::fs::create_dir_all(dir.join("ArduCopter")).expect("dir");
-        std::fs::create_dir_all(dir.join("libraries/AP_Foo")).expect("dir");
+        mp_os::fs::create_dir_all(dir.join("ArduCopter")).expect("dir");
+        mp_os::fs::create_dir_all(dir.join("libraries/AP_Foo")).expect("dir");
         let mut copter = String::from(
             "// @Param: ACRO_RP_P\n// @DisplayName: Acro Roll and Pitch P gain\n// @Description: Converts pilot roll and pitch into a desired rate of rotation in ACRO mode.\n// @Range: 1 10\n// @User: Standard\n// @Values{Copter}: 1:Low,2:High\n// @Values{Plane}: 0:Off\n    GSCALAR(acro_rp_p, \"ACRO_RP_P\", 4.5),\n\n// @Param: ACRO_RP_P\n// @DisplayName: a second block, which the first wins\n\n// @Group: FOO_\n// @Path: ../libraries/AP_Foo/AP_Foo.cpp\n    GOBJECT(foo, \"FOO_\", AP_Foo),\n\n// @Param: Z & <last>\n// @DisplayName: odd name\n",
         );
         while copter.len() < BLANK_TEMPLATE {
             copter.push_str("// padding\n");
         }
-        std::fs::write(dir.join("ArduCopter/Parameters.cpp"), copter).expect("write");
-        std::fs::write(
+        mp_os::fs::write(dir.join("ArduCopter/Parameters.cpp"), copter).expect("write");
+        mp_os::fs::write(
             dir.join("libraries/AP_Foo/AP_Foo.cpp"),
             "// @Param: ENABLE\n// @DisplayName: Foo enable\n// @Values: 0:Disabled,1:Enabled\n    AP_GROUPINFO(\"ENABLE\", 0, AP_Foo, _enable, 0),\n    AP_NESTEDGROUPINFO(AP_Foo_Backend, 1),\n",
         )
         .expect("write");
-        std::fs::write(
+        mp_os::fs::write(
             dir.join("libraries/AP_Foo/AP_Foo_Backend.cpp"),
             "// @Param: RATE\n// @DisplayName: Backend rate\n// @Units: Hz\n",
         )
@@ -884,7 +885,7 @@ mod tests {
     #[test]
     fn a_run_writes_the_xml_the_csharp_writes() {
         let dir = mp_os::temp_dir().join(format!("mp-paramgen-{}", mp_os::process_id()));
-        let _ = std::fs::remove_dir_all(&dir);
+        let _ = mp_os::fs::remove_dir_all(&dir);
         fixture(&dir);
         let location = format!("file://{}/ArduCopter/Parameters.cpp", dir.display());
         let file = dir.join("out").join(XML_FILE);
@@ -895,15 +896,15 @@ mod tests {
         );
         // The odd name out of the fixture: the run writes.
         let path = dir.join("ArduCopter/Parameters.cpp");
-        let text = std::fs::read_to_string(&path).expect("read");
-        std::fs::write(
+        let text = mp_os::fs::read_to_string(&path).expect("read");
+        mp_os::fs::write(
             &path,
             text.replace("// @Param: Z & <last>\n// @DisplayName: odd name\n", ""),
         )
         .expect("write");
         let outcome = generate(&[location], &NoHttp, &file).expect("a run");
         assert_eq!(outcome.vehicles, vec![("ArduCopter2".to_owned(), 3)]);
-        let written = std::fs::read_to_string(&file).expect("the file");
+        let written = mp_os::fs::read_to_string(&file).expect("the file");
         let expected = "<?xml version=\"1.0\" encoding=\"utf-8\"?>\r\n<Params>\r\n  <ArduCopter2>\r\n    <ACRO_RP_P>\r\n      <DisplayName>Acro Roll and Pitch P gain</DisplayName>\r\n      <Description>Converts pilot roll and pitch into a desired rate of rotation in ACRO mode.</Description>\r\n      <Range>1 10</Range>\r\n      <User>Standard</User>\r\n      <Values>1:Low,2:High</Values>\r\n    </ACRO_RP_P>\r\n    <FOO_ENABLE>\r\n      <DisplayName>Foo enable</DisplayName>\r\n      <Values>0:Disabled,1:Enabled</Values>\r\n    </FOO_ENABLE>\r\n    <FOO_RATE>\r\n      <DisplayName>Backend rate</DisplayName>\r\n      <Units>Hz</Units>\r\n    </FOO_RATE>\r\n  </ArduCopter2>\r\n</Params>";
         assert_eq!(written, expected);
         // A location fetching nothing (a 404) is skipped; a run with nothing writes an empty
@@ -916,10 +917,10 @@ mod tests {
         .expect("a run");
         assert!(outcome.vehicles.is_empty());
         assert_eq!(
-            std::fs::read_to_string(&file).expect("the file"),
+            mp_os::fs::read_to_string(&file).expect("the file"),
             "<?xml version=\"1.0\" encoding=\"utf-8\"?>\r\n<Params>\r\n</Params>"
         );
-        let _ = std::fs::remove_dir_all(&dir);
+        let _ = mp_os::fs::remove_dir_all(&dir);
     }
 
     /// The button: the dialogue up, the run on its thread, its outcome the facts'; Cancel
@@ -927,11 +928,11 @@ mod tests {
     #[test]
     fn the_button_runs_the_generation_behind_its_dialogue() {
         let dir = mp_os::temp_dir().join(format!("mp-paramgen-ui-{}", mp_os::process_id()));
-        let _ = std::fs::remove_dir_all(&dir);
+        let _ = mp_os::fs::remove_dir_all(&dir);
         fixture(&dir);
         let path = dir.join("ArduCopter/Parameters.cpp");
-        let text = std::fs::read_to_string(&path).expect("read");
-        std::fs::write(
+        let text = mp_os::fs::read_to_string(&path).expect("read");
+        mp_os::fs::write(
             &path,
             text.replace("// @Param: Z & <last>\n// @DisplayName: odd name\n", ""),
         )
@@ -950,14 +951,14 @@ mod tests {
         assert!(
             matches!(run.last.as_ref(), Some(Ok(outcome)) if outcome.vehicles == vec![("ArduCopter2".to_owned(), 3)])
         );
-        assert!(dir.join("data").join(XML_FILE).is_file());
+        assert!(dir.join("data").join(XML_FILE).os_is_file());
         run.start_with(&dir.join("data"), list);
         run.cancel();
         assert!(!run.running());
         assert_eq!(run.cancelled, 1);
         // The C#'s list stands when the harness names none.
         assert_eq!(locations().len(), LOCATIONS.len());
-        let _ = std::fs::remove_dir_all(&dir);
+        let _ = mp_os::fs::remove_dir_all(&dir);
     }
 
     /// The GUI script names only facts and controls this window has.

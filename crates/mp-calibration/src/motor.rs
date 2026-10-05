@@ -636,7 +636,7 @@ mod tests {
             return;
         };
         let path = std::path::PathBuf::from(tree).join("APMotorLayout.json");
-        let Ok(text) = std::fs::read_to_string(&path) else {
+        let Ok(text) = mp_os::fs::read_to_string(&path) else {
             eprintln!("{} not present; skipped", path.display());
             return;
         };

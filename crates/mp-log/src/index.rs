@@ -289,7 +289,7 @@ impl RecordIndex {
     ///
     /// Whatever opening or reading the file does.
     pub fn read_file(path: &std::path::Path) -> std::io::Result<(Vec<u8>, Self)> {
-        let file = std::fs::File::open(path)?;
+        let file = mp_os::fs::File::open(path)?;
         // A file whose length does not fit in memory's address space cannot be read into it
         // whatever is done; it is read until that fails.
         let len = usize::try_from(file.metadata()?.len()).unwrap_or(0);
@@ -299,7 +299,7 @@ impl RecordIndex {
     /// [`Self::read_file`], split as `split` says.
     fn read_file_split(
         path: &std::path::Path,
-        mut file: std::fs::File,
+        mut file: mp_os::fs::File,
         len: usize,
         split: Split,
     ) -> std::io::Result<(Vec<u8>, Self)> {
@@ -341,7 +341,7 @@ impl RecordIndex {
         });
         let Ok(mut pieces) = read else {
             // The file changed under us; read it as it is now, in one piece.
-            let file = std::fs::File::open(path)?;
+            let file = mp_os::fs::File::open(path)?;
             let len = usize::try_from(file.metadata()?.len()).unwrap_or(0);
             return Self::read(file, len);
         };
@@ -1239,7 +1239,7 @@ fn read_piece(
     chunk: usize,
 ) -> std::io::Result<Piece> {
     use std::io::{Read as _, Seek as _};
-    let mut file = std::fs::File::open(path)?;
+    let mut file = mp_os::fs::File::open(path)?;
     file.seek(std::io::SeekFrom::Start(start as u64))?;
     let mut piece = Piece::new(walk);
     let limit = bytes.len();
@@ -1264,7 +1264,7 @@ mod tests {
     fn fixture() -> Vec<u8> {
         let path =
             std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../testdata/dataflash.bin");
-        std::fs::read(&path).unwrap_or_else(|err| panic!("reading {}: {err}", path.display()))
+        mp_os::fs::read(&path).unwrap_or_else(|err| panic!("reading {}: {err}", path.display()))
     }
 
     /// Every record is indexed, the format declarations among them, and in log order.
@@ -1393,7 +1393,7 @@ mod tests {
         let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("../../testdata")
             .join(name);
-        std::fs::read(&path).unwrap_or_else(|err| panic!("reading {}: {err}", path.display()))
+        mp_os::fs::read(&path).unwrap_or_else(|err| panic!("reading {}: {err}", path.display()))
     }
 
     /// Logs whose pieces a split cuts in awkward places: the fixtures, logs joined end to end -
@@ -1472,10 +1472,10 @@ mod tests {
                 mp_os::process_id(),
                 name.replace([' ', ','], "-")
             ));
-            std::fs::write(&path, &log).unwrap();
+            mp_os::fs::write(&path, &log).unwrap();
             let whole = RecordIndex::build_split(&log, small(1));
             for pieces in [1, 2, 5, 16] {
-                let file = std::fs::File::open(&path).unwrap();
+                let file = mp_os::fs::File::open(&path).unwrap();
                 let (data, index) =
                     RecordIndex::read_file_split(&path, file, log.len(), small(pieces)).unwrap();
                 assert_eq!(data, log, "{name} in {pieces}");
@@ -1484,7 +1484,7 @@ mod tests {
             let (data, index) = RecordIndex::read_file(&path).unwrap();
             assert_eq!(data, log, "{name}");
             assert_same(&index, &whole, name);
-            std::fs::remove_file(&path).unwrap();
+            mp_os::fs::remove_file(&path).unwrap();
         }
     }
 

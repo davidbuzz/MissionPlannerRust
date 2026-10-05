@@ -30,6 +30,7 @@
 //! Planner and this application in either direction.
 //! `// C#: ExtLibs/ArduPilot/Joystick/JoystickBase.cs:29-30, 78-96, 107-182; JoyChannel.cs; JoyButton.cs`
 
+use mp_os::fs::FsExt as _;
 use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
 
@@ -422,14 +423,14 @@ impl JoystickConfig {
     #[must_use]
     pub fn load(files: &ConfigFiles) -> Self {
         let mut config = Self::new();
-        if files.buttons.exists() && files.axis.exists() {
-            if let Some(buttons) = std::fs::read(&files.buttons)
+        if files.buttons.os_exists() && files.axis.os_exists() {
+            if let Some(buttons) = mp_os::fs::read(&files.buttons)
                 .ok()
                 .and_then(|bytes| parse_buttons(&text_of(&bytes)).ok())
             {
                 config.buttons = buttons;
             }
-            if let Some(channels) = std::fs::read(&files.axis)
+            if let Some(channels) = mp_os::fs::read(&files.axis)
                 .ok()
                 .and_then(|bytes| parse_channels(&text_of(&bytes)).ok())
             {
@@ -448,8 +449,8 @@ impl JoystickConfig {
     /// A file that cannot be written, where the C#'s `StreamWriter` throws.
     /// `// C#: ExtLibs/ArduPilot/Joystick/JoystickBase.cs:160-179`
     pub fn save(&self, files: &ConfigFiles) -> std::io::Result<()> {
-        std::fs::write(&files.buttons, buttons_xml(&self.buttons))?;
-        std::fs::write(&files.axis, channels_xml(&self.channels))
+        mp_os::fs::write(&files.buttons, buttons_xml(&self.buttons))?;
+        mp_os::fs::write(&files.axis, channels_xml(&self.channels))
     }
 }
 
@@ -489,7 +490,7 @@ impl ConfigFiles {
             ),
             _ => (BUTTONS_FILE.to_owned(), AXIS_FILE.to_owned()),
         };
-        if Path::new(&axis).exists() {
+        if Path::new(&axis).os_exists() {
             Self {
                 buttons: PathBuf::from(buttons),
                 axis: PathBuf::from(axis),
@@ -740,15 +741,15 @@ mod tests {
                 mp_os::process_id(),
                 wasm_thread::current().id()
             ));
-            let _ = std::fs::remove_dir_all(&path);
-            std::fs::create_dir_all(&path).unwrap();
+            let _ = mp_os::fs::remove_dir_all(&path);
+            mp_os::fs::create_dir_all(&path).unwrap();
             Self(path)
         }
     }
 
     impl Drop for Scratch {
         fn drop(&mut self) {
-            let _ = std::fs::remove_dir_all(&self.0);
+            let _ = mp_os::fs::remove_dir_all(&self.0);
         }
     }
 
@@ -861,8 +862,8 @@ mod tests {
         buttons.extend_from_slice(
             b"<?xml version=\"1.0\" encoding=\"utf-8\"?>\n<ArrayOfJoyButton xmlns:xsi=\"x\" xmlns:xsd=\"y\">\n  <JoyButton>\n    <function>Arm</function>\n    <p1>1E+20</p1>\n  </JoyButton>\n</ArrayOfJoyButton>",
         );
-        std::fs::write(&files.buttons, buttons).unwrap();
-        std::fs::write(
+        mp_os::fs::write(&files.buttons, buttons).unwrap();
+        mp_os::fs::write(
             &files.axis,
             "<ArrayOfJoyChannel><JoyChannel><channel>1</channel><axis>Rz</axis><reverse>true</reverse><expo>50</expo></JoyChannel></ArrayOfJoyChannel>",
         )
@@ -886,13 +887,13 @@ mod tests {
         let files = ConfigFiles::for_firmware("ArduPlane", &scratch.0);
         let mut config = JoystickConfig::new();
         config.set_axis(1, JoystickAxis::Y);
-        std::fs::write(&files.axis, channels_xml(&config.channels)).unwrap();
+        mp_os::fs::write(&files.axis, channels_xml(&config.channels)).unwrap();
         assert_eq!(
             JoystickConfig::load(&files),
             JoystickConfig::new(),
             "the buttons' file is missing"
         );
-        std::fs::write(&files.buttons, "<ArrayOfJoyButton><JoyButton><function>Fly</function></JoyButton></ArrayOfJoyButton>").unwrap();
+        mp_os::fs::write(&files.buttons, "<ArrayOfJoyButton><JoyButton><function>Fly</function></JoyButton></ArrayOfJoyButton>").unwrap();
         let loaded = JoystickConfig::load(&files);
         assert_eq!(loaded.buttons, JoystickConfig::new().buttons, "Fly is not a function");
         assert_eq!(loaded.channel(1).axis, JoystickAxis::Y);

@@ -288,9 +288,9 @@ mod tests {
     #[test]
     fn the_fixtures_parameters_are_the_ones_mission_planner_saved() {
         let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../testdata");
-        let data = std::fs::read(root.join("dataflash.bin")).expect("fixture");
+        let data = mp_os::fs::read(root.join("dataflash.bin")).expect("fixture");
         let list = read(&data);
-        let saved = std::fs::read_to_string(root.join("dataflash/golden/kml/dataflash.bin.param"))
+        let saved = mp_os::fs::read_to_string(root.join("dataflash/golden/kml/dataflash.bin.param"))
             .expect("golden .param");
         let lines: Vec<&str> = saved
             .lines()

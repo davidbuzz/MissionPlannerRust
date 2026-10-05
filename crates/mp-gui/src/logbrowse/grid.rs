@@ -719,7 +719,7 @@ mod tests {
     fn fixture() -> Vec<u8> {
         let path =
             std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../testdata/dataflash.bin");
-        std::fs::read(&path).unwrap_or_else(|err| panic!("reading {}: {err}", path.display()))
+        mp_os::fs::read(&path).unwrap_or_else(|err| panic!("reading {}: {err}", path.display()))
     }
 
     fn grid_over(data: Vec<u8>) -> Grid {
@@ -1015,7 +1015,7 @@ mod tests {
     fn a_log_with_a_fix_writes_gps_time() {
         let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("../../testdata/dataflash_damaged.bin");
-        let data = std::fs::read(&path).unwrap();
+        let data = mp_os::fs::read(&path).unwrap();
         let index = RecordIndex::build(&data);
         assert_eq!(
             index.gps_start(),

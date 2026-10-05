@@ -48,6 +48,7 @@
 //! - the ASCII-grid fallback (`srtm_XX_YY.asc`) answers a found cell with an empty `altsource` and
 //!   a missing one with a valid altitude of 0 sourced "ASCII".
 
+use mp_os::fs::FsExt as _;
 mod fetch;
 /// The EGM96 geoid undulation (`ExtLibs/GeoidHeightsDotNet`), for the NMEA output's GGA.
 pub mod geoid;
@@ -60,9 +61,7 @@ pub use srtm::{
 };
 
 use std::path::{Path, PathBuf};
-// A file's time is std's: this file compares the clock only with files' times. port_clock: keep
-use std::time::SystemTime; // port_clock: keep
-use web_time::Duration;
+use web_time::{Duration, SystemTime};
 
 /// How we identify ourselves to the terrain server: the one identity the whole application sends.
 ///
@@ -109,15 +108,15 @@ pub fn clean_cache_directory(dir: &Path) {
     let sweep = || -> std::io::Result<()> {
         // C#: Directory.GetFiles(dir) - the files directly in it, not what is under them.
         let mut files = Vec::new();
-        for entry in std::fs::read_dir(dir)? {
+        for entry in mp_os::fs::read_dir(dir)? {
             let path = entry?.path();
-            if path.is_file() {
+            if path.os_is_file() {
                 files.push(path);
             }
         }
         for path in files {
             // C#: FileInfo reads the length and the time once; both tests use that one reading.
-            let meta = std::fs::metadata(&path)?;
+            let meta = mp_os::fs::metadata(&path)?;
             if meta.len() == 0 {
                 delete(&path)?;
             }
@@ -133,7 +132,7 @@ pub fn clean_cache_directory(dir: &Path) {
 
 /// `File.Delete`: a file that is already gone is not an error.
 fn delete(path: &Path) -> std::io::Result<()> {
-    match std::fs::remove_file(path) {
+    match mp_os::fs::remove_file(path) {
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
         other => other,
     }

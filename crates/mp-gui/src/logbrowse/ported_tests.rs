@@ -64,10 +64,10 @@ fn facts(browse: &LogBrowse) -> BTreeMap<String, String> {
 /// A scratch copy of a fixture, for the tests that write beside the log.
 fn scratch_copy(path: &std::path::Path, tag: &str) -> std::path::PathBuf {
     let directory = mp_os::temp_dir().join(format!("mp-logbrowse-{tag}-{}", mp_os::process_id()));
-    let _ = std::fs::remove_dir_all(&directory);
-    std::fs::create_dir_all(&directory).expect("scratch directory");
+    let _ = mp_os::fs::remove_dir_all(&directory);
+    mp_os::fs::create_dir_all(&directory).expect("scratch directory");
     let copy = directory.join(path.file_name().expect("a file"));
-    std::fs::copy(path, &copy).expect("copy the fixture");
+    mp_os::fs::copy(path, &copy).expect("copy the fixture");
     copy
 }
 
@@ -138,7 +138,7 @@ fn a_preselected_graph_graphs_its_pieces() {
     );
     // The same values the field list plots, unscaled.
     let roll = field(&browse, "ATT", "Roll");
-    let data = std::fs::read(damaged()).expect("fixture");
+    let data = mp_os::fs::read(damaged()).expect("fixture");
     let points = mp_log::plot::extract_instance(&data, "ATT", None, "Roll");
     assert_eq!(browse.plotted()[0].series.len(), points.len());
     assert!(roll.samples > 0);
@@ -501,7 +501,7 @@ fn the_grid_menu_exports_rows_and_files() {
     assert!(!browse.grid_menu());
     assert_eq!(facts(&browse)["log.prompt"], "Save As");
     browse.prompt_ok();
-    let written = std::fs::read_to_string(log.with_file_name("output.csv")).expect("the export");
+    let written = mp_os::fs::read_to_string(log.with_file_name("output.csv")).expect("the export");
     let lines: Vec<&str> = written.lines().collect();
     assert_eq!(lines.len(), 182, "the ATT rows");
     let columns = browse.grid().map_or(0, Grid::csv_columns);
@@ -522,10 +522,10 @@ fn the_grid_menu_exports_rows_and_files() {
     // The healthy log carries eight: a Lua script and the board's reports.
     browse.export_files("files");
     assert_eq!(facts(&browse)["log.exported"], "8 files");
-    let script = std::fs::read_to_string(log.with_file_name("files").join("drop_test_1.lua"))
+    let script = mp_os::fs::read_to_string(log.with_file_name("files").join("drop_test_1.lua"))
         .expect("the script");
     assert!(!script.is_empty());
-    let _ = std::fs::remove_dir_all(log.parent().expect("scratch"));
+    let _ = mp_os::fs::remove_dir_all(log.parent().expect("scratch"));
 
     // The damaged log carries two files in 536 FILE records - SITL's @SYS/uarts.txt and its
     // 16 KiB @SYS/storage.bin - each rebuilt from its 64-byte pieces.
@@ -534,16 +534,16 @@ fn the_grid_menu_exports_rows_and_files() {
     browse.export_files("files");
     assert_eq!(facts(&browse)["log.exported"], "2 files");
     let folder = log.with_file_name("files");
-    let uarts = std::fs::read_to_string(folder.join("@SYS/uarts.txt")).expect("uarts.txt");
+    let uarts = mp_os::fs::read_to_string(folder.join("@SYS/uarts.txt")).expect("uarts.txt");
     assert!(uarts.starts_with("UARTV1"), "{uarts:?}");
     assert!(uarts.contains("SERIAL0 TX="), "{uarts:?}");
     assert_eq!(
-        std::fs::metadata(folder.join("@SYS/storage.bin"))
+        mp_os::fs::metadata(folder.join("@SYS/storage.bin"))
             .map(|meta| meta.len())
             .ok(),
         Some(16_384)
     );
-    let _ = std::fs::remove_dir_all(log.parent().expect("scratch"));
+    let _ = mp_os::fs::remove_dir_all(log.parent().expect("scratch"));
 }
 
 /// `LoadLog2` sets six boxes from config.xml; Events is not remembered.

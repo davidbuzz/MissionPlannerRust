@@ -1946,6 +1946,7 @@ pub fn record_facts(survey: &SurveyUi) {
 
 #[cfg(test)]
 mod tests {
+    use mp_os::fs::FsExt as _;
     use super::*;
     use mp_mission::gridui::Context as GridContext;
 
@@ -2017,7 +2018,7 @@ mod tests {
     #[test]
     fn save_asks_a_name_and_writes_cameras_xml() {
         let dir = mp_os::temp_dir().join(format!("mp-gui-survey-save-{}", mp_os::process_id()));
-        let _ = std::fs::remove_dir_all(&dir);
+        let _ = mp_os::fs::remove_dir_all(&dir);
         let mut open = opened(gui_dialog());
         open.dialog.type_num(Num::FocalLength, "8.8");
         ask_camera_name(&mut open);
@@ -2028,13 +2029,13 @@ mod tests {
         open.prompt = None;
         save_camera(&mut open, "Default", Some(&dir));
         assert!(open.prompt.is_none());
-        let written = std::fs::read(dir.join(cameras::USER_FILE)).expect("cameras.xml written");
+        let written = mp_os::fs::read(dir.join(cameras::USER_FILE)).expect("cameras.xml written");
         let (reread, error) = Cameras::load(Some(&dir));
         assert!(error.is_none());
         assert_eq!(written, reread.to_xml());
         assert_eq!(reread.items().last().map(String::as_str), Some("Default"));
         assert_eq!(reread.get("Default").map(|c| c.focallen), Some(8.8));
-        let _ = std::fs::remove_dir_all(&dir);
+        let _ = mp_os::fs::remove_dir_all(&dir);
     }
 
     /// A box that is not a number is the handler's message box, and a file that cannot be
@@ -2051,11 +2052,11 @@ mod tests {
 
         let blocked =
             mp_os::temp_dir().join(format!("mp-gui-survey-blocked-{}", mp_os::process_id()));
-        std::fs::write(&blocked, b"a file where the directory would be").unwrap();
+        mp_os::fs::write(&blocked, b"a file where the directory would be").unwrap();
         let mut open = opened(gui_dialog());
         save_camera(&mut open, "Mine", Some(&blocked.join("inner")));
         assert!(matches!(&open.prompt, Some(Prompt::Message(_, ""))));
-        let _ = std::fs::remove_file(&blocked);
+        let _ = mp_os::fs::remove_file(&blocked);
     }
 
     /// Accept's settings go into `Settings.Instance` and the next dialog loads them from there:
@@ -2065,8 +2066,8 @@ mod tests {
     #[test]
     fn accept_settings_are_kept_in_config_xml_and_loaded_next_time() {
         let dir = mp_os::temp_dir().join(format!("mp-gui-survey-settings-{}", mp_os::process_id()));
-        let _ = std::fs::remove_dir_all(&dir);
-        std::fs::create_dir_all(&dir).unwrap();
+        let _ = mp_os::fs::remove_dir_all(&dir);
+        mp_os::fs::create_dir_all(&dir).unwrap();
         let file = dir.join("config.xml");
         let context = GridContext {
             home: (-35.363_262_1, 149.165_237_4, 584.1),
@@ -2093,7 +2094,7 @@ mod tests {
         assert_eq!(persisted.get("grid_camdir"), Some("True"));
         assert!(persisted.get("grid_camera").is_some());
         assert!(persisted.get("camera_fovh").is_some());
-        assert!(!file.exists(), "Accept writes nothing to disk itself");
+        assert!(!file.os_exists(), "Accept writes nothing to disk itself");
 
         // The same session: the next dialog has the altitude, and the angle of the polygon.
         let again = Dialog::open(
@@ -2118,7 +2119,7 @@ mod tests {
             &loaded_settings(&next),
         );
         assert_eq!(reopened.num(Num::Altitude).to_text(), "120");
-        let _ = std::fs::remove_dir_all(&dir);
+        let _ = mp_os::fs::remove_dir_all(&dir);
     }
 
     /// The script's path: the angle and the altitude typed, Accept, and the rows in the plan -
@@ -2133,7 +2134,7 @@ mod tests {
             .expect("a grid to accept");
         let mut plan = Plan::default();
         assert_eq!(apply_steps(&mut plan, &accepted.steps, &COPTER), None);
-        let golden = std::fs::read_to_string(
+        let golden = mp_os::fs::read_to_string(
             std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
                 .join("../../testdata/grid/golden/accept/accept_gui_angle_alt.csv"),
         )

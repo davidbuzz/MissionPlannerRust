@@ -57,6 +57,7 @@
 // This module is internal to the binary; `pub` here documents intent rather than exporting API.
 #![allow(unreachable_pub)]
 
+use mp_os::fs::FsExt as _;
 use std::cell::RefCell;
 use std::rc::Rc;
 use std::sync::{Arc, mpsc};
@@ -1528,14 +1529,14 @@ impl Form {
             Some(Prompt::Log(field)) => {
                 let path = field.value().trim().to_owned();
                 if ok {
-                    if !std::path::Path::new(&path).is_file() {
+                    if !std::path::Path::new(&path).os_is_file() {
                         self.prompt = Some(Prompt::Log(field));
                         return;
                     }
                     self.file_name = path;
                 }
                 // `if (File.Exists(openFileDialog1.FileName))`.
-                if std::path::Path::new(&self.file_name).is_file() {
+                if std::path::Path::new(&self.file_name).os_is_file() {
                     let file = self.file_name.clone();
                     self.set_text(Field::LogFile, &file);
                     let folder = get_directory_name(&file).ok().flatten().unwrap_or_default();
@@ -1550,7 +1551,7 @@ impl Form {
                     } else {
                         typed
                     };
-                    if !std::path::Path::new(path).is_dir() {
+                    if !std::path::Path::new(path).os_is_dir() {
                         self.prompt = Some(Prompt::Folder(field));
                         return;
                     }
@@ -1605,7 +1606,7 @@ impl Form {
         self.commit_edit();
         let log = self.text(Field::LogFile).to_owned();
         let dir = self.text(Field::JpgDir).to_owned();
-        if !std::path::Path::new(&log).is_file() || !std::path::Path::new(&dir).is_dir() {
+        if !std::path::Path::new(&log).os_is_file() || !std::path::Path::new(&dir).os_is_dir() {
             return None;
         }
         let settings = self.settings();
@@ -1749,7 +1750,7 @@ impl Form {
                         .iter()
                         .map(|(name, _)| {
                             let path = format!("{dir}{}{name}", mp_georef::photos::SEPARATOR);
-                            let size = std::fs::metadata(path).map_or(0, |meta| meta.len());
+                            let size = mp_os::fs::metadata(path).map_or(0, |meta| meta.len());
                             (name.clone(), size)
                         })
                         .collect()
@@ -1763,7 +1764,7 @@ impl Form {
             }
             Some(Outcome::Geotag(Ok(()), dir)) => {
                 let folder = mp_georef::photos::geotag_folder(&dir);
-                self.geotagged = std::fs::read_dir(folder)
+                self.geotagged = mp_os::fs::read_dir(folder)
                     .ok()
                     .map(|entries| entries.filter_map(Result::ok).count());
             }
@@ -2838,7 +2839,7 @@ impl MissionPlanner {
         let beside = crate::help::install_dir()
             .join("m3u")
             .join("GeoRefnetworklink.kml");
-        let path = if beside.is_file() {
+        let path = if beside.os_is_file() {
             beside
         } else {
             let Some(data) = mp_settings::data_directory() else {
@@ -2848,9 +2849,9 @@ impl MissionPlanner {
             };
             let written = data.join("m3u").join("GeoRefnetworklink.kml");
             if let Some(dir) = written.parent() {
-                let _ = std::fs::create_dir_all(dir);
+                let _ = mp_os::fs::create_dir_all(dir);
             }
-            if let Err(why) = std::fs::write(&written, crate::http_server::GEOREF_NETWORK_LINK_KML)
+            if let Err(why) = mp_os::fs::write(&written, crate::http_server::GEOREF_NETWORK_LINK_KML)
             {
                 self.file_status = Some(format!("could not write {}: {why}", written.display()));
                 return;
@@ -3014,8 +3015,8 @@ mod tests {
             "headless-planner-georef-ui-{name}-{}",
             mp_os::process_id()
         ));
-        let _ = std::fs::remove_dir_all(&dir);
-        std::fs::create_dir_all(&dir).unwrap();
+        let _ = mp_os::fs::remove_dir_all(&dir);
+        mp_os::fs::create_dir_all(&dir).unwrap();
         dir
     }
 
@@ -3032,16 +3033,16 @@ mod tests {
     fn setup(name: &str) -> (String, String, Arc<dyn Terrain + Send + Sync>) {
         let dir = scratch(name);
         let photos = dir.join("logs");
-        std::fs::create_dir_all(&photos).unwrap();
-        for entry in std::fs::read_dir(testdata("georef/photos")).unwrap() {
+        mp_os::fs::create_dir_all(&photos).unwrap();
+        for entry in mp_os::fs::read_dir(testdata("georef/photos")).unwrap() {
             let path = entry.unwrap().path();
-            std::fs::copy(&path, photos.join(path.file_name().unwrap())).unwrap();
+            mp_os::fs::copy(&path, photos.join(path.file_name().unwrap())).unwrap();
         }
         let log = photos.join("camera.bin");
-        std::fs::copy(testdata("georef/camera.bin"), &log).unwrap();
+        mp_os::fs::copy(testdata("georef/camera.bin"), &log).unwrap();
         let srtm = dir.join("srtm");
-        std::fs::create_dir_all(&srtm).unwrap();
-        let zip = std::fs::read(testdata("srtm/S28E153.hgt.zip")).unwrap();
+        mp_os::fs::create_dir_all(&srtm).unwrap();
+        let zip = mp_os::fs::read(testdata("srtm/S28E153.hgt.zip")).unwrap();
         mp_log::zip::extract(&zip, &srtm).unwrap();
         let terrain = mp_terrain::Srtm::without_thread(&srtm, Arc::new(Offline));
         (
@@ -3355,7 +3356,7 @@ mod tests {
         let golden = testdata("georef/golden");
         assert_eq!(
             form.output(),
-            std::fs::read_to_string(golden.join("estimate.txt")).unwrap()
+            mp_os::fs::read_to_string(golden.join("estimate.txt")).unwrap()
         );
         // `offset.ToString(CultureInfo.InvariantCulture)`: fifteen digits of 36066.10310937499.
         assert_eq!(
@@ -3367,7 +3368,7 @@ mod tests {
         form.click_radio(Radio::CamMsg);
         let job = form.doit_click().unwrap();
         finish(&mut form, job);
-        let want = std::fs::read_to_string(golden.join("cam-amsl/messages.txt")).unwrap();
+        let want = mp_os::fs::read_to_string(golden.join("cam-amsl/messages.txt")).unwrap();
         let tagging = want.find("GeoTagging").unwrap();
         assert_eq!(form.output().replace(&dir, "{dir}"), want[..tagging]);
         let mut sizes = Vec::new();
@@ -3381,14 +3382,14 @@ mod tests {
             "location.jxl",
             "location.gpx",
         ] {
-            let bytes = std::fs::read(Path::new(&dir).join(name)).unwrap();
+            let bytes = mp_os::fs::read(Path::new(&dir).join(name)).unwrap();
             // Compared as text on LF: the files' lines end with the platform's
             // `Environment.NewLine`, as the C# writes them, CRLF on Windows (the hosted runner,
             // 2026-10-04), where the golden was made under mono on Linux.
             let lf = |bytes: &[u8]| String::from_utf8_lossy(bytes).replace("\r\n", "\n");
             assert_eq!(
                 lf(&bytes),
-                lf(&std::fs::read(golden.join("cam-amsl").join(name)).unwrap()),
+                lf(&mp_os::fs::read(golden.join("cam-amsl").join(name)).unwrap()),
                 "{name}"
             );
             sizes.push((name.to_owned(), bytes.len() as u64));
@@ -3399,7 +3400,7 @@ mod tests {
             form.kml.as_deref().map(|kml| kml.replace("\r\n", "\n")),
             Some(
                 String::from_utf8_lossy(
-                    &std::fs::read(golden.join("cam-amsl/location.kml")).unwrap()
+                    &mp_os::fs::read(golden.join("cam-amsl/location.kml")).unwrap()
                 )
                 .replace("\r\n", "\n")
             )
@@ -3434,8 +3435,8 @@ mod tests {
         for n in [1, 13, 24] {
             let name = format!("IMG_{n:04}_geotag.jpg");
             assert_eq!(
-                std::fs::read(Path::new(&dir).join("geotagged").join(&name)).unwrap(),
-                std::fs::read(golden.join("cam-amsl/geotagged").join(&name)).unwrap(),
+                mp_os::fs::read(Path::new(&dir).join("geotagged").join(&name)).unwrap(),
+                mp_os::fs::read(golden.join("cam-amsl/geotagged").join(&name)).unwrap(),
                 "{name}"
             );
         }
@@ -3529,9 +3530,9 @@ mod tests {
         let dir = scratch("folder");
         let with = dir.join("with");
         let without = dir.join("without");
-        std::fs::create_dir_all(&with).unwrap();
-        std::fs::create_dir_all(&without).unwrap();
-        std::fs::write(with.join("location.txt"), "x seconds_offset: 42 y\n").unwrap();
+        mp_os::fs::create_dir_all(&with).unwrap();
+        mp_os::fs::create_dir_all(&without).unwrap();
+        mp_os::fs::write(with.join("location.txt"), "x seconds_offset: 42 y\n").unwrap();
         let with = with.to_str().unwrap().to_owned();
         let without = without.to_str().unwrap().to_owned();
 

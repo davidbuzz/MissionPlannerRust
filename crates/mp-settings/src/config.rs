@@ -117,7 +117,7 @@ impl Config {
 
     /// Reads a file.
     pub fn load(path: &Path) -> Result<Self, ConfigError> {
-        let text = std::fs::read_to_string(path).map_err(|source| ConfigError::Io {
+        let text = mp_os::fs::read_to_string(path).map_err(|source| ConfigError::Io {
             path: path.to_path_buf(),
             source,
         })?;
@@ -236,11 +236,11 @@ impl Config {
             source,
         };
         if let Some(directory) = path.parent().filter(|dir| !dir.as_os_str().is_empty()) {
-            std::fs::create_dir_all(directory).map_err(io)?;
+            mp_os::fs::create_dir_all(directory).map_err(io)?;
         }
         let temporary = path.with_extension("xml.tmp");
-        std::fs::write(&temporary, self.render()).map_err(io)?;
-        std::fs::rename(&temporary, path).map_err(io)
+        mp_os::fs::write(&temporary, self.render()).map_err(io)?;
+        mp_os::fs::rename(&temporary, path).map_err(io)
     }
 
     /// The link the C# would open, as this application's URL, if the file names one.
@@ -678,15 +678,15 @@ mod tests {
     #[test]
     fn saving_makes_the_directory_and_round_trips() {
         let dir = mp_os::temp_dir().join(format!("mp-settings-config-{}", mp_os::process_id()));
-        let _ = std::fs::remove_dir_all(&dir);
+        let _ = mp_os::fs::remove_dir_all(&dir);
         // GetConfigFullPath creates the user data directory; so does this.
         let path = dir.join("MissionPlannerRust").join("config.xml");
         let config = Config::parse(FIXTURE).expect("parses");
         config.save(&path).expect("save");
         let back = Config::load(&path).expect("load");
         assert_eq!(back, config);
-        assert_eq!(std::fs::read_to_string(&path).expect("read"), FIXTURE);
-        let _ = std::fs::remove_dir_all(&dir);
+        assert_eq!(mp_os::fs::read_to_string(&path).expect("read"), FIXTURE);
+        let _ = mp_os::fs::remove_dir_all(&dir);
     }
 
     /// The C#'s real file on this machine, when there is one: it reads, it says what it says, and
@@ -697,7 +697,7 @@ mod tests {
             eprintln!("skipped: no home directory");
             return;
         };
-        let Ok(text) = std::fs::read_to_string(&path) else {
+        let Ok(text) = mp_os::fs::read_to_string(&path) else {
             eprintln!("skipped: no Mission Planner config at {}", path.display());
             return;
         };
@@ -726,7 +726,7 @@ mod tests {
             eprintln!("skipped: no home directory");
             return;
         };
-        let Ok(text) = std::fs::read_to_string(&path) else {
+        let Ok(text) = mp_os::fs::read_to_string(&path) else {
             eprintln!("skipped: no Mission Planner config at {}", path.display());
             return;
         };

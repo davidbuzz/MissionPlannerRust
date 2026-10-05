@@ -1101,7 +1101,7 @@ mod tests {
             let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
                 .join("../../testdata")
                 .join(name);
-            let data = std::fs::read(&path).expect("fixture");
+            let data = mp_os::fs::read(&path).expect("fixture");
             let names = vec!["ATT".to_owned(), "GPS".to_owned(), "VIBE".to_owned()];
             let walked = records_of(&data, &names);
             let log = crate::logfile::LogFile::from_bytes(data);

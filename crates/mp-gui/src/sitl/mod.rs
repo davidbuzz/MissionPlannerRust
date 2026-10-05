@@ -366,7 +366,7 @@ impl Sitl {
     ) {
         if !self.made {
             if let Some(dir) = sitl_directory() {
-                let _ = std::fs::create_dir_all(dir);
+                let _ = mp_os::fs::create_dir_all(dir);
             }
             self.version = model::version_index(version_setting);
             self.made = true;

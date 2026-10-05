@@ -69,7 +69,7 @@ pub fn detect(data: &[u8]) -> Option<LogKind> {
 
 /// Prints a summary of a log file.
 pub fn summarise(path: &str) -> std::process::ExitCode {
-    let data = match std::fs::read(path) {
+    let data = match mp_os::fs::read(path) {
         Ok(data) => data,
         Err(err) => {
             eprintln!("could not read {path}: {err}");
@@ -266,7 +266,7 @@ fn print_statustexts(texts: &[(u8, String)]) {
 /// The usual way a flight is handed to somebody without a ground station. Mission Planner writes
 /// one beside every log it converts; this does the same from the command line.
 pub fn to_kml(path: &str, out: &str) -> std::process::ExitCode {
-    let data = match std::fs::read(path) {
+    let data = match mp_os::fs::read(path) {
         Ok(data) => data,
         Err(err) => {
             eprintln!("could not read {path}: {err}");
@@ -335,7 +335,7 @@ pub fn to_kml(path: &str, out: &str) -> std::process::ExitCode {
         |stem| stem.to_string_lossy().into_owned(),
     );
     let kml = mp_kml::flight_path(&name, &track);
-    match std::fs::write(out, &kml) {
+    match mp_os::fs::write(out, &kml) {
         Ok(()) => {
             let modes: std::collections::BTreeSet<&str> =
                 track.iter().map(|point| point.mode.as_str()).collect();
@@ -368,7 +368,7 @@ pub fn to_kml(path: &str, out: &str) -> std::process::ExitCode {
 /// hard-coded list goes stale silently, which on a diagnostic tool means a field that exists and
 /// cannot be found.
 pub fn fields(path: &str) -> std::process::ExitCode {
-    let data = match std::fs::read(path) {
+    let data = match mp_os::fs::read(path) {
         Ok(data) => data,
         Err(err) => {
             eprintln!("could not read {path}: {err}");

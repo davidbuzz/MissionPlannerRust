@@ -100,6 +100,7 @@
 // This module is internal to the binary; `pub` here documents intent rather than exporting API.
 #![allow(unreachable_pub)]
 
+use mp_os::fs::FsExt as _;
 use std::cell::{Cell, OnceCell};
 use std::cmp::Ordering;
 use std::collections::{BTreeSet, VecDeque};
@@ -1747,7 +1748,7 @@ impl MavFtp {
                 // is as Cancel: the dialog does not close on it (`CheckFileExists`).
                 // `// C#: Controls/MavFTPUI.cs:381-404`
                 let files = if ok { file_names(&answer) } else { Vec::new() };
-                if files.iter().all(|file| file.is_file()) {
+                if files.iter().all(|file| file.os_is_file()) {
                     self.upload(&files);
                 } else {
                     self.upload(&[]);
@@ -1816,7 +1817,7 @@ impl MavFtp {
                 continue;
             };
             let remote = format!("{node}/{name}");
-            match std::fs::read(file) {
+            match mp_os::fs::read(file) {
                 Ok(data) => {
                     let local = crc_crc32(0, &data);
                     self.steps.push_back(Step::Work(Work::dialog(
@@ -2474,11 +2475,11 @@ fn write_unused(folder: &Path, name: &str, data: &[u8]) -> std::io::Result<()> {
     let base = folder.join(name);
     let mut file = base.clone();
     let mut a = 0_u32;
-    while file.exists() {
+    while file.os_exists() {
         file = PathBuf::from(format!("{}{a}", base.display()));
         a += 1;
     }
-    std::fs::write(file, data)
+    mp_os::fs::write(file, data)
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -3368,6 +3369,7 @@ fn keep_answer(this: &mut MissionPlanner) {
 
 #[cfg(test)]
 mod tests {
+    use mp_os::fs::FsExt as _;
     use std::cell::RefCell;
 
     use mp_link::mavftp::MavFtp as Client;
@@ -3541,8 +3543,8 @@ mod tests {
             "headless-planner-mavftp-{name}-{}",
             mp_os::process_id()
         ));
-        let _ = std::fs::remove_dir_all(&dir);
-        std::fs::create_dir_all(&dir).expect("a scratch folder");
+        let _ = mp_os::fs::remove_dir_all(&dir);
+        mp_os::fs::create_dir_all(&dir).expect("a scratch folder");
         dir
     }
 
@@ -3682,7 +3684,7 @@ mod tests {
         page.close_prompt(true);
         settle(&mut page, &bench);
         assert_eq!(
-            std::fs::read(folder.join("param.pck")).ok().as_deref(),
+            mp_os::fs::read(folder.join("param.pck")).ok().as_deref(),
             Some(&b"params"[..])
         );
         assert_eq!(page.status(), READY);
@@ -3695,7 +3697,7 @@ mod tests {
         page.type_prompt(&folder.display().to_string());
         page.close_prompt(true);
         settle(&mut page, &bench);
-        assert!(folder.join("param.pck0").exists());
+        assert!(folder.join("param.pck0").os_exists());
         assert!(bench.started.borrow().contains(&FtpRequest::Get {
             path: "/APM/param.pck".to_owned(),
             burst: true,
@@ -3710,7 +3712,7 @@ mod tests {
         page.close_prompt(false);
         settle(&mut page, &bench);
         assert_eq!(page.status(), "Download ");
-        let _ = std::fs::remove_dir_all(&folder);
+        let _ = mp_os::fs::remove_dir_all(&folder);
     }
 
     /// Upload: the file written into the selected directory, its CRC checked, the list again.
@@ -3722,7 +3724,7 @@ mod tests {
         settle(&mut page, &bench);
         let folder = scratch("upload");
         let file = folder.join("hello.lua");
-        std::fs::write(&file, b"print('hi')").expect("a file");
+        mp_os::fs::write(&file, b"print('hi')").expect("a file");
         page.choose(Menu::Upload);
         assert_eq!(page.prompt().map(|p| p.input().title), Some(OPEN_TITLE));
         page.type_prompt(&file.display().to_string());
@@ -3739,7 +3741,7 @@ mod tests {
         );
         assert!(names(&page).contains(&"hello.lua"));
         assert!(page.take_status_line().is_none(), "the CRCs agree");
-        let _ = std::fs::remove_dir_all(&folder);
+        let _ = mp_os::fs::remove_dir_all(&folder);
     }
 
     /// Delete removes each selected row - by the listed directory's path and the name, "//name"
@@ -3945,13 +3947,13 @@ mod tests {
         bench.release();
         settle(&mut page, &bench);
         assert!(page.dialog().is_none());
-        assert!(!folder.join("param.pck").exists());
+        assert!(!folder.join("param.pck").os_exists());
         assert!(page.take_status_line().is_none(), "acknowledged: no error");
         assert_eq!(
             bench.started.borrow().last(),
             Some(&FtpRequest::ResetSessions)
         );
-        let _ = std::fs::remove_dir_all(&folder);
+        let _ = mp_os::fs::remove_dir_all(&folder);
     }
 
     #[test]
@@ -4006,8 +4008,8 @@ mod tests {
         let folder = scratch("several");
         let one = folder.join("one.lua");
         let two = folder.join("two words.lua");
-        std::fs::write(&one, b"print(1)").expect("a file");
-        std::fs::write(&two, b"print(2)").expect("a file");
+        mp_os::fs::write(&one, b"print(1)").expect("a file");
+        mp_os::fs::write(&two, b"print(2)").expect("a file");
         page.choose(Menu::Upload);
         page.type_prompt(&format!("\"{}\" \"{}\"", one.display(), two.display()));
         page.close_prompt(true);
@@ -4045,7 +4047,7 @@ mod tests {
                 "listed again, nothing written"
             );
         }
-        let _ = std::fs::remove_dir_all(&folder);
+        let _ = mp_os::fs::remove_dir_all(&folder);
     }
 
     /// A node's plus or minus toggles it and lists it, and so does the right button anywhere on

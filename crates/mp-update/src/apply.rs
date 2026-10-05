@@ -24,6 +24,7 @@
 //! again. It never replaces itself: the planner copies `<updater>.new` over the updater at its
 //! next start (`Program.CleanupFiles`). `// C#: Updater/Program.cs`
 
+use mp_os::fs::FsExt as _;
 use std::path::Path;
 use std::time::Duration;
 
@@ -37,14 +38,14 @@ pub const FAILED: &str = "Update failed, please try it later.\nPress any key to 
 /// `File.SetAttributes(file, FileAttributes.Normal)` then `File.Delete`: a read-only file made
 /// writable and removed.
 fn force_remove(file: &Path) {
-    if std::fs::remove_file(file).is_err() {
-        if let Ok(metadata) = std::fs::metadata(file) {
+    if mp_os::fs::remove_file(file).is_err() {
+        if let Ok(metadata) = mp_os::fs::metadata(file) {
             let mut permissions = metadata.permissions();
             #[allow(clippy::permissions_set_readonly_false)] // the C#'s FileAttributes.Normal
             permissions.set_readonly(false);
-            let _ = std::fs::set_permissions(file, permissions);
+            let _ = mp_os::fs::set_permissions(file, permissions);
         }
-        let _ = std::fs::remove_file(file);
+        let _ = mp_os::fs::remove_file(file);
     }
 }
 
@@ -61,11 +62,11 @@ fn lower_contains(path: &Path, needle: &str) -> bool {
 pub fn update_files(directory: &Path, updater_name: &str) -> bool {
     let mut all_done = true;
     let needle = updater_name.to_lowercase();
-    if let Ok(entries) = std::fs::read_dir(directory) {
+    if let Ok(entries) = mp_os::fs::read_dir(directory) {
         let files: Vec<_> = entries
             .flatten()
             .map(|e| e.path())
-            .filter(|p| p.is_file())
+            .filter(|p| p.os_is_file())
             .collect();
         // cleanup old
         for file in files.iter().filter(|f| {
@@ -94,11 +95,11 @@ pub fn update_files(directory: &Path, updater_name: &str) -> bool {
                 let oldfile = std::path::PathBuf::from(format!("{stem}.old"));
                 let moved = (|| -> std::io::Result<()> {
                     // move existing to .old
-                    if newfile.exists() {
-                        std::fs::rename(newfile, &oldfile)?;
+                    if newfile.os_exists() {
+                        mp_os::fs::rename(newfile, &oldfile)?;
                     }
                     // move .new to existing
-                    std::fs::rename(file, newfile)
+                    mp_os::fs::rename(file, newfile)
                 })();
                 match moved {
                     Ok(()) => done = true,
@@ -114,8 +115,8 @@ pub fn update_files(directory: &Path, updater_name: &str) -> bool {
             all_done = all_done && done;
         }
     }
-    if let Ok(entries) = std::fs::read_dir(directory) {
-        for sub in entries.flatten().map(|e| e.path()).filter(|p| p.is_dir()) {
+    if let Ok(entries) = mp_os::fs::read_dir(directory) {
+        for sub in entries.flatten().map(|e| e.path()).filter(|p| p.os_is_dir()) {
             all_done = all_done && update_files(&sub, updater_name);
         }
     }
@@ -137,7 +138,7 @@ pub fn run(directory: &Path, planner: &Path, updater_name: &str, wait: bool) -> 
     if !update_files(directory, updater_name) {
         return Err(FAILED.to_owned());
     }
-    if let Ok(entries) = std::fs::read_dir(directory) {
+    if let Ok(entries) = mp_os::fs::read_dir(directory) {
         for file in entries.flatten().map(|e| e.path()) {
             if file.to_string_lossy().to_lowercase().ends_with(".old") {
                 force_remove(&file);
@@ -153,45 +154,46 @@ pub fn run(directory: &Path, planner: &Path, updater_name: &str, wait: bool) -> 
 
 #[cfg(test)]
 mod tests {
+    use mp_os::fs::FsExt as _;
     use super::*;
 
     fn scratch(test: &str) -> std::path::PathBuf {
         let dir = mp_os::temp_dir().join(format!("mp-update-apply-{test}-{}", mp_os::process_id()));
-        let _ = std::fs::remove_dir_all(&dir);
-        std::fs::create_dir_all(dir.join("sub")).unwrap();
+        let _ = mp_os::fs::remove_dir_all(&dir);
+        mp_os::fs::create_dir_all(dir.join("sub")).unwrap();
         dir
     }
 
     #[test]
     fn new_files_move_into_place_and_old_ones_go() {
         let dir = scratch("move");
-        std::fs::write(dir.join("a.txt"), b"old a").unwrap();
-        std::fs::write(dir.join("a.txt.new"), b"new a").unwrap();
-        std::fs::write(dir.join("b.bin.new"), b"new b").unwrap();
-        std::fs::write(dir.join("stale.old"), b"stale").unwrap();
-        std::fs::write(dir.join("sub/c.new"), b"new c").unwrap();
-        std::fs::write(dir.join("headless-planner.new"), b"updater").unwrap();
+        mp_os::fs::write(dir.join("a.txt"), b"old a").unwrap();
+        mp_os::fs::write(dir.join("a.txt.new"), b"new a").unwrap();
+        mp_os::fs::write(dir.join("b.bin.new"), b"new b").unwrap();
+        mp_os::fs::write(dir.join("stale.old"), b"stale").unwrap();
+        mp_os::fs::write(dir.join("sub/c.new"), b"new c").unwrap();
+        mp_os::fs::write(dir.join("headless-planner.new"), b"updater").unwrap();
         assert!(update_files(&dir, "headless-planner"));
-        assert_eq!(std::fs::read(dir.join("a.txt")).unwrap(), b"new a");
-        assert_eq!(std::fs::read(dir.join("a.txt.old")).unwrap(), b"old a");
-        assert_eq!(std::fs::read(dir.join("b.bin")).unwrap(), b"new b");
-        assert!(!dir.join("b.bin.new").exists());
-        assert!(!dir.join("stale.old").exists());
-        assert_eq!(std::fs::read(dir.join("sub/c")).unwrap(), b"new c");
+        assert_eq!(mp_os::fs::read(dir.join("a.txt")).unwrap(), b"new a");
+        assert_eq!(mp_os::fs::read(dir.join("a.txt.old")).unwrap(), b"old a");
+        assert_eq!(mp_os::fs::read(dir.join("b.bin")).unwrap(), b"new b");
+        assert!(!dir.join("b.bin.new").os_exists());
+        assert!(!dir.join("stale.old").os_exists());
+        assert_eq!(mp_os::fs::read(dir.join("sub/c")).unwrap(), b"new c");
         // The updater itself is left for the planner to copy over.
-        assert!(dir.join("headless-planner.new").exists());
-        std::fs::remove_dir_all(&dir).unwrap();
+        assert!(dir.join("headless-planner.new").os_exists());
+        mp_os::fs::remove_dir_all(&dir).unwrap();
     }
 
     #[test]
     fn run_clears_the_old_files_and_starts_the_planner() {
         let dir = scratch("run");
-        std::fs::write(dir.join("a.txt"), b"old").unwrap();
-        std::fs::write(dir.join("a.txt.new"), b"new").unwrap();
+        mp_os::fs::write(dir.join("a.txt"), b"old").unwrap();
+        mp_os::fs::write(dir.join("a.txt.new"), b"new").unwrap();
         // "The planner" here is `true`, which starts and exits.
         run(&dir, Path::new("true"), "headless-planner", false).unwrap();
-        assert_eq!(std::fs::read(dir.join("a.txt")).unwrap(), b"new");
-        assert!(!dir.join("a.txt.old").exists());
+        assert_eq!(mp_os::fs::read(dir.join("a.txt")).unwrap(), b"new");
+        assert!(!dir.join("a.txt.old").os_exists());
         let missing = run(
             &dir,
             &dir.join("no-such-planner"),
@@ -203,7 +205,7 @@ mod tests {
         // Windows will not remove a folder a running process stands in: the cleanup waits for
         // `true` to have gone (CI run 37173996196, "being used by another process").
         let until = web_time::Instant::now() + std::time::Duration::from_secs(10);
-        while let Err(e) = std::fs::remove_dir_all(&dir) {
+        while let Err(e) = mp_os::fs::remove_dir_all(&dir) {
             assert!(web_time::Instant::now() < until, "{}: {e}", dir.display());
             wasm_thread::sleep(std::time::Duration::from_millis(50));
         }

@@ -262,7 +262,7 @@ fn setting_is_true(persisted: &Persisted, key: &str) -> bool {
 /// copied over the updater and deleted - the updater cannot replace itself.
 /// `// C#: Program.cs:614-626; Utilities/Update.cs:74-84`
 pub fn cleanup_updater_files(install_dir: &Path) {
-    let Ok(entries) = std::fs::read_dir(install_dir) else {
+    let Ok(entries) = mp_os::fs::read_dir(install_dir) else {
         return;
     };
     for path in entries.flatten().map(|e| e.path()) {
@@ -271,8 +271,8 @@ pub fn cleanup_updater_files(install_dir: &Path) {
             .map_or_else(String::new, |n| n.to_string_lossy().into_owned());
         if name.starts_with(UPDATER) && name.ends_with(".new") {
             let target = install_dir.join(name.trim_end_matches(".new"));
-            if std::fs::copy(&path, &target).is_ok() {
-                let _ = std::fs::remove_file(&path);
+            if mp_os::fs::copy(&path, &target).is_ok() {
+                let _ = mp_os::fs::remove_file(&path);
             }
         }
     }
@@ -928,6 +928,7 @@ pub fn record_facts(help: &Help) {
 
 #[cfg(test)]
 mod tests {
+    use mp_os::fs::FsExt as _;
     use super::*;
 
     /// The help screen names this program: "Mission Planner" read "MissionPlannerRust" (the owner,
@@ -961,8 +962,8 @@ mod tests {
 
     fn scratch(test: &str) -> PathBuf {
         let dir = mp_os::temp_dir().join(format!("mp-gui-help-{test}-{}", mp_os::process_id()));
-        let _ = std::fs::remove_dir_all(&dir);
-        std::fs::create_dir_all(&dir).expect("a scratch directory");
+        let _ = mp_os::fs::remove_dir_all(&dir);
+        mp_os::fs::create_dir_all(&dir).expect("a scratch directory");
         dir
     }
 
@@ -1044,7 +1045,7 @@ mod tests {
         assert_eq!(help.flow, Flow::Idle);
 
         // Up to date, and asked to say so: "No update available."; the startup check says nothing.
-        std::fs::write(dir.join("version.txt"), "2.0.0.0\n").expect("version.txt");
+        mp_os::fs::write(dir.join("version.txt"), "2.0.0.0\n").expect("version.txt");
         help.update_check_clicked(&persisted);
         wait(&mut help);
         assert_eq!(
@@ -1067,7 +1068,7 @@ mod tests {
         let status = wait(&mut help).expect("a status");
         assert!(status.starts_with("Update check failed: "), "{status}");
         assert_eq!(help.flow, Flow::Idle);
-        std::fs::remove_dir_all(&dir).expect("cleanup");
+        mp_os::fs::remove_dir_all(&dir).expect("cleanup");
     }
 
     #[test]
@@ -1084,7 +1085,7 @@ mod tests {
         assert_eq!(help.flow, Flow::Restarting);
         assert_eq!(help.written, 1);
         assert_eq!(
-            std::fs::read(dir.join("update-probe.txt.new")).expect("the new file"),
+            mp_os::fs::read(dir.join("update-probe.txt.new")).expect("the new file"),
             b"probe content"
         );
         assert!(
@@ -1099,7 +1100,7 @@ mod tests {
         assert_eq!(help.flow, Flow::Idle);
 
         // The beta button: no question, the update at once; with Control, the warning first.
-        std::fs::remove_file(dir.join("update-probe.txt.new")).expect("removed");
+        mp_os::fs::remove_file(dir.join("update-probe.txt.new")).expect("removed");
         help.beta_update_clicked(false, &persisted);
         assert_eq!(help.flow, Flow::Updating);
         assert_eq!(help.which, Which::Beta);
@@ -1121,7 +1122,7 @@ mod tests {
         let status = wait(&mut help).expect("a status");
         assert!(status.starts_with(UPDATE_FAILED), "{status}");
         assert_eq!(help.flow, Flow::Idle);
-        std::fs::remove_dir_all(&dir).expect("cleanup");
+        mp_os::fs::remove_dir_all(&dir).expect("cleanup");
     }
 
     #[test]
@@ -1138,7 +1139,7 @@ mod tests {
             status == format!("{UPDATE_FAILED}User Request") || status == "Starting Updater",
             "{status}"
         );
-        std::fs::remove_dir_all(&dir).expect("cleanup");
+        mp_os::fs::remove_dir_all(&dir).expect("cleanup");
     }
 
     #[test]
@@ -1178,22 +1179,22 @@ mod tests {
         assert!(
             matches!(&help.flow, Flow::Question { text } if text.starts_with("BETA Update Found"))
         );
-        std::fs::remove_dir_all(&dir).expect("cleanup");
+        mp_os::fs::remove_dir_all(&dir).expect("cleanup");
     }
 
     #[test]
     fn a_new_updater_is_copied_into_place() {
         let dir = scratch("updater");
         let updater = updater_path(&dir);
-        std::fs::write(&updater, b"old").expect("old updater");
+        mp_os::fs::write(&updater, b"old").expect("old updater");
         let new = dir.join(format!(
             "{}.new",
             updater.file_name().expect("a name").to_string_lossy()
         ));
-        std::fs::write(&new, b"new").expect("new updater");
+        mp_os::fs::write(&new, b"new").expect("new updater");
         cleanup_updater_files(&dir);
-        assert_eq!(std::fs::read(&updater).expect("updater"), b"new");
-        assert!(!new.exists());
-        std::fs::remove_dir_all(&dir).expect("cleanup");
+        assert_eq!(mp_os::fs::read(&updater).expect("updater"), b"new");
+        assert!(!new.os_exists());
+        mp_os::fs::remove_dir_all(&dir).expect("cleanup");
     }
 }

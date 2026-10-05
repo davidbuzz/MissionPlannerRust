@@ -70,6 +70,7 @@
 // This module is internal to the binary; `pub` here documents intent rather than exporting API.
 #![allow(unreachable_pub)]
 
+use mp_os::fs::FsExt as _;
 use std::collections::VecDeque;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -811,7 +812,7 @@ impl PathBox {
     #[must_use]
     pub fn new(directory: &str, filter: &'static str) -> Self {
         let mut field = TextField::new("");
-        if !directory.is_empty() && Path::new(directory).is_dir() {
+        if !directory.is_empty() && Path::new(directory).os_is_dir() {
             let separator = std::path::MAIN_SEPARATOR;
             field.set(format!(
                 "{}{separator}",
@@ -829,7 +830,7 @@ impl PathBox {
     #[must_use]
     pub fn chosen(&self) -> Option<PathBuf> {
         let path = PathBuf::from(self.field.value());
-        path.is_file().then_some(path)
+        path.os_is_file().then_some(path)
     }
 }
 
@@ -3203,7 +3204,7 @@ mod tests {
     fn fixture() -> Manifest {
         let path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
             .join("../../testdata/firmware/manifest.json.gz");
-        let bytes = std::fs::read(&path).expect("the fixture");
+        let bytes = mp_os::fs::read(&path).expect("the fixture");
         Manifest::decode(&bytes, true).expect("parses")
     }
 
@@ -4013,12 +4014,12 @@ mod tests {
     #[test]
     fn a_flow_on_its_thread_is_heard_and_answered() {
         let web = mp_os::temp_dir().join(format!("mp-gui-fw-flow-{}", mp_os::process_id()));
-        let _ = std::fs::remove_dir_all(&web);
+        let _ = mp_os::fs::remove_dir_all(&web);
         let served = web.join("web/firmware.ardupilot.org/Copter/stable/CubeOrange");
-        std::fs::create_dir_all(&served).unwrap();
+        mp_os::fs::create_dir_all(&served).unwrap();
         let apj = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
             .join("../mp-firmware/testdata/legacy/arducopter.apj");
-        std::fs::copy(&apj, served.join("arducopter.apj")).unwrap();
+        mp_os::fs::copy(&apj, served.join("arducopter.apj")).unwrap();
         let machine = Machine {
             fetch: Box::new(manifest::Mirror {
                 root: web.join("web"),
@@ -4064,7 +4065,7 @@ mod tests {
             progress.value, 100,
             "-1 leaves the bar at the download's end"
         );
-        let _ = std::fs::remove_dir_all(&web);
+        let _ = mp_os::fs::remove_dir_all(&web);
     }
 
     /// The file dialog opens in the folder last used, takes only a file that exists, and saves
@@ -4072,9 +4073,9 @@ mod tests {
     #[test]
     fn load_custom_firmware_remembers_the_folder() {
         let dir = mp_os::temp_dir().join(format!("mp-gui-fw-custom-{}", mp_os::process_id()));
-        std::fs::create_dir_all(&dir).unwrap();
+        mp_os::fs::create_dir_all(&dir).unwrap();
         let file = dir.join("custom.apj");
-        std::fs::write(&file, "{}").unwrap();
+        mp_os::fs::write(&file, "{}").unwrap();
         let mut settings = Persisted::at(None);
         settings.set(FIRMWARE_FILE_DIRECTORY, dir.display().to_string());
         let mut page = loaded("CubeOrange-BL");
@@ -4102,7 +4103,7 @@ mod tests {
             settings.get(FIRMWARE_FILE_DIRECTORY),
             Some(dir.display().to_string().as_str())
         );
-        let _ = std::fs::remove_dir_all(&dir);
+        let _ = mp_os::fs::remove_dir_all(&dir);
     }
 }
 

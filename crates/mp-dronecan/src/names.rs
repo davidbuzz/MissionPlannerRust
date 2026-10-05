@@ -566,7 +566,7 @@ mod tests {
         };
         let path = std::path::PathBuf::from(tree)
             .join("ExtLibs/DroneCAN/canard_dsdlc/messages.cs");
-        let Ok(text) = std::fs::read_to_string(&path) else {
+        let Ok(text) = mp_os::fs::read_to_string(&path) else {
             eprintln!("skipped: MP_SRC does not name a clone of https://github.com/ArduPilot/MissionPlanner");
             return;
         };

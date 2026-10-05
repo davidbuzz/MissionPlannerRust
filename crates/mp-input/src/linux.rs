@@ -22,7 +22,7 @@
 //!
 //! The legacy joystick API rather than evdev. It is deprecated and it is also an eight-byte
 //! struct of little-endian integers that any kernel since 1996 emits, which means it can be read
-//! with `std::fs::File` and no `unsafe` - and this workspace denies `unsafe`. evdev would need
+//! with `mp_os::fs::File` and no `unsafe` - and this workspace denies `unsafe`. evdev would need
 //! ioctls for the axis ranges, which needs `libc` and a block of `unsafe` around each one, to
 //! support devices that also present a `js` node.
 //!
@@ -32,7 +32,7 @@
 
 use crate::event::LEN as EVENT_LEN;
 use crate::{Device, Reading};
-use std::fs::File;
+use mp_os::fs::File;
 use std::io::{ErrorKind, Read};
 use std::path::{Path, PathBuf};
 
@@ -48,7 +48,7 @@ const INPUT_DIR: &str = "/dev/input";
 /// Sorted, so the list does not reorder itself between calls and move the device a person chose.
 #[must_use]
 pub fn devices() -> Vec<Device> {
-    let Ok(entries) = std::fs::read_dir(INPUT_DIR) else {
+    let Ok(entries) = mp_os::fs::read_dir(INPUT_DIR) else {
         return Vec::new();
     };
     let mut paths: Vec<PathBuf> = entries
@@ -82,7 +82,7 @@ fn describe(path: &Path) -> Device {
         .file_name()
         .and_then(|name| name.to_str())
         .unwrap_or("js");
-    let name = std::fs::read_to_string(format!("/sys/class/input/{node}/device/name"))
+    let name = mp_os::fs::read_to_string(format!("/sys/class/input/{node}/device/name"))
         .ok()
         .map(|text| text.trim().to_owned())
         .filter(|text| !text.is_empty())
@@ -93,7 +93,7 @@ fn describe(path: &Path) -> Device {
     // controls. An earlier version hard-coded zero with a comment promising these were filled in
     // later; nothing filled them in.
     let count = |leaf: &str| {
-        std::fs::read_to_string(format!("/sys/class/input/{node}/device/{leaf}"))
+        mp_os::fs::read_to_string(format!("/sys/class/input/{node}/device/{leaf}"))
             .ok()
             .map_or(0, |text| text.split_whitespace().count())
     };

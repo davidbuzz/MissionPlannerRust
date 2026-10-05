@@ -35,12 +35,12 @@ fn main() -> std::process::ExitCode {
         let [from, to] = pair else {
             continue;
         };
-        let compiled = std::fs::read(from)
+        let compiled = mp_os::fs::read(from)
             .map_err(|err| err.to_string())
             .and_then(|bytes| {
                 mp_plugin_host::precompile_for_web(&bytes).map_err(|err| err.to_string())
             })
-            .and_then(|compiled| std::fs::write(to, compiled).map_err(|err| err.to_string()));
+            .and_then(|compiled| mp_os::fs::write(to, compiled).map_err(|err| err.to_string()));
         if let Err(why) = compiled {
             eprintln!("precompile-web-plugins: {from}: {why}");
             return std::process::ExitCode::FAILURE;

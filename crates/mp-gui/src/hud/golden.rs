@@ -360,7 +360,7 @@ fn recorded_cases() -> [(&'static str, Pick); 3] {
 ///
 /// The log is not there, or a sheet cannot be filled.
 fn recorded_sheets() -> Vec<(&'static str, Image)> {
-    let log = std::fs::read(autotest_log()).expect("testdata/mavlink/autotest.tlog is committed");
+    let log = mp_os::fs::read(autotest_log()).expect("testdata/mavlink/autotest.tlog is committed");
     let mut moments = Vec::new();
     play(&log, |micros, state| {
         moments.push(Moment {
@@ -465,7 +465,7 @@ fn every_frame_matches_its_golden() {
     for (name, actual) in every_case() {
         let path = dir.join(format!("{name}.png"));
         if update {
-            std::fs::create_dir_all(&dir).expect("testdata/hud");
+            mp_os::fs::create_dir_all(&dir).expect("testdata/hud");
             save(&actual, &path).expect("the golden is written");
             eprintln!("wrote {}", path.display());
             continue;
@@ -484,7 +484,7 @@ fn every_frame_matches_its_golden() {
         if difference.as_ref().is_ok_and(raster::Difference::matches) {
             continue;
         }
-        let _ = std::fs::create_dir_all(&scratch);
+        let _ = mp_os::fs::create_dir_all(&scratch);
         let (drawn, diff) = (
             scratch.join(format!("{name}.actual.png")),
             scratch.join(format!("{name}.diff.png")),
@@ -526,7 +526,7 @@ fn no_golden_is_left_without_a_case() {
         names.len(),
         "two cases share a name: {names:?}"
     );
-    let on_disk: Vec<String> = std::fs::read_dir(golden_dir())
+    let on_disk: Vec<String> = mp_os::fs::read_dir(golden_dir())
         .expect("testdata/hud")
         .filter_map(|entry| entry.ok()?.file_name().into_string().ok())
         .collect();
@@ -934,7 +934,7 @@ fn the_tapes_end_for_any_value() {
 /// the arming, and the display's clocks put ARMED up and take it down as the screen would.
 #[test]
 fn the_arming_sheet_shows_armed_and_then_not() {
-    let log = std::fs::read(autotest_log()).expect("testdata/mavlink/autotest.tlog is committed");
+    let log = mp_os::fs::read(autotest_log()).expect("testdata/mavlink/autotest.tlog is committed");
     let mut moments = Vec::new();
     play(&log, |micros, state| {
         moments.push(Moment {

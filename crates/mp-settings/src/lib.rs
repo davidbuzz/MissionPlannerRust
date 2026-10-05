@@ -43,6 +43,7 @@
 //! came to record flights under `~/Documents/Mission Planner/logs`, a directory the C#
 //! application never reads.
 
+use mp_os::fs::FsExt as _;
 pub mod config;
 pub mod migrate;
 
@@ -164,7 +165,7 @@ impl Folders {
     /// `// C#: ExtLibs/Utilities/Settings.cs:344-363`
     fn csharp_user_data_directory_named(&self, name: &str) -> PathBuf {
         let old_approach = self.my_documents.join(name);
-        if self.unix && !old_approach.is_dir() {
+        if self.unix && !old_approach.os_is_dir() {
             self.local_application_data.join(name)
         } else {
             old_approach
@@ -268,15 +269,15 @@ mod tests {
                 mp_os::process_id(),
                 wasm_thread::current().id()
             ));
-            let _ = std::fs::remove_dir_all(&path);
-            std::fs::create_dir_all(&path).ok();
+            let _ = mp_os::fs::remove_dir_all(&path);
+            mp_os::fs::create_dir_all(&path).ok();
             Self(path)
         }
     }
 
     impl Drop for Scratch {
         fn drop(&mut self) {
-            let _ = std::fs::remove_dir_all(&self.0);
+            let _ = mp_os::fs::remove_dir_all(&self.0);
         }
     }
 
@@ -334,7 +335,7 @@ mod tests {
         let scratch = Scratch::new("old-linux");
         let folders = mono(&scratch);
         let old = folders.my_documents.join(CSHARP_APP_CONFIG_NAME);
-        std::fs::create_dir_all(&old).expect("create the old directory");
+        mp_os::fs::create_dir_all(&old).expect("create the old directory");
         assert_eq!(folders.csharp_user_data_directory(), old);
         assert_eq!(folders.csharp_data_directory(), old);
         // And this application stays where it always is.
@@ -352,8 +353,8 @@ mod tests {
         let scratch = Scratch::new("checkout-in-home");
         let folders = mono(&scratch);
         let checkout = folders.my_documents.join(APP_CONFIG_NAME);
-        std::fs::create_dir_all(checkout.join("crates")).expect("a checkout");
-        std::fs::write(checkout.join("Cargo.toml"), b"[workspace]").expect("a manifest");
+        mp_os::fs::create_dir_all(checkout.join("crates")).expect("a checkout");
+        mp_os::fs::write(checkout.join("Cargo.toml"), b"[workspace]").expect("a manifest");
         let ours = folders.local_application_data.join(APP_CONFIG_NAME);
         assert_eq!(folders.user_data_directory(), ours);
         assert_eq!(folders.data_directory(), ours);
@@ -371,8 +372,8 @@ mod tests {
         // Directory.Exists is false for a file.
         let scratch = Scratch::new("file-not-dir");
         let folders = mono(&scratch);
-        std::fs::create_dir_all(&folders.my_documents).expect("home");
-        std::fs::write(folders.my_documents.join(CSHARP_APP_CONFIG_NAME), b"").expect("a file");
+        mp_os::fs::create_dir_all(&folders.my_documents).expect("home");
+        mp_os::fs::write(folders.my_documents.join(CSHARP_APP_CONFIG_NAME), b"").expect("a file");
         assert!(
             folders
                 .csharp_user_data_directory()

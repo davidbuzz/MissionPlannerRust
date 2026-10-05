@@ -4478,6 +4478,7 @@ version = "0.0.0"
 dependencies = [
  "levenberg-marquardt",
  "mp-mavlink-dialects",
+ "mp-os",
  "mp-vehicle",
  "nalgebra",
  "thiserror 2.0.20",
@@ -4578,6 +4579,7 @@ dependencies = [
  "mp-log",
  "mp-mavlink",
  "mp-mavlink-dialects",
+ "mp-os",
  "mp-terrain",
  "thiserror 2.0.20",
 ]

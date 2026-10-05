@@ -38,6 +38,7 @@
 // This module is internal to the binary; `pub` here documents intent rather than exporting API.
 #![allow(unreachable_pub)]
 
+use mp_os::fs::FsExt as _;
 use mp_os::Lock as _;
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
@@ -69,12 +70,12 @@ pub fn scan(folder: &Path) -> Vec<PathBuf> {
     let mut found: [Vec<PathBuf>; 3] = [Vec::new(), Vec::new(), Vec::new()];
     let mut pending = vec![folder.to_path_buf()];
     while let Some(dir) = pending.pop() {
-        let Ok(entries) = std::fs::read_dir(&dir) else {
+        let Ok(entries) = mp_os::fs::read_dir(&dir) else {
             continue;
         };
         for entry in entries.flatten() {
             let path = entry.path();
-            if path.is_dir() {
+            if path.os_is_dir() {
                 pending.push(path);
                 continue;
             }
@@ -280,7 +281,7 @@ mod tests {
     use super::*;
 
     fn png(path: &Path, colour: [u8; 3]) {
-        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        mp_os::fs::create_dir_all(path.parent().unwrap()).unwrap();
         let image = image::RgbImage::from_pixel(8, 8, image::Rgb(colour));
         image.save(path).unwrap();
     }
@@ -305,13 +306,13 @@ mod tests {
     #[test]
     fn the_scan_lists_the_three_kinds_in_order() {
         let dir = mp_os::temp_dir().join(format!("mp-inject-scan-{}", mp_os::process_id()));
-        let _ = std::fs::remove_dir_all(&dir);
+        let _ = mp_os::fs::remove_dir_all(&dir);
         png(&dir.join("Z15/1/2.png"), [1, 2, 3]);
         png(&dir.join("Z15/1/3.png"), [1, 2, 3]);
-        std::fs::write(dir.join("Z15/1/1.jpg"), b"x").unwrap();
-        std::fs::create_dir_all(dir.join("Z16/1")).unwrap();
-        std::fs::write(dir.join("Z16/1/1.jpeg"), b"x").unwrap();
-        std::fs::write(dir.join("notes.txt"), b"x").unwrap();
+        mp_os::fs::write(dir.join("Z15/1/1.jpg"), b"x").unwrap();
+        mp_os::fs::create_dir_all(dir.join("Z16/1")).unwrap();
+        mp_os::fs::write(dir.join("Z16/1/1.jpeg"), b"x").unwrap();
+        mp_os::fs::write(dir.join("notes.txt"), b"x").unwrap();
         // Named with "/" whatever the platform's separator, so the order is what is compared: on
         // Windows the scan's paths carry "\\", as Directory.GetFiles's do (the hosted runner,
         // 2026-10-04).
@@ -331,7 +332,7 @@ mod tests {
             ["Z15/1/1.jpg", "Z16/1/1.jpeg", "Z15/1/2.png", "Z15/1/3.png"]
         );
         assert!(scan(&dir.join("missing")).is_empty());
-        let _ = std::fs::remove_dir_all(&dir);
+        let _ = mp_os::fs::remove_dir_all(&dir);
     }
 
     /// A run over two tiles and a stray image: the two in the cache as JPEG under Custom, the
@@ -339,7 +340,7 @@ mod tests {
     #[test]
     fn the_run_writes_the_tiles_and_counts_them() {
         let dir = mp_os::temp_dir().join(format!("mp-inject-run-{}", mp_os::process_id()));
-        let _ = std::fs::remove_dir_all(&dir);
+        let _ = mp_os::fs::remove_dir_all(&dir);
         png(&dir.join("tiles/Z15/18000/30000.png"), [10, 20, 30]);
         png(&dir.join("tiles/Z15/18000/30001.png"), [40, 50, 60]);
         png(&dir.join("tiles/stray.png"), [1, 1, 1]);
@@ -362,17 +363,17 @@ mod tests {
         );
         assert!(written.is_some(), "the tile is in the cache");
         assert!(job.failure().is_none());
-        let _ = std::fs::remove_dir_all(&dir);
+        let _ = mp_os::fs::remove_dir_all(&dir);
     }
 
     /// A file that is not an image ends the run where the C#'s exception does; one tile counts.
     #[test]
     fn a_file_that_is_not_an_image_ends_the_run() {
         let dir = mp_os::temp_dir().join(format!("mp-inject-bad-{}", mp_os::process_id()));
-        let _ = std::fs::remove_dir_all(&dir);
+        let _ = mp_os::fs::remove_dir_all(&dir);
         png(&dir.join("Z15/1/1.png"), [10, 20, 30]);
-        std::fs::create_dir_all(dir.join("Z15/1")).unwrap();
-        std::fs::write(dir.join("Z15/1/2.png"), b"not a picture").unwrap();
+        mp_os::fs::create_dir_all(dir.join("Z15/1")).unwrap();
+        mp_os::fs::write(dir.join("Z15/1/2.png"), b"not a picture").unwrap();
         png(&dir.join("Z15/1/3.png"), [10, 20, 30]);
         let cache = TileCache::new(dir.join("gmapcache"));
         let mut job = Injection::start(scan(&dir), cache);
@@ -383,6 +384,6 @@ mod tests {
             job.results(),
             "Number of tiles loaded per zoom : \n\nZoom 15 : 1\n\n1 tile loaded !"
         );
-        let _ = std::fs::remove_dir_all(&dir);
+        let _ = mp_os::fs::remove_dir_all(&dir);
     }
 }

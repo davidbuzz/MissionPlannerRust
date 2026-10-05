@@ -27,6 +27,7 @@
 //! window. Here each plugin has its own thread, which also takes its clicks, so a plugin waits
 //! only on itself; the window hears from it through [`Request`]s it drains once a frame.
 
+use mp_os::fs::FsExt as _;
 use mp_os::RecvTimeout as _;
 use std::path::{Path, PathBuf};
 use std::sync::mpsc::{self, Receiver, RecvTimeoutError, Sender};
@@ -174,12 +175,12 @@ impl PluginSource {
 
 /// Every `*.wasm` file in `dir`, in name order; none when there is no such folder.
 fn wasm_files(dir: &Path) -> Vec<PathBuf> {
-    let mut files: Vec<PathBuf> = std::fs::read_dir(dir)
+    let mut files: Vec<PathBuf> = mp_os::fs::read_dir(dir)
         .map(|entries| {
             entries
                 .filter_map(|entry| entry.ok().map(|entry| entry.path()))
                 .filter(|path| {
-                    path.is_file()
+                    path.os_is_file()
                         && path
                             .extension()
                             .is_some_and(|ext| ext.eq_ignore_ascii_case("wasm"))
@@ -434,7 +435,7 @@ impl Job {
             let read;
             let bytes: &[u8] = match &self.source {
                 PluginSource::File(path) => {
-                    read = std::fs::read(path)
+                    read = mp_os::fs::read(path)
                         .map_err(|err| Fault::Load(format!("{}: {err}", path.display())))?;
                     &read
                 }

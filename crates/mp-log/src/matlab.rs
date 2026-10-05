@@ -327,10 +327,10 @@ pub fn mat_path_for(log: &Path, lines: usize) -> PathBuf {
 /// The log cannot be read, the `.mat` cannot be written, or [`process_log`] fails.
 /// `// C#: Log/MatLabForms.cs:43-74; ExtLibs/Utilities/MatLab.cs:57-266`
 pub fn process_log_file(log: &Path, mode_name: ModeName<'_>) -> Result<PathBuf, MatlabError> {
-    let data = std::fs::read(log)?;
+    let data = mp_os::fs::read(log)?;
     let converted = process_log(&data, mode_name)?;
     let path = mat_path_for(log, converted.lines);
-    std::fs::write(&path, write_mat(&converted.arrays, &created_now()))?;
+    mp_os::fs::write(&path, write_mat(&converted.arrays, &created_now()))?;
     Ok(path)
 }
 

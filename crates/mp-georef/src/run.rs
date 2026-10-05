@@ -23,6 +23,7 @@
 //! itself - its map, picture box, browse dialogs - is not here; it will call these.
 //! `// C#: GeoRef/georefimage.cs:140-319`
 
+use mp_os::fs::FsExt as _;
 use crate::exif_write;
 use crate::georef::{GeoRefImageBase, GeorefError, Output, ProcessingMode};
 use crate::photos;
@@ -115,7 +116,7 @@ pub fn parse_shutter_lag(text: &str) -> i32 {
 /// `// C#: GeoRef/georefimage.cs:111-137`
 #[must_use]
 pub fn offset_from_location_txt(dir: &str) -> Option<String> {
-    let text = std::fs::read_to_string(format!("{dir}{}location.txt", photos::SEPARATOR)).ok()?;
+    let text = mp_os::fs::read_to_string(format!("{dir}{}location.txt", photos::SEPARATOR)).ok()?;
     const KEY: &str = "seconds_offset: ";
     let mut rest = text.as_str();
     while let Some(at) = rest.find(KEY) {
@@ -154,8 +155,8 @@ impl GeoRefImageBase {
         append_text: Output<'_>,
         terrain: &dyn Terrain,
     ) -> Option<ReportFiles> {
-        if !std::path::Path::new(log_file_path).is_file()
-            || !std::path::Path::new(dir_pictures).is_dir()
+        if !std::path::Path::new(log_file_path).os_is_file()
+            || !std::path::Path::new(dir_pictures).os_is_dir()
         {
             return None;
         }
@@ -259,10 +260,10 @@ impl GeoRefImageBase {
             path: folder.to_string_lossy().into_owned(),
             message: e.to_string(),
         };
-        if folder.exists() {
-            std::fs::remove_dir_all(&folder).map_err(io)?;
+        if folder.os_exists() {
+            mp_os::fs::remove_dir_all(&folder).map_err(io)?;
         }
-        std::fs::create_dir_all(&folder).map_err(io)?;
+        mp_os::fs::create_dir_all(&folder).map_err(io)?;
         let Some(pictures) = &self.pictures_info else {
             append_text("no valid matchs");
             return Ok(());

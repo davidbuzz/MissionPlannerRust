@@ -44,15 +44,15 @@ impl Scratch {
             mp_os::process_id(),
             wasm_thread::current().id()
         ));
-        let _ = std::fs::remove_dir_all(&path);
-        std::fs::create_dir_all(&path).unwrap();
+        let _ = mp_os::fs::remove_dir_all(&path);
+        mp_os::fs::create_dir_all(&path).unwrap();
         Self(path)
     }
 }
 
 impl Drop for Scratch {
     fn drop(&mut self) {
-        let _ = std::fs::remove_dir_all(&self.0);
+        let _ = mp_os::fs::remove_dir_all(&self.0);
     }
 }
 
@@ -612,8 +612,8 @@ fn export_and_import_round_trip() {
 
     // The files gone, the archive brings them back - by their own names.
     let files = copter_files(&scratch);
-    std::fs::remove_file(&files.axis).unwrap();
-    std::fs::remove_file(&files.buttons).unwrap();
+    mp_os::fs::remove_file(&files.axis).unwrap();
+    mp_os::fs::remove_file(&files.buttons).unwrap();
     sticks.import_click();
     assert!(sticks.page.question);
     sticks.question_answer(true);

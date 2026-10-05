@@ -372,7 +372,7 @@ mod tests {
     fn every_named_sitl_parameter_is_on_one_page() {
         let fixture = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("../../testdata/params/sitl-copter.param");
-        let text = std::fs::read_to_string(&fixture).expect("the SITL dump");
+        let text = mp_os::fs::read_to_string(&fixture).expect("the SITL dump");
         let parameters: Vec<(String, f64)> = text
             .lines()
             .filter_map(|line| {

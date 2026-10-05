@@ -27,7 +27,7 @@
 //! L3, and a recorder the link cannot reach records nothing. `mp-log`'s `tests/tlog.rs` reads back
 //! what this writes, so the two halves of the format cannot drift apart.
 
-use std::fs::File;
+use mp_os::fs::File;
 use std::io::{BufWriter, Write};
 use std::path::Path;
 

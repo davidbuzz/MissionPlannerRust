@@ -1609,7 +1609,7 @@ pub struct DroneCan {
     /// `mavlinkCANRun`.
     can_run: bool,
     /// The log file, `can.LogFile`.
-    log_file: Option<std::fs::File>,
+    log_file: Option<mp_os::fs::File>,
     /// The manifest an update's search loaded.
     manifest: Option<Arc<mp_firmware::manifest::Manifest>>,
     /// The SLCAN start's writes, in turn.
@@ -2014,9 +2014,9 @@ impl DroneCan {
         let opening = !start || !matches!(self.bus, Some(Bus::Slcan(_)));
         if self.log && opening {
             self.log_file = log_directory().and_then(|dir| {
-                let _ = std::fs::create_dir_all(&dir);
+                let _ = mp_os::fs::create_dir_all(&dir);
                 let name = format!("{}.can", chrono::Local::now().format("%Y-%m-%d %H-%M-%S"));
-                std::fs::File::create(dir.join(name)).ok()
+                mp_os::fs::File::create(dir.join(name)).ok()
             });
         }
         let node = self.node_for_start(now);
@@ -2372,7 +2372,7 @@ impl DroneCan {
                         mp_os::process_id(),
                         node
                     ));
-                    if std::fs::write(&temporary, &firmware.image).is_err() {
+                    if mp_os::fs::write(&temporary, &firmware.image).is_err() {
                         return;
                     }
                     temporary
@@ -3776,9 +3776,9 @@ fn fetch_firmware(
     }
     let bytes = http.get(&url)?;
     let directory = mp_os::temp_dir().join(format!("dronecan-fw-{}", mp_os::process_id()));
-    std::fs::create_dir_all(&directory).map_err(|error| error.to_string())?;
+    mp_os::fs::create_dir_all(&directory).map_err(|error| error.to_string())?;
     let downloaded = directory.join("download.tmp");
-    std::fs::write(&downloaded, &bytes).map_err(|error| error.to_string())?;
+    mp_os::fs::write(&downloaded, &bytes).map_err(|error| error.to_string())?;
     if url.to_lowercase().ends_with(".zip") {
         let unpacked = directory.join("unzipped");
         mp_log::zip::extract(&bytes, &unpacked).map_err(|error| error.to_string())?;

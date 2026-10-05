@@ -52,7 +52,7 @@ pub const SEPARATOR: char = std::path::MAIN_SEPARATOR;
 pub fn list_photos(dir: &str) -> std::io::Result<Vec<String>> {
     let mut out = Vec::new();
     let mut names: Vec<String> = Vec::new();
-    for entry in std::fs::read_dir(dir)? {
+    for entry in mp_os::fs::read_dir(dir)? {
         let entry = entry?;
         if entry.file_type()?.is_file() {
             names.push(entry.file_name().to_string_lossy().into_owned());
@@ -142,11 +142,11 @@ impl PhotoTimes {
         }
         let lower = path.to_lowercase();
         let read = if lower.ends_with(".jpg") {
-            std::fs::read(path)
+            mp_os::fs::read(path)
                 .ok()
                 .map(|bytes| exif_read::read_jpeg(&bytes))
         } else if lower.ends_with(".tif") {
-            std::fs::read(path)
+            mp_os::fs::read(path)
                 .ok()
                 .map(|bytes| exif_read::read_tiff(&bytes))
         } else {

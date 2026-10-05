@@ -316,8 +316,8 @@ impl ParamFile {
     /// If the directory cannot be written to, or the rename fails.
     pub fn save(&self, path: &std::path::Path) -> std::io::Result<()> {
         let temporary = path.with_extension("param.tmp");
-        std::fs::write(&temporary, self.render())?;
-        std::fs::rename(&temporary, path)
+        mp_os::fs::write(&temporary, self.render())?;
+        mp_os::fs::rename(&temporary, path)
     }
 
     /// Reads a file from disk.
@@ -325,7 +325,7 @@ impl ParamFile {
     /// # Errors
     /// If the file cannot be read. A file that parses badly is not an error - see `rejected`.
     pub fn load(path: &std::path::Path) -> std::io::Result<Self> {
-        Ok(Self::parse(&std::fs::read_to_string(path)?))
+        Ok(Self::parse(&mp_os::fs::read_to_string(path)?))
     }
 
     /// Compares this file against another, as "what would change if the other were loaded".

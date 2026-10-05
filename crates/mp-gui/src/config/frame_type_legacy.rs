@@ -911,7 +911,7 @@ pub fn page(frame: &FrameTypeLegacy, cx: &mut Context<MissionPlanner>) -> Option
                 // `Settings.GetUserDataDirectory()`.
                 let user_data = mp_settings::user_data_directory()
                     .unwrap_or_else(|| mp_os::temp_dir().join("MissionPlannerRust"));
-                let _ = std::fs::create_dir_all(&user_data);
+                let _ = mp_os::fs::create_dir_all(&user_data);
                 this.frame_type_legacy.defaults_mut().click_load(&user_data);
             },
             cx,
@@ -1419,7 +1419,7 @@ mod tests {
             "mp-gui-framelegacy-defaults-{}",
             mp_os::process_id()
         ));
-        std::fs::create_dir_all(&dir).expect("a scratch directory");
+        mp_os::fs::create_dir_all(&dir).expect("a scratch directory");
         let mut view = view();
         view.parameters = vec![(PARAM.to_owned(), 1.0)].into();
         let mut frame = opened(1.0);
@@ -1456,7 +1456,7 @@ mod tests {
         }
         assert_eq!(answers.values(), [1.0, 1.0], "Activate ran again");
         assert_eq!(frame.checked(), [1]);
-        let _ = std::fs::remove_dir_all(dir);
+        let _ = mp_os::fs::remove_dir_all(dir);
     }
 
     /// "Set FRAME Failed" goes on the status line rather than in a box (the owner's ruling).

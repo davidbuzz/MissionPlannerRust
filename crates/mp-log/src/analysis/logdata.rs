@@ -1073,7 +1073,7 @@ mod tests {
     fn the_example_log_reads_as_unittest_py_says() {
         let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("../../testdata/dataflash/loganalyzer/robert_lefebvre_octo_PM.log");
-        let text = std::fs::read_to_string(path).unwrap();
+        let text = mp_os::fs::read_to_string(path).unwrap();
         let log = DataflashLog::read(&text, "examples/robert_lefebvre_octo_PM.log", false).unwrap();
         assert_eq!(log.vehicle_type, Some(VehicleType::Copter));
         assert_eq!(log.firmware_version, "V3.0.1");

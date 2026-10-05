@@ -887,7 +887,7 @@ impl ScriptsTab {
         let Some(path) = self.selected.clone() else {
             return;
         };
-        let source = match std::fs::read_to_string(&path) {
+        let source = match mp_os::fs::read_to_string(&path) {
             Ok(source) => source,
             Err(err) => {
                 self.status_line = Some(format!("could not read {}: {err}", path.display()));
@@ -1411,7 +1411,7 @@ pub fn serve_while_running(cx: &mut Context<MissionPlanner>) {
 pub(crate) fn open_with_shell(path: &Path) -> Result<(), String> {
     if let Some(log) = std::env::var_os("MP_OPEN_WITH_SHELL_LOG") {
         use std::io::Write as _;
-        return std::fs::OpenOptions::new()
+        return mp_os::fs::OpenOptions::new()
             .create(true)
             .append(true)
             .open(log)
@@ -1849,7 +1849,7 @@ mod tests {
             target_component: 190,
             mission_type: 0,
         };
-        let source = std::fs::read_to_string(concat!(
+        let source = mp_os::fs::read_to_string(concat!(
             env!("CARGO_MANIFEST_DIR"),
             "/../../testdata/scripts/example4 wp.py"
         ))
@@ -2608,7 +2608,7 @@ mod tests {
     #[test]
     fn run_reads_the_speech_settings() {
         let path = mp_os::temp_dir().join(format!("mp-scripts-speech-{}.py", mp_os::process_id()));
-        std::fs::write(
+        mp_os::fs::write(
             &path,
             "print(MainV2.speechEnable, MainV2.speech_armed_only)\n",
         )
@@ -2633,7 +2633,7 @@ mod tests {
             assert_eq!(tab.result, Some(Ok(())));
             assert_eq!(tab.console, printed);
         }
-        let _ = std::fs::remove_file(&path);
+        let _ = mp_os::fs::remove_file(&path);
     }
 
     /// The vehicle's mission, read as the Plan screen's Read reads it.
@@ -2679,7 +2679,7 @@ mod tests {
             wasm_thread::sleep(Duration::from_millis(50));
         }
         let script = |name: &str| {
-            std::fs::read_to_string(format!(
+            mp_os::fs::read_to_string(format!(
                 "{}/../../testdata/scripts/{name}",
                 env!("CARGO_MANIFEST_DIR")
             ))

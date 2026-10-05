@@ -135,7 +135,7 @@ pub fn extract(archive: &[u8], to: &Path, inflate: Inflate<'_>) -> Result<usize,
     for entry in entries(archive)? {
         let path = destination(to, &entry.name)?;
         if entry.name.ends_with('/') || entry.name.ends_with('\\') {
-            std::fs::create_dir_all(&path).map_err(|why| why.to_string())?;
+            mp_os::fs::create_dir_all(&path).map_err(|why| why.to_string())?;
             continue;
         }
         if entry.flags & 1 != 0 {
@@ -160,9 +160,9 @@ pub fn extract(archive: &[u8], to: &Path, inflate: Inflate<'_>) -> Result<usize,
             return Err(format!("{}: the wrong length once inflated", entry.name));
         }
         if let Some(parent) = path.parent() {
-            std::fs::create_dir_all(parent).map_err(|why| why.to_string())?;
+            mp_os::fs::create_dir_all(parent).map_err(|why| why.to_string())?;
         }
-        std::fs::write(&path, contents).map_err(|why| format!("{}: {why}", path.display()))?;
+        mp_os::fs::write(&path, contents).map_err(|why| format!("{}: {why}", path.display()))?;
         written += 1;
     }
     Ok(written)
@@ -222,7 +222,7 @@ pub(crate) mod tests {
 
     fn scratch(name: &str) -> PathBuf {
         let dir = mp_os::temp_dir().join(format!("mp-video-zip-{name}-{}", mp_os::process_id()));
-        let _ = std::fs::remove_dir_all(&dir);
+        let _ = mp_os::fs::remove_dir_all(&dir);
         dir
     }
 
@@ -246,16 +246,16 @@ pub(crate) mod tests {
         let to = scratch("ok");
         assert_eq!(extract(&zip, &to, &reversing).unwrap(), 2);
         assert_eq!(
-            std::fs::read(to.join("gstreamer/1.0/x86_64/bin/gst-launch-1.0.exe")).unwrap(),
+            mp_os::fs::read(to.join("gstreamer/1.0/x86_64/bin/gst-launch-1.0.exe")).unwrap(),
             b"MZ launcher"
         );
         assert_eq!(
-            std::fs::read(to.join("gstreamer/1.0/x86_64/lib/note.txt")).unwrap(),
+            mp_os::fs::read(to.join("gstreamer/1.0/x86_64/lib/note.txt")).unwrap(),
             b"hello"
         );
         // Again over the same files: replaced, not refused.
         assert_eq!(extract(&zip, &to, &reversing).unwrap(), 2);
-        let _ = std::fs::remove_dir_all(&to);
+        let _ = mp_os::fs::remove_dir_all(&to);
     }
 
     #[test]

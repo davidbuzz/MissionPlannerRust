@@ -25,6 +25,7 @@
 //! carries USB VID/PID because board detection (Deliverable 13) identifies autopilots by them, exactly as
 //! `BoardDetect.cs` does today.
 
+use mp_os::fs::FsExt as _;
 use std::io::{self, Read, Write};
 use std::time::Duration;
 
@@ -108,14 +109,14 @@ fn dev_listing() -> Vec<String> {
     for directory in ["/dev/", "/dev/serial/by-id/"] {
         // The C# wraps each glob in its own try/catch: a directory that cannot be read lists
         // nothing, and the others still count.
-        let Ok(read) = std::fs::read_dir(directory) else {
+        let Ok(read) = mp_os::fs::read_dir(directory) else {
             continue;
         };
         for entry in read.flatten() {
             let path = format!("{directory}{}", entry.file_name().to_string_lossy());
             // stat() rather than the entry's own type, because GetFiles decides by what a symlink
             // points at; a dangling link fails the stat and counts as a file, as it does there.
-            let is_dir = std::fs::metadata(&path).is_ok_and(|meta| meta.is_dir());
+            let is_dir = mp_os::fs::metadata(&path).is_ok_and(|meta| meta.os_is_dir());
             listing.push(if is_dir { format!("{path}/") } else { path });
         }
     }
@@ -126,7 +127,7 @@ fn dev_listing() -> Vec<String> {
 /// realpath() reads links and never opens the device.
 #[cfg(unix)]
 fn device_node(name: &str) -> Option<String> {
-    std::fs::canonicalize(name)
+    mp_os::fs::canonicalize(name)
         .ok()
         .map(|path| path.to_string_lossy().into_owned())
 }
@@ -169,7 +170,7 @@ impl SerialTransport {
         // C#: ExtLibs/Comms/CommsSerialPort.cs:502-504 - a device path that is not there fails
         // before the driver is asked, with the message Mission Planner shows. An unplugged board's
         // by-id link is gone or dangling, and both land here.
-        if path.starts_with('/') && !std::path::Path::new(path).exists() {
+        if path.starts_with('/') && !std::path::Path::new(path).os_exists() {
             return Err(OpenError::io(
                 format!("opening {path} at {baud} baud"),
                 io::Error::new(io::ErrorKind::NotFound, "No such device"),

@@ -104,7 +104,7 @@ pub fn export_files<'a>(
     directory: &Path,
 ) -> std::io::Result<Exported> {
     let mut exported = Exported::default();
-    let mut open: BTreeMap<String, std::fs::File> = BTreeMap::new();
+    let mut open: BTreeMap<String, mp_os::fs::File> = BTreeMap::new();
     for record in records {
         if record.name != "FILE" {
             continue;
@@ -132,9 +132,9 @@ pub fn export_files<'a>(
         };
         if !open.contains_key(name) {
             if let Some(parent) = path.parent() {
-                std::fs::create_dir_all(parent)?;
+                mp_os::fs::create_dir_all(parent)?;
             }
-            let file = std::fs::OpenOptions::new()
+            let file = mp_os::fs::OpenOptions::new()
                 .write(true)
                 .create(true)
                 .truncate(true)
@@ -159,6 +159,7 @@ pub fn export_files<'a>(
 
 #[cfg(test)]
 mod tests {
+    use mp_os::fs::FsExt as _;
     use super::*;
 
     /// Every cell, then a comma; a short row padded to the grid's width.
@@ -207,9 +208,9 @@ mod tests {
     #[test]
     fn files_are_written_record_by_record() {
         let folder = mp_os::temp_dir().join(format!("mp-export-{}", mp_os::process_id()));
-        let _ = std::fs::remove_dir_all(&folder);
-        std::fs::create_dir_all(folder.join("APM")).expect("folder");
-        std::fs::write(folder.join("APM/a.txt"), b"old contents that are longer").expect("old");
+        let _ = mp_os::fs::remove_dir_all(&folder);
+        mp_os::fs::create_dir_all(folder.join("APM")).expect("folder");
+        mp_os::fs::write(folder.join("APM/a.txt"), b"old contents that are longer").expect("old");
         let records = [
             file("/APM/a.txt", 6, b"world"),
             file("/APM/a.txt", 0, b"hello "),
@@ -220,15 +221,15 @@ mod tests {
         assert_eq!(exported.files, vec!["/APM/a.txt", "b.txt"]);
         assert_eq!(exported.refused, vec!["../evil.txt"]);
         assert_eq!(
-            std::fs::read(folder.join("APM/a.txt")).expect("a"),
+            mp_os::fs::read(folder.join("APM/a.txt")).expect("a"),
             b"hello world"
         );
-        assert_eq!(std::fs::read(folder.join("b.txt")).expect("b"), b"b");
+        assert_eq!(mp_os::fs::read(folder.join("b.txt")).expect("b"), b"b");
         assert!(
             !folder
                 .parent()
-                .is_some_and(|up| up.join("evil.txt").exists())
+                .is_some_and(|up| up.join("evil.txt").os_exists())
         );
-        let _ = std::fs::remove_dir_all(&folder);
+        let _ = mp_os::fs::remove_dir_all(&folder);
     }
 }

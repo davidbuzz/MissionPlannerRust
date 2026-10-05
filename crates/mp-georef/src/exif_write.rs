@@ -1756,7 +1756,7 @@ pub fn write_coordinates_to_image(
     append_text: Output<'_>,
 ) {
     // File.ReadAllBytes is outside the try: an unreadable photo throws out of the loop.
-    let Ok(bytes) = std::fs::read(filename) else {
+    let Ok(bytes) = mp_os::fs::read(filename) else {
         append_text(&format!("There was a problem with image {filename}"));
         return;
     };
@@ -1768,8 +1768,8 @@ pub fn write_coordinates_to_image(
             photos::file_stem(filename),
             photos::extension(filename)
         );
-        std::fs::create_dir_all(&folder).map_err(|e| ExifError(e.to_string()))?;
-        std::fs::write(&output, out).map_err(|e| ExifError(e.to_string()))
+        mp_os::fs::create_dir_all(&folder).map_err(|e| ExifError(e.to_string()))?;
+        mp_os::fs::write(&output, out).map_err(|e| ExifError(e.to_string()))
     });
     if result.is_err() {
         append_text(&format!("There was a problem with image {filename}"));

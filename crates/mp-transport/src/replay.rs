@@ -76,7 +76,7 @@ impl ReplayTransport {
     /// Loads a log file into memory.
     pub fn open(path: impl AsRef<Path>) -> Result<Self, OpenError> {
         let path = path.as_ref();
-        let data = std::fs::read(path)
+        let data = mp_os::fs::read(path)
             .map_err(|e| OpenError::io(format!("reading {}", path.display()), e))?;
         Ok(Self {
             description: describe(path.display(), data.len()),
@@ -675,7 +675,7 @@ mod tests {
     fn a_recorded_flight_splits_into_timestamped_frames() {
         let path =
             Path::new(env!("CARGO_MANIFEST_DIR")).join("../../testdata/mavlink/autotest.tlog");
-        let Ok(data) = std::fs::read(&path) else {
+        let Ok(data) = mp_os::fs::read(&path) else {
             eprintln!("skipped: {} is not here", path.display());
             return;
         };

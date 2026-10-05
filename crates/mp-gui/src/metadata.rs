@@ -420,7 +420,7 @@ mod tests {
     fn every_sitl_name_is_documented_by_its_own_name_with_or_without_the_real_file() {
         let fixture = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("../../testdata/params/sitl-copter.param");
-        let text = std::fs::read_to_string(&fixture).expect("the SITL dump");
+        let text = mp_os::fs::read_to_string(&fixture).expect("the SITL dump");
         let names: Vec<&str> = text
             .lines()
             .filter_map(|line| line.split(',').next())

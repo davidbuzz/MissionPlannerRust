@@ -228,7 +228,7 @@ mod tests {
         };
         // The DEV WebAssembly build is not the stable release asked for.
         assert!(text.contains("lists no WebAssembly SITL yet"), "{text}");
-        let _ = std::fs::remove_dir_all(dir);
+        let _ = mp_os::fs::remove_dir_all(dir);
     }
 
     /// The Linux launcher with its record: downloaded to the name without `.elf`, executable.
@@ -251,17 +251,17 @@ mod tests {
         );
         assert_eq!(image, Image::Found(dir.join("ArduCopter")));
         assert_eq!(
-            std::fs::read(dir.join("ArduCopter")).ok(),
+            mp_os::fs::read(dir.join("ArduCopter")).ok(),
             Some(b"\x7fELF".to_vec())
         );
         #[cfg(unix)]
         {
             use std::os::unix::fs::PermissionsExt as _;
-            let mode = std::fs::metadata(dir.join("ArduCopter"))
+            let mode = mp_os::fs::metadata(dir.join("ArduCopter"))
                 .map(|m| m.permissions().mode() & 0o777)
                 .unwrap_or_default();
             assert_eq!(mode, 0o755);
         }
-        let _ = std::fs::remove_dir_all(dir);
+        let _ = mp_os::fs::remove_dir_all(dir);
     }
 }

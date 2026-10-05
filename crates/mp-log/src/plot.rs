@@ -499,7 +499,7 @@ mod tests {
     fn fixture() -> Vec<u8> {
         let path =
             std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../testdata/dataflash.bin");
-        std::fs::read(&path).unwrap_or_else(|err| panic!("reading {}: {err}", path.display()))
+        mp_os::fs::read(&path).unwrap_or_else(|err| panic!("reading {}: {err}", path.display()))
     }
 
     /// The inventory comes from the log's own FMT messages, so it must find real ArduPilot fields.

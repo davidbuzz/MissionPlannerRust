@@ -41,6 +41,7 @@
 //! where every slippy-map tool writes `z/x/y`. And the provider directory is the C# provider's
 //! `Name` - `OpenStreetMap`, `GoogleSatelliteMap` - not any identifier of ours.
 
+use mp_os::fs::FsExt as _;
 use std::path::{Path, PathBuf};
 
 use mp_units::TileId;
@@ -204,13 +205,13 @@ impl TileCache {
     #[must_use]
     pub fn read(&self, provider: &str, tile: TileId) -> Option<CachedTile> {
         let path = self.path_for(provider, tile);
-        let bytes = std::fs::read(&path).ok()?;
+        let bytes = mp_os::fs::read(&path).ok()?;
         match ImageFormat::sniff(&bytes) {
             Some(format) if bytes.len() >= MINIMUM_TILE_BYTES => Some(CachedTile { bytes, format }),
             _ => {
                 // Truncated, empty, or an error page saved as a tile. Remove it so the next
                 // request fetches rather than finding the same rubbish again.
-                let _ = std::fs::remove_file(&path);
+                let _ = mp_os::fs::remove_file(&path);
                 None
             }
         }
@@ -240,18 +241,18 @@ impl TileCache {
         let directory = final_path
             .parent()
             .map_or_else(|| self.tile_root(), Path::to_path_buf);
-        std::fs::create_dir_all(&directory).map_err(|source| CacheError::Io {
+        mp_os::fs::create_dir_all(&directory).map_err(|source| CacheError::Io {
             path: directory.clone(),
             source,
         })?;
 
         let temporary = directory.join(format!("{}.{CACHED_EXTENSION}.part", tile.x));
-        std::fs::write(&temporary, bytes).map_err(|source| CacheError::Io {
+        mp_os::fs::write(&temporary, bytes).map_err(|source| CacheError::Io {
             path: temporary.clone(),
             source,
         })?;
-        std::fs::rename(&temporary, &final_path).map_err(|source| {
-            let _ = std::fs::remove_file(&temporary);
+        mp_os::fs::rename(&temporary, &final_path).map_err(|source| {
+            let _ = mp_os::fs::remove_file(&temporary);
             CacheError::Io {
                 path: final_path.clone(),
                 source,
@@ -264,7 +265,7 @@ impl TileCache {
     /// `// C#: ExtLibs/Maps/MyImageCache.cs:186-215`
     #[must_use]
     pub fn contains(&self, provider: &str, tile: TileId) -> bool {
-        self.path_for(provider, tile).is_file()
+        self.path_for(provider, tile).os_is_file()
     }
 
     /// Total bytes held, and how many tiles that is, across every provider - including ones the
@@ -286,7 +287,7 @@ impl TileCache {
     /// Deletes every cached tile for one provider.
     pub fn clear(&self, provider: &str) -> Result<(), CacheError> {
         let directory = self.tile_root().join(provider);
-        match std::fs::remove_dir_all(&directory) {
+        match mp_os::fs::remove_dir_all(&directory) {
             Ok(()) => Ok(()),
             // Nothing cached is not a failure to clear it.
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
@@ -317,13 +318,13 @@ pub struct CacheUsage {
 }
 
 /// Visits every file under a directory.
-fn walk(directory: &Path, visit: &mut impl FnMut(&std::fs::DirEntry)) {
-    let Ok(entries) = std::fs::read_dir(directory) else {
+fn walk(directory: &Path, visit: &mut impl FnMut(&mp_os::fs::DirEntry)) {
+    let Ok(entries) = mp_os::fs::read_dir(directory) else {
         return;
     };
     for entry in entries.flatten() {
         let path = entry.path();
-        if path.is_dir() {
+        if path.os_is_dir() {
             walk(&path, visit);
         } else {
             visit(&entry);
@@ -333,6 +334,7 @@ fn walk(directory: &Path, visit: &mut impl FnMut(&std::fs::DirEntry)) {
 
 #[cfg(test)]
 mod tests {
+    use mp_os::fs::FsExt as _;
     use super::*;
 
     /// The C# provider name for OpenStreetMap, as the tests file tiles under it.
@@ -348,14 +350,14 @@ mod tests {
                 mp_os::process_id(),
                 wasm_thread::current().id()
             ));
-            let _ = std::fs::remove_dir_all(&path);
+            let _ = mp_os::fs::remove_dir_all(&path);
             Self(path)
         }
     }
 
     impl Drop for Scratch {
         fn drop(&mut self) {
-            let _ = std::fs::remove_dir_all(&self.0);
+            let _ = mp_os::fs::remove_dir_all(&self.0);
         }
     }
 
@@ -403,7 +405,7 @@ mod tests {
         let on_disk = scratch
             .0
             .join("TileDBv3/en/OpenStreetMap/14/9814/15089.jpg");
-        assert!(on_disk.is_file(), "{}", on_disk.display());
+        assert!(on_disk.os_is_file(), "{}", on_disk.display());
         assert!(
             !scratch
                 .0
@@ -482,10 +484,10 @@ mod tests {
 
         // Corrupt it behind the cache's back, as a half-finished write or a bad disk would.
         let path = cache.path_for(OSM, tile());
-        std::fs::write(&path, b"nonsense").expect("overwrite");
+        mp_os::fs::write(&path, b"nonsense").expect("overwrite");
 
         assert!(cache.read(OSM, tile()).is_none());
-        assert!(!path.exists(), "the corrupt entry should have been removed");
+        assert!(!path.os_exists(), "the corrupt entry should have been removed");
     }
 
     #[test]
@@ -493,11 +495,11 @@ mod tests {
         let scratch = Scratch::new("empty");
         let cache = TileCache::new(&scratch.0);
         let path = cache.path_for(OSM, tile());
-        std::fs::create_dir_all(path.parent().expect("a parent")).expect("mkdir");
-        std::fs::write(&path, b"").expect("write empty");
+        mp_os::fs::create_dir_all(path.parent().expect("a parent")).expect("mkdir");
+        mp_os::fs::write(&path, b"").expect("write empty");
 
         assert!(cache.read(OSM, tile()).is_none());
-        assert!(!path.exists());
+        assert!(!path.os_exists());
     }
 
     #[test]

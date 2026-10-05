@@ -57,6 +57,7 @@
 // This module is internal to the binary; `pub` here documents intent rather than exporting API.
 #![allow(unreachable_pub)]
 
+use mp_os::fs::FsExt as _;
 use mp_os::Lock as _;
 use std::collections::{BTreeMap, HashMap};
 use std::io::{Read, Write};
@@ -572,7 +573,7 @@ fn route<C: Connection>(
         let kml = wps_kml(&lock(&shared.snapshot).plan_points);
         write_all(stream, &[kml_header(kml.len()).as_bytes(), kml.as_bytes()])
     } else if url.contains(" /block_plane_0.dae") {
-        match std::fs::read(files.join("block_plane_0.dae")) {
+        match mp_os::fs::read(files.join("block_plane_0.dae")) {
             Ok(bytes) => {
                 let _ = write_all(
                     stream,
@@ -586,7 +587,7 @@ fn route<C: Connection>(
         }
         false
     } else if url.contains(" /hud.html") {
-        match std::fs::read(files.join("hud.html")) {
+        match mp_os::fs::read(files.join("hud.html")) {
             Ok(bytes) => {
                 let header = format!(
                     "HTTP/1.1 200 OK\r\nConnection: close\r\nContent-Type: text/html\r\nContent-Length: {}\r\n\r\n",
@@ -1301,7 +1302,7 @@ fn static_file<C: Connection>(stream: &mut C, head: &str, url: &str, root: &Path
         _ => false,
     };
     if !inside {
-        if full.exists() {
+        if full.os_exists() {
             let _ = write_all(
                 stream,
                 &[b"HTTP/1.1 403 Forbidden\r\nContent-Length: 0\r\n\r\n"],
@@ -1310,7 +1311,7 @@ fn static_file<C: Connection>(stream: &mut C, head: &str, url: &str, root: &Path
         }
         return not_found_keep(stream);
     }
-    let Ok(bytes) = std::fs::read(&full) else {
+    let Ok(bytes) = mp_os::fs::read(&full) else {
         return not_found_keep(stream);
     };
     let content_type = if file.contains(".htm") {
@@ -1322,14 +1323,17 @@ fn static_file<C: Connection>(stream: &mut C, head: &str, url: &str, root: &Path
     } else {
         "text/plain"
     };
-    let modified = std::fs::metadata(&full)
+    let modified = mp_os::fs::metadata(&full)
         .and_then(|meta| meta.modified())
         .ok()
-        .map(|time| {
-            chrono::DateTime::<chrono::Utc>::from(time)
-                .format("%a, %d %b %Y %H:%M:%S GMT")
-                .to_string()
+        .and_then(|time| {
+            // By its time since the epoch, which a page's file times (web_time's) and std's both
+            // give.
+            let since = time.duration_since(web_time::UNIX_EPOCH).ok()?;
+            let seconds = i64::try_from(since.as_secs()).ok()?;
+            chrono::DateTime::<chrono::Utc>::from_timestamp(seconds, since.subsec_nanos())
         })
+        .map(|time| time.format("%a, %d %b %Y %H:%M:%S GMT").to_string())
         .unwrap_or_default();
     if let Some(since) = header_value(head, "If-Modified-Since")
         && since.eq_ignore_ascii_case(&modified)
@@ -1833,10 +1837,10 @@ mod tests {
     #[test]
     fn mavelous_files_stay_inside_their_folder() {
         let dir = mp_os::temp_dir().join(format!("mp-http-{}", mp_os::process_id()));
-        let _ = std::fs::remove_dir_all(&dir);
-        std::fs::create_dir_all(dir.join("mavelous_web")).unwrap();
-        std::fs::write(dir.join("mavelous_web/index.html"), "<html>mavelous</html>").unwrap();
-        std::fs::write(dir.join("secret.txt"), "no").unwrap();
+        let _ = mp_os::fs::remove_dir_all(&dir);
+        mp_os::fs::create_dir_all(dir.join("mavelous_web")).unwrap();
+        mp_os::fs::write(dir.join("mavelous_web/index.html"), "<html>mavelous</html>").unwrap();
+        mp_os::fs::write(dir.join("secret.txt"), "no").unwrap();
         let shared = shared();
         let page = get("/mav/", LOOPBACK, &shared, &dir);
         assert!(page.starts_with("HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nConnection: keep-alive\r\nLast-Modified: "));
@@ -1860,7 +1864,7 @@ mod tests {
         assert!(!climb.contains("no\r"));
         let missing = get("/mav/none.js", LOOPBACK, &shared, &dir);
         assert!(missing.starts_with("HTTP/1.1 404 not found\r\nConnection: Keep-Alive"));
-        let _ = std::fs::remove_dir_all(&dir);
+        let _ = mp_os::fs::remove_dir_all(&dir);
     }
 
     /// `wps` as JSON: `Locationwp`'s fields by sequence number.

@@ -627,7 +627,7 @@ mod tests {
     fn a_second_ask_while_the_first_is_being_read_reads_the_disk_once() {
         let root =
             mp_os::temp_dir().join(format!("mp-tiles-store-second-ask-{}", mp_os::process_id()));
-        let _ = std::fs::remove_dir_all(&root);
+        let _ = mp_os::fs::remove_dir_all(&root);
         let cache = TileCache::new(&root);
         let tile = TileId::new(10, 500, 600).unwrap();
         cache.write(BING_MAP.cache_name, tile, &png()).unwrap();
@@ -670,6 +670,6 @@ mod tests {
         assert_eq!(stats.disk_hits, 1, "{stats:?}");
         assert_eq!(stats.misses, 2, "{stats:?}");
         assert!(shared.memory.os_lock().unwrap().tiles.contains_key(&tile));
-        let _ = std::fs::remove_dir_all(&root);
+        let _ = mp_os::fs::remove_dir_all(&root);
     }
 }

@@ -38,6 +38,7 @@
 //! again with the camera being edited (`GridUI.cs:458-498, 1567-1602`). The user data directory
 //! is this application's own, `mp_settings::user_data_directory()`.
 
+use mp_os::fs::FsExt as _;
 use std::path::Path;
 
 use crate::dotnet::{general_f32, parse_f32};
@@ -98,12 +99,12 @@ impl Cameras {
         let Some(path) = user_data_directory.map(|directory| directory.join(USER_FILE)) else {
             return (cameras, None);
         };
-        if !path.exists() {
+        if !path.os_exists() {
             let written = cameras.write(&path).err();
             return (cameras, written);
         }
         // The reader's outer `catch` ("Bad Camera File") swallows a file it cannot open.
-        if let Ok(bytes) = std::fs::read(&path) {
+        if let Ok(bytes) = mp_os::fs::read(&path) {
             cameras.read(&String::from_utf8_lossy(&bytes));
         }
         (cameras, None)
@@ -117,9 +118,9 @@ impl Cameras {
     /// The directory or the file cannot be written: the `catch`'s exception.
     pub fn write(&self, path: &Path) -> std::io::Result<()> {
         if let Some(parent) = path.parent() {
-            std::fs::create_dir_all(parent)?;
+            mp_os::fs::create_dir_all(parent)?;
         }
-        std::fs::write(path, self.to_xml())
+        mp_os::fs::write(path, self.to_xml())
     }
 
     /// What `xmlcamera(true, ...)`'s `XmlTextWriter` puts in the file, byte for byte: ASCII,
@@ -488,7 +489,7 @@ mod tests {
             return;
         };
         let path = std::path::PathBuf::from(tree).join("camerasBuiltin.xml");
-        let Ok(shipped) = std::fs::read_to_string(&path) else {
+        let Ok(shipped) = mp_os::fs::read_to_string(&path) else {
             eprintln!("skipped: MP_SRC does not name a clone of https://github.com/ArduPilot/MissionPlanner");
             return;
         };
@@ -550,7 +551,7 @@ mod tests {
     fn scratch(test: &str) -> std::path::PathBuf {
         let dir =
             mp_os::temp_dir().join(format!("mp-mission-cameras-{test}-{}", mp_os::process_id()));
-        let _ = std::fs::remove_dir_all(&dir);
+        let _ = mp_os::fs::remove_dir_all(&dir);
         dir
     }
 
@@ -660,8 +661,8 @@ mod tests {
             })
         );
         // Read back and written again, the file is the same bytes.
-        assert_eq!(read.to_xml(), std::fs::read(dir.join(USER_FILE)).unwrap());
-        let _ = std::fs::remove_dir_all(&dir);
+        assert_eq!(read.to_xml(), mp_os::fs::read(dir.join(USER_FILE)).unwrap());
+        let _ = mp_os::fs::remove_dir_all(&dir);
     }
 
     /// No `cameras.xml`: the constructor's `xmlcamera(false, ...)` writes it, every shipped
@@ -673,7 +674,7 @@ mod tests {
         let (cameras, error) = Cameras::load(Some(&dir));
         assert!(error.is_none(), "{error:?}");
         assert_eq!(cameras, Cameras::builtin());
-        let written = std::fs::read(dir.join(USER_FILE)).expect("written");
+        let written = mp_os::fs::read(dir.join(USER_FILE)).expect("written");
         assert_eq!(written, Cameras::builtin().to_xml());
         let mut reread = Cameras::default();
         reread.read(&String::from_utf8(written).unwrap());
@@ -681,7 +682,7 @@ mod tests {
         for name in reread.items() {
             assert_eq!(reread.get(name), Cameras::builtin().get(name), "{name}");
         }
-        let _ = std::fs::remove_dir_all(&dir);
+        let _ = mp_os::fs::remove_dir_all(&dir);
     }
 
     /// A directory that cannot be made: the cameras load all the same, and the error is the
@@ -689,12 +690,12 @@ mod tests {
     #[test]
     fn an_unwritable_directory_is_the_writes_error() {
         let dir = scratch("unwritable");
-        std::fs::create_dir_all(dir.parent().unwrap()).unwrap();
-        std::fs::write(&dir, b"a file where the directory would be").unwrap();
+        mp_os::fs::create_dir_all(dir.parent().unwrap()).unwrap();
+        mp_os::fs::write(&dir, b"a file where the directory would be").unwrap();
         let (cameras, error) = Cameras::load(Some(&dir.join("inner")));
         assert!(error.is_some());
         assert_eq!(cameras, Cameras::builtin());
-        let _ = std::fs::remove_file(&dir);
+        let _ = mp_os::fs::remove_file(&dir);
     }
 
     #[test]

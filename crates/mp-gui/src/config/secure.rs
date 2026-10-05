@@ -415,7 +415,7 @@ impl Secure {
             (file.replace(".pem", "_public_key.dat"), key.public_dat()),
         ];
         for (path, text) in files {
-            if let Err(err) = std::fs::write(&path, text) {
+            if let Err(err) = mp_os::fs::write(&path, text) {
                 self.threw(format!("{path}: {err}"));
                 return;
             }
@@ -428,7 +428,7 @@ impl Secure {
     /// Private Key, after the dialog: the pair read, and its public key shown.
     /// `// C#: GCSViews/ConfigurationView/ConfigSecureAP.cs:34-50`
     fn read_key(&mut self, file: &Path) {
-        let read = std::fs::read_to_string(file)
+        let read = mp_os::fs::read_to_string(file)
             .map_err(|err| err.to_string())
             .and_then(|text| KeyPair::from_key_file(&text));
         match read {
@@ -449,7 +449,7 @@ impl Secure {
             self.threw("System.NullReferenceException: no key: Generate Key or Private Key first");
             return;
         };
-        let signed = std::fs::read(file)
+        let signed = mp_os::fs::read(file)
             .map_err(|err| err.to_string())
             .and_then(|bl| signed::create_signed_bl(&key, &bl));
         self.save_signed(signed, &signed::signed_path(file, ".bin"));
@@ -464,7 +464,7 @@ impl Secure {
             self.threw("System.NullReferenceException: no key: Generate Key or Private Key first");
             return;
         };
-        let signed = std::fs::read_to_string(file)
+        let signed = mp_os::fs::read_to_string(file)
             .map_err(|err| err.to_string())
             .and_then(|apj| signed::create_signed_apj(&key, &apj));
         self.save_signed(signed, &signed::signed_path(file, ".apj"));
@@ -472,7 +472,7 @@ impl Secure {
 
     /// `File.WriteAllBytes` of what was signed, or the exception.
     fn save_signed(&mut self, signed: Result<Vec<u8>, String>, to: &Path) {
-        match signed.and_then(|bytes| std::fs::write(to, bytes).map_err(|err| err.to_string())) {
+        match signed.and_then(|bytes| mp_os::fs::write(to, bytes).map_err(|err| err.to_string())) {
             Ok(()) => self.written.push(to.to_path_buf()),
             Err(why) => self.threw(why),
         }
@@ -760,8 +760,8 @@ mod tests {
 
     fn scratch(name: &str) -> PathBuf {
         let dir = mp_os::temp_dir().join(format!("mp-gui-secure-{}-{name}", mp_os::process_id()));
-        let _ = std::fs::remove_dir_all(&dir);
-        std::fs::create_dir_all(&dir).expect("a scratch directory");
+        let _ = mp_os::fs::remove_dir_all(&dir);
+        mp_os::fs::create_dir_all(&dir).expect("a scratch directory");
         dir
     }
 
@@ -804,11 +804,11 @@ mod tests {
         let pubkey = secure.boxes()[0].to_owned();
         assert_eq!(pubkey.len(), 44, "32 bytes in base64");
         assert_eq!(
-            std::fs::read_to_string(&public).ok(),
+            mp_os::fs::read_to_string(&public).ok(),
             Some(format!("PUBLIC_KEYV1:{pubkey}"))
         );
         assert!(
-            std::fs::read_to_string(&pem)
+            mp_os::fs::read_to_string(&pem)
                 .is_ok_and(|text| text.starts_with("-----BEGIN PRIVATE KEY-----"))
         );
         assert_eq!(secure.message().map(|m| m.text.as_str()), Some(PROTECT));
@@ -821,7 +821,7 @@ mod tests {
             assert_eq!(reader.boxes()[0], pubkey, "{}", file.display());
             assert_eq!(reader.take_thrown(), None);
         }
-        let _ = std::fs::remove_dir_all(dir);
+        let _ = mp_os::fs::remove_dir_all(dir);
     }
 
     /// BootLoader and Firmware sign with the key loaded and save beside the file, showing its
@@ -832,8 +832,8 @@ mod tests {
         let fixtures = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../testdata/secure");
         let bl = dir.join("bl.bin");
         let apj = dir.join("fw.apj");
-        std::fs::copy(fixtures.join("bl.bin"), &bl).expect("copied");
-        std::fs::copy(fixtures.join("unsigned.apj"), &apj).expect("copied");
+        mp_os::fs::copy(fixtures.join("bl.bin"), &bl).expect("copied");
+        mp_os::fs::copy(fixtures.join("unsigned.apj"), &apj).expect("copied");
 
         let mut secure = shown();
         pick(&mut secure, Pick::Bootloader, &bl);
@@ -848,7 +848,7 @@ mod tests {
         let seed: [u8; 32] = std::array::from_fn(|i| u8::try_from(i * 7 + 1).unwrap_or(0));
         let key = KeyPair::from_seed(&seed).expect("a pair");
         let dat = dir.join("key.dat");
-        std::fs::write(&dat, key.private_dat()).expect("written");
+        mp_os::fs::write(&dat, key.private_dat()).expect("written");
         pick(&mut secure, Pick::PrivateKey, &dat);
 
         pick(&mut secure, Pick::Bootloader, &bl);
@@ -856,8 +856,8 @@ mod tests {
         let signed_bl = dir.join("bl-signed.bin");
         assert_eq!(secure.written(), std::slice::from_ref(&signed_bl));
         assert_eq!(
-            std::fs::read(&signed_bl).ok(),
-            std::fs::read(fixtures.join("bl-signed-by-mp.bin")).ok(),
+            mp_os::fs::read(&signed_bl).ok(),
+            mp_os::fs::read(fixtures.join("bl-signed-by-mp.bin")).ok(),
             "Mission Planner's own output"
         );
 
@@ -867,19 +867,19 @@ mod tests {
         let signed_apj = dir.join("fw-signed.apj");
         assert_eq!(secure.written(), std::slice::from_ref(&signed_apj));
         assert!(
-            std::fs::read_to_string(&signed_apj)
+            mp_os::fs::read_to_string(&signed_apj)
                 .is_ok_and(|text| text.contains("\"signed_firmware\": true"))
         );
 
         // A bin with no key table throws.
         let empty = dir.join("empty.bin");
-        std::fs::write(&empty, [0u8; 32]).expect("written");
+        mp_os::fs::write(&empty, [0u8; 32]).expect("written");
         pick(&mut secure, Pick::Bootloader, &empty);
         assert_eq!(
             secure.take_thrown().as_deref(),
             Some("Invalid bin, descriptor not found")
         );
-        let _ = std::fs::remove_dir_all(dir);
+        let _ = mp_os::fs::remove_dir_all(dir);
     }
 
     /// Cancel, and an Open on a file that is not there, do nothing.

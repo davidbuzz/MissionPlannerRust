@@ -95,7 +95,7 @@ impl Settings {
     /// Reads the settings, or the defaults if anything at all is wrong.
     #[must_use]
     pub fn load() -> Self {
-        let own = std::fs::read_to_string(Self::path())
+        let own = mp_os::fs::read_to_string(Self::path())
             .ok()
             .map(|text| Self::parse(&text))
             .unwrap_or_default();
@@ -213,11 +213,11 @@ impl Settings {
     pub fn save(&self) -> std::io::Result<()> {
         let path = Self::path();
         if let Some(parent) = path.parent() {
-            std::fs::create_dir_all(parent)?;
+            mp_os::fs::create_dir_all(parent)?;
         }
         let temporary = path.with_extension("tmp");
-        std::fs::write(&temporary, self.render())?;
-        std::fs::rename(&temporary, &path)
+        mp_os::fs::write(&temporary, self.render())?;
+        mp_os::fs::rename(&temporary, &path)
     }
 }
 
@@ -929,7 +929,7 @@ impl Persisted {
 /// Reads `config.xml` for [`Persisted::at`]: a missing or empty file is an empty dictionary, and
 /// any other failure is the reason.
 fn read_config(path: &Path) -> Result<mp_settings::Config, String> {
-    let text = match std::fs::read_to_string(path) {
+    let text = match mp_os::fs::read_to_string(path) {
         Ok(text) => text,
         Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
             return Ok(mp_settings::Config::default());
@@ -954,6 +954,7 @@ fn parse_size(value: &str) -> Option<(u32, u32)> {
 
 #[cfg(test)]
 mod tests {
+    use mp_os::fs::FsExt as _;
     use super::*;
 
     /// A file Mission Planner's `XmlTextWriter` wrote, from `mp-settings`'s fixtures.
@@ -966,8 +967,8 @@ mod tests {
         fn new(name: &str) -> Self {
             let path =
                 mp_os::temp_dir().join(format!("mp-gui-persisted-{name}-{}", mp_os::process_id()));
-            let _ = std::fs::remove_dir_all(&path);
-            std::fs::create_dir_all(&path).expect("scratch directory");
+            let _ = mp_os::fs::remove_dir_all(&path);
+            mp_os::fs::create_dir_all(&path).expect("scratch directory");
             Self(path)
         }
 
@@ -979,15 +980,15 @@ mod tests {
 
         fn seed(&self, text: &str) -> PathBuf {
             let path = self.config();
-            std::fs::create_dir_all(path.parent().expect("parent")).expect("data directory");
-            std::fs::write(&path, text).expect("seed config.xml");
+            mp_os::fs::create_dir_all(path.parent().expect("parent")).expect("data directory");
+            mp_os::fs::write(&path, text).expect("seed config.xml");
             path
         }
     }
 
     impl Drop for Scratch {
         fn drop(&mut self) {
-            let _ = std::fs::remove_dir_all(&self.0);
+            let _ = mp_os::fs::remove_dir_all(&self.0);
         }
     }
 
@@ -1011,7 +1012,7 @@ mod tests {
 
         // Nothing reaches the file until the screen is left and a save follows it.
         persisted.planner_deactivated(&plan, AltitudeFrame::Terrain);
-        assert!(!path.exists());
+        assert!(!path.os_exists());
         persisted.save_config(SaveEvent::FlightData).expect("saved");
         let saved = reload(&path);
         assert_eq!(saved.get("TXT_homelat"), Some("-35.25"));
@@ -1049,7 +1050,7 @@ mod tests {
         let mut persisted = Persisted::at(Some(path.clone()));
         persisted.planner_deactivated(&Plan::default(), AltitudeFrame::Relative);
         persisted.save_config(SaveEvent::Close).expect("saved");
-        let text = std::fs::read_to_string(&path).expect("read");
+        let text = mp_os::fs::read_to_string(&path).expect("read");
         assert!(text.contains("\n  <TXT_homelat />"), "{text}");
         assert_eq!(reload(&path).get("TXT_homelat"), Some(""));
         // Which MainV2 reads as no home: GetDouble of "" is 0.
@@ -1251,11 +1252,11 @@ mod tests {
         assert_eq!(saved.last_link().as_deref(), Some("serial:/dev/ttyACM0"));
 
         // A log played back is not a port: the file says what it said.
-        let before = std::fs::read_to_string(&path).expect("read");
+        let before = mp_os::fs::read_to_string(&path).expect("read");
         let mut persisted = Persisted::at(Some(path.clone()));
         persisted.link_opened("file:flight.tlog");
         persisted.save_config(SaveEvent::Startup).expect("saved");
-        assert_eq!(std::fs::read_to_string(&path).expect("read"), before);
+        assert_eq!(mp_os::fs::read_to_string(&path).expect("read"), before);
     }
 
     #[test]
@@ -1266,7 +1267,7 @@ mod tests {
         let path = scratch.seed(CSHARP_FILE);
         let mut persisted = Persisted::at(Some(path.clone()));
         persisted.save_config(SaveEvent::Startup).expect("saved");
-        assert_eq!(std::fs::read_to_string(&path).expect("read"), CSHARP_FILE);
+        assert_eq!(mp_os::fs::read_to_string(&path).expect("read"), CSHARP_FILE);
     }
 
     #[test]
@@ -1278,7 +1279,7 @@ mod tests {
             eprintln!("skipped: no home directory");
             return;
         };
-        let Ok(text) = std::fs::read_to_string(&real) else {
+        let Ok(text) = mp_os::fs::read_to_string(&real) else {
             eprintln!("skipped: no Mission Planner config at {}", real.display());
             return;
         };
@@ -1286,7 +1287,7 @@ mod tests {
         let path = scratch.seed(&text);
         let mut persisted = Persisted::at(Some(path.clone()));
         persisted.save_config(SaveEvent::Startup).expect("saved");
-        assert_eq!(std::fs::read_to_string(&path).expect("read"), text);
+        assert_eq!(mp_os::fs::read_to_string(&path).expect("read"), text);
         // And a planning screen left as it was loaded changes only what config(true) writes.
         let mut plan = Plan::default();
         plan.set_planned_home(crate::plan::planned_home_from_config(Some(
@@ -1338,7 +1339,7 @@ mod tests {
         let mut persisted = Persisted::at(Some(path.clone()));
         persisted.save_config(SaveEvent::Startup).expect("saved");
         assert_eq!(
-            std::fs::read_to_string(&path).expect("read"),
+            mp_os::fs::read_to_string(&path).expect("read"),
             "\u{feff}<?xml version=\"1.0\" encoding=\"utf-8\"?>\n<Config>\n  <_BAUD>115200</_BAUD>\n  <comport />\n</Config>"
         );
         // Which names no link.
@@ -1370,18 +1371,18 @@ mod tests {
         let theirs = scratch.0.join("Mission Planner");
         assert_eq!(directories.from_user, theirs);
         assert_eq!(directories.to_user, scratch.0.join("MissionPlannerRust"));
-        std::fs::create_dir_all(theirs.join("History")).expect("the C#'s directory");
-        std::fs::write(
+        mp_os::fs::create_dir_all(theirs.join("History")).expect("the C#'s directory");
+        mp_os::fs::write(
             theirs.join("config.xml"),
             "\u{feff}<?xml version=\"1.0\" encoding=\"utf-8\"?>\n<Config>\n  <distunits>Feet</distunits>\n  <MapType>OpenStreetMap</MapType>\n</Config>",
         )
         .expect("config.xml");
-        std::fs::write(
+        mp_os::fs::write(
             theirs.join("poi.txt"),
             "-35.3625\t149.1655\tgate\r\n-35.3640\t149.1640\tmast\r\n",
         )
         .expect("poi.txt");
-        std::fs::write(theirs.join("History").join("firmware.hex"), "fw").expect("History");
+        mp_os::fs::write(theirs.join("History").join("firmware.hex"), "fw").expect("History");
 
         for expect in expected {
             let imported = mp_settings::migrate::import(&directories);
@@ -1502,7 +1503,7 @@ mod tests {
         let refused = persisted.save_config(SaveEvent::Startup);
         assert!(refused.is_err(), "{refused:?}");
         assert_eq!(
-            std::fs::read_to_string(&path).expect("read"),
+            mp_os::fs::read_to_string(&path).expect("read"),
             "<Config><unclosed></Config>"
         );
         // An empty one is the empty dictionary Load leaves, and is written.

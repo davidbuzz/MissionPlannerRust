@@ -3117,7 +3117,7 @@ mod tests {
     fn current_state() -> Option<String> {
         let tree = std::env::var_os("MP_SRC")?;
         let path = std::path::PathBuf::from(tree).join("ExtLibs/ArduPilot/CurrentState.cs");
-        std::fs::read_to_string(path).ok()
+        mp_os::fs::read_to_string(path).ok()
     }
 
     /// A public property or field as the C# declares it.
@@ -3450,7 +3450,7 @@ mod tests {
     #[test]
     fn the_committed_report_is_current() {
         let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join(REPORT);
-        let committed = std::fs::read_to_string(&path).unwrap_or_default();
+        let committed = mp_os::fs::read_to_string(&path).unwrap_or_default();
         assert!(
             committed == report(),
             "docs/coverage/currentstate.md is stale; run \
@@ -3463,7 +3463,7 @@ mod tests {
     #[ignore = "writes docs/coverage/currentstate.md"]
     fn update_report() {
         let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join(REPORT);
-        std::fs::write(&path, report()).expect("write the report");
+        mp_os::fs::write(&path, report()).expect("write the report");
     }
 
     /// The report leads with the counts and names the groups with the most missing.

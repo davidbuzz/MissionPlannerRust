@@ -3974,7 +3974,7 @@ mod tests {
     fn the_offset_matches_clipperlib_node_for_node() {
         let grid = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../testdata/grid");
         let declared: std::collections::BTreeSet<String> =
-            std::fs::read_to_string(grid.join("cases.txt"))
+            mp_os::fs::read_to_string(grid.join("cases.txt"))
                 .unwrap()
                 .lines()
                 .map(|line| line.split('#').next().unwrap_or(""))
@@ -3985,7 +3985,7 @@ mod tests {
                 .collect();
         assert!(declared.len() >= 10, "only {} offset cases", declared.len());
 
-        let mut files: Vec<std::path::PathBuf> = std::fs::read_dir(grid.join("golden/offset"))
+        let mut files: Vec<std::path::PathBuf> = mp_os::fs::read_dir(grid.join("golden/offset"))
             .unwrap()
             .map(|entry| entry.unwrap().path())
             .collect();
@@ -3998,7 +3998,7 @@ mod tests {
 
         let (mut executes, mut nodes) = (0, 0);
         for file in &files {
-            let text = std::fs::read_to_string(file).unwrap();
+            let text = mp_os::fs::read_to_string(file).unwrap();
             let name = file.display();
             let mut offset = ClipperOffset::new();
             // (delta, top-level count, nodes) per execute, in order.

@@ -41,6 +41,7 @@
 // This module is internal to the binary; `pub` here documents intent rather than exporting API.
 #![allow(unreachable_pub)]
 
+use mp_os::fs::FsExt as _;
 use std::backtrace::Backtrace;
 use std::panic::PanicHookInfo;
 use std::path::{Path, PathBuf};
@@ -165,15 +166,15 @@ fn reports_dir(data_dir: &Path) -> PathBuf {
 /// The directory or the file could not be written.
 pub fn write_report(data_dir: &Path, text: &str) -> std::io::Result<PathBuf> {
     let dir = reports_dir(data_dir);
-    std::fs::create_dir_all(&dir)?;
+    mp_os::fs::create_dir_all(&dir)?;
     let stamp = chrono::Local::now().format("%Y-%m-%dT%H-%M-%S").to_string();
     let mut path = dir.join(format!("{stamp}.txt"));
     let mut counter = 1;
-    while path.exists() {
+    while path.os_exists() {
         path = dir.join(format!("{stamp}-{counter}.txt"));
         counter += 1;
     }
-    std::fs::write(&path, text)?;
+    mp_os::fs::write(&path, text)?;
     Ok(path)
 }
 
@@ -182,13 +183,13 @@ pub fn write_report(data_dir: &Path, text: &str) -> std::io::Result<PathBuf> {
 /// names would put the other way round (`-` sorts before `.`).
 #[must_use]
 pub fn pending(data_dir: &Path) -> Vec<PathBuf> {
-    let Ok(entries) = std::fs::read_dir(reports_dir(data_dir)) else {
+    let Ok(entries) = mp_os::fs::read_dir(reports_dir(data_dir)) else {
         return Vec::new();
     };
     let mut reports: Vec<PathBuf> = entries
         .flatten()
         .map(|e| e.path())
-        .filter(|p| p.is_file() && p.extension().is_some_and(|e| e == "txt"))
+        .filter(|p| p.os_is_file() && p.extension().is_some_and(|e| e == "txt"))
         .collect();
     reports.sort_by_cached_key(|path| written_order(path));
     reports
@@ -222,10 +223,10 @@ fn mark_seen(path: &Path) {
         return;
     };
     let seen = dir.join(SEEN_DIR);
-    if std::fs::create_dir_all(&seen).is_ok()
+    if mp_os::fs::create_dir_all(&seen).is_ok()
         && let Some(name) = path.file_name()
     {
-        let _ = std::fs::rename(path, seen.join(name));
+        let _ = mp_os::fs::rename(path, seen.join(name));
     }
 }
 
@@ -309,7 +310,7 @@ impl Crash {
         self.flow = Flow::Idle;
         while !self.queue.is_empty() {
             let path = self.queue.remove(0);
-            if let Ok(report) = std::fs::read_to_string(&path) {
+            if let Ok(report) = mp_os::fs::read_to_string(&path) {
                 self.flow = Flow::Question { path, report };
                 return;
             }
@@ -513,6 +514,7 @@ pub fn record_facts(crash: &Crash) {
 
 #[cfg(test)]
 mod tests {
+    use mp_os::fs::FsExt as _;
     use mp_os::Lock as _;
     use super::*;
     use std::sync::Mutex;
@@ -541,8 +543,8 @@ mod tests {
 
     fn scratch(test: &str) -> PathBuf {
         let dir = mp_os::temp_dir().join(format!("mp-gui-crash-{test}-{}", mp_os::process_id()));
-        let _ = std::fs::remove_dir_all(&dir);
-        std::fs::create_dir_all(&dir).expect("a scratch directory");
+        let _ = mp_os::fs::remove_dir_all(&dir);
+        mp_os::fs::create_dir_all(&dir).expect("a scratch directory");
         dir
     }
 
@@ -600,7 +602,7 @@ mod tests {
     fn reports_of_one_second_list_in_the_order_written() {
         let dir = scratch("order");
         let reports = reports_dir(&dir);
-        std::fs::create_dir_all(&reports).expect("dir");
+        mp_os::fs::create_dir_all(&reports).expect("dir");
         let names = [
             "2026-10-03T12-22-26-1.txt",
             "2026-10-03T12-22-27.txt",
@@ -609,7 +611,7 @@ mod tests {
             "2026-10-03T12-22-26-10.txt",
         ];
         for name in names {
-            std::fs::write(reports.join(name), "x").expect("written");
+            mp_os::fs::write(reports.join(name), "x").expect("written");
         }
         let listed: Vec<String> = pending(&dir)
             .iter()
@@ -661,7 +663,7 @@ mod tests {
         assert_eq!(posted[0].0, "https://x/mail.php");
         assert!(posted[0].1.contains("message my note\n"), "{}", posted[0].1);
         drop(posted);
-        assert!(!first.exists());
+        assert!(!first.os_exists());
         assert!(
             dir.join(REPORTS_DIR)
                 .join(SEEN_DIR)
@@ -674,7 +676,7 @@ mod tests {
         assert!(crash.question_text().is_none());
         assert_eq!(crash.last, "dismissed");
         assert!(pending(&dir).is_empty());
-        std::fs::remove_dir_all(&dir).expect("cleanup");
+        mp_os::fs::remove_dir_all(&dir).expect("cleanup");
     }
 
     #[test]
@@ -696,7 +698,7 @@ mod tests {
                 report.display()
             )
         );
-        assert!(!report.exists(), "moved to seen");
+        assert!(!report.os_exists(), "moved to seen");
 
         let again =
             write_report(&dir, &compose("again", "k.rs:2:2", "main", "frames")).expect("written");
@@ -705,7 +707,7 @@ mod tests {
         assert!(crash.message_done(Some("https://x/mail.php")).is_none());
         let status = wait(&mut crash).expect("a status");
         assert_eq!(status, COULD_NOT_SEND);
-        assert!(!again.exists());
-        std::fs::remove_dir_all(&dir).expect("cleanup");
+        assert!(!again.os_exists());
+        mp_os::fs::remove_dir_all(&dir).expect("cleanup");
     }
 }

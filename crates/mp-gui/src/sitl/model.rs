@@ -28,6 +28,7 @@
 // This module is internal to the binary; `pub` here documents intent rather than exporting API.
 #![allow(unreachable_pub)]
 
+use mp_os::fs::FsExt as _;
 use std::path::{Path, PathBuf};
 
 use mp_firmware::manifest::{Fetch, ReleaseType};
@@ -542,20 +543,20 @@ fn under(dir: &Path, name: &str) -> PathBuf {
 /// `// C#: GCSViews/SITL.cs:458-553`
 pub fn default_config(model: &str, dir: &Path, fetch: &dyn Fetch) -> String {
     let sim_vehicle = dir.join("sim_vehicle.py");
-    if download(fetch, SIM_VEHICLE_URL, &sim_vehicle) || sim_vehicle.is_file() {
-        let text = std::fs::read_to_string(&sim_vehicle).unwrap_or_default();
+    if download(fetch, SIM_VEHICLE_URL, &sim_vehicle) || sim_vehicle.os_is_file() {
+        let text = mp_os::fs::read_to_string(&sim_vehicle).unwrap_or_default();
         for (frame, file) in sim_vehicle_defaults(&text) {
             // `match.Groups[1].Value.ToLower().Equals(model)`: the frame lowered, the model not.
             if frame.to_lowercase() == model {
                 let to = under(dir, &file);
-                if download(fetch, &format!("{AUTOTEST_URL}{file}"), &to) || to.is_file() {
+                if download(fetch, &format!("{AUTOTEST_URL}{file}"), &to) || to.os_is_file() {
                     return to.display().to_string();
                 }
             }
         }
     }
     let vehicleinfo = dir.join("vehicleinfo.py");
-    if download(fetch, VEHICLEINFO_URL, &vehicleinfo) || vehicleinfo.is_file() {
+    if download(fetch, VEHICLEINFO_URL, &vehicleinfo) || vehicleinfo.os_is_file() {
         return vehicleinfo_config(model, dir, &vehicleinfo, fetch).unwrap_or_default();
     }
     String::new()
@@ -581,9 +582,9 @@ pub fn sim_vehicle_defaults(text: &str) -> Vec<(String, String)> {
 /// The `try` of `GetDefaultConfig`'s second half: `None` where the C# throws and catches.
 /// `// C#: GCSViews/SITL.cs:483-550`
 fn vehicleinfo_config(model: &str, dir: &Path, file: &Path, fetch: &dyn Fetch) -> Option<String> {
-    let content = std::fs::read_to_string(file).ok()?;
+    let content = mp_os::fs::read_to_string(file).ok()?;
     let cleaned = cleanup_json(&content);
-    std::fs::write(file, &cleaned).ok()?;
+    mp_os::fs::write(file, &cleaned).ok()?;
     let parsed: serde_json::Value = serde_json::from_str(&lenient_json(&cleaned)).ok()?;
     // `if (obj == null) return "";`
     let serde_json::Value::Object(obj) = parsed else {
@@ -614,11 +615,11 @@ fn vehicleinfo_config(model: &str, dir: &Path, file: &Path, fetch: &dyn Fetch) -
                     let name = token_text(item);
                     let to = under(dir, &name);
                     if let Some(parent) = to.parent() {
-                        let _ = std::fs::create_dir_all(parent);
+                        let _ = mp_os::fs::create_dir_all(parent);
                     }
-                    if download(fetch, &format!("{AUTOTEST_URL}{name}"), &to) || to.is_file() {
+                    if download(fetch, &format!("{AUTOTEST_URL}{name}"), &to) || to.os_is_file() {
                         data.push_str("\r\n");
-                        data.push_str(&std::fs::read_to_string(&to).unwrap_or_default());
+                        data.push_str(&mp_os::fs::read_to_string(&to).unwrap_or_default());
                     }
                 }
             }
@@ -632,9 +633,9 @@ fn vehicleinfo_config(model: &str, dir: &Path, file: &Path, fetch: &dyn Fetch) -
                 let name = token_text(value);
                 let to = under(dir, &name);
                 if let Some(parent) = to.parent() {
-                    let _ = std::fs::create_dir_all(parent);
+                    let _ = mp_os::fs::create_dir_all(parent);
                 }
-                if download(fetch, &format!("{AUTOTEST_URL}{name}"), &to) || to.is_file() {
+                if download(fetch, &format!("{AUTOTEST_URL}{name}"), &to) || to.os_is_file() {
                     return Some(to.display().to_string());
                 }
                 // Neither fetched nor there: the C# goes on to enumerate the `JValue`, which has
@@ -642,7 +643,7 @@ fn vehicleinfo_config(model: &str, dir: &Path, file: &Path, fetch: &dyn Fetch) -
             }
         }
         let temp = dir.join(format!("{model}-defaults.parm"));
-        std::fs::write(&temp, data).ok()?;
+        mp_os::fs::write(&temp, data).ok()?;
         return Some(temp.display().to_string());
     }
     Some(String::new())

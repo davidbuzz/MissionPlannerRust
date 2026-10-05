@@ -1329,7 +1329,7 @@ mod tests {
     /// A web of fixtures: the list at its first source, the Copter version beside its build.
     fn web(name: &str) -> std::path::PathBuf {
         let root = mp_os::temp_dir().join(format!("mp-gui-fwl-{name}-{}", mp_os::process_id()));
-        let _ = std::fs::remove_dir_all(&root);
+        let _ = mp_os::fs::remove_dir_all(&root);
         for (url, file) in [
             (
                 "github.com/ArduPilot/binary/raw/master/Firmware/firmware2.xml",
@@ -1345,8 +1345,8 @@ mod tests {
             ),
         ] {
             let path = root.join(url);
-            std::fs::create_dir_all(path.parent().unwrap()).unwrap();
-            std::fs::copy(fixture(file), path).unwrap();
+            mp_os::fs::create_dir_all(path.parent().unwrap()).unwrap();
+            mp_os::fs::copy(fixture(file), path).unwrap();
         }
         root
     }
@@ -1505,7 +1505,7 @@ mod tests {
         // The Quad's tag is the entry, renamed by `temp.name += " Quad"`.
         let tag = page.tags[index_of("fwl-quad")].as_ref().expect("a tag");
         assert_eq!(tag.name, "ArduCopter V4.7.1 Quad");
-        let _ = std::fs::remove_dir_all(root);
+        let _ = mp_os::fs::remove_dir_all(root);
     }
 
     /// A list that cannot be had shows the progress dialog's error, and Close takes it away.
@@ -1589,7 +1589,7 @@ mod tests {
 
         assert_eq!(page.open_link(FIRMWARE_SITE), Some(FIRMWARE_SITE));
         assert_eq!(page.opened, Some("https://firmware.ardupilot.org/"));
-        let _ = std::fs::remove_dir_all(root);
+        let _ = mp_os::fs::remove_dir_all(root);
     }
 
     /// The page object goes with its screen - `firstrun` again - but the list, a static, stays.
@@ -1602,7 +1602,7 @@ mod tests {
         assert!(page.firstrun);
         assert!(page.labels.iter().all(String::is_empty));
         assert_eq!(page.softwares.len(), 12, "softwares is static");
-        let _ = std::fs::remove_dir_all(root);
+        let _ = mp_os::fs::remove_dir_all(root);
     }
 
     /// A vehicle clicked runs `findfirmware` on its thread: the question waits for its answer.
@@ -1627,7 +1627,7 @@ mod tests {
             page.tick(key(), true);
         }
         assert_eq!(page.reached, Some(Reached::default()), "No: nothing more");
-        let _ = std::fs::remove_dir_all(root);
+        let _ = mp_os::fs::remove_dir_all(root);
     }
 
     /// Every fact the script asserts on is recorded - here, or by the flows' report the manifest

@@ -50,6 +50,7 @@
 // This module is internal to the binary; `pub` here documents intent rather than exporting API.
 #![allow(unreachable_pub)]
 
+use mp_os::fs::FsExt as _;
 use mp_os::Lock as _;
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command};
@@ -434,7 +435,7 @@ fn make_executable(path: &Path) {
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt as _;
-        let _ = std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o755));
+        let _ = mp_os::fs::set_permissions(path, mp_os::fs::Permissions::from_mode(0o755));
     }
     #[cfg(not(unix))]
     {
@@ -496,7 +497,7 @@ pub fn local_wasm_dir() -> Option<PathBuf> {
         std::env::current_exe().ok(),
     )
     .into_iter()
-    .find(|dir| dir.join(BRIDGE).is_file())
+    .find(|dir| dir.join(BRIDGE).os_is_file())
 }
 
 /// Where the WebAssembly builds may be, in order: `MP_SITL_WASM`; `sitl-wasm` beside the
@@ -524,7 +525,7 @@ pub fn local_wasm_candidates(named: Option<PathBuf>, exe: Option<PathBuf>) -> Ve
 #[must_use]
 pub fn find_node() -> Option<PathBuf> {
     if let Some(node) = std::env::var_os("MP_NODE").map(PathBuf::from) {
-        return node.is_file().then_some(node);
+        return node.os_is_file().then_some(node);
     }
     let name = if cfg!(windows) { "node.exe" } else { "node" };
     let path = std::env::var_os("PATH").unwrap_or_default();
@@ -535,7 +536,7 @@ pub fn find_node() -> Option<PathBuf> {
                 .map(PathBuf::from),
         )
         .map(|dir| dir.join(name))
-        .find(|candidate| candidate.is_file())
+        .find(|candidate| candidate.os_is_file())
 }
 
 /// The bridge script in the WebAssembly folder.
@@ -798,7 +799,7 @@ pub fn start(
         }
     };
     // A web page has no files: its module is the page's own (PageWasm).
-    if !cfg!(target_family = "wasm") && !image.is_file() {
+    if !cfg!(target_family = "wasm") && !image.os_is_file() {
         return Outcome::Failed(model::FAILED_TO_DOWNLOAD.to_owned());
     }
     launcher.kill_all();
@@ -806,7 +807,7 @@ pub fn start(
     let config = model::default_config(&model_name, &request.dir, fetch);
     let extra = model::extra_arguments(&config, &request.cmdline, request.wipe);
     let sim_dir = request.dir.join(&model_name);
-    let _ = std::fs::create_dir_all(&sim_dir);
+    let _ = mp_os::fs::create_dir_all(&sim_dir);
     let arguments = model::arguments(&model_name, &request.home, request.speedup, &extra);
     let spawn = Spawn {
         program: image,
@@ -881,8 +882,8 @@ pub fn start_chain(
     let instances = model::chain(request.how_many, model_name, &config, &image, &home);
     for instance in &instances {
         let sim_dir = request.dir.join(&instance.dir);
-        let _ = std::fs::create_dir_all(&sim_dir);
-        let _ = std::fs::write(sim_dir.join("identity.parm"), &instance.identity);
+        let _ = mp_os::fs::create_dir_all(&sim_dir);
+        let _ = mp_os::fs::write(sim_dir.join("identity.parm"), &instance.identity);
         append(&request.data_dir.join("sitl.bat"), &instance.bat);
         append(&request.data_dir.join("sitl1.sh"), &instance.sh);
         let spawn = Spawn {
@@ -909,7 +910,7 @@ pub fn start_chain(
 /// `File.AppendAllText`.
 fn append(path: &Path, text: &str) {
     use std::io::Write as _;
-    if let Ok(mut file) = std::fs::OpenOptions::new()
+    if let Ok(mut file) = mp_os::fs::OpenOptions::new()
         .create(true)
         .append(true)
         .open(path)
@@ -922,6 +923,7 @@ fn append(path: &Path, text: &str) {
 pub mod tests {
     //! The launchers against a stub web and a stub process table.
 
+    use mp_os::fs::FsExt as _;
     use super::*;
     use std::collections::HashMap;
     use std::sync::atomic::{AtomicUsize, Ordering};
@@ -1147,12 +1149,12 @@ pub mod tests {
         };
         let after_writing = session(Some(WRITTEN));
         let after_restart = session(None);
-        let saved = std::fs::read_dir(&dir)
+        let saved = mp_os::fs::read_dir(&dir)
             .into_iter()
             .flatten()
             .flatten()
-            .any(|entry| entry.path().join("eeprom.bin").is_file());
-        let _ = std::fs::remove_dir_all(&dir);
+            .any(|entry| entry.path().join("eeprom.bin").os_is_file());
+        let _ = mp_os::fs::remove_dir_all(&dir);
         assert_eq!(after_writing, Some(WRITTEN), "the write was not echoed");
         assert!(saved, "no eeprom.bin in the copter's folder");
         assert_eq!(
@@ -1263,8 +1265,8 @@ pub mod tests {
     /// A directory of its own under the system's temporary one, emptied first.
     pub fn scratch(name: &str) -> PathBuf {
         let dir = mp_os::temp_dir().join(format!("mp-gui-sitl-{}-{name}", mp_os::process_id()));
-        let _ = std::fs::remove_dir_all(&dir);
-        let _ = std::fs::create_dir_all(&dir);
+        let _ = mp_os::fs::remove_dir_all(&dir);
+        let _ = mp_os::fs::create_dir_all(&dir);
         dir
     }
 
@@ -1388,20 +1390,20 @@ pub mod tests {
         assert_eq!(image, Image::Found(dir.join("ArduRover.exe")));
         assert_eq!(web.asked().len(), 11);
         assert_eq!(
-            std::fs::read(dir.join("ArduRover.exe")).ok(),
+            mp_os::fs::read(dir.join("ArduRover.exe")).ok(),
             Some(
                 b"https://firmware.ardupilot.org/Tools/MissionPlanner/sitl/Beta/ArduRover.elf"
                     .to_vec()
             )
         );
-        assert!(dir.join("cygstdc++-6.dll").is_file());
+        assert!(dir.join("cygstdc++-6.dll").os_is_file());
         assert_eq!(*said.os_lock().expect("lock"), [model::DOWNLOADING]);
 
         let web = StubWeb::default();
         let image = cygwin.image("ArduRover.elf", None, &dir, &web, &|_| {});
         assert_eq!(image, Image::Found(dir.join("ArduRover.exe")));
         assert!(web.asked().is_empty());
-        let _ = std::fs::remove_dir_all(dir);
+        let _ = mp_os::fs::remove_dir_all(dir);
     }
 
     /// A click through to the connection: the spawn's program, line, directory and variables, and
@@ -1410,7 +1412,7 @@ pub mod tests {
     fn a_start_spawns_the_line_and_connects_to_5760() {
         let dir = scratch("start");
         let exe = dir.join("ArduCopter.exe");
-        std::fs::write(&exe, b"MZ").expect("write");
+        mp_os::fs::write(&exe, b"MZ").expect("write");
         let launcher = StubLauncher::new(Image::Found(exe.clone()));
         let web = autotest_web();
         let waited = Mutex::new(Vec::new());
@@ -1448,9 +1450,9 @@ pub mod tests {
                 model::with_separator(&dir.join("+"))
             )
         );
-        assert!(dir.join("+").is_dir());
+        assert!(dir.join("+").os_is_dir());
         assert_eq!(
-            std::fs::read(&defaults).ok(),
+            mp_os::fs::read(&defaults).ok(),
             Some(b"FRAME_CLASS 1\n".to_vec())
         );
         assert_eq!(launcher.kills.load(Ordering::Relaxed), 1);
@@ -1464,7 +1466,7 @@ pub mod tests {
                 format!("{}default_params/copter.parm", model::AUTOTEST_URL),
             ]
         );
-        let _ = std::fs::remove_dir_all(dir);
+        let _ = mp_os::fs::remove_dir_all(dir);
     }
 
     /// The model box, the extra line and Wipe; a list of defaults joined into one file.
@@ -1472,7 +1474,7 @@ pub mod tests {
     fn the_model_box_overrides_the_picture_and_a_list_of_defaults_is_joined() {
         let dir = scratch("hexa");
         let exe = dir.join("ArduCopter.exe");
-        std::fs::write(&exe, b"MZ").expect("write");
+        mp_os::fs::write(&exe, b"MZ").expect("write");
         let launcher = StubLauncher::new(Image::Found(exe));
         let mut asked = request(&dir, Vehicle::Multirotor);
         asked.model_text = "hexa".to_owned();
@@ -1492,7 +1494,7 @@ pub mod tests {
             )
         );
         assert_eq!(
-            std::fs::read_to_string(&joined).ok().as_deref(),
+            mp_os::fs::read_to_string(&joined).ok().as_deref(),
             Some("\r\nFRAME_CLASS 1\n\r\nFRAME_CLASS 2\n")
         );
         assert_eq!(
@@ -1502,7 +1504,7 @@ pub mod tests {
                 .map(|s| s.working_directory.clone()),
             Some(dir.join("hexa"))
         );
-        let _ = std::fs::remove_dir_all(dir);
+        let _ = mp_os::fs::remove_dir_all(dir);
     }
 
     /// No defaults to be had anywhere: no `--defaults`.
@@ -1510,7 +1512,7 @@ pub mod tests {
     fn with_no_defaults_the_line_has_none() {
         let dir = scratch("nodefaults");
         let exe = dir.join("ArduPlane.exe");
-        std::fs::write(&exe, b"MZ").expect("write");
+        mp_os::fs::write(&exe, b"MZ").expect("write");
         let launcher = StubLauncher::new(Image::Found(exe));
         let outcome = start(
             &launcher,
@@ -1527,7 +1529,7 @@ pub mod tests {
                     .to_owned()
             }
         );
-        let _ = std::fs::remove_dir_all(dir);
+        let _ = mp_os::fs::remove_dir_all(dir);
     }
 
     /// The C#'s failures, as the status line's words.
@@ -1548,7 +1550,7 @@ pub mod tests {
         assert!(missing.spawns().is_empty());
 
         let exe = dir.join("ArduCopter.exe");
-        std::fs::write(&exe, b"MZ").expect("write");
+        mp_os::fs::write(&exe, b"MZ").expect("write");
         let mut refusing = StubLauncher::new(Image::Found(exe));
         refusing.refuse = true;
         assert_eq!(
@@ -1589,7 +1591,7 @@ pub mod tests {
                 .is_err()
         );
         assert_eq!(NotAvailable.note().as_deref(), Some(note.as_str()));
-        let _ = std::fs::remove_dir_all(dir);
+        let _ = mp_os::fs::remove_dir_all(dir);
     }
 
     /// The chain swarm: one spawn per instance in its own directory with its identity, the
@@ -1636,16 +1638,16 @@ pub mod tests {
             "--home A --instance 0 --serial0 tcp:0 --serial2 tcpclient:127.0.0.1:5772 "
         )));
         assert!(
-            std::fs::read_to_string(dir.join("+1").join("identity.parm"))
+            mp_os::fs::read_to_string(dir.join("+1").join("identity.parm"))
                 .is_ok_and(|text| text.contains("SYSID_THISMAV=1\r\n"))
         );
-        let bat = std::fs::read_to_string(data.join("sitl.bat")).unwrap_or_default();
+        let bat = mp_os::fs::read_to_string(data.join("sitl.bat")).unwrap_or_default();
         assert!(bat.starts_with("mkdir 2\ncd 2\n"), "{bat}");
         assert!(bat.contains("mkdir 1\ncd 1\n"), "{bat}");
-        assert!(data.join("sitl1.sh").is_file());
+        assert!(data.join("sitl1.sh").os_is_file());
         assert_eq!(launcher.kills.load(Ordering::Relaxed), 1);
-        let _ = std::fs::remove_dir_all(dir);
-        let _ = std::fs::remove_dir_all(data);
+        let _ = mp_os::fs::remove_dir_all(dir);
+        let _ = mp_os::fs::remove_dir_all(data);
     }
 
     /// The desktop's own choice.

@@ -411,7 +411,7 @@ mod tests {
         let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("../../testdata")
             .join(name);
-        std::fs::read(&path).unwrap_or_else(|err| panic!("reading {}: {err}", path.display()))
+        mp_os::fs::read(&path).unwrap_or_else(|err| panic!("reading {}: {err}", path.display()))
     }
 
     /// The healthy fixture was logged on a bench: its GPS never had a fix, so there is no route.

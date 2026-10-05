@@ -27,6 +27,7 @@
 // This module is internal to the binary; `pub` here documents intent rather than exporting API.
 #![allow(unreachable_pub)]
 
+use mp_os::fs::FsExt as _;
 use std::cell::Cell;
 use std::rc::Rc;
 use std::sync::Arc;
@@ -4991,7 +4992,7 @@ fn gstreamer_download(data: &mut FlightData, pipeline: &str) -> Option<String> {
     let spawned = wasm_thread::Builder::new()
         .name("gstreamer-download".to_owned())
         .spawn(move || {
-            let _ = std::fs::create_dir_all(&directory);
+            let _ = mp_os::fs::create_dir_all(&directory);
             let mut status = |percent: i32, words: &str| {
                 let _ = tell.send((percent, words.to_owned()));
             };
@@ -6089,7 +6090,7 @@ fn sized(paths: Vec<std::path::PathBuf>) -> Converted {
         paths
             .into_iter()
             .map(|path| {
-                let size = std::fs::metadata(&path).map_or(0, |meta| meta.len());
+                let size = mp_os::fs::metadata(&path).map_or(0, |meta| meta.len());
                 (path, size)
             })
             .collect(),
@@ -8171,7 +8172,7 @@ impl MissionPlanner {
     /// `// C#: GCSViews/FlightData.cs:1091, 1151, 1319, Log/MatLabForms.cs:59`
     fn fly_convert(&mut self, kind: Conversion, text: &str) {
         let path = text.trim();
-        if path.is_empty() || std::path::Path::new(path).is_dir() {
+        if path.is_empty() || std::path::Path::new(path).os_is_dir() {
             return;
         }
         if self
@@ -8270,7 +8271,7 @@ impl MissionPlanner {
         let name = chrono::Local::now().format("%Y-%m-%d %H-%M-%S").to_string();
         let path = directory.join(format!("{name}.avi"));
         let mut writer = mp_video::avi::AviWriter::new();
-        let opened = std::fs::create_dir_all(&directory).and_then(|()| writer.start(&path));
+        let opened = mp_os::fs::create_dir_all(&directory).and_then(|()| writer.start(&path));
         match opened {
             Ok(()) => {
                 let now = Instant::now();
@@ -8296,7 +8297,7 @@ impl MissionPlanner {
             if let Err(why) = recording.writer.close() {
                 self.file_status = Some(format!("Error {why}"));
             }
-            self.fly_data.avi_size = std::fs::metadata(&recording.path).map_or(0, |m| m.len());
+            self.fly_data.avi_size = mp_os::fs::metadata(&recording.path).map_or(0, |m| m.len());
         }
     }
 
@@ -8605,7 +8606,7 @@ impl MissionPlanner {
     /// A typed path that names a file: empty or only the folder is the dialog closed without one.
     fn poi_path(text: &str) -> Option<std::path::PathBuf> {
         let path = text.trim();
-        (!path.is_empty() && !std::path::Path::new(path).is_dir())
+        (!path.is_empty() && !std::path::Path::new(path).os_is_dir())
             .then(|| std::path::PathBuf::from(path))
     }
 
@@ -8617,7 +8618,7 @@ impl MissionPlanner {
             return;
         };
         let rendered = crate::poi::render(self.fly_data.pois.points());
-        self.file_status = Some(match std::fs::write(&path, rendered) {
+        self.file_status = Some(match mp_os::fs::write(&path, rendered) {
             Ok(()) => format!("Save File: {}", path.display()),
             Err(err) => error_box(format!("{}: {err}", path.display())),
         });
@@ -8632,7 +8633,7 @@ impl MissionPlanner {
         let Some(path) = Self::poi_path(text) else {
             return;
         };
-        match std::fs::read(&path) {
+        match mp_os::fs::read(&path) {
             Ok(bytes) => {
                 for poi in crate::poi::parse(&String::from_utf8_lossy(&bytes)) {
                     self.fly_data.pois.add(poi.lat, poi.lng, 0.0, poi.id());
@@ -9136,6 +9137,7 @@ fn customize_form(
 #[cfg(test)]
 mod tests {
 
+    use mp_os::fs::FsExt as _;
     /// The message list's rows, newest first: row 0 the last message held, a range past the end
     /// giving what there is.
     #[test]
@@ -11267,7 +11269,7 @@ mod tests {
     fn a_loaded_log_plays_through_the_link_and_pauses() {
         let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("../../testdata/mavlink/autotest.tlog");
-        if !path.exists() {
+        if !path.os_exists() {
             eprintln!("skipped: {} is not here", path.display());
             return;
         }
@@ -11275,7 +11277,7 @@ mod tests {
         let (telemetry, control) = replay(&path.display().to_string()).expect("opens");
         assert_eq!(
             u64::try_from(control.len()).unwrap(),
-            std::fs::metadata(&path).unwrap().len()
+            mp_os::fs::metadata(&path).unwrap().len()
         );
         // Ten times real time: the log spans 36 s, so it plays for 3.6 s, and the pause below lands
         // inside it on any machine. At a thousand times it was over in 36 ms, and on the hosted
@@ -11349,10 +11351,10 @@ mod tests {
     /// A directory of its own for one test, with the checked-in log copied in as `name`.
     fn scratch_log(test: &str, name: &str) -> (std::path::PathBuf, std::path::PathBuf) {
         let dir = mp_os::temp_dir().join(format!("mp-gui-{test}-{}", mp_os::process_id()));
-        let _ = std::fs::remove_dir_all(&dir);
-        std::fs::create_dir_all(&dir).expect("a scratch directory");
+        let _ = mp_os::fs::remove_dir_all(&dir);
+        mp_os::fs::create_dir_all(&dir).expect("a scratch directory");
         let log = dir.join(name);
-        std::fs::copy(testdata("dataflash.bin"), &log).expect("the log copied");
+        mp_os::fs::copy(testdata("dataflash.bin"), &log).expect("the log copied");
         (dir, log)
     }
 
@@ -11468,8 +11470,8 @@ mod tests {
             Ok(Converted::Files(vec![(target.clone(), 868_884)]))
         );
         assert_eq!(
-            std::fs::read(&target).expect("the .log"),
-            std::fs::read(testdata("dataflash/golden/dataflash.log")).expect("the golden")
+            mp_os::fs::read(&target).expect("the .log"),
+            mp_os::fs::read(testdata("dataflash/golden/dataflash.log")).expect("the golden")
         );
         assert_eq!(
             conversion_status(&outcome),
@@ -11517,8 +11519,8 @@ mod tests {
                 .find(|(path, _)| path.file_name().is_some_and(|file| file == name))
                 .unwrap_or_else(|| panic!("{name} not written: {named:?}"));
             assert_eq!(
-                lf(std::fs::read(&written.0).expect("the written file")),
-                lf(std::fs::read(testdata(golden)).expect("a golden")),
+                lf(mp_os::fs::read(&written.0).expect("the written file")),
+                lf(mp_os::fs::read(testdata(golden)).expect("a golden")),
                 "{name}"
             );
         }
@@ -11531,11 +11533,11 @@ mod tests {
         assert!(conversions.start(Conversion::Matlab, log));
         let outcome = finish(&mut conversions);
         let mat = dir.join("dataflash.bin-11439.mat");
-        let golden = std::fs::metadata(testdata("dataflash/golden/matlab/dataflash.bin-11439.mat"))
+        let golden = mp_os::fs::metadata(testdata("dataflash/golden/matlab/dataflash.bin-11439.mat"))
             .expect("the golden")
             .len();
         assert_eq!(outcome.2, Ok(Converted::Files(vec![(mat, golden)])));
-        std::fs::remove_dir_all(&dir).expect("the scratch directory removed");
+        mp_os::fs::remove_dir_all(&dir).expect("the scratch directory removed");
     }
 
     /// Where the C# shows a message box, the status line says the same words.
@@ -11603,7 +11605,7 @@ mod tests {
         );
         let failed = convert(Conversion::LogAnalysis, &dir.join("missing.log"));
         assert_eq!(failed, Err("Bad input file".to_owned()));
-        let _ = std::fs::remove_dir_all(&dir);
+        let _ = mp_os::fs::remove_dir_all(&dir);
     }
 
     // --- The HUD's menu -----------------------------------------------------------------------
@@ -12149,12 +12151,12 @@ mod tests {
     fn set_home_here_sends_the_height_of_the_tile_under_the_press() {
         let dir =
             mp_os::temp_dir().join(format!("headless-planner-fly-srtm-{}", mp_os::process_id()));
-        std::fs::create_dir_all(&dir).expect("scratch folder");
+        mp_os::fs::create_dir_all(&dir).expect("scratch folder");
         let mut tile = Vec::with_capacity(1201 * 1201 * 2);
         for _ in 0..1201 * 1201 {
             tile.extend_from_slice(&584i16.to_be_bytes());
         }
-        std::fs::write(dir.join("S36E149.hgt"), tile).expect("the tile");
+        mp_os::fs::write(dir.join("S36E149.hgt"), tile).expect("the tile");
         let (lat, lng) = (-35.363_262_1, 149.165_237_4);
         let height = set_home_height(crate::srtm::altitude_in(&dir, lat, lng)).expect("a height");
         let sent = set_home_messages(target(), (lat, lng, height), true);
@@ -12168,7 +12170,7 @@ mod tests {
             set_home_height(crate::srtm::altitude_in(&dir, lat, 148.9)),
             Err(Refusal::error(NO_SRTM))
         );
-        std::fs::remove_dir_all(dir).ok();
+        mp_os::fs::remove_dir_all(dir).ok();
     }
 
     /// Point Camera Here: the height is a float or "Bad Alt", then a point that is not the

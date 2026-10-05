@@ -28,6 +28,7 @@
 #![allow(clippy::print_stderr)]
 
 
+use mp_os::fs::FsExt as _;
 /// The product's name, as the owner has it (2026-10-03): the window's title and the header over
 /// the screen buttons both carry it. Mission Planner shows its own name and version there
 /// (`MainV2.cs:815, 1739`); this application is not Mission Planner, and its title says which it
@@ -104,6 +105,8 @@ mod stderr_log;
 mod storm;
 // What each screen's frames cost in an ordinary run (`MP_FRAMES`).
 mod frametimes;
+#[cfg(target_family = "wasm")]
+mod page_storage;
 mod repaint;
 mod survey_ui;
 mod telemetry;
@@ -1120,7 +1123,7 @@ impl MissionPlanner {
                 .persisted
                 .get("WPFileDirectory")
                 .map(std::path::PathBuf::from)
-                .filter(|folder| folder.is_dir())
+                .filter(|folder| folder.os_is_dir())
         {
             return folder;
         }
@@ -1217,7 +1220,7 @@ impl MissionPlanner {
     fn save_plan_to(&mut self, path: &std::path::Path) {
         // Home at record 0 from the Home Location boxes, then the rows: `savewaypoints`.
         let text = self.plan.waypoints_file();
-        self.file_status = match std::fs::write(path, text) {
+        self.file_status = match mp_os::fs::write(path, text) {
             Ok(()) => {
                 self.plan_name.set(file_name_of(path));
                 Some(format!(
@@ -1232,7 +1235,7 @@ impl MissionPlanner {
 
     /// Reads a waypoint file: `readQGC110wpfile`, once Load File's dialog has returned it.
     fn load_plan_from(&mut self, path: &std::path::Path) {
-        let text = match std::fs::read_to_string(path) {
+        let text = match mp_os::fs::read_to_string(path) {
             Ok(text) => text,
             Err(err) => {
                 self.file_status = Some(format!("could not read {}: {err}", path.display()));
@@ -4793,6 +4796,8 @@ fn main() {
     #[cfg(target_family = "wasm")]
     {
         console_error_panic_hook::set_once();
+        // The files the last visit kept, before anything reads one (page_storage.rs).
+        mp_os::fs::preload_from_page();
         gpui_web::init_logging();
     }
     // First: what gpui cannot do - open a Metal device, load a font - it says only through `log`.
@@ -4957,7 +4962,7 @@ mod tests {
     fn the_product_name_is_the_owners_and_not_mission_planners() {
         assert_eq!(super::PRODUCT_NAME, "MissionPlannerRust");
         assert!(!super::PRODUCT_NAME.contains(' '));
-        let runner = std::fs::read_to_string(
+        let runner = mp_os::fs::read_to_string(
             std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../tools/gui-test.sh"),
         )
         .expect("the GUI runner");

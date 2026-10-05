@@ -486,7 +486,7 @@ mod tests {
     fn every_projection_golden_point_matches_the_c_sharp_bit_for_bit() {
         let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("../../testdata/projection/golden/utm.csv");
-        let text = std::fs::read_to_string(&path).expect("testdata/projection/golden/utm.csv");
+        let text = mp_os::fs::read_to_string(&path).expect("testdata/projection/golden/utm.csv");
         let mut compared = 0;
         for line in text.lines().filter(|line| line.starts_with("utm,")) {
             let fields: Vec<&str> = line.split(',').collect();

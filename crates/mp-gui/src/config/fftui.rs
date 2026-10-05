@@ -974,7 +974,7 @@ pub fn perform(job: &Job) -> Result<Outcome, String> {
         .unwrap_or_default();
     let opened = |error: std::io::Error| format!("{}: {error}", job.path.display());
     if job.run == Run::Wav {
-        let bytes = std::fs::read(&job.path).map_err(opened)?;
+        let bytes = mp_os::fs::read(&job.path).map_err(opened)?;
         return wav(&bytes, job.hz, job.settings);
     }
     let log = LogFile::open(&job.path).map_err(opened)?;

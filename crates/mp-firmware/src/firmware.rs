@@ -143,7 +143,7 @@ impl Firmware {
     /// # Errors
     /// As [`Firmware::parse`], plus any error opening the file.
     pub fn load(path: &std::path::Path) -> Result<Self, FirmwareError> {
-        Self::parse(&std::fs::read(path)?)
+        Self::parse(&mp_os::fs::read(path)?)
     }
 
     /// The CRC the bootloader will report for this image, padded to `pad_length`.

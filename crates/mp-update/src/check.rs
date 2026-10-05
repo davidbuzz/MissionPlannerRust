@@ -22,6 +22,7 @@
 //! `CheckMD5`, which hashes every file the channel lists and fetches the ones that differ as
 //! `<file>.new` beside the program. `// C#: Utilities/Update.cs:118-203, 219-440, 474-640, 684-738`
 
+use mp_os::fs::FsExt as _;
 use std::path::{Component, Path, PathBuf};
 
 use mp_firmware::manifest::Fetch;
@@ -71,8 +72,8 @@ pub fn check_for_update(
     }
     let path = install_dir.join("version.txt");
     let body = fetch.get(version_url)?;
-    let update_found = if path.exists() {
-        let local_text = std::fs::read_to_string(&path).map_err(|e| e.to_string())?;
+    let update_found = if path.os_exists() {
+        let local_text = mp_os::fs::read_to_string(&path).map_err(|e| e.to_string())?;
         let local = Version::parse(first_line(&local_text)?)?;
         let remote_text = String::from_utf8_lossy(&body);
         let remote = Version::parse(first_line(&remote_text)?)?;
@@ -97,10 +98,10 @@ pub fn check_for_update(
 /// "Unable to write to the install directory". `// C#: Utilities/Update.cs:711-731`
 pub fn write_test(install_dir: &Path) -> Result<(), String> {
     let probe = install_dir.join("writetest.txt");
-    let outcome = std::fs::write(&probe, "this is a test")
+    let outcome = mp_os::fs::write(&probe, "this is a test")
         .map_err(|_| "Unable to write to the install directory".to_owned());
     // "Write test cleanup failed" is only logged.
-    let _ = std::fs::remove_file(&probe);
+    let _ = mp_os::fs::remove_file(&probe);
     outcome
 }
 
@@ -108,7 +109,7 @@ pub fn write_test(install_dir: &Path) -> Result<(), String> {
 /// `// C#: Utilities/Update.cs:446-472`
 #[must_use]
 pub fn md5_file(path: &Path, hash: &str) -> bool {
-    match std::fs::read(path) {
+    match mp_os::fs::read(path) {
         Ok(data) => md5::hex(&data) == hash,
         Err(_) => false,
     }
@@ -159,12 +160,12 @@ fn files_with_extension(dir: &Path, extension: &str) -> Vec<PathBuf> {
     let mut out = Vec::new();
     let mut pending = vec![dir.to_path_buf()];
     while let Some(folder) = pending.pop() {
-        let Ok(entries) = std::fs::read_dir(&folder) else {
+        let Ok(entries) = mp_os::fs::read_dir(&folder) else {
             continue;
         };
         for entry in entries.flatten() {
             let path = entry.path();
-            if path.is_dir() {
+            if path.os_is_dir() {
                 pending.push(path);
             } else if path
                 .extension()
@@ -228,7 +229,7 @@ impl Work<'_> {
                     progress(percent as i32, &format!("{GETTING}{file}: {percent:.1}%"));
                 }
             });
-            match fetched.and_then(|bytes| std::fs::write(dest, bytes).map_err(|e| e.to_string())) {
+            match fetched.and_then(|bytes| mp_os::fs::write(dest, bytes).map_err(|e| e.to_string())) {
                 Ok(()) => return Ok(()),
                 Err(e) => {
                     fail = e;
@@ -266,7 +267,7 @@ impl Work<'_> {
             // "zip missing entry"
             return Ok(());
         };
-        std::fs::write(dest, &entry.data).map_err(|e| e.to_string())
+        mp_os::fs::write(dest, &entry.data).map_err(|e| e.to_string())
     }
 }
 
@@ -301,7 +302,7 @@ pub fn do_update(
     progress(-1, "Getting Base URL");
     write_test(install_dir)?;
     let text = String::from_utf8_lossy(&fetch.get(&channel.md5_url)?).into_owned();
-    std::fs::write(install_dir.join("checksums.txt.new"), &text).map_err(|e| e.to_string())?;
+    mp_os::fs::write(install_dir.join("checksums.txt.new"), &text).map_err(|e| e.to_string())?;
     let list = listed(&text);
     if list.is_empty() {
         return Ok(Vec::new());
@@ -362,7 +363,7 @@ pub fn do_update(
         // bare separator, so its URL has two slashes in a row, as the C#'s does.
         let subdir = format!("{}/", parent.replace('\\', "/"));
         if let Some(dir) = dest.parent() {
-            std::fs::create_dir_all(dir).map_err(|e| e.to_string())?;
+            mp_os::fs::create_dir_all(dir).map_err(|e| e.to_string())?;
         }
         if is_zip {
             work.get_new_file_zip(&channel.base_url, &subdir, &name, &dest)?;
@@ -390,7 +391,7 @@ pub fn do_update(
     for stray in dlls.iter().chain(exes.iter()) {
         let here = stray.to_string_lossy().to_lowercase();
         if !listed_paths.contains(&here) {
-            let _ = std::fs::remove_file(stray);
+            let _ = mp_os::fs::remove_file(stray);
         }
     }
     Ok(written)
@@ -398,6 +399,7 @@ pub fn do_update(
 
 #[cfg(test)]
 mod tests {
+    use mp_os::fs::FsExt as _;
     use super::*;
     use std::collections::HashMap;
 
@@ -432,8 +434,8 @@ mod tests {
 
     fn scratch(test: &str) -> PathBuf {
         let dir = mp_os::temp_dir().join(format!("mp-update-{test}-{}", mp_os::process_id()));
-        let _ = std::fs::remove_dir_all(&dir);
-        std::fs::create_dir_all(&dir).unwrap();
+        let _ = mp_os::fs::remove_dir_all(&dir);
+        mp_os::fs::create_dir_all(&dir).unwrap();
         dir
     }
 
@@ -451,28 +453,28 @@ mod tests {
                 changelog_url: "https://x/upgrade/ChangeLog.txt".to_owned()
             }
         );
-        std::fs::write(dir.join("version.txt"), "1.3.80.0\n").unwrap();
+        mp_os::fs::write(dir.join("version.txt"), "1.3.80.0\n").unwrap();
         assert_eq!(
             check_for_update(&server, "https://x/upgrade/version.txt", &dir).unwrap(),
             Check::UpToDate
         );
-        std::fs::write(dir.join("version.txt"), "1.3.79.2\n").unwrap();
+        mp_os::fs::write(dir.join("version.txt"), "1.3.79.2\n").unwrap();
         assert!(matches!(
             check_for_update(&server, "https://x/upgrade/version.txt", &dir).unwrap(),
             Check::UpdateFound { .. }
         ));
-        std::fs::write(dir.join("version.txt"), "soon\n").unwrap();
+        mp_os::fs::write(dir.join("version.txt"), "soon\n").unwrap();
         assert_eq!(
             check_for_update(&server, "https://x/upgrade/version.txt", &dir).unwrap_err(),
             "Version string portion was too short or too long."
         );
-        std::fs::write(dir.join("version.txt"), "1.x\n").unwrap();
+        mp_os::fs::write(dir.join("version.txt"), "1.x\n").unwrap();
         assert_eq!(
             check_for_update(&server, "https://x/upgrade/version.txt", &dir).unwrap_err(),
             "Input string was not in a correct format."
         );
         assert!(check_for_update(&server, "https://x/none.txt", &dir).is_err());
-        std::fs::remove_dir_all(&dir).unwrap();
+        mp_os::fs::remove_dir_all(&dir).unwrap();
     }
 
     #[test]
@@ -500,11 +502,11 @@ mod tests {
     #[test]
     fn differing_files_are_fetched_as_new_and_checked() {
         let dir = scratch("do-update");
-        std::fs::create_dir_all(dir.join("assets")).unwrap();
-        std::fs::write(dir.join("planner"), b"old planner").unwrap();
-        std::fs::write(dir.join("assets/same.bin"), b"abc").unwrap();
-        std::fs::write(dir.join("stray.dll"), b"x").unwrap();
-        std::fs::write(dir.join("keep.dll"), b"keep").unwrap();
+        mp_os::fs::create_dir_all(dir.join("assets")).unwrap();
+        mp_os::fs::write(dir.join("planner"), b"old planner").unwrap();
+        mp_os::fs::write(dir.join("assets/same.bin"), b"abc").unwrap();
+        mp_os::fs::write(dir.join("stray.dll"), b"x").unwrap();
+        mp_os::fs::write(dir.join("keep.dll"), b"keep").unwrap();
         let checksums = format!(
             "{}  ./planner\n{}  ./assets/same.bin\n{}  ./keep.dll\n{}  ./files.html\n",
             md5::hex(b"new planner"),
@@ -532,19 +534,19 @@ mod tests {
         .unwrap();
         assert_eq!(written, vec![dir.join("planner.new")]);
         assert_eq!(
-            std::fs::read(dir.join("planner.new")).unwrap(),
+            mp_os::fs::read(dir.join("planner.new")).unwrap(),
             b"new planner"
         );
         assert_eq!(
-            std::fs::read_to_string(dir.join("checksums.txt.new")).unwrap(),
+            mp_os::fs::read_to_string(dir.join("checksums.txt.new")).unwrap(),
             checksums
         );
         assert!(
-            !dir.join("stray.dll").exists(),
+            !dir.join("stray.dll").os_exists(),
             "a dll the list has not got is deleted"
         );
-        assert!(dir.join("keep.dll").exists());
-        assert!(!dir.join("writetest.txt").exists());
+        assert!(dir.join("keep.dll").os_exists());
+        assert!(!dir.join("writetest.txt").os_exists());
         assert_eq!(said.first(), Some(&(-1, "Getting Base URL".to_owned())));
         assert!(said.contains(&(-1, "Hashing Files".to_owned())));
         assert!(
@@ -570,7 +572,7 @@ mod tests {
         );
 
         // A server whose file does not hash as listed.
-        std::fs::remove_file(dir.join("planner.new")).unwrap();
+        mp_os::fs::remove_file(dir.join("planner.new")).unwrap();
         let wrong = Server::new(&[
             ("https://x/checksums.txt", checksums.as_bytes()),
             ("https://x/upgrade//planner", b"something else"),
@@ -580,18 +582,18 @@ mod tests {
             "File downloaded does not match hash: planner"
         );
         // Cancelled before the first fetch.
-        std::fs::remove_file(dir.join("planner.new")).unwrap();
+        mp_os::fs::remove_file(dir.join("planner.new")).unwrap();
         assert_eq!(
             do_update(&server, &channel, &dir, &mut |_, _| {}, &|| true).unwrap_err(),
             "User Request"
         );
-        std::fs::remove_dir_all(&dir).unwrap();
+        mp_os::fs::remove_dir_all(&dir).unwrap();
     }
 
     #[test]
     fn a_zip_channel_is_read_once_for_every_file() {
         let dir = scratch("zip");
-        std::fs::write(dir.join("a.txt"), b"old a").unwrap();
+        mp_os::fs::write(dir.join("a.txt"), b"old a").unwrap();
         let entries = vec![
             mp_log::zip::Entry {
                 name: "a.txt".to_owned(),
@@ -633,8 +635,8 @@ mod tests {
             outcome.unwrap_err(),
             "File downloaded does not match hash: zz-missing.txt"
         );
-        assert_eq!(std::fs::read(dir.join("a.txt.new")).unwrap(), b"new a");
-        assert_eq!(std::fs::read(dir.join("sub/b.txt.new")).unwrap(), b"new b");
+        assert_eq!(mp_os::fs::read(dir.join("a.txt.new")).unwrap(), b"new a");
+        assert_eq!(mp_os::fs::read(dir.join("sub/b.txt.new")).unwrap(), b"new b");
         let zip_requests = server
             .requests
             .borrow()
@@ -642,7 +644,7 @@ mod tests {
             .filter(|u| u.ends_with("Beta.zip"))
             .count();
         assert_eq!(zip_requests, 1);
-        std::fs::remove_dir_all(&dir).unwrap();
+        mp_os::fs::remove_dir_all(&dir).unwrap();
     }
 
     #[test]

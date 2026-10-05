@@ -11,6 +11,8 @@ repository.workspace = true
 workspace = true
 
 [dependencies]
+# The files, std's on the desktop and the page's own in a web page (web/tools/port_fs.py).
+mp-os.workspace = true
 # DFLogBuffer, BinaryLog and .NET's number text, which every dataflash value goes through before
 # GeoRefImageBase parses it back (L4, below this crate's L5).
 mp-log.workspace = true

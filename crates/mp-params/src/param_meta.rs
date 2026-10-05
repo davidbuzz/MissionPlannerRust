@@ -170,7 +170,7 @@ mod tests {
     fn sitl_names() -> Vec<String> {
         let fixture = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("../../testdata/params/sitl-copter.param");
-        let text = std::fs::read_to_string(&fixture).expect("the SITL parameter dump");
+        let text = mp_os::fs::read_to_string(&fixture).expect("the SITL parameter dump");
         let names: Vec<String> = text
             .lines()
             .filter(|line| !line.starts_with('#'))

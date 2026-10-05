@@ -40,6 +40,7 @@
 //! The person the C# asks - its `CustomMessageBox`es - and its progress events are a
 //! [`Dialogue`], so the pages put them on screen and the tests script them.
 
+use mp_os::fs::FsExt as _;
 use std::io::{self, Read, Write};
 use std::path::{Path, PathBuf};
 use web_time::{Duration, Instant};
@@ -245,7 +246,7 @@ impl Reached {
     /// Notes the file as it is on disk now.
     fn file(&mut self, path: &Path) {
         self.file = Some(path.to_owned());
-        self.size = std::fs::metadata(path).ok().map(|meta| meta.len());
+        self.size = mp_os::fs::metadata(path).ok().map(|meta| meta.len());
     }
 }
 
@@ -464,27 +465,27 @@ pub fn get_file_from_net(
     let staged = PathBuf::from(format!("{}.new", saveto.display()));
     let saved = saveto
         .parent()
-        .map_or(Ok(()), std::fs::create_dir_all)
-        .and_then(|()| std::fs::write(&staged, &bytes))
+        .map_or(Ok(()), mp_os::fs::create_dir_all)
+        .and_then(|()| mp_os::fs::write(&staged, &bytes))
         .and_then(|()| {
-            if saveto.exists() {
-                std::fs::remove_file(saveto)?;
+            if saveto.os_exists() {
+                mp_os::fs::remove_file(saveto)?;
             }
-            std::fs::rename(&staged, saveto)
+            mp_os::fs::rename(&staged, saveto)
         });
     saved.is_ok()
 }
 
 /// `Path.GetTempFileName()`: a new, empty file in the temporary directory.
 fn temp_file_name(dir: &Path) -> io::Result<PathBuf> {
-    std::fs::create_dir_all(dir)?;
+    mp_os::fs::create_dir_all(dir)?;
     let pid = mp_os::process_id();
     for attempt in 0..1000_u32 {
         let nanos = web_time::SystemTime::now()
             .duration_since(web_time::UNIX_EPOCH)
             .map_or(0, |since| since.subsec_nanos());
         let path = dir.join(format!("tmp{pid:x}{nanos:x}{attempt:x}.tmp"));
-        match std::fs::OpenOptions::new()
+        match mp_os::fs::OpenOptions::new()
             .write(true)
             .create_new(true)
             .open(&path)
@@ -589,7 +590,7 @@ fn upload_arduino(
     reached: &mut Reached,
 ) -> Result<bool, Stop> {
     cx.dialogue.progress(0, READING_HEX_FILE);
-    let read = std::fs::read(filename)
+    let read = mp_os::fs::read(filename)
         .map_err(|err| err.to_string())
         .and_then(|bytes| read_intel_hex(&String::from_utf8_lossy(&bytes), cx.dialogue));
     let flash = match read {
@@ -1345,7 +1346,7 @@ pub fn download_and_flash(cx: &mut Cx<'_>, baseurl: &str, device_name: &str) -> 
             if !length_known {
                 return Err("no Content-Length".to_owned());
             }
-            std::fs::write(&tempfile, bytes).map_err(|err| err.to_string())?;
+            mp_os::fs::write(&tempfile, bytes).map_err(|err| err.to_string())?;
             Ok(tempfile)
         });
     let tempfile = match downloaded {

@@ -887,7 +887,7 @@ fn logs(url: &str, wanted: Option<u16>, out_dir: &str) -> std::process::ExitCode
     loop {
         if let Some((_, bytes)) = link.finished_log() {
             let path = std::path::Path::new(out_dir).join(format!("log_{}.bin", listing.id));
-            return match std::fs::write(&path, &bytes) {
+            return match mp_os::fs::write(&path, &bytes) {
                 Ok(()) => {
                     println!("wrote {} ({} bytes)", path.display(), bytes.len());
                     std::process::ExitCode::SUCCESS
@@ -1224,7 +1224,7 @@ fn mission(url: &str, file: Option<&str>) -> std::process::ExitCode {
 
     // Upload first, if a file was given.
     if let Some(path) = file {
-        let text = match std::fs::read_to_string(path) {
+        let text = match mp_os::fs::read_to_string(path) {
             Ok(text) => text,
             Err(err) => {
                 eprintln!("could not read {path}: {err}");
@@ -1421,7 +1421,7 @@ fn survey(url: &str, out_path: &str, spacing: Option<f64>) -> std::process::Exit
         });
     }
 
-    if let Err(err) = std::fs::write(out_path, mp_mission::write_waypoints(&items)) {
+    if let Err(err) = mp_os::fs::write(out_path, mp_mission::write_waypoints(&items)) {
         eprintln!("could not write {out_path}: {err}");
         return std::process::ExitCode::FAILURE;
     }
@@ -1974,7 +1974,7 @@ mod tests {
     fn catalogue() -> Manifest {
         let path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
             .join("../../testdata/firmware/manifest.json.gz");
-        let bytes = std::fs::read(&path).expect("the fixture");
+        let bytes = mp_os::fs::read(&path).expect("the fixture");
         Manifest::decode(&bytes, true).expect("parses")
     }
 
@@ -2471,7 +2471,7 @@ mod terrain {
             "headless-planner-terrain-{test}-{}",
             mp_os::process_id()
         ));
-        let _ = std::fs::remove_dir_all(&dir);
+        let _ = mp_os::fs::remove_dir_all(&dir);
         dir
     }
 
@@ -2483,7 +2483,7 @@ mod terrain {
         srtm.set_baseurl(format!("{BASE}/SRTM3/"));
 
         let answer = terrain_answer(&srtm, 0.25, -0.75, Duration::from_secs(60));
-        let _ = std::fs::remove_dir_all(&dir);
+        let _ = mp_os::fs::remove_dir_all(&dir);
         assert_eq!(
             (answer.current_type, answer.alt, answer.alt_source),
             (TileType::Valid, 321.0, "SRTM")
@@ -2502,7 +2502,7 @@ mod terrain {
         srtm.set_baseurl(format!("{BASE}/SRTM3/"));
 
         let answer = terrain_answer(&srtm, 0.25, -0.75, Duration::from_millis(1500));
-        let _ = std::fs::remove_dir_all(&dir);
+        let _ = mp_os::fs::remove_dir_all(&dir);
         assert_eq!(answer, AltResponse::INVALID);
         // Still at the head of the queue, as the C# leaves it.
         assert_eq!(srtm.queued(), vec!["N00W001.hgt"]);

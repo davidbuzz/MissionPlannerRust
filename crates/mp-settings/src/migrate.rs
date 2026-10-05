@@ -44,6 +44,7 @@
 //! C# reads beside its executable (`GetRunningDirectory`, `Program.cs:209-221`), which is not a
 //! data directory; they are copied from the user data directory if a user put them there.
 
+use mp_os::fs::FsExt as _;
 use std::fmt::Write as _;
 use std::io;
 use std::path::{Path, PathBuf};
@@ -184,10 +185,10 @@ pub fn import(directories: &Directories) -> Import {
     if !is_missing_or_empty(&directories.to_user) {
         return Import::AlreadyHere;
     }
-    if !directories.from_user.is_dir() && !directories.from_shared.is_dir() {
+    if !directories.from_user.os_is_dir() && !directories.from_shared.os_is_dir() {
         return Import::NothingToImport;
     }
-    if let Err(err) = std::fs::create_dir_all(&directories.to_user) {
+    if let Err(err) = mp_os::fs::create_dir_all(&directories.to_user) {
         return Import::Failed(format!("{}: {err}", directories.to_user.display()));
     }
     let mut names = Vec::new();
@@ -196,7 +197,7 @@ pub fn import(directories: &Directories) -> Import {
         let source = directories.from(kept).join(name);
         let target = directories.to(kept).join(name);
         // A file this application already has (a shared directory on Windows can) is its own.
-        if std::fs::symlink_metadata(&source).is_err() || std::fs::symlink_metadata(&target).is_ok()
+        if mp_os::fs::symlink_metadata(&source).is_err() || mp_os::fs::symlink_metadata(&target).is_ok()
         {
             continue;
         }
@@ -206,7 +207,7 @@ pub fn import(directories: &Directories) -> Import {
         }
     }
     let marker = marker_text(directories, &names, &failed);
-    if let Err(err) = std::fs::write(directories.to_user.join(MARKER), marker) {
+    if let Err(err) = mp_os::fs::write(directories.to_user.join(MARKER), marker) {
         return Import::Failed(format!("{MARKER}: {err}"));
     }
     Import::Imported {
@@ -219,7 +220,7 @@ pub fn import(directories: &Directories) -> Import {
 /// Whether a directory is absent or has nothing in it. One that cannot be read is neither: it is
 /// left alone.
 fn is_missing_or_empty(directory: &Path) -> bool {
-    match std::fs::read_dir(directory) {
+    match mp_os::fs::read_dir(directory) {
         Ok(mut entries) => entries.next().is_none(),
         Err(err) => err.kind() == io::ErrorKind::NotFound,
     }
@@ -227,27 +228,27 @@ fn is_missing_or_empty(directory: &Path) -> bool {
 
 /// Copies a file, or a folder and everything in it. Reads the source only.
 fn copy(source: &Path, target: &Path) -> io::Result<()> {
-    if std::fs::metadata(source)?.is_dir() {
+    if mp_os::fs::metadata(source)?.is_dir() {
         copy_tree(source, target)
     } else {
         if let Some(parent) = target.parent() {
-            std::fs::create_dir_all(parent)?;
+            mp_os::fs::create_dir_all(parent)?;
         }
-        std::fs::copy(source, target).map(|_| ())
+        mp_os::fs::copy(source, target).map(|_| ())
     }
 }
 
 /// Copies a folder's contents. A link inside it is copied as what it points at when that is a
 /// file, and is an error when it is a folder, so a loop of links cannot recurse for ever.
 fn copy_tree(source: &Path, target: &Path) -> io::Result<()> {
-    std::fs::create_dir_all(target)?;
-    for entry in std::fs::read_dir(source)? {
+    mp_os::fs::create_dir_all(target)?;
+    for entry in mp_os::fs::read_dir(source)? {
         let entry = entry?;
         let to = target.join(entry.file_name());
         if entry.file_type()?.is_dir() {
             copy_tree(&entry.path(), &to)?;
         } else {
-            std::fs::copy(entry.path(), &to)?;
+            mp_os::fs::copy(entry.path(), &to)?;
         }
     }
     Ok(())
@@ -272,6 +273,7 @@ fn marker_text(directories: &Directories, names: &[String], failed: &[String]) -
 
 #[cfg(test)]
 mod tests {
+    use mp_os::fs::FsExt as _;
     use super::*;
     use std::collections::BTreeMap;
 
@@ -285,8 +287,8 @@ mod tests {
                 mp_os::process_id(),
                 wasm_thread::current().id()
             ));
-            let _ = std::fs::remove_dir_all(&path);
-            std::fs::create_dir_all(&path).expect("scratch");
+            let _ = mp_os::fs::remove_dir_all(&path);
+            mp_os::fs::create_dir_all(&path).expect("scratch");
             Self(path)
         }
 
@@ -303,21 +305,21 @@ mod tests {
 
     impl Drop for Scratch {
         fn drop(&mut self) {
-            let _ = std::fs::remove_dir_all(&self.0);
+            let _ = mp_os::fs::remove_dir_all(&self.0);
         }
     }
 
     /// Every file under a directory, by path relative to it, with its bytes; folders as `None`.
     fn snapshot(root: &Path) -> BTreeMap<PathBuf, Option<Vec<u8>>> {
         fn walk(root: &Path, dir: &Path, into: &mut BTreeMap<PathBuf, Option<Vec<u8>>>) {
-            for entry in std::fs::read_dir(dir).expect("readable") {
+            for entry in mp_os::fs::read_dir(dir).expect("readable") {
                 let path = entry.expect("entry").path();
                 let relative = path.strip_prefix(root).expect("under root").to_path_buf();
-                if path.is_dir() {
+                if path.os_is_dir() {
                     into.insert(relative, None);
                     walk(root, &path, into);
                 } else {
-                    into.insert(relative, Some(std::fs::read(&path).expect("readable")));
+                    into.insert(relative, Some(mp_os::fs::read(&path).expect("readable")));
                 }
             }
         }
@@ -341,20 +343,20 @@ mod tests {
         let folders = scratch.mono();
         let directories = Directories::of(&folders);
         let theirs = &directories.from_user;
-        std::fs::create_dir_all(theirs.join("gmapcache")).expect("C# directory");
-        std::fs::write(theirs.join("gmapcache").join("tile.png"), b"tile").expect("tile");
-        std::fs::write(theirs.join("ArduCopter.apm.pdef.xml"), b"<params/>").expect("pdef");
+        mp_os::fs::create_dir_all(theirs.join("gmapcache")).expect("C# directory");
+        mp_os::fs::write(theirs.join("gmapcache").join("tile.png"), b"tile").expect("tile");
+        mp_os::fs::write(theirs.join("ArduCopter.apm.pdef.xml"), b"<params/>").expect("pdef");
         if name == "History" {
             let history = theirs.join("History");
-            std::fs::create_dir_all(history.join("ArduCopter")).expect("History");
-            std::fs::write(history.join("firmware.hex"), content("firmware.hex")).expect("hex");
-            std::fs::write(
+            mp_os::fs::create_dir_all(history.join("ArduCopter")).expect("History");
+            mp_os::fs::write(history.join("firmware.hex"), content("firmware.hex")).expect("hex");
+            mp_os::fs::write(
                 history.join("ArduCopter").join("arducopter.apj"),
                 content("apj"),
             )
             .expect("apj");
         } else {
-            std::fs::write(theirs.join(name), content(name)).expect("artefact");
+            mp_os::fs::write(theirs.join(name), content(name)).expect("artefact");
         }
         let before = snapshot(theirs);
 
@@ -369,9 +371,9 @@ mod tests {
                 assert_eq!(ours.get(path), Some(bytes), "{} not copied", path.display());
             }
         }
-        assert!(!directories.to_user.join("gmapcache").exists());
-        assert!(!directories.to_user.join("ArduCopter.apm.pdef.xml").exists());
-        let marker = std::fs::read_to_string(directories.to_user.join(MARKER)).expect("the marker");
+        assert!(!directories.to_user.join("gmapcache").os_exists());
+        assert!(!directories.to_user.join("ArduCopter.apm.pdef.xml").os_exists());
+        let marker = mp_os::fs::read_to_string(directories.to_user.join(MARKER)).expect("the marker");
         assert!(marker.lines().any(|line| line == name), "{marker}");
     }
 
@@ -429,12 +431,12 @@ mod tests {
     fn every_artefact_at_once_in_order() {
         let scratch = Scratch::new("all");
         let directories = Directories::of(&scratch.mono());
-        std::fs::create_dir_all(&directories.from_user).expect("C# directory");
+        mp_os::fs::create_dir_all(&directories.from_user).expect("C# directory");
         for &(name, _) in ARTEFACTS {
             if name == "History" {
-                std::fs::create_dir_all(directories.from_user.join(name)).expect("History");
+                mp_os::fs::create_dir_all(directories.from_user.join(name)).expect("History");
             } else {
-                std::fs::write(directories.from_user.join(name), content(name)).expect("file");
+                mp_os::fs::write(directories.from_user.join(name), content(name)).expect("file");
             }
         }
         let outcome = import(&directories);
@@ -450,33 +452,33 @@ mod tests {
     fn a_second_start_imports_nothing() {
         let scratch = Scratch::new("second");
         let directories = Directories::of(&scratch.mono());
-        std::fs::create_dir_all(&directories.from_user).expect("C# directory");
-        std::fs::write(directories.from_user.join("config.xml"), b"first").expect("config");
+        mp_os::fs::create_dir_all(&directories.from_user).expect("C# directory");
+        mp_os::fs::write(directories.from_user.join("config.xml"), b"first").expect("config");
         assert_eq!(import(&directories).names(), ["config.xml".to_owned()]);
 
         // The C# goes on writing its own file, and a new one; this application keeps what it has.
-        std::fs::write(directories.from_user.join("config.xml"), b"second").expect("config");
-        std::fs::write(directories.from_user.join("poi.txt"), b"poi").expect("poi");
+        mp_os::fs::write(directories.from_user.join("config.xml"), b"second").expect("config");
+        mp_os::fs::write(directories.from_user.join("poi.txt"), b"poi").expect("poi");
         let again = import(&directories);
         assert_eq!(again, Import::AlreadyHere);
         assert_eq!(again.summary(), "none");
         assert_eq!(
-            std::fs::read(directories.to_user.join("config.xml")).expect("ours"),
+            mp_os::fs::read(directories.to_user.join("config.xml")).expect("ours"),
             b"first"
         );
-        assert!(!directories.to_user.join("poi.txt").exists());
+        assert!(!directories.to_user.join("poi.txt").os_exists());
     }
 
     #[test]
     fn a_start_that_found_nothing_to_copy_still_never_runs_again() {
         let scratch = Scratch::new("found-nothing");
         let directories = Directories::of(&scratch.mono());
-        std::fs::create_dir_all(&directories.from_user).expect("an empty C# directory");
+        mp_os::fs::create_dir_all(&directories.from_user).expect("an empty C# directory");
         let first = import(&directories);
         assert!(matches!(first, Import::Imported { .. }), "{first:?}");
         assert_eq!(first.summary(), "none");
-        assert!(directories.to_user.join(MARKER).is_file());
-        std::fs::write(directories.from_user.join("config.xml"), b"later").expect("config");
+        assert!(directories.to_user.join(MARKER).os_is_file());
+        mp_os::fs::write(directories.from_user.join("config.xml"), b"later").expect("config");
         assert_eq!(import(&directories), Import::AlreadyHere);
     }
 
@@ -484,10 +486,10 @@ mod tests {
     fn an_existing_directory_with_anything_in_it_is_left_alone() {
         let scratch = Scratch::new("not-empty");
         let directories = Directories::of(&scratch.mono());
-        std::fs::create_dir_all(&directories.from_user).expect("C# directory");
-        std::fs::write(directories.from_user.join("config.xml"), b"theirs").expect("config");
-        std::fs::create_dir_all(&directories.to_user).expect("ours");
-        std::fs::write(directories.to_user.join("poi.txt"), b"ours").expect("poi");
+        mp_os::fs::create_dir_all(&directories.from_user).expect("C# directory");
+        mp_os::fs::write(directories.from_user.join("config.xml"), b"theirs").expect("config");
+        mp_os::fs::create_dir_all(&directories.to_user).expect("ours");
+        mp_os::fs::write(directories.to_user.join("poi.txt"), b"ours").expect("poi");
         let before = snapshot(&directories.to_user);
 
         assert_eq!(import(&directories), Import::AlreadyHere);
@@ -498,9 +500,9 @@ mod tests {
     fn an_existing_empty_directory_is_imported_into() {
         let scratch = Scratch::new("empty");
         let directories = Directories::of(&scratch.mono());
-        std::fs::create_dir_all(&directories.from_user).expect("C# directory");
-        std::fs::write(directories.from_user.join("config.xml"), b"theirs").expect("config");
-        std::fs::create_dir_all(&directories.to_user).expect("ours, empty");
+        mp_os::fs::create_dir_all(&directories.from_user).expect("C# directory");
+        mp_os::fs::write(directories.from_user.join("config.xml"), b"theirs").expect("config");
+        mp_os::fs::create_dir_all(&directories.to_user).expect("ours, empty");
         assert_eq!(import(&directories).names(), ["config.xml".to_owned()]);
     }
 
@@ -511,8 +513,8 @@ mod tests {
         let outcome = import(&directories);
         assert_eq!(outcome, Import::NothingToImport);
         assert_eq!(outcome.summary(), "none");
-        assert!(!directories.to_user.exists());
-        assert!(!directories.from_user.exists());
+        assert!(!directories.to_user.os_exists());
+        assert!(!directories.from_user.os_exists());
     }
 
     #[test]
@@ -533,13 +535,13 @@ mod tests {
             directories.to_shared,
             scratch.0.join("ProgramData").join("MissionPlannerRust")
         );
-        std::fs::create_dir_all(&directories.from_user).expect("C# user directory");
-        std::fs::create_dir_all(&directories.from_shared).expect("C# shared directory");
-        std::fs::write(directories.from_user.join("config.xml"), b"config").expect("config");
-        std::fs::write(directories.from_shared.join("UserAlerts.json"), b"{}").expect("alerts");
+        mp_os::fs::create_dir_all(&directories.from_user).expect("C# user directory");
+        mp_os::fs::create_dir_all(&directories.from_shared).expect("C# shared directory");
+        mp_os::fs::write(directories.from_user.join("config.xml"), b"config").expect("config");
+        mp_os::fs::write(directories.from_shared.join("UserAlerts.json"), b"{}").expect("alerts");
         // A shared file this application already has is not overwritten.
-        std::fs::create_dir_all(directories.from_shared.join("History")).expect("History");
-        std::fs::create_dir_all(directories.to_shared.join("History")).expect("our History");
+        mp_os::fs::create_dir_all(directories.from_shared.join("History")).expect("History");
+        mp_os::fs::create_dir_all(directories.to_shared.join("History")).expect("our History");
 
         let outcome = import(&directories);
         assert_eq!(
@@ -547,9 +549,9 @@ mod tests {
             ["config.xml".to_owned(), "UserAlerts.json".to_owned()]
         );
         assert_eq!(
-            std::fs::read(directories.to_shared.join("UserAlerts.json")).expect("copied"),
+            mp_os::fs::read(directories.to_shared.join("UserAlerts.json")).expect("copied"),
             b"{}"
         );
-        assert!(!directories.to_user.join("UserAlerts.json").exists());
+        assert!(!directories.to_user.join("UserAlerts.json").os_exists());
     }
 }

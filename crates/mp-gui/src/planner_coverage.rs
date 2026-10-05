@@ -1337,7 +1337,7 @@ mod tests {
     #[test]
     fn the_committed_report_is_current() {
         let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join(REPORT);
-        let committed = std::fs::read_to_string(&path).unwrap_or_default();
+        let committed = mp_os::fs::read_to_string(&path).unwrap_or_default();
         assert!(
             committed == report(),
             "docs/coverage/flightplanner.md is stale; run `cargo test -p mp-gui planner_coverage -- --ignored update_report`"
@@ -1349,7 +1349,7 @@ mod tests {
     #[ignore = "writes docs/coverage/flightplanner.md"]
     fn update_report() {
         let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join(REPORT);
-        std::fs::write(&path, report()).expect("write the report");
+        mp_os::fs::write(&path, report()).expect("write the report");
     }
 
     /// The count is the recorded one, so a change in either direction is a deliberate edit.

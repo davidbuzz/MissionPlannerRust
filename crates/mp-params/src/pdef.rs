@@ -42,6 +42,7 @@
 //! `AUTOPILOT_VERSION.flight_sw_version` carries the same numbers packed, and is decoded here
 //! too, for a vehicle that never sends its banner.
 
+use mp_os::fs::FsExt as _;
 use std::collections::BTreeMap;
 use std::io::Read;
 use std::path::{Path, PathBuf};
@@ -291,7 +292,7 @@ pub fn fetch_versioned(
     version: Version,
 ) -> Result<PathBuf, FetchError> {
     let path = versioned_path(data_directory, vehicle, version);
-    if path.is_file() {
+    if path.os_is_file() {
         return Ok(path);
     }
     let url = versioned_url(vehicle, version);
@@ -306,7 +307,7 @@ pub fn fetch_versioned(
 /// `// C#: ExtLibs/Utilities/ParameterMetaDataRepositoryAPMpdef.cs:93-147`
 pub fn fetch_unversioned(data_directory: &Path, vehicle: &str) -> Result<PathBuf, FetchError> {
     let path = unversioned_path(data_directory, vehicle);
-    let fresh = std::fs::metadata(&path)
+    let fresh = mp_os::fs::metadata(&path)
         .and_then(|meta| meta.modified())
         .ok()
         .and_then(|modified| modified.elapsed().ok())
@@ -371,11 +372,11 @@ fn write_atomically(path: &Path, bytes: &[u8]) -> Result<(), FetchError> {
         source,
     };
     if let Some(parent) = path.parent() {
-        std::fs::create_dir_all(parent).map_err(io)?;
+        mp_os::fs::create_dir_all(parent).map_err(io)?;
     }
     let temporary = path.with_extension("part");
-    std::fs::write(&temporary, bytes).map_err(io)?;
-    std::fs::rename(&temporary, path).map_err(io)
+    mp_os::fs::write(&temporary, bytes).map_err(io)?;
+    mp_os::fs::rename(&temporary, path).map_err(io)
 }
 
 /// What one `<param>` says, in the shape [`crate::param_meta::ParamMeta`] has.
@@ -439,7 +440,7 @@ pub enum PdefError {
 impl Pdef {
     /// Reads a file.
     pub fn load(path: &Path) -> Result<Self, PdefError> {
-        let text = std::fs::read_to_string(path).map_err(|source| PdefError::Io {
+        let text = mp_os::fs::read_to_string(path).map_err(|source| PdefError::Io {
             path: path.to_path_buf(),
             source,
         })?;
@@ -603,6 +604,7 @@ fn read_param(name: &str, param: &roxmltree::Node<'_, '_>) -> PdefParam {
 
 #[cfg(test)]
 mod tests {
+    use mp_os::fs::FsExt as _;
     use super::*;
 
     const SAMPLE: &str = r#"<?xml version="1.0" encoding="utf-8"?>
@@ -794,7 +796,7 @@ mod tests {
             return;
         };
         let path = unversioned_path(&dir, "ArduCopter");
-        if !path.is_file() {
+        if !path.os_is_file() {
             eprintln!("skipped: no {}", path.display());
             return;
         }
@@ -811,7 +813,7 @@ mod tests {
     fn the_downloaded_file_documents_more_of_a_real_vehicle_than_the_bundled_table() {
         let fixture = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("../../testdata/params/sitl-copter.param");
-        let text = std::fs::read_to_string(&fixture).expect("the SITL parameter dump");
+        let text = mp_os::fs::read_to_string(&fixture).expect("the SITL parameter dump");
         let names: Vec<&str> = text
             .lines()
             .filter(|line| !line.starts_with('#'))

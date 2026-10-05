@@ -353,14 +353,14 @@ mod tests {
                 mp_os::process_id(),
                 wasm_thread::current().id()
             ));
-            let _ = std::fs::remove_dir_all(&path);
+            let _ = mp_os::fs::remove_dir_all(&path);
             Self(path)
         }
     }
 
     impl Drop for Scratch {
         fn drop(&mut self) {
-            let _ = std::fs::remove_dir_all(&self.0);
+            let _ = mp_os::fs::remove_dir_all(&self.0);
         }
     }
 

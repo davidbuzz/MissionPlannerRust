@@ -543,6 +543,7 @@ pub fn page(cx: &mut Context<MissionPlanner>) -> AnyElement {
 
 #[cfg(test)]
 mod tests {
+    use mp_os::fs::FsExt as _;
     use std::collections::BTreeSet;
 
     use super::*;
@@ -667,7 +668,7 @@ mod tests {
             assert!(body.contains(stem), "{} does not use {stem}", row.handler);
                         assert!(
                 crate::config_coverage::source::csharp_root()
-                    .is_some_and(|root| root.join(file).exists()),
+                    .is_some_and(|root| root.join(file).os_exists()),
                 "{file}"
             );
         }
@@ -966,7 +967,7 @@ mod tests {
             let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
                 .join("src")
                 .join(port);
-            assert!(path.exists(), "{}", path.display());
+            assert!(path.os_exists(), "{}", path.display());
         }
         let (Some(advanced), Some(setup)) = (
             csharp("GCSViews/ConfigurationView/ConfigAdvanced.cs"),

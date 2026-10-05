@@ -406,7 +406,7 @@ impl MissionPlanner {
         if let Some((id, bytes)) = self.telemetry.finished_log() {
             self.telemetry.clear_log_download();
             let path = Self::plan_directory().join(format!("log_{id}.bin"));
-            self.file_status = Some(match std::fs::write(&path, &bytes) {
+            self.file_status = Some(match mp_os::fs::write(&path, &bytes) {
                 Ok(()) => format!("wrote {} ({} bytes)", path.display(), bytes.len()),
                 Err(err) => format!("could not write {}: {err}", path.display()),
             });

@@ -372,7 +372,7 @@ impl<H: Copy> DefaultSettings<H> {
         bytes: Result<Option<Vec<u8>>, String>,
     ) -> Result<Vec<(String, f64)>, String> {
         let bytes = bytes?.ok_or("System.ArgumentNullException: Value cannot be null.")?;
-        std::fs::write(save_as, &bytes).map_err(|err| err.to_string())?;
+        mp_os::fs::write(save_as, &bytes).map_err(|err| err.to_string())?;
         let file =
             mp_params::param_file::ParamFile::load(save_as).map_err(|err| err.to_string())?;
         Ok(file
@@ -476,6 +476,7 @@ impl<H: Copy> DefaultSettings<H> {
 
 #[cfg(test)]
 mod tests {
+    use mp_os::fs::FsExt as _;
     use super::*;
     use crate::config::optional::tests::Answering;
 
@@ -508,7 +509,7 @@ mod tests {
             "mp-gui-defaultsettings-{}-{name}",
             mp_os::process_id()
         ));
-        std::fs::create_dir_all(&dir).expect("a scratch directory");
+        mp_os::fs::create_dir_all(&dir).expect("a scratch directory");
         dir
     }
 
@@ -602,7 +603,7 @@ mod tests {
             },
             &vehicle,
         );
-        assert!(save_as.is_file(), "saved in the user data directory");
+        assert!(save_as.os_is_file(), "saved in the user data directory");
         let form = control.compare().expect("ParamCompare");
         let names: Vec<&str> = form.rows().iter().map(|row| row.name.as_str()).collect();
         assert_eq!(names, ["FRAME"]);
@@ -618,7 +619,7 @@ mod tests {
         assert_eq!(control.message().map(|m| m.text.as_str()), Some(LOADED));
         assert!(control.take_changed());
         assert!(!control.take_changed(), "taken once");
-        let _ = std::fs::remove_dir_all(dir);
+        let _ = mp_os::fs::remove_dir_all(dir);
     }
 
     #[test]
@@ -637,7 +638,7 @@ mod tests {
         assert!(control.compare().is_none());
         assert!(control.message().is_none());
         assert!(control.take_changed());
-        let _ = std::fs::remove_dir_all(dir);
+        let _ = mp_os::fs::remove_dir_all(dir);
     }
 
     /// A fetch that failed, or a body that is JSON `null`, is "Failed to load file." with the

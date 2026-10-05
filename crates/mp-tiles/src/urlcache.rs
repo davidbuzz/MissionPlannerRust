@@ -40,9 +40,7 @@
 use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
-// A file's time is std's: this file compares the clock only with files' times. port_clock: keep
-use std::time::SystemTime; // port_clock: keep
-use web_time::Duration;
+use web_time::{Duration, SystemTime};
 
 /// The directory under the cache root, `CacheType.UrlCache.ToString()`.
 /// `// C#: ExtLibs/GMap.NET.Core/GMap.NET.Internals/Cache.cs:191, 259-266`
@@ -89,15 +87,15 @@ pub fn get(root: &Path, url: &str, stay: Duration) -> Option<String> {
         return None;
     }
     let file = path(root, url);
-    let written = std::fs::metadata(&file).ok()?.modified().ok()?;
+    let written = mp_os::fs::metadata(&file).ok()?.modified().ok()?;
     let age = SystemTime::now()
         .duration_since(written)
         .unwrap_or(Duration::ZERO);
     if age >= stay {
-        let _ = std::fs::remove_file(&file);
+        let _ = mp_os::fs::remove_file(&file);
         return None;
     }
-    let text = std::fs::read_to_string(&file).ok()?;
+    let text = mp_os::fs::read_to_string(&file).ok()?;
     Some(text.strip_prefix(BOM).unwrap_or(&text).to_owned())
 }
 
@@ -111,9 +109,9 @@ pub fn save(root: &Path, url: &str, content: &str) {
     LOCATION_KNOWN.store(true, Ordering::Release);
     let file = path(root, url);
     if let Some(directory) = file.parent() {
-        let _ = std::fs::create_dir_all(directory);
+        let _ = mp_os::fs::create_dir_all(directory);
     }
-    let Ok(mut out) = std::fs::File::create(&file) else {
+    let Ok(mut out) = mp_os::fs::File::create(&file) else {
         return;
     };
     let _ = out

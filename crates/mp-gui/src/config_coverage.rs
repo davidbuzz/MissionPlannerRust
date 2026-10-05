@@ -1446,6 +1446,7 @@ pub fn report() -> String {
 /// (`setup.rs`).
 #[cfg(test)]
 pub(crate) mod source {
+    use mp_os::fs::FsExt as _;
     use std::collections::BTreeMap;
     use std::path::{Path, PathBuf};
 
@@ -1460,12 +1461,12 @@ pub(crate) mod source {
     pub(crate) fn csharp_root() -> Option<PathBuf> {
         std::env::var_os("MP_SRC")
             .map(PathBuf::from)
-            .filter(|tree| tree.is_dir())
+            .filter(|tree| tree.os_is_dir())
     }
 
     /// A C# file, relative to the tree, or `None` when the tree is not here.
     pub(crate) fn csharp(path: &str) -> Option<String> {
-        std::fs::read_to_string(csharp_root()?.join(path)).ok()
+        mp_os::fs::read_to_string(csharp_root()?.join(path)).ok()
     }
 
     /// Every `<data name="K"><value>V</value>` in a `.resx`.
@@ -1688,7 +1689,7 @@ mod tests {
             return;
         };
         let directory = root.join("GCSViews/ConfigurationView");
-        let Ok(entries) = std::fs::read_dir(&directory) else {
+        let Ok(entries) = mp_os::fs::read_dir(&directory) else {
             eprintln!("skipped: MP_SRC does not name a clone of https://github.com/ArduPilot/MissionPlanner");
             return;
         };
@@ -1895,7 +1896,7 @@ mod tests {
             let (Ours::Done(at) | Ours::Partial(at, _)) = panel.ours else {
                 continue;
             };
-            let source = std::fs::read_to_string(workspace().join(at.file)).unwrap_or_else(|_| {
+            let source = mp_os::fs::read_to_string(workspace().join(at.file)).unwrap_or_else(|_| {
                 panic!("{} claims {}, which does not exist", panel.class, at.file)
             });
             let found = at.item.strip_prefix("fn ").map_or_else(
@@ -1916,7 +1917,7 @@ mod tests {
     #[test]
     fn the_committed_report_is_current() {
         let path = Path::new(env!("CARGO_MANIFEST_DIR")).join(REPORT);
-        let committed = std::fs::read_to_string(&path).unwrap_or_default();
+        let committed = mp_os::fs::read_to_string(&path).unwrap_or_default();
         assert!(
             committed == report(),
             "docs/coverage/configuration.md is stale; run `cargo test -p mp-gui config_coverage::tests::update_report -- --ignored`"
@@ -1928,7 +1929,7 @@ mod tests {
     #[ignore = "writes docs/coverage/configuration.md"]
     fn update_report() {
         let path = Path::new(env!("CARGO_MANIFEST_DIR")).join(REPORT);
-        std::fs::write(&path, report()).expect("write the report");
+        mp_os::fs::write(&path, report()).expect("write the report");
     }
 
     /// The counts are the recorded ones, so a change in either direction is a deliberate edit.

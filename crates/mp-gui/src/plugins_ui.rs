@@ -49,6 +49,7 @@
 // This module is internal to the binary; `pub` here documents intent rather than exporting API.
 #![allow(unreachable_pub)]
 
+use mp_os::fs::FsExt as _;
 /// The plugins Mission Planner ships, built for WebAssembly by `build.rs` and carried here.
 mod builtin {
     include!(concat!(env!("OUT_DIR"), "/builtin_plugins.rs"));
@@ -307,7 +308,7 @@ impl Plugins {
             builtin::BUILTIN
                 .iter()
                 .any(|(built_in, _)| built_in.eq_ignore_ascii_case(name))
-                || dir.as_ref().is_some_and(|dir| dir.join(name).is_file())
+                || dir.as_ref().is_some_and(|dir| dir.join(name).os_is_file())
         };
         self.manager.show(self.host.plugins(), &disabled, present);
     }
@@ -537,9 +538,9 @@ fn write_user_data(root: Option<PathBuf>, path: &str, data: &[u8]) -> Result<Str
     let root = root.ok_or_else(|| "no user data directory".to_owned())?;
     let full = user_path(&root, path)?;
     if let Some(parent) = full.parent() {
-        std::fs::create_dir_all(parent).map_err(|err| format!("{}: {err}", parent.display()))?;
+        mp_os::fs::create_dir_all(parent).map_err(|err| format!("{}: {err}", parent.display()))?;
     }
-    std::fs::write(&full, data).map_err(|err| format!("{}: {err}", full.display()))?;
+    mp_os::fs::write(&full, data).map_err(|err| format!("{}: {err}", full.display()))?;
     Ok(full.display().to_string())
 }
 
@@ -921,7 +922,7 @@ impl MissionPlanner {
             Answer::Input(reply) => reply.send(accepted.then_some(text)),
             Answer::Open(reply) => {
                 let opened = if accepted {
-                    match std::fs::read(&text) {
+                    match mp_os::fs::read(&text) {
                         Ok(data) => Some(OpenedFile {
                             name: Path::new(&text)
                                 .file_name()
@@ -942,7 +943,7 @@ impl MissionPlanner {
             }
             Answer::Save { data, reply } => {
                 let saved = if accepted {
-                    match std::fs::write(&text, &data) {
+                    match mp_os::fs::write(&text, &data) {
                         Ok(()) => Some(text),
                         Err(err) => {
                             self.file_status = Some(format!("{text}: {err}"));
@@ -1497,7 +1498,7 @@ mod tests {
     #[test]
     fn open_drone_id_is_off_until_a_user_turns_it_on() {
         let dir = mp_os::temp_dir().join(format!("plugins-default-off-{}", mp_os::process_id()));
-        std::fs::create_dir_all(&dir).expect("a scratch folder");
+        mp_os::fs::create_dir_all(&dir).expect("a scratch folder");
         let path = dir.join("config.xml");
         let mut persisted = crate::settings::Persisted::at(Some(path.clone()));
         assert_eq!(disabled_list(&persisted), ["opendroneid.wasm"]);
@@ -1510,7 +1511,7 @@ mod tests {
         assert!(disabled_list(&read_back).is_empty());
         persisted.set(DISABLED, "dowding.wasm");
         assert_eq!(disabled_list(&persisted), ["dowding.wasm"]);
-        let _ = std::fs::remove_dir_all(&dir);
+        let _ = mp_os::fs::remove_dir_all(&dir);
     }
 
     /// The planner carries the plugins Mission Planner ships, so a plain start loads them with
@@ -1553,7 +1554,7 @@ mod tests {
         let written = write_user_data(Some(root.clone()), "TerrainData/S36E149.DAT", b"dat")
             .expect("written");
         assert_eq!(
-            std::fs::read(&written).expect("read back"),
+            mp_os::fs::read(&written).expect("read back"),
             b"dat",
             "{written}"
         );
@@ -1564,7 +1565,7 @@ mod tests {
             );
         }
         assert!(write_user_data(None, "a", b"x").is_err());
-        let _ = std::fs::remove_dir_all(root);
+        let _ = mp_os::fs::remove_dir_all(root);
     }
 
     /// `Host.cs`: `connected` from the link, `firmware` by the C#'s names, the Scripts tab's

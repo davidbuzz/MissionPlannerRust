@@ -21,6 +21,7 @@
 //! `srtm.getAltitude` and everything it reads: tile names, `.hgt` tiles, the ASCII-grid fallback,
 //! and the state the download thread shares with it.
 
+use mp_os::fs::FsExt as _;
 use mp_os::Lock as _;
 use std::collections::HashMap;
 use std::io::Read;
@@ -264,7 +265,7 @@ fn avg(v1: f64, v2: f64, weight: f64) -> f64 {
 /// [`AltResponse::INVALID`] without caching.
 /// `// C#: ExtLibs/Utilities/srtm.cs:193-230`
 fn read_hgt(path: &Path) -> Result<Option<Tile>, Fault> {
-    let mut file = std::fs::File::open(path)?;
+    let mut file = mp_os::fs::File::open(path)?;
     let length = file.metadata()?.len();
     let size = if length == (SIZE_3SEC * SIZE_3SEC * 2) as u64 {
         SIZE_3SEC
@@ -560,7 +561,7 @@ impl Inner {
         let path = self.datadirectory.join(filename);
         let cached = lock(&self.cache).get(filename).cloned();
         // C#: File.Exists is false for a directory, and for anything it cannot look at.
-        if cached.is_some() || path.is_file() {
+        if cached.is_some() || path.os_is_file() {
             let tile = if let Some(tile) = cached {
                 tile
             } else {
@@ -577,14 +578,14 @@ impl Inner {
         }
 
         let ascii = self.datadirectory.join(ascii_name(lat, lng));
-        if ascii.is_file() {
+        if ascii.os_is_file() {
             return self.ascii(&ascii, lat, lng);
         }
 
         // C#: ExtLibs/Utilities/srtm.cs:378-398 - "get something".
         if zoom >= DOWNLOAD_ZOOM {
-            if !self.datadirectory.is_dir() {
-                std::fs::create_dir_all(&self.datadirectory)?;
+            if !self.datadirectory.os_is_dir() {
+                mp_os::fs::create_dir_all(&self.datadirectory)?;
             }
             if !self.cache_only.load(Ordering::Acquire) {
                 let mut queue = lock(&self.queue);
@@ -608,7 +609,7 @@ impl Inner {
         if let Some(bytes) = lock(&self.filecache).get(path) {
             return Ok(Arc::clone(bytes));
         }
-        let bytes = Arc::new(std::fs::read(path)?);
+        let bytes = Arc::new(mp_os::fs::read(path)?);
         lock(&self.filecache).insert(path.to_owned(), Arc::clone(&bytes));
         Ok(bytes)
     }
@@ -810,7 +811,7 @@ mod tests {
     /// The records of `testdata/srtm/oracle.txt` whose first word is `kind`, split on spaces.
     fn records(kind: &str) -> Vec<Vec<String>> {
         let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../testdata/srtm/oracle.txt");
-        let text = std::fs::read_to_string(path).unwrap();
+        let text = mp_os::fs::read_to_string(path).unwrap();
         text.lines()
             .map(|line| line.split(' ').map(str::to_owned).collect::<Vec<_>>())
             .filter(|fields| fields.first().map(String::as_str) == Some(kind))

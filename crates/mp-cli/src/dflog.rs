@@ -104,7 +104,7 @@ fn to_kml(path: &Path, out: Option<&str>) -> Result<(), String> {
 }
 
 fn matlab(path: &Path, out: Option<&str>) -> Result<(), String> {
-    let data = std::fs::read(path).map_err(|e| format!("{}: {e}", path.display()))?;
+    let data = mp_os::fs::read(path).map_err(|e| format!("{}: {e}", path.display()))?;
     let converted = mp_log::matlab::process_log(&data, &flight_mode_name)
         .map_err(|e| format!("Error converting file {e}"))?;
     let target = out.map_or_else(
@@ -112,7 +112,7 @@ fn matlab(path: &Path, out: Option<&str>) -> Result<(), String> {
         PathBuf::from,
     );
     let bytes = mp_log::matlab::write_mat(&converted.arrays, &mp_log::matlab::created_now());
-    std::fs::write(&target, bytes).map_err(|e| format!("{}: {e}", target.display()))?;
+    mp_os::fs::write(&target, bytes).map_err(|e| format!("{}: {e}", target.display()))?;
     println!("{}", target.display());
     Ok(())
 }

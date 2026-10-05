@@ -2444,7 +2444,7 @@ impl LogBrowse {
                 rows += 1;
             });
         }
-        match std::fs::write(&path, text) {
+        match mp_os::fs::write(&path, text) {
             Ok(()) => {
                 self.refused = None;
                 self.exported = Some(format!("{rows} rows"));
@@ -2461,7 +2461,7 @@ impl LogBrowse {
             self.refuse(format!("{name} is not a folder name"));
             return;
         };
-        let written = std::fs::create_dir_all(&folder)
+        let written = mp_os::fs::create_dir_all(&folder)
             .map_err(|err| err.to_string())
             .and_then(|()| {
                 // `logdata.GetEnumeratorType("FILE")`.
@@ -5419,7 +5419,7 @@ mod tests {
         assert_eq!(fact(&browse, "log.axis"), "line");
 
         let browse = plotting(&fixture(), XAxis::Line);
-        let index = mp_log::index::RecordIndex::build(&std::fs::read(fixture()).expect("fixture"));
+        let index = mp_log::index::RecordIndex::build(&mp_os::fs::read(fixture()).expect("fixture"));
         let rows = index.rows_named("ATT");
         let (from, to) = browse.x_range().expect("a range");
         assert!((from - f64::from(rows[0])).abs() < f64::EPSILON);
@@ -6037,7 +6037,7 @@ mod tests {
             mp_os::process_id(),
             values.len()
         ));
-        std::fs::write(&path, log).expect("write the log");
+        mp_os::fs::write(&path, log).expect("write the log");
         path
     }
 
@@ -6050,7 +6050,7 @@ mod tests {
         let path = flags_log(&[0, 1, 4, 5, 6, 7, 12]);
         let mut browse = LogBrowse::new();
         browse.open(&path);
-        let _ = std::fs::remove_file(&path);
+        let _ = mp_os::fs::remove_file(&path);
         let mut meta = metadata::MetaData::default();
         meta.parse(
             "<loggermessagefile><logformat name=\"TEST\"><description>t</description><fields>\
@@ -6102,7 +6102,7 @@ mod tests {
         let path = flags_log(&[0, 4]);
         let mut browse = LogBrowse::new();
         browse.open(&path);
-        let _ = std::fs::remove_file(&path);
+        let _ = mp_os::fs::remove_file(&path);
         let mut meta = metadata::MetaData::default();
         meta.parse(
             "<loggermessagefile><logformat name=\"TEST\"><description>t</description><fields>\

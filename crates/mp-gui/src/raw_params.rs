@@ -535,7 +535,7 @@ pub fn load_preset(fetch: &dyn Fetch, file: &PresetFile, directory: Option<&Path
         .file_name()
         .ok_or_else(|| format!("{} is not a file name", file.name))?;
     let path = directory.join(name);
-    std::fs::write(&path, &data).map_err(|err| format!("{}: {err}", path.display()))?;
+    mp_os::fs::write(&path, &data).map_err(|err| format!("{}: {err}", path.display()))?;
     let loaded = mp_params::param_file::ParamFile::load(&path)
         .map_err(|err| format!("{}: {err}", path.display()))?;
     Ok(loaded
@@ -1629,14 +1629,14 @@ mod tests {
             mp_os::process_id(),
             wasm_thread::current().id()
         ));
-        std::fs::create_dir_all(&directory).expect("scratch directory");
+        mp_os::fs::create_dir_all(&directory).expect("scratch directory");
         let first = files.first().expect("a file");
         let values = load_preset(&fetch, first, Some(&directory)).expect("the file");
         assert_eq!(
-            std::fs::read_to_string(directory.join("3DR_Iris+.param")).expect("saved"),
+            mp_os::fs::read_to_string(directory.join("3DR_Iris+.param")).expect("saved"),
             text
         );
-        let _ = std::fs::remove_dir_all(&directory);
+        let _ = mp_os::fs::remove_dir_all(&directory);
         let mut values = values;
         values.sort_by(|a, b| a.0.cmp(&b.0));
         assert_eq!(

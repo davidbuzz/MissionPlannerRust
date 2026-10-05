@@ -30,6 +30,7 @@
 
 #![allow(clippy::print_stdout, clippy::print_stderr)]
 
+use mp_os::fs::FsExt as _;
 use std::process::ExitCode;
 
 use mp_georef::georef::ProcessingMode;
@@ -193,11 +194,11 @@ fn run_with(args: &[String], terrain: &dyn Terrain, out: &mut dyn FnMut(&str)) -
         };
     }
 
-    if !std::path::Path::new(&request.log).is_file() {
+    if !std::path::Path::new(&request.log).os_is_file() {
         eprintln!("headless-planner georef: no log at {}", request.log);
         return ExitCode::FAILURE;
     }
-    if !std::path::Path::new(&request.dir).is_dir() {
+    if !std::path::Path::new(&request.dir).os_is_dir() {
         eprintln!("headless-planner georef: no folder at {}", request.dir);
         return ExitCode::FAILURE;
     }
@@ -280,8 +281,8 @@ mod tests {
             "headless-planner-georef-{name}-{}",
             mp_os::process_id()
         ));
-        let _ = std::fs::remove_dir_all(&dir);
-        std::fs::create_dir_all(&dir).unwrap();
+        let _ = mp_os::fs::remove_dir_all(&dir);
+        mp_os::fs::create_dir_all(&dir).unwrap();
         dir
     }
 
@@ -290,16 +291,16 @@ mod tests {
     fn setup(name: &str, log: &str) -> (PathBuf, PathBuf, mp_terrain::Srtm) {
         let dir = scratch(name);
         let photos = dir.join("photos");
-        std::fs::create_dir_all(&photos).unwrap();
-        for entry in std::fs::read_dir(testdata("georef/photos")).unwrap() {
+        mp_os::fs::create_dir_all(&photos).unwrap();
+        for entry in mp_os::fs::read_dir(testdata("georef/photos")).unwrap() {
             let path = entry.unwrap().path();
-            std::fs::copy(&path, photos.join(path.file_name().unwrap())).unwrap();
+            mp_os::fs::copy(&path, photos.join(path.file_name().unwrap())).unwrap();
         }
         let log_path = photos.join(log);
-        std::fs::copy(testdata("georef").join(log), &log_path).unwrap();
+        mp_os::fs::copy(testdata("georef").join(log), &log_path).unwrap();
         let srtm_dir = dir.join("srtm");
-        std::fs::create_dir_all(&srtm_dir).unwrap();
-        let zip = std::fs::read(testdata("srtm/S28E153.hgt.zip")).unwrap();
+        mp_os::fs::create_dir_all(&srtm_dir).unwrap();
+        let zip = mp_os::fs::read(testdata("srtm/S28E153.hgt.zip")).unwrap();
         mp_log::zip::extract(&zip, &srtm_dir).unwrap();
         let srtm = mp_terrain::Srtm::without_thread(&srtm_dir, Arc::new(Offline));
         (photos, log_path, srtm)
@@ -331,20 +332,20 @@ mod tests {
             "loglocation.csv",
         ] {
             assert_eq!(
-                lf(std::fs::read(photos.join(name)).unwrap()),
-                lf(std::fs::read(golden.join(name)).unwrap()),
+                lf(mp_os::fs::read(photos.join(name)).unwrap()),
+                lf(mp_os::fs::read(golden.join(name)).unwrap()),
                 "{name}"
             );
         }
         for n in [1, 13, 24] {
             let name = format!("IMG_{n:04}_geotag.jpg");
             assert_eq!(
-                std::fs::read(photos.join("geotagged").join(&name)).unwrap(),
-                std::fs::read(golden.join("geotagged").join(&name)).unwrap(),
+                mp_os::fs::read(photos.join("geotagged").join(&name)).unwrap(),
+                mp_os::fs::read(golden.join("geotagged").join(&name)).unwrap(),
                 "{name}"
             );
         }
-        let want = std::fs::read_to_string(golden.join("messages.txt")).unwrap();
+        let want = mp_os::fs::read_to_string(golden.join("messages.txt")).unwrap();
         // The directory is the test's; the separator after it is the platform's, as the C#'s
         // Path.Combine would give it - a backslash on Windows (the hosted runner, 2026-10-03),
         // where the golden, made on Linux, has a slash.
@@ -376,12 +377,12 @@ mod tests {
         assert_eq!(code, ExitCode::SUCCESS);
         let golden = testdata("georef/golden/time-tlog");
         assert_eq!(
-            lf(std::fs::read(photos.join("location.txt")).unwrap()),
-            lf(std::fs::read(golden.join("location.txt")).unwrap())
+            lf(mp_os::fs::read(photos.join("location.txt")).unwrap()),
+            lf(mp_os::fs::read(golden.join("location.txt")).unwrap())
         );
         assert_eq!(
-            lf(std::fs::read(photos.join("camera.tlog.xml")).unwrap()),
-            lf(std::fs::read(golden.join("camera.tlog.xml")).unwrap())
+            lf(mp_os::fs::read(photos.join("camera.tlog.xml")).unwrap()),
+            lf(mp_os::fs::read(golden.join("camera.tlog.xml")).unwrap())
         );
 
         let (photos, log, srtm) = setup("estimate", "camera.bin");
@@ -398,7 +399,7 @@ mod tests {
         assert_eq!(code, ExitCode::SUCCESS);
         assert_eq!(
             lines,
-            std::fs::read_to_string(testdata("georef/golden/estimate.txt")).unwrap()
+            mp_os::fs::read_to_string(testdata("georef/golden/estimate.txt")).unwrap()
         );
     }
 

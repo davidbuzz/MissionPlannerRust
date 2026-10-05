@@ -25,12 +25,11 @@
 //! first listed URL that contains the tile's name is fetched as `<tile>.zip` and unzipped beside
 //! it. A tile in no listing, once every listing has been read, is ocean.
 
+use mp_os::fs::FsExt as _;
 use std::sync::Arc;
 use std::sync::OnceLock;
 use std::sync::atomic::Ordering;
-// A file's time is std's: this file compares the clock only with files' times. port_clock: keep
-use std::time::SystemTime; // port_clock: keep
-use web_time::Duration;
+use web_time::{Duration, SystemTime};
 
 use crate::srtm::{Fault, Inner, decode_utf8, lock, read_lines};
 
@@ -208,7 +207,7 @@ pub(crate) fn request_step(inner: &Inner) {
 fn get3secfile(inner: &Inner, name: &str) -> Result<(), Fault> {
     // check file doesnt already exist
     let path = inner.datadirectory.join(name);
-    if path.is_file() && std::fs::metadata(&path)?.len() != 0 {
+    if path.os_is_file() && mp_os::fs::metadata(&path)?.len() != 0 {
         return Ok(());
     }
 
@@ -247,7 +246,7 @@ fn gethgt(inner: &Inner, url: &str, filename: &str) {
     let fetch = || -> Result<(), Fault> {
         let body = inner.http.get(url)?;
         let zip = inner.datadirectory.join(format!("{filename}.zip"));
-        std::fs::write(&zip, &body)?;
+        mp_os::fs::write(&zip, &body)?;
         // C#: lock(extract) fzip.ExtractZip(zip, datadirectory, "") - every entry, overwriting.
         let _extracting = lock(&inner.extract);
         mp_log::zip::extract(&body, &inner.datadirectory).map_err(|_| Fault)?;
@@ -272,8 +271,8 @@ fn get_listing(inner: &Inner, url: &str) -> Result<Vec<String>, Fault> {
     let name = listing_name(url)?;
     let path = inner.datadirectory.join(&name);
 
-    if path.is_file() {
-        let meta = std::fs::metadata(&path)?;
+    if path.os_is_file() {
+        let meta = mp_os::fs::metadata(&path)?;
         // C#: fi.LastWriteTime.AddDays(7) > DateTime.Now
         let fresh = meta
             .modified()
@@ -281,7 +280,7 @@ fn get_listing(inner: &Inner, url: &str) -> Result<Vec<String>, Fault> {
             .and_then(|modified| modified.checked_add(LISTING_MAX_AGE))
             .is_some_and(|expires| expires > SystemTime::now());
         if meta.len() > 0 && fresh {
-            let text = decode_utf8(&std::fs::read(&path)?);
+            let text = decode_utf8(&mp_os::fs::read(&path)?);
             return Ok(read_lines(&text).into_iter().map(str::to_owned).collect());
         }
     }
@@ -308,7 +307,7 @@ fn get_listing(inner: &Inner, url: &str) -> Result<Vec<String>, Fault> {
     if name == "README.txt" || name == "Region_definition.jpg" {
         text.push(' ');
     }
-    std::fs::write(&path, text)?;
+    mp_os::fs::write(&path, text)?;
 
     Ok(list)
 }

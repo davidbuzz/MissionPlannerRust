@@ -282,7 +282,7 @@ pub(crate) fn run(args: &[String]) -> ExitCode {
         eprintln!("usage: {USAGE}");
         return ExitCode::from(2);
     };
-    let data = match std::fs::read(path) {
+    let data = match mp_os::fs::read(path) {
         Ok(data) => data,
         Err(error) => {
             // The C#'s "Log Can not be opened. Are you still connected?" is the tlog path's
@@ -364,9 +364,9 @@ mod tests {
     #[ignore = "regenerates testdata/magcal; run by hand when the extraction changes"]
     fn regenerate_magcal_fixtures() {
         let out = testdata().join("magcal");
-        std::fs::create_dir_all(&out).unwrap();
+        mp_os::fs::create_dir_all(&out).unwrap();
         for (log, name) in LOGS {
-            let data = std::fs::read(testdata().join(log)).unwrap();
+            let data = mp_os::fs::read(testdata().join(log)).unwrap();
             let Ok(gathered) = gather(log, &data, 0) else {
                 println!("{log}: unreadable");
                 continue;
@@ -374,7 +374,7 @@ mod tests {
             let samples = compass_one(&gathered).len();
             println!("{log}: {samples} samples");
             if samples > 0 {
-                std::fs::write(out.join(format!("{name}.txt")), fixture(log, &gathered)).unwrap();
+                mp_os::fs::write(out.join(format!("{name}.txt")), fixture(log, &gathered)).unwrap();
             }
         }
     }
@@ -384,10 +384,10 @@ mod tests {
     fn the_fixtures_are_what_the_logs_give() {
         for (log, name) in LOGS {
             let path = testdata().join("magcal").join(format!("{name}.txt"));
-            let Ok(expected) = std::fs::read_to_string(&path) else {
+            let Ok(expected) = mp_os::fs::read_to_string(&path) else {
                 continue;
             };
-            let data = std::fs::read(testdata().join(log)).unwrap();
+            let data = mp_os::fs::read(testdata().join(log)).unwrap();
             let gathered = gather(log, &data, 0).unwrap();
             assert_eq!(fixture(log, &gathered), expected, "{log}");
         }
@@ -403,7 +403,7 @@ mod tests {
 
     #[test]
     fn a_still_vehicle_is_not_enough_data() {
-        let data = std::fs::read(testdata().join("mavlink/autotest.tlog")).unwrap();
+        let data = mp_os::fs::read(testdata().join("mavlink/autotest.tlog")).unwrap();
         let gathered = gather("autotest.tlog", &data, 0).unwrap();
         let (text, fitted) = report(&gathered, false);
         assert!(!fitted);
@@ -418,14 +418,14 @@ mod tests {
 
     #[test]
     fn a_throttle_never_reached_gathers_nothing() {
-        let data = std::fs::read(testdata().join("mavlink/autotest.tlog")).unwrap();
+        let data = mp_os::fs::read(testdata().join("mavlink/autotest.tlog")).unwrap();
         let gathered = gather("autotest.tlog", &data, 101).unwrap();
         assert!(compass_one(&gathered).is_empty());
     }
 
     #[test]
     fn the_dataflash_path_ends_in_the_box() {
-        let data = std::fs::read(testdata().join("dataflash.bin")).unwrap();
+        let data = mp_os::fs::read(testdata().join("dataflash.bin")).unwrap();
         let gathered = gather("dataflash.bin", &data, 0).unwrap();
         let (text, fitted) = report(&gathered, true);
         assert!(fitted, "{text}");

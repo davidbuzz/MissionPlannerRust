@@ -56,6 +56,7 @@
 // This module is internal to the binary; `pub` here documents intent rather than exporting API.
 #![allow(unreachable_pub)]
 
+use mp_os::fs::FsExt as _;
 use std::path::{Path, PathBuf};
 use web_time::{Duration, SystemTime};
 
@@ -112,14 +113,14 @@ pub struct Row {
 #[must_use]
 pub fn dir_size(directory: &Path) -> (u64, u64) {
     let (mut size, mut count) = (0, 0);
-    let Ok(entries) = std::fs::read_dir(directory) else {
+    let Ok(entries) = mp_os::fs::read_dir(directory) else {
         return (0, 0);
     };
     for entry in entries.flatten() {
         let Ok(kind) = entry.file_type() else {
             continue;
         };
-        if kind.is_dir() {
+        if kind.os_is_dir() {
             let (bytes, files) = dir_size(&entry.path());
             size += bytes;
             count += files;
@@ -145,11 +146,11 @@ pub fn megabytes(bytes: u64) -> String {
 /// `// C#: Controls/GMAPCache.cs:31-57`
 #[must_use]
 pub fn rows(tile_root: &Path) -> Vec<Row> {
-    let mut directories: Vec<PathBuf> = std::fs::read_dir(tile_root)
+    let mut directories: Vec<PathBuf> = mp_os::fs::read_dir(tile_root)
         .map(|entries| {
             entries
                 .flatten()
-                .filter(|entry| entry.file_type().is_ok_and(|kind| kind.is_dir()))
+                .filter(|entry| entry.file_type().is_ok_and(|kind| kind.os_is_dir()))
                 .map(|entry| entry.path())
                 .collect()
         })
@@ -186,23 +187,23 @@ pub fn is_provider(name: &str) -> bool {
 
 /// `File.GetCreationTime`, else the modification time where the file system keeps no creation
 /// time.
-fn created(metadata: &std::fs::Metadata) -> Option<SystemTime> {
+fn created(metadata: &mp_os::fs::Metadata) -> Option<SystemTime> {
     let written = metadata.created().or_else(|_| metadata.modified()).ok()?;
     // A file's time is std's, the clock here the page's in a browser: the same instant, counted
     // from the same epoch (one type on the desktop).
-    let epoch = std::time::UNIX_EPOCH; // port_clock: keep
+    let epoch = web_time::UNIX_EPOCH;
     Some(SystemTime::UNIX_EPOCH + written.duration_since(epoch).unwrap_or_default())
 }
 
 /// Every file under `directory` with one of the extensions, as `Directory.GetFiles(dir, "*.jpg",
 /// SearchOption.AllDirectories)` finds them - the extension in any case, as Windows matches it.
 fn tiles_under(directory: &Path, extension: &str, found: &mut Vec<PathBuf>) {
-    let Ok(entries) = std::fs::read_dir(directory) else {
+    let Ok(entries) = mp_os::fs::read_dir(directory) else {
         return;
     };
     for entry in entries.flatten() {
         let path = entry.path();
-        if entry.file_type().is_ok_and(|kind| kind.is_dir()) {
+        if entry.file_type().is_ok_and(|kind| kind.os_is_dir()) {
             tiles_under(&path, extension, found);
         } else if path
             .extension()
@@ -220,7 +221,7 @@ fn tiles_under(directory: &Path, extension: &str, found: &mut Vec<PathBuf>) {
 #[must_use]
 pub fn delete_older_than(tile_root: &Path, provider: &str, date: SystemTime) -> usize {
     let directory = tile_root.join(provider);
-    if !directory.is_dir() {
+    if !directory.os_is_dir() {
         return 0;
     }
     let mut removed = 0;
@@ -228,12 +229,12 @@ pub fn delete_older_than(tile_root: &Path, provider: &str, date: SystemTime) -> 
         let mut found = Vec::new();
         tiles_under(&directory, extension, &mut found);
         for file in found {
-            let old = std::fs::metadata(&file)
+            let old = mp_os::fs::metadata(&file)
                 .ok()
                 .as_ref()
                 .and_then(created)
                 .is_some_and(|made| made < date);
-            if old && std::fs::remove_file(&file).is_ok() {
+            if old && mp_os::fs::remove_file(&file).is_ok() {
                 removed += 1;
             }
         }
@@ -576,22 +577,22 @@ mod tests {
                 mp_os::process_id(),
                 wasm_thread::current().id()
             ));
-            let _ = std::fs::remove_dir_all(&path);
-            std::fs::create_dir_all(&path).expect("a scratch directory");
+            let _ = mp_os::fs::remove_dir_all(&path);
+            mp_os::fs::create_dir_all(&path).expect("a scratch directory");
             Self(path)
         }
     }
 
     impl Drop for Scratch {
         fn drop(&mut self) {
-            let _ = std::fs::remove_dir_all(&self.0);
+            let _ = mp_os::fs::remove_dir_all(&self.0);
         }
     }
 
     /// A file of `bytes` bytes at `path`, its directories made.
     fn file(path: &Path, bytes: usize) {
-        std::fs::create_dir_all(path.parent().expect("a parent")).expect("directories");
-        std::fs::write(path, vec![0x42; bytes]).expect("a file");
+        mp_os::fs::create_dir_all(path.parent().expect("a parent")).expect("directories");
+        mp_os::fs::write(path, vec![0x42; bytes]).expect("a file");
     }
 
     /// A cache of two providers: OpenStreetMap with three tiles, one a `.png`, and a half-written

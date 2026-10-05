@@ -234,8 +234,8 @@ pub fn decrypt(cipher_text: &[u8], mac: &[u8]) -> Option<Vec<u8>> {
 pub fn first_mac() -> Vec<u8> {
     /// `ARPHRD_LOOPBACK`.
     const LOOPBACK: &str = "772";
-    let read = |path: PathBuf| std::fs::read_to_string(path).unwrap_or_default();
-    let Ok(entries) = std::fs::read_dir("/sys/class/net") else {
+    let read = |path: PathBuf| mp_os::fs::read_to_string(path).unwrap_or_default();
+    let Ok(entries) = mp_os::fs::read_dir("/sys/class/net") else {
         return Vec::new();
     };
     let first = entries
@@ -356,7 +356,7 @@ impl KeyStore {
         let Some(path) = store.file.as_deref() else {
             return store;
         };
-        let Ok(bytes) = std::fs::read(path) else {
+        let Ok(bytes) = mp_os::fs::read(path) else {
             return store;
         };
         match decrypt(&bytes, &store.mac)
@@ -488,7 +488,7 @@ impl KeyStore {
 
 /// `new FileStream(keyfile, FileMode.Create)` and the write.
 fn write(path: &Path, bytes: &[u8]) -> Result<(), String> {
-    std::fs::write(path, bytes).map_err(|error| format!("{}: {error}", path.display()))
+    mp_os::fs::write(path, bytes).map_err(|error| format!("{}: {error}", path.display()))
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -1376,6 +1376,7 @@ pub fn overlay(
 
 #[cfg(test)]
 mod tests {
+    use mp_os::fs::FsExt as _;
     use mp_os::Lock as _;
     use super::*;
     use crate::config_coverage::source::{csharp, resx};
@@ -1403,8 +1404,8 @@ mod tests {
 
     fn scratch(name: &str) -> PathBuf {
         let dir = mp_os::temp_dir().join(format!("authkeys-{name}-{}", mp_os::process_id()));
-        let _ = std::fs::remove_dir_all(&dir);
-        std::fs::create_dir_all(&dir).unwrap();
+        let _ = mp_os::fs::remove_dir_all(&dir);
+        mp_os::fs::create_dir_all(&dir).unwrap();
         dir
     }
 
@@ -1415,7 +1416,7 @@ mod tests {
     fn the_store_reads_and_writes_the_csharps_file() {
         let dir = scratch("csharp");
         let file = dir.join(KEY_FILE);
-        std::fs::write(&file, bytes(CSHARP_TWO_KEYS)).unwrap();
+        mp_os::fs::write(&file, bytes(CSHARP_TWO_KEYS)).unwrap();
         let store = KeyStore::load(Some(file.clone()), Vec::new());
         let names: Vec<&str> = store.keys.iter().map(|(name, _)| name.as_str()).collect();
         assert_eq!(names, ["bench", "Second key"]);
@@ -1433,16 +1434,16 @@ mod tests {
         ours.add_key("bench", "Correct Horse 42!");
         ours.add_key("Second key", "pass<&>\"phrase");
         ours.save().unwrap();
-        assert_eq!(std::fs::read(&file).unwrap(), bytes(CSHARP_TWO_KEYS));
+        assert_eq!(mp_os::fs::read(&file).unwrap(), bytes(CSHARP_TWO_KEYS));
         ours.add_key("a<b&c>\"d'é", "x");
         ours.save().unwrap();
-        assert_eq!(std::fs::read(&file).unwrap(), bytes(CSHARP_ESCAPED));
+        assert_eq!(mp_os::fs::read(&file).unwrap(), bytes(CSHARP_ESCAPED));
         assert_eq!(KeyStore::load(Some(file.clone()), Vec::new()), ours);
 
         // Under another MAC it does not read, and the store is empty.
         let other = KeyStore::load(Some(file), vec![0, 0x42, 0x38, 0xc6, 0x31, 0x5d]);
         assert!(other.keys.is_empty());
-        let _ = std::fs::remove_dir_all(dir);
+        let _ = mp_os::fs::remove_dir_all(dir);
     }
 
     /// `Crypto`'s key and IV: the MAC over their first bytes; one longer than the IV leaves both.
@@ -1583,7 +1584,7 @@ mod tests {
                 key: Some("oBPRD6pBgzO8Tbf6nQxJ5aCQaorJmv5BfT35Mr9oyDM=".to_owned()),
             }]
         );
-        assert!(dir.join(KEY_FILE).exists());
+        assert!(dir.join(KEY_FILE).os_exists());
         assert_eq!(
             KeyStore::load(Some(dir.join(KEY_FILE)), Vec::new())
                 .keys
@@ -1628,7 +1629,7 @@ mod tests {
                 .keys
                 .is_empty()
         );
-        let _ = std::fs::remove_dir_all(dir);
+        let _ = mp_os::fs::remove_dir_all(dir);
     }
 
     /// Use and Disable Signing over a real link, and the label: Use sends `SETUP_SIGNING` with
@@ -1741,7 +1742,7 @@ mod tests {
             label.starts_with("Using Key: None/Unknown, Signed Packets: "),
             "{label}"
         );
-        let _ = std::fs::remove_dir_all(dir);
+        let _ = mp_os::fs::remove_dir_all(dir);
     }
 
     /// The places and words are the Designer's and the `.resx`'s.

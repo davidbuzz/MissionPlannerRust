@@ -29,7 +29,7 @@
 //! rate is added again until the count catches up ("Extra frame"), the target being 10 a second
 //! until the first `end` says 25. `// C#: ExtLibs/Utilities/AviWriter.cs`
 
-use std::fs::File;
+use mp_os::fs::File;
 use std::io::{self, BufWriter, Seek, SeekFrom, Write};
 use std::path::Path;
 use std::time::Duration;
@@ -327,7 +327,7 @@ mod tests {
     #[allow(clippy::indexing_slicing)]
     fn the_file_is_the_csharps_layout() {
         let dir = mp_os::temp_dir().join(format!("mp-video-avi-{}", mp_os::process_id()));
-        std::fs::create_dir_all(&dir).unwrap();
+        mp_os::fs::create_dir_all(&dir).unwrap();
         let path = dir.join("hud.avi");
         let mut writer = AviWriter::new();
         writer.start(&path).unwrap();
@@ -346,7 +346,7 @@ mod tests {
         writer.close().unwrap();
         assert!(!writer.is_open());
 
-        let bytes = std::fs::read(&path).unwrap();
+        let bytes = mp_os::fs::read(&path).unwrap();
         // 8204 of headers, then 8 + 6, 8 + 5 + 1 of padding, 8 + 6, then idx1 of 8 + 3 * 16.
         assert_eq!(bytes.len(), 8204 + 14 + 14 + 14 + 8 + 48);
         assert_eq!(&bytes[0..4], b"RIFF");
@@ -402,13 +402,13 @@ mod tests {
         assert_eq!(u32_at(&bytes, idx + 16), 4); // the first frame's data, from the movi list
         assert_eq!(u32_at(&bytes, idx + 20), 6);
         assert_eq!(u32_at(&bytes, idx + 32), 4 + 6 + 8); // the second's: 8212 + 6 + 8 - 8208
-        std::fs::remove_dir_all(&dir).unwrap();
+        mp_os::fs::remove_dir_all(&dir).unwrap();
     }
 
     #[test]
     fn a_frame_behind_the_clock_is_added_again() {
         let dir = mp_os::temp_dir().join(format!("mp-video-avi-extra-{}", mp_os::process_id()));
-        std::fs::create_dir_all(&dir).unwrap();
+        mp_os::fs::create_dir_all(&dir).unwrap();
         let path = dir.join("extra.avi");
         let mut writer = AviWriter::new();
         writer.start(&path).unwrap();
@@ -422,6 +422,6 @@ mod tests {
         assert_eq!(writer.frames(), 13);
         writer.close().unwrap();
         assert!(writer.add(&[1], Duration::ZERO).is_err(), "closed");
-        std::fs::remove_dir_all(&dir).unwrap();
+        mp_os::fs::remove_dir_all(&dir).unwrap();
     }
 }

@@ -310,8 +310,8 @@ fn write() {
     out.push_str("\n}\n");
 
     let temporary = path.with_extension("tmp");
-    if std::fs::write(&temporary, out).is_ok() {
-        let _ = std::fs::rename(&temporary, path);
+    if mp_os::fs::write(&temporary, out).is_ok() {
+        let _ = mp_os::fs::rename(&temporary, path);
     }
 }
 

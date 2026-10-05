@@ -67,6 +67,7 @@
 //! against `testdata/firmware/`. It is not a Mission Planner setting, in the way `MP_TILE_CACHE`
 //! is not: it exists to verify the port.
 
+use mp_os::fs::FsExt as _;
 use std::io::Read;
 use std::path::PathBuf;
 use std::time::Duration;
@@ -1810,11 +1811,11 @@ impl Fetch for Mirror {
         let path = self
             .path_of(url)
             .ok_or_else(|| format!("not fetched: {url} is not in {MIRROR_ENV}"))?;
-        std::fs::read(&path).map_err(|err| format!("{}: {err}", path.display()))
+        mp_os::fs::read(&path).map_err(|err| format!("{}: {err}", path.display()))
     }
 
     fn exists(&self, url: &str) -> Result<bool, String> {
-        Ok(self.path_of(url).is_some_and(|path| path.is_file()))
+        Ok(self.path_of(url).is_some_and(|path| path.os_is_file()))
     }
 }
 
@@ -1856,7 +1857,7 @@ pub struct FromFile {
 impl Fetch for FromFile {
     fn get(&self, url: &str) -> Result<Vec<u8>, String> {
         if PAGE_SOURCES.contains(&url) {
-            std::fs::read(&self.path).map_err(|err| format!("{}: {err}", self.path.display()))
+            mp_os::fs::read(&self.path).map_err(|err| format!("{}: {err}", self.path.display()))
         } else {
             Err(format!("not fetched: {OVERRIDE_ENV} is set"))
         }

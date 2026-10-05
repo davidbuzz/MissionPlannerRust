@@ -629,7 +629,7 @@ mod tests {
     #[test]
     fn the_committed_report_is_current() {
         let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join(REPORT);
-        let committed = std::fs::read_to_string(&path).unwrap_or_default();
+        let committed = mp_os::fs::read_to_string(&path).unwrap_or_default();
         assert!(
             committed == report(),
             "docs/coverage/logbrowse.md is stale; run `cargo test -p mp-gui logbrowse::coverage \
@@ -642,7 +642,7 @@ mod tests {
     #[ignore = "writes docs/coverage/logbrowse.md"]
     fn update_report() {
         let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join(REPORT);
-        std::fs::write(&path, report()).expect("write the report");
+        mp_os::fs::write(&path, report()).expect("write the report");
     }
 
     /// The counts, so a change in either direction is a deliberate edit.

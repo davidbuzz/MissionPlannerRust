@@ -565,7 +565,7 @@ mod tests {
         let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("../../testdata/secure")
             .join(name);
-        std::fs::read(&path).unwrap_or_else(|err| panic!("{}: {err}", path.display()))
+        mp_os::fs::read(&path).unwrap_or_else(|err| panic!("{}: {err}", path.display()))
     }
 
     /// `testdata/secure/bl-signed-by-mp.bin` and `signed-by-mp.apj` are what Mission Planner's own

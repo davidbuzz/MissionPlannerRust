@@ -224,6 +224,7 @@ fn unpad_rows(bytes: &[u8], width: u32, height: u32, stride: u32) -> Vec<u8> {
 
 #[cfg(test)]
 mod tests {
+    use mp_os::fs::FsExt as _;
     use super::*;
 
     /// The machine's capture nodes, whatever they are: none is fine, but each one listed must
@@ -234,7 +235,7 @@ mod tests {
         let source = V4l2Source;
         let devices = source.devices();
         for device in &devices {
-            assert!(device.path.exists(), "{device:?}");
+            assert!(device.path.os_exists(), "{device:?}");
             assert!(
                 device
                     .name

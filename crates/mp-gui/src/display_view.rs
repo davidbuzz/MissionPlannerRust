@@ -57,6 +57,7 @@
 // This module is internal to the binary; `pub` here documents intent rather than exporting API.
 #![allow(unreachable_pub)]
 
+use mp_os::fs::FsExt as _;
 use std::cell::RefCell;
 use std::path::{Path, PathBuf};
 
@@ -266,8 +267,8 @@ impl DisplayView {
     #[must_use]
     pub fn custom(path: Option<&Path>) -> Self {
         let read = path
-            .filter(|path| path.is_file())
-            .and_then(|path| std::fs::read_to_string(path).ok())
+            .filter(|path| path.os_is_file())
+            .and_then(|path| mp_os::fs::read_to_string(path).ok())
             .and_then(|text| Self::try_parse(&text));
         match read {
             Some(mut view) => {
@@ -590,7 +591,7 @@ mod tests {
         start(&mut settings);
         assert_eq!(current(), DisplayView::advanced());
         assert!(settings.get(SETTING).is_none(), "nothing written");
-        let _ = std::fs::remove_dir_all(&dir);
+        let _ = mp_os::fs::remove_dir_all(&dir);
     }
 
     /// With the file, the view is Custom; a saved `displayview` then replaces it, with the two
@@ -598,7 +599,7 @@ mod tests {
     #[test]
     fn a_saved_view_is_loaded_with_the_parameter_pages_off() {
         let dir = scratch("saved");
-        std::fs::write(
+        mp_os::fs::write(
             dir.join(CUSTOM_FILE),
             "{\"displayStandardParams\": true, \"isAdvancedMode\": true}",
         )
@@ -638,7 +639,7 @@ mod tests {
         assert_eq!(current().name, DisplayName::Basic);
         assert!(!flag("isAdvancedMode"));
         set(DisplayView::advanced(), &mut settings);
-        let _ = std::fs::remove_dir_all(&dir);
+        let _ = mp_os::fs::remove_dir_all(&dir);
     }
 
     /// Custom with no file is the Advanced preset, named Advanced; a file that does not read is
@@ -648,15 +649,15 @@ mod tests {
         let dir = scratch("custom");
         let path = dir.join(CUSTOM_FILE);
         assert_eq!(DisplayView::custom(Some(&path)), DisplayView::advanced());
-        std::fs::write(&path, "{ not json").expect("the file");
+        mp_os::fs::write(&path, "{ not json").expect("the file");
         assert_eq!(DisplayView::custom(Some(&path)), DisplayView::advanced());
-        std::fs::write(&path, "{\"DISPLAYSTANDARDPARAMS\": true}").expect("the file");
+        mp_os::fs::write(&path, "{\"DISPLAYSTANDARDPARAMS\": true}").expect("the file");
         let view = DisplayView::custom(Some(&path));
         assert_eq!(view.name, DisplayName::Custom);
         assert!(view.get("displayStandardParams"));
         assert!(!view.get("isAdvancedMode"), "the constructor's");
         assert!(!view.get("displaySimulation"), "the constructor's");
-        std::fs::write(
+        mp_os::fs::write(
             &path,
             "<?xml version=\"1.0\"?><DisplayView><displayName>Basic</displayName>\
              <displayAdvancedParams>true</displayAdvancedParams><isAdvancedMode>true</isAdvancedMode>\
@@ -670,7 +671,7 @@ mod tests {
             "named Custom whatever it says"
         );
         assert!(view.get("displayAdvancedParams") && view.get("isAdvancedMode"));
-        let _ = std::fs::remove_dir_all(&dir);
+        let _ = mp_os::fs::remove_dir_all(&dir);
     }
 
     /// `ConvertToString` reads back as the same view, with the name as its number in its place.
@@ -692,8 +693,8 @@ mod tests {
             "headless-planner-displayview-{name}-{}",
             mp_os::process_id()
         ));
-        let _ = std::fs::remove_dir_all(&dir);
-        std::fs::create_dir_all(&dir).expect("a scratch folder");
+        let _ = mp_os::fs::remove_dir_all(&dir);
+        mp_os::fs::create_dir_all(&dir).expect("a scratch folder");
         dir
     }
 }

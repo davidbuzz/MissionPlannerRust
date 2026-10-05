@@ -974,9 +974,9 @@ pub(crate) mod tests {
     #[test]
     fn upload_asks_for_the_file_and_programs_it() {
         let dir = mp_os::temp_dir().join(format!("mp-sikradio-page-{}", mp_os::process_id()));
-        std::fs::create_dir_all(&dir).unwrap();
+        mp_os::fs::create_dir_all(&dir).unwrap();
         let file = dir.join("rfd900p.hex");
-        std::fs::write(&file, ":0700100052464439303050E1\n").unwrap();
+        mp_os::fs::write(&file, ":0700100052464439303050E1\n").unwrap();
         let mut s = session(Radio::rfd900p());
         let mut heard = Heard::default();
         assert_eq!(program_firmware(&mut s, &mut heard), Programmed::Cancelled);
@@ -997,7 +997,7 @@ pub(crate) mod tests {
             Some("Programmed firmware into device")
         );
         assert!(heard.progress.iter().any(|p| *p > 0.0));
-        std::fs::remove_dir_all(&dir).ok();
+        mp_os::fs::remove_dir_all(&dir).ok();
     }
 
     /// An HM-TRP has no modem object: "Unknown modem", on the status line.

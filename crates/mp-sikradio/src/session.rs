@@ -586,7 +586,7 @@ impl<P: Port> Session<P> {
         path: &Path,
         report: &mut dyn Report,
     ) -> io::Result<bool> {
-        let bytes = std::fs::read(path)?;
+        let bytes = mp_os::fs::read(path)?;
         if modem::is_certified(&bytes) {
             return self.program(modem, path, report);
         }
@@ -654,14 +654,14 @@ impl<P: Port> Session<P> {
         let found = match modem.family() {
             Family::Rev2 => return Ok(true),
             // A file that will not load is false, without the box.
-            Family::Apu => match std::fs::read_to_string(path)
+            Family::Apu => match mp_os::fs::read_to_string(path)
                 .ok()
                 .and_then(|text| IHex::parse(&text).ok())
             {
                 Some(image) => modem::search_hex(&image, modem.search_tokens()),
                 None => return Ok(false),
             },
-            Family::Xux => modem::search_binary(&std::fs::read(path)?, modem.search_tokens()),
+            Family::Xux => modem::search_binary(&mp_os::fs::read(path)?, modem.search_tokens()),
         };
         if !found {
             report.message(&modem.wrong_firmware_text());
@@ -679,7 +679,7 @@ impl<P: Port> Session<P> {
         report: &mut dyn Report,
     ) -> io::Result<bool> {
         if modem.family() == Family::Apu {
-            let Some(image) = std::fs::read_to_string(path)
+            let Some(image) = mp_os::fs::read_to_string(path)
                 .ok()
                 .and_then(|text| IHex::parse(&text).ok())
             else {
@@ -744,7 +744,7 @@ impl<P: Port> Session<P> {
             return Ok(false);
         }
         // `FileMode.OpenOrCreate`: a file not there is an empty one.
-        let firmware = std::fs::read(path).unwrap_or_default();
+        let firmware = mp_os::fs::read(path).unwrap_or_default();
         let mut progress = |d: f64| report.progress(d);
         let Ok(result) = xmodem::upload(&firmware, &mut self.wire, &mut progress) else {
             return Ok(false);
@@ -890,10 +890,10 @@ pub(crate) mod tests {
     #[test]
     fn an_rfd900p_takes_its_hex() {
         let dir = mp_os::temp_dir().join(format!("mp-sikradio-{}", mp_os::process_id()));
-        std::fs::create_dir_all(&dir).unwrap();
+        mp_os::fs::create_dir_all(&dir).unwrap();
         let file = dir.join("rfd900p.ihx");
         // "RFD900P" at 0x10.
-        std::fs::write(&file, ":0700100052464439303050E1\n:0400000001020304F2\n").unwrap();
+        mp_os::fs::write(&file, ":0700100052464439303050E1\n:0400000001020304F2\n").unwrap();
         let mut s = session(Radio::rfd900p());
         let modem = s.get_modem_object().unwrap().unwrap();
         let mut heard = Heard::default();
@@ -911,23 +911,23 @@ pub(crate) mod tests {
 
         // A file for another model: the box, and "Incorrect firmware selected."
         let wrong = dir.join("rfd900a.ihx");
-        std::fs::write(&wrong, ":0700100052464439303041E1\n").unwrap();
+        mp_os::fs::write(&wrong, ":0700100052464439303041E1\n").unwrap();
         let mut heard = Heard::default();
         assert!(!s.program_firmware(modem, &wrong, &mut heard).unwrap());
         assert_eq!(heard.messages, [modem.wrong_firmware_text()]);
         assert_eq!(heard.statuses, ["Incorrect firmware selected."]);
-        std::fs::remove_dir_all(&dir).ok();
+        mp_os::fs::remove_dir_all(&dir).ok();
     }
 
     /// An RFD900x not locked to a country takes a firmware holding its name, over XModem.
     #[test]
     fn an_rfd900x_takes_its_bin_over_xmodem() {
         let dir = mp_os::temp_dir().join(format!("mp-sikradio-x-{}", mp_os::process_id()));
-        std::fs::create_dir_all(&dir).unwrap();
+        mp_os::fs::create_dir_all(&dir).unwrap();
         let file = dir.join("rfd900x.bin");
         let mut firmware = vec![0u8; 200];
         firmware[50..57].copy_from_slice(b"RFD900X");
-        std::fs::write(&file, &firmware).unwrap();
+        mp_os::fs::write(&file, &firmware).unwrap();
         let mut s = session(Radio::with(Unit::rfd900x(), None));
         let modem = s.get_modem_object().unwrap().unwrap();
         let mut heard = Heard::default();
@@ -956,6 +956,6 @@ pub(crate) mod tests {
             heard.messages,
             ["The selected firmware is not certified to run on this modem.  Aborting."]
         );
-        std::fs::remove_dir_all(&dir).ok();
+        mp_os::fs::remove_dir_all(&dir).ok();
     }
 }

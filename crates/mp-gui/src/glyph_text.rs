@@ -233,7 +233,7 @@ mod tests {
             eprintln!("no fontconfig here; skipped");
             return;
         };
-        let bytes = std::fs::read(&path).expect("the font file fontconfig named");
+        let bytes = mp_os::fs::read(&path).expect("the font file fontconfig named");
         let segments = outline(&bytes, "I", 10.0 * 1.35).expect("a font");
         assert!(
             segments

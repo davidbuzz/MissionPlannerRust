@@ -1094,7 +1094,7 @@ mod tests {
             let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
                 .join("../../testdata")
                 .join(name);
-            let data = std::fs::read(&path).unwrap_or_default();
+            let data = mp_os::fs::read(&path).unwrap_or_default();
             assert!(!data.is_empty(), "{name}");
             let log = LogFile::from_bytes(data.clone());
             assert_eq!(

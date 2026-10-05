@@ -2336,7 +2336,7 @@ impl SikRadio {
         } else {
             self.local_settings.clone()
         }?;
-        let Ok(text) = std::fs::read_to_string(file) else {
+        let Ok(text) = mp_os::fs::read_to_string(file) else {
             self.show(format!("Failed to load settings from {file}"));
             return None;
         };
@@ -2382,7 +2382,7 @@ impl SikRadio {
             Some(Prompt::Save { path, text }) => {
                 let file = path.field.value().trim().to_owned();
                 if ok && !file.is_empty() {
-                    if std::fs::write(&file, text).is_ok() {
+                    if mp_os::fs::write(&file, text).is_ok() {
                         self.show(format!("Saved settings to {file} OK"));
                     } else {
                         self.show(format!("Failed to save settings to {file}"));
@@ -4372,9 +4372,9 @@ mod tests {
         assert!(saved.contains("NETID = 28"), "{saved}");
         assert!(saved.contains(&format!("AESKEY = {KEY}")));
         let dir = mp_os::temp_dir().join(format!("mp-gui-sikradio-{}", mp_os::process_id()));
-        std::fs::create_dir_all(&dir).unwrap();
+        mp_os::fs::create_dir_all(&dir).unwrap();
         let file = dir.join("netid.ini");
-        std::fs::write(&file, "NETID = 33\n; comment\nNOT_THERE = 1\n").unwrap();
+        mp_os::fs::write(&file, "NETID = 33\n; comment\nNOT_THERE = 1\n").unwrap();
         let file = file.display().to_string();
         page.prompt = None;
         assert_eq!(page.load_file(false, &file), None);
@@ -4389,7 +4389,7 @@ mod tests {
             page.message().unwrap().text,
             "Failed to load settings from /no/such/file.ini"
         );
-        std::fs::remove_dir_all(&dir).ok();
+        mp_os::fs::remove_dir_all(&dir).ok();
     }
 
     /// The remote radio's file loads only its check boxes and text boxes: `UpdateControlsWithValues`
@@ -4398,9 +4398,9 @@ mod tests {
     fn a_remote_file_reaches_only_its_check_and_text_boxes() {
         let mut page = page();
         let dir = mp_os::temp_dir().join(format!("mp-gui-sikradio-r-{}", mp_os::process_id()));
-        std::fs::create_dir_all(&dir).unwrap();
+        mp_os::fs::create_dir_all(&dir).unwrap();
         let file = dir.join("remote.ini");
-        std::fs::write(&file, "NETID = 33\nECC = 1\nAESKEY = ABCD\n").unwrap();
+        mp_os::fs::write(&file, "NETID = 33\nECC = 1\nAESKEY = ABCD\n").unwrap();
         page.load_file(true, &file.display().to_string());
         assert_eq!(
             text(&page, Side::Remote, "RNETID"),
@@ -4409,7 +4409,7 @@ mod tests {
         );
         assert!(page.ctl(Side::Remote, "RECC").unwrap().checked);
         assert_eq!(text(&page, Side::Remote, "RAESKEY"), "ABCD");
-        std::fs::remove_dir_all(&dir).ok();
+        mp_os::fs::remove_dir_all(&dir).ok();
     }
 
     /// The firmware models: multipoint renames and relists the extra pairs; point to point puts

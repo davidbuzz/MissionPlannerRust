@@ -28,6 +28,7 @@
 // This module is internal to the binary; `pub` here documents intent rather than exporting API.
 #![allow(unreachable_pub)]
 
+use mp_os::fs::FsExt as _;
 use std::path::{Path, PathBuf};
 
 use gpui::{AnyElement, Context, div, prelude::*, px, rgb};
@@ -5857,7 +5858,7 @@ pub fn dialog_path(typed: &str, extension: &str, directory: &Path) -> Option<Pat
         return None;
     }
     let path = typed_path(typed, directory)?;
-    if path.is_dir() {
+    if path.os_is_dir() {
         return None;
     }
     Some(if path.extension().is_none() && !extension.is_empty() {
@@ -5919,10 +5920,10 @@ pub fn dialog_listing(
         directory.to_path_buf()
     } else {
         match typed_path(typed, directory) {
-            Some(path) if path.is_dir() => path,
+            Some(path) if path.os_is_dir() => path,
             Some(path) => path
                 .parent()
-                .filter(|parent| parent.is_dir())
+                .filter(|parent| parent.os_is_dir())
                 .map_or_else(|| directory.to_path_buf(), Path::to_path_buf),
             None => directory.to_path_buf(),
         }
@@ -5932,13 +5933,13 @@ pub fn dialog_listing(
     let folder: PathBuf = folder.components().collect();
     let mut folders = Vec::new();
     let mut files = Vec::new();
-    for entry in std::fs::read_dir(&folder).into_iter().flatten().flatten() {
+    for entry in mp_os::fs::read_dir(&folder).into_iter().flatten().flatten() {
         let name = entry.file_name().to_string_lossy().into_owned();
         if name.starts_with('.') {
             continue;
         }
         let path = entry.path();
-        if path.is_dir() {
+        if path.os_is_dir() {
             folders.push(DialogEntry {
                 name,
                 path,
@@ -5999,12 +6000,12 @@ fn load_shp(this: &mut MissionPlanner, name: &str) -> Result<(), String> {
     let Some(path) = dialog_path(name, "shp", &this.plan_menus.dialog_directory) else {
         return Ok(());
     };
-    let Ok(bytes) = std::fs::read(&path) else {
+    let Ok(bytes) = mp_os::fs::read(&path) else {
         this.file_status = Some(format!("could not read {}", path.display()));
         return Ok(());
     };
     // `Path.GetFileNameWithoutExtension(file) + ".prj"`, its first line.
-    let projection = match std::fs::read_to_string(path.with_extension("prj")) {
+    let projection = match mp_os::fs::read_to_string(path.with_extension("prj")) {
         Ok(text) => Some(
             mp_mission::shapefile::Projection::from_esri(text.lines().next().unwrap_or(""))
                 .map_err(|why| format!("{ERROR}\n{why}"))?,
@@ -6052,7 +6053,7 @@ fn file_request(
             let Some(path) = path(&name, "poly") else {
                 return;
             };
-            match std::fs::read_to_string(&path) {
+            match mp_os::fs::read_to_string(&path) {
                 Ok(text) => {
                     this.plan
                         .load_polygon(mp_mission::fence_file::read_polygon(&text));
@@ -6070,7 +6071,7 @@ fn file_request(
                 return;
             };
             let text = mp_mission::fence_file::write_polygon(this.plan.polygon());
-            match std::fs::write(&path, text) {
+            match mp_os::fs::write(&path, text) {
                 Ok(()) => {
                     this.file_status = Some(format!("saved the polygon to {}", path.display()));
                 }
@@ -6089,7 +6090,7 @@ fn file_request(
                 return;
             };
             let text = mp_mission::fence_file::write_rally(&this.plan.rally_markers());
-            match std::fs::write(&path, text) {
+            match mp_os::fs::write(&path, text) {
                 Ok(()) => {
                     this.file_status =
                         Some(format!("saved the rally points to {}", path.display()));
@@ -6103,7 +6104,7 @@ fn file_request(
             let Some(path) = path(&name, "ral") else {
                 return;
             };
-            match std::fs::read_to_string(&path) {
+            match mp_os::fs::read_to_string(&path) {
                 Ok(text) => {
                     this.plan
                         .load_rally_file(&mp_mission::fence_file::read_rally(&text));
@@ -6146,7 +6147,7 @@ fn fence_file(
             let Some(path) = dialog_path(&name, "fen", &this.plan_menus.dialog_directory) else {
                 return;
             };
-            match std::fs::read_to_string(&path) {
+            match mp_os::fs::read_to_string(&path) {
                 Ok(text) => {
                     this.plan
                         .adopt_fence_file(mp_mission::fence_file::read_fence(&text));
@@ -6163,7 +6164,7 @@ fn fence_file(
                 return;
             };
             let written = this.plan.fence_file().and_then(|file| {
-                std::fs::write(&path, mp_mission::fence_file::write_fence(&file))
+                mp_os::fs::write(&path, mp_mission::fence_file::write_fence(&file))
                     .map_err(|_| FENCE_FILE_FAILED)
             });
             match written {
@@ -7789,7 +7790,7 @@ fn file_name_of(path: &Path) -> String {
 /// `// C#: GCSViews/FlightPlanner.cs:1817-1887`
 fn load_mission(this: &mut MissionPlanner, name: &str) -> Refusal {
     let path = dialog_path(name, "waypoints", &this.plan_menus.dialog_directory)?;
-    if !path.is_file() {
+    if !path.os_is_file() {
         this.file_status = Some(format!(
             "could not read {}: there is no such file",
             path.display()
@@ -7806,7 +7807,7 @@ fn load_mission(this: &mut MissionPlanner, name: &str) -> Refusal {
         return load_kml_mission(this, &answer);
     }
     // `line = fs.ReadLine(); if (line.StartsWith("{"))`: a JSON mission.
-    let json = std::fs::read_to_string(&path)
+    let json = mp_os::fs::read_to_string(&path)
         .is_ok_and(|text| text.lines().next().is_some_and(|line| line.starts_with('{')));
     if json {
         this.file_status = Some(format!(
@@ -7845,7 +7846,7 @@ fn save_mission(this: &mut MissionPlanner, name: &str) -> Refusal {
 /// `// C#: GCSViews/FlightPlanner.cs:990-1010, 4330-4344`
 fn load_and_append(this: &mut MissionPlanner, name: &str) -> Refusal {
     let path = dialog_path(name, "waypoints", &this.plan_menus.dialog_directory)?;
-    let read = std::fs::read_to_string(&path)
+    let read = mp_os::fs::read_to_string(&path)
         .map_err(|err| format!("System.IO.FileNotFoundException: {err}"))
         .and_then(|text| {
             mp_mission::read_waypoints(&text)
@@ -7873,7 +7874,7 @@ fn load_kml_mission(this: &mut MissionPlanner, name: &str) -> Refusal {
     let path = dialog_path(name, "kml", &this.plan_menus.dialog_directory)?;
     let name = file_name_of(&path);
     let context = menu_context(this);
-    let loaded = std::fs::read(&path)
+    let loaded = mp_os::fs::read(&path)
         .map_err(|err| format!("System.IO.FileNotFoundException: {err}"))
         .and_then(|bytes| kml_text(&name, &bytes))
         .and_then(|text| match text {
@@ -7898,15 +7899,15 @@ fn load_kml_mission(this: &mut MissionPlanner, name: &str) -> Refusal {
 /// `// C#: GCSViews/FlightPlanner.cs:4718-4737`
 fn load_shp_mission(this: &mut MissionPlanner, name: &str) -> Refusal {
     let path = dialog_path(name, "shp", &this.plan_menus.dialog_directory)?;
-    let Ok(shp) = std::fs::read(&path) else {
+    let Ok(shp) = mp_os::fs::read(&path) else {
         return None;
     };
     let context = menu_context(this);
     // `FeatureSet.Open` wants the table beside the shapes; the `.prj` is optional.
-    let loaded = std::fs::read(path.with_extension("dbf"))
+    let loaded = mp_os::fs::read(path.with_extension("dbf"))
         .map_err(|err| err.to_string())
         .and_then(|dbf| {
-            let prj = std::fs::read_to_string(path.with_extension("prj")).ok();
+            let prj = mp_os::fs::read_to_string(path.with_extension("prj")).ok();
             shp_into_mission(&mut this.plan, &shp, &dbf, prj.as_deref(), &context)
         });
     match loaded {
@@ -7942,7 +7943,7 @@ fn load_kml_overlay(this: &mut MissionPlanner, name: &str) -> Refusal {
         this.file_status = Some("DXF overlays need netDxf, which is not ported".to_owned());
         return None;
     }
-    let loaded = std::fs::read(&path)
+    let loaded = mp_os::fs::read(&path)
         .map_err(|err| format!("System.IO.FileNotFoundException: {err}"))
         .and_then(|bytes| kml_text(&name, &bytes))
         .and_then(|text| match text {
@@ -8952,7 +8953,7 @@ impl PlanMenus {
         };
         let outline = crate::glyph_text::font_file()
             .and_then(|path| {
-                std::fs::read(&path)
+                mp_os::fs::read(&path)
                     .map_err(|err| crate::glyph_text::FontError::NoFont(err.to_string()))
             })
             .and_then(|bytes| crate::glyph_text::outline(&bytes, &text, f64::from(em_size)));
@@ -14878,7 +14879,7 @@ mod tests {
     #[test]
     fn a_dialog_answer_is_a_path_as_a_file_dialog_takes_it() {
         let folder = mp_os::temp_dir().join(format!("mp-dialog-path-{}", mp_os::process_id()));
-        std::fs::create_dir_all(folder.join("sub")).unwrap();
+        mp_os::fs::create_dir_all(folder.join("sub")).unwrap();
         assert_eq!(
             dialog_path("square", "fen", &folder),
             Some(folder.join("square.fen"))
@@ -14905,7 +14906,7 @@ mod tests {
         assert_eq!(dialog_path("  ", "fen", &folder), None);
         assert_eq!(dialog_path("sub", "fen", &folder), None, "a folder is not a file");
         assert_eq!(dialog_path("sub/", "fen", &folder), None);
-        std::fs::remove_dir_all(&folder).unwrap();
+        mp_os::fs::remove_dir_all(&folder).unwrap();
     }
 
     /// The dialog's list: `..`, the folders, then the files of its filter, each by name and
@@ -14915,12 +14916,12 @@ mod tests {
     fn a_file_dialog_lists_its_folder() {
         let folder = mp_os::temp_dir().join(format!("mp-dialog-list-{}", mp_os::process_id()));
         for sub in ["b-sub", ".hidden"] {
-            std::fs::create_dir_all(folder.join(sub)).unwrap();
+            mp_os::fs::create_dir_all(folder.join(sub)).unwrap();
         }
         for file in ["z.waypoints", "a.TXT", "notes.md", ".x.waypoints"] {
-            std::fs::write(folder.join(file), "").unwrap();
+            mp_os::fs::write(folder.join(file), "").unwrap();
         }
-        std::fs::write(folder.join("b-sub").join("deep.waypoints"), "").unwrap();
+        mp_os::fs::write(folder.join("b-sub").join("deep.waypoints"), "").unwrap();
         let names = |entries: &[DialogEntry]| -> Vec<String> {
             entries.iter().map(|entry| entry.name.clone()).collect()
         };
@@ -14945,7 +14946,7 @@ mod tests {
         assert_eq!(listed, folder.join("b-sub"), "a file's own folder");
         let (_, entries) = dialog_listing("", &folder, &[]);
         assert_eq!(names(&entries), ["..", "b-sub"], "a folder dialog lists folders");
-        std::fs::remove_dir_all(&folder).unwrap();
+        mp_os::fs::remove_dir_all(&folder).unwrap();
     }
 
     /// Clear's ending: the geofence goes, the return marker stays, the drawn corners stay but go

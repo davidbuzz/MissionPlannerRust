@@ -132,8 +132,8 @@ pub fn publish() {
     };
     let text = text(&facts);
     let temporary = path.with_extension("facts.tmp");
-    if std::fs::write(&temporary, text).is_ok() {
-        let _ = std::fs::rename(&temporary, path);
+    if mp_os::fs::write(&temporary, text).is_ok() {
+        let _ = mp_os::fs::rename(&temporary, path);
     }
 }
 

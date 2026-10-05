@@ -2526,6 +2526,7 @@ pub fn overlay(
 
 #[cfg(test)]
 mod tests {
+    use mp_os::fs::FsExt as _;
     use std::cell::RefCell;
     use std::sync::Arc;
 
@@ -3574,7 +3575,7 @@ mod tests {
     fn a_speech_change_is_saved_with_config_xml_and_comes_back() {
         let dir =
             mp_os::temp_dir().join(format!("mp-gui-battery-speech-{}", mp_os::process_id()));
-        let _ = std::fs::remove_dir_all(&dir);
+        let _ = mp_os::fs::remove_dir_all(&dir);
         let path = dir.join("MissionPlannerRust").join("config.xml");
         let mut settings = Persisted::at(Some(path.clone()));
         let view = view_with(&SITL);
@@ -3589,7 +3590,7 @@ mod tests {
         }
         assert!(battery.prompt().is_none(), "three questions");
         assert_eq!(settings.get("speechbattery"), Some("LOW {batv}"));
-        assert!(!path.exists(), "nothing on disk before a save");
+        assert!(!path.os_exists(), "nothing on disk before a save");
 
         settings
             .save_config(crate::settings::SaveEvent::FlightData)
@@ -3617,7 +3618,7 @@ mod tests {
             again.prompt().map(|prompt| prompt.field.value().to_owned()),
             Some("LOW {batv}".to_owned())
         );
-        let _ = std::fs::remove_dir_all(&dir);
+        let _ = mp_os::fs::remove_dir_all(&dir);
     }
 
     /// Every fact `tests/gui/config-battery.gui` asserts on is one this page records or one of

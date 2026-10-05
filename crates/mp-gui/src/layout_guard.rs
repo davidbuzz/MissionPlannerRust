@@ -231,7 +231,7 @@ pub fn record_line(time: &str, screen: &str, size: (f32, f32), text: &str) -> St
 /// strip and the stderr log still say it.
 fn append_record(path: &std::path::Path, line: &str) {
     use std::io::Write as _;
-    let written = std::fs::OpenOptions::new()
+    let written = mp_os::fs::OpenOptions::new()
         .create(true)
         .append(true)
         .open(path)
@@ -398,14 +398,14 @@ mod tests {
             "2026-10-05 00:59:01 CUT OFF on fly at 1600x920: panel:actions"
         );
         let path = mp_os::temp_dir().join(format!("mp-layout-record-{}.log", mp_os::process_id()));
-        let _ = std::fs::remove_file(&path);
+        let _ = mp_os::fs::remove_file(&path);
         append_record(&path, "first");
         append_record(&path, "second");
         assert_eq!(
-            std::fs::read_to_string(&path).unwrap_or_default(),
+            mp_os::fs::read_to_string(&path).unwrap_or_default(),
             "first\nsecond\n"
         );
-        let _ = std::fs::remove_file(&path);
+        let _ = mp_os::fs::remove_file(&path);
     }
 
     /// The log has each cut-off once, when the strip first shows it, and again only when it

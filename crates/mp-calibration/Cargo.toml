@@ -11,6 +11,8 @@ repository.workspace = true
 workspace = true
 
 [dependencies]
+# The files, std's on the desktop and the page's own in a web page (web/tools/port_fs.py).
+mp-os.workspace = true
 mp-mavlink-dialects.workspace = true
 mp-vehicle.workspace = true
 thiserror.workspace = true

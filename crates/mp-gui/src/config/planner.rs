@@ -88,6 +88,7 @@
 // This module is internal to the binary; `pub` here documents intent rather than exporting API.
 #![allow(unreachable_pub)]
 
+use mp_os::fs::FsExt as _;
 use std::collections::{BTreeMap, VecDeque};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -2246,7 +2247,7 @@ impl Planner {
     /// `// C#: GCSViews/ConfigurationView/ConfigPlanner.cs:787-794`
     fn log_dir_changed(&self, settings: &mut Persisted) {
         let path = self.log_dir.value();
-        if !path.is_empty() && Path::new(path).is_dir() {
+        if !path.is_empty() && Path::new(path).os_is_dir() {
             settings.set("logdirectory", path);
         }
     }
@@ -2288,7 +2289,7 @@ impl Planner {
             "BUT_Joystick" => self.joystick = true,
             "BUT_logdirbrowse" => self.effects.push(Effect::BrowseLogDirectory),
             "BUT_mapCacheDir" => {
-                if map_cache.is_dir() {
+                if map_cache.os_is_dir() {
                     self.effects
                         .push(Effect::OpenDirectory(map_cache.to_path_buf()));
                 } else {
@@ -3338,6 +3339,7 @@ fn facts(planner: &Planner, settings: &Persisted, read_mission_on_connect: bool)
 
 #[cfg(test)]
 mod tests {
+    use mp_os::fs::FsExt as _;
     use super::*;
     use crate::settings::SaveEvent;
     use crate::telemetry::scripted::{VEHICLE, Vehicle, until};
@@ -3357,8 +3359,8 @@ mod tests {
                 "mp-gui-config-planner-{name}-{}",
                 mp_os::process_id()
             ));
-            let _ = std::fs::remove_dir_all(&path);
-            std::fs::create_dir_all(&path).expect("scratch directory");
+            let _ = mp_os::fs::remove_dir_all(&path);
+            mp_os::fs::create_dir_all(&path).expect("scratch directory");
             Self(path)
         }
 
@@ -3369,15 +3371,15 @@ mod tests {
 
         fn seed(&self, text: &str) -> PathBuf {
             let path = self.config();
-            std::fs::create_dir_all(path.parent().expect("parent")).expect("data directory");
-            std::fs::write(&path, text).expect("seed config.xml");
+            mp_os::fs::create_dir_all(path.parent().expect("parent")).expect("data directory");
+            mp_os::fs::write(&path, text).expect("seed config.xml");
             path
         }
     }
 
     impl Drop for Scratch {
         fn drop(&mut self) {
-            let _ = std::fs::remove_dir_all(&self.0);
+            let _ = mp_os::fs::remove_dir_all(&self.0);
         }
     }
 
@@ -4382,8 +4384,8 @@ mod tests {
     fn layout_chooses_the_display_view() {
         use crate::display_view::{DisplayName, DisplayView, SETTING, current, flag};
         let dir = mp_os::temp_dir().join(format!("mpr-planner-layout-{}", mp_os::process_id()));
-        let _ = std::fs::remove_dir_all(&dir);
-        let _ = std::fs::create_dir_all(&dir);
+        let _ = mp_os::fs::remove_dir_all(&dir);
+        let _ = mp_os::fs::create_dir_all(&dir);
         let mut settings = Persisted::at(Some(dir.join("config.xml")));
         let mut planner = Planner::new(&settings);
         planner.activate(&mut settings, None);
@@ -4405,7 +4407,7 @@ mod tests {
         planner.choose("CMB_Layout", 2, &mut settings);
         assert_eq!(current().name, DisplayName::Advanced);
         // With the file beside config.xml: read, named Custom.
-        let _ = std::fs::write(
+        let _ = mp_os::fs::write(
             dir.join(crate::display_view::CUSTOM_FILE),
             "{\"displayStandardParams\": true, \"displayPlannerLayout\": false}",
         );
@@ -4419,7 +4421,7 @@ mod tests {
         assert_eq!(planner.combo_text("CMB_Layout"), "Custom");
         assert!(!planner.layout_shown());
         crate::display_view::set(DisplayView::advanced(), &mut settings);
-        let _ = std::fs::remove_dir_all(&dir);
+        let _ = mp_os::fs::remove_dir_all(&dir);
     }
 
     #[test]
@@ -4549,7 +4551,7 @@ mod tests {
         for character in ["/", "t", "m", "p"] {
             planner.log_dir_key(&key(character, Some(character)), &mut settings);
         }
-        if Path::new("/tmp").is_dir() {
+        if Path::new("/tmp").os_is_dir() {
             assert_eq!(settings.get("logdirectory"), Some("/tmp"));
         }
     }
@@ -4632,7 +4634,7 @@ mod tests {
         assert_eq!(settings.get("speechcustom"), Some(custom));
         assert_eq!(settings.get("severity"), Some("4"));
         // ... and not on disk: a handler saves nothing.
-        assert_eq!(std::fs::read_to_string(&path).expect("read"), CSHARP_FILE);
+        assert_eq!(mp_os::fs::read_to_string(&path).expect("read"), CSHARP_FILE);
 
         // FLIGHT DATA's SaveConfig writes the whole dictionary.
         settings.save_config(SaveEvent::FlightData).expect("saved");
@@ -4670,7 +4672,7 @@ mod tests {
             eprintln!("skipped: no home directory");
             return;
         };
-        let Ok(text) = std::fs::read_to_string(&real) else {
+        let Ok(text) = mp_os::fs::read_to_string(&real) else {
             eprintln!("skipped: no Mission Planner config at {}", real.display());
             return;
         };
