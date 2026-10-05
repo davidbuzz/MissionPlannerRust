@@ -27,9 +27,13 @@ roxmltree.workspace = true
 mp-vehicle.workspace = true
 # The FFT window's transform (`mp_log::fft`), in place of `FFT2.run`.
 rustfft.workspace = true
+# `magcal_log`: `MagCalib.ProcessLog`'s fit (L3, below), the messages its telemetry logs are read
+# into, and the drawing `doDXF` writes with netDxf.
+mp-calibration.workspace = true
+mp-mavlink-dialects.workspace = true
+dxf.workspace = true
 
 [dev-dependencies]
-mp-mavlink-dialects.workspace = true
 # The tlog writer is the link's recorder; the round-trip tests read back what it writes.
 mp-link.workspace = true
 criterion.workspace = true

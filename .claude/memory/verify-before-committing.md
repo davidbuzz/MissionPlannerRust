@@ -37,3 +37,9 @@ start-up, `main.rs`, `telemetry.rs` or a static every screen reads gets the whol
 (`tools/gui-suite.sh -o <dir> $(ls tests/gui/*.gui | xargs -n1 basename | sed 's/\.gui$//')`,
 about 80 minutes, quiet machine, no GUI rebuild while it runs), not the merged rows' scripts. A
 `PASS` logged before the merge proves nothing about the tree after it.
+
+**A new dependency edge is checked by xtask, not by the crates.** `xtask/tests/graph.rs` holds
+PLAN.md §5.1's layers; mag calb log's commit of 2026-10-06 gave mp-calibration (L3) a dependency on
+mp-log (L4), which its own crates' tests, clippy and the wasm check all passed, and the graph test
+refused (the code moved up to mp-log the same day). Any Cargo.toml change: `cargo test -p xtask
+--test graph --test licences` before the commit, at least, when the whole workspace is too long.

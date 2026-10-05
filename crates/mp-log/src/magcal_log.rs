@@ -24,16 +24,19 @@
 //! A file whose name ends in `tlog` is read as `getOffsets` reads it: every `RAW_IMU` taken while
 //! the throttle is at least the threshold, with the last `SENSOR_OFFSETS` taken back off. Anything
 //! else is a dataflash log read as `getOffsetsLog` reads it, through `DFLogBuffer`: every `MAG`,
-//! `MAG2` and `MAG3` line. The fit is [`magcalib`]'s.
+//! `MAG2` and `MAG3` line. The fit is `mp_calibration::magcalib`'s; this is here, with the logs,
+//! because reading them is this crate's (mp-calibration sits a layer below it).
 //! `// C#: MagCalib.cs:93-133, 813-1137`
 
-use mp_log::TlogReader;
-use mp_log::convert::flight_mode_name;
-use mp_log::dflogbuffer::DfLogBuffer;
+use mp_calibration::CalibrationError;
+use mp_calibration::magcalib::{
+    DataflashSamples, LogFit, Sample, TlogSamples, fit_dataflash, fit_tlog,
+};
 use mp_mavlink_dialects::all::{DIALECT, MavMessage};
 
-use crate::CalibrationError;
-use crate::magcalib::{DataflashSamples, LogFit, Sample, TlogSamples, fit_dataflash, fit_tlog};
+use crate::TlogReader;
+use crate::convert::flight_mode_name;
+use crate::dflogbuffer::DfLogBuffer;
 
 /// What a pass over a log gathered.
 #[derive(Debug, Clone)]
@@ -131,7 +134,7 @@ pub fn compass_one(gathered: &Gathered) -> &[Sample] {
 /// # Errors
 ///
 /// The fit's: too few telemetry samples, where the C# shows
-/// [`NOT_ENOUGH_DATA`](crate::magcalib::NOT_ENOUGH_DATA) and throws; a dataflash log with no
+/// [`NOT_ENOUGH_DATA`](mp_calibration::magcalib::NOT_ENOUGH_DATA) and throws; a dataflash log with no
 /// `MAG` line, where alglib throws and `ProcessLog` swallows it.
 /// `// C#: MagCalib.cs:901-932, 1070-1117`
 pub fn fit(gathered: &Gathered) -> Result<LogFit, CalibrationError> {
@@ -255,7 +258,7 @@ pub fn process_log(
     let fitted = match fit(&gathered) {
         Ok(fitted) => fitted,
         Err(CalibrationError::NotEnoughData { .. }) => {
-            return Processed::Said(crate::magcalib::NOT_ENOUGH_DATA);
+            return Processed::Said(mp_calibration::magcalib::NOT_ENOUGH_DATA);
         }
         Err(error) => return Processed::Quiet(error.to_string()),
     };
@@ -374,7 +377,7 @@ mod tests {
         let directory = scratch("still");
         assert_eq!(
             process_log(&testdata("mavlink/autotest.tlog"), 0, Some(&directory)),
-            Processed::Said(crate::magcalib::NOT_ENOUGH_DATA)
+            Processed::Said(mp_calibration::magcalib::NOT_ENOUGH_DATA)
         );
         assert!(!directory.join(DXF_NAME).exists());
     }

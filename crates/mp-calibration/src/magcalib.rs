@@ -661,7 +661,7 @@ pub struct LogFit {
 
 /// `getOffsets` after its pass over the log: at least [`MIN_SAMPLES`], the farthest sixteenth
 /// dropped, the sphere, the ellipsoid, the nine-parameter ellipsoid again, and the offsets of the
-/// last. The `.dxf` it writes is [`magcal_log::dxf`](crate::magcal_log::dxf).
+/// last. The `.dxf` it writes is mp-log's `magcal_log::dxf`.
 ///
 /// # Errors
 ///

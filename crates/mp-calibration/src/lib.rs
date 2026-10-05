@@ -41,8 +41,8 @@
 //! [`magcalib`] is the one calibration done on the ground station rather than the vehicle:
 //! `MagCalib.cs`'s least-squares fit of a sphere and an ellipsoid to magnetometer samples read
 //! from a log or gathered live, and the boxes that give the offsets; [`live_magcal`] is the live
-//! gathering, `DoGUIMagCalib` without its window; [`magcal_log`] is `ProcessLog`'s, a log read
-//! for its samples, fitted, and drawn into `magoffset.dxf`.
+//! gathering, `DoGUIMagCalib` without its window. `ProcessLog`'s reading of a log is mp-log's
+//! `magcal_log`, a layer above this.
 //!
 //! The protocol half of `GCSViews/ConfigurationView/ConfigAccelerometerCalibration.cs`,
 //! `ConfigHWCompass.cs`, `ConfigMotorTest.cs` and `ConfigRadioInput.cs`, without their forms. L3
@@ -54,7 +54,6 @@
 
 pub mod compass;
 pub mod live_magcal;
-pub mod magcal_log;
 pub mod magcalib;
 pub mod motor;
 pub mod motor_layouts;

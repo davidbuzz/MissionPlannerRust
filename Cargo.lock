@@ -4498,10 +4498,7 @@ dependencies = [
 name = "mp-calibration"
 version = "0.0.0"
 dependencies = [
- "dxf",
  "levenberg-marquardt",
- "mp-log",
- "mp-mavlink",
  "mp-mavlink-dialects",
  "mp-os",
  "mp-vehicle",
@@ -4715,7 +4712,9 @@ name = "mp-log"
 version = "0.0.0"
 dependencies = [
  "criterion",
+ "dxf",
  "flate2",
+ "mp-calibration",
  "mp-link",
  "mp-mavlink",
  "mp-mavlink-dialects",

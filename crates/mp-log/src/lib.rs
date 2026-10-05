@@ -53,6 +53,7 @@ pub mod fft;
 pub mod index;
 pub mod logfile;
 pub mod logparams;
+pub mod magcal_log;
 pub mod matlab;
 pub mod mavgraph;
 pub mod netfmt;

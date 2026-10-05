@@ -33,7 +33,7 @@
 //! `--ellipsoid` also prints the C#'s log lines for its fits (`magcal`, `magcalel`), which is where
 //! the ellipsoid it fits is to be seen: `ProcessLog` hands only the offsets on.
 //!
-//! The reading and the fit are `mp_calibration::magcal_log`'s, which the planner's EXPERIMENTAL
+//! The reading and the fit are `mp_log::magcal_log`'s, which the planner's EXPERIMENTAL
 //! "mag calb log" shares. This verb writes no `magoffset.dxf`: `doDXF`'s drawing goes into the
 //! planner's data directory when the planner reads a log, and a command line asked for offsets.
 //! `// C#: MagCalib.cs:93-133, 813-1117`
@@ -43,7 +43,7 @@
 use std::fmt::Write as _;
 use std::process::ExitCode;
 
-use mp_calibration::magcal_log::{Gathered, compass_one, gather};
+use mp_log::magcal_log::{Gathered, compass_one, gather};
 use mp_calibration::magcalib::{self, DataflashSamples, LogFit, TITLE, fit_dataflash, fit_tlog};
 
 /// The usage line.

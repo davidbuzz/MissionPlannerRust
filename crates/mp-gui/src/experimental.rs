@@ -69,7 +69,7 @@ use crate::config::optional::{InputBox, input_box};
 use crate::fly::{PLEASE_CONNECT, error_box};
 use crate::telemetry::Report;
 use crate::{MissionPlanner, facts, theme};
-use mp_calibration::magcal_log::{DXF_NAME, Processed, process_log};
+use mp_log::magcal_log::{DXF_NAME, Processed, process_log};
 use mp_firmware::flow::Buttons;
 use mp_link::requests::CMD_FLASH_BOOTLOADER;
 

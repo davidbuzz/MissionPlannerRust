@@ -19,7 +19,3 @@ thiserror.workspace = true
 # `magcalib`: the Levenberg-Marquardt fit alglib's `minlmcreatev` does in the C#.
 levenberg-marquardt.workspace = true
 nalgebra.workspace = true
-# `magcal_log`: the logs `ProcessLog` reads, and the drawing `doDXF` writes with netDxf.
-mp-log.workspace = true
-mp-mavlink.workspace = true
-dxf.workspace = true
