@@ -11,7 +11,8 @@
 //   mprSerialChoose(), the chooser; the port chosen is handed to `chosen` by its name, the
 //   planner's planner_serial_chosen;
 // - openSerial(name, baud, received, said): the port opened at `baud`, its bytes to `received`,
-//   what happens to it to `said`; resolves to { send, close }, or null.
+//   what happens to it to `said`; resolves to { send, setBaud, setDtr, close }, or null - the
+//   rate and DTR asked by the planner's SiK radio and firmware tools (page.rs's controls).
 
 let ports = [];
 
@@ -51,43 +52,71 @@ export function serveSerial(chosen) {
     };
 }
 
-/// The port the planner named, opened at `baud` and read until closed.
+/// The port the planner named, opened at `baud` and read until closed: { send, setBaud, setDtr,
+/// close }, each done in the order asked - WebSerial changes a port's rate only by closing and
+/// opening it again, which waits for the bytes written before it.
 export async function openSerial(name, baud, received, said) {
     const port = ports.find((port, index) => nameOf(port, index) === name);
     if (!port) {
         said(`no serial port ${name} in this page`);
         return null;
     }
+    let reader = null;
+    let writer = null;
+    let written = Promise.resolve();
+    const start = async (rate) => {
+        await port.open({ baudRate: rate, bufferSize: 65536 });
+        writer = port.writable.getWriter();
+        const mine = port.readable.getReader();
+        reader = mine;
+        (async () => {
+            try {
+                while (true) {
+                    const { value, done } = await mine.read();
+                    if (done) break;
+                    if (value && value.length) received(value);
+                }
+            } catch (err) {
+                if (reader === mine) said(`serial ${name}: ${err.message ?? err}`);
+            }
+        })();
+    };
+    const stop = async () => {
+        await written.catch(() => {});
+        const [mine, out] = [reader, writer];
+        reader = null;
+        writer = null;
+        try { await mine?.cancel(); } catch (_) {}
+        mine?.releaseLock();
+        out?.releaseLock();
+        await port.close().catch(() => {});
+    };
     try {
-        await port.open({ baudRate: baud, bufferSize: 65536 });
+        await start(baud);
     } catch (err) {
         said(`serial ${name}: ${err.message ?? err}`);
         return null;
     }
     said(`serial ${name} at ${baud}`);
-    const writer = port.writable.getWriter();
-    const reader = port.readable.getReader();
-    let open = true;
-    (async () => {
-        try {
-            while (open) {
-                const { value, done } = await reader.read();
-                if (done) break;
-                if (value && value.length) received(value);
-            }
-        } catch (err) {
-            if (open) said(`serial ${name}: ${err.message ?? err}`);
-        }
-    })();
+    // What is asked, done in turn; a write is handed to the port at once, in order.
+    let turn = Promise.resolve();
+    const inTurn = (job) => {
+        turn = turn.then(job).catch((err) => said(`serial ${name}: ${err.message ?? err}`));
+        return turn;
+    };
     return {
-        send: (bytes) => writer.write(bytes).catch((err) => said(`serial ${name}: ${err.message ?? err}`)),
-        close: async () => {
-            open = false;
-            try { await reader.cancel(); } catch (_) {}
-            reader.releaseLock();
-            writer.releaseLock();
-            await port.close().catch(() => {});
+        send: (bytes) => inTurn(() => {
+            if (writer) written = writer.write(bytes);
+        }),
+        setBaud: (rate) => inTurn(async () => {
+            await stop();
+            await start(rate);
+            said(`serial ${name} at ${rate}`);
+        }),
+        setDtr: (level) => inTurn(() => port.setSignals({ dataTerminalReady: level })),
+        close: () => inTurn(async () => {
+            await stop();
             said(`serial ${name} closed`);
-        },
+        }),
     };
 }

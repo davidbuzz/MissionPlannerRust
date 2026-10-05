@@ -76,6 +76,12 @@ opens it at the baud box's rate and carries it as any other link; DISCONNECT clo
 no USB: the port granted only from the click, its heartbeats heard, the planner's bytes written to
 it, the port closed after.
 
+The pages that open a port themselves - SETUP's Sik Radio, the firmware tools - get the same
+ports (mp-transport's `SerialTransport` in a page): a rate change is the port opened again at the
+new rate, which is all WebSerial allows, and DTR the port's `setSignals`, each in order with the
+bytes around it. `check/serial_sik_check.js` loads the Sik Radio page's settings through a stand-in
+port backed by `tests/gui/sik-radio.py`, the desktop's simulated RFD900+, over `tools/ws_relay.py`.
+
 ## A vehicle on a tailnet
 
 New to Tailscale, or to the planner? [using_tailscale.md](../using_tailscale.md) walks through it
@@ -135,6 +141,7 @@ NODE_PATH=<node_modules with playwright> node check/storage_check.js   # config.
 NODE_PATH=<node_modules with playwright> node check/files_check.js     # the browser's picker and downloads
 NODE_PATH=<node_modules with playwright> node check/storage_budget_check.js # the logs a visit loads, newest first
 NODE_PATH=<node_modules with playwright> node check/serial_check.js    # a serial link through WebSerial
+NODE_PATH=<node_modules with playwright> node check/serial_sik_check.js # SiK radios' settings over a page's port
 NODE_PATH=<node_modules with playwright> node check/fault_check.js     # a fault of the page's own, asked about at the next start
 NODE_PATH=<node_modules with playwright> check/tailnet_e2e.sh          # over a tailnet (needs Go)
 ```
@@ -178,6 +185,6 @@ By hand:
   HUD, and the full parameter download.
 - UDP listening (`udp:0.0.0.0:14550`), where a vehicle sends first: the page's Tailscale node
   dials out (TCP, UDPCl) but does not listen yet.
-- Serial for Install Firmware and SiK radios: they open their ports themselves, at bauds they
-  change and with DTR they toggle, which the page's serial ports do not take yet (the link does,
-  above).
+- Install Firmware over a page's serial port: its rates and DTR go to the port as the SiK radio
+  page's do (above), but no board's bootloader, real or stand-in, has been programmed through
+  it; and its firmware downloads come from ardupilot.org, which refuses a page's origin.

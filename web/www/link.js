@@ -18,14 +18,15 @@ let sendTo = () => {};
 let active = null;
 // The bytes for the SITL in the page, while it runs.
 let sitlSend = () => {};
-// A serial port the page has open (serial.js), closed before any other link: a port open is a
-// port no other link, nor the next visit, may open.
+// A serial port the page has open (serial.js), as the promise of its link: what is asked of it -
+// bytes, a rate, DTR - waits for it to open, each in the order asked. Closed before any other link:
+// a port open is a port no other link, nor the next visit, may open.
 let serialLink = null;
 // Its closing, which the next open waits for: a port still closing will not open again.
 let serialClosing = Promise.resolve();
 
 function closeSerial() {
-    if (serialLink) serialClosing = serialLink.close();
+    if (serialLink) serialClosing = serialLink.then((link) => link?.close());
     serialLink = null;
 }
 
@@ -37,15 +38,14 @@ function openSerialLink(asked) {
     const baud = (colon > 0 && Number(rest.slice(colon + 1))) || 115200;
     active = "serial";
     status = `opening serial ${name}`;
-    serialClosing.then(() => openSerial(name, baud, (bytes) => {
+    const link = serialClosing.then(() => openSerial(name, baud, (bytes) => {
         if (active === "serial") inbox.push(bytes);
     }, (text) => {
         status = text;
         console.log(`link: ${text}`);
-    })).then((link) => {
-        serialLink = link;
-        sendTo = link ? link.send : () => {};
-    });
+    }));
+    serialLink = link;
+    sendTo = (bytes) => { link.then((open) => open?.send(bytes)); };
 }
 
 
@@ -174,9 +174,17 @@ export function servePlanner(planner) {
         if (asked !== undefined && asked !== null) {
             console.log(`link: the planner asks for ${asked}`);
             crossed.asked.push(asked);
+            // A serial port's rate or DTR, in order with its bytes (page.rs's controls).
+            const control = asked.startsWith("serial-baud\n") || asked.startsWith("serial-dtr\n");
             // Any link asked for, or none, ends the serial port the page had open.
-            if (!asked.startsWith("sitl")) closeSerial();
-            if (asked === "close") {
+            if (!control && !asked.startsWith("sitl")) closeSerial();
+            if (control) {
+                const [kind, value] = asked.split("\n");
+                serialLink?.then((link) => {
+                    if (kind === "serial-baud") link?.setBaud(Number(value));
+                    else link?.setDtr(value === "1");
+                });
+            } else if (asked === "close") {
                 forwarding = false;
                 status = "closed";
             } else if (asked.startsWith("serial:")) {

@@ -50,6 +50,10 @@ struct Shared {
     /// The link the page carries now, counted from the first: one closed after another has
     /// opened is not the page's to close.
     current: u64,
+    /// What the page is to do to the link's port, each after the outbox's first bytes - as many
+    /// as were written before it ([`PageTransport::control`]): handed over only once those have
+    /// been taken, so a rate change never overtakes the bytes before it, nor they it.
+    controls: VecDeque<(usize, String)>,
 }
 
 static SHARED: Mutex<Shared> = Mutex::new(Shared {
@@ -57,6 +61,7 @@ static SHARED: Mutex<Shared> = Mutex::new(Shared {
     inbox: VecDeque::new(),
     outbox: Vec::new(),
     current: 0,
+    controls: VecDeque::new(),
 });
 /// Rung when the page hands bytes over.
 static ARRIVED: Condvar = Condvar::new();
@@ -73,10 +78,19 @@ fn shared() -> MutexGuard<'static, Shared> {
 #[wasm_bindgen]
 #[must_use]
 pub fn page_link_requested() -> Option<String> {
-    SHARED
-        .try_lock()
-        .ok()
-        .and_then(|mut shared| shared.requests.pop_front())
+    let mut shared = SHARED.try_lock().ok()?;
+    if let Some(request) = shared.requests.pop_front() {
+        return Some(request);
+    }
+    // A control once the bytes before it are gone.
+    if shared
+        .controls
+        .front()
+        .is_some_and(|(before, _)| *before == 0)
+    {
+        return shared.controls.pop_front().map(|(_, control)| control);
+    }
+    None
 }
 
 /// Asks the page to start ArduPilot's WebAssembly SITL `module` (a file of its `sitl/` folder,
@@ -153,10 +167,24 @@ pub fn page_link_push(bytes: &[u8]) -> bool {
 #[wasm_bindgen]
 #[must_use]
 pub fn page_link_take() -> Vec<u8> {
-    SHARED
-        .try_lock()
-        .map(|mut shared| std::mem::take(&mut shared.outbox))
-        .unwrap_or_default()
+    let Ok(mut shared) = SHARED.try_lock() else {
+        return Vec::new();
+    };
+    take_before_control(&mut shared)
+}
+
+/// The outbox's bytes up to the next control, or all of them; the controls' places moved up.
+fn take_before_control(shared: &mut Shared) -> Vec<u8> {
+    let count = shared
+        .controls
+        .front()
+        .map_or(shared.outbox.len(), |(before, _)| *before)
+        .min(shared.outbox.len());
+    let taken: Vec<u8> = shared.outbox.drain(..count).collect();
+    for (before, _) in &mut shared.controls {
+        *before = before.saturating_sub(count);
+    }
+    taken
 }
 
 /// A link the page carries.
@@ -179,6 +207,7 @@ impl PageTransport {
         shared.requests.push_back(url.to_owned());
         shared.inbox.clear();
         shared.outbox.clear();
+        shared.controls.clear();
         shared.current += 1;
         Ok(Self {
             description: format!("{url} (through the page)"),
@@ -186,6 +215,18 @@ impl PageTransport {
             open: true,
             link: shared.current,
         })
+    }
+}
+
+impl PageTransport {
+    /// Something for the page to do to what carries this link, in order with its bytes - a
+    /// serial port's rate or DTR (`serial-baud`, `serial-dtr`) - if it is still the page's link.
+    pub(crate) fn control(&self, request: &str) {
+        let mut shared = shared();
+        if self.open && shared.current == self.link {
+            let before = shared.outbox.len();
+            shared.controls.push_back((before, request.to_owned()));
+        }
     }
 }
 

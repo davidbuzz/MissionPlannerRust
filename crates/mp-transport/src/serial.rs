@@ -25,14 +25,19 @@
 //! carries USB VID/PID because board detection (Deliverable 13) identifies autopilots by them, exactly as
 //! `BoardDetect.cs` does today.
 
+#[cfg(not(target_family = "wasm"))]
 use mp_os::fs::FsExt as _;
-use std::io::{self, Read, Write};
+use std::io;
+#[cfg(not(target_family = "wasm"))]
+use std::io::{Read, Write};
 use std::time::Duration;
 
 #[cfg(not(target_family = "wasm"))]
+use crate::DEFAULT_READ_TIMEOUT;
+#[cfg(not(target_family = "wasm"))]
 use crate::enumerate;
 pub use crate::enumerate::PortInfo;
-use crate::{DEFAULT_READ_TIMEOUT, OpenError, Transport};
+use crate::{OpenError, Transport};
 
 /// Lists serial ports currently present, as Mission Planner would list them on this machine.
 ///
@@ -150,6 +155,7 @@ fn device_node(_name: &str) -> Option<String> {
 }
 
 /// An open serial port.
+#[cfg(not(target_family = "wasm"))]
 pub struct SerialTransport {
     port: Box<dyn serialport::SerialPort>,
     name: String,
@@ -164,6 +170,7 @@ fn describe(name: &str, baud: u32) -> String {
     format!("serial:{name}:{baud}")
 }
 
+#[cfg(not(target_family = "wasm"))]
 impl std::fmt::Debug for SerialTransport {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("SerialTransport")
@@ -174,6 +181,7 @@ impl std::fmt::Debug for SerialTransport {
     }
 }
 
+#[cfg(not(target_family = "wasm"))]
 impl SerialTransport {
     /// Opens a port at the given baud rate.
     pub fn open(path: &str, baud: u32) -> Result<Self, OpenError> {
@@ -220,6 +228,7 @@ impl SerialTransport {
     }
 }
 
+#[cfg(not(target_family = "wasm"))]
 impl Transport for SerialTransport {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
         match self.port.read(buf) {
@@ -255,5 +264,94 @@ impl Transport for SerialTransport {
 
     fn close(&mut self) {
         self.open = false;
+    }
+}
+
+/// An open serial port in a web page: one the browser has let the page use (WebSerial), opened
+/// and carried by the page as its links are (web/www/serial.js, link.js) - for SiK radios and the
+/// firmware tools, which open their ports themselves. WebSerial changes a port's rate only by
+/// opening it again, so a baud change is the port reopened at the new rate; DTR is the port's
+/// `setSignals`. Each goes to the page in order with the bytes around it.
+#[cfg(target_family = "wasm")]
+pub struct SerialTransport {
+    link: crate::page::PageTransport,
+    name: String,
+    baud: u32,
+    /// `serial:<name>:<baud>`, kept ready for [`Transport::description`].
+    description: String,
+}
+
+#[cfg(target_family = "wasm")]
+impl std::fmt::Debug for SerialTransport {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("SerialTransport")
+            .field("name", &self.name)
+            .field("baud", &self.baud)
+            .field("open", &self.link.is_open())
+            .finish()
+    }
+}
+
+#[cfg(target_family = "wasm")]
+impl SerialTransport {
+    /// Asks the page to open the port it calls `path` at `baud`.
+    ///
+    /// # Errors
+    /// None today: the page answers by sending bytes or not.
+    pub fn open(path: &str, baud: u32) -> Result<Self, OpenError> {
+        Ok(Self {
+            link: crate::page::PageTransport::open(&describe(path, baud))?,
+            name: path.to_owned(),
+            baud,
+            description: describe(path, baud),
+        })
+    }
+
+    /// DTR, which is how ArduPilot boards are pushed into the bootloader.
+    ///
+    /// # Errors
+    /// None: the page sets it in its turn.
+    pub fn set_dtr(&mut self, level: bool) -> io::Result<()> {
+        self.link
+            .control(&format!("serial-dtr\n{}", u8::from(level)));
+        Ok(())
+    }
+
+    /// The port at another rate, used by the SiK radio configurator: reopened by the page.
+    ///
+    /// # Errors
+    /// None: the page reopens it in its turn.
+    pub fn set_baud(&mut self, baud: u32) -> io::Result<()> {
+        self.link.control(&format!("serial-baud\n{baud}"));
+        self.baud = baud;
+        self.description = describe(&self.name, baud);
+        Ok(())
+    }
+}
+
+#[cfg(target_family = "wasm")]
+impl Transport for SerialTransport {
+    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+        self.link.read(buf)
+    }
+
+    fn write_all(&mut self, buf: &[u8]) -> io::Result<()> {
+        self.link.write_all(buf)
+    }
+
+    fn description(&self) -> &str {
+        &self.description
+    }
+
+    fn is_open(&self) -> bool {
+        self.link.is_open()
+    }
+
+    fn set_read_timeout(&mut self, timeout: Duration) -> io::Result<()> {
+        self.link.set_read_timeout(timeout)
+    }
+
+    fn close(&mut self) {
+        self.link.close();
     }
 }
