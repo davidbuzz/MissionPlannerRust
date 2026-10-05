@@ -41,9 +41,10 @@
 //! and fills the table, or starts the classic download and watches that. The owner reads where
 //! it is with [`crate::Link::param_fetch`].
 
+use mp_os::Lock as _;
 use std::collections::BTreeMap;
 use std::sync::Arc;
-use std::time::Instant;
+use web_time::Instant;
 
 use mp_ftp::mavftp::{FtpOutcome, FtpRequest};
 use mp_params::{ParamTable, parampck};
@@ -165,7 +166,7 @@ impl Link {
                 self.download_params(target)
             }
         };
-        if let Ok(mut fetches) = self.shared.param_fetches.lock() {
+        if let Ok(mut fetches) = self.shared.param_fetches.os_lock() {
             fetches.insert(target, fetch);
         }
         sent
@@ -174,7 +175,12 @@ impl Link {
     /// Where a vehicle's fetch is, if one has been started.
     #[must_use]
     pub fn param_fetch(&self, target: VehicleId) -> Option<ParamFetch> {
-        self.shared.param_fetches.lock().ok()?.get(&target).cloned()
+        self.shared
+            .param_fetches
+            .os_lock()
+            .ok()?
+            .get(&target)
+            .cloned()
     }
 
     /// Stops a fetch: the file read cancelled, or the stream, as the progress dialog's Cancel
@@ -188,7 +194,7 @@ impl Link {
         }
         self.cancel_ftp(target);
         self.cancel_param_download(target);
-        if let Ok(mut fetches) = self.shared.param_fetches.lock()
+        if let Ok(mut fetches) = self.shared.param_fetches.os_lock()
             && let Some(fetch) = fetches.get_mut(&target)
         {
             fetch.state = ParamFetchState::Cancelled;
@@ -205,14 +211,14 @@ pub(crate) fn tick(
     now: Instant,
     actions: &mut Vec<(VehicleId, ParamAction)>,
 ) {
-    let Ok(mut fetches) = shared.param_fetches.lock() else {
+    let Ok(mut fetches) = shared.param_fetches.os_lock() else {
         return;
     };
     for (id, fetch) in fetches.iter_mut() {
         match &fetch.state {
             ParamFetchState::Ftp => {
                 let outcome = {
-                    let Ok(mut clients) = shared.ftp.lock() else {
+                    let Ok(mut clients) = shared.ftp.os_lock() else {
                         continue;
                     };
                     let Some(client) = clients.get_mut(id) else {
@@ -246,7 +252,7 @@ pub(crate) fn tick(
                             );
                         }
                         let held = table.len();
-                        if let Ok(mut tables) = shared.params.lock() {
+                        if let Ok(mut tables) = shared.params.os_lock() {
                             tables.insert(*id, table);
                         }
                         fetch.defaults = Arc::new(defaults);
@@ -258,7 +264,7 @@ pub(crate) fn tick(
                     Err(why) => {
                         // `log.Error(e)` and `return await getParamListAsync(...)`.
                         // C#: MAVLinkInterface.cs:1922-1930
-                        if let Ok(mut downloads) = shared.param_downloads.lock() {
+                        if let Ok(mut downloads) = shared.param_downloads.os_lock() {
                             let download = ParamDownload::new(*id, timeouts, now);
                             actions.push((*id, download.begin()));
                             downloads.insert(*id, download);
@@ -268,7 +274,7 @@ pub(crate) fn tick(
                 }
             }
             ParamFetchState::Stream { .. } => {
-                let Ok(downloads) = shared.param_downloads.lock() else {
+                let Ok(downloads) = shared.param_downloads.os_lock() else {
                     continue;
                 };
                 let Some(download) = downloads.get(id) else {
@@ -287,7 +293,7 @@ pub(crate) fn tick(
                 } else {
                     let count = shared
                         .params
-                        .lock()
+                        .os_lock()
                         .ok()
                         .and_then(|tables| tables.get(id).map(ParamTable::len))
                         .unwrap_or(0);

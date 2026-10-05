@@ -374,7 +374,7 @@ mod tests {
         zip.extend(at.to_le_bytes());
         zip.extend(0u16.to_le_bytes());
 
-        let dir = std::env::temp_dir().join(format!("mp-log-zip-{}", std::process::id()));
+        let dir = mp_os::temp_dir().join(format!("mp-log-zip-{}", mp_os::process_id()));
         extract(&zip, &dir).unwrap();
         assert_eq!(std::fs::read(dir.join("dir/runner.exe")).unwrap(), b"MZ");
         std::fs::remove_dir_all(&dir).unwrap();

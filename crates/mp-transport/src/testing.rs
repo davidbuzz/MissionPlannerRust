@@ -24,6 +24,7 @@
 //! doubles make the nasty cases - partial writes, dropped bytes, duplicated bytes, disconnects
 //! mid-frame - reproducible in a unit test.
 
+use mp_os::Lock as _;
 use std::collections::VecDeque;
 use std::io;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -138,7 +139,7 @@ impl LoopbackEnd {
     /// Injects faults into the path towards this end.
     #[must_use]
     pub fn with_fault(self, fault: Fault) -> Self {
-        if let Ok(mut wire) = self.rx.lock() {
+        if let Ok(mut wire) = self.rx.os_lock() {
             wire.fault = fault;
         }
         self
@@ -147,7 +148,7 @@ impl LoopbackEnd {
     /// Bytes waiting to be read.
     #[must_use]
     pub fn pending(&self) -> usize {
-        self.rx.lock().map(|wire| wire.bytes.len()).unwrap_or(0)
+        self.rx.os_lock().map(|wire| wire.bytes.len()).unwrap_or(0)
     }
 
     /// The cable this end hangs off, for pulling it while something else owns the end.
@@ -182,7 +183,7 @@ impl Transport for LoopbackEnd {
                 "loopback closed",
             ));
         }
-        let Ok(mut wire) = self.rx.lock() else {
+        let Ok(mut wire) = self.rx.os_lock() else {
             return Err(io::Error::other("loopback queue poisoned"));
         };
         let fault = wire.fault;
@@ -238,7 +239,7 @@ impl Transport for LoopbackEnd {
                 "loopback closed",
             ));
         }
-        let Ok(mut wire) = self.tx.lock() else {
+        let Ok(mut wire) = self.tx.os_lock() else {
             return Err(io::Error::other("loopback queue poisoned"));
         };
         let fault = wire.fault;

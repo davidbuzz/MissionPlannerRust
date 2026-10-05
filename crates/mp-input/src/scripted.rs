@@ -32,7 +32,7 @@
 //! [`crate::StickReader::spawn`] takes it exactly as it takes the real node.
 
 use std::io::Read;
-use std::time::{Duration, Instant};
+use web_time::{Duration, Instant};
 
 use crate::event::{self, AXIS, BUTTON, INIT, LEN};
 
@@ -174,13 +174,13 @@ impl Read for ScriptedDevice {
     fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
         loop {
             let Some(step) = self.steps.get(self.next).copied() else {
-                std::thread::sleep(HOLD);
+                wasm_thread::sleep(HOLD);
                 continue;
             };
             let due = self.opened + step.at();
             let now = Instant::now();
             if now < due {
-                std::thread::sleep(due - now);
+                wasm_thread::sleep(due - now);
                 continue;
             }
             if matches!(step, Step::Gone { .. }) {

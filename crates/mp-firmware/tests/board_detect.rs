@@ -32,6 +32,7 @@
 
 mod common;
 
+use mp_os::Lock as _;
 use common::MockBootloader;
 use mp_firmware::detect::{
     Boards, DetectHost, Detected, DeviceInfo, FLASH_SIZE_2MB, PLEASE_UNPLUG_THE_BOARD_AND, Probe,
@@ -46,7 +47,7 @@ use std::collections::VecDeque;
 use std::io::{self, Read, Write};
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
-use std::time::{Duration, Instant};
+use web_time::{Duration, Instant};
 
 // --- fixtures -------------------------------------------------------------------------------
 
@@ -464,7 +465,7 @@ impl Transport for MockLink {
     }
 
     fn write_all(&mut self, buf: &[u8]) -> io::Result<()> {
-        self.sent.lock().unwrap().extend_from_slice(buf);
+        self.sent.os_lock().unwrap().extend_from_slice(buf);
         match &mut self.device {
             Device::Px4(mock) => mock.write_all(buf)?,
             Device::Stk500v1 => {
@@ -506,7 +507,7 @@ struct Opened {
 
 impl Opened {
     fn sent(&self) -> Vec<u8> {
-        self.sent.lock().unwrap().clone()
+        self.sent.os_lock().unwrap().clone()
     }
 }
 
@@ -989,7 +990,7 @@ mod pty {
             Instant::now()
         }
         fn sleep(&mut self, duration: Duration) {
-            std::thread::sleep(duration);
+            wasm_thread::sleep(duration);
         }
     }
 
@@ -998,8 +999,8 @@ mod pty {
     fn serve(
         mut master: TTYPort,
         stop: Arc<AtomicBool>,
-    ) -> std::thread::JoinHandle<MockBootloader> {
-        std::thread::spawn(move || {
+    ) -> wasm_thread::JoinHandle<MockBootloader> {
+        wasm_thread::spawn(move || {
             let mut mock = MockBootloader::new(9, FLASH_SIZE_2MB);
             master
                 .set_timeout(Duration::from_millis(10))
@@ -1017,7 +1018,7 @@ mod pty {
                     Err(error) if error.kind() == io::ErrorKind::TimedOut => {}
                     // Between probe attempts nothing holds the slave open, and the master reads
                     // EIO until the next attempt opens it: a board waiting to be spoken to.
-                    Err(_) => std::thread::sleep(Duration::from_millis(1)),
+                    Err(_) => wasm_thread::sleep(Duration::from_millis(1)),
                 }
             }
             mock

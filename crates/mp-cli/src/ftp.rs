@@ -34,7 +34,7 @@
 
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
-use std::time::{Duration, Instant};
+use web_time::{Duration, Instant};
 
 use mp_link::mavftp::{FtpFileInfo, FtpOutcome, FtpRequest, RW_SIZE, crc_crc32};
 use mp_link::{FtpError, Link, LinkConfig};
@@ -100,7 +100,7 @@ fn with_link(
         Link::connect(url, config).map_err(|err| format!("could not open {url}: {err}"))?;
     let deadline = Instant::now() + Duration::from_secs(20);
     while link.primary_vehicle().is_none() && Instant::now() < deadline {
-        std::thread::sleep(Duration::from_millis(50));
+        wasm_thread::sleep(Duration::from_millis(50));
     }
     let Some((id, _)) = link.primary_vehicle() else {
         return Err(format!("no vehicle appeared on {url}"));
@@ -124,7 +124,7 @@ fn request(link: &Link, id: VehicleId, request: FtpRequest) -> Result<FtpOutcome
             link.cancel_ftp(id);
             return Err("the link stopped answering".to_owned());
         }
-        std::thread::sleep(Duration::from_millis(5));
+        wasm_thread::sleep(Duration::from_millis(5));
     }
 }
 
@@ -336,8 +336,8 @@ mod tests {
         mut end: LoopbackEnd,
         stop: Arc<AtomicBool>,
         mut fake: FakeVehicle,
-    ) -> std::thread::JoinHandle<FakeVehicle> {
-        std::thread::spawn(move || {
+    ) -> wasm_thread::JoinHandle<FakeVehicle> {
+        wasm_thread::spawn(move || {
             let mut seq = 0u8;
             let heartbeat = MavMessage::Heartbeat(Heartbeat {
                 custom_mode: 0,
@@ -353,7 +353,7 @@ mod tests {
             while !stop.load(Ordering::Acquire) {
                 let n = end.read(&mut buf).unwrap_or(0);
                 if n == 0 {
-                    std::thread::sleep(Duration::from_millis(1));
+                    wasm_thread::sleep(Duration::from_millis(1));
                     continue;
                 }
                 let mut requests = Vec::new();
@@ -387,15 +387,15 @@ mod tests {
         let deadline = Instant::now() + Duration::from_secs(5);
         while link.vehicle(VEHICLE).is_none() {
             assert!(Instant::now() < deadline, "the vehicle was never heard");
-            std::thread::sleep(Duration::from_millis(1));
+            wasm_thread::sleep(Duration::from_millis(1));
         }
         link
     }
 
     fn scratch(name: &str) -> PathBuf {
-        let dir = std::env::temp_dir().join(format!(
+        let dir = mp_os::temp_dir().join(format!(
             "headless-planner-ftp-{}-{name}",
-            std::process::id()
+            mp_os::process_id()
         ));
         std::fs::create_dir_all(&dir).unwrap();
         dir
@@ -486,7 +486,7 @@ mod tests {
         let mut link = Link::connect(url, config).expect("SITL on 5763");
         let deadline = Instant::now() + Duration::from_secs(20);
         while link.primary_vehicle().is_none() && Instant::now() < deadline {
-            std::thread::sleep(Duration::from_millis(50));
+            wasm_thread::sleep(Duration::from_millis(50));
         }
         let (id, _) = link.primary_vehicle().expect("a vehicle");
 

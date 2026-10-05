@@ -52,6 +52,7 @@
 // This module is internal to the binary; `pub` here documents intent rather than exporting API.
 #![allow(unreachable_pub)]
 
+use mp_os::Lock as _;
 use gpui::{AnyElement, Context, Window, div, prelude::*, px, rgb};
 use mp_units::{Metres, MetresPerSecond};
 use mp_vehicle::VehicleState;
@@ -107,8 +108,8 @@ pub type Random<'a> = &'a mut dyn FnMut(usize) -> usize;
 /// `new Random()`: seeded from the clock, as .NET's parameterless constructor is. An xorshift, not
 /// .NET's generator - the sequence is not the C#'s, only its being unpredictable.
 fn clock_random() -> impl FnMut(usize) -> usize {
-    let nanos = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
+    let nanos = web_time::SystemTime::now()
+        .duration_since(web_time::UNIX_EPOCH)
         .map_or(0, |since| since.as_nanos());
     #[allow(clippy::cast_possible_truncation)] // any 64 bits of the clock will do
     let mut state = (nanos as u64) | 1;
@@ -192,14 +193,14 @@ static FENCE: std::sync::Mutex<Vec<mp_vehicle::FenceItem>> = std::sync::Mutex::n
 /// once a frame.
 pub fn set_fence(fence: Vec<mp_vehicle::FenceItem>) {
     *FENCE
-        .lock()
+        .os_lock()
         .unwrap_or_else(std::sync::PoisonError::into_inner) = fence;
 }
 
 /// `GeoFenceDist` from the fence last handed over.
 fn geo_fence_dist(state: &VehicleState) -> f64 {
     let fence = FENCE
-        .lock()
+        .os_lock()
         .unwrap_or_else(std::sync::PoisonError::into_inner);
     f64::from(state.geo_fence_dist(&fence))
 }

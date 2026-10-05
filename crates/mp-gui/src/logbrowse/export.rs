@@ -206,7 +206,7 @@ mod tests {
     /// The records are written at their offsets, the file emptied first, the escape refused.
     #[test]
     fn files_are_written_record_by_record() {
-        let folder = std::env::temp_dir().join(format!("mp-export-{}", std::process::id()));
+        let folder = mp_os::temp_dir().join(format!("mp-export-{}", mp_os::process_id()));
         let _ = std::fs::remove_dir_all(&folder);
         std::fs::create_dir_all(folder.join("APM")).expect("folder");
         std::fs::write(folder.join("APM/a.txt"), b"old contents that are longer").expect("old");

@@ -27,7 +27,7 @@
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::indexing_slicing)]
 
 use std::path::PathBuf;
-use std::time::{Duration, Instant};
+use web_time::{Duration, Instant};
 
 use mp_tiles::cache::TileCache;
 use mp_tiles::source::OPENSTREETMAP;
@@ -39,10 +39,10 @@ struct Scratch(PathBuf);
 
 impl Scratch {
     fn new(name: &str) -> Self {
-        let path = std::env::temp_dir().join(format!(
+        let path = mp_os::temp_dir().join(format!(
             "mp-tiles-offline-{name}-{}-{:?}",
-            std::process::id(),
-            std::thread::current().id()
+            mp_os::process_id(),
+            wasm_thread::current().id()
         ));
         let _ = std::fs::remove_dir_all(&path);
         Self(path)
@@ -115,7 +115,7 @@ fn an_offline_store_reads_the_disk_without_being_asked_to() {
     // when it does not is a hang rather than a failure.
     let deadline = Instant::now() + Duration::from_secs(2);
     while store.generation() == 0 && Instant::now() < deadline {
-        std::thread::sleep(Duration::from_millis(5));
+        wasm_thread::sleep(Duration::from_millis(5));
     }
     assert!(
         matches!(store.get(subject), TileAnswer::Exact(_)),

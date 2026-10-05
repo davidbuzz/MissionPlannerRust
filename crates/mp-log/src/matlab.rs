@@ -337,8 +337,8 @@ pub fn process_log_file(log: &Path, mode_name: ModeName<'_>) -> Result<PathBuf, 
 /// csmatio's header date, `ddd, dd MMM yyyy HH:mm:ss GMT`, for now.
 #[must_use]
 pub fn created_now() -> String {
-    let seconds = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
+    let seconds = web_time::SystemTime::now()
+        .duration_since(web_time::UNIX_EPOCH)
         .map_or(0, |d| d.as_secs());
     let seconds = i64::try_from(seconds).unwrap_or(0);
     let days = seconds.div_euclid(86_400);

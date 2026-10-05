@@ -48,8 +48,9 @@
 //! it over its golden, then look at what changed before committing it. A golden that no case
 //! draws any more fails [`no_golden_is_left_without_a_case`].
 
+use mp_os::RecvTimeout as _;
 use std::path::{Path, PathBuf};
-use std::time::{Duration, Instant};
+use web_time::{Duration, Instant};
 
 use mp_log::TlogReader;
 use mp_mavlink::FrameDecoder;
@@ -459,7 +460,7 @@ fn load(path: &Path) -> Result<Image, String> {
 fn every_frame_matches_its_golden() {
     let dir = golden_dir();
     let update = std::env::var_os(UPDATE).is_some();
-    let scratch = std::env::temp_dir().join("mp-hud-golden");
+    let scratch = mp_os::temp_dir().join("mp-hud-golden");
     let mut failures = Vec::new();
     for (name, actual) in every_case() {
         let path = dir.join(format!("{name}.png"));
@@ -905,7 +906,7 @@ fn the_tapes_end_for_any_value() {
     }
     let (sender, receiver) = std::sync::mpsc::channel();
     let total = cases.len();
-    std::thread::spawn(move || {
+    wasm_thread::spawn(move || {
         for inputs in cases {
             #[allow(clippy::cast_precision_loss)]
             let drawn = scene(&inputs, WIDTH as f32, HEIGHT as f32);
@@ -917,7 +918,7 @@ fn the_tapes_end_for_any_value() {
     let normal = scene(&cruising(), WIDTH as f32, HEIGHT as f32).items.len();
     for _ in 0..total {
         let (inputs, drawn, image) = receiver
-            .recv_timeout(Duration::from_secs(60))
+            .os_recv_timeout(Duration::from_secs(60))
             .expect("a frame with an extreme value never finished: a tape's loop did not end");
         let what = (inputs.airspeed, inputs.altitude, inputs.heading);
         assert!(

@@ -89,7 +89,7 @@ use std::hint::black_box;
 use std::io::Write as _;
 use std::path::{Path, PathBuf};
 use std::sync::OnceLock;
-use std::time::{Duration, Instant};
+use web_time::{Duration, Instant};
 
 use criterion::{BatchSize, Criterion, criterion_group};
 use mp_log::index::RecordIndex;

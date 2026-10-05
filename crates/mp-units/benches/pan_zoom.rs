@@ -79,7 +79,7 @@
 #![allow(missing_docs)] // criterion_group! expands to an undocumented pub fn
 
 use std::hint::black_box;
-use std::time::{Duration, Instant};
+use web_time::{Duration, Instant};
 
 use criterion::{Criterion, criterion_group};
 use mp_units::tiles::{TILE_SIZE_PX, tiles_for_view, zoom_for_span};

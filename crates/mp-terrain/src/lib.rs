@@ -60,7 +60,9 @@ pub use srtm::{
 };
 
 use std::path::{Path, PathBuf};
-use std::time::{Duration, SystemTime};
+// A file's time is std's: this file compares the clock only with files' times. port_clock: keep
+use std::time::SystemTime; // port_clock: keep
+use web_time::Duration;
 
 /// How we identify ourselves to the terrain server: the one identity the whole application sends.
 ///

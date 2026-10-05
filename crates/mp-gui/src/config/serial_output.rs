@@ -227,7 +227,7 @@ pub type Opening = Receiver<Result<Box<dyn Transport>, String>>;
 /// `// C#: Controls/SerialOutputNMEA.cs:44-108`
 pub fn open(kind: Kind, host_port: u16, baud: u32, answers: Vec<String>) -> Opening {
     let (send, receive) = std::sync::mpsc::channel();
-    let spawned = std::thread::Builder::new()
+    let spawned = wasm_thread::Builder::new()
         .name("mp-serial-output".to_owned())
         .spawn(move || {
             let answer = |index: usize| answers.get(index).map(String::as_str).unwrap_or("");

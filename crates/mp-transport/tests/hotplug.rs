@@ -29,11 +29,12 @@
 
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::indexing_slicing)]
 
+use mp_os::RecvTimeout as _;
 use std::io::{self, Write};
 use std::net::TcpListener;
 use std::sync::mpsc;
-use std::thread;
-use std::time::{Duration, Instant};
+use wasm_thread as thread;
+use web_time::{Duration, Instant};
 
 use mp_transport::testing::Loopback;
 use mp_transport::{OpenError, Transport};
@@ -81,7 +82,7 @@ fn a_surprise_unplug_is_reported_on_the_next_read_as_an_error_not_zero_bytes_for
     });
 
     vehicle.write_all(b"heartbeat").unwrap();
-    got_it.recv_timeout(Duration::from_secs(10)).unwrap();
+    got_it.os_recv_timeout(Duration::from_secs(10)).unwrap();
     plug.pull();
 
     let (received, kind, open, again) = reader.join().unwrap();
@@ -213,7 +214,7 @@ mod pty {
     #[test]
     fn a_serial_port_that_vanishes_fails_its_next_read_and_the_same_url_reopens_when_it_returns() {
         let dir = PathBuf::from(env!("CARGO_TARGET_TMPDIR"))
-            .join(format!("hotplug-{}", std::process::id()));
+            .join(format!("hotplug-{}", mp_os::process_id()));
         std::fs::create_dir_all(&dir).unwrap();
         let link = dir.join("usb-ArduPilot_Test_0123456789ABCDEF-if00");
         let url = format!("serial:{}:115200", link.display());

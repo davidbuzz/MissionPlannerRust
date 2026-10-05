@@ -67,7 +67,7 @@
 #![allow(unreachable_pub)]
 
 use std::sync::Arc;
-use std::time::{Duration, Instant};
+use web_time::{Duration, Instant};
 
 use gpui::{
     AnyElement, Bounds, ContentMask, Context, Hsla, PathBuilder, Pixels, Point, Window, canvas,
@@ -965,8 +965,8 @@ fn progress_bar(full: bool) -> AnyElement {
     let fill = if full {
         div().h_full().w_full().bg(rgb(theme::OK))
     } else {
-        let millis = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
+        let millis = web_time::SystemTime::now()
+            .duration_since(web_time::UNIX_EPOCH)
             .map_or(0, |since| since.as_millis() % 2000);
         #[allow(clippy::cast_precision_loss)] // under 2000
         let left = millis as f32 / 2000.0 * (277.0 - 60.0);

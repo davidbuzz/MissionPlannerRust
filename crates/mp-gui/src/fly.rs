@@ -30,7 +30,7 @@
 use std::cell::Cell;
 use std::rc::Rc;
 use std::sync::Arc;
-use std::time::{Duration, Instant};
+use web_time::{Duration, Instant};
 
 use gpui::{
     AnyElement, Bounds, Context, FocusHandle, KeyDownEvent, Pixels, SharedString, Window, div,
@@ -4053,8 +4053,8 @@ impl MissionPlanner {
                             & mp_mavlink_dialects::all::MavSysStatusSensor::MAV_SYS_STATUS_SENSOR_MOTOR_OUTPUTS.0
                             != 0
                 }),
-                now_unix_usec: std::time::SystemTime::now()
-                    .duration_since(std::time::UNIX_EPOCH)
+                now_unix_usec: web_time::SystemTime::now()
+                    .duration_since(web_time::UNIX_EPOCH)
                     .map_or(0, |since| u64::try_from(since.as_micros()).unwrap_or(u64::MAX)),
             };
             action_messages(action, &context)
@@ -4675,7 +4675,7 @@ pub struct GstDownload {
     /// `UpdateProgressAndStatus`'s words.
     said: std::sync::mpsc::Receiver<(i32, String)>,
     /// The download.
-    thread: std::thread::JoinHandle<()>,
+    thread: wasm_thread::JoinHandle<()>,
     /// What the menu entry starts once the runtime is found.
     then: String,
 }
@@ -4849,7 +4849,7 @@ fn gstreamer_download(data: &mut FlightData, pipeline: &str) -> Option<String> {
         return Some(error_box("no home directory to keep GStreamer in"));
     };
     let (tell, said) = std::sync::mpsc::channel();
-    let spawned = std::thread::Builder::new()
+    let spawned = wasm_thread::Builder::new()
         .name("gstreamer-download".to_owned())
         .spawn(move || {
             let _ = std::fs::create_dir_all(&directory);
@@ -6015,7 +6015,7 @@ impl Conversions {
         }
         let (sender, receiver) = std::sync::mpsc::channel();
         let path = log.clone();
-        let spawned = std::thread::Builder::new()
+        let spawned = wasm_thread::Builder::new()
             .name(format!("mp-convert-{}", kind.name()))
             .spawn(move || {
                 let outcome = convert(kind, &path);
@@ -9600,7 +9600,7 @@ mod tests {
     #[test]
     #[ignore = "needs SITL on tcp:127.0.0.1:5763"]
     fn sitl_reports_the_home_set_home_alt_takes() {
-        use std::time::{Duration, Instant};
+        use web_time::{Duration, Instant};
         let link = mp_link::Link::connect("tcp:127.0.0.1:5763", mp_link::LinkConfig::default())
             .expect("SITL on 5763");
         let deadline = Instant::now() + Duration::from_secs(10);
@@ -9609,7 +9609,7 @@ mod tests {
                 break vehicle;
             }
             assert!(Instant::now() < deadline, "no vehicle on 5763");
-            std::thread::sleep(Duration::from_millis(50));
+            wasm_thread::sleep(Duration::from_millis(50));
         };
         let unasked = handle.load();
         eprintln!(
@@ -9628,7 +9628,7 @@ mod tests {
                     state = Some(now);
                     break;
                 }
-                std::thread::sleep(Duration::from_millis(20));
+                wasm_thread::sleep(Duration::from_millis(20));
             }
             if state.is_some() {
                 break;
@@ -11007,14 +11007,14 @@ mod tests {
         control.set_speed(10.0);
         let started = Instant::now();
         while telemetry.view().state.is_none() && started.elapsed() < Duration::from_secs(10) {
-            std::thread::sleep(Duration::from_millis(20));
+            wasm_thread::sleep(Duration::from_millis(20));
         }
         assert!(telemetry.view().state.is_some(), "no vehicle after 10 s");
         assert!(telemetry.recording().is_none(), "a replay is not recorded");
         control.set_paused(true);
-        std::thread::sleep(Duration::from_millis(300));
+        wasm_thread::sleep(Duration::from_millis(300));
         let held = control.position();
-        std::thread::sleep(Duration::from_millis(300));
+        wasm_thread::sleep(Duration::from_millis(300));
         assert_eq!(control.position(), held);
         assert!(held < control.len());
     }
@@ -11072,7 +11072,7 @@ mod tests {
 
     /// A directory of its own for one test, with the checked-in log copied in as `name`.
     fn scratch_log(test: &str, name: &str) -> (std::path::PathBuf, std::path::PathBuf) {
-        let dir = std::env::temp_dir().join(format!("mp-gui-{test}-{}", std::process::id()));
+        let dir = mp_os::temp_dir().join(format!("mp-gui-{test}-{}", mp_os::process_id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).expect("a scratch directory");
         let log = dir.join(name);
@@ -11088,7 +11088,7 @@ mod tests {
                 return outcome;
             }
             assert!(Instant::now() < deadline, "the conversion never finished");
-            std::thread::sleep(Duration::from_millis(20));
+            wasm_thread::sleep(Duration::from_millis(20));
         }
     }
 
@@ -11265,9 +11265,9 @@ mod tests {
     /// Where the C# shows a message box, the status line says the same words.
     #[test]
     fn a_conversion_that_fails_says_what_the_csharps_box_says() {
-        let missing = std::env::temp_dir().join(format!(
+        let missing = mp_os::temp_dir().join(format!(
             "mp-gui-convert-missing-{}/none.bin",
-            std::process::id()
+            mp_os::process_id()
         ));
         let kml = convert(Conversion::DflogToKml, &missing);
         assert!(
@@ -11872,7 +11872,7 @@ mod tests {
     #[test]
     fn set_home_here_sends_the_height_of_the_tile_under_the_press() {
         let dir =
-            std::env::temp_dir().join(format!("headless-planner-fly-srtm-{}", std::process::id()));
+            mp_os::temp_dir().join(format!("headless-planner-fly-srtm-{}", mp_os::process_id()));
         std::fs::create_dir_all(&dir).expect("scratch folder");
         let mut tile = Vec::with_capacity(1201 * 1201 * 2);
         for _ in 0..1201 * 1201 {
@@ -12227,7 +12227,7 @@ mod tests {
                 break frame;
             }
             assert!(Instant::now() < deadline, "{:?}", data.gstreamer.error());
-            std::thread::sleep(Duration::from_millis(5));
+            wasm_thread::sleep(Duration::from_millis(5));
         };
         assert_eq!((frame.width, frame.height), (64, 48));
         // videotestsrc's green is pure green.

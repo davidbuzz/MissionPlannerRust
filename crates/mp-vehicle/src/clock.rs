@@ -31,7 +31,7 @@
 //! The C#'s `DateTime.Now` is local time; [`DateTime::now`] is UTC. Only differences and the
 //! seconds field are ever computed from it, and a time zone changes neither.
 
-use std::time::{SystemTime, UNIX_EPOCH};
+use web_time::{SystemTime, UNIX_EPOCH};
 
 /// A C# `DateTime`: ticks of 100 ns since 0001-01-01 00:00:00.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]

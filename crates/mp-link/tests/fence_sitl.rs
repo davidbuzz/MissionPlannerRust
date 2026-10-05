@@ -29,7 +29,7 @@
 
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::indexing_slicing)]
 
-use std::time::{Duration, Instant};
+use web_time::{Duration, Instant};
 
 use mp_link::mission_transfer::TransferState;
 use mp_link::{Link, LinkConfig};
@@ -42,7 +42,7 @@ fn connect() -> (Link, VehicleId) {
     let link = Link::connect("tcp:127.0.0.1:5760", LinkConfig::default()).expect("SITL on 5760");
     let deadline = Instant::now() + Duration::from_secs(20);
     while link.primary_vehicle().is_none() && Instant::now() < deadline {
-        std::thread::sleep(Duration::from_millis(100));
+        wasm_thread::sleep(Duration::from_millis(100));
     }
     let (id, _) = link.primary_vehicle().expect("a vehicle");
     (link, id)
@@ -64,7 +64,7 @@ fn await_list(link: &Link, id: VehicleId, kind: u8, what: &str) -> Vec<MissionIt
             }
         }
         assert!(Instant::now() < deadline, "{what} transfer timed out");
-        std::thread::sleep(Duration::from_millis(50));
+        wasm_thread::sleep(Duration::from_millis(50));
     }
 }
 
@@ -280,7 +280,7 @@ fn await_request(link: &Link, id: mp_link::RequestId, what: &str) -> mp_link::re
             return request;
         }
         assert!(Instant::now() < deadline, "{what} never ended");
-        std::thread::sleep(Duration::from_millis(20));
+        wasm_thread::sleep(Duration::from_millis(20));
     }
 }
 

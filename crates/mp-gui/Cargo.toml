@@ -15,6 +15,12 @@ path = "src/main.rs"
 workspace = true
 
 [dependencies]
+# The std calls that panic in a web page, std's on the desktop (experiments/web-experiment/tools/port_os.py).
+mp-os.workspace = true
+# Threads, std's on the desktop and Web Workers in a web page (experiments/web-experiment/tools/port_threads.py).
+wasm_thread = { git = "https://github.com/zed-industries/wasm_thread", rev = "0cf96c7708dfb97ccf3da50347e25edcf75d6937" }
+# The clock, std's on the desktop and the browser's in a web page (experiments/web-experiment/tools/port_clock.py).
+web-time = "1"
 log.workspace = true
 # Pinned to the zed tree rather than the crates.io release. The published gpui 0.2.2 is an older,
 # self-contained snapshot that still uses the blade renderer and has no web backend; the current
@@ -33,9 +39,6 @@ mp-vehicle.workspace = true
 mp-units.workspace = true
 mp-settings.workspace = true
 mp-script.workspace = true
-# The WebAssembly plugin host (PLAN.md §13.6 row 96): `PluginLoader` and the plugin thread, whose
-# requests plugins_ui.rs serves.
-mp-plugin-host.workspace = true
 # The DroneCAN/UAVCAN page (config/dronecan.rs): ExtLibs/DroneCAN's protocol and node.
 mp-dronecan.workspace = true
 mp-terrain.workspace = true
@@ -120,6 +123,20 @@ gpui_windows = { git = "https://github.com/zed-industries/zed", rev = "62e5991dd
 # feature, so no text will be rendered" (seen on the owner's borrowed Mac, 2026-10-04).
 [target.'cfg(target_os = "macos")'.dependencies]
 gpui_macos = { git = "https://github.com/zed-industries/zed", rev = "62e5991dd0f0c8a3af8d5e7e9c4652490d468db8", features = ["font-kit"] }
+
+[target.'cfg(target_family = "wasm")'.dependencies]
+# Local time in a web page: chrono reads the browser's `Date` ("wasmbind"), not std's clock.
+chrono = { workspace = true, features = ["wasmbind"] }
+# A panic's message in the browser's console (main.rs), as gpui_platform's `web_init` sends it.
+console_error_panic_hook = "0.1"
+# The web page's platform (src/platform.rs), as gpui_platform picks it for wasm.
+gpui_web = { git = "https://github.com/zed-industries/zed", rev = "62e5991dd0f0c8a3af8d5e7e9c4652490d468db8" }
+
+# The WebAssembly plugin host (PLAN.md §13.6 row 96): `PluginLoader` and the plugin thread, whose
+# requests plugins_ui.rs serves. wasmtime does not build for a web page, where the browser build
+# carries plugins_ui_web.rs instead.
+[target.'cfg(not(target_family = "wasm"))'.dependencies]
+mp-plugin-host.workspace = true
 
 # A scripted vehicle on the far end of an in-memory link, so a screen's sets and commands can be
 # driven through the real link and its retries in a unit test: the frame codec that vehicle speaks

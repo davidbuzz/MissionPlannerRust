@@ -29,14 +29,14 @@
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::indexing_slicing)]
 
 use std::path::Path;
-use std::time::{Duration, Instant};
+use web_time::{Duration, Instant};
 
 use mp_terrain::{AltResponse, Srtm, TileType};
 
 #[test]
 #[ignore = "downloads about 4 MB from terrain.ardupilot.org"]
 fn a_tile_comes_from_the_first_server_as_mission_planner_got_it() {
-    let dir = std::env::temp_dir().join(format!("mp-terrain-live-{}", std::process::id()));
+    let dir = mp_os::temp_dir().join(format!("mp-terrain-live-{}", mp_os::process_id()));
     let _ = std::fs::remove_dir_all(&dir);
 
     let srtm = Srtm::new(&dir);
@@ -46,7 +46,7 @@ fn a_tile_comes_from_the_first_server_as_mission_planner_got_it() {
     // HttpClient's 100 seconds for each of the three requests, and the one-second pause.
     let deadline = Instant::now() + Duration::from_secs(330);
     while !srtm.queued().is_empty() && Instant::now() < deadline {
-        std::thread::sleep(Duration::from_millis(200));
+        wasm_thread::sleep(Duration::from_millis(200));
     }
     let answer = srtm.get_altitude(-27.5, 153.5, 16.0);
 

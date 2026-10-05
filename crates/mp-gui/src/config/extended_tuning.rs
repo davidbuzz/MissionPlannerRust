@@ -63,7 +63,7 @@
 #![allow(unreachable_pub)]
 
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
-use std::time::{Duration, Instant};
+use web_time::{Duration, Instant};
 
 use gpui::{
     AnyElement, App, Context, FocusHandle, FontWeight, KeyDownEvent, Keystroke, Modifiers, Render,

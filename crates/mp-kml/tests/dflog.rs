@@ -199,7 +199,7 @@ fn a_text_log_is_read_line_by_line() {
 /// The product path: the files land beside the log, the `.kmz` in lower case.
 #[test]
 fn the_button_writes_beside_the_log() {
-    let dir = std::env::temp_dir().join(format!("mp-kml-dflog-{}", std::process::id()));
+    let dir = mp_os::temp_dir().join(format!("mp-kml-dflog-{}", mp_os::process_id()));
     std::fs::create_dir_all(&dir).unwrap();
     let log = dir.join("Flight.BIN");
     std::fs::copy(testdata("dataflash.bin"), &log).unwrap();

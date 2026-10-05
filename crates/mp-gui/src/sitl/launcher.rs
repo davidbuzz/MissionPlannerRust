@@ -50,6 +50,7 @@
 // This module is internal to the binary; `pub` here documents intent rather than exporting API.
 #![allow(unreachable_pub)]
 
+use mp_os::Lock as _;
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command};
 use std::sync::Mutex;
@@ -239,7 +240,7 @@ impl Processes {
     /// It could not be started.
     pub fn start(&self, spawn: &Spawn) -> Result<(), String> {
         let child = start_process(spawn).map_err(|err| err.to_string())?;
-        if let Ok(mut children) = self.children.lock() {
+        if let Ok(mut children) = self.children.os_lock() {
             children.push(child);
         }
         Ok(())
@@ -247,7 +248,7 @@ impl Processes {
 
     /// Kills every one; one already gone is ignored, as `catch { }` ignores it.
     pub fn kill_all(&self) {
-        if let Ok(mut children) = self.children.lock() {
+        if let Ok(mut children) = self.children.os_lock() {
             for child in children.iter_mut() {
                 let _ = child.kill();
                 let _ = child.wait();
@@ -376,7 +377,7 @@ impl Launcher for ManifestSitl {
         say: &dyn Fn(&str),
     ) -> Image {
         let mav_type = mav_type_of(file);
-        let Ok(mut held) = self.manifest.lock() else {
+        let Ok(mut held) = self.manifest.os_lock() else {
             return Image::Failed("the manifest's lock is poisoned".to_owned());
         };
         // `GetOptions` starts with `GetList()`, the default URL.
@@ -441,6 +442,20 @@ fn make_executable(path: &Path) {
     }
 }
 
+/// The note where nothing runs a SITL: the desktop's (the C#'s Cygwin, and the WebAssembly SITL
+/// ArduPilot does not publish yet), and in a web page what does run there.
+fn not_available_note() -> String {
+    if cfg!(target_family = "wasm") {
+        PAGE_NOTE.to_owned()
+    } else {
+        wasm::note(&wasm::Probe::NotYetAsked)
+    }
+}
+
+/// The browser build's note with "try local wasm" unticked: the page's own SITL is the only one.
+pub const PAGE_NOTE: &str = "In a web page the simulator is ArduPilot's WebAssembly SITL, which \
+     the page runs itself: tick \"try local wasm\" and click a vehicle.";
+
 /// A desktop with no SITL to run: the owner's ruling D14's note, and nothing started.
 #[derive(Debug, Default)]
 pub struct NotAvailable;
@@ -451,7 +466,7 @@ impl Launcher for NotAvailable {
     }
 
     fn note(&self) -> Option<String> {
-        Some(wasm::note(&wasm::Probe::NotYetAsked))
+        Some(not_available_note())
     }
 
     fn image(
@@ -462,11 +477,11 @@ impl Launcher for NotAvailable {
         _fetch: &dyn Fetch,
         _say: &dyn Fn(&str),
     ) -> Image {
-        Image::NotAvailable(wasm::note(&wasm::Probe::NotYetAsked))
+        Image::NotAvailable(not_available_note())
     }
 
     fn spawn(&self, _spawn: &Spawn) -> Result<(), String> {
-        Err(wasm::note(&wasm::Probe::NotYetAsked))
+        Err(not_available_note())
     }
 
     fn kill_all(&self) {}
@@ -513,7 +528,7 @@ pub fn find_node() -> Option<PathBuf> {
     }
     let name = if cfg!(windows) { "node.exe" } else { "node" };
     let path = std::env::var_os("PATH").unwrap_or_default();
-    std::env::split_paths(&path)
+    mp_os::split_paths(&path)
         .chain(
             ["/opt/homebrew/bin", "/usr/local/bin", "/usr/bin"]
                 .into_iter()
@@ -657,6 +672,53 @@ impl Launcher for LocalWasm {
     }
 }
 
+/// The browser build's "try local wasm": the same four WebAssembly builds, started by the page
+/// itself in a Web Worker (experiments/web-experiment/www/link.js) where the desktop starts them
+/// under Node, through mp_transport::page. Its SERIAL0 is then what the start's
+/// `tcp:127.0.0.1:5760` reaches, as the desktop's bridge serves it there.
+#[cfg(target_family = "wasm")]
+#[derive(Debug, Default)]
+pub struct PageWasm;
+
+#[cfg(target_family = "wasm")]
+impl Launcher for PageWasm {
+    fn name(&self) -> String {
+        "local wasm".to_owned()
+    }
+
+    fn image(
+        &self,
+        file: &str,
+        _release: Option<ReleaseType>,
+        _dir: &Path,
+        _fetch: &dyn Fetch,
+        _say: &dyn Fn(&str),
+    ) -> Image {
+        local_wasm_module(file).map_or_else(
+            || {
+                Image::NotAvailable(format!(
+                    "try local wasm: there is no WebAssembly build of {file}"
+                ))
+            },
+            |module| Image::Found(PathBuf::from(module)),
+        )
+    }
+
+    /// The page asked to start the module, with the command line [`local_wasm_arguments`]
+    /// makes, as the desktop's bridge is given it.
+    fn spawn(&self, spawn: &Spawn) -> Result<(), String> {
+        mp_transport::page::start_sitl(
+            &spawn.program.display().to_string(),
+            &local_wasm_arguments(&spawn.arguments),
+        );
+        Ok(())
+    }
+
+    fn kill_all(&self) {
+        mp_transport::page::stop_sitl();
+    }
+}
+
 /// The source `CheckandGetSITLImage` takes on the system this runs on.
 /// `// C#: GCSViews/SITL.cs:302-303, 340-341, 377`
 #[must_use]
@@ -735,7 +797,8 @@ pub fn start(
             return Outcome::Failed(format!("{FAILED_TO_DOWNLOAD_AND_START}\n{reason}"));
         }
     };
-    if !image.is_file() {
+    // A web page has no files: its module is the page's own (PageWasm).
+    if !cfg!(target_family = "wasm") && !image.is_file() {
         return Outcome::Failed(model::FAILED_TO_DOWNLOAD.to_owned());
     }
     launcher.kill_all();
@@ -961,13 +1024,13 @@ pub mod tests {
         };
         let outcome = start(&wasm, &StubWeb::default(), &request, &|_| {}, &|_| {});
         assert!(matches!(outcome, Outcome::Connect { .. }), "{outcome:?}");
-        let deadline = std::time::Instant::now() + Duration::from_secs(60);
+        let deadline = web_time::Instant::now() + Duration::from_secs(60);
         let mut seen = Vec::new();
-        while std::time::Instant::now() < deadline && !seen.contains(&0xFD) {
+        while web_time::Instant::now() < deadline && !seen.contains(&0xFD) {
             if let Ok(mut socket) = std::net::TcpStream::connect(("127.0.0.1", port)) {
                 let _ = socket.set_read_timeout(Some(Duration::from_secs(2)));
                 let mut buffer = [0u8; 4096];
-                while std::time::Instant::now() < deadline {
+                while web_time::Instant::now() < deadline {
                     match std::io::Read::read(&mut socket, &mut buffer) {
                         Ok(0) | Err(_) => break,
                         Ok(read) => {
@@ -979,7 +1042,7 @@ pub mod tests {
                     }
                 }
             } else {
-                std::thread::sleep(Duration::from_millis(200));
+                wasm_thread::sleep(Duration::from_millis(200));
             }
         }
         wasm.kill_all();
@@ -1030,7 +1093,7 @@ pub mod tests {
             let outcome = start(&wasm, &StubWeb::default(), &request, &|_| {}, &|_| {});
             assert!(matches!(outcome, Outcome::Connect { .. }), "{outcome:?}");
             // Node takes a moment to listen; the planner's connect retries too.
-            let deadline = std::time::Instant::now() + Duration::from_secs(90);
+            let deadline = web_time::Instant::now() + Duration::from_secs(90);
             let link = loop {
                 match mp_link::Link::connect(
                     &format!("tcp:127.0.0.1:{port}"),
@@ -1042,10 +1105,10 @@ pub mod tests {
                     Ok(link) => break link,
                     Err(err) => {
                         assert!(
-                            std::time::Instant::now() < deadline,
+                            web_time::Instant::now() < deadline,
                             "the bridge's port never opened: {err:?}"
                         );
-                        std::thread::sleep(Duration::from_millis(250));
+                        wasm_thread::sleep(Duration::from_millis(250));
                     }
                 }
             };
@@ -1058,7 +1121,7 @@ pub mod tests {
             let mut asked = false;
             let mut set = false;
             let mut last = None;
-            while std::time::Instant::now() < deadline {
+            while web_time::Instant::now() < deadline {
                 if let Some((id, _)) = link.primary_vehicle() {
                     if !asked {
                         asked = link.download_params(id);
@@ -1074,10 +1137,10 @@ pub mod tests {
                         _ => {}
                     }
                 }
-                std::thread::sleep(Duration::from_millis(200));
+                wasm_thread::sleep(Duration::from_millis(200));
             }
             // Past the bridge's half-second save, then stopped as the planner stops it.
-            std::thread::sleep(Duration::from_secs(2));
+            wasm_thread::sleep(Duration::from_secs(2));
             drop(link);
             wasm.kill_all();
             last
@@ -1118,7 +1181,7 @@ pub mod tests {
         /// The URLs asked for so far.
         pub fn asked(&self) -> Vec<String> {
             self.asked
-                .lock()
+                .os_lock()
                 .map(|asked| asked.clone())
                 .unwrap_or_default()
         }
@@ -1126,7 +1189,7 @@ pub mod tests {
 
     impl Fetch for StubWeb {
         fn get(&self, url: &str) -> Result<Vec<u8>, String> {
-            if let Ok(mut asked) = self.asked.lock() {
+            if let Ok(mut asked) = self.asked.os_lock() {
                 asked.push(url.to_owned());
             }
             self.files
@@ -1162,7 +1225,7 @@ pub mod tests {
 
         /// The spawns so far.
         pub fn spawns(&self) -> Vec<Spawn> {
-            self.spawns.lock().map(|s| s.clone()).unwrap_or_default()
+            self.spawns.os_lock().map(|s| s.clone()).unwrap_or_default()
         }
     }
 
@@ -1186,7 +1249,7 @@ pub mod tests {
             if self.refuse {
                 return Err("The system cannot find the file specified".to_owned());
             }
-            if let Ok(mut spawns) = self.spawns.lock() {
+            if let Ok(mut spawns) = self.spawns.os_lock() {
                 spawns.push(spawn.clone());
             }
             Ok(())
@@ -1199,7 +1262,7 @@ pub mod tests {
 
     /// A directory of its own under the system's temporary one, emptied first.
     pub fn scratch(name: &str) -> PathBuf {
-        let dir = std::env::temp_dir().join(format!("mp-gui-sitl-{}-{name}", std::process::id()));
+        let dir = mp_os::temp_dir().join(format!("mp-gui-sitl-{}-{name}", mp_os::process_id()));
         let _ = std::fs::remove_dir_all(&dir);
         let _ = std::fs::create_dir_all(&dir);
         dir
@@ -1320,7 +1383,7 @@ pub mod tests {
             Some(ReleaseType::Beta),
             &dir,
             &web,
-            &|text| said.lock().expect("lock").push(text.to_owned()),
+            &|text| said.os_lock().expect("lock").push(text.to_owned()),
         );
         assert_eq!(image, Image::Found(dir.join("ArduRover.exe")));
         assert_eq!(web.asked().len(), 11);
@@ -1332,7 +1395,7 @@ pub mod tests {
             )
         );
         assert!(dir.join("cygstdc++-6.dll").is_file());
-        assert_eq!(*said.lock().expect("lock"), [model::DOWNLOADING]);
+        assert_eq!(*said.os_lock().expect("lock"), [model::DOWNLOADING]);
 
         let web = StubWeb::default();
         let image = cygwin.image("ArduRover.elf", None, &dir, &web, &|_| {});
@@ -1356,7 +1419,7 @@ pub mod tests {
             &web,
             &request(&dir, Vehicle::Multirotor),
             &|_| {},
-            &|d| waited.lock().expect("lock").push(d),
+            &|d| waited.os_lock().expect("lock").push(d),
         );
         let defaults = dir.join("default_params").join("copter.parm");
         let line = format!(
@@ -1391,7 +1454,7 @@ pub mod tests {
             Some(b"FRAME_CLASS 1\n".to_vec())
         );
         assert_eq!(launcher.kills.load(Ordering::Relaxed), 1);
-        assert_eq!(*waited.lock().expect("lock"), [Duration::from_secs(2)]);
+        assert_eq!(*waited.os_lock().expect("lock"), [Duration::from_secs(2)]);
         // sim_vehicle.py first, then vehicleinfo.py, then the file it names.
         assert_eq!(
             web.asked(),

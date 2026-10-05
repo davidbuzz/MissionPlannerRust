@@ -31,7 +31,7 @@
 //! as the flight went on, which is exactly what the Arc-pooled snapshot bus exists to avoid.
 
 use std::collections::VecDeque;
-use std::time::{SystemTime, UNIX_EPOCH};
+use web_time::{SystemTime, UNIX_EPOCH};
 
 use mp_vehicle::VehicleId;
 

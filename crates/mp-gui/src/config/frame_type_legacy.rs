@@ -910,7 +910,7 @@ pub fn page(frame: &FrameTypeLegacy, cx: &mut Context<MissionPlanner>) -> Option
             |this, _window, _cx| {
                 // `Settings.GetUserDataDirectory()`.
                 let user_data = mp_settings::user_data_directory()
-                    .unwrap_or_else(|| std::env::temp_dir().join("MissionPlannerRust"));
+                    .unwrap_or_else(|| mp_os::temp_dir().join("MissionPlannerRust"));
                 let _ = std::fs::create_dir_all(&user_data);
                 this.frame_type_legacy.defaults_mut().click_load(&user_data);
             },
@@ -1415,9 +1415,9 @@ mod tests {
         use crate::config::default_settings::Arrived;
         use mp_firmware::github::FileInfo;
 
-        let dir = std::env::temp_dir().join(format!(
+        let dir = mp_os::temp_dir().join(format!(
             "mp-gui-framelegacy-defaults-{}",
-            std::process::id()
+            mp_os::process_id()
         ));
         std::fs::create_dir_all(&dir).expect("a scratch directory");
         let mut view = view();

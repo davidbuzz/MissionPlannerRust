@@ -306,7 +306,7 @@ standard library it carries (`rustpython-pylib`) and its documentation strings
 permissions the GPL's section 7 lets this work remove.
 
 <!-- BEGIN crates: written by `cargo xtask licences` from `cargo metadata`; not edited by hand -->
-995 crates, every target's, from `cargo metadata` over Cargo.lock; each licence is one `deny.toml` admits (`xtask/tests/licences.rs` holds both).
+998 crates, every target's, from `cargo metadata` over Cargo.lock; each licence is one `deny.toml` admits (`xtask/tests/licences.rs` holds both).
 
 | Crate | Version | Licence | Source |
 |---|---|---|---|
@@ -438,6 +438,7 @@ permissions the GPL's section 7 lets this work remove.
 | compression-codecs | 0.4.43 | MIT OR Apache-2.0 | crates.io |
 | compression-core | 0.4.33 | MIT OR Apache-2.0 | crates.io |
 | concurrent-queue | 2.5.0 | Apache-2.0 OR MIT | crates.io |
+| console_error_panic_hook | 0.1.7 | Apache-2.0/MIT | crates.io |
 | const-random | 0.1.18 | MIT OR Apache-2.0 | crates.io |
 | const-random-macro | 0.1.16 | MIT OR Apache-2.0 | crates.io |
 | constant_time_eq | 0.4.2 | CC0-1.0 OR MIT-0 OR Apache-2.0 | crates.io |
@@ -613,6 +614,7 @@ permissions the GPL's section 7 lets this work remove.
 | gpui_macros | 0.1.0 | Apache-2.0 | git https://github.com/zed-industries/zed @ 62e5991 |
 | gpui_shared_string | 0.1.0 | Apache-2.0 | git https://github.com/zed-industries/zed @ 62e5991 |
 | gpui_util | 0.1.0 | Apache-2.0 | git https://github.com/zed-industries/zed @ 62e5991 |
+| gpui_web | 0.1.0 | Apache-2.0 | git https://github.com/zed-industries/zed @ 62e5991 |
 | gpui_wgpu | 0.1.0 | Apache-2.0 | git https://github.com/zed-industries/zed @ 62e5991 |
 | gpui_windows | 0.1.0 | Apache-2.0 | git https://github.com/zed-industries/zed @ 62e5991 |
 | half | 2.7.1 | MIT OR Apache-2.0 | crates.io |
@@ -1106,7 +1108,7 @@ permissions the GPL's section 7 lets this work remove.
 | unicode-ident | 1.0.26 | (MIT OR Apache-2.0) AND Unicode-3.0 | crates.io |
 | unicode-linebreak | 0.1.5 | Apache-2.0 | crates.io |
 | unicode-normalization | 0.1.25 | MIT OR Apache-2.0 | crates.io |
-| unicode-properties | 0.1.4 | MIT/Apache-2.0 | crates.io |
+| unicode-properties | 0.1.3 | MIT/Apache-2.0 | crates.io |
 | unicode-script | 0.5.8 | MIT OR Apache-2.0 | crates.io |
 | unicode-segmentation | 1.13.3 | MIT OR Apache-2.0 | crates.io |
 | unicode-vo | 0.1.0 | MIT/Apache-2.0 | crates.io |
@@ -1148,6 +1150,7 @@ permissions the GPL's section 7 lets this work remove.
 | wasm-bindgen-shared | 0.2.128 | MIT OR Apache-2.0 | crates.io |
 | wasm-encoder | 0.254.2 | Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT | crates.io |
 | wasm-metadata | 0.254.2 | Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT | crates.io |
+| wasm_thread | 0.3.3 | Apache-2.0 OR MIT | git https://github.com/zed-industries/wasm_thread @ 0cf96c7 |
 | wasmparser | 0.254.2 | Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT | crates.io |
 | wasmprinter | 0.254.2 | Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT | crates.io |
 | wasmtime | 48.0.4 | Apache-2.0 WITH LLVM-exception | crates.io |

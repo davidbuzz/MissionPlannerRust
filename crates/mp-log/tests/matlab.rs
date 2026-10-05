@@ -166,7 +166,7 @@ fn a_damaged_log_matches_line_for_line() {
 /// The product path writes `<log>-<lines>.mat` beside the log.
 #[test]
 fn the_file_is_named_for_its_lines() {
-    let dir = std::env::temp_dir().join(format!("mp-log-matlab-{}", std::process::id()));
+    let dir = mp_os::temp_dir().join(format!("mp-log-matlab-{}", mp_os::process_id()));
     std::fs::create_dir_all(&dir).unwrap();
     let log = dir.join("flight.bin");
     std::fs::copy(testdata("dataflash.bin"), &log).unwrap();

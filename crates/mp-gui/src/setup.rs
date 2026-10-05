@@ -1171,13 +1171,13 @@ impl MissionPlanner {
             }
             // C#: GCSViews/ConfigurationView/ConfigRadioOutput.cs:76-79
             Some("ConfigRadioOutput") => {
-                self.servo_output.deactivate(std::time::Instant::now());
+                self.servo_output.deactivate(web_time::Instant::now());
             }
             // C#: GCSViews/ConfigurationView/ConfigSerial.cs:493-496
             Some("ConfigSerial") => self.serial_ports.hide(),
             // `ConfigESCCalibration` is `IActivate` only: hidden, a number being typed into read.
             Some("ConfigESCCalibration") => {
-                self.esc_calibration.hide(std::time::Instant::now());
+                self.esc_calibration.hide(web_time::Instant::now());
             }
             // `ConfigPlanner` is `IActivate` only: hidden, its boxes put away.
             Some("ConfigPlanner") if self.planner.is_active() => self.planner.deactivate(),
@@ -1202,7 +1202,7 @@ impl MissionPlanner {
             // end Optional Hardware pages
             // ---- Basic Tuning / Advanced ----
             // `ConfigArduplane` is `IActivate` only: hidden, a number being typed into read.
-            Some("ConfigArduplane") => self.basic_tuning.hide(std::time::Instant::now()),
+            Some("ConfigArduplane") => self.basic_tuning.hide(web_time::Instant::now()),
             // ---- end Basic Tuning / Advanced ----
             // ---- Extended Tuning ----
             // `ConfigArducopter` is `IActivate` only: hidden, a number being typed into read.
@@ -1998,9 +1998,9 @@ mod tests {
     fn a_custom_view_lists_the_parameter_pages() {
         let params = parameters(&["OSD_TYPE"]);
         let vehicle = copter(&params);
-        let dir = std::env::temp_dir().join(format!(
+        let dir = mp_os::temp_dir().join(format!(
             "headless-planner-setup-view-{}",
-            std::process::id()
+            mp_os::process_id()
         ));
         let _ = std::fs::create_dir_all(&dir);
         let mut settings = crate::settings::Persisted::at(Some(dir.join("config.xml")));

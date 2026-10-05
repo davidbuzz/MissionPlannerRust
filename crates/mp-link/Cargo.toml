@@ -11,6 +11,12 @@ repository.workspace = true
 workspace = true
 
 [dependencies]
+# The std calls that panic in a web page, std's on the desktop (experiments/web-experiment/tools/port_os.py).
+mp-os.workspace = true
+# Threads, std's on the desktop and Web Workers in a web page (experiments/web-experiment/tools/port_threads.py).
+wasm_thread = { git = "https://github.com/zed-industries/wasm_thread", rev = "0cf96c7708dfb97ccf3da50347e25edcf75d6937" }
+# The clock, std's on the desktop and the browser's in a web page (experiments/web-experiment/tools/port_clock.py).
+web-time = "1"
 mp-mavlink.workspace = true
 mp-mavlink-dialects.workspace = true
 mp-transport.workspace = true

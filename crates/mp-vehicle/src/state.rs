@@ -663,7 +663,7 @@ pub struct VehicleState {
     /// state and not the C#'s: a link stamps it only when its configuration asks
     /// (`mp_link::LinkConfig::stamp_arrivals`, which only `MP_STORM` sets), and it is `None`
     /// otherwise.
-    pub packet_in: Option<std::time::Instant>,
+    pub packet_in: Option<web_time::Instant>,
 }
 
 /// `MAV_MODE_FLAG_SAFETY_ARMED`. `// C#: ExtLibs/Mavlink/Mavlink.cs:6557`

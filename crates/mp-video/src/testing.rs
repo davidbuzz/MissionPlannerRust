@@ -232,7 +232,7 @@ impl Stream for FakeStream {
         if self.die_after.is_some_and(|after| self.sequence >= after) {
             return Err(VideoError::Read("the device went away".to_owned()));
         }
-        std::thread::sleep(self.frame_time);
+        wasm_thread::sleep(self.frame_time);
         self.reads += 1;
         if every(self.reads, self.stall_every) {
             return Err(VideoError::TimedOut);

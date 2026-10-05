@@ -27,7 +27,8 @@
 //! holds the port.
 //! `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:500-586, ExtLibs/ArduPilot/CurrentState.cs:4654-4655`
 
-use std::time::{Duration, Instant};
+use mp_os::Lock as _;
+use web_time::{Duration, Instant};
 
 use mp_mavlink_dialects::all::MavMessage;
 use mp_vehicle::VehicleId;
@@ -49,10 +50,10 @@ pub(crate) type Starts = Vec<(VehicleId, Instant)>;
 pub(crate) fn detected(shared: &Shared, id: VehicleId, now: Instant, starts: &mut Starts) {
     let camera = camera::is_camera_component(id.compid);
     let manager = camera::is_gimbal_manager_component(id.compid);
-    if camera && let Ok(mut held) = shared.cameras.lock() {
+    if camera && let Ok(mut held) = shared.cameras.os_lock() {
         held.insert(id, Camera::new(id));
     }
-    if manager && let Ok(mut held) = shared.gimbal_managers.lock() {
+    if manager && let Ok(mut held) = shared.gimbal_managers.os_lock() {
         held.insert(id, GimbalManager::default());
     }
     if camera || manager {
@@ -68,7 +69,7 @@ pub(crate) fn observe(shared: &Shared, from: VehicleId, message: &MavMessage) {
         MavMessage::GimbalManagerInformation(_)
         | MavMessage::GimbalManagerStatus(_)
         | MavMessage::GimbalDeviceAttitudeStatus(_) => {
-            if let Ok(mut held) = shared.gimbal_managers.lock() {
+            if let Ok(mut held) = shared.gimbal_managers.os_lock() {
                 for manager in held.values_mut() {
                     manager.observe(message);
                 }
@@ -81,7 +82,7 @@ pub(crate) fn observe(shared: &Shared, from: VehicleId, message: &MavMessage) {
         | MavMessage::CameraFovStatus(_)
         | MavMessage::CameraTrackingImageStatus(_) => {
             if let (Ok(mut cameras), Ok(mut streams)) =
-                (shared.cameras.lock(), shared.video_streams.lock())
+                (shared.cameras.os_lock(), shared.video_streams.os_lock())
                 && let Some(camera) = cameras.get_mut(&from)
             {
                 camera.observe(from, message, &mut streams);
@@ -95,7 +96,7 @@ pub(crate) fn observe(shared: &Shared, from: VehicleId, message: &MavMessage) {
 /// a command waited on, unless one is already waiting. False for a component with no camera, or
 /// one not started. `// C#: CameraProtocol.cs:224-236`
 pub(crate) fn request_information(shared: &Shared, id: VehicleId) -> bool {
-    let Ok(mut cameras) = shared.cameras.lock() else {
+    let Ok(mut cameras) = shared.cameras.os_lock() else {
         return false;
     };
     let Some(camera) = cameras.get_mut(&id) else {
@@ -112,7 +113,7 @@ pub(crate) fn request_information(shared: &Shared, id: VehicleId) -> bool {
             .next_request
             .fetch_add(1, std::sync::atomic::Ordering::Relaxed),
     );
-    if let Ok(mut queue) = shared.request_queue.lock() {
+    if let Ok(mut queue) = shared.request_queue.os_lock() {
         queue.push((
             request,
             Request::new(
@@ -133,7 +134,7 @@ pub(crate) fn request_information(shared: &Shared, id: VehicleId) -> bool {
 pub(crate) fn information_pending(shared: &Shared, id: VehicleId) -> bool {
     shared
         .cameras
-        .lock()
+        .os_lock()
         .ok()
         .and_then(|held| {
             held.get(&id)
@@ -159,14 +160,14 @@ pub(crate) fn tick(shared: &Shared, now: Instant, starts: &mut Starts, send: &mu
     for id in due {
         let started = shared
             .cameras
-            .lock()
+            .os_lock()
             .ok()
             .and_then(|mut held| held.get_mut(&id).map(Camera::start))
             .is_some();
         if started {
             request_information(shared, id);
         }
-        if let Ok(mut held) = shared.gimbal_managers.lock()
+        if let Ok(mut held) = shared.gimbal_managers.os_lock()
             && let Some(manager) = held.get_mut(&id)
         {
             send.push(manager.discover());
@@ -174,7 +175,7 @@ pub(crate) fn tick(shared: &Shared, now: Instant, starts: &mut Starts, send: &mu
     }
     // The answers: the C# awaits the first request, then sends the rest. A request that timed
     // out is its `catch`, which logs and sends nothing more.
-    let Ok(mut cameras) = shared.cameras.lock() else {
+    let Ok(mut cameras) = shared.cameras.os_lock() else {
         return;
     };
     for camera in cameras.values_mut() {
@@ -183,12 +184,12 @@ pub(crate) fn tick(shared: &Shared, now: Instant, starts: &mut Starts, send: &mu
         };
         let state = shared
             .requests
-            .lock()
+            .os_lock()
             .ok()
             .and_then(|held| held.get(&request).map(Request::state));
         let queued = shared
             .request_queue
-            .lock()
+            .os_lock()
             .map(|queue| queue.iter().any(|(id, _)| *id == request))
             .unwrap_or(false);
         match state {
@@ -220,7 +221,7 @@ pub(crate) fn on_streams(
     ratestatus: i32,
     send: &mut Vec<MavMessage>,
 ) {
-    let started = if let Ok(held) = shared.cameras.lock()
+    let started = if let Ok(held) = shared.cameras.os_lock()
         && let Some(camera) = held.get(&id)
     {
         send.extend(camera.message_intervals(ratestatus));
@@ -231,7 +232,7 @@ pub(crate) fn on_streams(
     if started {
         request_information(shared, id);
     }
-    if let Ok(mut held) = shared.gimbal_managers.lock()
+    if let Ok(mut held) = shared.gimbal_managers.os_lock()
         && let Some(manager) = held.get_mut(&id)
     {
         send.push(manager.discover());

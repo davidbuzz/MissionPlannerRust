@@ -6032,9 +6032,9 @@ mod tests {
             log.extend((index * 1_000_000).to_le_bytes());
             log.extend(value.to_le_bytes());
         }
-        let path = std::env::temp_dir().join(format!(
+        let path = mp_os::temp_dir().join(format!(
             "mp-gui-logbits-{}-{}.bin",
-            std::process::id(),
+            mp_os::process_id(),
             values.len()
         ));
         std::fs::write(&path, log).expect("write the log");

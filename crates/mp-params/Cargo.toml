@@ -11,6 +11,8 @@ repository.workspace = true
 workspace = true
 
 [dependencies]
+# The std calls that panic in a web page, std's on the desktop (experiments/web-experiment/tools/port_os.py).
+mp-os.workspace = true
 thiserror.workspace = true
 roxmltree.workspace = true
 flate2.workspace = true

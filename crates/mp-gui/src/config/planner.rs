@@ -3353,9 +3353,9 @@ mod tests {
 
     impl Scratch {
         fn new(name: &str) -> Self {
-            let path = std::env::temp_dir().join(format!(
+            let path = mp_os::temp_dir().join(format!(
                 "mp-gui-config-planner-{name}-{}",
-                std::process::id()
+                mp_os::process_id()
             ));
             let _ = std::fs::remove_dir_all(&path);
             std::fs::create_dir_all(&path).expect("scratch directory");
@@ -3538,10 +3538,10 @@ mod tests {
         // Disabled while it runs.
         planner.press("BUT_videostart", Path::new("/"));
         assert!(planner.take_effects().is_empty());
-        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+        let deadline = web_time::Instant::now() + std::time::Duration::from_secs(5);
         while capture.as_ref().is_some_and(|c| c.frames() < 3) {
-            assert!(std::time::Instant::now() < deadline);
-            std::thread::sleep(std::time::Duration::from_millis(2));
+            assert!(web_time::Instant::now() < deadline);
+            wasm_thread::sleep(std::time::Duration::from_millis(2));
         }
         planner.video_status(capture.as_ref());
         assert!(planner.video.frames >= 3);
@@ -4381,7 +4381,7 @@ mod tests {
     #[test]
     fn layout_chooses_the_display_view() {
         use crate::display_view::{DisplayName, DisplayView, SETTING, current, flag};
-        let dir = std::env::temp_dir().join(format!("mpr-planner-layout-{}", std::process::id()));
+        let dir = mp_os::temp_dir().join(format!("mpr-planner-layout-{}", mp_os::process_id()));
         let _ = std::fs::remove_dir_all(&dir);
         let _ = std::fs::create_dir_all(&dir);
         let mut settings = Persisted::at(Some(dir.join("config.xml")));
@@ -4509,7 +4509,7 @@ mod tests {
         planner.close_joystick();
         planner.press("BUT_logdirbrowse", Path::new("/"));
         assert_eq!(planner.take_effects(), [Effect::BrowseLogDirectory]);
-        let cache = std::env::temp_dir();
+        let cache = mp_os::temp_dir();
         planner.press("BUT_mapCacheDir", &cache);
         assert_eq!(planner.take_effects(), [Effect::OpenDirectory(cache)]);
         let missing = Path::new("/no/such/gmapcache");
@@ -4524,7 +4524,7 @@ mod tests {
     #[test]
     fn the_log_path_is_written_when_it_names_a_directory() {
         let mut settings = Persisted::at(None);
-        let existing = std::env::temp_dir();
+        let existing = mp_os::temp_dir();
         let mut planner = Planner::new(&settings);
         planner.activate(&mut settings, Some(&existing));
         // `TextChanged` from `Activate`'s own assignment.
@@ -4818,9 +4818,9 @@ mod tests {
             if let Some(capture) = &self.capture {
                 let wanted = capture.frames() + 20;
                 let deadline =
-                    std::time::Instant::now() + std::time::Duration::from_secs_f32(seconds);
-                while capture.frames() < wanted && std::time::Instant::now() < deadline {
-                    std::thread::sleep(std::time::Duration::from_millis(5));
+                    web_time::Instant::now() + std::time::Duration::from_secs_f32(seconds);
+                while capture.frames() < wanted && web_time::Instant::now() < deadline {
+                    wasm_thread::sleep(std::time::Duration::from_millis(5));
                 }
             }
             self.planner.video_status(self.capture.as_ref());

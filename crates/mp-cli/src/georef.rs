@@ -68,8 +68,8 @@ fn usage() -> ExitCode {
 /// `DateTime.Today`: the date now, at midnight - the machine's time taken as UTC, as the port
 /// takes local time everywhere.
 fn today() -> DateTime {
-    let seconds = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
+    let seconds = web_time::SystemTime::now()
+        .duration_since(web_time::UNIX_EPOCH)
         .map_or(0, |d| d.as_secs());
     let days = i64::try_from(seconds / 86_400).unwrap_or(0);
     DateTime::from_ticks(UNIX_EPOCH_TICKS + days * TICKS_PER_DAY, Kind::Local)
@@ -276,9 +276,9 @@ mod tests {
     }
 
     fn scratch(name: &str) -> PathBuf {
-        let dir = std::env::temp_dir().join(format!(
+        let dir = mp_os::temp_dir().join(format!(
             "headless-planner-georef-{name}-{}",
-            std::process::id()
+            mp_os::process_id()
         ));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();

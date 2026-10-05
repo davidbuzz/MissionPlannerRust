@@ -54,6 +54,7 @@ mod builtin {
     include!(concat!(env!("OUT_DIR"), "/builtin_plugins.rs"));
 }
 
+use mp_os::Lock as _;
 use std::collections::{HashMap, VecDeque};
 use std::path::{Component, Path, PathBuf};
 use std::sync::{Arc, Mutex, OnceLock, PoisonError};
@@ -65,7 +66,7 @@ use mp_plugin_host::{
     Area, Control, ControlKind, CsValue, DialogResult, FencePoint, Limits, MapMenu, MessageButtons,
     OpenedFile, PluginHost, PluginState, Reply, RequestBody, Waypoint,
 };
-use mp_vehicle::{VehicleFamily, VehicleState};
+use mp_vehicle::VehicleState;
 
 use crate::MissionPlanner;
 use crate::facts;
@@ -141,7 +142,7 @@ fn static_id(id: String) -> &'static str {
     static IDS: OnceLock<Mutex<HashMap<String, &'static str>>> = OnceLock::new();
     let mut ids = IDS
         .get_or_init(Mutex::default)
-        .lock()
+        .os_lock()
         .unwrap_or_else(PoisonError::into_inner);
     if let Some(id) = ids.get(&id) {
         return id;
@@ -443,36 +444,15 @@ impl Plugins {
     }
 }
 
-/// `Host.cs.<name>`: the fields the Scripts tab reads by the C#'s names, the quick view's whole
-/// table, and `connected` and `firmware`.
+/// `Host.cs.<name>` as the plugin host's type: [`crate::scripts_tab::cs_value`], which the
+/// Scripts tab answers with too.
 #[must_use]
 pub fn cs_value(state: Option<&VehicleState>, connected: bool, name: &str) -> Option<CsValue> {
-    match name {
-        "connected" => return Some(CsValue::Flag(connected)),
-        // `cs.firmware`: the C#'s `Firmwares` name of the vehicle's family.
-        "firmware" => {
-            let family = state.and_then(|state| VehicleFamily::from_mav_type(state.vehicle_type));
-            return Some(CsValue::Text(
-                match family {
-                    Some(VehicleFamily::Copter) => "ArduCopter2",
-                    Some(VehicleFamily::Plane) => "ArduPlane",
-                    Some(VehicleFamily::Rover) => "ArduRover",
-                    None => "Other",
-                }
-                .to_owned(),
-            ));
-        }
-        _ => {}
-    }
-    let state = state?;
-    if let Some(value) = crate::scripts_tab::cs_field(state, name) {
-        return Some(match value {
-            mp_script::CsValue::Number(number) => CsValue::Number(number),
-            mp_script::CsValue::Text(text) => CsValue::Text(text),
-            mp_script::CsValue::Flag(flag) => CsValue::Flag(flag),
-        });
-    }
-    crate::quick::value(name, state).map(CsValue::Number)
+    crate::scripts_tab::cs_value(state, connected, name).map(|value| match value {
+        mp_script::CsValue::Number(number) => CsValue::Number(number),
+        mp_script::CsValue::Text(text) => CsValue::Text(text),
+        mp_script::CsValue::Flag(flag) => CsValue::Flag(flag),
+    })
 }
 
 /// `WriteUserData`'s path under the user data directory: relative, and not climbing out of it.
@@ -1370,7 +1350,7 @@ mod tests {
     /// A plugin writes under the user data directory only: a relative path, folders made.
     #[test]
     fn user_data_stays_under_its_directory() {
-        let root = std::env::temp_dir().join(format!("plugins-ui-{}", std::process::id()));
+        let root = mp_os::temp_dir().join(format!("plugins-ui-{}", mp_os::process_id()));
         let written = write_user_data(Some(root.clone()), "TerrainData/S36E149.DAT", b"dat")
             .expect("written");
         assert_eq!(

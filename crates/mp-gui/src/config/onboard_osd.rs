@@ -78,7 +78,7 @@ use std::cell::RefCell;
 use std::collections::VecDeque;
 use std::rc::Rc;
 use std::sync::{Arc, OnceLock};
-use std::time::Instant;
+use web_time::Instant;
 
 use gpui::RenderImage;
 use image::RgbaImage;

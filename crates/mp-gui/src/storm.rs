@@ -92,7 +92,7 @@
 
 use std::cell::RefCell;
 use std::sync::OnceLock;
-use std::time::{Duration, Instant};
+use web_time::{Duration, Instant};
 
 use gpui::{IntoElement, Styled as _};
 use mp_link::testing::{STORM_FRAMES_PER_TICK, Storm};
@@ -900,7 +900,7 @@ mod tests {
                 view.frames,
                 rolls.len()
             );
-            std::thread::sleep(Duration::from_millis(20));
+            wasm_thread::sleep(Duration::from_millis(20));
         }
         assert!(storm.ticks() > 10);
         // The storm's link stamps each packet's arrival into the snapshot, for the latency, and

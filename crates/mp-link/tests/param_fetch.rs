@@ -31,7 +31,7 @@
 
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::time::{Duration, Instant};
+use web_time::{Duration, Instant};
 
 use mp_ftp::mavftp::testing::FakeVehicle;
 use mp_ftp::mavftp::wire::Header;
@@ -94,8 +94,8 @@ fn run_vehicle(
     stop: Arc<AtomicBool>,
     mut files: FakeVehicle,
     stream: Vec<PackedParam>,
-) -> std::thread::JoinHandle<(usize, usize)> {
-    std::thread::spawn(move || {
+) -> wasm_thread::JoinHandle<(usize, usize)> {
+    wasm_thread::spawn(move || {
         let mut seq = 0u8;
         let heartbeat = MavMessage::Heartbeat(Heartbeat {
             custom_mode: 0,
@@ -119,7 +119,7 @@ fn run_vehicle(
             }
             let n = end.read(&mut buf).unwrap_or(0);
             if n == 0 {
-                std::thread::sleep(Duration::from_millis(1));
+                wasm_thread::sleep(Duration::from_millis(1));
                 continue;
             }
             let mut heard = Vec::new();
@@ -173,7 +173,7 @@ fn link(end: LoopbackEnd) -> Link {
     let deadline = Instant::now() + Duration::from_secs(5);
     while link.vehicle(VEHICLE).is_none() {
         assert!(Instant::now() < deadline, "the vehicle was never heard");
-        std::thread::sleep(Duration::from_millis(1));
+        wasm_thread::sleep(Duration::from_millis(1));
     }
     link
 }
@@ -189,7 +189,7 @@ fn wait_until_finished(link: &Link) -> ParamFetchState {
             Instant::now() < deadline,
             "the fetch never finished: {fetch:?}"
         );
-        std::thread::sleep(Duration::from_millis(2));
+        wasm_thread::sleep(Duration::from_millis(2));
     }
 }
 

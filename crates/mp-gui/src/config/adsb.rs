@@ -86,7 +86,7 @@ use std::cmp::Ordering;
 use std::collections::{BTreeMap, VecDeque};
 use std::rc::Rc;
 use std::sync::Arc;
-use std::time::{Duration, Instant};
+use web_time::{Duration, Instant};
 
 use gpui::{
     AnyElement, Bounds, Context, FocusHandle, KeyDownEvent, MouseButton, MouseDownEvent,

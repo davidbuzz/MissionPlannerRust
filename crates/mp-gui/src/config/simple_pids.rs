@@ -69,7 +69,7 @@
 use std::cell::Cell;
 use std::collections::VecDeque;
 use std::rc::Rc;
-use std::time::Instant;
+use web_time::Instant;
 
 use gpui::{
     AnyElement, Bounds, Context, FocusHandle, KeyDownEvent, Pixels, SharedString, Window, div,

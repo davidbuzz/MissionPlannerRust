@@ -58,6 +58,7 @@
 // This module is internal to the binary; `pub` here documents intent rather than exporting API.
 #![allow(unreachable_pub)]
 
+use mp_os::Lock as _;
 use std::collections::{BTreeMap, HashMap};
 use std::sync::{Mutex, OnceLock, PoisonError};
 
@@ -363,7 +364,10 @@ impl Catalog {
 
     /// The bracketed name of a key nobody has, remembered once.
     fn miss(&self, id: &str) -> &'static str {
-        let mut missed = self.missed.lock().unwrap_or_else(PoisonError::into_inner);
+        let mut missed = self
+            .missed
+            .os_lock()
+            .unwrap_or_else(PoisonError::into_inner);
         missed
             .entry(id.to_owned())
             // One small string per distinct key the source asks for and no file has: bounded by
@@ -375,7 +379,7 @@ impl Catalog {
     #[must_use]
     pub fn missed(&self) -> Vec<String> {
         self.missed
-            .lock()
+            .os_lock()
             .unwrap_or_else(PoisonError::into_inner)
             .keys()
             .cloned()

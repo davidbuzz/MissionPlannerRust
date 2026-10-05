@@ -41,7 +41,7 @@
 
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::indexing_slicing)]
 
-use std::time::{Duration, Instant};
+use web_time::{Duration, Instant};
 
 use mp_link::testing::{STORM_FRAMES_PER_TICK, Storm, attitude, heartbeat, position};
 use mp_link::{Link, LinkConfig};
@@ -67,13 +67,13 @@ fn a_render_pass_stays_cheap_while_telemetry_pours_in() {
     let deadline = Instant::now() + Duration::from_secs(10);
     while link.primary_vehicle().is_none() {
         assert!(Instant::now() < deadline, "no vehicle appeared");
-        std::thread::sleep(Duration::from_millis(10));
+        wasm_thread::sleep(Duration::from_millis(10));
     }
     let (_, handle) = link.primary_vehicle().expect("a vehicle");
 
     // A writer running as fast as it can, which is harder than 200 Hz. If the snapshot path holds
     // up against an unthrottled writer it holds up against a real vehicle.
-    let writer = std::thread::spawn(move || {
+    let writer = wasm_thread::spawn(move || {
         let mut seq = 0u8;
         let until = Instant::now() + Duration::from_secs(3);
         while Instant::now() < until {
@@ -107,7 +107,7 @@ fn a_render_pass_stays_cheap_while_telemetry_pours_in() {
         total += elapsed;
 
         // Roughly 60 Hz, so this measures a renderer's pace rather than a tight loop.
-        std::thread::sleep(Duration::from_millis(16));
+        wasm_thread::sleep(Duration::from_millis(16));
     }
 
     writer.join().expect("the writer thread should finish");
@@ -137,7 +137,7 @@ fn snapshots_keep_arriving_while_the_link_is_saturated() {
     let deadline = Instant::now() + Duration::from_secs(10);
     while link.primary_vehicle().is_none() {
         assert!(Instant::now() < deadline, "no vehicle appeared");
-        std::thread::sleep(Duration::from_millis(10));
+        wasm_thread::sleep(Duration::from_millis(10));
     }
     let (_, handle) = link.primary_vehicle().expect("a vehicle");
 
@@ -145,7 +145,7 @@ fn snapshots_keep_arriving_while_the_link_is_saturated() {
     for seq in 0..60u8 {
         let roll = f32::from(seq) / 10.0;
         vehicle_side.write_all(&attitude(seq, roll)).unwrap();
-        std::thread::sleep(Duration::from_millis(5));
+        wasm_thread::sleep(Duration::from_millis(5));
         let state = handle.load();
         // Rounded, because the wire carries f32 and the state keeps radians as f64.
         #[allow(clippy::cast_possible_truncation)] // roll in milliradians fits an i64 easily
@@ -170,11 +170,11 @@ fn a_paced_storm_arrives_through_the_link_at_its_rate() {
     let deadline = Instant::now() + Duration::from_secs(10);
     while link.primary_vehicle().is_none() {
         assert!(Instant::now() < deadline, "no vehicle appeared");
-        std::thread::sleep(Duration::from_millis(10));
+        wasm_thread::sleep(Duration::from_millis(10));
     }
 
     let (frames_before, started) = (link.frames_received(), Instant::now());
-    std::thread::sleep(Duration::from_secs(2));
+    wasm_thread::sleep(Duration::from_secs(2));
     let frames = link.frames_received() - frames_before;
     let elapsed = started.elapsed().as_secs_f64();
     drop(storm);

@@ -21,12 +21,13 @@
 //! `srtm.getAltitude` and everything it reads: tile names, `.hgt` tiles, the ASCII-grid fallback,
 //! and the state the download thread shares with it.
 
+use mp_os::Lock as _;
 use std::collections::HashMap;
 use std::io::Read;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Condvar, Mutex, MutexGuard, PoisonError};
-use std::time::{Duration, Instant};
+use web_time::{Duration, Instant};
 
 use crate::fetch::{Http, UreqHttp};
 
@@ -121,7 +122,7 @@ impl From<std::io::Error> for Fault {
 /// A lock that a panic elsewhere does not poison for good: every value behind these is left
 /// consistent between statements.
 pub(crate) fn lock<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
-    mutex.lock().unwrap_or_else(PoisonError::into_inner)
+    mutex.os_lock().unwrap_or_else(PoisonError::into_inner)
 }
 
 /// C#'s `(int)` of a double, as mono does it on x86-64 (`cvttsd2si`): truncation toward zero,
@@ -413,7 +414,7 @@ impl Srtm {
         // C#: requestThreadrun = true, at the top of requestRunner (srtm.cs:530). Set before the
         // thread starts rather than in it, so a drop that comes first is not undone.
         inner.run.store(true, Ordering::Release);
-        let spawned = std::thread::Builder::new()
+        let spawned = wasm_thread::Builder::new()
             .name("mp-terrain".to_owned())
             .spawn(move || crate::fetch::request_runner(&inner));
         // C#: StartQueueProcess's task. A thread that cannot be started leaves the queue unread;

@@ -30,10 +30,11 @@
 
 mod common;
 
+use mp_os::Lock as _;
 use std::io::{self, Write};
 use std::net::{IpAddr, UdpSocket};
 use std::sync::{Arc, Mutex};
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use web_time::{Duration, SystemTime, UNIX_EPOCH};
 
 use common::{
     caster, escape, golden_lines, listen, read_client_frame, read_to_end, sentences, server_frame,
@@ -177,7 +178,7 @@ fn every_gga_sentence_is_the_csharps_to_the_checksum() {
 fn hand_clock(start: SystemTime) -> (Arc<Mutex<SystemTime>>, Clock) {
     let now = Arc::new(Mutex::new(start));
     let read = Arc::clone(&now);
-    (now, Box::new(move || *read.lock().unwrap()))
+    (now, Box::new(move || *read.os_lock().unwrap()))
 }
 
 #[test]
@@ -261,7 +262,7 @@ fn the_gga_cadence_is_the_csharps() {
         .unwrap();
     let mut buf = [0u8; 64];
     for (step, moment) in at.iter().enumerate().skip(1) {
-        *now.lock().unwrap() = *moment;
+        *now.os_lock().unwrap() = *moment;
         if step == 4 {
             transport.set_position(0.0, 0.0, 1.0);
         }
@@ -525,7 +526,7 @@ fn is_in_range_answers_as_the_csharps_does() {
 
 /// Asks until the answer is `Some`, for a datagram to finish arriving; bounded, and never asleep.
 fn until<T>(mut ask: impl FnMut() -> Option<T>) -> T {
-    let started = std::time::Instant::now();
+    let started = web_time::Instant::now();
     loop {
         if let Some(answer) = ask() {
             return answer;

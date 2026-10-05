@@ -320,8 +320,9 @@ impl Sitl {
             press: None,
             zoom_pending: false,
             launcher,
-            local_wasm: Arc::new(launcher::LocalWasm::default()),
-            try_local_wasm: cfg!(target_os = "macos"),
+            local_wasm: local_wasm_launcher(),
+            // Ticked where it is the only simulator that runs: macOS, and a web page.
+            try_local_wasm: cfg!(any(target_os = "macos", target_family = "wasm")),
             worker: None,
             saying: None,
             note: None,
@@ -389,7 +390,9 @@ impl Sitl {
         if self.note.is_none() {
             self.note = self.chosen().note();
         }
-        if self.note.is_some() && !self.probed {
+        // The probe asks ArduPilot's manifest for a WebAssembly SITL a desktop could bundle; a web
+        // page runs the local builds itself and has nothing to ask.
+        if self.note.is_some() && !self.probed && !cfg!(target_family = "wasm") {
             self.start_probe();
         }
     }
@@ -407,7 +410,7 @@ impl Sitl {
     fn start_probe(&mut self) {
         self.probed = true;
         let (sender, receiver) = channel();
-        let started = std::thread::Builder::new()
+        let started = wasm_thread::Builder::new()
             .name("mp-sitl-wasm-probe".to_owned())
             .spawn(move || {
                 let fetch = mp_firmware::manifest::fetcher();
@@ -825,7 +828,7 @@ impl MissionPlanner {
         self.sitl.local_wasm.kill_all();
         let launcher = self.sitl.chosen();
         self.sitl.worker = run(move |fetch, say| {
-            launcher::start(launcher.as_ref(), fetch, &request, say, &std::thread::sleep)
+            launcher::start(launcher.as_ref(), fetch, &request, say, &wasm_thread::sleep)
         });
     }
 
@@ -884,7 +887,7 @@ impl MissionPlanner {
         self.sitl.outcome = None;
         let launcher = Arc::clone(&self.sitl.launcher);
         self.sitl.worker = run(move |fetch, say| {
-            launcher::start_chain(launcher.as_ref(), fetch, &request, say, &std::thread::sleep)
+            launcher::start_chain(launcher.as_ref(), fetch, &request, say, &wasm_thread::sleep)
         });
     }
 
@@ -921,7 +924,7 @@ fn run(
     work: impl FnOnce(&dyn mp_firmware::manifest::Fetch, &dyn Fn(&str)) -> Outcome + Send + 'static,
 ) -> Option<Receiver<Progress>> {
     let (sender, receiver) = channel();
-    std::thread::Builder::new()
+    wasm_thread::Builder::new()
         .name("mp-sitl-start".to_owned())
         .spawn(move || {
             let fetch = mp_firmware::manifest::fetcher();
@@ -1033,6 +1036,18 @@ pub fn record_facts(sitl: &Sitl, persisted: &crate::settings::Persisted) {
                 "none"
             },
         );
+    }
+}
+
+/// "try local wasm"'s launcher: Node and the bridge on a desktop, the page itself in a browser.
+fn local_wasm_launcher() -> Arc<dyn Launcher> {
+    #[cfg(target_family = "wasm")]
+    {
+        Arc::new(launcher::PageWasm)
+    }
+    #[cfg(not(target_family = "wasm"))]
+    {
+        Arc::new(launcher::LocalWasm::default())
     }
 }
 
@@ -1244,3 +1259,4 @@ mod tests {
         assert_eq!(sitl.connect.as_deref(), Some("tcp:127.0.0.1:5760"));
     }
 }
+

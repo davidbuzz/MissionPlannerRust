@@ -51,7 +51,7 @@
 use std::collections::{BTreeMap, VecDeque};
 use std::io::{Read, Seek, SeekFrom};
 use std::path::PathBuf;
-use std::time::{Duration, Instant};
+use web_time::{Duration, Instant};
 
 use crate::dsdl::{
     Allocation, GetNodeInfoRes, HEALTH_OK, HardwareVersion, MODE_OPERATIONAL, Message, NodeStatus,
@@ -749,7 +749,7 @@ mod tests {
     /// end raised; a file not served is not answered.
     #[test]
     fn the_file_server_answers_reads() {
-        let dir = std::env::temp_dir().join(format!("mp-dronecan-fs-{}", std::process::id()));
+        let dir = mp_os::temp_dir().join(format!("mp-dronecan-fs-{}", mp_os::process_id()));
         std::fs::create_dir_all(&dir).expect("a directory");
         let path = dir.join("image.bin");
         let image: Vec<u8> = (0..300u32)

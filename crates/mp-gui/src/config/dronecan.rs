@@ -116,6 +116,7 @@
 // This module is internal to the binary; `pub` here documents intent rather than exporting API.
 #![allow(unreachable_pub)]
 
+use mp_os::Lock as _;
 use std::collections::{BTreeMap, VecDeque};
 use std::io::{Read as _, Write as _};
 use std::net::{TcpListener, TcpStream, UdpSocket};
@@ -123,7 +124,7 @@ use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{self, Receiver, Sender, TryRecvError};
 use std::sync::{Arc, Mutex};
-use std::time::{Duration, Instant};
+use web_time::{Duration, Instant};
 
 use gpui::{
     AnyElement, ClickEvent, Context, Div, FocusHandle, KeyDownEvent, MouseButton, MouseDownEvent,
@@ -567,7 +568,7 @@ fn read_line(transport: &mut dyn mp_transport::Transport, pending: &mut Vec<u8>)
         match transport.read(&mut buf) {
             Ok(1) => pending.push(buf[0]),
             // A transport whose read does not wait: a breath before the next.
-            Ok(_) => std::thread::sleep(Duration::from_millis(1)),
+            Ok(_) => wasm_thread::sleep(Duration::from_millis(1)),
             Err(_) => {
                 let line: Vec<u8> = std::mem::take(pending);
                 return String::from_utf8_lossy(&line).into_owned();
@@ -590,7 +591,7 @@ fn run_slcan(
         let _ = events.send(SlcanEvent::Failed(CHECK_PORT.to_owned()));
         return;
     }
-    std::thread::sleep(Duration::from_millis(50));
+    wasm_thread::sleep(Duration::from_millis(50));
     let until = Instant::now() + Duration::from_secs(1);
     let mut buf = [0u8; 1024];
     while Instant::now() < until {
@@ -644,7 +645,7 @@ fn run_slcan(
                     }
                 }
             }
-            Ok(_) => std::thread::sleep(Duration::from_millis(1)),
+            Ok(_) => wasm_thread::sleep(Duration::from_millis(1)),
             Err(error) => {
                 let _ = events.send(SlcanEvent::Failed(error.to_string()));
                 return;
@@ -801,7 +802,7 @@ fn run_passthrough(
                     let _ = events.send(PassthroughEvent::Connected);
                 }
                 Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
-                    std::thread::sleep(Duration::from_millis(5));
+                    wasm_thread::sleep(Duration::from_millis(5));
                 }
                 Err(error) => {
                     let _ = events.send(PassthroughEvent::Failed(error.to_string()));
@@ -831,7 +832,7 @@ fn run_passthrough(
                     ));
                 }
                 Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
-                    std::thread::sleep(Duration::from_millis(1));
+                    wasm_thread::sleep(Duration::from_millis(1));
                 }
                 Err(_) => gone = true,
             }
@@ -2150,7 +2151,7 @@ impl DroneCan {
         self.setup_node(now, false);
         let (commands, command_rx) = mpsc::channel();
         let (event_tx, events) = mpsc::channel();
-        let spawned = std::thread::Builder::new()
+        let spawned = wasm_thread::Builder::new()
             .name("dronecan-slcan".to_owned())
             .spawn(move || run_slcan(transport, &command_rx, &event_tx));
         if spawned.is_err() {
@@ -2191,7 +2192,7 @@ impl DroneCan {
         let (lines_tx, lines) = mpsc::channel();
         let reader = Arc::clone(&socket);
         let running = Arc::clone(&run);
-        let spawned = std::thread::Builder::new()
+        let spawned = wasm_thread::Builder::new()
             .name("dronecan-mcast".to_owned())
             .spawn(move || {
                 let mut buf = [0u8; 1500];
@@ -2333,7 +2334,7 @@ impl DroneCan {
         let hwversion = hw_version_text(info);
         let manifest = self.manifest.clone();
         let (results_tx, results) = mpsc::channel();
-        let spawned = std::thread::Builder::new()
+        let spawned = wasm_thread::Builder::new()
             .name("dronecan-update".to_owned())
             .spawn(move || {
                 let _ = results_tx.send(fetch_firmware(&device, &hwversion, beta, manifest));
@@ -2366,9 +2367,9 @@ impl DroneCan {
         {
             match mp_firmware::firmware::Firmware::load(file) {
                 Ok(firmware) => {
-                    let temporary = std::env::temp_dir().join(format!(
+                    let temporary = mp_os::temp_dir().join(format!(
                         "dronecan-{}-{}.bin",
-                        std::process::id(),
+                        mp_os::process_id(),
                         node
                     ));
                     if std::fs::write(&temporary, &firmware.image).is_err() {
@@ -2509,7 +2510,7 @@ impl DroneCan {
         let (events_tx, from_client) = mpsc::channel();
         let chunk = if tunnel.is_some() { 120 } else { 128 };
         let stopping = Arc::clone(&stop);
-        let spawned = std::thread::Builder::new()
+        let spawned = wasm_thread::Builder::new()
             .name("dronecan-passthrough".to_owned())
             .spawn(move || run_passthrough(&listener, chunk, &stopping, &client_rx, &events_tx));
         if spawned.is_err() {
@@ -2897,13 +2898,13 @@ impl DroneCan {
                             return;
                         }
                         if let MavMessage::CanFrame(frame) = packet.message
-                            && let Ok(mut heard) = heard.lock()
+                            && let Ok(mut heard) = heard.os_lock()
                         {
                             heard.push_back(frame);
                         }
                     });
                 }
-                if let Ok(mut heard) = bus.heard.lock() {
+                if let Ok(mut heard) = bus.heard.os_lock() {
                     for frame in heard.drain(..) {
                         bus.received += 1;
                         lines.push(mavlink::line_of(&frame));
@@ -3774,7 +3775,7 @@ fn fetch_firmware(
         return Err(UPDATE_NOT_FOUND.to_owned());
     }
     let bytes = http.get(&url)?;
-    let directory = std::env::temp_dir().join(format!("dronecan-fw-{}", std::process::id()));
+    let directory = mp_os::temp_dir().join(format!("dronecan-fw-{}", mp_os::process_id()));
     std::fs::create_dir_all(&directory).map_err(|error| error.to_string())?;
     let downloaded = directory.join("download.tmp");
     std::fs::write(&downloaded, &bytes).map_err(|error| error.to_string())?;
@@ -5345,7 +5346,7 @@ mod tests {
                     }),
                 );
             }
-            std::thread::sleep(Duration::from_millis(3));
+            wasm_thread::sleep(Duration::from_millis(3));
             peer.serve(vehicle);
             if done(page, peer) {
                 return;
@@ -5702,7 +5703,7 @@ mod tests {
         let (ours, mut adapter) = Loopback::pair();
         let (commands, command_rx) = mpsc::channel();
         let (event_tx, events) = mpsc::channel();
-        let thread = std::thread::spawn(move || run_slcan(Box::new(ours), &command_rx, &event_tx));
+        let thread = wasm_thread::spawn(move || run_slcan(Box::new(ours), &command_rx, &event_tx));
         let mut heard = Vec::new();
         let mut buf = [0u8; 256];
         // Each command answered with a carriage return as it comes.

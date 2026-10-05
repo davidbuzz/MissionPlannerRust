@@ -54,10 +54,10 @@ struct Scratch(PathBuf);
 
 impl Scratch {
     fn new(name: &str) -> Self {
-        let path = std::env::temp_dir().join(format!(
+        let path = mp_os::temp_dir().join(format!(
             "mp-tiles-versions-{name}-{}-{:?}",
-            std::process::id(),
-            std::thread::current().id()
+            mp_os::process_id(),
+            wasm_thread::current().id()
         ));
         let _ = std::fs::remove_dir_all(&path);
         Self(path)

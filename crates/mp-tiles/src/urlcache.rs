@@ -40,7 +40,9 @@
 use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::time::{Duration, SystemTime};
+// A file's time is std's: this file compares the clock only with files' times. port_clock: keep
+use std::time::SystemTime; // port_clock: keep
+use web_time::Duration;
 
 /// The directory under the cache root, `CacheType.UrlCache.ToString()`.
 /// `// C#: ExtLibs/GMap.NET.Core/GMap.NET.Internals/Cache.cs:191, 259-266`

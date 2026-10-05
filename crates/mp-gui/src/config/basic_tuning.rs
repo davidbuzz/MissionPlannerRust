@@ -73,7 +73,7 @@
 
 use std::collections::VecDeque;
 use std::sync::Arc;
-use std::time::Instant;
+use web_time::Instant;
 
 use gpui::{
     AnyElement, AnyView, Context, FocusHandle, KeyDownEvent, Render, SharedString, Window, div,
@@ -1925,7 +1925,7 @@ mod tests {
         assert_eq!(shown_text_of(&page, "THR_MAX"), "100");
         assert!(page.changes().is_empty());
         assert!(page.is_green(index("THR_MAX")), "Activate leaves BackColor");
-        std::thread::sleep(Duration::from_millis(50));
+        wasm_thread::sleep(Duration::from_millis(50));
         vehicle.read();
         assert_eq!(requests(&vehicle), before, "no parameter asked for");
     }

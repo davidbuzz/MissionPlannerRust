@@ -23,6 +23,7 @@
 
 #![allow(dead_code, unreachable_pub, clippy::unwrap_used, clippy::expect_used)]
 
+use mp_os::Lock as _;
 use std::collections::{BTreeMap, VecDeque};
 use std::path::PathBuf;
 use std::process::Command;
@@ -132,7 +133,7 @@ impl Scripted {
     }
 
     pub fn record(&self) -> MutexGuard<'_, Record> {
-        self.0.lock().unwrap()
+        self.0.os_lock().unwrap()
     }
 
     pub fn with<R>(&self, change: impl FnOnce(&mut Record) -> R) -> R {

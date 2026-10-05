@@ -99,7 +99,7 @@
 #![allow(unreachable_pub)]
 
 use std::collections::{BTreeMap, VecDeque};
-use std::time::Instant;
+use web_time::Instant;
 
 use gpui::{AnyElement, Context, Div, FontWeight, SharedString, Window, div, prelude::*, px, rgb};
 use mp_link::mavftp::{FtpOutcome, FtpRequest, RW_SIZE};

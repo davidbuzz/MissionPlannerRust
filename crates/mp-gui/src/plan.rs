@@ -9115,7 +9115,7 @@ impl PlanMenus {
         let fetch: GeocoderFetch = geocoder_fetch;
         let (send, answer) = std::sync::mpsc::channel();
         let keywords = place.clone();
-        let spawned = std::thread::Builder::new()
+        let spawned = wasm_thread::Builder::new()
             .name("geocoder".to_owned())
             .spawn(move || {
                 let outcome = mapview::geocode(&keywords, fetch);
@@ -14869,7 +14869,7 @@ mod tests {
     /// the file has none; nothing when empty or a folder.
     #[test]
     fn a_dialog_answer_is_a_path_as_a_file_dialog_takes_it() {
-        let folder = std::env::temp_dir().join(format!("mp-dialog-path-{}", std::process::id()));
+        let folder = mp_os::temp_dir().join(format!("mp-dialog-path-{}", mp_os::process_id()));
         std::fs::create_dir_all(folder.join("sub")).unwrap();
         assert_eq!(
             dialog_path("square", "fen", &folder),
@@ -14883,7 +14883,7 @@ mod tests {
             dialog_path("sub/square", "fen", &folder),
             Some(folder.join("sub").join("square.fen"))
         );
-        let elsewhere = std::env::temp_dir().join("elsewhere.waypoints");
+        let elsewhere = mp_os::temp_dir().join("elsewhere.waypoints");
         assert_eq!(
             dialog_path(&elsewhere.display().to_string(), "waypoints", &folder),
             Some(elsewhere)
@@ -14905,7 +14905,7 @@ mod tests {
     /// a row puts a file of its own folder in the box by name, anything else by path.
     #[test]
     fn a_file_dialog_lists_its_folder() {
-        let folder = std::env::temp_dir().join(format!("mp-dialog-list-{}", std::process::id()));
+        let folder = mp_os::temp_dir().join(format!("mp-dialog-list-{}", mp_os::process_id()));
         for sub in ["b-sub", ".hidden"] {
             std::fs::create_dir_all(folder.join(sub)).unwrap();
         }
@@ -15485,7 +15485,7 @@ mod tests {
             if let Some(answer) = menus.take_geocode() {
                 return answer;
             }
-            std::thread::sleep(std::time::Duration::from_millis(10));
+            wasm_thread::sleep(std::time::Duration::from_millis(10));
         }
         panic!("the geocoder never answered");
     }

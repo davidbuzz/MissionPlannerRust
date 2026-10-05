@@ -119,10 +119,11 @@ pub mod timeouts;
 pub mod tlog;
 pub mod traffic;
 
+use mp_os::Lock as _;
 use std::collections::BTreeMap;
 use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
-use std::time::{Duration, Instant};
+use web_time::{Duration, Instant};
 
 use mission_transfer::{Action, MissionTransfer};
 use mp_mavlink::{DecodeStats, FrameDecoder, Message as _, encode_v2};
@@ -452,7 +453,7 @@ impl LinkSender {
     /// and altitude are all the same, which writing the same values again amounts to.
     /// `// C#: ExtLibs/ArduPilot/CurrentState.cs:1591-1604`
     pub fn set_base(&self, target: VehicleId, position: LatLngAlt) {
-        if let Ok(mut bases) = self.bases.lock() {
+        if let Ok(mut bases) = self.bases.os_lock() {
             bases.push((target, position));
         }
     }
@@ -465,7 +466,7 @@ impl LinkSender {
     /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:1529-1584`
     pub fn setup_signing(&self, target: VehicleId, userseed: &str, key: Option<&[u8]>) -> bool {
         let setup = signing::Setup::new(target, userseed, key);
-        if let Ok(mut signing) = self.signing.lock() {
+        if let Ok(mut signing) = self.signing.os_lock() {
             signing.queue(setup);
         }
         !setup.clear
@@ -476,7 +477,7 @@ impl LinkSender {
     /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVState.cs:151-162`
     #[must_use]
     pub fn signing(&self, id: VehicleId) -> Option<signing::MavSigning> {
-        self.signing.lock().ok()?.vehicle(id)
+        self.signing.os_lock().ok()?.vehicle(id)
     }
 
     /// `Mavlink2Signed`: signed packets read since the start of the current second.
@@ -484,7 +485,7 @@ impl LinkSender {
     #[must_use]
     pub fn signed_packets(&self) -> u32 {
         self.signing
-            .lock()
+            .os_lock()
             .map_or(0, |signing| signing.signed_packets())
     }
 }
@@ -530,7 +531,7 @@ pub struct Link {
     last_log_progress: AtomicU32,
     shared: Arc<Shared>,
     outbound: std::sync::mpsc::Sender<Vec<u8>>,
-    thread: Option<std::thread::JoinHandle<()>>,
+    thread: Option<wasm_thread::JoinHandle<()>>,
     description: String,
     config: LinkConfig,
 }
@@ -574,14 +575,14 @@ impl Link {
         let description = transport.description().to_owned();
         shared
             .description
-            .lock()
+            .os_lock()
             .map(|mut d| *d = description.clone())
             .unwrap_or(());
         let (tx, rx) = std::sync::mpsc::channel::<Vec<u8>>();
 
         let thread_shared = Arc::clone(&shared);
         let thread_config = config.clone();
-        let thread = std::thread::Builder::new()
+        let thread = wasm_thread::Builder::new()
             .name("mp-link".to_owned())
             .spawn(move || run_link(transport, thread_config, &thread_shared, &rx, reopen))
             .ok();
@@ -601,7 +602,7 @@ impl Link {
     pub fn vehicles(&self) -> Vec<VehicleId> {
         self.shared
             .handles
-            .lock()
+            .os_lock()
             .map(|h| h.keys().copied().collect())
             .unwrap_or_default()
     }
@@ -609,13 +610,13 @@ impl Link {
     /// A snapshot reader for one vehicle.
     #[must_use]
     pub fn vehicle(&self, id: VehicleId) -> Option<StateHandle> {
-        self.shared.handles.lock().ok()?.get(&id).cloned()
+        self.shared.handles.os_lock().ok()?.get(&id).cloned()
     }
 
     /// The first vehicle that looks like an autopilot, which is what a single-vehicle UI shows.
     #[must_use]
     pub fn primary_vehicle(&self) -> Option<(VehicleId, StateHandle)> {
-        let handles = self.shared.handles.lock().ok()?;
+        let handles = self.shared.handles.os_lock().ok()?;
         // Component 1 is the autopilot; prefer it over gimbals, companions and other GCSs.
         handles
             .iter()
@@ -633,7 +634,7 @@ impl Link {
     pub fn download_params(&self, target: VehicleId) -> bool {
         let download = ParamDownload::new(target, self.config.timeouts, Instant::now());
         let first = download.begin();
-        if let Ok(mut downloads) = self.shared.param_downloads.lock() {
+        if let Ok(mut downloads) = self.shared.param_downloads.os_lock() {
             downloads.insert(target, download);
         }
         match first {
@@ -647,7 +648,7 @@ impl Link {
     pub fn param_download(&self, target: VehicleId) -> Option<ParamDownload> {
         self.shared
             .param_downloads
-            .lock()
+            .os_lock()
             .ok()?
             .get(&target)
             .cloned()
@@ -656,7 +657,7 @@ impl Link {
     /// Stops a parameter download, as the C#'s progress dialog's Cancel does. What arrived stays
     /// in the table.
     pub fn cancel_param_download(&self, target: VehicleId) {
-        if let Ok(mut downloads) = self.shared.param_downloads.lock()
+        if let Ok(mut downloads) = self.shared.param_downloads.os_lock()
             && let Some(download) = downloads.get_mut(&target)
         {
             download.cancel();
@@ -828,11 +829,11 @@ impl Link {
         // then the queue), so the request cannot be picked up between the two reads and be in
         // neither. It was, once: a caller that took `None` for "forgotten" abandoned a write the
         // vehicle then accepted.
-        let held = self.shared.requests.lock().ok()?;
+        let held = self.shared.requests.os_lock().ok()?;
         if let Some(request) = held.get(&id) {
             return Some(request.clone());
         }
-        let queue = self.shared.request_queue.lock().ok()?;
+        let queue = self.shared.request_queue.os_lock().ok()?;
         queue
             .iter()
             .find(|(queued, _)| *queued == id)
@@ -841,7 +842,7 @@ impl Link {
 
     fn queue_request(&self, target: VehicleId, kind: RequestKind) -> RequestId {
         let id = RequestId(self.shared.next_request.fetch_add(1, Ordering::Relaxed));
-        if let Ok(mut queue) = self.shared.request_queue.lock() {
+        if let Ok(mut queue) = self.shared.request_queue.os_lock() {
             queue.push((id, Request::new(target, kind)));
         }
         id
@@ -889,7 +890,7 @@ impl Link {
     fn queue_transfer(&self, transfer: MissionTransfer) -> bool {
         self.shared
             .mission_requests
-            .lock()
+            .os_lock()
             .map(|mut queue| queue.push(transfer))
             .is_ok()
     }
@@ -905,7 +906,7 @@ impl Link {
     pub fn list_transfer(&self, target: VehicleId, mission_type: u8) -> Option<MissionTransfer> {
         self.shared
             .missions
-            .lock()
+            .os_lock()
             .ok()?
             .get(&(target, mission_type))
             .cloned()
@@ -917,7 +918,7 @@ impl Link {
     pub fn fence_points(&self, target: VehicleId) -> Vec<FenceItem> {
         self.shared
             .fence_points
-            .lock()
+            .os_lock()
             .map(|held| held.items(target))
             .unwrap_or_default()
     }
@@ -928,7 +929,7 @@ impl Link {
     pub fn camera_points(&self, target: VehicleId) -> Vec<CameraFeedback> {
         self.shared
             .camera_points
-            .lock()
+            .os_lock()
             .map(|held| held.points(target))
             .unwrap_or_default()
     }
@@ -939,7 +940,7 @@ impl Link {
     pub fn wps(&self, target: VehicleId) -> Vec<MissionItem> {
         self.shared
             .mission_points
-            .lock()
+            .os_lock()
             .map(|held| held.wps(target))
             .unwrap_or_default()
     }
@@ -950,7 +951,7 @@ impl Link {
     pub fn rally_points(&self, target: VehicleId) -> Vec<MissionItem> {
         self.shared
             .mission_points
-            .lock()
+            .os_lock()
             .map(|held| held.rally_points(target))
             .unwrap_or_default()
     }
@@ -958,7 +959,7 @@ impl Link {
     /// `MAV.rallypoints.Clear()`, as Clear Rally Points does it beside its markers.
     /// `// C#: GCSViews/FlightPlanner.cs:2108-2109`
     pub fn clear_rally_points(&self, target: VehicleId) {
-        if let Ok(mut held) = self.shared.mission_points.lock() {
+        if let Ok(mut held) = self.shared.mission_points.os_lock() {
             held.clear(target, mission_points::MISSION_TYPE_RALLY);
         }
     }
@@ -979,7 +980,7 @@ impl Link {
     }
 
     fn write_state(&self, target: VehicleId, write: StateWrite) {
-        if let Ok(mut writes) = self.shared.state_writes.lock() {
+        if let Ok(mut writes) = self.shared.state_writes.os_lock() {
             writes.push((target, write));
         }
     }
@@ -992,7 +993,7 @@ impl Link {
     /// is asked about: a caller that sees it not queued and reads the table finds the new one.
     #[must_use]
     pub fn list_transfer_queued(&self, target: VehicleId, mission_type: u8) -> bool {
-        self.shared.mission_requests.lock().is_ok_and(|queue| {
+        self.shared.mission_requests.os_lock().is_ok_and(|queue| {
             queue
                 .iter()
                 .any(|transfer| transfer.target == target && transfer.mission_type == mission_type)
@@ -1002,7 +1003,7 @@ impl Link {
     /// A snapshot of a vehicle's parameters.
     #[must_use]
     pub fn params(&self, target: VehicleId) -> Option<ParamTable> {
-        self.shared.params.lock().ok()?.get(&target).cloned()
+        self.shared.params.os_lock().ok()?.get(&target).cloned()
     }
 
     /// Which state a vehicle's parameter table is in, without copying it: its
@@ -1014,7 +1015,7 @@ impl Link {
     pub fn params_generation(&self, target: VehicleId) -> Option<u64> {
         self.shared
             .params
-            .lock()
+            .os_lock()
             .ok()?
             .get(&target)
             .map(ParamTable::generation)
@@ -1028,7 +1029,7 @@ impl Link {
     pub fn recent_messages(&self, count: usize) -> Vec<messages::LogMessage> {
         self.shared
             .messages
-            .lock()
+            .os_lock()
             .map(|log| log.recent(count))
             .unwrap_or_default()
     }
@@ -1038,7 +1039,7 @@ impl Link {
     pub fn messages_dropped(&self) -> u64 {
         self.shared
             .messages
-            .lock()
+            .os_lock()
             .map(|log| log.dropped())
             .unwrap_or(0)
     }
@@ -1048,14 +1049,14 @@ impl Link {
     pub fn accel_calibration(&self) -> mp_calibration::AccelCalibration {
         self.shared
             .accel_calibration
-            .lock()
+            .os_lock()
             .map(|held| *held)
             .unwrap_or(mp_calibration::AccelCalibration::Idle)
     }
 
     /// Forgets any calibration state, so a finished run does not look like a running one.
     pub fn clear_accel_calibration(&self) {
-        if let Ok(mut held) = self.shared.accel_calibration.lock() {
+        if let Ok(mut held) = self.shared.accel_calibration.os_lock() {
             *held = mp_calibration::AccelCalibration::Idle;
         }
     }
@@ -1066,14 +1067,14 @@ impl Link {
     pub fn compass_calibration(&self) -> mp_calibration::MagCalLog {
         self.shared
             .compass_calibration
-            .lock()
+            .os_lock()
             .map(|held| held.clone())
             .unwrap_or_default()
     }
 
     /// Forgets compass calibration progress: the C#'s `mprog.Clear()` and `mrep.Clear()`.
     pub fn clear_compass_calibration(&self) {
-        if let Ok(mut held) = self.shared.compass_calibration.lock() {
+        if let Ok(mut held) = self.shared.compass_calibration.os_lock() {
             *held = mp_calibration::MagCalLog::default();
         }
     }
@@ -1085,7 +1086,7 @@ impl Link {
     pub fn take_compassmot_status(&self) -> Vec<(VehicleId, CompassmotStatus)> {
         self.shared
             .compassmot
-            .lock()
+            .os_lock()
             .map(|mut held| held.drain(..).collect())
             .unwrap_or_default()
     }
@@ -1095,7 +1096,7 @@ impl Link {
     /// Clears what was listed before, so a second listing does not leave logs that have since
     /// been erased sitting in the list.
     pub fn request_log_list(&self, target: VehicleId) -> bool {
-        if let Ok(mut held) = self.shared.log_listings.lock() {
+        if let Ok(mut held) = self.shared.log_listings.os_lock() {
             held.clear();
         }
         self.send(&commands::request_log_list(target))
@@ -1106,14 +1107,14 @@ impl Link {
     pub fn log_listings(&self) -> Vec<mp_ftp::logs::LogListing> {
         self.shared
             .log_listings
-            .lock()
+            .os_lock()
             .map(|held| held.values().copied().collect())
             .unwrap_or_default()
     }
 
     /// Starts downloading one log.
     pub fn download_log(&self, target: VehicleId, id: u16, size: u32) -> bool {
-        if let Ok(mut held) = self.shared.log_download.lock() {
+        if let Ok(mut held) = self.shared.log_download.os_lock() {
             *held = Some(mp_ftp::logs::LogDownload::new(target, id, size));
         }
         self.last_log_progress.store(0, Ordering::Release);
@@ -1128,7 +1129,7 @@ impl Link {
     /// How far a log download has got, if one is running.
     #[must_use]
     pub fn log_download_progress(&self) -> Option<(u16, u32, u32)> {
-        let held = self.shared.log_download.lock().ok()?;
+        let held = self.shared.log_download.os_lock().ok()?;
         let download = held.as_ref()?;
         Some((download.id, download.filled(), download.size))
     }
@@ -1140,7 +1141,7 @@ impl Link {
     /// that re-requests while data is still flowing throttles itself to one window per nudge.
     /// Measured against SITL, the second cost a factor of thirty. So: nudge only on a stall.
     pub fn nudge_log_download(&self, target: VehicleId) -> bool {
-        let Ok(held) = self.shared.log_download.lock() else {
+        let Ok(held) = self.shared.log_download.os_lock() else {
             return false;
         };
         let Some(download) = held.as_ref() else {
@@ -1175,7 +1176,7 @@ impl Link {
     /// The assembled log, once every byte has arrived.
     #[must_use]
     pub fn finished_log(&self) -> Option<(u16, Vec<u8>)> {
-        let held = self.shared.log_download.lock().ok()?;
+        let held = self.shared.log_download.os_lock().ok()?;
         let download = held.as_ref()?;
         download
             .is_complete()
@@ -1184,7 +1185,7 @@ impl Link {
 
     /// Forgets a download.
     pub fn clear_log_download(&self) {
-        if let Ok(mut held) = self.shared.log_download.lock() {
+        if let Ok(mut held) = self.shared.log_download.os_lock() {
             *held = None;
         }
     }
@@ -1195,7 +1196,7 @@ impl Link {
     /// and a caller that has stopped looking does not need the list pruned.
     #[must_use]
     pub fn traffic(&self) -> Vec<traffic::Traffic> {
-        let Ok(mut held) = self.shared.traffic.lock() else {
+        let Ok(mut held) = self.shared.traffic.os_lock() else {
             return Vec::new();
         };
         held.forget_old(Instant::now());
@@ -1205,7 +1206,7 @@ impl Link {
     /// Link counters.
     #[must_use]
     pub fn stats(&self) -> LinkStats {
-        self.shared.stats.lock().map(|s| *s).unwrap_or_default()
+        self.shared.stats.os_lock().map(|s| *s).unwrap_or_default()
     }
 
     /// Total frames received.
@@ -1244,7 +1245,7 @@ impl Link {
     pub fn reconnect_error(&self) -> Option<String> {
         self.shared
             .reconnect_error
-            .lock()
+            .os_lock()
             .ok()
             .and_then(|error| error.clone())
     }
@@ -1252,13 +1253,13 @@ impl Link {
     /// `MAVlist[id].Camera`: the component's camera as it stands, if the C# makes one for it.
     #[must_use]
     pub fn camera(&self, id: VehicleId) -> Option<camera::Camera> {
-        self.shared.cameras.lock().ok()?.get(&id).cloned()
+        self.shared.cameras.os_lock().ok()?.get(&id).cloned()
     }
 
     /// `MAVlist[id].GimbalManager`: the component's gimbal manager as it stands.
     #[must_use]
     pub fn gimbal_manager(&self, id: VehicleId) -> Option<gimbal_manager::GimbalManager> {
-        self.shared.gimbal_managers.lock().ok()?.get(&id).cloned()
+        self.shared.gimbal_managers.os_lock().ok()?.get(&id).cloned()
     }
 
     /// `CameraProtocol.VideoStreams`, in key order: (system, component, stream id).
@@ -1271,7 +1272,7 @@ impl Link {
     )> {
         self.shared
             .video_streams
-            .lock()
+            .os_lock()
             .map(|held| held.iter().map(|(k, v)| (*k, *v)).collect())
             .unwrap_or_default()
     }
@@ -1343,7 +1344,7 @@ impl Link {
     pub fn description(&self) -> String {
         self.shared
             .description
-            .lock()
+            .os_lock()
             .map(|d| d.clone())
             .unwrap_or_else(|_| self.description.clone())
     }
@@ -1459,7 +1460,7 @@ fn send_frame(
 ) -> bool {
     let signed = shared
         .signing
-        .lock()
+        .os_lock()
         .ok()
         .and_then(|mut held| held.sign(bytes, signing::timestamp_now));
     let bytes = signed.as_deref().unwrap_or(bytes);
@@ -1509,10 +1510,10 @@ fn reopen_transport(
         match open() {
             Ok(fresh) => {
                 *transport = fresh;
-                if let Ok(mut description) = shared.description.lock() {
+                if let Ok(mut description) = shared.description.os_lock() {
                     *description = transport.description().to_owned();
                 }
-                if let Ok(mut error) = shared.reconnect_error.lock() {
+                if let Ok(mut error) = shared.reconnect_error.os_lock() {
                     *error = None;
                 }
                 shared.reconnects.fetch_add(1, Ordering::AcqRel);
@@ -1521,7 +1522,7 @@ fn reopen_transport(
                 return true;
             }
             Err(err) => {
-                if let Ok(mut error) = shared.reconnect_error.lock() {
+                if let Ok(mut error) = shared.reconnect_error.os_lock() {
                     *error = Some(err.to_string());
                 }
                 let until = Instant::now() + RECONNECT_INTERVAL;
@@ -1529,7 +1530,7 @@ fn reopen_transport(
                     if !shared.running.load(Ordering::Acquire) {
                         return give_up(shared);
                     }
-                    std::thread::sleep(RECONNECT_POLL);
+                    wasm_thread::sleep(RECONNECT_POLL);
                 }
             }
         }
@@ -1588,7 +1589,7 @@ fn run_link(
                 // would otherwise spin a core flat. Idle CPU is a stated budget for this port, so
                 // yield only when the read cost us nothing.
                 if read_started.elapsed() < IDLE_POLL {
-                    std::thread::sleep(IDLE_POLL);
+                    wasm_thread::sleep(IDLE_POLL);
                 }
             }
             Ok(n) => {
@@ -1606,7 +1607,7 @@ fn run_link(
                 // `logreadmode`: a log's packets are not checked for their signatures. A new
                 // second starts `Mavlink2Signed` again. C#: MAVLinkInterface.cs:4938-4963, 5061
                 let logreadmode = matches!(transport.read_time(), ReadTime::Recorded(_));
-                if let Ok(mut held) = shared.signing.lock() {
+                if let Ok(mut held) = shared.signing.os_lock() {
                     held.new_second(signing::utc_second());
                 }
                 if let Some(chunk) = buf.get(..n) {
@@ -1619,7 +1620,7 @@ fn run_link(
                             && !logreadmode
                             && !shared
                                 .signing
-                                .lock()
+                                .os_lock()
                                 .is_ok_and(|mut held| held.check_against_store(frame))
                         {
                             return;
@@ -1675,10 +1676,10 @@ fn run_link(
                                     | MavMessage::FencePoint(_)
                                     | MavMessage::RallyPoint(_)
                             ) {
-                                if let Ok(mut held) = shared.fence_points.lock() {
+                                if let Ok(mut held) = shared.fence_points.os_lock() {
                                     held.observe(frame.sysid, frame.compid, config.sysid, &msg);
                                 }
-                                if let Ok(mut held) = shared.mission_points.lock() {
+                                if let Ok(mut held) = shared.mission_points.os_lock() {
                                     held.observe(frame.sysid, frame.compid, config.sysid, &msg);
                                 }
                             }
@@ -1698,7 +1699,7 @@ fn run_link(
                                 match &msg {
                                     MavMessage::MissionAck(m) => {
                                         let mut filed = None;
-                                        if let Ok(mut held) = shared.requests.lock() {
+                                        if let Ok(mut held) = shared.requests.os_lock() {
                                             let addressed =
                                                 to_us(m.target_system, m.target_component);
                                             for request in held.values_mut() {
@@ -1729,7 +1730,7 @@ fn run_link(
                                     }) => {
                                         let mut counted = None;
                                         let mut filed = None;
-                                        if let Ok(mut held) = shared.requests.lock() {
+                                        if let Ok(mut held) = shared.requests.os_lock() {
                                             let addressed = to_us(*target_system, *target_component);
                                             for request in held.values_mut() {
                                                 let (took, send) = request
@@ -1787,7 +1788,7 @@ fn run_link(
                                         target_component,
                                         ..
                                     }) => {
-                                        if let Ok(mut held) = shared.requests.lock() {
+                                        if let Ok(mut held) = shared.requests.os_lock() {
                                             let addressed = to_us(*target_system, *target_component);
                                             for request in held.values_mut() {
                                                 match request.on_mission_item(id, addressed, &msg) {
@@ -1798,7 +1799,7 @@ fn run_link(
                                         }
                                     }
                                     MavMessage::HomePosition(_) => {
-                                        if let Ok(mut held) = shared.requests.lock() {
+                                        if let Ok(mut held) = shared.requests.os_lock() {
                                             for request in held.values_mut() {
                                                 request.on_home_position(id);
                                             }
@@ -1828,7 +1829,7 @@ fn run_link(
                             // only make sense together.
                             match &msg {
                                 MavMessage::Statustext(text) => {
-                                    if let Ok(mut log) = shared.messages.lock() {
+                                    if let Ok(mut log) = shared.messages.os_lock() {
                                         log.push(
                                             id,
                                             messages::Severity::from_wire(text.severity),
@@ -1849,7 +1850,7 @@ fn run_link(
                                     )]
                                     let value = long.param1 as u32;
                                     let state = mp_calibration::AccelCalibration::from_wire(value);
-                                    if let Ok(mut held) = shared.accel_calibration.lock() {
+                                    if let Ok(mut held) = shared.accel_calibration.os_lock() {
                                         *held = state;
                                     }
                                 }
@@ -1857,19 +1858,19 @@ fn run_link(
                                 // calibrates every enabled one at once. A vehicle can have its
                                 // external compass pass and its internal one fail.
                                 MavMessage::MagCalProgress(progress) => {
-                                    if let Ok(mut held) = shared.compass_calibration.lock() {
+                                    if let Ok(mut held) = shared.compass_calibration.os_lock() {
                                         held.observe_progress(progress);
                                     }
                                 }
                                 MavMessage::MagCalReport(report) => {
-                                    if let Ok(mut held) = shared.compass_calibration.lock() {
+                                    if let Ok(mut held) = shared.compass_calibration.os_lock() {
                                         held.observe_report(report);
                                     }
                                 }
                                 // Compass/motor interference while `compassmot` runs, one
                                 // message per throttle step.
                                 MavMessage::CompassmotStatus(status) => {
-                                    if let Ok(mut held) = shared.compassmot.lock() {
+                                    if let Ok(mut held) = shared.compassmot.os_lock() {
                                         if held.len() >= COMPASSMOT_HELD {
                                             held.pop_front();
                                         }
@@ -1882,7 +1883,7 @@ fn run_link(
                                 MavMessage::AdsbVehicle(adsb) => {
                                     if let Ok(position) =
                                         mp_units::LatLon::from_mavlink_e7(adsb.lat, adsb.lon)
-                                        && let Ok(mut held) = shared.traffic.lock()
+                                        && let Ok(mut held) = shared.traffic.os_lock()
                                     {
                                         held.observe(traffic::Traffic {
                                             icao: adsb.icao_address,
@@ -1904,7 +1905,7 @@ fn run_link(
                                     }
                                 }
                                 MavMessage::LogEntry(entry) => {
-                                    if let Ok(mut held) = shared.log_listings.lock() {
+                                    if let Ok(mut held) = shared.log_listings.os_lock() {
                                         // num_logs of zero means the vehicle holds none, and it
                                         // still sends one LOG_ENTRY to say so. Recording that as
                                         // a log would offer the operator a download of nothing.
@@ -1925,7 +1926,7 @@ fn run_link(
                                     ftp::route(shared, id, message, Instant::now(), &mut ftp_sends);
                                 }
                                 MavMessage::LogData(data) => {
-                                    if let Ok(mut held) = shared.log_download.lock()
+                                    if let Ok(mut held) = shared.log_download.os_lock()
                                         && let Some(download) = held.as_mut()
                                         && download.id == data.id
                                     {
@@ -1940,7 +1941,7 @@ fn run_link(
                                 // screen's map loop works it out - here as the shot arrives.
                                 // C#: MAVLinkInterface.cs:5736-5745; GCSViews/FlightData.cs:4021-4038
                                 MavMessage::CameraFeedback(point) => {
-                                    if let Ok(mut held) = shared.camera_points.lock() {
+                                    if let Ok(mut held) = shared.camera_points.os_lock() {
                                         held.observe(id, point);
                                         let interval =
                                             mp_vehicle::VehicleState::shot_interval(held.times(id));
@@ -1956,7 +1957,7 @@ fn run_link(
                                 MavMessage::RallyPoint(point) => {
                                     let to_us = point.target_system == config.sysid
                                         && point.target_component == config.compid;
-                                    if let Ok(mut held) = shared.requests.lock() {
+                                    if let Ok(mut held) = shared.requests.os_lock() {
                                         let now = Instant::now();
                                         for request in held.values_mut() {
                                             match request.on_rally_point(id, to_us, point, now) {
@@ -1971,7 +1972,7 @@ fn run_link(
                                 MavMessage::FencePoint(point) => {
                                     let to_us = point.target_system == config.sysid
                                         && point.target_component == config.compid;
-                                    if let Ok(mut held) = shared.requests.lock() {
+                                    if let Ok(mut held) = shared.requests.os_lock() {
                                         let now = Instant::now();
                                         for request in held.values_mut() {
                                             match request.on_fence_point(id, to_us, point, now) {
@@ -1983,7 +1984,7 @@ fn run_link(
                                 }
                                 // Any MISSION_CURRENT answers a set-current (setWPCurrentAsync).
                                 MavMessage::MissionCurrent(_) => {
-                                    if let Ok(mut held) = shared.requests.lock() {
+                                    if let Ok(mut held) = shared.requests.os_lock() {
                                         for request in held.values_mut() {
                                             request.on_mission_current(id);
                                         }
@@ -1991,7 +1992,7 @@ fn run_link(
                                 }
                                 MavMessage::CommandAck(ack) => {
                                     // The oldest command waiting for this ack takes it.
-                                    if let Ok(mut held) = shared.requests.lock() {
+                                    if let Ok(mut held) = shared.requests.os_lock() {
                                         let now = Instant::now();
                                         for request in held.values_mut() {
                                             if request.on_command_ack(
@@ -2004,7 +2005,7 @@ fn run_link(
                                             }
                                         }
                                     }
-                                    if let Ok(mut log) = shared.messages.lock() {
+                                    if let Ok(mut log) = shared.messages.os_lock() {
                                         let severity = if messages::command_failed(ack.result) {
                                             messages::Severity::Error
                                         } else {
@@ -2040,7 +2041,7 @@ fn run_link(
                                 });
                                 // Every PARAM_VALUE counts toward a download, whatever its
                                 // type, as every one does in getParamListAsync.
-                                if let Ok(mut downloads) = shared.param_downloads.lock()
+                                if let Ok(mut downloads) = shared.param_downloads.os_lock()
                                     && let Some(download) = downloads.get_mut(&id)
                                 {
                                     download.on_param_value(
@@ -2061,7 +2062,7 @@ fn run_link(
                                     // until the table has the value, so a caller that sees the
                                     // request finished finds the table already agreeing with it.
                                     // Lock order: requests, then parameters.
-                                    let mut held = shared.requests.lock();
+                                    let mut held = shared.requests.os_lock();
                                     if let Ok(held) = held.as_mut() {
                                         for request in held.values_mut() {
                                             request.on_param_value(
@@ -2072,7 +2073,7 @@ fn run_link(
                                             );
                                         }
                                     }
-                                    if let Ok(mut table) = shared.params.lock() {
+                                    if let Ok(mut table) = shared.params.os_lock() {
                                         let table = table.entry(id).or_default();
                                         table.insert(
                                             name,
@@ -2108,7 +2109,7 @@ fn run_link(
         }
 
         // What the screens wrote into a vehicle's state since the last pass.
-        if let Ok(mut writes) = shared.state_writes.lock() {
+        if let Ok(mut writes) = shared.state_writes.os_lock() {
             for (id, write) in writes.drain(..) {
                 let Some(state) = registry.working_mut(id) else {
                     continue;
@@ -2201,13 +2202,13 @@ fn run_link(
         }
 
         // Pick up transfers the caller queued, and start them.
-        if let Ok(mut queued) = shared.mission_requests.lock() {
+        if let Ok(mut queued) = shared.mission_requests.os_lock() {
             for transfer in queued.drain(..) {
                 let transfer = transfer.with_timeouts(config.timeouts);
                 let id = transfer.target;
                 let kind = transfer.mission_type;
                 let first = transfer.begin();
-                if let Ok(mut transfers) = shared.missions.lock() {
+                if let Ok(mut transfers) = shared.missions.os_lock() {
                     transfers.insert((id, kind), transfer);
                 }
                 pending_actions.push((id, kind, first));
@@ -2215,7 +2216,7 @@ fn run_link(
         }
 
         // Retry whatever step is outstanding.
-        if let Ok(mut transfers) = shared.missions.lock() {
+        if let Ok(mut transfers) = shared.missions.os_lock() {
             for ((id, kind), transfer) in transfers.iter_mut() {
                 let action = transfer.on_tick();
                 if action != Action::Nothing {
@@ -2274,7 +2275,7 @@ fn run_link(
 
         // Parameter downloads: chase the holes a lossy stream leaves, as getParamListAsync does.
         // Only a download the caller started is chased; see `Shared::param_downloads`.
-        if let Ok(mut downloads) = shared.param_downloads.lock() {
+        if let Ok(mut downloads) = shared.param_downloads.os_lock() {
             let now = Instant::now();
             for (id, download) in downloads.iter_mut() {
                 match download.on_tick(now) {
@@ -2337,8 +2338,8 @@ fn run_link(
         // the request it was in neither: `Link::request` said `None` for a request that was
         // alive, and a caller that took `None` for "forgotten" gave up on a write the vehicle
         // then accepted. Lock order, as at the PARAM_VALUE arm: requests, then parameters.
-        if let Ok(mut held) = shared.requests.lock() {
-            if let Ok(mut queue) = shared.request_queue.lock() {
+        if let Ok(mut held) = shared.requests.os_lock() {
+            if let Ok(mut queue) = shared.request_queue.os_lock() {
                 picked_up.append(&mut queue);
             }
             if !picked_up.is_empty() {
@@ -2347,7 +2348,7 @@ fn run_link(
                     let ardupilot = registry
                         .working(request.target)
                         .is_some_and(|state| state.autopilot == MAV_AUTOPILOT_ARDUPILOTMEGA);
-                    let send = match shared.params.lock() {
+                    let send = match shared.params.os_lock() {
                         Ok(tables) => request.begin(
                             &config.timeouts,
                             tables.get(&request.target),
@@ -2362,7 +2363,7 @@ fn run_link(
                 forget_finished_requests(&mut held);
             }
         }
-        if let Ok(mut held) = shared.requests.lock() {
+        if let Ok(mut held) = shared.requests.os_lock() {
             let now = Instant::now();
             for request in held.values_mut() {
                 match request.on_tick(now) {
@@ -2397,7 +2398,7 @@ fn run_link(
         if last_publish.elapsed() >= config.publish_interval {
             // `cs.Base` from the RTK page, into the vehicle's state for this snapshot.
             // `// C#: GCSViews/ConfigurationView/ConfigSerialInjectGPS.cs:910, 1077, 1098`
-            if let Ok(mut bases) = shared.bases.lock() {
+            if let Ok(mut bases) = shared.bases.os_lock() {
                 for (id, position) in bases.drain(..) {
                     if let Some(state) = registry.working_mut(id) {
                         state.base = position;
@@ -2405,7 +2406,7 @@ fn run_link(
                 }
             }
             registry.publish_all();
-            if let Ok(mut description) = shared.description.lock() {
+            if let Ok(mut description) = shared.description.os_lock() {
                 // Borrowed, so asking is free; the text is copied only when it changed - a UDP
                 // link learning its peer - and then into the buffer the old text had.
                 let current = transport.description();
@@ -2468,7 +2469,7 @@ fn run_link(
         // as the vehicle's state still says, then signing switched. C#: MAVLinkInterface.cs:1529-1584
         let setups = shared
             .signing
-            .lock()
+            .os_lock()
             .map(|mut held| held.take_setups())
             .unwrap_or_default();
         for setup in setups {
@@ -2484,7 +2485,7 @@ fn run_link(
                     &message,
                 );
             }
-            if let Ok(mut held) = shared.signing.lock() {
+            if let Ok(mut held) = shared.signing.os_lock() {
                 held.finish(&setup);
             }
         }
@@ -2508,7 +2509,7 @@ fn run_link(
         }
 
         stats.decode = *decoder.stats();
-        if let Ok(mut shared_stats) = shared.stats.lock() {
+        if let Ok(mut shared_stats) = shared.stats.os_lock() {
             *shared_stats = stats;
         }
     }
@@ -2522,7 +2523,7 @@ fn run_link(
     // recording played unpaced - would leave the vehicles it heard unreachable.
     expose_handles(shared, &registry, detected.iter());
     stats.decode = *decoder.stats();
-    if let Ok(mut shared_stats) = shared.stats.lock() {
+    if let Ok(mut shared_stats) = shared.stats.os_lock() {
         *shared_stats = stats;
     }
     shared.running.store(false, Ordering::Release);
@@ -2534,7 +2535,7 @@ fn expose_handles<'a>(
     registry: &VehicleRegistry,
     ids: impl Iterator<Item = &'a VehicleId>,
 ) {
-    if let Ok(mut handles) = shared.handles.lock() {
+    if let Ok(mut handles) = shared.handles.os_lock() {
         for id in ids {
             if !handles.contains_key(id)
                 && let Some(handle) = registry.handle(*id)
@@ -2583,7 +2584,7 @@ fn file_list_upload(shared: &Arc<Shared>, id: VehicleId, gcs: VehicleId, msg: &M
     if target != (gcs.sysid, gcs.compid) {
         return;
     }
-    let Ok(transfers) = shared.missions.lock() else {
+    let Ok(transfers) = shared.missions.os_lock() else {
         return;
     };
     let Some(transfer) = transfers.get(&(id, kind)) else {
@@ -2605,10 +2606,10 @@ fn file_list_upload(shared: &Arc<Shared>, id: VehicleId, gcs: VehicleId, msg: &M
     };
     if let Some(item) = transfer.items().get(usize::from(filed)) {
         if kind == mp_mission::fence::MISSION_TYPE_FENCE {
-            if let Ok(mut held) = shared.fence_points.lock() {
+            if let Ok(mut held) = shared.fence_points.os_lock() {
                 held.store(id, item.seq, fence_points::uploaded(item));
             }
-        } else if let Ok(mut held) = shared.mission_points.lock() {
+        } else if let Ok(mut held) = shared.mission_points.os_lock() {
             held.store(id, kind, item.seq, mission_points::uploaded(item));
         }
     }
@@ -2617,10 +2618,10 @@ fn file_list_upload(shared: &Arc<Shared>, id: VehicleId, gcs: VehicleId, msg: &M
 /// `wps.Clear()`, `fencepoints.Clear()` or `rallypoints.Clear()`, as `mission_type` names.
 fn clear_list(shared: &Shared, id: VehicleId, mission_type: u8) {
     if mission_type == mp_mission::fence::MISSION_TYPE_FENCE {
-        if let Ok(mut held) = shared.fence_points.lock() {
+        if let Ok(mut held) = shared.fence_points.os_lock() {
             held.clear(id);
         }
-    } else if let Ok(mut held) = shared.mission_points.lock() {
+    } else if let Ok(mut held) = shared.mission_points.os_lock() {
         held.clear(id, mission_type);
     }
 }
@@ -2635,7 +2636,7 @@ fn clear_list(shared: &Shared, id: VehicleId, mission_type: u8) {
 /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:3811-3828, 3842-3859`
 fn wp_total_answered(shared: &Shared, id: VehicleId, total: u16, mission_type: u8) {
     if mission_type == MISSION_TYPE_MISSION
-        && let Ok(mut tables) = shared.params.lock()
+        && let Ok(mut tables) = shared.params.os_lock()
         && let Some(table) = tables.get_mut(&id)
     {
         for name in ["WP_TOTAL", "CMD_TOTAL", "MIS_TOTAL"] {
@@ -2684,12 +2685,12 @@ fn set_wp_filed(request: &Request, finish: mission_points::Finish) -> Option<Fil
 fn file_set_wp(shared: &Shared, id: VehicleId, filed: Option<Filed>) {
     match filed {
         Some(Filed::Fence(seq, item)) => {
-            if let Ok(mut held) = shared.fence_points.lock() {
+            if let Ok(mut held) = shared.fence_points.os_lock() {
                 held.store(id, seq, item);
             }
         }
         Some(Filed::List(list, seq, item)) => {
-            if let Ok(mut held) = shared.mission_points.lock() {
+            if let Ok(mut held) = shared.mission_points.os_lock() {
                 held.store(id, list, seq, item);
             }
         }
@@ -2713,7 +2714,7 @@ fn route_transfer(shared: &Arc<Shared>, id: VehicleId, msg: &MavMessage) -> Opti
         _ => return None,
     };
 
-    let mut transfers = shared.missions.lock().ok()?;
+    let mut transfers = shared.missions.os_lock().ok()?;
 
     let kind = match declared {
         Some(kind) => kind,

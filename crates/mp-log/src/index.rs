@@ -171,7 +171,7 @@ impl Split {
     /// How a log of `len` bytes is split on this machine.
     fn of(len: usize) -> Self {
         let threads =
-            std::thread::available_parallelism().map_or(1, |threads| threads.get().min(8));
+            wasm_thread::available_parallelism().map_or(1, |threads| threads.get().min(8));
         Self {
             pieces: if (Self::PARALLEL_FROM..Self::PARALLEL_TO).contains(&len) {
                 threads
@@ -317,7 +317,7 @@ impl RecordIndex {
         }
         let guess = split.guess(&data);
         let per = bounds.get(1).map_or(len, |second| second.0);
-        let read: std::io::Result<Vec<Piece>> = std::thread::scope(|scope| {
+        let read: std::io::Result<Vec<Piece>> = wasm_thread::scope(|scope| {
             let handles: Vec<_> = data
                 .chunks_mut(per)
                 .zip(&bounds)
@@ -1152,7 +1152,7 @@ fn join(pieces: Vec<(Piece, usize)>) -> Joined {
             .collect();
         places.push((offsets_here, types_here, lines_here));
     }
-    std::thread::scope(|scope| {
+    wasm_thread::scope(|scope| {
         for (((piece, skip), (offsets, types, lines)), (base, first)) in pieces
             .into_iter()
             .zip(places)
@@ -1183,7 +1183,7 @@ fn join(pieces: Vec<(Piece, usize)>) -> Joined {
 /// Walks each piece of `data` in a thread of its own: the first from the start of the log, the
 /// others from their first byte knowing the formats `guess` knows.
 fn walk_pieces(data: &[u8], bounds: &[(usize, usize)], guess: &Walk) -> Vec<Piece> {
-    std::thread::scope(|scope| {
+    wasm_thread::scope(|scope| {
         let handles: Vec<_> = bounds
             .iter()
             .map(|&(start, end)| {
@@ -1465,11 +1465,11 @@ mod tests {
     /// bytes and the index one walk makes of them.
     #[test]
     fn a_log_read_in_pieces_is_indexed_as_one_walk_indexes_it() {
-        let dir = std::env::temp_dir();
+        let dir = mp_os::temp_dir();
         for (name, log) in awkward_logs() {
             let path = dir.join(format!(
                 "mp-log-read-in-pieces-{}-{}.bin",
-                std::process::id(),
+                mp_os::process_id(),
                 name.replace([' ', ','], "-")
             ));
             std::fs::write(&path, &log).unwrap();

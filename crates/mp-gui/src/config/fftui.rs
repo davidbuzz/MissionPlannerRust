@@ -1233,7 +1233,7 @@ impl FftUi {
     pub fn start(&mut self, job: Job) {
         let (send, receive) = std::sync::mpsc::channel();
         let run = job.run;
-        let spawned = std::thread::Builder::new()
+        let spawned = wasm_thread::Builder::new()
             .name("mp-fft".to_owned())
             .spawn(move || {
                 // The receiver may be gone with the window; nothing is owed then.
@@ -2600,7 +2600,7 @@ mod tests {
             if !ui.is_running() {
                 break;
             }
-            std::thread::sleep(std::time::Duration::from_millis(10));
+            wasm_thread::sleep(std::time::Duration::from_millis(10));
         }
         assert_eq!(error, None);
         assert_eq!(ui.graphs().count(), 6);

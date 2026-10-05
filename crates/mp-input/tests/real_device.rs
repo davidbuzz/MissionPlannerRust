@@ -46,8 +46,8 @@
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
 use std::path::Path;
-use std::thread;
 use std::time::Duration;
+use wasm_thread as thread;
 
 use mp_input::{JoystickAxis, MIN_INTERVAL, Mapping, Poll, StickReader};
 

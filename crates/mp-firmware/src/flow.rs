@@ -42,7 +42,7 @@
 
 use std::io::{self, Read, Write};
 use std::path::{Path, PathBuf};
-use std::time::{Duration, Instant};
+use web_time::{Duration, Instant};
 
 use crate::detect::BOOTLOADER_BAUD;
 use crate::detect::{
@@ -478,10 +478,10 @@ pub fn get_file_from_net(
 /// `Path.GetTempFileName()`: a new, empty file in the temporary directory.
 fn temp_file_name(dir: &Path) -> io::Result<PathBuf> {
     std::fs::create_dir_all(dir)?;
-    let pid = std::process::id();
+    let pid = mp_os::process_id();
     for attempt in 0..1000_u32 {
-        let nanos = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
+        let nanos = web_time::SystemTime::now()
+            .duration_since(web_time::UNIX_EPOCH)
             .map_or(0, |since| since.subsec_nanos());
         let path = dir.join(format!("tmp{pid:x}{nanos:x}{attempt:x}.tmp"));
         match std::fs::OpenOptions::new()
@@ -1112,11 +1112,11 @@ where
     O: Fn(&str, u32) -> io::Result<P> + Sync,
     F: Fn(FoundBoard) + Sync,
 {
-    std::thread::scope(|scope| {
+    wasm_thread::scope(|scope| {
         for port in ports {
             let (open, found) = (&open, &found);
             scope.spawn(move || {
-                std::thread::sleep(ARRIVAL_SETTLE);
+                wasm_thread::sleep(ARRIVAL_SETTLE);
                 let Ok(mut serial) = open(port, BOOTLOADER_BAUD) else {
                     return;
                 };

@@ -31,7 +31,7 @@
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::indexing_slicing)]
 
 use std::collections::VecDeque;
-use std::time::{Duration, Instant};
+use web_time::{Duration, Instant};
 
 use mp_ftp::FtpError;
 use mp_ftp::mavftp::testing::FakeVehicle;

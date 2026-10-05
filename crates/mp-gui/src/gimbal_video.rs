@@ -73,7 +73,7 @@ use std::cell::{Cell, RefCell};
 use std::collections::BTreeSet;
 use std::rc::Rc;
 use std::sync::Arc;
-use std::time::{Duration, Instant};
+use web_time::{Duration, Instant};
 
 use gpui::{
     AnyElement, Bounds, Context, FocusHandle, Hsla, KeyDownEvent, KeyUpEvent, Modifiers,

@@ -39,7 +39,7 @@
 
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::time::{Duration, Instant};
+use web_time::{Duration, Instant};
 
 use criterion::{Criterion, black_box, criterion_group};
 use mp_vehicle::{StatePublisher, VehicleState};
@@ -98,7 +98,7 @@ fn gate() {
         .map(|_| {
             let handle = publisher.handle();
             let stop = Arc::clone(&stop);
-            std::thread::spawn(move || {
+            wasm_thread::spawn(move || {
                 let mut times = Vec::with_capacity(1 << 16);
                 let mut seen = 0u64;
                 while !stop.load(Ordering::Relaxed) {
@@ -126,7 +126,7 @@ fn gate() {
         publishes.push(started.elapsed());
         next += Duration::from_millis(1);
         if let Some(wait) = next.checked_duration_since(Instant::now()) {
-            std::thread::sleep(wait);
+            wasm_thread::sleep(wait);
         }
     }
     let allocated = publisher.allocations() - allocations_before;

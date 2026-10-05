@@ -28,7 +28,9 @@
 use std::sync::Arc;
 use std::sync::OnceLock;
 use std::sync::atomic::Ordering;
-use std::time::{Duration, SystemTime};
+// A file's time is std's: this file compares the clock only with files' times. port_clock: keep
+use std::time::SystemTime; // port_clock: keep
+use web_time::Duration;
 
 use crate::srtm::{Fault, Inner, decode_utf8, lock, read_lines};
 
@@ -138,6 +140,7 @@ impl Http for UreqHttp {
         self.get_status(url).map(|(_, body)| body)
     }
 
+    #[cfg(not(target_family = "wasm"))]
     fn get_status(&self, url: &str) -> Result<(u16, Vec<u8>), HttpError> {
         let mut response = self
             .agent
@@ -153,6 +156,12 @@ impl Http for UreqHttp {
             .map(|body| (status, body))
             .map_err(|error| HttpError(format!("{url}: {error}")))
     }
+
+    /// In a web page, through the browser (mp_os::http); its status is the caller's, as above.
+    #[cfg(target_family = "wasm")]
+    fn get_status(&self, url: &str) -> Result<(u16, Vec<u8>), HttpError> {
+        mp_os::http("GET", url, None).map_err(HttpError)
+    }
 }
 
 /// `requestRunner`: the queue thread, until the [`crate::Srtm`] is dropped.
@@ -161,7 +170,7 @@ pub(crate) fn request_runner(inner: &Arc<Inner>) {
     while inner.run.load(Ordering::Acquire) {
         request_step(inner);
         // C#: await Task.Delay(1000) - "never more than 1/s".
-        std::thread::sleep(REQUEST_PAUSE);
+        wasm_thread::sleep(REQUEST_PAUSE);
     }
 }
 

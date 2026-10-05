@@ -65,8 +65,9 @@ use serde_json::Value;
 /// The names §5.1 gives that no crate has yet are in the comment above each row; when one is
 /// created it goes in its row, and until it does `every_crate_has_a_layer` fails.
 const LAYERS: &[(u8, &[&str])] = &[
-    // L0. Not yet: mp-math, mp-time, mp-bus.
-    (0, &["mp-units", "mp-settings"]),
+    // L0. Not yet: mp-math, mp-time, mp-bus. mp-os: the std calls that panic in a web page (the
+    // browser experiment), under everything that makes them.
+    (0, &["mp-units", "mp-settings", "mp-os"]),
         // L1. Not yet: mp-gnss, mp-adsb, mp-cot.
     (1, &["mp-mavlink", "mp-mavlink-dialects", "mp-dronecan"]),
     // L2. Not yet: mp-transport-ble, mp-platform, mp-platform-linux, mp-platform-windows,
@@ -202,6 +203,8 @@ const RENDERER_EXCEPTIONS: &[(&str, &str)] = &[
     ("mp-gui", "gpui_linux"),
     ("mp-gui", "gpui_windows"),
     ("mp-gui", "gpui_macos"),
+    // The web page's, for the browser experiment's build (crates/mp-gui/src/platform.rs).
+    ("mp-gui", "gpui_web"),
 ];
 
 /// The layer of a workspace crate, or `None` if nothing places it.

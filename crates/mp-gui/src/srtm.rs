@@ -158,9 +158,9 @@ mod tests {
         size: usize,
         height: impl Fn(usize, usize) -> i16,
     ) -> std::path::PathBuf {
-        let dir = std::env::temp_dir().join(format!(
+        let dir = mp_os::temp_dir().join(format!(
             "headless-planner-srtm-{test}-{}",
-            std::process::id()
+            mp_os::process_id()
         ));
         std::fs::create_dir_all(&dir).expect("scratch folder");
         let mut bytes = Vec::with_capacity(size * size * 2);

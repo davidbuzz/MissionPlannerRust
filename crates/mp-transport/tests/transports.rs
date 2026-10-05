@@ -366,7 +366,7 @@ fn tcp_round_trips_over_localhost() {
     let listener = TcpListener::bind("127.0.0.1:0").unwrap();
     let port = listener.local_addr().unwrap().port();
 
-    let server = std::thread::spawn(move || {
+    let server = wasm_thread::spawn(move || {
         let (mut stream, _) = listener.accept().unwrap();
         use std::io::{Read, Write};
         let mut buf = [0u8; 16];

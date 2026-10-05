@@ -37,7 +37,7 @@
 
 use std::collections::HashMap;
 use std::sync::Arc;
-use std::time::{Duration, Instant};
+use web_time::{Duration, Instant};
 
 use gpui::{
     App, Bounds, Corners, Hsla, Path, PathBuilder, Pixels, Point, RenderImage, SharedString,

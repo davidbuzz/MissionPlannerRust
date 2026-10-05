@@ -22,7 +22,7 @@
 
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::indexing_slicing)]
 
-use std::time::{Duration, Instant};
+use web_time::{Duration, Instant};
 
 use mp_link::{Link, LinkConfig};
 use mp_mavlink::{Message as _, encode_v2};
@@ -103,7 +103,7 @@ fn wait_for(what: &str, mut check: impl FnMut() -> bool) {
         if check() {
             return;
         }
-        std::thread::sleep(Duration::from_millis(5));
+        wasm_thread::sleep(Duration::from_millis(5));
     }
     panic!("timed out waiting for {what}");
 }
@@ -176,7 +176,7 @@ fn a_moving_aircraft_stays_one_symbol() {
     }
 
     wait_for("the aircraft", || !link.traffic().is_empty());
-    std::thread::sleep(Duration::from_millis(200));
+    wasm_thread::sleep(Duration::from_millis(200));
     assert_eq!(
         link.traffic().len(),
         1,

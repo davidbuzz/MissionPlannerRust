@@ -61,7 +61,7 @@
 use std::collections::BTreeMap;
 use std::hash::{BuildHasher as _, Hasher as _};
 use std::sync::RwLock;
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use web_time::{Duration, SystemTime, UNIX_EPOCH};
 
 use mp_mavlink::{Dialect as _, FieldValue, Frame, INCOMPAT_FLAG_SIGNED, STX_V2, SigningKey};
 use mp_mavlink_dialects::all::{DIALECT, MavMessage, SetupSigning};
@@ -718,13 +718,13 @@ mod tests {
 
     /// Polls until `check` holds, failing rather than hanging.
     fn until(what: &str, check: impl Fn() -> bool) {
-        let deadline = std::time::Instant::now() + Duration::from_secs(5);
+        let deadline = web_time::Instant::now() + Duration::from_secs(5);
         while !check() {
             assert!(
-                std::time::Instant::now() < deadline,
+                web_time::Instant::now() < deadline,
                 "timed out waiting for {what}"
             );
-            std::thread::sleep(Duration::from_millis(1));
+            wasm_thread::sleep(Duration::from_millis(1));
         }
     }
 
@@ -734,7 +734,7 @@ mod tests {
     fn sent_to(vehicle: &mut mp_transport::testing::LoopbackEnd, count: usize) -> Vec<Vec<u8>> {
         use mp_mavlink::Message as _;
         use mp_transport::Transport as _;
-        let deadline = std::time::Instant::now() + Duration::from_secs(5);
+        let deadline = web_time::Instant::now() + Duration::from_secs(5);
         let mut bytes = Vec::new();
         let mut buf = [0u8; 4096];
         loop {
@@ -755,10 +755,10 @@ mod tests {
                 return out;
             }
             assert!(
-                std::time::Instant::now() < deadline,
+                web_time::Instant::now() < deadline,
                 "timed out waiting for {count} frames"
             );
-            std::thread::sleep(Duration::from_millis(1));
+            wasm_thread::sleep(Duration::from_millis(1));
         }
     }
 

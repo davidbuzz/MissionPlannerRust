@@ -290,10 +290,10 @@ impl LogFile {
         let threads = if lines < 1 << 20 {
             1
         } else {
-            std::thread::available_parallelism().map_or(1, |threads| threads.get().min(8))
+            wasm_thread::available_parallelism().map_or(1, |threads| threads.get().min(8))
         };
         let per_thread = lines.div_ceil(threads);
-        let parts: Vec<Vec<Counts>> = std::thread::scope(|scope| {
+        let parts: Vec<Vec<Counts>> = wasm_thread::scope(|scope| {
             let handles: Vec<_> = (0..threads)
                 .map(|part| {
                     let plans = &plans;

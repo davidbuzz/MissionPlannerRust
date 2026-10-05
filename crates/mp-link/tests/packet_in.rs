@@ -24,7 +24,7 @@
 
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
-use std::time::{Duration, Instant};
+use web_time::{Duration, Instant};
 
 use mp_link::testing::{attitude, heartbeat};
 use mp_link::{Link, LinkConfig};
@@ -58,7 +58,7 @@ fn wait_for(link: &Link, done: impl Fn(&mp_vehicle::VehicleState) -> bool) -> St
             return handle;
         }
         assert!(Instant::now() < deadline, "the snapshot never got there");
-        std::thread::sleep(Duration::from_millis(2));
+        wasm_thread::sleep(Duration::from_millis(2));
     }
 }
 
@@ -73,7 +73,7 @@ fn a_stamping_link_puts_the_newest_frames_arrival_in_the_snapshot() {
     assert!(first <= Instant::now());
 
     // A later frame moves the stamp on: the snapshot carries the newest arrival, not the first.
-    std::thread::sleep(Duration::from_millis(20));
+    wasm_thread::sleep(Duration::from_millis(20));
     let resent = Instant::now();
     vehicle.write_all(&attitude(1, 0.25)).unwrap();
     let handle = wait_for(&link, |state| {

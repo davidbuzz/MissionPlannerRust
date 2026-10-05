@@ -27,7 +27,7 @@
 // A CLI prints; that is its job.
 #![allow(clippy::print_stdout, clippy::print_stderr)]
 
-use std::time::{Duration, Instant};
+use web_time::{Duration, Instant};
 
 mod dflog;
 mod fft;
@@ -353,7 +353,7 @@ fn terrain_answer(
     }
     let deadline = Instant::now() + wait;
     while srtm.queued().contains(&tile) && Instant::now() < deadline {
-        std::thread::sleep(Duration::from_millis(100));
+        wasm_thread::sleep(Duration::from_millis(100));
     }
     srtm.get_altitude(lat, lng, mp_terrain::DEFAULT_ZOOM)
 }
@@ -402,7 +402,7 @@ fn watch(url: &str, seconds: Option<u64>) -> std::process::ExitCode {
         {
             break;
         }
-        std::thread::sleep(Duration::from_millis(50));
+        wasm_thread::sleep(Duration::from_millis(50));
 
         for id in link.vehicles() {
             if !announced.contains(&id) {
@@ -482,7 +482,7 @@ fn record(url: &str, path: &str, seconds: Option<u64>) -> std::process::ExitCode
         if deadline.is_some_and(|d| Instant::now() >= d) {
             break;
         }
-        std::thread::sleep(Duration::from_millis(100));
+        wasm_thread::sleep(Duration::from_millis(100));
         if last.elapsed() >= Duration::from_secs(2) {
             last = Instant::now();
             // Both directions, because both are in the file. A count of only what arrived
@@ -516,7 +516,7 @@ fn await_state(
             println!("  {what}: ok");
             return true;
         }
-        std::thread::sleep(Duration::from_millis(100));
+        wasm_thread::sleep(Duration::from_millis(100));
     }
     eprintln!("  {what}: TIMED OUT after {timeout:?}");
     false
@@ -577,7 +577,7 @@ fn send_command(url: &str, command: &str, params: &[String]) -> std::process::Ex
     };
     let deadline = Instant::now() + Duration::from_secs(30);
     while link.primary_vehicle().is_none() && Instant::now() < deadline {
-        std::thread::sleep(Duration::from_millis(100));
+        wasm_thread::sleep(Duration::from_millis(100));
     }
     let Some((id, _)) = link.primary_vehicle() else {
         eprintln!("no vehicle appeared");
@@ -600,7 +600,7 @@ fn send_command(url: &str, command: &str, params: &[String]) -> std::process::Ex
                 println!("no COMMAND_ACK: timed out after the link's retries");
                 return std::process::ExitCode::FAILURE;
             }
-            Some(_) | None => std::thread::sleep(Duration::from_millis(100)),
+            Some(_) | None => wasm_thread::sleep(Duration::from_millis(100)),
         }
     }
     println!("no COMMAND_ACK within 90 s");
@@ -623,7 +623,7 @@ fn fly(url: &str, record_path: Option<&str>) -> std::process::ExitCode {
     // Wait for the vehicle to appear and settle.
     let deadline = Instant::now() + Duration::from_secs(30);
     while link.primary_vehicle().is_none() && Instant::now() < deadline {
-        std::thread::sleep(Duration::from_millis(100));
+        wasm_thread::sleep(Duration::from_millis(100));
     }
     let Some((id, handle)) = link.primary_vehicle() else {
         eprintln!("no vehicle appeared");
@@ -644,13 +644,13 @@ fn fly(url: &str, record_path: Option<&str>) -> std::process::ExitCode {
 
     // Let the EKF settle before asking to arm; ArduPilot refuses otherwise.
     println!("  waiting for the EKF to settle");
-    std::thread::sleep(Duration::from_secs(12));
+    wasm_thread::sleep(Duration::from_secs(12));
 
     // Sent and not waited for, as `setMode` sends it: the mode in the next heartbeat is the answer.
     // `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:4631-4641`
     println!("mode GUIDED");
     link.send(&commands::set_mode(id, commands::copter_mode::GUIDED));
-    std::thread::sleep(Duration::from_millis(500));
+    wasm_thread::sleep(Duration::from_millis(500));
 
     // `doARM`: the command sent again until the vehicle answers it, ten seconds a try.
     println!("arming");
@@ -726,7 +726,7 @@ fn await_request(link: &Link, id: RequestId) -> Option<RequestOutcome> {
         if !link.is_running() {
             return None;
         }
-        std::thread::sleep(Duration::from_millis(5));
+        wasm_thread::sleep(Duration::from_millis(5));
     }
 }
 
@@ -837,7 +837,7 @@ fn logs(url: &str, wanted: Option<u16>, out_dir: &str) -> std::process::ExitCode
 
     let deadline = Instant::now() + Duration::from_secs(20);
     while link.primary_vehicle().is_none() && Instant::now() < deadline {
-        std::thread::sleep(Duration::from_millis(100));
+        wasm_thread::sleep(Duration::from_millis(100));
     }
     let Some((id, _)) = link.primary_vehicle() else {
         eprintln!("no vehicle appeared on {url}");
@@ -851,7 +851,7 @@ fn logs(url: &str, wanted: Option<u16>, out_dir: &str) -> std::process::ExitCode
             eprintln!("the vehicle listed no logs");
             return std::process::ExitCode::FAILURE;
         }
-        std::thread::sleep(Duration::from_millis(100));
+        wasm_thread::sleep(Duration::from_millis(100));
     }
     let listings = link.log_listings();
 
@@ -912,7 +912,7 @@ fn logs(url: &str, wanted: Option<u16>, out_dir: &str) -> std::process::ExitCode
         }
 
         link.nudge_log_download(id);
-        std::thread::sleep(Duration::from_millis(400));
+        wasm_thread::sleep(Duration::from_millis(400));
     }
 }
 
@@ -940,7 +940,7 @@ fn set_param(url: &str, name: &str, value: f32) -> std::process::ExitCode {
 
     let deadline = Instant::now() + Duration::from_secs(20);
     while link.primary_vehicle().is_none() && Instant::now() < deadline {
-        std::thread::sleep(Duration::from_millis(100));
+        wasm_thread::sleep(Duration::from_millis(100));
     }
     let Some((id, _)) = link.primary_vehicle() else {
         eprintln!("no vehicle appeared on {url}");
@@ -995,7 +995,7 @@ fn connect_and_download(url: &str) -> Option<(Link, mp_vehicle::VehicleId, Param
 
     let deadline = Instant::now() + Duration::from_secs(20);
     while link.primary_vehicle().is_none() && Instant::now() < deadline {
-        std::thread::sleep(Duration::from_millis(100));
+        wasm_thread::sleep(Duration::from_millis(100));
     }
     let Some((id, _)) = link.primary_vehicle() else {
         eprintln!("no vehicle appeared on {url}");
@@ -1011,7 +1011,7 @@ fn connect_and_download(url: &str) -> Option<(Link, mp_vehicle::VehicleId, Param
     let mut last_count = 0usize;
     loop {
         let Some(table) = link.params(id) else {
-            std::thread::sleep(Duration::from_millis(200));
+            wasm_thread::sleep(Duration::from_millis(200));
             continue;
         };
         if table.is_complete() {
@@ -1041,7 +1041,7 @@ fn connect_and_download(url: &str) -> Option<(Link, mp_vehicle::VehicleId, Param
             last_count = count;
             last_report = Instant::now();
         }
-        std::thread::sleep(Duration::from_millis(100));
+        wasm_thread::sleep(Duration::from_millis(100));
     }
 
     let Some(table) = link.params(id) else {
@@ -1205,7 +1205,7 @@ fn mission(url: &str, file: Option<&str>) -> std::process::ExitCode {
 
     let deadline = Instant::now() + Duration::from_secs(20);
     while link.primary_vehicle().is_none() && Instant::now() < deadline {
-        std::thread::sleep(Duration::from_millis(100));
+        wasm_thread::sleep(Duration::from_millis(100));
     }
     let Some((id, _)) = link.primary_vehicle() else {
         eprintln!("no vehicle appeared on {url}");
@@ -1219,7 +1219,7 @@ fn mission(url: &str, file: Option<&str>) -> std::process::ExitCode {
             .primary_vehicle()
             .is_none_or(|(_, handle)| handle.load().position.is_none())
     {
-        std::thread::sleep(Duration::from_millis(200));
+        wasm_thread::sleep(Duration::from_millis(200));
     }
 
     // Upload first, if a file was given.
@@ -1305,7 +1305,7 @@ fn await_transfer(link: &Link, id: VehicleId, what: &str) -> bool {
     let mut last_report = Instant::now();
     loop {
         let Some(transfer) = link.mission_transfer(id) else {
-            std::thread::sleep(Duration::from_millis(100));
+            wasm_thread::sleep(Duration::from_millis(100));
             if Instant::now() >= deadline {
                 eprintln!("{what}: never started");
                 return false;
@@ -1331,7 +1331,7 @@ fn await_transfer(link: &Link, id: VehicleId, what: &str) -> bool {
             println!("  {what}: {:.0}%", transfer.progress() * 100.0);
             last_report = Instant::now();
         }
-        std::thread::sleep(Duration::from_millis(50));
+        wasm_thread::sleep(Duration::from_millis(50));
     }
 }
 
@@ -1359,7 +1359,7 @@ fn survey(url: &str, out_path: &str, spacing: Option<f64>) -> std::process::Exit
         if let Some((_, handle)) = link.primary_vehicle() {
             centre = handle.load().position;
         }
-        std::thread::sleep(Duration::from_millis(200));
+        wasm_thread::sleep(Duration::from_millis(200));
     }
     let Some(centre) = centre else {
         eprintln!("no position from {url}; a survey needs somewhere to be");
@@ -2148,7 +2148,7 @@ mod retries {
 
     use std::sync::Arc;
     use std::sync::atomic::{AtomicBool, Ordering};
-    use std::time::{Duration, Instant};
+    use web_time::{Duration, Instant};
 
     use mp_link::requests::MAV_RESULT_ACCEPTED;
     use mp_link::{Link, LinkConfig, ProtocolTimeouts, commands};
@@ -2190,8 +2190,8 @@ mod retries {
         mut end: LoopbackEnd,
         stop: Arc<AtomicBool>,
         mut script: impl FnMut(&MavMessage) -> Option<MavMessage> + Send + 'static,
-    ) -> std::thread::JoinHandle<Vec<MavMessage>> {
-        std::thread::spawn(move || {
+    ) -> wasm_thread::JoinHandle<Vec<MavMessage>> {
+        wasm_thread::spawn(move || {
             let mut seq = 0u8;
             let mut send = |end: &mut LoopbackEnd, message: &MavMessage| {
                 end.write_all(&frame(seq, message)).unwrap();
@@ -2214,7 +2214,7 @@ mod retries {
             while !stop.load(Ordering::Acquire) {
                 let n = end.read(&mut buf).unwrap_or(0);
                 if n == 0 {
-                    std::thread::sleep(Duration::from_millis(1));
+                    wasm_thread::sleep(Duration::from_millis(1));
                     continue;
                 }
                 let mut fresh = Vec::new();
@@ -2247,7 +2247,7 @@ mod retries {
         let deadline = Instant::now() + Duration::from_secs(5);
         while link.vehicle(VEHICLE).is_none() {
             assert!(Instant::now() < deadline, "the vehicle was never heard");
-            std::thread::sleep(Duration::from_millis(1));
+            wasm_thread::sleep(Duration::from_millis(1));
         }
         link
     }
@@ -2327,7 +2327,7 @@ mod retries {
                 Instant::now() < deadline,
                 "the streams were never asked for"
             );
-            std::thread::sleep(Duration::from_millis(1));
+            wasm_thread::sleep(Duration::from_millis(1));
         }
         stop.store(true, Ordering::Release);
         let heard = script.join().unwrap();
@@ -2467,9 +2467,9 @@ mod terrain {
     }
 
     fn scratch(test: &str) -> std::path::PathBuf {
-        let dir = std::env::temp_dir().join(format!(
+        let dir = mp_os::temp_dir().join(format!(
             "headless-planner-terrain-{test}-{}",
-            std::process::id()
+            mp_os::process_id()
         ));
         let _ = std::fs::remove_dir_all(&dir);
         dir

@@ -38,7 +38,7 @@
 #![allow(unreachable_pub)]
 
 use std::collections::BTreeSet;
-use std::time::Instant;
+use web_time::Instant;
 
 use gpui::{AnyElement, Context, Window, div, prelude::*, px, rgb};
 use mp_ftp::logs::LogListing;

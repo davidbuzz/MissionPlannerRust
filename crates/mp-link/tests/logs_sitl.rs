@@ -29,7 +29,7 @@
 
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::indexing_slicing)]
 
-use std::time::{Duration, Instant};
+use web_time::{Duration, Instant};
 
 use mp_link::{Link, LinkConfig};
 use mp_vehicle::VehicleId;
@@ -38,7 +38,7 @@ fn connect() -> (Link, VehicleId) {
     let link = Link::connect("tcp:127.0.0.1:5760", LinkConfig::default()).expect("SITL on 5760");
     let deadline = Instant::now() + Duration::from_secs(20);
     while link.primary_vehicle().is_none() && Instant::now() < deadline {
-        std::thread::sleep(Duration::from_millis(100));
+        wasm_thread::sleep(Duration::from_millis(100));
     }
     let (id, _) = link.primary_vehicle().expect("a vehicle");
     (link, id)
@@ -56,7 +56,7 @@ fn the_vehicle_lists_the_logs_it_holds() {
             Instant::now() < deadline,
             "the vehicle listed no logs in 30 seconds"
         );
-        std::thread::sleep(Duration::from_millis(100));
+        wasm_thread::sleep(Duration::from_millis(100));
     }
 
     let listings = link.log_listings();
@@ -76,7 +76,7 @@ fn a_log_downloads_and_assembles_to_its_declared_size() {
     let deadline = Instant::now() + Duration::from_secs(30);
     while link.log_listings().is_empty() {
         assert!(Instant::now() < deadline, "no logs were listed");
-        std::thread::sleep(Duration::from_millis(100));
+        wasm_thread::sleep(Duration::from_millis(100));
     }
 
     // The smallest, because this runs in a test suite and a long log takes minutes over the
@@ -124,6 +124,6 @@ fn a_log_downloads_and_assembles_to_its_declared_size() {
             return;
         }
         link.nudge_log_download(id);
-        std::thread::sleep(Duration::from_millis(400));
+        wasm_thread::sleep(Duration::from_millis(400));
     }
 }

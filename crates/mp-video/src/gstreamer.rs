@@ -39,12 +39,13 @@
 //! ([`crate::multipart`]). Without an `appsink name=outsink` the pipeline plays as it is and
 //! hands the HUD nothing, as the C#'s waits for its end.
 
+use mp_os::Lock as _;
 use std::ffi::OsString;
 use std::io::{BufRead as _, BufReader};
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
 use std::sync::{Arc, Mutex, PoisonError};
-use std::thread::JoinHandle;
+use wasm_thread::JoinHandle;
 
 use crate::{Feed, Frame, VideoError, convert, multipart};
 
@@ -206,7 +207,7 @@ pub fn search_dirs(
     data_dir: Option<&Path>,
     drives: &[PathBuf],
 ) -> (Vec<PathBuf>, Vec<PathBuf>) {
-    let on_path = path.map_or_else(Vec::new, |path| std::env::split_paths(path).collect());
+    let on_path = path.map_or_else(Vec::new, |path| mp_os::split_paths(path).collect());
     let mut dirs = vec![
         PathBuf::from("/usr/lib/x86_64-linux-gnu"),
         PathBuf::from("/usr/lib/arm-linux-gnueabihf"),
@@ -381,8 +382,7 @@ impl GStreamer {
             .stderr(Stdio::piped());
         if cfg!(windows) {
             let path = std::env::var_os("PATH");
-            for (name, value) in
-                runtime_environment(gst_launch, path.as_ref(), &std::env::temp_dir())
+            for (name, value) in runtime_environment(gst_launch, path.as_ref(), &mp_os::temp_dir())
             {
                 command.env(name, value);
             }
@@ -410,7 +410,7 @@ impl GStreamer {
         let spawned = {
             let feed = Arc::clone(&feed);
             let child = Arc::clone(&child);
-            std::thread::Builder::new()
+            wasm_thread::Builder::new()
                 .name("gstreamer".to_owned())
                 .spawn(move || play(stdout, stderr, &feed, &child))
         };
@@ -497,7 +497,11 @@ impl Drop for GStreamer {
 
 /// Ends the launcher, if it has not ended, and reaps it.
 fn kill(child: &Mutex<Option<Child>>) {
-    if let Some(mut child) = child.lock().unwrap_or_else(PoisonError::into_inner).take() {
+    if let Some(mut child) = child
+        .os_lock()
+        .unwrap_or_else(PoisonError::into_inner)
+        .take()
+    {
         let _ = child.kill();
         let _ = child.wait();
     }
@@ -514,7 +518,7 @@ fn play(
 ) {
     let said = {
         let feed = Arc::clone(feed);
-        std::thread::Builder::new()
+        wasm_thread::Builder::new()
             .name("gstreamer-stderr".to_owned())
             .spawn(move || {
                 let mut noted = false;
@@ -631,7 +635,7 @@ pub fn download_gstreamer(
 mod tests {
     #![allow(clippy::unwrap_used, clippy::expect_used, clippy::indexing_slicing)]
 
-    use std::time::{Duration, Instant};
+    use web_time::{Duration, Instant};
 
     use super::*;
 
@@ -727,7 +731,7 @@ mod tests {
     }
 
     fn scratch(name: &str) -> PathBuf {
-        let dir = std::env::temp_dir().join(format!("mp-video-gst-{name}-{}", std::process::id()));
+        let dir = mp_os::temp_dir().join(format!("mp-video-gst-{name}-{}", mp_os::process_id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
         dir
@@ -910,7 +914,7 @@ mod tests {
                 gstreamer.error(),
                 gstreamer.is_running()
             );
-            std::thread::sleep(Duration::from_millis(5));
+            wasm_thread::sleep(Duration::from_millis(5));
         }
     }
 
@@ -1000,7 +1004,7 @@ mod tests {
         let deadline = Instant::now() + Duration::from_secs(20);
         while gstreamer.is_running() {
             assert!(Instant::now() < deadline);
-            std::thread::sleep(Duration::from_millis(5));
+            wasm_thread::sleep(Duration::from_millis(5));
         }
         assert_eq!(
             gstreamer.error().as_deref(),

@@ -39,7 +39,7 @@
 
 use std::io::{Read, Write};
 use std::net::{TcpListener, TcpStream};
-use std::time::{Duration, Instant};
+use web_time::{Duration, Instant};
 
 use criterion::{Criterion, criterion_group};
 use mp_transport::Transport;
@@ -100,7 +100,7 @@ fn p50(times: &mut [Duration]) -> Duration {
 fn tcp_far_end() -> u16 {
     let listener = TcpListener::bind("127.0.0.1:0").unwrap();
     let port = listener.local_addr().unwrap().port();
-    std::thread::spawn(move || {
+    wasm_thread::spawn(move || {
         for stream in listener.incoming() {
             let Ok(mut stream) = stream else { break };
             stream.set_nodelay(true).ok();
@@ -147,7 +147,7 @@ mod pty {
         };
         let path = slave.name()?;
         master.set_timeout(Duration::from_secs(30)).ok();
-        std::thread::spawn(move || {
+        wasm_thread::spawn(move || {
             let mut poke = [0u8; 1];
             while master.read(&mut poke).map(|n| n > 0).unwrap_or(false) {
                 if master.write_all(&[0x5A; ANSWER]).is_err() {

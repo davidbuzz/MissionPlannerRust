@@ -201,7 +201,7 @@ fn a_handshake_with_the_wrong_answer_is_refused() {
 
     // A server that is not a websocket server at all.
     let listener2 = listener.try_clone().unwrap();
-    let plain = std::thread::spawn(move || {
+    let plain = wasm_thread::spawn(move || {
         let (mut stream, _) = listener2.accept().unwrap();
         common::read_until(&mut stream, b"\r\n\r\n");
         stream

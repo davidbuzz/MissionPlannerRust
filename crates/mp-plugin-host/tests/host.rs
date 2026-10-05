@@ -26,7 +26,7 @@
 mod common;
 
 use std::path::PathBuf;
-use std::time::{Duration, Instant};
+use web_time::{Duration, Instant};
 
 use common::{Scripted, load, load_with, path};
 use mp_plugin_host::{
@@ -65,7 +65,7 @@ fn pump(host: &mut PluginHost, mut done: impl FnMut(&[Request]) -> bool) -> Vec<
         if done(&seen) {
             break;
         }
-        std::thread::sleep(Duration::from_millis(5));
+        wasm_thread::sleep(Duration::from_millis(5));
     }
     seen
 }
@@ -246,7 +246,7 @@ fn loaded_false_is_idle() {
                 _ => {}
             }
         }
-        std::thread::sleep(Duration::from_millis(5));
+        wasm_thread::sleep(Duration::from_millis(5));
     }
     assert_eq!(host.plugins()[0].state, PluginState::Idle);
     assert_eq!(statuses, 0);
@@ -389,7 +389,7 @@ fn the_thread_loops_at_the_rate() {
             None => assert!(Instant::now() < deadline, "the plugin never looped"),
             Some(_) => {}
         }
-        std::thread::sleep(Duration::from_millis(5));
+        wasm_thread::sleep(Duration::from_millis(5));
     }
     // Never faster than its rate: 16 at most. As fast as the rate where the machine wakes a
     // sleeping thread on time: 8 at least; on one that does not, it still loops, and the rate is
@@ -399,7 +399,7 @@ fn the_thread_loops_at_the_rate() {
         .map(|_| {
             let asked = Duration::from_millis(5);
             let slept = Instant::now();
-            std::thread::sleep(asked);
+            wasm_thread::sleep(asked);
             slept.elapsed().saturating_sub(asked)
         })
         .max()

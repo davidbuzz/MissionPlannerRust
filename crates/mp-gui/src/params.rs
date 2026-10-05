@@ -36,7 +36,7 @@ use std::cell::RefCell;
 use std::collections::VecDeque;
 use std::ops::Range;
 use std::sync::Arc;
-use std::time::Instant;
+use web_time::Instant;
 
 use gpui::{AnyElement, Context, div, prelude::*, px, rgb};
 use mp_link::RequestId;

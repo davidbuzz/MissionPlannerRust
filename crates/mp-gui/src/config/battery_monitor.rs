@@ -77,7 +77,7 @@
 #![allow(unreachable_pub)]
 
 use std::collections::VecDeque;
-use std::time::{Duration, Instant};
+use web_time::{Duration, Instant};
 
 use gpui::{
     AnyElement, Context, Div, FocusHandle, KeyDownEvent, SharedString, Window, div, prelude::*, px,
@@ -3573,7 +3573,7 @@ mod tests {
     #[test]
     fn a_speech_change_is_saved_with_config_xml_and_comes_back() {
         let dir =
-            std::env::temp_dir().join(format!("mp-gui-battery-speech-{}", std::process::id()));
+            mp_os::temp_dir().join(format!("mp-gui-battery-speech-{}", mp_os::process_id()));
         let _ = std::fs::remove_dir_all(&dir);
         let path = dir.join("MissionPlannerRust").join("config.xml");
         let mut settings = Persisted::at(Some(path.clone()));

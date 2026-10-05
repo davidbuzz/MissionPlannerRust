@@ -52,9 +52,9 @@ fn lf(bytes: Vec<u8>) -> Vec<u8> {
 
 /// A fresh directory for one test.
 fn scratch(test: &str) -> PathBuf {
-    let dir = std::env::temp_dir().join(format!(
+    let dir = mp_os::temp_dir().join(format!(
         "headless-planner-log-{test}-{}",
-        std::process::id()
+        mp_os::process_id()
     ));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).unwrap();
@@ -75,7 +75,7 @@ fn headless_planner(args: &[&Path]) -> std::process::Output {
         // directory that does not exist, with no C# directory beside it, imports nothing.
         .env(
             "XDG_DATA_HOME",
-            std::env::temp_dir().join(format!("headless-planner-log-data-{}", std::process::id())),
+            mp_os::temp_dir().join(format!("headless-planner-log-data-{}", mp_os::process_id())),
         )
         .output()
         .unwrap()

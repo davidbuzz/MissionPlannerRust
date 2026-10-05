@@ -48,7 +48,7 @@
 use std::fs::File;
 use std::io::{BufWriter, Write as _};
 use std::path::{Path, PathBuf};
-use std::time::{Duration, Instant};
+use web_time::{Duration, Instant};
 
 use gpui::{AnyElement, Context, SharedString, Window, div, prelude::*, px, rgb};
 use mp_chart::{Series, auto_range};
@@ -999,7 +999,7 @@ mod tests {
     /// `ax` to `gz`; an empty name is the dialog cancelled.
     #[test]
     fn save_csv_names_the_file_and_the_samples_fill_it() {
-        let dir = std::env::temp_dir().join(format!("mp-raw-sensor-{}", std::process::id()));
+        let dir = mp_os::temp_dir().join(format!("mp-raw-sensor-{}", mp_os::process_id()));
         std::fs::create_dir_all(&dir).unwrap();
         let mut raw = RawSensor::new();
         raw.open(true).unwrap();

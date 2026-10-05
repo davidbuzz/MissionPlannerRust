@@ -87,8 +87,8 @@ pub fn frames() -> u64 {
 /// where it does not. It has to be able to report a hang, so it must not share the machinery that
 /// might be hung.
 pub fn watch() {
-    std::thread::spawn(|| {
-        let started = std::time::Instant::now();
+    wasm_thread::spawn(|| {
+        let started = web_time::Instant::now();
         loop {
             let painted = frames();
             if painted >= REQUIRED_FRAMES {
@@ -106,7 +106,7 @@ pub fn watch() {
                 );
                 std::process::exit(1);
             }
-            std::thread::sleep(Duration::from_millis(50));
+            wasm_thread::sleep(Duration::from_millis(50));
         }
     });
 }

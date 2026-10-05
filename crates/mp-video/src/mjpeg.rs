@@ -27,11 +27,12 @@
 //! `TcpStream` - the answer to one is never chunked - so an `https://` URL is not read; an
 //! MJPEG server on a camera or a companion computer serves plain HTTP.
 
+use mp_os::Lock as _;
 use std::io::{BufReader, Write as _};
 use std::net::{Shutdown, TcpStream, ToSocketAddrs};
 use std::sync::{Arc, Mutex, PoisonError};
-use std::thread::JoinHandle;
 use std::time::Duration;
+use wasm_thread::JoinHandle;
 
 use crate::{Feed, Frame, VideoError, convert, multipart};
 
@@ -74,7 +75,7 @@ impl CaptureMjpeg {
             let feed = Arc::clone(&feed);
             let socket = Arc::clone(&socket);
             let url = url.to_owned();
-            std::thread::Builder::new()
+            wasm_thread::Builder::new()
                 .name("mjpg stream reader".to_owned())
                 .spawn(move || get_url(&url, &feed, &socket))
                 .map_err(|why| VideoError::Device(why.to_string()))?
@@ -95,7 +96,7 @@ impl CaptureMjpeg {
         self.feed.tell_stop();
         if let Some(socket) = self
             .socket
-            .lock()
+            .os_lock()
             .unwrap_or_else(PoisonError::into_inner)
             .as_ref()
         {
@@ -152,7 +153,7 @@ fn get_url(url: &str, feed: &Feed, socket: &Mutex<Option<TcpStream>>) {
     while !feed.stopping() {
         match connect(url) {
             Ok((stream, mut reader)) => {
-                *socket.lock().unwrap_or_else(PoisonError::into_inner) = Some(stream);
+                *socket.os_lock().unwrap_or_else(PoisonError::into_inner) = Some(stream);
                 // Stopped while connecting: the shutdown missed this socket.
                 if feed.stopping() {
                     break;
@@ -178,7 +179,7 @@ fn get_url(url: &str, feed: &Feed, socket: &Mutex<Option<TcpStream>>) {
             Err(why) => feed.note(why),
         }
         if !feed.stopping() {
-            std::thread::sleep(RETRY_PAUSE);
+            wasm_thread::sleep(RETRY_PAUSE);
         }
     }
 }
@@ -250,7 +251,7 @@ mod tests {
 
     use std::io::Read as _;
     use std::net::TcpListener;
-    use std::time::Instant;
+    use web_time::Instant;
 
     use super::*;
 
@@ -284,10 +285,10 @@ mod tests {
         connections: usize,
         frames: usize,
         hold: Duration,
-    ) -> (u16, std::thread::JoinHandle<Vec<String>>) {
+    ) -> (u16, wasm_thread::JoinHandle<Vec<String>>) {
         let listener = TcpListener::bind("127.0.0.1:0").unwrap();
         let port = listener.local_addr().unwrap().port();
-        let server = std::thread::spawn(move || {
+        let server = wasm_thread::spawn(move || {
             let mut requests = Vec::new();
             for _ in 0..connections {
                 let (mut client, _) = listener.accept().unwrap();
@@ -309,7 +310,7 @@ mod tests {
                     client.write_all(&picture).unwrap();
                     client.write_all(b"\r\n").unwrap();
                 }
-                std::thread::sleep(hold);
+                wasm_thread::sleep(hold);
             }
             requests
         });
@@ -325,7 +326,7 @@ mod tests {
         let deadline = Instant::now() + Duration::from_secs(10);
         while capture.frames() < 6 {
             assert!(Instant::now() < deadline, "{capture:?}");
-            std::thread::sleep(Duration::from_millis(5));
+            wasm_thread::sleep(Duration::from_millis(5));
         }
         let requests = server.join().unwrap();
         assert_eq!(requests.len(), 2);
@@ -350,7 +351,7 @@ mod tests {
                 break frame;
             }
             assert!(Instant::now() < deadline, "{capture:?}");
-            std::thread::sleep(Duration::from_millis(2));
+            wasm_thread::sleep(Duration::from_millis(2));
         };
         assert_eq!((frame.width, frame.height), (32, 16));
         let pixel = &frame.rgba[..4];
@@ -372,7 +373,7 @@ mod tests {
         let deadline = Instant::now() + Duration::from_secs(10);
         while capture.error().is_none() {
             assert!(Instant::now() < deadline);
-            std::thread::sleep(Duration::from_millis(5));
+            wasm_thread::sleep(Duration::from_millis(5));
         }
         assert!(capture.is_running());
         assert_eq!(capture.frames(), 0);

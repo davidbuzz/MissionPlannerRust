@@ -35,7 +35,7 @@
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::indexing_slicing)]
 
 use std::collections::{BTreeMap, VecDeque};
-use std::time::{Duration, Instant};
+use web_time::{Duration, Instant};
 
 use mp_link::mission_transfer::TransferState;
 use mp_link::param_download::ParamDownloadState;
@@ -137,7 +137,7 @@ impl Swarm {
         let deadline = Instant::now() + window;
         while Instant::now() < deadline {
             self.pump();
-            std::thread::sleep(Duration::from_millis(1));
+            wasm_thread::sleep(Duration::from_millis(1));
         }
         self.pump();
         self.inbox.drain(..).collect()
@@ -210,7 +210,7 @@ fn wait_for(what: &str, mut check: impl FnMut() -> bool) {
     let deadline = Instant::now() + HUNG;
     while !check() {
         assert!(Instant::now() < deadline, "timed out waiting for {what}");
-        std::thread::sleep(Duration::from_millis(1));
+        wasm_thread::sleep(Duration::from_millis(1));
     }
 }
 
@@ -393,7 +393,7 @@ fn fifty_vehicles_through_one_link_are_routed_apart() {
     // The same command acknowledged by its neighbour, and by its own companion computer.
     swarm.send(VehicleId::new(36, 1), &ack(4));
     swarm.send(VehicleId::new(30, COMPANION), &ack(4));
-    std::thread::sleep(Duration::from_millis(20));
+    wasm_thread::sleep(Duration::from_millis(20));
     assert_eq!(
         link.request(id).unwrap().outcome(),
         None,
@@ -449,7 +449,7 @@ fn fifty_vehicles_through_one_link_are_routed_apart() {
         })
     });
     swarm.send(VehicleId::new(26, 1), &param("RTL_ALT", 3000.0, 0, 1));
-    std::thread::sleep(Duration::from_millis(20));
+    wasm_thread::sleep(Duration::from_millis(20));
     assert_eq!(link.request(set).unwrap().outcome(), None);
     swarm.send(set_on, &param("RTL_ALT", 3000.0, 0, 1));
     wait_for("the echo", || {
@@ -564,7 +564,7 @@ fn fifty_vehicles_through_one_link_are_routed_apart() {
                 _ => {}
             }
         }
-        std::thread::sleep(Duration::from_millis(1));
+        wasm_thread::sleep(Duration::from_millis(1));
     }
     let transfer = link.mission_transfer(holding).unwrap();
     assert_eq!(transfer.state(), &TransferState::Complete);

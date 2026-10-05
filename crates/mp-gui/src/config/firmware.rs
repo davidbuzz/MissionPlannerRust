@@ -75,7 +75,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{Receiver, Sender, TryRecvError, channel};
-use std::time::{Duration, Instant};
+use web_time::{Duration, Instant};
 
 use gpui::{
     AnyElement, Context, Div, FocusHandle, KeyDownEvent, MouseButton, SharedString, Window, div,
@@ -558,10 +558,10 @@ const REBOOT_WAITS: RebootWaits = RebootWaits {
 /// `// C#: Utilities/Firmware.cs:797-837; ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:821-826, 1153-1203, 2553-2559, 2591-2618, 2717, 2758-2763`
 fn reboot_to_bootloader(
     link: &mp_link::Link,
-    started: std::time::Instant,
+    started: web_time::Instant,
     waits: RebootWaits,
 ) -> LinkReboot {
-    use std::time::{Duration, Instant};
+    use web_time::{Duration, Instant};
     let poll = Duration::from_millis(10);
     // `MainV2.comPort.getHeartBeat().Length > 0`, else "No HeartBeat found".
     let first = started + waits.heartbeat;
@@ -572,13 +572,13 @@ fn reboot_to_bootloader(
         if Instant::now() >= first {
             return LinkReboot::NoHeartbeat;
         }
-        std::thread::sleep(poll);
+        wasm_thread::sleep(poll);
     };
     // `doReboot(true, false)`: `getHeartBeat` again, the heartbeat after the one seen.
     let seen = handle.load().heartbeats;
     let again = Instant::now() + waits.heartbeat;
     while handle.load().heartbeats <= seen && Instant::now() < again {
-        std::thread::sleep(poll);
+        wasm_thread::sleep(poll);
     }
     // `if (MAV.sysid != 0 && MAV.compid != 0)`: 3 twice, then 1 twice.
     if id.sysid != 0 && id.compid != 0 {
@@ -600,7 +600,7 @@ fn reboot_to_bootloader(
             && Instant::now() < written
             && link.request(request).is_none_or(|r| r.outcome().is_none())
         {
-            std::thread::sleep(Duration::from_millis(1));
+            wasm_thread::sleep(Duration::from_millis(1));
         }
     }
     if started.elapsed() <= waits.window {
@@ -645,7 +645,7 @@ impl FlashHost for SerialHost {
         if !self.is_serial() {
             return LinkReboot::NotSerial;
         }
-        let started = std::time::Instant::now();
+        let started = web_time::Instant::now();
         let url = format!("serial:{}:{}", self.comport, self.baud);
         let Ok(link) = mp_link::Link::connect(&url, mp_link::LinkConfig::default()) else {
             return LinkReboot::NoHeartbeat;
@@ -655,11 +655,11 @@ impl FlashHost for SerialHost {
         drop(link);
         reached
     }
-    fn now(&mut self) -> std::time::Instant {
-        std::time::Instant::now()
+    fn now(&mut self) -> web_time::Instant {
+        web_time::Instant::now()
     }
     fn sleep(&mut self, duration: std::time::Duration) {
-        std::thread::sleep(duration);
+        wasm_thread::sleep(duration);
     }
 }
 
@@ -681,7 +681,7 @@ impl Worker {
         let (said, heard) = channel();
         let (answer, answers) = channel();
         let done = said.clone();
-        std::thread::Builder::new()
+        wasm_thread::Builder::new()
             .name(name.to_owned())
             .spawn(move || {
                 let mut channel = Channel { said, answers };
@@ -756,8 +756,8 @@ impl Machine {
         Self {
             fetch: manifest::fetcher(),
             user_data: mp_settings::user_data_directory()
-                .unwrap_or_else(|| std::env::temp_dir().join("MissionPlannerRust")),
-            temp_dir: std::env::temp_dir(),
+                .unwrap_or_else(|| mp_os::temp_dir().join("MissionPlannerRust")),
+            temp_dir: mp_os::temp_dir(),
             comport: std::env::var(PORT_ENV)
                 .unwrap_or_else(|_| settings.get("comport").unwrap_or_default().to_owned()),
             baud: settings.baud().to_owned(),
@@ -1156,12 +1156,12 @@ impl Watcher {
         let stop = Arc::new(AtomicBool::new(false));
         let stopped = Arc::clone(&stop);
         let (sender, arrivals) = channel();
-        std::thread::Builder::new()
+        wasm_thread::Builder::new()
             .name("mp-firmware-ports".to_owned())
             .spawn(move || {
                 let mut seen = enumerate();
                 loop {
-                    std::thread::sleep(every);
+                    wasm_thread::sleep(every);
                     if stopped.load(Ordering::Relaxed) {
                         return;
                     }
@@ -1373,7 +1373,7 @@ impl InstallFirmware {
         }
         let found = self.found_sender.clone();
         // `Task.Run(() => Parallel.ForEach(SerialPort.GetPortNames(), ...))`.
-        let _ = std::thread::Builder::new()
+        let _ = wasm_thread::Builder::new()
             .name("mp-firmware-arrival".to_owned())
             .spawn(move || {
                 flow::probe_arrival(&ports, open, |board| {
@@ -1409,7 +1409,7 @@ impl InstallFirmware {
             return;
         }
         let (sender, receiver) = channel();
-        let started = std::thread::Builder::new()
+        let started = wasm_thread::Builder::new()
             .name("mp-firmware-manifest".to_owned())
             .spawn(move || {
                 let mut held = None;
@@ -3196,6 +3196,8 @@ impl MissionPlanner {
 
 #[cfg(test)]
 mod tests {
+    use mp_os::RecvTimeout as _;
+    use mp_os::Lock as _;
     use super::*;
 
     fn fixture() -> Manifest {
@@ -3662,7 +3664,7 @@ mod tests {
             move || {
                 calls.fetch_add(1, Ordering::SeqCst);
                 lists
-                    .lock()
+                    .os_lock()
                     .expect("the lists")
                     .pop_front()
                     .unwrap_or_else(|| ports(&["/dev/ttyS0", "/dev/ttyACM0"]))
@@ -3673,19 +3675,19 @@ mod tests {
         let watcher = page.watcher.as_ref().expect("the thread");
         let arrival = watcher
             .arrivals
-            .recv_timeout(Duration::from_secs(5))
+            .os_recv_timeout(Duration::from_secs(5))
             .expect("the port back is an arrival");
         assert_eq!(arrival, ["/dev/ttyS0", "/dev/ttyACM0"]);
         assert!(
             watcher
                 .arrivals
-                .recv_timeout(Duration::from_millis(100))
+                .os_recv_timeout(Duration::from_millis(100))
                 .is_err(),
             "the same ports again, or one fewer, are none"
         );
 
         // The page takes the latest arrival, once, for the probe.
-        lists.lock().expect("the lists").extend([
+        lists.os_lock().expect("the lists").extend([
             ports(&["/dev/ttyS0"]),
             ports(&["/dev/ttyS0", "/dev/ttyUSB0"]),
         ]);
@@ -3695,9 +3697,9 @@ mod tests {
         // Deactivate: the thread stops, and nothing more is heard.
         page.close();
         assert!(page.watcher.is_none());
-        std::thread::sleep(Duration::from_millis(50));
+        wasm_thread::sleep(Duration::from_millis(50));
         let after = calls.load(Ordering::SeqCst);
-        std::thread::sleep(Duration::from_millis(50));
+        wasm_thread::sleep(Duration::from_millis(50));
         assert_eq!(calls.load(Ordering::SeqCst), after, "no more enumerations");
         assert!(page.hear_arrival().is_none());
     }
@@ -3736,7 +3738,7 @@ mod tests {
         };
         page.flashdone.store(true, Ordering::Relaxed);
         page.probe(ports.clone(), open.clone());
-        std::thread::sleep(Duration::from_millis(100));
+        wasm_thread::sleep(Duration::from_millis(100));
         assert_eq!(
             opened.load(Ordering::SeqCst),
             0,
@@ -3829,7 +3831,7 @@ mod tests {
         let left = Running::new(&page.flows);
         page.worker = None;
         page.probe(vec!["/dev/ttyACM0".to_owned()], counting(&opened));
-        std::thread::sleep(Duration::from_millis(100));
+        wasm_thread::sleep(Duration::from_millis(100));
         assert_eq!(
             opened.load(Ordering::SeqCst),
             0,
@@ -3840,7 +3842,7 @@ mod tests {
         let until = Instant::now() + Duration::from_secs(5);
         while opened.load(Ordering::SeqCst) == 0 {
             assert!(Instant::now() < until, "not probed once the flash ended");
-            std::thread::sleep(Duration::from_millis(5));
+            wasm_thread::sleep(Duration::from_millis(5));
         }
     }
 
@@ -3870,14 +3872,14 @@ mod tests {
         let until = Instant::now() + Duration::from_secs(5);
         while LOOKS.load(Ordering::SeqCst) == 0 {
             assert!(Instant::now() < until, "the watcher never looked at the ports");
-            std::thread::sleep(Duration::from_millis(1));
+            wasm_thread::sleep(Duration::from_millis(1));
         }
         PLUGGED.store(true, Ordering::SeqCst);
         let until = Instant::now() + Duration::from_secs(5);
         while page.arrivals == 0 {
             assert!(Instant::now() < until, "the arrival was never heard");
             page.tick(true);
-            std::thread::sleep(Duration::from_millis(20));
+            wasm_thread::sleep(Duration::from_millis(20));
         }
         assert_eq!(page.arrivals, 1);
         assert_eq!(page.detected_board_id(), None, "nothing there to answer");
@@ -3976,9 +3978,9 @@ mod tests {
         // A second request while one is under way starts nothing.
         page.fetch_from(Box::new(manifest::Http));
         assert_eq!(page.fetches, 1);
-        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(20);
-        while page.receiver.is_some() && std::time::Instant::now() < deadline {
-            std::thread::sleep(std::time::Duration::from_millis(10));
+        let deadline = web_time::Instant::now() + std::time::Duration::from_secs(20);
+        while page.receiver.is_some() && web_time::Instant::now() < deadline {
+            wasm_thread::sleep(std::time::Duration::from_millis(10));
             page.tick(true);
         }
         assert_eq!(page.manifest_state(), "loaded");
@@ -4010,7 +4012,7 @@ mod tests {
     /// at the reboot into the bootloader.
     #[test]
     fn a_flow_on_its_thread_is_heard_and_answered() {
-        let web = std::env::temp_dir().join(format!("mp-gui-fw-flow-{}", std::process::id()));
+        let web = mp_os::temp_dir().join(format!("mp-gui-fw-flow-{}", mp_os::process_id()));
         let _ = std::fs::remove_dir_all(&web);
         let served = web.join("web/firmware.ardupilot.org/Copter/stable/CubeOrange");
         std::fs::create_dir_all(&served).unwrap();
@@ -4043,16 +4045,16 @@ mod tests {
         })
         .expect("a thread");
         let mut progress = Progress::default();
-        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+        let deadline = web_time::Instant::now() + std::time::Duration::from_secs(10);
         let mut done = None;
-        while done.is_none() && std::time::Instant::now() < deadline {
+        while done.is_none() && web_time::Instant::now() < deadline {
             done = worker.poll(&mut progress);
             if let Some(waiting) = worker.waiting.clone() {
                 assert_eq!(waiting.text, "Go?");
                 assert_eq!(waiting.buttons, Some(Buttons::YesNo));
                 worker.answer(true);
             }
-            std::thread::sleep(std::time::Duration::from_millis(2));
+            wasm_thread::sleep(std::time::Duration::from_millis(2));
         }
         let reached = done.expect("the flow ended");
         assert_eq!(reached.firmware.map(|f| f.board_id), Some(140));
@@ -4069,7 +4071,7 @@ mod tests {
     /// the folder of the one it takes.
     #[test]
     fn load_custom_firmware_remembers_the_folder() {
-        let dir = std::env::temp_dir().join(format!("mp-gui-fw-custom-{}", std::process::id()));
+        let dir = mp_os::temp_dir().join(format!("mp-gui-fw-custom-{}", mp_os::process_id()));
         std::fs::create_dir_all(&dir).unwrap();
         let file = dir.join("custom.apj");
         std::fs::write(&file, "{}").unwrap();
@@ -4107,7 +4109,7 @@ mod tests {
 /// The firmware page's reboot into the bootloader, over the real link to a scripted copter.
 #[cfg(test)]
 mod reboot_to_bootloader_tests {
-    use std::time::{Duration, Instant};
+    use web_time::{Duration, Instant};
 
     use mp_link::ProtocolTimeouts;
     use mp_link::requests::CMD_PREFLIGHT_REBOOT_SHUTDOWN;
@@ -4153,10 +4155,10 @@ mod reboot_to_bootloader_tests {
             window: Duration::from_secs(5),
             heartbeat: Duration::from_secs(4),
         };
-        let reached = std::thread::scope(|scope| {
+        let reached = wasm_thread::scope(|scope| {
             let task = scope.spawn(|| reboot_to_bootloader(&link, Instant::now(), waits));
             // `doReboot`'s own `getHeartBeat` holds the reboots until the next heartbeat.
-            std::thread::sleep(Duration::from_millis(200));
+            wasm_thread::sleep(Duration::from_millis(200));
             vehicle.read();
             assert_eq!(reboots(&vehicle), [], "sent before the second heartbeat");
             vehicle.heartbeat();
@@ -4168,7 +4170,7 @@ mod reboot_to_bootloader_tests {
             reached
         });
         assert_eq!(reached, LinkReboot::Rebooted);
-        std::thread::sleep(fast().command.timeout * 3);
+        wasm_thread::sleep(fast().command.timeout * 3);
         vehicle.read();
         assert_eq!(reboots(&vehicle), FOUR);
     }
@@ -4240,15 +4242,15 @@ mod reboot_to_bootloader_tests {
             window: Duration::from_secs(5),
             heartbeat: Duration::from_secs(4),
         };
-        let reached = std::thread::scope(|scope| {
+        let reached = wasm_thread::scope(|scope| {
             vehicle.send_from(adsb, &receiver);
             until("the receiver to be seen", || {
                 link.vehicles().contains(&adsb)
             });
             let task = scope.spawn(|| reboot_to_bootloader(&link, Instant::now(), waits));
-            std::thread::sleep(Duration::from_millis(200));
+            wasm_thread::sleep(Duration::from_millis(200));
             vehicle.send_from(adsb, &receiver);
-            std::thread::sleep(Duration::from_millis(200));
+            wasm_thread::sleep(Duration::from_millis(200));
             vehicle.read();
             assert_eq!(reboots(&vehicle), [], "sent on the receiver's heartbeats");
             // The autopilot heard, then `doReboot`'s next heartbeat.
@@ -4256,7 +4258,7 @@ mod reboot_to_bootloader_tests {
             until("the autopilot to be seen", || {
                 link.vehicles().contains(&VEHICLE)
             });
-            std::thread::sleep(Duration::from_millis(100));
+            wasm_thread::sleep(Duration::from_millis(100));
             vehicle.heartbeat();
             let reached = task.join().expect("the task");
             until("the four reboots", || {
@@ -4300,7 +4302,7 @@ mod reboot_to_bootloader_tests {
 /// copter: what goes on the wire, and what the page says.
 #[cfg(test)]
 mod manifest_link_tests {
-    use std::time::{Duration, Instant};
+    use web_time::{Duration, Instant};
 
     use mp_link::ProtocolTimeouts;
     use mp_link::requests::{CMD_FLASH_BOOTLOADER, CMD_PREFLIGHT_REBOOT_SHUTDOWN};
@@ -4359,7 +4361,7 @@ mod manifest_link_tests {
             if let Some(end) = page.force.tick(telemetry, &view, now()) {
                 return Some(end);
             }
-            std::thread::sleep(Duration::from_millis(2));
+            wasm_thread::sleep(Duration::from_millis(2));
         }
         None
     }
@@ -4382,7 +4384,7 @@ mod manifest_link_tests {
             let view = telemetry.view();
             assert_eq!(page.force.tick(&mut telemetry, &view, Instant::now()), None);
         }
-        std::thread::sleep(Duration::from_millis(100));
+        wasm_thread::sleep(Duration::from_millis(100));
         vehicle.read();
         assert_eq!(reboots(&vehicle), [], "not before the next heartbeat");
         vehicle.heartbeat();
@@ -4397,7 +4399,7 @@ mod manifest_link_tests {
             vehicle.read();
             reboots(&vehicle).len() >= 4
         });
-        std::thread::sleep(fast().command.timeout * 3);
+        wasm_thread::sleep(fast().command.timeout * 3);
         vehicle.read();
         assert_eq!(reboots(&vehicle), FOUR);
         assert_eq!(
@@ -4467,7 +4469,7 @@ mod manifest_link_tests {
         assert!(page.message().is_none(), "no box");
         assert!(page.force.state().is_none());
         assert!(!page.forcing());
-        std::thread::sleep(Duration::from_millis(100));
+        wasm_thread::sleep(Duration::from_millis(100));
         vehicle.read();
         assert_eq!(reboots(&vehicle), []);
     }
@@ -4566,7 +4568,7 @@ mod manifest_link_tests {
         page.answer_bootloader(false);
         assert!(page.bl.is_none(), "mav.Close()");
         assert!(page.question().is_none());
-        std::thread::sleep(Duration::from_millis(100));
+        wasm_thread::sleep(Duration::from_millis(100));
         vehicle.read();
         assert!(flash_commands(&vehicle).is_empty());
         assert_eq!(page.take_status(), None);
@@ -4595,7 +4597,7 @@ mod manifest_link_tests {
         let deadline = Instant::now() + Duration::from_secs(10);
         while page.bl.is_some() && Instant::now() < deadline {
             page.bl_tick(Instant::now());
-            std::thread::sleep(Duration::from_millis(5));
+            wasm_thread::sleep(Duration::from_millis(5));
         }
         assert!(page.bl.is_none());
         let said = page.take_status().expect("something said");
@@ -4622,7 +4624,7 @@ mod manifest_link_tests {
         let deadline = Instant::now() + Duration::from_secs(10);
         while page.bl.is_some() && Instant::now() < deadline {
             page.bl_tick(Instant::now());
-            std::thread::sleep(Duration::from_millis(5));
+            wasm_thread::sleep(Duration::from_millis(5));
         }
         assert!(page.bl.is_none());
         assert_eq!(page.take_status().as_deref(), Some(DO_COMMAND_TIMEOUT));

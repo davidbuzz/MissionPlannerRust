@@ -27,7 +27,7 @@
 //! rule (`// C#: MainV2.cs:2514-2540`).
 
 use std::fmt;
-use std::time::{Duration, Instant};
+use web_time::{Duration, Instant};
 
 use wasmtime::component::{Component, HasSelf, Linker};
 use wasmtime::{Config, Engine, Store, StoreLimits, StoreLimitsBuilder, Trap};

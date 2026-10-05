@@ -67,10 +67,34 @@ pub fn current_platform(headless: bool) -> Rc<dyn Platform> {
     {
         Rc::new(gpui_macos::MacPlatform::new(headless))
     }
+
+    // A web page (the browser experiment): WebGPU, else WebGL2, as gpui_platform chooses.
+    #[cfg(target_family = "wasm")]
+    {
+        let _ = headless;
+        Rc::new(gpui_web::WebPlatform::new_with_backend(
+            true,
+            gpui_web::WebBackendPreference::Auto,
+        ))
+    }
 }
 
 /// An application bound to this target's platform.
 #[must_use]
+#[cfg(not(target_family = "wasm"))]
 pub fn application() -> Application {
     Application::with_platform(current_platform(false))
+}
+
+/// An application in a web page, its HTTP through the browser's `fetch`, as gpui_platform's
+/// `application_with_web_backend` builds it.
+#[must_use]
+#[cfg(target_family = "wasm")]
+pub fn application() -> Application {
+    let platform = Rc::new(gpui_web::WebPlatform::new_with_backend(
+        true,
+        gpui_web::WebBackendPreference::Auto,
+    ));
+    let http_client = std::sync::Arc::new(platform.fetch_http_client());
+    Application::with_platform(platform).with_http_client(http_client)
 }

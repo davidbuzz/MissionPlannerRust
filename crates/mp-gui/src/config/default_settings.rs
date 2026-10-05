@@ -454,7 +454,7 @@ impl<H: Copy> DefaultSettings<H> {
         };
         let (sender, receiver) = channel();
         self.fetching = Some(receiver);
-        std::thread::spawn(move || {
+        wasm_thread::spawn(move || {
             let fetch = mp_firmware::manifest::fetcher();
             let arrived = match want {
                 Want::Listing => Arrived::Listing(github::dir_content(
@@ -504,9 +504,9 @@ mod tests {
     }
 
     fn scratch(name: &str) -> PathBuf {
-        let dir = std::env::temp_dir().join(format!(
+        let dir = mp_os::temp_dir().join(format!(
             "mp-gui-defaultsettings-{}-{name}",
-            std::process::id()
+            mp_os::process_id()
         ));
         std::fs::create_dir_all(&dir).expect("a scratch directory");
         dir

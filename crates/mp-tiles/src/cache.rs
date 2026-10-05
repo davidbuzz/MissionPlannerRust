@@ -159,7 +159,7 @@ impl TileCache {
             // No home directory at all is a strange environment, not a reason to have no cache;
             // the temp directory keeps tiles for the length of the session.
             .unwrap_or_else(|| {
-                std::env::temp_dir()
+                mp_os::temp_dir()
                     .join("mission-planner-rust")
                     .join("gmapcache")
             })
@@ -343,10 +343,10 @@ mod tests {
 
     impl Scratch {
         fn new(name: &str) -> Self {
-            let path = std::env::temp_dir().join(format!(
+            let path = mp_os::temp_dir().join(format!(
                 "mp-tiles-{name}-{}-{:?}",
-                std::process::id(),
-                std::thread::current().id()
+                mp_os::process_id(),
+                wasm_thread::current().id()
             ));
             let _ = std::fs::remove_dir_all(&path);
             Self(path)

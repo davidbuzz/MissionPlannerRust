@@ -42,8 +42,9 @@
 // This module is internal to the binary; `pub` here documents intent rather than exporting API.
 #![allow(unreachable_pub)]
 
+use mp_os::Lock as _;
 use std::sync::{Arc, Mutex, PoisonError};
-use std::time::{Duration, Instant};
+use web_time::{Duration, Instant};
 
 use mp_link::inspector::PacketSubscription;
 use mp_mavlink_dialects::all::{MavMessage, OsdParamConfig, OsdParamShowConfig};
@@ -741,7 +742,7 @@ impl Slots {
         let replies = Arc::clone(&self.replies);
         self.subscription = telemetry.on_packet(move |packet| {
             if let Some(reply) = Reply::of(&packet.message)
-                && let Ok(mut held) = replies.lock()
+                && let Ok(mut held) = replies.os_lock()
             {
                 held.push(reply);
             }
@@ -749,7 +750,10 @@ impl Slots {
     }
 
     fn take_replies(&self) -> Vec<Reply> {
-        let mut held = self.replies.lock().unwrap_or_else(PoisonError::into_inner);
+        let mut held = self
+            .replies
+            .os_lock()
+            .unwrap_or_else(PoisonError::into_inner);
         std::mem::take(&mut *held)
     }
 
@@ -1255,7 +1259,7 @@ mod tests {
         assert!(fetch.to_send.is_empty());
         // Two answered, one of them refused; ten seconds of silence end the pass; the second
         // pass asks the sixteen again.
-        slots.replies.lock().unwrap().extend([
+        slots.replies.os_lock().unwrap().extend([
             Reply::Show {
                 request_id: 1,
                 result: 0,
@@ -1340,7 +1344,7 @@ mod tests {
             update.requests.iter().map(|r| r.0).collect::<Vec<_>>(),
             [1, 2]
         );
-        slots.replies.lock().unwrap().push(Reply::Set {
+        slots.replies.os_lock().unwrap().push(Reply::Set {
             request_id: 2,
             success: false,
         });

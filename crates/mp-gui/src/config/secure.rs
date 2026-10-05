@@ -759,7 +759,7 @@ mod tests {
     }
 
     fn scratch(name: &str) -> PathBuf {
-        let dir = std::env::temp_dir().join(format!("mp-gui-secure-{}-{name}", std::process::id()));
+        let dir = mp_os::temp_dir().join(format!("mp-gui-secure-{}-{name}", mp_os::process_id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).expect("a scratch directory");
         dir

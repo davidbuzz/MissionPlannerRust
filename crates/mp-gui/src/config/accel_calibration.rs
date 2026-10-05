@@ -1123,7 +1123,7 @@ mod tests {
         // The vehicle's answer to the start is an acknowledgement, which says "calibration" and
         // is not a STATUSTEXT: the label is not written.
         vehicle.send(&ack(mp_calibration::CMD_PREFLIGHT_CALIBRATION, 0));
-        std::thread::sleep(Duration::from_millis(20));
+        wasm_thread::sleep(Duration::from_millis(20));
         accel.tick(&telemetry, &telemetry.view(), true);
         assert_eq!(accel.label(), "");
 
@@ -1144,7 +1144,7 @@ mod tests {
         });
         // A message that is not a prompt is not written.
         vehicle.send(&statustext("EKF3 IMU0 is using GPS"));
-        std::thread::sleep(Duration::from_millis(20));
+        wasm_thread::sleep(Duration::from_millis(20));
         accel.tick(&telemetry, &telemetry.view(), true);
         assert_eq!(accel.label(), "Please place vehicle LEVEL");
 
@@ -1186,7 +1186,7 @@ mod tests {
         assert!(!accel.in_calibrate());
         // What the vehicle says after is not heard.
         vehicle.send(&request(16_777_215));
-        std::thread::sleep(Duration::from_millis(20));
+        wasm_thread::sleep(Duration::from_millis(20));
         accel.tick(&telemetry, &telemetry.view(), true);
         assert_eq!(accel.label(), "Calibration successful");
         assert_eq!(accel.pos(), 2);
@@ -1265,7 +1265,7 @@ mod tests {
         assert!(!accel.subscribed());
         assert_eq!(accel.accel_text(), CALIBRATE_ACCEL);
         vehicle.send(&request(1));
-        std::thread::sleep(Duration::from_millis(20));
+        wasm_thread::sleep(Duration::from_millis(20));
         accel.tick(&telemetry, &telemetry.view(), false);
         assert_eq!(accel.label(), "");
         assert_eq!(accel.sent()[0], 1, "the counts outlive the page object");

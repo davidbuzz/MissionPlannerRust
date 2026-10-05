@@ -69,6 +69,7 @@
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::indexing_slicing)]
 #![allow(clippy::cast_possible_truncation)]
 
+use mp_os::Lock as _;
 use std::alloc::{GlobalAlloc, Layout, System};
 use std::cell::Cell;
 use std::collections::BTreeMap;
@@ -76,7 +77,7 @@ use std::hint::black_box;
 use std::io;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
-use std::time::{Duration, Instant};
+use web_time::{Duration, Instant};
 
 use mp_link::{Link, LinkConfig};
 use mp_mavlink::FrameDecoder;
@@ -265,7 +266,7 @@ impl FramePerRead {
         let Some(msgid) = self.in_flight.take() else {
             return;
         };
-        let mut probe = self.probe.lock().unwrap();
+        let mut probe = self.probe.os_lock().unwrap();
         probe.measured_frames += 1;
         probe.publishes += publishes;
         probe.description_allocations += description;
@@ -297,7 +298,7 @@ impl Transport for FramePerRead {
         }
         if self.pass == self.passes {
             if let Some(from) = self.measured_from.take() {
-                self.probe.lock().unwrap().measured_elapsed = from.elapsed();
+                self.probe.os_lock().unwrap().measured_elapsed = from.elapsed();
             }
             // Counting stays off: the link's shutdown is not a packet.
             self.open = false;
@@ -325,7 +326,13 @@ impl Transport for FramePerRead {
             self.wrote_param_request = true;
         }
         if self.in_flight.is_some() {
-            *self.probe.lock().unwrap().written.entry(msgid).or_default() += 1;
+            *self
+                .probe
+                .os_lock()
+                .unwrap()
+                .written
+                .entry(msgid)
+                .or_default() += 1;
         }
         WATCHING.with(|w| w.set(watching));
         Ok(())
@@ -398,7 +405,7 @@ fn frames_of(bytes: &[u8]) -> Vec<Recorded> {
 /// A recording path nobody else is using. `TlogWriter` refuses to overwrite.
 fn recording_path(name: &str) -> PathBuf {
     let path = Path::new(env!("CARGO_TARGET_TMPDIR"))
-        .join(format!("no_alloc_ingest-{}-{name}", std::process::id()));
+        .join(format!("no_alloc_ingest-{}-{name}", mp_os::process_id()));
     let _ = std::fs::remove_file(&path);
     path
 }
@@ -436,7 +443,7 @@ fn run(name: &str, bytes: Vec<u8>, allocating_description: bool) -> (Probe, usiz
     let deadline = Instant::now() + Duration::from_secs(300);
     while link.is_running() {
         assert!(Instant::now() < deadline, "{name}: the link never finished");
-        std::thread::sleep(Duration::from_millis(10));
+        wasm_thread::sleep(Duration::from_millis(10));
     }
 
     // Both passes were received, recorded and published, or the numbers below describe a link
@@ -466,7 +473,7 @@ fn run(name: &str, bytes: Vec<u8>, allocating_description: bool) -> (Probe, usiz
     link.close();
     let _ = std::fs::remove_file(&recording);
 
-    let probe = std::mem::take(&mut *probe.lock().unwrap());
+    let probe = std::mem::take(&mut *probe.os_lock().unwrap());
     (probe, count)
 }
 

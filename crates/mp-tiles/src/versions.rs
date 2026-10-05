@@ -38,6 +38,7 @@
 //! the C#, and Bing's on the tile thread before its first fetch - so, as in the C#, no Bing tile is
 //! requested before the check has finished, and the window does not freeze while it runs.
 
+use mp_os::Lock as _;
 use std::borrow::Cow;
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
@@ -97,7 +98,7 @@ static BING_DONE: AtomicBool = AtomicBool::new(false);
 #[must_use]
 pub fn current(source: &TileSource) -> Cow<'static, str> {
     CORRECTED
-        .lock()
+        .os_lock()
         .ok()
         .and_then(|corrected| corrected.get(source.cache_name).cloned())
         .map_or(Cow::Borrowed(source.version), Cow::Owned)
@@ -105,7 +106,7 @@ pub fn current(source: &TileSource) -> Cow<'static, str> {
 
 /// Records a version found for a provider.
 fn set(source: &TileSource, version: String) {
-    if let Ok(mut corrected) = CORRECTED.lock() {
+    if let Ok(mut corrected) = CORRECTED.os_lock() {
         corrected.insert(source.cache_name, version);
     }
 }
@@ -188,7 +189,7 @@ pub fn initialize(source: &'static TileSource, root: &Path, fetcher: &TileFetche
         return;
     }
     let first_time = INITIALIZED
-        .lock()
+        .os_lock()
         .map(|mut shown| shown.insert(source.cache_name))
         .unwrap_or(false);
     if !first_time {
@@ -203,7 +204,7 @@ pub fn initialize(source: &'static TileSource, root: &Path, fetcher: &TileFetche
             }
             let root = root.to_path_buf();
             let fetcher = fetcher.clone();
-            let _ = std::thread::Builder::new()
+            let _ = wasm_thread::Builder::new()
                 .name("mp-tiles-version".to_owned())
                 .spawn(move || {
                     correct_google(&root, |url| fetcher.fetch_text(url, source.referer));

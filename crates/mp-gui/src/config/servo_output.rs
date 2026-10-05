@@ -65,7 +65,7 @@
 
 use std::collections::VecDeque;
 use std::rc::Rc;
-use std::time::{Duration, Instant};
+use web_time::{Duration, Instant};
 
 use gpui::{
     AnyElement, Context, Div, FocusHandle, KeyDownEvent, SharedString, Window, div, prelude::*, px,

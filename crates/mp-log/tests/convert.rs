@@ -92,7 +92,7 @@ fn the_mode_is_named_for_the_firmware() {
 /// The button writes `<name>.log` beside the `.bin`, and that is the file the product path reads.
 #[test]
 fn the_file_is_written_beside_the_log() {
-    let dir = std::env::temp_dir().join(format!("mp-log-convert-{}", std::process::id()));
+    let dir = mp_os::temp_dir().join(format!("mp-log-convert-{}", mp_os::process_id()));
     std::fs::create_dir_all(&dir).unwrap();
     let bin = dir.join("00000001.BIN");
     std::fs::copy(testdata("dataflash.bin"), &bin).unwrap();

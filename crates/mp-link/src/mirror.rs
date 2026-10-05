@@ -58,12 +58,14 @@
 //!   `doAutoReconnect`'s pace - and not also on every packet, as `VerifyConnected`'s retries do
 //!   (`:363-386`), each one a connect the vehicle's reader waits for.
 
+use mp_os::Lock as _;
+use mp_os::RecvTimeout as _;
 use std::collections::BTreeMap;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::mpsc::{Receiver, RecvTimeoutError, SyncSender, TrySendError, sync_channel};
 use std::sync::{Arc, Mutex};
-use std::thread::JoinHandle;
-use std::time::{Duration, Instant};
+use wasm_thread::JoinHandle;
+use web_time::{Duration, Instant};
 
 use mp_mavlink::{Dialect as _, FrameDecoder, encode_v2};
 use mp_mavlink_dialects::all::{DIALECT, MavMessage};
@@ -167,7 +169,7 @@ impl Mirror {
         });
         let (queue, packets) = sync_channel(QUEUE);
         let thread_shared = Arc::clone(&shared);
-        let thread = std::thread::Builder::new()
+        let thread = wasm_thread::Builder::new()
             .name("mp-mirror".to_owned())
             .spawn(move || run(stream, reopen, &packets, &thread_shared))?;
         Ok(Self {
@@ -203,7 +205,7 @@ impl Mirror {
     /// The link what the stream sends is written to - `BaseStream`, the vehicle's port - or
     /// none, when there is no link to write to.
     pub fn attach(&self, link: Option<LinkSender>) {
-        if let Ok(mut held) = self.shared.link.lock() {
+        if let Ok(mut held) = self.shared.link.os_lock() {
             *held = link;
         }
     }
@@ -243,7 +245,7 @@ impl Mirror {
         if let Some(thread) = self.thread.take() {
             let deadline = Instant::now() + CLOSE_WAIT;
             while !thread.is_finished() && Instant::now() < deadline {
-                std::thread::sleep(Duration::from_millis(1));
+                wasm_thread::sleep(Duration::from_millis(1));
             }
             if thread.is_finished() {
                 let _ = thread.join();
@@ -302,7 +304,7 @@ fn run(
     // `lastReconnectTime` starts at `DateTime.MinValue`: the first try is at once.
     let mut next_reconnect = Instant::now();
     while shared.running.load(Ordering::Acquire) {
-        let packet = match packets.recv_timeout(IDLE) {
+        let packet = match packets.os_recv_timeout(IDLE) {
             Ok(packet) => Some(packet),
             Err(RecvTimeoutError::Timeout) => None,
             Err(RecvTimeoutError::Disconnected) => break,
@@ -362,7 +364,7 @@ fn run(
                 };
                 let sent = shared
                     .link
-                    .lock()
+                    .os_lock()
                     .ok()
                     .and_then(|link| link.as_ref().map(|link| link.outbound.send(bytes).is_ok()))
                     .unwrap_or(false);
@@ -391,7 +393,7 @@ mod tests {
         let deadline = Instant::now() + Duration::from_secs(10);
         while !check() {
             assert!(Instant::now() < deadline, "timed out waiting for {what}");
-            std::thread::sleep(Duration::from_millis(2));
+            wasm_thread::sleep(Duration::from_millis(2));
         }
     }
 
@@ -499,7 +501,7 @@ mod tests {
         .expect("a v1 frame");
         server.write_all(&v1[..n]).expect("written");
         // Nothing is read from the server until the vehicle's next packet.
-        std::thread::sleep(Duration::from_millis(100));
+        wasm_thread::sleep(Duration::from_millis(100));
         let mut to_vehicle = FrameDecoder::new();
         assert!(heard(&mut vehicle, &mut to_vehicle).is_empty());
         vehicle
@@ -561,7 +563,7 @@ mod tests {
             .expect("written");
         until("the heartbeat mirrored", || mirror.relayed().up == 1);
         // The server's bytes are read in the same pass as the heartbeat is written.
-        std::thread::sleep(Duration::from_millis(50));
+        wasm_thread::sleep(Duration::from_millis(50));
         assert!(heard(&mut vehicle, &mut to_vehicle).is_empty());
         assert_eq!(mirror.relayed().down, 0);
 
@@ -570,7 +572,7 @@ mod tests {
         vehicle
             .write_all(&crate::testing::frame(2, &heartbeat()))
             .expect("written");
-        std::thread::sleep(Duration::from_millis(50));
+        wasm_thread::sleep(Duration::from_millis(50));
         assert_eq!(mirror.relayed().up, 1);
         assert!(heard(&mut server, &mut FrameDecoder::new()).len() <= 1);
     }
@@ -597,7 +599,7 @@ mod tests {
         until("a heartbeat at the second stream", || {
             seq = seq.wrapping_add(1);
             let _ = vehicle.write_all(&crate::testing::frame(seq, &heartbeat()));
-            std::thread::sleep(Duration::from_millis(20));
+            wasm_thread::sleep(Duration::from_millis(20));
             got.extend(heard(&mut second, &mut decoder));
             !got.is_empty()
         });
@@ -655,7 +657,7 @@ mod tests {
         // The first is taken and its write waits; the queue then fills, and five more are
         // dropped, the handler never waiting.
         handler(&packet);
-        std::thread::sleep(Duration::from_millis(100));
+        wasm_thread::sleep(Duration::from_millis(100));
         let started = Instant::now();
         for _ in 0..QUEUE + 5 {
             handler(&packet);

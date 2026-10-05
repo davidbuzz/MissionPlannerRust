@@ -75,7 +75,7 @@
 #![allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
 
 use std::hint::black_box;
-use std::time::{Duration, Instant};
+use web_time::{Duration, Instant};
 
 use mp_chart::{Series, auto_range, reduce, reduce_counted, reduce_scan};
 use mp_log::logfile::LogFile;

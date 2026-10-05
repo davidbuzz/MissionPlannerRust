@@ -29,7 +29,7 @@
 //! the map is worse than no symbol, because it says something is somewhere it is not.
 
 use std::collections::BTreeMap;
-use std::time::{Duration, Instant};
+use web_time::{Duration, Instant};
 
 use mp_units::LatLon;
 

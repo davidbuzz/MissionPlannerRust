@@ -24,10 +24,11 @@
 
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
+use mp_os::Lock as _;
 use std::io;
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::{Arc, Mutex};
-use std::time::{Duration, Instant};
+use web_time::{Duration, Instant};
 
 use mp_link::testing::heartbeat;
 use mp_link::{Link, LinkConfig, RECONNECT_INTERVAL, Reopen};
@@ -41,7 +42,7 @@ fn within(patience: Duration, what: impl Fn() -> bool) -> bool {
         if what() {
             return true;
         }
-        std::thread::sleep(Duration::from_millis(10));
+        wasm_thread::sleep(Duration::from_millis(10));
     }
     what()
 }
@@ -60,7 +61,7 @@ fn reopening_after(refusals: u32, fresh: LoopbackEnd, attempts: &Arc<AtomicU32>)
             ));
         }
         fresh
-            .lock()
+            .os_lock()
             .unwrap()
             .take()
             .map(|end| Box::new(end) as Box<dyn Transport>)

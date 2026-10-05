@@ -24,9 +24,10 @@
 
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::indexing_slicing)]
 
+use mp_os::Lock as _;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
-use std::time::{Duration, Instant, SystemTime};
+use web_time::{Duration, Instant, SystemTime};
 
 use mp_terrain::{AltResponse, Http, HttpError, Srtm, TileType};
 
@@ -37,7 +38,7 @@ struct Scratch(PathBuf);
 
 impl Scratch {
     fn new(test: &str) -> Self {
-        let dir = std::env::temp_dir().join(format!("mp-terrain-q-{test}-{}", std::process::id()));
+        let dir = mp_os::temp_dir().join(format!("mp-terrain-q-{test}-{}", mp_os::process_id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
         Self(dir)
@@ -94,14 +95,14 @@ impl Server {
     }
 
     fn take_requests(&self) -> Vec<String> {
-        std::mem::take(&mut *self.requests.lock().unwrap())
+        std::mem::take(&mut *self.requests.os_lock().unwrap())
     }
 }
 
 impl Http for Server {
     fn get(&self, url: &str) -> Result<Vec<u8>, HttpError> {
         let path = url.strip_prefix(BASE).unwrap_or(url).to_owned();
-        self.requests.lock().unwrap().push(path.clone());
+        self.requests.os_lock().unwrap().push(path.clone());
         Ok(self.pages.iter().find(|(p, _)| *p == path).map_or_else(
             || b"<html>404 Not Found</html>".to_vec(),
             |(_, b)| b.clone(),
@@ -151,7 +152,7 @@ fn the_thread_downloads_a_queued_tile_and_the_next_lookup_has_it() {
         if answer.current_type == TileType::Valid || Instant::now() > deadline {
             break answer;
         }
-        std::thread::sleep(Duration::from_millis(20));
+        wasm_thread::sleep(Duration::from_millis(20));
     };
     assert_eq!(answer.current_type, TileType::Valid, "{answer:?}");
     assert_eq!(answer.alt, 123.0);
@@ -185,7 +186,7 @@ fn dropping_the_lookup_ends_its_thread() {
     drop(srtm);
     let deadline = Instant::now() + Duration::from_secs(10);
     while Arc::strong_count(&server) > 1 && Instant::now() < deadline {
-        std::thread::sleep(Duration::from_millis(20));
+        wasm_thread::sleep(Duration::from_millis(20));
     }
     assert_eq!(Arc::strong_count(&server), 1, "the thread is still running");
 }

@@ -61,6 +61,10 @@ pub const APP_CONFIG_NAME: &str = "MissionPlannerRust";
 /// `// C#: ExtLibs/Utilities/Settings.cs:20`
 pub const CSHARP_APP_CONFIG_NAME: &str = "Mission Planner";
 
+/// The home a web page's planner keeps its folders under (the browser experiment): a page has no
+/// `HOME`, and the browser's own storage is where these paths are to live.
+pub const WEB_HOME: &str = "/home/web";
+
 /// The special folders the C# rules are written in terms of, resolved once.
 ///
 /// Every rule is a pure function of these, so the rules can be tested against directories a test
@@ -105,7 +109,12 @@ impl Folders {
                 unix: false,
             })
         } else {
-            let home = std::env::var_os("HOME").map(PathBuf::from)?;
+            // A web page has no environment: a home of its own, so the planner keeps the
+            // folders it has on Linux there (a file in them fails to save today, which every
+            // caller already reports).
+            let home = std::env::var_os("HOME")
+                .map(PathBuf::from)
+                .or_else(|| cfg!(target_family = "wasm").then(|| PathBuf::from(WEB_HOME)))?;
             Some(Self {
                 // mono: MyDocuments and Personal are the same folder, and it is $HOME.
                 my_documents: home.clone(),
@@ -254,10 +263,10 @@ mod tests {
 
     impl Scratch {
         fn new(name: &str) -> Self {
-            let path = std::env::temp_dir().join(format!(
+            let path = mp_os::temp_dir().join(format!(
                 "mp-settings-{name}-{}-{:?}",
-                std::process::id(),
-                std::thread::current().id()
+                mp_os::process_id(),
+                wasm_thread::current().id()
             ));
             let _ = std::fs::remove_dir_all(&path);
             std::fs::create_dir_all(&path).ok();

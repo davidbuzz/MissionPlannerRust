@@ -287,7 +287,7 @@ pub struct Windows<'a> {
 /// WarningsManager().Show()` over the engine's rules, and the two [`click`] opens. True when it
 /// did something. Proximity's and Mavlink Signing's are [`click_keys_or_proximity`].
 /// `// C#: GCSViews/ConfigurationView/ConfigAdvanced.cs:22-30, 114-117`
-pub fn open(button: &str, windows: Windows<'_>, now: std::time::Instant) -> bool {
+pub fn open(button: &str, windows: Windows<'_>, now: web_time::Instant) -> bool {
     if button == "but_warningmanager" {
         windows.warnings.show(windows.rules);
         return true;
@@ -306,7 +306,7 @@ pub fn click(
     button: &str,
     fft: &mut Fft,
     inspector: &mut InspectorWindow,
-    now: std::time::Instant,
+    now: web_time::Instant,
 ) -> bool {
     match button {
         "but_mavinspector" => {
@@ -329,7 +329,7 @@ pub fn click_keys_or_proximity(
     button: &str,
     proximity: &mut ProximityWindow,
     auth_keys: &mut AuthKeysWindow,
-    now: std::time::Instant,
+    now: web_time::Instant,
 ) -> bool {
     match button {
         "but_signkey" => {
@@ -460,7 +460,7 @@ impl MissionPlanner {
         cx: &mut Context<Self>,
     ) -> bool {
         let pages = &mut self.extra;
-        let now = std::time::Instant::now();
+        let now = web_time::Instant::now();
         let windows = Windows {
             fft: &mut pages.fft,
             inspector: &mut pages.inspector,
@@ -485,7 +485,7 @@ impl MissionPlanner {
                 button,
                 &mut pages.param_gen,
                 // `Settings.GetUserDataDirectory()`.
-                &mp_settings::user_data_directory().unwrap_or_else(std::env::temp_dir),
+                &mp_settings::user_data_directory().unwrap_or_else(mp_os::temp_dir),
             );
         if opened {
             // A new form is activated: the proximity window takes its keys at once.
@@ -748,7 +748,7 @@ mod tests {
 
         /// A button clicked, as the page clicks it.
         fn click(&mut self, button: &str, persisted: &Persisted) -> bool {
-            let now = std::time::Instant::now();
+            let now = web_time::Instant::now();
             let windows = Windows {
                 fft: &mut self.fft,
                 inspector: &mut self.inspector,
@@ -759,7 +759,7 @@ mod tests {
                 || click_keys_or_proximity(button, &mut self.proximity, &mut self.auth_keys, now)
                 || click_window(button, &mut self.spectrogram, &mut self.proxy, persisted)
                 || click_outputs(button, &mut self.mirror, &mut self.nmea, persisted)
-                || click_paramgen(button, &mut self.paramgen, &std::env::temp_dir())
+                || click_paramgen(button, &mut self.paramgen, &mp_os::temp_dir())
         }
     }
 
@@ -773,7 +773,7 @@ mod tests {
     /// `// C#: GCSViews/ConfigurationView/ConfigAdvanced.cs:22-30, 37-45, 114-127; ConfigFFT.cs:162-165`
     #[test]
     fn the_ported_windows_open_and_the_others_nothing() {
-        let now = std::time::Instant::now();
+        let now = web_time::Instant::now();
         let persisted = Persisted::at(None);
         for row in ROWS {
             let mut windows = Pages::new();

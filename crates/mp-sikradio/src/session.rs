@@ -889,7 +889,7 @@ pub(crate) mod tests {
     /// An RFD900+ programmed from an Intel HEX file holding its name, over the SiK bootloader.
     #[test]
     fn an_rfd900p_takes_its_hex() {
-        let dir = std::env::temp_dir().join(format!("mp-sikradio-{}", std::process::id()));
+        let dir = mp_os::temp_dir().join(format!("mp-sikradio-{}", mp_os::process_id()));
         std::fs::create_dir_all(&dir).unwrap();
         let file = dir.join("rfd900p.ihx");
         // "RFD900P" at 0x10.
@@ -922,7 +922,7 @@ pub(crate) mod tests {
     /// An RFD900x not locked to a country takes a firmware holding its name, over XModem.
     #[test]
     fn an_rfd900x_takes_its_bin_over_xmodem() {
-        let dir = std::env::temp_dir().join(format!("mp-sikradio-x-{}", std::process::id()));
+        let dir = mp_os::temp_dir().join(format!("mp-sikradio-x-{}", mp_os::process_id()));
         std::fs::create_dir_all(&dir).unwrap();
         let file = dir.join("rfd900x.bin");
         let mut firmware = vec![0u8; 200];

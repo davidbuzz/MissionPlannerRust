@@ -37,7 +37,7 @@
 //! ported: a finished command finishes when its answer arrives, and the next command in a
 //! sequence starts then too, up to 100 ms sooner than the C#'s would.
 
-use std::time::{Duration, Instant};
+use web_time::{Duration, Instant};
 
 /// One command's patience, as `new RetryTimeout(Retrys, TimeoutMS)` sets it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

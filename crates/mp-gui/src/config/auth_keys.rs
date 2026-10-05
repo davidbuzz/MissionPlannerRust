@@ -77,7 +77,7 @@
 #![allow(unreachable_pub)]
 
 use std::path::{Path, PathBuf};
-use std::time::{Duration, Instant};
+use web_time::{Duration, Instant};
 
 use aes::Aes256;
 use base64::Engine as _;
@@ -1376,6 +1376,7 @@ pub fn overlay(
 
 #[cfg(test)]
 mod tests {
+    use mp_os::Lock as _;
     use super::*;
     use crate::config_coverage::source::{csharp, resx};
 
@@ -1401,7 +1402,7 @@ mod tests {
     }
 
     fn scratch(name: &str) -> PathBuf {
-        let dir = std::env::temp_dir().join(format!("authkeys-{name}-{}", std::process::id()));
+        let dir = mp_os::temp_dir().join(format!("authkeys-{name}-{}", mp_os::process_id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
         dir
@@ -1538,7 +1539,7 @@ mod tests {
     #[test]
     fn add_asks_scores_stores_and_saves() {
         let _store = STORE
-            .lock()
+            .os_lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner);
         let dir = scratch("add");
         let mut window = holder(&dir);
@@ -1643,7 +1644,7 @@ mod tests {
         use mp_transport::testing::Loopback;
 
         let _store = STORE
-            .lock()
+            .os_lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner);
         let dir = scratch("use");
         let mut window = holder(&dir);

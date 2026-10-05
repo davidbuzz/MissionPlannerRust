@@ -24,7 +24,7 @@
 
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::indexing_slicing)]
 
-use std::time::{Duration, Instant};
+use web_time::{Duration, Instant};
 
 use mp_link::{Link, LinkConfig};
 use mp_mavlink::{Message as _, encode_v2};
@@ -71,7 +71,7 @@ fn wait_for(what: &str, mut check: impl FnMut() -> bool) {
         if check() {
             return;
         }
-        std::thread::sleep(Duration::from_millis(5));
+        wasm_thread::sleep(Duration::from_millis(5));
     }
     panic!("timed out waiting for {what}");
 }
@@ -97,6 +97,6 @@ fn each_status_is_handed_over_once_in_order_with_its_sender() {
     assert!((taken[1].1.current - 7.25).abs() < 1e-6);
     assert!((taken[1].1.compensationy - -0.25).abs() < 1e-6);
     // Taken is gone: a second take has nothing new.
-    std::thread::sleep(Duration::from_millis(50));
+    wasm_thread::sleep(Duration::from_millis(50));
     assert!(link.take_compassmot_status().is_empty());
 }

@@ -549,7 +549,7 @@ mod tests {
     /// A directory of the test's own under the system's temporary one, empty.
     fn scratch(test: &str) -> std::path::PathBuf {
         let dir =
-            std::env::temp_dir().join(format!("mp-mission-cameras-{test}-{}", std::process::id()));
+            mp_os::temp_dir().join(format!("mp-mission-cameras-{test}-{}", mp_os::process_id()));
         let _ = std::fs::remove_dir_all(&dir);
         dir
     }

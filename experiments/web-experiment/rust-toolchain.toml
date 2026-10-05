@@ -1,0 +1,5 @@
+# gpui_web needs nightly: parking_lot's "nightly" feature and wasm_thread (Zed's own hello_web does the same).
+[toolchain]
+channel = "nightly"
+targets = ["wasm32-unknown-unknown"]
+components = ["rust-src"]

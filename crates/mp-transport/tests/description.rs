@@ -38,8 +38,8 @@ use std::cell::Cell;
 use std::hint::black_box;
 use std::io::Write as _;
 use std::net::{SocketAddr, TcpListener, TcpStream, UdpSocket};
-use std::thread;
-use std::time::{Duration, Instant};
+use wasm_thread as thread;
+use web_time::{Duration, Instant};
 
 use mp_transport::testing::Loopback;
 use mp_transport::{ReplayTransport, Transport, UdpTransport};
@@ -125,7 +125,7 @@ fn a_replayed_log_is_named_with_its_path_and_size() {
 
     // Through the URL the link opens, and still the same once the log has been played out.
     let path = std::path::Path::new(env!("CARGO_TARGET_TMPDIR"))
-        .join(format!("description-{}.tlog", std::process::id()));
+        .join(format!("description-{}.tlog", mp_os::process_id()));
     std::fs::write(&path, [0xFE; 10]).unwrap();
     let mut file = mp_transport::open(&format!("file:{}", path.display())).unwrap();
     let expected = format!("file:{} (10 bytes)", path.display());

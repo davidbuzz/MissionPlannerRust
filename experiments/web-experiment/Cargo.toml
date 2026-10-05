@@ -1,0 +1,33 @@
+# The browser experiment (local only: never pushed until the owner says so): the planner's HUD in a
+# web page, through gpui_web at the revision the planner uses, drawn from a live vehicle.
+[package]
+name = "mp-web-experiment"
+version = "0.0.0"
+edition = "2024"
+license = "GPL-3.0-only"
+publish = false
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+gpui = { git = "https://github.com/zed-industries/zed", rev = "62e5991dd0f0c8a3af8d5e7e9c4652490d468db8" }
+gpui_platform = { git = "https://github.com/zed-industries/zed", rev = "62e5991dd0f0c8a3af8d5e7e9c4652490d468db8" }
+wasm-bindgen = "=0.2.128"
+web-sys = { version = "0.3", features = ["console"] }
+js-sys = "0.3"
+# std's clock panics in a web page; hud.rs reads web-time's there.
+web-time = "1"
+# hud.rs's frame_jpeg, as the planner builds it (the workspace's features).
+image = { version = "0.25", default-features = false, features = ["png", "jpeg"] }
+# The planner's own crates the HUD and its feed need; CI already checks these for wasm32.
+mp-mavlink = { path = "../../crates/mp-mavlink" }
+mp-mavlink-dialects = { path = "../../crates/mp-mavlink-dialects" }
+mp-vehicle = { path = "../../crates/mp-vehicle" }
+mp-mission = { path = "../../crates/mp-mission" }
+mp-units = { path = "../../crates/mp-units" }
+# What the linked files reach for in a web page: `os_lock` (pictures.rs).
+mp-os = { path = "../../crates/mp-os" }
+
+# A workspace of its own: its lock file and target folder stay out of the planner's.
+[workspace]

@@ -1984,7 +1984,7 @@ mod tests {
     /// `// C#: Grid/GridUI.cs:1567-1602`
     #[test]
     fn save_asks_a_name_and_writes_cameras_xml() {
-        let dir = std::env::temp_dir().join(format!("mp-gui-survey-save-{}", std::process::id()));
+        let dir = mp_os::temp_dir().join(format!("mp-gui-survey-save-{}", mp_os::process_id()));
         let _ = std::fs::remove_dir_all(&dir);
         let mut open = opened(gui_dialog());
         open.dialog.type_num(Num::FocalLength, "8.8");
@@ -2018,7 +2018,7 @@ mod tests {
         ));
 
         let blocked =
-            std::env::temp_dir().join(format!("mp-gui-survey-blocked-{}", std::process::id()));
+            mp_os::temp_dir().join(format!("mp-gui-survey-blocked-{}", mp_os::process_id()));
         std::fs::write(&blocked, b"a file where the directory would be").unwrap();
         let mut open = opened(gui_dialog());
         save_camera(&mut open, "Mine", Some(&blocked.join("inner")));
@@ -2032,8 +2032,7 @@ mod tests {
     /// `// C#: Grid/GridUI.cs:129-134, 325-447, 1858-1882`
     #[test]
     fn accept_settings_are_kept_in_config_xml_and_loaded_next_time() {
-        let dir =
-            std::env::temp_dir().join(format!("mp-gui-survey-settings-{}", std::process::id()));
+        let dir = mp_os::temp_dir().join(format!("mp-gui-survey-settings-{}", mp_os::process_id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
         let file = dir.join("config.xml");

@@ -72,7 +72,7 @@ thread_local! {
 /// `try_with` rather than `with`, because an allocator can run during thread teardown and must
 /// never panic. The cells are const-initialised and have no destructor, so touching them needs no
 /// lazy setup and cannot recurse into the allocator.
-fn note(counter: &'static std::thread::LocalKey<Cell<u64>>) {
+fn note(counter: &'static wasm_thread::LocalKey<Cell<u64>>) {
     let watching = WATCHING.try_with(Cell::get).unwrap_or(false);
     if watching {
         let _ = counter.try_with(|n| n.set(n.get() + 1));

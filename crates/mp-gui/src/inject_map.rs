@@ -38,6 +38,7 @@
 // This module is internal to the binary; `pub` here documents intent rather than exporting API.
 #![allow(unreachable_pub)]
 
+use mp_os::Lock as _;
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
@@ -133,7 +134,7 @@ pub struct Injection {
     shared: Arc<Shared>,
     /// `progressBarInjectCustomMap.Maximum`: the files and one more.
     maximum: usize,
-    handle: Option<std::thread::JoinHandle<()>>,
+    handle: Option<wasm_thread::JoinHandle<()>>,
 }
 
 impl Injection {
@@ -146,7 +147,7 @@ impl Injection {
         let shared = Arc::new(Shared::default());
         let worker = Arc::clone(&shared);
         let maximum = files.len() + 1;
-        let handle = std::thread::Builder::new()
+        let handle = wasm_thread::Builder::new()
             .name("inject-custom-map".to_owned())
             .spawn(move || {
                 for file in &files {
@@ -162,7 +163,7 @@ impl Injection {
                             let _ = cache.write(PROVIDER, tile, &jpeg);
                         }
                         Err(why) => {
-                            if let Ok(mut failure) = worker.failure.lock() {
+                            if let Ok(mut failure) = worker.failure.os_lock() {
                                 *failure = Some(format!("{}: {why}", file.display()));
                             }
                             break;
@@ -172,7 +173,7 @@ impl Injection {
                     if worker.done.load(Ordering::Acquire) < maximum {
                         worker.done.fetch_add(1, Ordering::AcqRel);
                     }
-                    if let Ok(mut counts) = worker.counts.lock() {
+                    if let Ok(mut counts) = worker.counts.os_lock() {
                         *counts.entry(tile.z).or_insert(0) += 1;
                     }
                 }
@@ -208,7 +209,7 @@ impl Injection {
     pub fn failure(&self) -> Option<String> {
         self.shared
             .failure
-            .lock()
+            .os_lock()
             .ok()
             .and_then(|held| held.clone())
     }
@@ -221,7 +222,7 @@ impl Injection {
         let counts = self
             .shared
             .counts
-            .lock()
+            .os_lock()
             .map(|held| held.clone())
             .unwrap_or_default();
         let mut results = String::new();
@@ -303,7 +304,7 @@ mod tests {
     /// folder that is not there.
     #[test]
     fn the_scan_lists_the_three_kinds_in_order() {
-        let dir = std::env::temp_dir().join(format!("mp-inject-scan-{}", std::process::id()));
+        let dir = mp_os::temp_dir().join(format!("mp-inject-scan-{}", mp_os::process_id()));
         let _ = std::fs::remove_dir_all(&dir);
         png(&dir.join("Z15/1/2.png"), [1, 2, 3]);
         png(&dir.join("Z15/1/3.png"), [1, 2, 3]);
@@ -337,7 +338,7 @@ mod tests {
     /// stray skipped, the bar at two of four, the results box counting the zoom's two.
     #[test]
     fn the_run_writes_the_tiles_and_counts_them() {
-        let dir = std::env::temp_dir().join(format!("mp-inject-run-{}", std::process::id()));
+        let dir = mp_os::temp_dir().join(format!("mp-inject-run-{}", mp_os::process_id()));
         let _ = std::fs::remove_dir_all(&dir);
         png(&dir.join("tiles/Z15/18000/30000.png"), [10, 20, 30]);
         png(&dir.join("tiles/Z15/18000/30001.png"), [40, 50, 60]);
@@ -367,7 +368,7 @@ mod tests {
     /// A file that is not an image ends the run where the C#'s exception does; one tile counts.
     #[test]
     fn a_file_that_is_not_an_image_ends_the_run() {
-        let dir = std::env::temp_dir().join(format!("mp-inject-bad-{}", std::process::id()));
+        let dir = mp_os::temp_dir().join(format!("mp-inject-bad-{}", mp_os::process_id()));
         let _ = std::fs::remove_dir_all(&dir);
         png(&dir.join("Z15/1/1.png"), [10, 20, 30]);
         std::fs::create_dir_all(dir.join("Z15/1")).unwrap();

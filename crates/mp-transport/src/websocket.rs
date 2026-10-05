@@ -307,7 +307,7 @@ impl WebSocketTransport {
     fn receive_failed(&mut self) {
         self.drop_connection();
         if self.auto_reconnect {
-            std::thread::sleep(RECONNECT_DELAY);
+            wasm_thread::sleep(RECONNECT_DELAY);
             if self.connect().is_err() {
                 self.drop_connection();
             }

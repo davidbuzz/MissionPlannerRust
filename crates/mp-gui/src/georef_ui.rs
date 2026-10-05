@@ -718,8 +718,8 @@ impl Terrain for PlannerTerrain {
 /// `DateTime.Today`: the date now, at midnight - the machine's time taken as UTC, as the port
 /// takes local time everywhere (`mp_georef::time`). `// C#: ExtLibs/Utilities/GeoRefImageBase.cs:1197`
 fn today() -> DateTime {
-    let seconds = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
+    let seconds = web_time::SystemTime::now()
+        .duration_since(web_time::UNIX_EPOCH)
         .map_or(0, |d| d.as_secs());
     let days = i64::try_from(seconds / 86_400).unwrap_or(0);
     DateTime::from_ticks(UNIX_EPOCH_TICKS + days * TICKS_PER_DAY, TimeKind::Local)
@@ -1650,7 +1650,7 @@ impl Form {
         let (sender, receiver) = mpsc::channel();
         let terrain = Arc::clone(&self.terrain);
         let kind = job.kind();
-        let spawned = std::thread::Builder::new()
+        let spawned = wasm_thread::Builder::new()
             .name(format!("mp-georef-{}", kind.name()))
             .spawn(move || {
                 let lines = sender.clone();
@@ -2997,7 +2997,7 @@ mod tests {
     use super::*;
     use mp_georef::{Location, OrderedMap, PictureInformation};
     use std::path::{Path, PathBuf};
-    use std::time::{Duration, Instant};
+    use web_time::{Duration, Instant};
 
     fn testdata(name: &str) -> PathBuf {
         Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -3010,9 +3010,9 @@ mod tests {
     }
 
     fn scratch(name: &str) -> PathBuf {
-        let dir = std::env::temp_dir().join(format!(
+        let dir = mp_os::temp_dir().join(format!(
             "headless-planner-georef-ui-{name}-{}",
-            std::process::id()
+            mp_os::process_id()
         ));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
@@ -3067,7 +3067,7 @@ mod tests {
         while form.running().is_some() {
             form.poll();
             assert!(Instant::now() < deadline, "the run never finished");
-            std::thread::sleep(Duration::from_millis(5));
+            wasm_thread::sleep(Duration::from_millis(5));
         }
     }
 
@@ -3465,7 +3465,7 @@ mod tests {
         while form.running().is_some() {
             form.poll();
             assert!(Instant::now() < deadline);
-            std::thread::sleep(Duration::from_millis(5));
+            wasm_thread::sleep(Duration::from_millis(5));
         }
         assert!(form.georef().is_some());
         assert_eq!(form.last, Some(Kind::Process));

@@ -29,10 +29,11 @@
 
 mod common;
 
+use mp_os::Lock as _;
 use std::io::{self, Write};
 use std::net::TcpListener;
-use std::thread::JoinHandle;
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use wasm_thread::JoinHandle;
+use web_time::{Duration, SystemTime, UNIX_EPOCH};
 
 use common::{base64_reference, caster, listen, read_to_end, read_until, sentences};
 use mp_transport::ntrip::{GGA_INTERVAL, nmea_checksum};
@@ -68,7 +69,7 @@ fn rtcm(length: usize) -> Vec<u8> {
 /// it is asked, and gives back the request and the connection.
 fn mock_caster(listener: &TcpListener) -> JoinHandle<(String, std::net::TcpStream)> {
     let listener = listener.try_clone().unwrap();
-    std::thread::spawn(move || {
+    wasm_thread::spawn(move || {
         let (mut stream, _) = listener.accept().unwrap();
         let request = String::from_utf8(read_until(&mut stream, b"\r\n\r\n")).unwrap();
         let first = request.lines().next().unwrap().to_owned();
@@ -253,7 +254,7 @@ fn a_position_set_after_open_goes_on_the_next_read_and_then_every_thirty_seconds
     let mut ntrip = NtripTransport::open_with_clock(
         &format!("ntrip://127.0.0.1:{port}/MOUNT"),
         NtripOptions::default(),
-        Box::new(move || *clock.lock().unwrap()),
+        Box::new(move || *clock.os_lock().unwrap()),
     )
     .unwrap();
     ntrip.set_read_timeout(Duration::from_millis(1)).unwrap();
@@ -261,7 +262,7 @@ fn a_position_set_after_open_goes_on_the_next_read_and_then_every_thirty_seconds
     let mut buf = [0u8; 16];
     // A hundred seconds of reads, a second apart.
     for second in 0..100 {
-        *now.lock().unwrap() = noon_ish() + Duration::from_secs(second);
+        *now.os_lock().unwrap() = noon_ish() + Duration::from_secs(second);
         assert_eq!(ntrip.read(&mut buf).unwrap(), 0);
     }
     drop(ntrip);

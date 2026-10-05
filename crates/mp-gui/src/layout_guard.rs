@@ -236,7 +236,7 @@ pub const BANNER_AFTER: std::time::Duration = std::time::Duration::from_millis(5
 #[derive(Debug, Default)]
 pub struct Banner {
     /// What is cut off, described, and since when it has been so.
-    showing: Option<(String, std::time::Instant)>,
+    showing: Option<(String, web_time::Instant)>,
     /// Whether the strip has shown it yet, so the log has it once.
     logged: bool,
 }
@@ -254,7 +254,7 @@ impl Banner {
             Vec::new()
         };
         let text = (!names.is_empty()).then(|| describe(&names));
-        let now = std::time::Instant::now();
+        let now = web_time::Instant::now();
         self.observe(text, now);
         if let Some(text) = self.newly_shown(now) {
             let line = record_line(
@@ -271,7 +271,7 @@ impl Banner {
     }
 
     /// What is cut off at `now`, if anything: the time starts again when it changes.
-    pub fn observe(&mut self, text: Option<String>, now: std::time::Instant) {
+    pub fn observe(&mut self, text: Option<String>, now: web_time::Instant) {
         self.showing = match (text, self.showing.take()) {
             (None, _) => None,
             (Some(text), Some((shown, since))) if shown == text => Some((shown, since)),
@@ -283,7 +283,7 @@ impl Banner {
     }
 
     /// What the strip has just come to show at `now`: each cut-off once.
-    pub fn newly_shown(&mut self, now: std::time::Instant) -> Option<String> {
+    pub fn newly_shown(&mut self, now: web_time::Instant) -> Option<String> {
         if self.logged {
             return None;
         }
@@ -294,7 +294,7 @@ impl Banner {
 
     /// What the strip says at `now`, once the cut-off has lasted.
     #[must_use]
-    pub fn text_at(&self, now: std::time::Instant) -> Option<&str> {
+    pub fn text_at(&self, now: web_time::Instant) -> Option<&str> {
         self.showing
             .as_ref()
             .filter(|(_, since)| now.duration_since(*since) >= BANNER_AFTER)
@@ -357,7 +357,7 @@ mod tests {
     /// change starts the time again, and nothing cut off takes it away.
     #[test]
     fn the_banner_names_what_stays_cut_off() {
-        let start = std::time::Instant::now();
+        let start = web_time::Instant::now();
         let later = |ms: u64| start + std::time::Duration::from_millis(ms);
         let mut banner = Banner::default();
         banner.observe(Some("plan-read".to_owned()), start);
@@ -379,7 +379,7 @@ mod tests {
             record_line("2026-10-05 00:59:01", "fly", (1600.0, 920.0), "panel:actions"),
             "2026-10-05 00:59:01 CUT OFF on fly at 1600x920: panel:actions"
         );
-        let path = std::env::temp_dir().join(format!("mp-layout-record-{}.log", std::process::id()));
+        let path = mp_os::temp_dir().join(format!("mp-layout-record-{}.log", mp_os::process_id()));
         let _ = std::fs::remove_file(&path);
         append_record(&path, "first");
         append_record(&path, "second");
@@ -394,7 +394,7 @@ mod tests {
     /// changes and lasts.
     #[test]
     fn the_log_has_each_cut_off_once() {
-        let start = std::time::Instant::now();
+        let start = web_time::Instant::now();
         let later = |ms: u64| start + std::time::Duration::from_millis(ms);
         let mut banner = Banner::default();
         banner.observe(Some("header".to_owned()), start);

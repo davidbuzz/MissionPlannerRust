@@ -61,7 +61,7 @@
 
 use std::path::PathBuf;
 use std::sync::OnceLock;
-use std::time::{Duration, Instant};
+use web_time::{Duration, Instant};
 
 use mp_mission::dotnet::format_f64;
 use mp_vehicle::VehicleState;
@@ -943,6 +943,7 @@ impl crate::MissionPlanner {
 
 #[cfg(test)]
 mod tests {
+    use mp_os::Lock as _;
     use super::*;
     use crate::config_coverage::source::csharp;
     use std::collections::HashMap;
@@ -1371,9 +1372,9 @@ mod tests {
     fn the_file_is_loaded_at_start_and_saved_by_save() {
         static LOCK: Mutex<()> = Mutex::new(());
         let _guard = LOCK
-            .lock()
+            .os_lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner);
-        let dir = std::env::temp_dir().join(format!("mp-warnings-{}", std::process::id()));
+        let dir = mp_os::temp_dir().join(format!("mp-warnings-{}", mp_os::process_id()));
         let _ = std::fs::remove_dir_all(&dir);
         let file = dir.join("data").join(FILE_NAME);
         let mut engine = WarningEngine {

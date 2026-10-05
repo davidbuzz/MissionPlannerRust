@@ -108,9 +108,9 @@ fn the_two_formats_agree_where_they_overlap() {
 #[test]
 fn our_own_output_round_trips_through_the_disk() {
     let original = fixture("mission-planner.param");
-    let directory = std::env::temp_dir().join(format!(
+    let directory = mp_os::temp_dir().join(format!(
         "headless-planner-param-compat-{}",
-        std::process::id()
+        mp_os::process_id()
     ));
     std::fs::create_dir_all(&directory).expect("a writable temp directory");
     let path = directory.join("written.param");

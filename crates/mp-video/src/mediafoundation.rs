@@ -39,6 +39,8 @@
 //! the stream is read on the capture thread though it was opened on another.
 #![allow(unsafe_code)]
 
+use mp_os::Lock as _;
+use mp_os::RecvTimeout as _;
 use std::path::PathBuf;
 use std::sync::Mutex;
 use std::sync::mpsc::{self, Receiver, RecvTimeoutError, Sender};
@@ -461,7 +463,7 @@ impl Arrivals {
         // A stream already dropped has no receiver; the arrival is not wanted.
         let _ = self
             .sender
-            .lock()
+            .os_lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
             .send(arrival);
     }
@@ -569,7 +571,7 @@ impl Stream for MediaFoundationStream {
             .map_err(|why| VideoError::Read(why.message()))?;
             self.pending = true;
         }
-        match self.arrivals.recv_timeout(READ_TIMEOUT) {
+        match self.arrivals.os_recv_timeout(READ_TIMEOUT) {
             Ok(arrival) => {
                 self.pending = false;
                 match arrival {
@@ -845,7 +847,7 @@ mod tests {
             eprintln!("mode {}", mode.label());
         }
         let mode = modes.first().expect("a decodable mode");
-        let started = std::time::Instant::now();
+        let started = web_time::Instant::now();
         let capture = crate::Capture::start(&source, first, mode).unwrap();
         while capture.frames() < 10 {
             assert!(
@@ -853,7 +855,7 @@ mod tests {
                 "{capture:?} {:?}",
                 capture.error()
             );
-            std::thread::sleep(Duration::from_millis(5));
+            wasm_thread::sleep(Duration::from_millis(5));
         }
         let frame = capture.latest().unwrap();
         eprintln!(

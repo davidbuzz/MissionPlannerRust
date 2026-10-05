@@ -103,7 +103,7 @@ pub fn update_files(directory: &Path, updater_name: &str) -> bool {
                 match moved {
                     Ok(()) => done = true,
                     Err(_) => {
-                        std::thread::sleep(RETRY);
+                        wasm_thread::sleep(RETRY);
                         // normally in use by explorer.exe
                         if lower_contains(file, "tlogthumbnailhandler") {
                             done = true;
@@ -132,7 +132,7 @@ pub fn update_files(directory: &Path, updater_name: &str) -> bool {
 /// `// C#: Updater/Program.cs:16-79`
 pub fn run(directory: &Path, planner: &Path, updater_name: &str, wait: bool) -> Result<(), String> {
     if wait {
-        std::thread::sleep(GRACE);
+        wasm_thread::sleep(GRACE);
     }
     if !update_files(directory, updater_name) {
         return Err(FAILED.to_owned());
@@ -156,8 +156,7 @@ mod tests {
     use super::*;
 
     fn scratch(test: &str) -> std::path::PathBuf {
-        let dir =
-            std::env::temp_dir().join(format!("mp-update-apply-{test}-{}", std::process::id()));
+        let dir = mp_os::temp_dir().join(format!("mp-update-apply-{test}-{}", mp_os::process_id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(dir.join("sub")).unwrap();
         dir
@@ -203,10 +202,10 @@ mod tests {
         // The planner was started standing in `dir` and not waited for, as the C# starts it, and
         // Windows will not remove a folder a running process stands in: the cleanup waits for
         // `true` to have gone (CI run 37173996196, "being used by another process").
-        let until = std::time::Instant::now() + std::time::Duration::from_secs(10);
+        let until = web_time::Instant::now() + std::time::Duration::from_secs(10);
         while let Err(e) = std::fs::remove_dir_all(&dir) {
-            assert!(std::time::Instant::now() < until, "{}: {e}", dir.display());
-            std::thread::sleep(std::time::Duration::from_millis(50));
+            assert!(web_time::Instant::now() < until, "{}: {e}", dir.display());
+            wasm_thread::sleep(std::time::Duration::from_millis(50));
         }
     }
 }

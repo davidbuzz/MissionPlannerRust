@@ -1,0 +1,24 @@
+[package]
+name = "mp-os"
+description = "The std calls that panic in a web page rather than fail: std's on the desktop"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+# Threads, std's on the desktop and Web Workers in a web page (experiments/web-experiment/tools/port_threads.py);
+# in a page also which thread is the page's main one (`lock`).
+wasm_thread = { git = "https://github.com/zed-industries/wasm_thread", rev = "0cf96c7708dfb97ccf3da50347e25edcf75d6937" }
+
+# The browser's HTTP (`http`): a synchronous XMLHttpRequest from a Web Worker.
+[target.'cfg(target_family = "wasm")'.dependencies]
+# The page's clock, for `os_recv_timeout`'s deadline.
+web-time = "1"
+wasm-bindgen = "0.2"
+js-sys = "0.3"
+web-sys = { version = "0.3", features = ["XmlHttpRequest", "XmlHttpRequestResponseType"] }

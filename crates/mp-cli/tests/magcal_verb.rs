@@ -39,9 +39,9 @@ fn headless_planner(args: &[&str]) -> std::process::Output {
         // A data directory that does not exist imports nothing (`mp_settings::migrate`).
         .env(
             "XDG_DATA_HOME",
-            std::env::temp_dir().join(format!(
+            mp_os::temp_dir().join(format!(
                 "headless-planner-magcal-data-{}",
-                std::process::id()
+                mp_os::process_id()
             )),
         )
         .output()
