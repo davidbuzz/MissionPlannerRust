@@ -28,6 +28,7 @@
 //! paths - the link's parameter write, the fly screen's mode command, the plan's list, its
 //! prompts - so a plugin opens no second path to the vehicle.
 
+use mp_os::ReadWrite as _;
 use mp_os::RecvTimeout as _;
 use std::sync::mpsc::{self, Receiver, RecvTimeoutError, Sender};
 use std::sync::{Arc, PoisonError, RwLock};
@@ -372,7 +373,7 @@ impl ChannelSurface {
 
     fn read(&self) -> Snapshot {
         self.snapshot
-            .read()
+            .os_read()
             .unwrap_or_else(PoisonError::into_inner)
             .clone()
     }

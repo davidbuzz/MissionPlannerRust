@@ -242,7 +242,9 @@ impl Injection {
     /// Lets the thread go when the run is over.
     pub fn join(&mut self) {
         if let Some(handle) = self.handle.take() {
-            let _ = handle.join();
+            // Finished; on a web page's main thread let go of rather than joined
+            // (mp_os::join_or_leave).
+            let _ = mp_os::join_or_leave(handle);
         }
     }
 }

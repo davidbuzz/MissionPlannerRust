@@ -36,6 +36,7 @@
 // This module is internal to the binary; `pub` here documents intent rather than exporting API.
 #![allow(unreachable_pub)]
 
+use mp_os::ReadWrite as _;
 use std::collections::BTreeMap;
 use std::sync::RwLock;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -61,7 +62,8 @@ struct Loaded {
 /// loaded (and fetched) on demand by `CheckLoad`; here both are fetched once the vehicle's
 /// documentation is in, so a ReadOnly question finds them ready.
 /// `// C#: ExtLibs/Utilities/ParameterMetaDataRepository.cs:42-46; ParameterMetaDataRepositoryAPMpdef.cs:46-152, 196-206`
-static FALLBACK_READ_ONLY: RwLock<Vec<(String, BTreeMap<String, String>)>> = RwLock::new(Vec::new());
+static FALLBACK_READ_ONLY: RwLock<Vec<(String, BTreeMap<String, String>)>> =
+    RwLock::new(Vec::new());
 
 static LOADED: RwLock<Option<Loaded>> = RwLock::new(None);
 
@@ -76,7 +78,7 @@ static GENERATION: AtomicU64 = AtomicU64::new(0);
 /// ([`mp_params::param_meta::lookup`]). Both are searches, not scans.
 #[must_use]
 pub fn lookup(name: &str) -> Option<&'static ParamMeta> {
-    let guard = LOADED.read().ok();
+    let guard = LOADED.os_read().ok();
     lookup_in(
         guard
             .as_ref()
@@ -105,11 +107,12 @@ fn lookup_in(
 /// `// C#: ExtLibs/Utilities/ParameterMetaDataRepository.cs:27-67; GCSViews/ConfigurationView/ConfigRawParams.cs:480-483`
 #[must_use]
 pub fn read_only(name: &str) -> Option<String> {
-    let fetched = LOADED
-        .read()
-        .ok()
-        .and_then(|guard| guard.as_ref().and_then(|loaded| loaded.read_only.get(name).cloned()));
-    let fallbacks = FALLBACK_READ_ONLY.read().ok();
+    let fetched = LOADED.os_read().ok().and_then(|guard| {
+        guard
+            .as_ref()
+            .and_then(|loaded| loaded.read_only.get(name).cloned())
+    });
+    let fallbacks = FALLBACK_READ_ONLY.os_read().ok();
     read_only_in(
         fetched,
         fallbacks.as_deref().map_or(&[], Vec::as_slice),
@@ -125,7 +128,11 @@ fn read_only_in(
     name: &str,
 ) -> Option<String> {
     fetched
-        .or_else(|| fallbacks.iter().find_map(|(_, marks)| marks.get(name).cloned()))
+        .or_else(|| {
+            fallbacks
+                .iter()
+                .find_map(|(_, marks)| marks.get(name).cloned())
+        })
         .or_else(|| mp_params::param_meta::read_only_backup(name).then(|| "True".to_owned()))
 }
 
@@ -153,7 +160,7 @@ fn fetch_fallbacks() {
                     .collect();
                 found.push((vehicle.to_owned(), marks));
             }
-            if let Ok(mut guard) = FALLBACK_READ_ONLY.write() {
+            if let Ok(mut guard) = FALLBACK_READ_ONLY.os_write() {
                 *guard = found;
             }
         })
@@ -176,7 +183,7 @@ pub fn generation() -> u64 {
 #[must_use]
 pub fn source() -> String {
     LOADED
-        .read()
+        .os_read()
         .ok()
         .and_then(|guard| guard.as_ref().map(|loaded| loaded.source.clone()))
         .unwrap_or_else(|| "bundled".to_owned())
@@ -186,7 +193,7 @@ pub fn source() -> String {
 #[must_use]
 pub fn documented() -> usize {
     LOADED
-        .read()
+        .os_read()
         .ok()
         .and_then(|guard| guard.as_ref().map(|loaded| loaded.table.len()))
         .unwrap_or(0)
@@ -196,7 +203,7 @@ pub fn documented() -> usize {
 pub fn install(source: impl Into<String>, pdef: &Pdef) -> usize {
     let table = table_of(pdef);
     let count = table.len();
-    if let Ok(mut guard) = LOADED.write() {
+    if let Ok(mut guard) = LOADED.os_write() {
         *guard = Some(Loaded {
             source: source.into(),
             table,
@@ -501,8 +508,9 @@ mod tests {
     /// `// C#: ExtLibs/Utilities/ParameterMetaDataRepository.cs:42-49`
     #[test]
     fn read_only_falls_back_through_the_files_in_order() {
-        let sitl: BTreeMap<String, String> =
-            [("SIM_ONLY".to_owned(), "True".to_owned())].into_iter().collect();
+        let sitl: BTreeMap<String, String> = [("SIM_ONLY".to_owned(), "True".to_owned())]
+            .into_iter()
+            .collect();
         let periph: BTreeMap<String, String> = [
             ("SIM_ONLY".to_owned(), "False".to_owned()),
             ("PERIPH_ONLY".to_owned(), "True".to_owned()),
@@ -520,7 +528,10 @@ mod tests {
             Some("True"),
             "SITL's before AP_Periph's"
         );
-        assert_eq!(read_only_in(None, &fallbacks, "PERIPH_ONLY").as_deref(), Some("True"));
+        assert_eq!(
+            read_only_in(None, &fallbacks, "PERIPH_ONLY").as_deref(),
+            Some("True")
+        );
         assert_eq!(
             read_only_in(None, &fallbacks, "BARO1_DEVID").as_deref(),
             Some("True"),

@@ -52,6 +52,22 @@ pub fn may_block() -> bool {
     }
 }
 
+/// A thread's handle let go of: joined where this thread may wait ([`may_block`]), its result
+/// given; on a web page's main thread, which may not, left to end on its own - for a thread told
+/// to stop, or done. Not even a thread `is_finished` calls done may be joined there:
+/// wasm_thread's thread lets go of its share of the result, which `is_finished` counts, before
+/// it signals the end that `join` waits for, so a join in between waits, and a wait there traps
+/// ("Atomics.wait cannot be called in this context" - a map type chosen in a page ended the
+/// planner so, its tile store's threads joined as it went, 2026-10-06).
+pub fn join_or_leave<T>(handle: wasm_thread::JoinHandle<T>) -> Option<std::thread::Result<T>> {
+    if may_block() {
+        Some(handle.join())
+    } else {
+        drop(handle);
+        None
+    }
+}
+
 /// [`wake`]s so far.
 static WAKES: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
 
@@ -75,7 +91,7 @@ use std::sync::TryLockError;
 #[cfg(target_family = "wasm")]
 use std::sync::mpsc::TryRecvError;
 use std::sync::mpsc::{Receiver, RecvTimeoutError};
-use std::sync::{LockResult, Mutex, MutexGuard};
+use std::sync::{LockResult, Mutex, MutexGuard, RwLock, RwLockReadGuard, RwLockWriteGuard};
 use std::time::Duration;
 
 /// `std::env::temp_dir`; in a web page `/tmp`, where nothing can be written.
@@ -155,6 +171,70 @@ pub trait Lock<T: ?Sized> {
 impl<T: ?Sized> Lock<T> for Mutex<T> {
     fn os_lock(&self) -> LockResult<MutexGuard<'_, T>> {
         lock(self)
+    }
+}
+
+/// `RwLock::read`, spinning on a web page's main thread as [`lock`] does there, where a wait for a
+/// writer would trap; `read` itself on the desktop and on a worker.
+///
+/// # Errors
+/// A poisoned lock, as `read`'s.
+pub fn read<T: ?Sized>(rwlock: &RwLock<T>) -> LockResult<RwLockReadGuard<'_, T>> {
+    #[cfg(target_family = "wasm")]
+    if on_main_thread() {
+        loop {
+            match rwlock.try_read() {
+                Ok(guard) => return Ok(guard),
+                Err(TryLockError::Poisoned(poisoned)) => return Err(poisoned),
+                Err(TryLockError::WouldBlock) => std::hint::spin_loop(),
+            }
+        }
+    }
+    rwlock.read()
+}
+
+/// `RwLock::write`, spinning on a web page's main thread as [`lock`] does there; `write` itself
+/// on the desktop and on a worker.
+///
+/// # Errors
+/// A poisoned lock, as `write`'s.
+pub fn write<T: ?Sized>(rwlock: &RwLock<T>) -> LockResult<RwLockWriteGuard<'_, T>> {
+    #[cfg(target_family = "wasm")]
+    if on_main_thread() {
+        loop {
+            match rwlock.try_write() {
+                Ok(guard) => return Ok(guard),
+                Err(TryLockError::Poisoned(poisoned)) => return Err(poisoned),
+                Err(TryLockError::WouldBlock) => std::hint::spin_loop(),
+            }
+        }
+    }
+    rwlock.write()
+}
+
+/// [`read`] and [`write`] as an `RwLock`'s own methods, as [`Lock`] gives a `Mutex` [`lock`]: for
+/// the `RwLock`s the screen's thread shares with the planner's threads.
+pub trait ReadWrite<T: ?Sized> {
+    /// [`read`].
+    ///
+    /// # Errors
+    /// A poisoned lock, as `read`'s.
+    fn os_read(&self) -> LockResult<RwLockReadGuard<'_, T>>;
+
+    /// [`write`].
+    ///
+    /// # Errors
+    /// A poisoned lock, as `write`'s.
+    fn os_write(&self) -> LockResult<RwLockWriteGuard<'_, T>>;
+}
+
+impl<T: ?Sized> ReadWrite<T> for RwLock<T> {
+    fn os_read(&self) -> LockResult<RwLockReadGuard<'_, T>> {
+        read(self)
+    }
+
+    fn os_write(&self) -> LockResult<RwLockWriteGuard<'_, T>> {
+        write(self)
     }
 }
 
@@ -413,6 +493,35 @@ mod tests {
         })
         .join();
         assert!(lock(&poisoned).is_err());
+    }
+
+    #[test]
+    fn on_the_desktop_a_thread_let_go_of_is_joined() {
+        let handle = wasm_thread::spawn(|| 7);
+        assert_eq!(join_or_leave(handle).map(Result::ok), Some(Some(7)));
+        let panicked = wasm_thread::spawn(|| panic!("its result is the panic"));
+        assert!(join_or_leave(panicked).is_some_and(|result| result.is_err()));
+    }
+
+    #[test]
+    fn on_the_desktop_read_and_write_are_rwlocks_own() {
+        let rwlock = RwLock::new(1);
+        *rwlock.os_write().expect("not poisoned") += 1;
+        assert_eq!(*rwlock.os_read().expect("not poisoned"), 2);
+        // Readers together, as RwLock's own.
+        let first = rwlock.os_read().expect("not poisoned");
+        let second = rwlock.os_read().expect("not poisoned");
+        assert_eq!(*first + *second, 4);
+        drop((first, second));
+        let poisoned = std::sync::Arc::new(RwLock::new(0));
+        let held = std::sync::Arc::clone(&poisoned);
+        let _ = wasm_thread::spawn(move || {
+            let _guard = held.write();
+            panic!("poison it");
+        })
+        .join();
+        assert!(poisoned.os_read().is_err());
+        assert!(poisoned.os_write().is_err());
     }
 
     #[test]

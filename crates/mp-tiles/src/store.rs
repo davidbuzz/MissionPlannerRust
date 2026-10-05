@@ -445,8 +445,11 @@ impl Drop for TileStore {
         self.shared.running.store(false, Ordering::Release);
         self.shared.wake.notify_all();
         self.shared.network_wake.notify_all();
+        // Told to stop and woken, each ends at once; joined where this thread may wait, and
+        // left to end on a web page's main thread, where a wait traps (mp_os::join_or_leave):
+        // the map dropped its store there when its imagery changed, and the page ended.
         for thread in self.threads.drain(..) {
-            let _ = thread.join();
+            let _ = mp_os::join_or_leave(thread);
         }
     }
 }

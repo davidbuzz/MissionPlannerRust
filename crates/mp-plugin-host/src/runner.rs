@@ -27,8 +27,9 @@
 //! window. Here each plugin has its own thread, which also takes its clicks, so a plugin waits
 //! only on itself; the window hears from it through [`Request`]s it drains once a frame.
 
-use mp_os::fs::FsExt as _;
+use mp_os::ReadWrite as _;
 use mp_os::RecvTimeout as _;
+use mp_os::fs::FsExt as _;
 use std::path::{Path, PathBuf};
 use std::sync::mpsc::{self, Receiver, RecvTimeoutError, Sender};
 use std::sync::{Arc, PoisonError, RwLock};
@@ -308,7 +309,7 @@ impl PluginHost {
     pub fn set_snapshot(&self, snapshot: Snapshot) {
         *self
             .snapshot
-            .write()
+            .os_write()
             .unwrap_or_else(PoisonError::into_inner) = snapshot;
     }
 
@@ -317,7 +318,7 @@ impl PluginHost {
         change(
             &mut self
                 .snapshot
-                .write()
+                .os_write()
                 .unwrap_or_else(PoisonError::into_inner),
         );
     }
@@ -399,7 +400,7 @@ impl PluginHost {
                     wasm_thread::sleep(Duration::from_millis(5));
                 }
                 if thread.is_finished() {
-                    let _ = thread.join();
+                    let _ = mp_os::join_or_leave(thread);
                 }
             }
         }

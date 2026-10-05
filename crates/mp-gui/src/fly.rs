@@ -5076,7 +5076,8 @@ pub fn gst_download_tick(
         return said;
     }
     let download = data.gst_download.take()?;
-    let _ = download.thread.join();
+    // Finished; on a web page's main thread let go of rather than joined (mp_os::join_or_leave).
+    let _ = mp_os::join_or_leave(download.thread);
     let found = look()
         .map(|path| path.display().to_string())
         .unwrap_or_default();

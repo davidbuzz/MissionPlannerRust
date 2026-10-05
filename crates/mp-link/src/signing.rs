@@ -58,6 +58,7 @@
 //!   kept;
 //! * `signingignore` is not ported: nothing in the C# tree sets it.
 
+use mp_os::ReadWrite as _;
 use std::collections::BTreeMap;
 use std::hash::{BuildHasher as _, Hasher as _};
 use std::sync::RwLock;
@@ -81,7 +82,7 @@ static AUTH_KEYS: RwLock<Vec<[u8; 32]>> = RwLock::new(Vec::new());
 /// when it has loaded the store and whenever a key is added or removed.
 /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVAuthKeys.cs:22, 45-55`
 pub fn set_auth_keys(keys: Vec<[u8; 32]>) {
-    if let Ok(mut held) = AUTH_KEYS.write() {
+    if let Ok(mut held) = AUTH_KEYS.os_write() {
         *held = keys;
     }
 }
@@ -90,7 +91,7 @@ pub fn set_auth_keys(keys: Vec<[u8; 32]>) {
 #[must_use]
 pub fn auth_keys() -> Vec<[u8; 32]> {
     AUTH_KEYS
-        .read()
+        .os_read()
         .map(|keys| keys.clone())
         .unwrap_or_default()
 }
@@ -363,7 +364,7 @@ impl Signing {
         if frame.signature.is_none() {
             return true;
         }
-        let Ok(keys) = AUTH_KEYS.read() else {
+        let Ok(keys) = AUTH_KEYS.os_read() else {
             return self.check(frame, &[]);
         };
         self.check(frame, &keys)

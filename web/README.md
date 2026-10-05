@@ -142,6 +142,7 @@ NODE_PATH=<node_modules with playwright> node check/files_check.js     # the bro
 NODE_PATH=<node_modules with playwright> node check/storage_budget_check.js # the logs a visit loads, newest first
 NODE_PATH=<node_modules with playwright> node check/serial_check.js    # a serial link through WebSerial
 NODE_PATH=<node_modules with playwright> node check/serial_sik_check.js # SiK radios' settings over a page's port
+NODE_PATH=<node_modules with playwright> node check/maptype_check.js   # map types chosen, no wait on the main thread
 NODE_PATH=<node_modules with playwright> node check/fault_check.js     # a fault of the page's own, asked about at the next start
 NODE_PATH=<node_modules with playwright> check/tailnet_e2e.sh          # over a tailnet (needs Go)
 ```
@@ -180,9 +181,6 @@ By hand:
 
 ## Not done
 
-- `RwLock` and blocking `recv`/`join` on the page's main thread are not swept. The paths exercised
-  so far are proven: startup, every top screen with and without a vehicle, the map, connect, the
-  HUD, and the full parameter download.
 - UDP listening (`udp:0.0.0.0:14550`), where a vehicle sends first: the page's Tailscale node
   dials out (TCP, UDPCl) but does not listen yet.
 - Install Firmware over a page's serial port: its rates and DTR go to the port as the SiK radio
