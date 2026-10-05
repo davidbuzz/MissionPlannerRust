@@ -76,10 +76,14 @@ expect config.mavftp.prompt none
 expect config.InputBoxFolderNameEnterfoldername mprtest
 expect config.mavftp.list ~ mprtest
 expect config.mavftp.item.mprtest.type Directory
-# After a listing the C# sets "Ready" at once while the listing, awaited, reports "<dir> Ready"
-# (MavFTPUI.cs:543-545, MAVFtp.cs:1441) onto the label if 100 ms have passed since its last
-# update - so Mission Planner ends on either, by timing, and so does this.
-expect config.mavftp.status ~ Ready
+# After a listing Mission Planner's label ends on "Ready", "/ Ready" or "/ Listing", by timing,
+# and so does this. The handler sets "Ready" at once (MavFTPUI.cs:543-545) while the listing runs on
+# a thread of the pool (MavFTPUI.cs:240-244); its "<dir> Listing" (MAVFtp.cs:1285) reaches the label
+# through BeginInvoke, after "Ready", and its "<dir> Ready" (MAVFtp.cs:1441) only if 100 ms have
+# passed since the last report the label took (MavFTPUI.cs:34-60) - which a SITL's quick listing
+# often has not: config-mavftp failed here three runs in four on a new SITL (2026-10-06) with the
+# label on "/ Listing" and the listing done. So the script asks that the work has ended.
+expect config.mavftp.busy false
 
 # Into it, and two files uploaded there at once, each in double quotes: their CRCs agree, or the
 # status line would say so.
@@ -157,7 +161,8 @@ click mavftp-item-second.txt:right
 expect config.mavftp.selection ~ renamed.txt
 click mavftp-menu-delete
 expect config.mavftp.list.count 0
-expect config.mavftp.status ~ Ready
+# Listed again after: as after New Folder, the work ended whatever the label says.
+expect config.mavftp.busy false
 
 # The tree's keys move its selection and list nothing.
 click mavftp-node-/
