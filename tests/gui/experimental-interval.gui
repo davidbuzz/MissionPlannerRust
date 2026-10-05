@@ -1,0 +1,52 @@
+# EXPERIMENTAL's Message Interval (temp.cs:1026-1098), against SITL: the form shown beside the
+# tab as the C#'s Show() shows it - every MAVLINK_MSG_ID by name, sorted, the first chosen; the
+# rates 0 to 199, 0 to start. ATTITUDE chosen at 2 Hz and Set: SET_MESSAGE_INTERVAL with
+# ATTITUDE's id and 500000 microseconds, which the copter takes. A rate that is no number is said
+# on the status line (the C#'s double.Parse throws); the close box takes the form away; and the
+# MAVLink Inspector, opened from the same tab, shows ATTITUDE at 2.0 Hz.
+#
+# Run as: tools/gui-test.sh tests/gui/experimental-interval.gui -- tcp:127.0.0.1:5760
+screen fly
+window 1600x1200
+budget 20
+# 20: two runs took 13.3 s (2026-10-06).
+env XDG_DATA_HOME $WORK
+env MP_CONFIG_XML $WORK/config.xml
+setup printf '<?xml version="1.0" encoding="utf-8"?><Config><tabcontrolactions>tabQuick;</tabcontrolactions></Config>' > "$WORK/config.xml"
+
+within 30
+expect vehicle.count > 0
+key ctrl+f
+expect screen experimental
+expect experimental.interval.open false
+click experimental-but_messageinterval
+expect experimental.interval.open true
+expect experimental.interval.message ACTUATOR_CONTROL_TARGET
+expect experimental.interval.rate 0
+
+# ATTITUDE, from the list, at 2 Hz, from the rates' list.
+click experimental-interval-message
+reveal experimental-interval-message-list experimental-interval-message-ATTITUDE
+click experimental-interval-message-ATTITUDE
+expect experimental.interval.message ATTITUDE
+click experimental-interval-rates
+reveal experimental-interval-rate-list experimental-interval-rate-2
+click experimental-interval-rate-2
+expect experimental.interval.rate 2
+click experimental-interval-set
+
+# A rate that is no number, typed and Entered.
+click experimental-interval-rate
+key ctrl+a
+type fast
+key Return
+expect status ~ Input string was not in a correct format.
+
+click experimental-interval-close
+expect experimental.interval.open false
+
+# The copter sends ATTITUDE twice a second now.
+click experimental-but_mavinspector
+expect config.inspector.window true
+within 20
+expect config.inspector.message.1.1.30 ~ ATTITUDE (2.0 Hz

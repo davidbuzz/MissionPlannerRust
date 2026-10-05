@@ -212,6 +212,8 @@ pub(crate) enum Tool {
     Advanced(&'static str),
     /// Geo ref images: `new Georefimage().Show()`.
     Georef,
+    /// Message Interval's form (message_interval.rs).
+    MessageInterval,
     /// A command to the vehicle, ported here.
     Act(Act),
     /// Not here, and why.
@@ -235,6 +237,7 @@ pub(crate) fn tool(name: &str) -> Tool {
         "but_signkey" => Tool::Advanced("but_signkey"),
         "but_proximity" => Tool::Advanced("but_proximity"),
         "BUT_georefimage" => Tool::Georef,
+        "but_messageinterval" => Tool::MessageInterval,
         "but_reboot" => Tool::Act(Act::Reboot),
         "BUT_forcecal_accel" => Tool::Act(Act::ForceAccelCal),
         "BUT_forcecal_mag" => Tool::Act(Act::ForceCompassCal),
@@ -352,6 +355,8 @@ enum Answered {
 /// table is scrolled to.
 pub(crate) struct Experimental {
     last: Option<&'static str>,
+    /// Message Interval's form, while it shows.
+    pub(crate) interval: Option<crate::message_interval::IntervalForm>,
     asking: Option<Asking>,
     /// The input box's keyboard, made the first time one shows.
     focus: Option<gpui::FocusHandle>,
@@ -362,6 +367,7 @@ impl Default for Experimental {
     fn default() -> Self {
         Self {
             last: None,
+            interval: None,
             asking: None,
             focus: None,
             scroll: gpui::ScrollHandle::new(),
@@ -628,6 +634,7 @@ fn press(
             this.open_advanced_tool(button, window, cx);
         }
         Tool::Georef => crate::georef_ui::open(this),
+        Tool::MessageInterval => crate::message_interval::open(this, cx),
         Tool::Act(what) => act(this, what, window, cx),
         Tool::Unavailable(why) => this.file_status = Some(format!("{text}: {why}")),
     }
@@ -728,6 +735,7 @@ pub(crate) fn screen(
         // The windows the buttons open, over the tab as over the pages that open them elsewhere.
         .children(this.extra_setup_overlay(window, cx))
         .children(crate::georef_ui::window(this, window, cx))
+        .children(crate::message_interval::window(this, window, cx))
         .children(asking_box(this, window, cx))
         .into_any_element()
 }
@@ -746,6 +754,7 @@ pub(crate) fn record_facts(state: &Experimental) {
     facts::record("experimental.buttons", buttons.len());
     facts::record("experimental.working", working);
     facts::record("experimental.last", state.last.unwrap_or("none"));
+    crate::message_interval::record_facts(state.interval.as_ref());
     facts::record(
         "experimental.asking",
         match state.asking.as_ref() {
@@ -794,11 +803,12 @@ mod tests {
                     assert!(advanced.contains(&button), "{name} ({text}): {button}");
                     opens += 1;
                 }
-                Tool::Georef | Tool::Act(_) => opens += 1,
+                Tool::Georef | Tool::MessageInterval | Tool::Act(_) => opens += 1,
                 Tool::Unavailable(why) => assert!(!why.is_empty()),
             }
         }
-        assert_eq!(opens, 16);
+        assert_eq!(opens, 17);
+        assert_eq!(tool("but_messageinterval"), Tool::MessageInterval);
         assert_eq!(tool("BUT_swarm"), Tool::Unavailable(SECTION_12_D13));
         assert_eq!(tool("but_GDAL"), Tool::Unavailable(NO_GDAL));
         assert_eq!(tool("but_reboot"), Tool::Act(Act::Reboot));

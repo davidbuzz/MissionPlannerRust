@@ -154,6 +154,11 @@ pub const MAY_SCROLL: &[&str] = &[
     // scrolls (fly-quick.gui: 186 below it, 2026-10-06).
     // `// C#: GCSViews/FlightData.cs:4556-4566 (AutoScroll = true)`
     "fly-quick-choice-",
+    // EXPERIMENTAL's Message Interval: `cmb`'s 349 messages and `cmbrate`'s 200 rates, each a
+    // combo's list that scrolls, thirty rows in view.
+    // `// C#: temp.cs:1031-1038`
+    "experimental-interval-message-",
+    "experimental-interval-rate-",
 ];
 
 /// The rows of the lists that scroll and are named by what they hold - a parameter's name, an
@@ -477,8 +482,18 @@ mod tests {
             "logfield-GPS.HDop",
             "loggrid-0-15",
             "loggrid-head-15",
+            "experimental-interval-message-ATTITUDE",
+            "experimental-interval-rate-150",
         ] {
             assert!(!must_show(row), "{row}");
+        }
+        // Message Interval's two boxes are its own, and show.
+        for control in [
+            "experimental-interval-message",
+            "experimental-interval-rate",
+            "experimental-interval-rates",
+        ] {
+            assert!(must_show(control), "{control}");
         }
         assert!(!must_show("advancedparams-AHRS_GPS_MINSATS"));
         for control in [

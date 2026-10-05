@@ -22,7 +22,7 @@ expect screen fly
 key ctrl+f
 expect screen experimental
 expect experimental.buttons 63
-expect experimental.working 16
+expect experimental.working 17
 # A window this application has: the NMEA output, as Advanced's NMEA opens it.
 click experimental-BUT_outputnmea
 expect experimental.last BUT_outputnmea

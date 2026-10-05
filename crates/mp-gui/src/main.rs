@@ -67,6 +67,8 @@ mod logbrowse;
 mod logdownload;
 mod logs_tab;
 mod mapview;
+// EXPERIMENTAL's Message Interval form.
+mod message_interval;
 mod metadata;
 mod params;
 mod payload;
