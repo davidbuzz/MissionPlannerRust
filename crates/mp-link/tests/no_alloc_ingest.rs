@@ -195,6 +195,8 @@ const EXCLUDED: &[Excluded] = &[
 const PARAM_REQUEST_READ: u32 = 20;
 /// `HEARTBEAT`, which the link sends on its own timer.
 const HEARTBEAT: u32 = 0;
+/// `COMMAND_LONG`'s id.
+const COMMAND_LONG: u32 = 76;
 
 /// What one message type cost in the measured pass.
 #[derive(Debug, Default, Clone, Copy)]
@@ -254,8 +256,19 @@ struct FramePerRead {
     wrote_param_request: bool,
     /// When the first frame of the measured pass was served.
     measured_from: Option<Instant>,
+    /// When the first frame of all was served, for [`SETTLE`].
+    first_served: Option<Instant>,
     open: bool,
 }
+
+/// How long after the first frame the measured pass may start: the link's own timed starts done
+/// first - a camera's and a gimbal manager's, two seconds after their component's first heartbeat
+/// (mp-link's `protocols::START_DELAY`, the C#'s `await Task.Delay(2000)`), and a margin. They
+/// happen once, as a registry entry grows once, but by the clock: a first pass quicker than two
+/// seconds left them to the measured one, charged to whatever frame was in flight - five
+/// allocations at a random message type, on a loaded machine whose passes were slower (found
+/// 2026-10-05, traced 2026-10-06 to protocols::tick and request_information).
+const SETTLE: Duration = Duration::from_secs(3);
 
 impl FramePerRead {
     /// Closes the books on the iteration that just ended. Called with counting off.
@@ -296,6 +309,14 @@ impl Transport for FramePerRead {
             self.next = 0;
             self.pass += 1;
         }
+        // Before the measured pass, nothing to read till the link's timed starts are done: the
+        // link sees a quiet line and runs its loop and its timers, counting off.
+        if self.pass + 1 == self.passes
+            && self.next == 0
+            && self.first_served.is_some_and(|at| at.elapsed() < SETTLE)
+        {
+            return Ok(0);
+        }
         if self.pass == self.passes {
             if let Some(from) = self.measured_from.take() {
                 self.probe.os_lock().unwrap().measured_elapsed = from.elapsed();
@@ -306,6 +327,7 @@ impl Transport for FramePerRead {
         }
         let frame = &self.frames[self.next];
         self.next += 1;
+        self.first_served.get_or_insert_with(Instant::now);
         buf[..frame.bytes.len()].copy_from_slice(&frame.bytes);
         if self.pass + 1 == self.passes {
             self.in_flight = Some(frame.msgid);
@@ -429,6 +451,7 @@ fn run(name: &str, bytes: Vec<u8>, allocating_description: bool) -> (Probe, usiz
         allocating_description,
         wrote_param_request: false,
         measured_from: None,
+        first_served: None,
         open: true,
     };
 
@@ -557,11 +580,15 @@ fn the_real_link_thread_allocates_nothing_per_telemetry_packet() {
         // carrying the vehicle's full count - must not make the link ask for anything. Before
         // the download became a machine of its own they did: the old timer chased every table
         // with holes, ten requests every 1.5 s.
-        for msgid in probe.written.keys() {
+        // And the end of a camera's RequestCameraInformationAsync, once: its first request went
+        // out before measuring (SETTLE), a recorded COMMAND_ACK answers it in the measured pass,
+        // and its follow-up - at most two COMMAND_LONGs (camera.rs, information_follow_up) - goes
+        // out then.
+        for (msgid, count) in &probe.written {
             assert!(
-                *msgid == HEARTBEAT,
+                *msgid == HEARTBEAT || (*msgid == COMMAND_LONG && *count <= 2),
                 "{name}: the link sent msgid {msgid} in steady state; only heartbeats are \
-                 expected: {:?}",
+                 expected, and a camera's follow-up once: {:?}",
                 probe.written
             );
         }

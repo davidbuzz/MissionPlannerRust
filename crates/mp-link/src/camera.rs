@@ -388,23 +388,26 @@ impl Camera {
     /// The rest of `RequestCameraInformationAsync` once the first request has its answer: the
     /// deprecated `REQUEST_CAMERA_INFORMATION` where it was not accepted, then
     /// `REQUEST_MESSAGE(VIDEO_STREAM_INFORMATION)`, each sent once and not waited on.
+    /// Returned as they are made, not gathered first: the link thread allocates nothing for them
+    /// (crates/mp-link/tests/no_alloc_ingest.rs, where the gathering showed as a fourth allocation
+    /// on the COMMAND_ACK that answered the first request, 2026-10-06).
     /// `// C#: CameraProtocol.cs:237-255`
-    #[must_use]
-    pub fn information_follow_up(&self, accepted: bool) -> Vec<MavMessage> {
-        let mut out = Vec::new();
-        if !accepted {
-            out.push(commands::command_long(
-                self.vehicle,
-                cmd(MavCmd::MAV_CMD_REQUEST_CAMERA_INFORMATION),
-                [0.0; 7],
-            ));
-        }
-        out.push(commands::command_long(
-            self.vehicle,
-            cmd(MavCmd::MAV_CMD_REQUEST_MESSAGE),
-            [VIDEO_STREAM_INFORMATION, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
-        ));
-        out
+    pub fn information_follow_up(&self, accepted: bool) -> impl Iterator<Item = MavMessage> {
+        let vehicle = self.vehicle;
+        (!accepted)
+            .then(|| {
+                commands::command_long(
+                    vehicle,
+                    cmd(MavCmd::MAV_CMD_REQUEST_CAMERA_INFORMATION),
+                    [0.0; 7],
+                )
+            })
+            .into_iter()
+            .chain(std::iter::once(commands::command_long(
+                vehicle,
+                cmd(MavCmd::MAV_CMD_REQUEST_MESSAGE),
+                [VIDEO_STREAM_INFORMATION, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+            )))
     }
 
     /// `SET_MESSAGE_INTERVAL` for one message, not waited on.
@@ -747,9 +750,9 @@ mod tests {
         assert_eq!(command, 512);
         assert!((params[0] - 259.0).abs() < f32::EPSILON);
         // Refused: the old request, then the streams'.
-        let follow = camera.information_follow_up(false);
+        let follow: Vec<MavMessage> = camera.information_follow_up(false).collect();
         assert_eq!(follow.len(), 2);
-        assert_eq!(camera.information_follow_up(true).len(), 1);
+        assert_eq!(camera.information_follow_up(true).count(), 1);
         // FOV always; capture status for a camera that captures; no settings without modes.
         let intervals = camera.message_intervals(4);
         assert_eq!(intervals.len(), 2);
