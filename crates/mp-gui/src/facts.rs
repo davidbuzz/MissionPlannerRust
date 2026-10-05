@@ -76,10 +76,20 @@ mod web {
         ENABLED.load(Ordering::Relaxed)
     }
 
-    /// The page: start recording facts (web/www/index.html with `?facts=1`, for its checks).
+    /// The page: start recording facts (web/www/index.html with `?facts=1`, for its checks), and
+    /// measuring the controls, so a check can click one by name ([`planner_probe`]).
     #[wasm_bindgen]
     pub fn planner_facts_enable() {
         ENABLED.store(true, Ordering::Relaxed);
+        crate::probe::enable();
+    }
+
+    /// The page: where each control on screen is, `name x y width height` a line - the point a
+    /// click should target and its size - as the probe file gives them on the desktop.
+    #[wasm_bindgen]
+    #[must_use]
+    pub fn planner_probe() -> String {
+        crate::probe::centres_text()
     }
 
     /// The page: the facts recorded so far, `key = value` a line as `MP_FACTS`'s file has them;

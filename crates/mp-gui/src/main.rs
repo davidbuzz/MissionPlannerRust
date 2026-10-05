@@ -105,6 +105,8 @@ mod stderr_log;
 mod storm;
 // What each screen's frames cost in an ordinary run (`MP_FRAMES`).
 mod frametimes;
+// The browser's file picker and downloads for the file boxes, in a page.
+mod page_files;
 #[cfg(target_family = "wasm")]
 mod page_storage;
 mod repaint;
@@ -1223,6 +1225,7 @@ impl MissionPlanner {
         self.file_status = match mp_os::fs::write(path, text) {
             Ok(()) => {
                 self.plan_name.set(file_name_of(path));
+                page_files::saved(path);
                 Some(format!(
                     "saved {} items to {}",
                     self.plan.items().len(),
@@ -1315,11 +1318,14 @@ impl MissionPlanner {
         let path = self.param_path();
         let file = self.params_as_file();
         self.file_status = match file.save(&path) {
-            Ok(()) => Some(format!(
-                "saved {} of {held} parameters to {}",
-                file.len(),
-                path.display()
-            )),
+            Ok(()) => {
+                page_files::saved(&path);
+                Some(format!(
+                    "saved {} of {held} parameters to {}",
+                    file.len(),
+                    path.display()
+                ))
+            }
             Err(err) => Some(format!("could not save to {}: {err}", path.display())),
         };
     }
@@ -3122,6 +3128,8 @@ impl Render for MissionPlanner {
         if window.focused(cx).is_none() {
             self.root_focus.focus(window, cx);
         }
+        // In a page, a file the browser's picker gave, typed into the box that asked for it.
+        page_files::deliver(window, cx);
         // Who holds the keyboard as this frame starts; see the end of `render`.
         let focused_at_start = window.focused(cx);
         // Counted here because this is the one place that only runs when a frame is actually

@@ -2830,9 +2830,29 @@ pub fn path_box(
         ))
         .child(
             div()
-                .text_xs()
-                .text_color(rgb(theme::DIM))
-                .child(path.filter),
+                .flex()
+                .items_center()
+                .justify_between()
+                .gap_2()
+                .child(
+                    div()
+                        .min_w(px(0.0))
+                        .text_xs()
+                        .text_color(rgb(theme::DIM))
+                        .child(path.filter),
+                )
+                // In a page, a file from the computer too: the browser's picker (page_files.rs),
+                // its file put in the folder the box shows.
+                .children((path.caption == OPEN_FILE).then(|| {
+                    crate::page_files::browse_button(
+                        format!("{}-browse", ids.path),
+                        crate::page_files::accept_filter(path.filter),
+                        crate::page_files::folder_of(
+                            path.field.value(),
+                            &mp_settings::data_directory().unwrap_or_default(),
+                        ),
+                    )
+                }).flatten()),
         )
         .child(div().flex().justify_end().gap_2().children(buttons));
     let size = window.viewport_size();

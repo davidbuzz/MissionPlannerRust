@@ -4597,6 +4597,7 @@ dependencies = [
  "gpui_web",
  "gpui_windows",
  "image",
+ "js-sys",
  "log",
  "lzma-rs",
  "mp-calibration",

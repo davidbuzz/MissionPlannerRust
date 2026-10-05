@@ -50,6 +50,16 @@ page's own - a WebAssembly fault ends the planner without its panic hook - is wr
 crash report too (`keepFaults`), so the next start asks about the real cause rather than what
 followed it.
 
+The computer's own files are out of a page's reach, and its file boxes list only the planner's. So a
+box that opens a file also shows "From this computer..." (`crates/mp-gui/src/page_files.rs`,
+`www/files.js`): the browser's picker, filtered to the box's file types. The file chosen is put in
+the folder the box shows - listed there from then on, and kept with the rest - and its path typed
+into the box and Enter pressed, as a double click on a listed file takes it. A file a box saves is
+handed to the browser as a download as well, under its name. `check/files_check.js` chooses
+QGroundControl's plan in FLIGHT PLAN's Load File and saves the mission both ways, each a download.
+With `?facts=1` the page also gives each control's place by name (`mpProbe()`), for the checks to
+click.
+
 ## A vehicle on a tailnet
 
 New to Tailscale, or to the planner? [using_tailscale.md](../using_tailscale.md) walks through it
@@ -106,6 +116,7 @@ NODE_PATH=<node_modules with playwright> node check/plugins_check.js   # the bui
 NODE_PATH=<node_modules with playwright> node check/demo_check.js      # the Welcome-Demo-Sitl, start to finish
 NODE_PATH=<node_modules with playwright> node check/pages_check.js <dir> # the GitHub Pages site, no headers
 NODE_PATH=<node_modules with playwright> node check/storage_check.js   # config.xml kept across a reload
+NODE_PATH=<node_modules with playwright> node check/files_check.js     # the browser's picker and downloads
 NODE_PATH=<node_modules with playwright> node check/fault_check.js     # a fault of the page's own, asked about at the next start
 NODE_PATH=<node_modules with playwright> check/tailnet_e2e.sh          # over a tailnet (needs Go)
 ```

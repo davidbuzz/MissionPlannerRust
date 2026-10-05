@@ -382,6 +382,28 @@ pub fn measured(name: impl Into<String>, element: Div) -> Div {
     })
 }
 
+/// Every control measured and still on screen, a line each: its name, the point a click should
+/// target, and its size - `name x y width height`. What a page's checks click by, having no probe
+/// file to read (facts.rs's `planner_probe`).
+#[cfg_attr(not(target_family = "wasm"), allow(dead_code))]
+pub fn centres_text() -> String {
+    registry()
+        .os_lock()
+        .map(|registry| {
+            registry
+                .iter()
+                .map(|(name, measured)| {
+                    let (x, y) = measured.rect.centre();
+                    format!(
+                        "{name} {x:.1} {y:.1} {:.1} {:.1}\n",
+                        measured.rect.width, measured.rect.height
+                    )
+                })
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
 /// The positions recorded, for tests.
 #[cfg(test)]
 pub fn snapshot() -> BTreeMap<String, Rect> {

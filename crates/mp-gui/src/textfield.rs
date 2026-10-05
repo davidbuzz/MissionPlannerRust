@@ -571,10 +571,31 @@ thread_local! {
 #[cfg(target_family = "wasm")]
 struct PagePaste;
 
-/// What a paste chord pastes: the clipboard's text, or in a page what the browser's paste brought
-/// [`PagePaste`] - taken, so it is pasted once.
+/// What a paste chord pastes: what the browser's paste brought [`PagePaste`], or what
+/// [`type_into_focused`] types - taken, so it is pasted once; else the clipboard's text. Either is
+/// held only while its Ctrl+V is dispatched.
 fn paste_text(clipboard: Option<String>) -> Option<String> {
-    clipboard.or_else(|| PAGE_PASTE.with(|paste| paste.borrow_mut().take()))
+    PAGE_PASTE
+        .with(|paste| paste.borrow_mut().take())
+        .or(clipboard)
+}
+
+/// Types `text` into the box that holds the keyboard, in place of what it held, and presses
+/// Enter: Ctrl+A, `text` pasted as a page's paste brings it, then Enter - each to the box as its
+/// own key, so whichever box it is takes them as typed. For the file the browser's picker gave
+/// (page_files.rs), whose path every file box takes as a typed answer.
+pub fn type_into_focused(text: &str, window: &mut gpui::Window, cx: &mut gpui::App) {
+    let mut press = |keys: &str| {
+        if let Ok(keystroke) = Keystroke::parse(keys) {
+            window.dispatch_keystroke(keystroke, cx);
+        }
+    };
+    press("ctrl-a");
+    PAGE_PASTE.with(|paste| *paste.borrow_mut() = Some(text.to_owned()));
+    press("ctrl-v");
+    // A box that took no paste leaves none for the next Ctrl+V.
+    PAGE_PASTE.with(|paste| paste.borrow_mut().take());
+    press("enter");
 }
 
 #[cfg(target_family = "wasm")]
@@ -1553,6 +1574,12 @@ mod tests {
         assert_eq!(paste_text(None), None);
         // A clipboard that reads something is the clipboard.
         assert_eq!(paste_text(Some("x".to_owned())).as_deref(), Some("x"));
+        // What is being typed into the box goes in whatever the clipboard holds.
+        PAGE_PASTE.with(|paste| *paste.borrow_mut() = Some("/home/web/a.plan".to_owned()));
+        assert_eq!(
+            paste_text(Some("x".to_owned())).as_deref(),
+            Some("/home/web/a.plan")
+        );
     }
 
     #[test]

@@ -6097,6 +6097,7 @@ fn file_request(
             let text = mp_mission::fence_file::write_polygon(this.plan.polygon());
             match mp_os::fs::write(&path, text) {
                 Ok(()) => {
+                    crate::page_files::saved(&path);
                     this.file_status = Some(format!("saved the polygon to {}", path.display()));
                 }
                 // The polygon's writer says the fence's words.
@@ -6116,6 +6117,7 @@ fn file_request(
             let text = mp_mission::fence_file::write_rally(&this.plan.rally_markers());
             match mp_os::fs::write(&path, text) {
                 Ok(()) => {
+                    crate::page_files::saved(&path);
                     this.file_status =
                         Some(format!("saved the rally points to {}", path.display()));
                 }
@@ -6193,6 +6195,7 @@ fn fence_file(
             });
             match written {
                 Ok(()) => {
+                    crate::page_files::saved(&path);
                     this.file_status = Some(format!("saved the fence to {}", path.display()));
                 }
                 Err(why) => {
@@ -7900,11 +7903,14 @@ fn save_json_mission(this: &mut MissionPlanner, path: &Path) {
         this.altitude_frame.mav_frame(),
     );
     this.file_status = Some(match mp_os::fs::write(path, text) {
-        Ok(()) => format!(
-            "saved {} items to {}",
-            this.plan.items().len(),
-            path.display()
-        ),
+        Ok(()) => {
+            crate::page_files::saved(path);
+            format!(
+                "saved {} items to {}",
+                this.plan.items().len(),
+                path.display()
+            )
+        }
         Err(err) => format!("could not save to {}: {err}", path.display()),
     });
 }
@@ -11563,15 +11569,36 @@ fn file_list(prompt: &Prompt, directory: &Path, cx: &mut Context<MissionPlanner>
                 .into_any_element()
         })
         .collect();
+    // In a page, a file from the computer too: the browser's picker (page_files.rs).
+    let browse = (prompt.title == OPEN_FILE)
+        .then(|| {
+            crate::page_files::browse_button(
+                "plan-file-browse",
+                crate::page_files::accept(prompt.file_types()),
+                folder.clone(),
+            )
+        })
+        .flatten();
     div()
         .flex()
         .flex_col()
         .gap_1()
         .child(
             div()
-                .text_xs()
-                .text_color(rgb(theme::DIM))
-                .child(format!("in {}", folder.display())),
+                .flex()
+                .items_center()
+                .justify_between()
+                .gap_2()
+                .child(
+                    div()
+                        .min_w(px(0.0))
+                        .overflow_hidden()
+                        .text_ellipsis()
+                        .text_xs()
+                        .text_color(rgb(theme::DIM))
+                        .child(format!("in {}", folder.display())),
+                )
+                .children(browse),
         )
         .child(
             div()

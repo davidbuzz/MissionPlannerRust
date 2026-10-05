@@ -132,6 +132,8 @@ gpui_macos = { git = "https://github.com/zed-industries/zed", rev = "62e5991dd0f
 chrono = { workspace = true, features = ["wasmbind"] }
 # The page's calls into the planner: its facts for the browser checks (facts.rs).
 wasm-bindgen = "0.2"
+# The planner's calls into the page: its file picker and downloads (page_files.rs).
+js-sys = "0.3"
 # A panic's message in the browser's console (main.rs), as gpui_platform's `web_init` sends it.
 console_error_panic_hook = "0.1"
 # The web page's platform (src/platform.rs), as gpui_platform picks it for wasm.
