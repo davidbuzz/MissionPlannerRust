@@ -20,7 +20,8 @@ env MP_PLAN_DIR $WORK
 
 screen plan
 window 1600x1200
-budget 8
+budget 10
+# 10: runs took 8.8 to 9.4 s on both timers (2026-10-06), over the 8 first set by hand.
 
 expect mission.home true
 

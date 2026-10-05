@@ -20,7 +20,8 @@ setup mkdir -p $WORK/logs && cp testdata/dataflash_damaged.bin $WORK/logs/gpsfix
 
 screen logs
 window 1600x1200
-budget 19
+budget 24
+# 24: 21.4 s on 2026-10-06, the log's plots drawn in software on both timers; it had 19.
 
 click log-name
 type gpsfix.bin

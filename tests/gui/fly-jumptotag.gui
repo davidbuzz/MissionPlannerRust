@@ -2,7 +2,8 @@
 # 65535 as UInt16.TryParse takes one, and sends MAV_CMD_DO_JUMP_TAG with it through doCommand,
 # which waits for the vehicle's answer. A tag that is not one is "Invalid Tag. Must be a number
 # from 0 to 65535", and the question is asked again, as the C#'s handler calls itself. The C#'s
-# menu is on the map; this application's map menu entries are the row under the Actions grid.
+# menu is on the map, and so is this application's since its map menu was ported (the row under
+# the Actions grid that held its entries before is gone).
 # `GCSViews/FlightData.cs:6504-6531, GCSViews/FlightData.Designer.cs:2518-2531, 2645-2649`
 #
 # Needs SITL: tools/gui-test.sh tests/gui/fly-jumptotag.gui -- tcp:127.0.0.1:5760
@@ -18,6 +19,8 @@ click fly-tab-actions
 expect fly.tab tabActions
 expect fly.page.overflow 0
 
+click map@0.5x0.5:right
+expect fly.menu map
 click fly-jumptotag
 expect fly.prompt Tag Id:
 type 70000

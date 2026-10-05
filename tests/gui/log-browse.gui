@@ -15,7 +15,8 @@ setup mkdir -p $WORK/MissionPlannerRust && cp testdata/logbrowse/LogMessagesCopt
 
 screen logs
 window 1600x1200
-budget 21
+budget 25
+# 25: 22.7 s on 2026-10-06, the log's plots drawn in software on both timers; it had 21.
 # A first budget, set by hand until a passing run records one.
 
 expect log.open false

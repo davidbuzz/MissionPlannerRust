@@ -179,11 +179,32 @@ const NAMED_ROWS: &[&str] = &[
     "osd-item-",
 ];
 
+/// The cells of the grids that scroll and are named by their row's number - told so from the
+/// grid's own controls under the same prefix (`loggrid-menu-visible`).
+const NUMBERED_ROWS: &[&str] = &[
+    // The log browser's records, `dataGridView1`, a MyDataGridView, which scrolls both ways - its
+    // columns past its right edge (log-grid.gui, log-cursor.gui: loggrid-0-15 on, 2026-10-06) -
+    // and its header with them.
+    // `// C#: Log/LogBrowse.designer.cs:62 (dataGridView1)`
+    "loggrid-",
+    "loggrid-head-",
+];
+
 /// Whether a control must be wholly on screen whenever it is measured: all but a scrolling
 /// list's rows.
 #[must_use]
 pub fn must_show(name: &str) -> bool {
-    !MAY_SCROLL.iter().any(|prefix| name.starts_with(prefix)) && !is_named_row(name)
+    !MAY_SCROLL.iter().any(|prefix| name.starts_with(prefix))
+        && !is_named_row(name)
+        && !is_numbered_row(name)
+}
+
+/// Whether a control is a cell of one of [`NUMBERED_ROWS`]' grids: its prefix, then a number.
+fn is_numbered_row(name: &str) -> bool {
+    NUMBERED_ROWS.iter().any(|prefix| {
+        name.strip_prefix(prefix)
+            .is_some_and(|rest| rest.starts_with(|first: char| first.is_ascii_digit()))
+    })
 }
 
 /// Whether a control is a row of one of [`NAMED_ROWS`]' lists: its prefix, then a name in capitals.
@@ -454,6 +475,8 @@ mod tests {
             "osd-left",
             "fly-quick-choice-battery_temp",
             "logfield-GPS.HDop",
+            "loggrid-0-15",
+            "loggrid-head-15",
         ] {
             assert!(!must_show(row), "{row}");
         }
@@ -462,6 +485,7 @@ mod tests {
             "osd-item-options",
             "advancedparams-write",
             "advancedparams-find-box",
+            "loggrid-menu-visible",
         ] {
             assert!(must_show(control), "{control}");
         }
