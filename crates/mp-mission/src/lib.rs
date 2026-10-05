@@ -39,6 +39,7 @@ pub mod geoutility;
 pub mod grid;
 pub mod gridui;
 pub mod item;
+pub mod mission_file;
 pub mod missionpck;
 pub mod polygon;
 pub mod rotary;

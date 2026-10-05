@@ -2227,6 +2227,30 @@ impl Plan {
         ))
     }
 
+    /// Home as Save File's `.mission` takes it: `TXT_homelat`, `TXT_homelng` and `TXT_homealt`
+    /// parsed in turn inside a `try` whose `catch` is empty, so from the first box that does not
+    /// parse each stays 0; the altitude a `float`, divided by `multiplieralt`.
+    /// `// C#: GCSViews/FlightPlanner.cs:6086-6098`
+    #[must_use]
+    pub fn mission_file_home(&self) -> Home {
+        let parse = |which| mp_mission::rows::parse_number(self.home_text(which));
+        let mut home = Home::default();
+        let Some(lat) = parse(HomeBox::Lat) else {
+            return home;
+        };
+        home.lat = lat;
+        let Some(lng) = parse(HomeBox::Lng) else {
+            return home;
+        };
+        home.lng = lng;
+        if let Some(alt) = parse(HomeBox::Alt) {
+            #[allow(clippy::cast_possible_truncation)] // `float.Parse`
+            let alt = alt as f32;
+            home.alt = f64::from(alt / MULTIPLIER_ALT);
+        }
+        home
+    }
+
     /// What Save File writes: the `.waypoints` text with home at record 0 and the rows after it.
     /// `// C#: GCSViews/FlightPlanner.cs:6108-6160`
     #[must_use]
@@ -7785,8 +7809,8 @@ fn file_name_of(path: &Path) -> String {
 
 /// Load File once its dialog has returned: `if (File.Exists(file))`, the folder remembered as
 /// `WPFileDirectory`, and the file read by its kind - a `.shp` through `LoadSHPFile`, a `.kml`
-/// through the KML parser, a JSON mission (`MissionFile.ReadFile`, not ported: said on the status
-/// line), anything else as a waypoint file.
+/// through the KML parser, a file whose first line starts `{` as a JSON mission, anything else as
+/// a waypoint file.
 /// `// C#: GCSViews/FlightPlanner.cs:1817-1887`
 fn load_mission(this: &mut MissionPlanner, name: &str) -> Refusal {
     let path = dialog_path(name, "waypoints", &this.plan_menus.dialog_directory)?;
@@ -7810,36 +7834,79 @@ fn load_mission(this: &mut MissionPlanner, name: &str) -> Refusal {
     let json = mp_os::fs::read_to_string(&path)
         .is_ok_and(|text| text.lines().next().is_some_and(|line| line.starts_with('{')));
     if json {
-        this.file_status = Some(format!(
-            "{} is a JSON mission (MissionFile), which this planner does not read yet",
-            path.display()
-        ));
+        load_json_mission(this, &path);
         return None;
     }
     this.load_plan_from(&path);
     None
 }
 
-/// Save File once its dialog has returned: `savewaypoints`' QGC WPL 110 file, `.waypoints` added
-/// to a name without an extension (`DefaultExt`), and the folder remembered as `WPFileDirectory`.
-/// A `.mission` - the Mission JSON filter's - is `MissionFile.WriteFile`, not ported: said on the
-/// status line.
+/// Load File's JSON mission: `MissionFile.ReadFile` and `ConvertToLocationwps`, then
+/// `processToScreen(cmds)`, `writeKML()` and `MainMap.ZoomAndCenterMarkers("WPOverlay")`.
+/// `wpfilename` is left as it was - only the waypoint file sets it - so Save File opens on the
+/// name it had. The C# has no `catch` round this, and a file that does not fit stops in the
+/// unhandled-exception dialog; here what it throws is said on the status line.
+/// `// C#: GCSViews/FlightPlanner.cs:1866-1877`
+fn load_json_mission(this: &mut MissionPlanner, path: &Path) {
+    let read = mp_os::fs::read_to_string(path)
+        .map_err(|err| format!("System.IO.FileNotFoundException: {err}"))
+        .and_then(|text| mp_mission::mission_file::read(&text).map_err(|err| err.to_string()));
+    match read {
+        Ok(cmds) => {
+            // Item 0 is home and leaves the rows; if it is not the boxes' home, the operator is
+            // asked whether to take it.
+            if let Some(home) = this.plan.adopt_from_file(file_name_of(path), &cmds) {
+                this.plan_menus.offer_home_reset(home);
+            }
+            // `processToScreen` ends with `setWPParams`. `// C#: GCSViews/FlightPlanner.cs:5630`
+            this.plan.set_wp_params(&this.telemetry.view().parameters);
+            this.sync_map_mission();
+            this.map.borrow_mut().zoom_and_centre_markers();
+            this.file_status = Some(format!(
+                "loaded {} items from {}",
+                this.plan.items().len(),
+                path.display()
+            ));
+        }
+        Err(why) => this.file_status = Some(format!("{}: {why}", path.display())),
+    }
+}
+
+/// Save File once its dialog has returned: the folder remembered as `WPFileDirectory`, then a
+/// `.mission` - the Mission JSON filter's - as a JSON mission, anything else as `savewaypoints`'
+/// QGC WPL 110 file, `.waypoints` added to a name without an extension (`DefaultExt`).
 /// `// C#: GCSViews/FlightPlanner.cs:6069-6140`
 fn save_mission(this: &mut MissionPlanner, name: &str) -> Refusal {
     let path = dialog_path(name, "waypoints", &this.plan_menus.dialog_directory)?;
-    if path
-        .extension()
-        .is_some_and(|extension| extension.eq_ignore_ascii_case("mission"))
-    {
-        this.file_status = Some(format!(
-            "{} would be a JSON mission (MissionFile), which this planner does not write yet",
-            path.display()
-        ));
+    this.remember_dialog_directory(&path);
+    // `file.EndsWith(".mission")`: ordinal, so case counts.
+    if path.to_string_lossy().ends_with(".mission") {
+        save_json_mission(this, &path);
         return None;
     }
-    this.remember_dialog_directory(&path);
     this.save_plan_to(&path);
     None
+}
+
+/// Save File's `.mission`: `GetCommandList()` with home from the Home Location boxes inserted at
+/// 0, `MissionFile.ConvertFromLocationwps` with `CMB_altmode`'s frame, and `WriteFile`. Nothing
+/// else - `wpfilename` stays as it was. A file that cannot be written is said on the status line,
+/// where the C#'s `catch` shows it in a message box.
+/// `// C#: GCSViews/FlightPlanner.cs:6084-6105`
+fn save_json_mission(this: &mut MissionPlanner, path: &Path) {
+    let text = mp_mission::mission_file::write(
+        this.plan.mission_file_home(),
+        this.plan.items(),
+        this.altitude_frame.mav_frame(),
+    );
+    this.file_status = Some(match mp_os::fs::write(path, text) {
+        Ok(()) => format!(
+            "saved {} items to {}",
+            this.plan.items().len(),
+            path.display()
+        ),
+        Err(err) => format!("could not save to {}: {err}", path.display()),
+    });
 }
 
 /// Load and Append once its dialog has returned: `readQGC110wpfile(file, true)`.

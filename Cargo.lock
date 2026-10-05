@@ -4723,6 +4723,7 @@ version = "0.0.0"
 dependencies = [
  "mp-os",
  "mp-units",
+ "serde_json",
  "thiserror 2.0.20",
 ]
 

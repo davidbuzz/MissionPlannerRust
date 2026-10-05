@@ -14,4 +14,6 @@ workspace = true
 # The std calls that panic in a web page, std's on the desktop (web/tools/port_os.py).
 mp-os.workspace = true
 mp-units.workspace = true
+# `MissionFile.cs`'s JSON mission; in the classes' declaration order, as Newtonsoft writes them.
+serde_json = { workspace = true, features = ["preserve_order"] }
 thiserror.workspace = true
