@@ -2318,18 +2318,25 @@ impl MissionPlanner {
         window: &Window,
         cx: &mut Context<Self>,
     ) -> impl IntoElement {
-        let page = fly::page_content(
-            self.fly_pages.selected(),
-            &fly::PageInputs {
-                view,
-                data: &self.fly_data,
-                actions: &self.fly_actions,
-                focus: &self.fly_focus,
-                checks_disabled: self.disabled_arming_checks,
-            },
-            window,
-            cx,
-        );
+        // A plugin's page has its form; the others their panels.
+        let page = match self.fly_pages.selected() {
+            fly::Page::Plugin(slot) => fly::plugin_page(slot)
+                .map(|page| plugins_ui::page_form(self, page.plugin, window, cx))
+                .into_iter()
+                .collect(),
+            page => fly::page_content(
+                page,
+                &fly::PageInputs {
+                    view,
+                    data: &self.fly_data,
+                    actions: &self.fly_actions,
+                    focus: &self.fly_focus,
+                    checks_disabled: self.disabled_arming_checks,
+                },
+                window,
+                cx,
+            ),
+        };
         probe::measured("fly-column", div())
             .flex()
             .flex_col()

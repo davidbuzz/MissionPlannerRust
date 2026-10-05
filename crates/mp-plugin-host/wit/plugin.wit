@@ -124,6 +124,13 @@ interface host {
     /// flight screen's pages saved as the `tabcontrolactions` setting, and the settings written.
     save-tab-control-actions: func();
 
+    /// `Host.MainForm.FlightData.TabListOriginal.Add(tab)` and
+    /// `tabControlactions.TabPages.Insert(index, tab)`: a page of the flight screen's tabs, its
+    /// `Name` `name` and its header `text`, which the plugin's form fills. A page the saved
+    /// `tabcontrolactions` does not name goes again when the flight screen is shown, as
+    /// `updateDisplayView` takes it away there; the tabs' Customize lists it either way.
+    flight-data-tab-add: func(name: string, text: string, index: u32);
+
     /// The demo pointer - the owner's Welcome-Demo-Sitl plugin (2026-10-05), not in the C#: a
     /// drawn cursor moves to the centre of the control the planner names `control` (its probe
     /// name) over `millis` milliseconds, as a hand would, and clicks it there - a real click,
@@ -133,6 +140,12 @@ interface host {
 
     /// The same at a place on the map on screen, `lat` and `lng` in degrees.
     demo-click-map: func(lat: f64, lng: f64, millis: u32) -> bool;
+
+    /// The same with the right button: the map's menu, opened at that place.
+    demo-right-click-map: func(lat: f64, lng: f64, millis: u32) -> bool;
+
+    /// The demo is over: the pointer goes once its last gesture is done.
+    demo-end: func();
 
     /// `text` typed into what has the keyboard, then Enter: a prompt's box. After the gesture
     /// under way, if any.

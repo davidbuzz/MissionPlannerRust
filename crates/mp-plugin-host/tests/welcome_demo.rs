@@ -34,8 +34,10 @@ use mp_plugin_host::{Area, CsValue, Plugin};
 const SCREEN: &[&str] = &[
     "tab-simulation",
     "sitl-picture-quad",
-    "plugin-form-Drone_ID-close",
     "tab-plan",
+    "plan-zoomicon",
+    "menu-zoomToVehicle",
+    "menu-setHomeHere",
     "map",
     "plan-write",
     "tab-fly",
@@ -49,6 +51,16 @@ const SCREEN: &[&str] = &[
     "plugin-manager-save",
 ];
 
+/// The planning map after the Home Location link: zoom 17's few hundred metres around the field.
+fn zoomed_in() -> Area {
+    Area {
+        top: LAT + 0.0025,
+        bottom: LAT - 0.0025,
+        left: LNG - 0.004,
+        right: LNG + 0.004,
+    }
+}
+
 /// The vehicle the simulator gives: Canberra's field, satellites enough.
 const LAT: f64 = -35.363_262;
 const LNG: f64 = 149.165_237;
@@ -61,6 +73,7 @@ fn everything_shown(script: &Scripted) {
         r.cs.insert("lat".to_owned(), CsValue::Number(LAT));
         r.cs.insert("lng".to_owned(), CsValue::Number(LNG));
         r.cs.insert("satcount".to_owned(), CsValue::Number(10.0));
+        r.view_area = Some(zoomed_in());
     });
 }
 
@@ -112,6 +125,8 @@ fn the_demo_clicks_the_owners_sequence_then_rests() {
         .map(|click| {
             if click.starts_with("map ") {
                 "map"
+            } else if click.starts_with("right ") {
+                "right-click map"
             } else {
                 click
             }
@@ -122,8 +137,11 @@ fn the_demo_clicks_the_owners_sequence_then_rests() {
         [
             "tab-simulation",
             "sitl-picture-quad",
-            "plugin-form-Drone_ID-close",
             "tab-plan",
+            "plan-zoomicon",
+            "menu-zoomToVehicle",
+            "right-click map",
+            "menu-setHomeHere",
             "map",
             "map",
             "map",
@@ -147,6 +165,10 @@ fn the_demo_clicks_the_owners_sequence_then_rests() {
         "{:?}",
         script.record().status
     );
+    // Over: its pointer goes.
+    assert!(script.record().demo_ended);
+    // Set Home Here's right click was on the copter.
+    assert!(clicks.contains(&format!("right {LAT:.6},{LNG:.6}")));
 }
 
 /// The four waypoints the demo clicks on a planning map showing `view`.
@@ -209,12 +231,12 @@ fn the_mission_is_a_square_around_the_vehicle_inside_the_map() {
         assert!((lat - want_lat).abs() < 2e-6, "{lat} against {want_lat}");
         assert!((lng - want_lng).abs() < 2e-6, "{lng} against {want_lng}");
     }
-    // A map kilometres across: 150 m.
+    // A map kilometres across, though not too far out: 150 m.
     let corners = corners_on(Area {
-        top: LAT + 0.05,
-        bottom: LAT - 0.05,
-        left: LNG - 0.05,
-        right: LNG + 0.05,
+        top: LAT + 0.02,
+        bottom: LAT - 0.02,
+        left: LNG - 0.02,
+        right: LNG + 0.02,
     });
     assert_eq!(corners.len(), 4);
     for ((lat, lng), (want_lat, want_lng)) in corners.iter().zip(square(150.0)) {
@@ -354,4 +376,62 @@ fn a_copter_that_disarms_before_climbing_is_armed_again() {
         ]
     );
     assert!(script.record().status.is_empty());
+}
+
+/// Write refused - the planner's message box, as "Your home location is invalid" was when no home
+/// had been set (the owner's run, 2026-10-05) - is answered, and the demo stops, saying so,
+/// rather than clicking on behind the box.
+#[test]
+fn a_refused_write_is_answered_and_the_demo_stops() {
+    let Some((mut plugin, script)) = load("welcomedemositl") else {
+        return;
+    };
+    assert!(plugin.init().unwrap());
+    everything_shown(&script);
+    for _ in 0..1000 {
+        if script.record().demo_clicks.last().map(String::as_str) == Some("plan-write") {
+            break;
+        }
+        plugin.run_loop().unwrap();
+    }
+    script.with(|r| {
+        r.shown.insert("plan-prompt-ok".to_owned());
+    });
+    ticks(&mut plugin, 10);
+    assert_eq!(
+        script.record().demo_clicks.last().map(String::as_str),
+        Some("plan-prompt-ok")
+    );
+    assert_eq!(
+        script.record().status,
+        ["Welcome demo stopped: Write did not write the mission"]
+    );
+    assert_eq!(plugin.loop_rate_hz(), 0.0);
+    assert!(script.record().demo_ended);
+}
+
+/// A planning map still far out - the planner's zoom 3, which the owner's run met - takes no
+/// waypoints, whose clicks would fall on one another: the demo stops, saying so.
+#[test]
+fn a_map_too_far_out_takes_no_waypoints() {
+    let Some((mut plugin, script)) = load("welcomedemositl") else {
+        return;
+    };
+    assert!(plugin.init().unwrap());
+    everything_shown(&script);
+    script.with(|r| {
+        r.view_area = Some(Area {
+            top: LAT + 40.0,
+            bottom: LAT - 40.0,
+            left: LNG - 60.0,
+            right: LNG + 60.0,
+        });
+    });
+    run_out(&mut plugin, 1000);
+    let clicks = script.record().demo_clicks.clone();
+    assert!(!clicks.iter().any(|click| click.starts_with("map ")));
+    assert_eq!(
+        script.record().status,
+        ["Welcome demo stopped: the planning map is too far out to place waypoints"]
+    );
 }

@@ -404,7 +404,9 @@ impl Guest for OpenDroneId {
 
     // `Loaded` and `forceSettings`: without `tabcontrolactions` the C# asks for a restart once,
     // then saves the flight screen's tabs as the setting, so the next start has it and does not
-    // ask (the owner's bug, 2026-10-04: the message came at every start).
+    // ask (the owner's bug, 2026-10-04: the message came at every start). Then its page,
+    // `tabDroneID`, "Drone ID", the sixth of the flight screen's tabs, which its form fills - the
+    // page the saved tabs do not name until it is ticked in the tabs' Customize.
     // `// C#: Plugins/OpenDroneID2/OpenDroneID_Plugin.cs:40-82`
     fn loaded() -> bool {
         if host::config_get("tabcontrolactions").is_none() {
@@ -415,6 +417,7 @@ impl Guest for OpenDroneId {
             );
             host::save_tab_control_actions();
         }
+        host::flight_data_tab_add("tabDroneID", "Drone ID", 5);
         show(&UI.lock().unwrap_or_else(PoisonError::into_inner));
         true
     }

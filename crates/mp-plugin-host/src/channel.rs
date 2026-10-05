@@ -229,6 +229,15 @@ pub enum RequestBody {
     },
     /// `FlightData.saveTabControlActions()`, then `Settings.Instance.Save()`.
     SaveTabControlActions,
+    /// `FlightData.TabListOriginal.Add(tab)` and `tabControlactions.TabPages.Insert(index, tab)`.
+    FlightDataTabAdd {
+        /// The page's `Name`.
+        name: String,
+        /// Its header's text.
+        text: String,
+        /// Where it goes among the pages showing.
+        index: u32,
+    },
     /// The demo pointer to a named control, and its click: whether the control is on screen.
     /// The owner's Welcome-Demo-Sitl, not in the C#.
     DemoClick {
@@ -250,6 +259,19 @@ pub enum RequestBody {
         /// Whether the map is on screen and shows the place.
         reply: Reply<bool>,
     },
+    /// The same with the right button: the map's menu at that place.
+    DemoRightClickMap {
+        /// Latitude, degrees.
+        lat: f64,
+        /// Longitude, degrees.
+        lng: f64,
+        /// How long the pointer takes to get there.
+        millis: u32,
+        /// Whether the map is on screen and shows the place.
+        reply: Reply<bool>,
+    },
+    /// The demo over: its pointer goes once its last gesture is done.
+    DemoEnd,
     /// Text typed into what has the keyboard, then Enter.
     DemoType(String),
     /// Whether a demo gesture is under way.
@@ -499,6 +521,14 @@ impl Surface for ChannelSurface {
         self.tell(RequestBody::SaveTabControlActions);
     }
 
+    fn flight_data_tab_add(&mut self, name: &str, text: &str, index: u32) {
+        self.tell(RequestBody::FlightDataTabAdd {
+            name: name.to_owned(),
+            text: text.to_owned(),
+            index,
+        });
+    }
+
     fn demo_click(&mut self, control: &str, millis: u32) -> bool {
         let control = control.to_owned();
         self.ask(
@@ -523,6 +553,23 @@ impl Surface for ChannelSurface {
             false,
             Some(ANSWER_WAIT),
         )
+    }
+
+    fn demo_right_click_map(&mut self, lat: f64, lng: f64, millis: u32) -> bool {
+        self.ask(
+            |reply| RequestBody::DemoRightClickMap {
+                lat,
+                lng,
+                millis,
+                reply,
+            },
+            false,
+            Some(ANSWER_WAIT),
+        )
+    }
+
+    fn demo_end(&mut self) {
+        self.tell(RequestBody::DemoEnd);
     }
 
     fn demo_type(&mut self, text: &str) {

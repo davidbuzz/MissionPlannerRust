@@ -1,0 +1,30 @@
+# The Drone ID plugin's form is a page of the flight screen's tabs, as the C#'s OpenDroneID adds
+# its tab - `TabListOriginal.Add`, `tabControlactions.TabPages.Insert(5, tab)` - not a panel over
+# the window, where it lay over FLIGHT PLAN's Write (found 2026-10-05). As in the C#, the saved
+# tabs decide whether it shows: FlightData's Activate applies them after the plugins are loaded.
+# Here they name it, so the strip has it, between Actions and Messages where the setting puts it,
+# and its page shows the form; and on FLIGHT PLAN no plugin form is over anything.
+# (Plugins/OpenDroneID2/OpenDroneID_Plugin.cs:42-58; GCSViews/FlightData.cs:733-791)
+# The built-in plugins: the runner leaves them out unless a script asks for them. The config's
+# empty `DisabledPlugins` turns Open Drone ID on, off until a user does (the owner, 2026-10-05).
+env MP_BUILTIN_PLUGINS 1
+screen fly
+window 1600x1200
+budget 20
+env XDG_DATA_HOME $WORK
+env MP_CONFIG_XML $WORK/config.xml
+setup printf '<?xml version="1.0" encoding="utf-8"?><Config><tabcontrolactions>tabQuick;tabActions;tabDroneID;tabPagemessages;</tabcontrolactions><DisabledPlugins></DisabledPlugins></Config>' > "$WORK/config.xml"
+within 10
+expect plugins.Open_Drone_ID.state running
+within 10
+expect fly.tabs tabQuick,tabActions,tabDroneID,tabPagemessages
+expect fly.tabs.all ~ tabDroneID
+expect plugins.forms.paged Drone ID@tabDroneID
+expect plugins.forms.floating none
+expect plugins.question none
+click fly-tab-droneid
+expect fly.tab tabDroneID
+expect fly.tab.text Drone ID
+click tab-plan
+expect screen plan
+expect plugins.forms.floating none

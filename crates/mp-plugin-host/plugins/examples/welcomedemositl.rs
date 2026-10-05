@@ -20,11 +20,12 @@
 
 //! Welcome-Demo-Sitl, the owner's plugin (2026-10-05), not in the C#: a first visit shows what
 //! the planner does. A drawn pointer moves as a hand would and clicks, in order, SIMULATION and
-//! its Multirotor (a copter starts in the simulator and the planner connects to it), PLAN and
-//! four waypoints around the copter (closing Drone ID's form first, which lies over Write),
-//! Write, FLY and its Actions page, force arm, TakeOff and its prompt's OK, and Auto, so the
-//! copter flies the mission; then the PLUGINS tab, where it unticks
-//! its own Enabled box and saves, so the next start leaves it out, and back to FLY to watch.
+//! its Multirotor (a copter starts in the simulator and the planner connects to it), PLAN, its zoom
+//! icon's Zoom To Vehicle, Set Home Here on the map's right-click menu at the copter, four
+//! waypoints around the copter, Write, FLY and its Actions page, force arm, TakeOff and its
+//! prompt's OK, and Auto, so the copter flies the mission; then the PLUGINS tab, where it unticks
+//! its own Enabled box and saves, so the next start leaves it out, and back to FLY to watch, where
+//! its pointer goes.
 //!
 //! A plugin rather than part of the planner so a user can turn it off as any other. The browser
 //! build carries it built in and enabled; the desktop does not, and runs it only from a file put
@@ -53,8 +54,11 @@ const DWELL: u32 = 3;
 const SHOW_WAIT: u32 = 20;
 /// Another plugin's message box: Drone ID's, at a start that has not yet saved its pages.
 const QUESTION_OK: &str = "plugin-question-ok";
-/// Drone ID's form's close box, named by the form's title.
-const DRONE_ID_CLOSE: &str = "plugin-form-Drone_ID-close";
+/// The planner's own message box's OK: what Write says when it will not write.
+const PLAN_PROMPT_OK: &str = "plan-prompt-ok";
+/// The planning map taller than this, in metres, is too far out for waypoints a click apart: Zoom
+/// To Vehicle brings it in to zoom 17, a few hundred metres.
+const VIEW_MOST: f64 = 5_000.0;
 /// This plugin's Enabled box on the PLUGINS tab, named by its file.
 const OWN_BOX: &str = "plugin-manager-enabled-welcomedemositl.wasm";
 /// Half the mission square's side as a part of the vehicle's distance to the planning map's
@@ -99,10 +103,15 @@ enum Act {
     /// The pointer to a corner of the mission square on the planning map, and a click there,
     /// which adds a waypoint.
     Waypoint(usize),
+    /// The pointer to the copter on the map, and a right click there: the map's menu.
+    RightClickVehicle,
     /// Wait for something, at most so many seconds.
     Wait(Until, u32),
     /// A pause, in ticks.
     Pause(u32),
+    /// Write's answer: a message box from the planner within so many seconds is a refusal -
+    /// "Your home location is invalid", say - answered, and the demo stops, saying so.
+    Written(u32),
 }
 
 /// The demo, in order.
@@ -113,15 +122,24 @@ const SCRIPT: &[Act] = &[
     Act::Click("sitl-picture-quad"),
     Act::Wait(Until::Located, 180),
     Act::Pause(3 * TICKS),
-    // Drone ID's form, shown once a vehicle is connected, lies over the planning screen's Write.
-    Act::Answer(DRONE_ID_CLOSE, 2),
     Act::Click("tab-plan"),
+    // Zoom To Vehicle, on the planning map's zoom icon: the map on the copter, in to 17 - the
+    // planning map starts out at zoom 3, as the C#'s does.
+    // `// C#: GCSViews/FlightPlanner.cs:232, 8369-8380`
+    Act::Click("plan-zoomicon"),
+    Act::Click("menu-zoomToVehicle"),
+    Act::Pause(TICKS),
+    // Set Home Here, on the map's right-click menu at the copter: the home Write sends, without
+    // which it says "Your home location is invalid" (the owner's run, 2026-10-05).
+    Act::RightClickVehicle,
+    Act::Click("menu-setHomeHere"),
+    Act::Pause(TICKS),
     Act::Waypoint(0),
     Act::Waypoint(1),
     Act::Waypoint(2),
     Act::Waypoint(3),
     Act::Click("plan-write"),
-    Act::Pause(3 * TICKS),
+    Act::Written(4),
     Act::Click("tab-fly"),
     Act::Click("fly-tab-actions"),
     Act::Click("force-arm"),
@@ -166,20 +184,25 @@ static STATE: Mutex<State> = Mutex::new(State {
 });
 
 impl State {
-    /// On to the next step after a rest of `rest` ticks.
+    /// On to the next step after a rest of `rest` ticks; past the last, the demo is over and its
+    /// pointer goes.
     fn next(&mut self, rest: u32) {
         self.step += 1;
         self.ticks = 0;
         self.resting = rest;
         self.finished = self.step >= SCRIPT.len();
+        if self.finished {
+            host::demo_end();
+        }
     }
 
-    /// The demo stops where it is, saying why.
+    /// The demo stops where it is, saying why, and its pointer goes.
     fn stop(&mut self, why: &str) {
         let text = format!("Welcome demo stopped: {why}");
         host::status(&text);
         host::log(&text);
         self.finished = true;
+        host::demo_end();
     }
 }
 
@@ -204,6 +227,13 @@ fn arrived(until: Until) -> bool {
         Until::Climbed => number("alt") >= 2.0,
         Until::Auto => cs_text("mode").is_some_and(|mode| mode.eq_ignore_ascii_case("auto")),
     }
+}
+
+/// The planning map's height as last drawn, in metres; none known, as tall as can be.
+fn view_height() -> f64 {
+    host::fp_view_area().map_or(f64::MAX, |area| {
+        (area.top - area.bottom).abs() * METRES_PER_DEGREE
+    })
 }
 
 /// The mission square around the vehicle, its corners clockwise from the north-east, sized to
@@ -243,8 +273,10 @@ fn tick(state: &mut State) {
     };
     state.ticks += 1;
     // A message box over the window takes the click; a user reads it and presses OK first.
-    if matches!(act, Act::Click(_) | Act::Answer(..) | Act::Waypoint(_))
-        && host::demo_visible(QUESTION_OK)
+    if matches!(
+        act,
+        Act::Click(_) | Act::Answer(..) | Act::Waypoint(_) | Act::RightClickVehicle
+    ) && host::demo_visible(QUESTION_OK)
     {
         if host::demo_click(QUESTION_OK, MOVE_MS) {
             state.resting = DWELL;
@@ -267,6 +299,10 @@ fn tick(state: &mut State) {
             }
         }
         Act::Waypoint(corner) => {
+            if state.corners.is_none() && view_height() > VIEW_MOST {
+                state.stop("the planning map is too far out to place waypoints");
+                return;
+            }
             let corners = *state.corners.get_or_insert_with(square);
             let Some(&(lat, lng)) = corners.get(corner) else {
                 state.stop("no such corner of the mission");
@@ -300,6 +336,21 @@ fn tick(state: &mut State) {
                     Until::Climbed => "the vehicle did not climb",
                     Until::Auto => "the vehicle did not take Auto",
                 });
+            }
+        }
+        Act::RightClickVehicle => {
+            if host::demo_right_click_map(number("lat"), number("lng"), MOVE_MS) {
+                state.next(DWELL);
+            } else if state.ticks > SHOW_WAIT * TICKS {
+                state.stop("the copter is not on the map");
+            }
+        }
+        Act::Written(seconds) => {
+            if host::demo_visible(PLAN_PROMPT_OK) {
+                let _ = host::demo_click(PLAN_PROMPT_OK, MOVE_MS);
+                state.stop("Write did not write the mission");
+            } else if state.ticks > seconds * TICKS {
+                state.next(0);
             }
         }
         Act::Pause(ticks) => {

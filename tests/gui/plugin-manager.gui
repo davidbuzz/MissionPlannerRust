@@ -11,6 +11,8 @@
 # as a file in the plugins folder.
 #
 # The config holds `tabcontrolactions`, so the Drone ID plugin's message box does not show.
+# And an empty `DisabledPlugins`: every plugin on, Open Drone ID too, which is off until a user
+# turns it on (the owner, 2026-10-05).
 # The built-in plugins: the runner leaves them out unless a script asks for them.
 env MP_BUILTIN_PLUGINS 1
 screen fly
@@ -18,7 +20,7 @@ window 1600x1200
 budget 30
 env XDG_DATA_HOME $WORK
 env MP_CONFIG_XML $WORK/config.xml
-setup printf '<?xml version="1.0" encoding="utf-8"?><Config><tabcontrolactions>tabQuick;</tabcontrolactions></Config>' > "$WORK/config.xml"
+setup printf '<?xml version="1.0" encoding="utf-8"?><Config><tabcontrolactions>tabQuick;</tabcontrolactions><DisabledPlugins></DisabledPlugins></Config>' > "$WORK/config.xml"
 expect plugins.Dowding.state running
 expect plugins.question none
 expect plugin-manager.open false

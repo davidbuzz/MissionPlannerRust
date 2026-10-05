@@ -42,13 +42,15 @@ use crate::MissionPlanner;
 /// How long a click's ring is drawn after it.
 const RING: Duration = Duration::from_millis(400);
 
-/// A move under way: from where, to where, since when, for how long, and a click at its end.
+/// A move under way: from where, to where, since when, for how long, and the button clicked at
+/// its end.
 #[derive(Debug, Clone, Copy)]
 struct Gesture {
     from: (f32, f32),
     to: (f32, f32),
     started: Instant,
     took: Duration,
+    button: MouseButton,
 }
 
 /// The pointer: where it is drawn, the move under way, and what to type after it.
@@ -61,6 +63,8 @@ pub struct DemoPointer {
     /// The clicks asked for so far, and the last one's target: a control's name, or `map`.
     clicks: usize,
     last: Option<String>,
+    /// The demo is over: the pointer goes once its last gesture and ring are done.
+    ended: bool,
 }
 
 impl DemoPointer {
@@ -68,6 +72,34 @@ impl DemoPointer {
     /// (a control's name, or `map`). It starts from where it is, or at `to` the first time. The
     /// probe is switched on so the planner keeps measuring its controls for the next asks.
     pub fn click_at(&mut self, to: (f32, f32), target: &str, millis: u32, now: Instant) {
+        self.move_to(to, target, millis, now, MouseButton::Left);
+    }
+
+    /// The same with the right button: what opens the map's menu where it lands.
+    pub fn right_click_at(&mut self, to: (f32, f32), target: &str, millis: u32, now: Instant) {
+        self.move_to(to, target, millis, now, MouseButton::Right);
+    }
+
+    /// The demo over: the pointer is drawn no more once its last gesture and its ring are done.
+    pub fn end(&mut self) {
+        self.ended = true;
+    }
+
+    /// Whether the pointer is drawn at `now`.
+    #[must_use]
+    pub fn shown(&self, now: Instant) -> bool {
+        self.at.is_some() && (!self.ended || self.active(now))
+    }
+
+    /// A move to `to` begun, ending in a click of `button`.
+    fn move_to(
+        &mut self,
+        to: (f32, f32),
+        target: &str,
+        millis: u32,
+        now: Instant,
+        button: MouseButton,
+    ) {
         crate::probe::enable();
         self.clicks += 1;
         self.last = Some(target.to_owned());
@@ -77,6 +109,7 @@ impl DemoPointer {
             to,
             started: now,
             took: Duration::from_millis(u64::from(millis)),
+            button,
         });
         self.at = Some(from);
     }
@@ -141,7 +174,8 @@ impl DemoPointer {
                 self.gesture = None;
                 self.clicked = Some((gesture.to, now));
                 let position = point(px(gesture.to.0), px(gesture.to.1));
-                window.defer(cx, move |window, cx| click(position, window, cx));
+                let button = gesture.button;
+                window.defer(cx, move |window, cx| click(position, button, window, cx));
             }
             return;
         }
@@ -153,6 +187,9 @@ impl DemoPointer {
     /// The cursor and a click's ring, drawn over everything, or nothing before the first move.
     #[must_use]
     pub fn cursor(&self, now: Instant) -> Option<AnyElement> {
+        if !self.shown(now) {
+            return None;
+        }
         let (x, y) = self.at?;
         let ring = self
             .clicked
@@ -199,8 +236,14 @@ fn visible_centre(control: &str) -> Option<(f32, f32)> {
     (right > left && bottom > top).then(|| ((left + right) / 2.0, (top + bottom) / 2.0))
 }
 
-/// A left click at `position`: the pointer there, the button down and up, as a mouse gives them.
-fn click(position: gpui::Point<gpui::Pixels>, window: &mut Window, cx: &mut gpui::App) {
+/// A click of `button` at `position`: the pointer there, the button down and up, as a mouse gives
+/// them.
+fn click(
+    position: gpui::Point<gpui::Pixels>,
+    button: MouseButton,
+    window: &mut Window,
+    cx: &mut gpui::App,
+) {
     let modifiers = Modifiers::default();
     window.dispatch_event(
         PlatformInput::MouseMove(MouseMoveEvent {
@@ -212,7 +255,7 @@ fn click(position: gpui::Point<gpui::Pixels>, window: &mut Window, cx: &mut gpui
     );
     window.dispatch_event(
         PlatformInput::MouseDown(MouseDownEvent {
-            button: MouseButton::Left,
+            button,
             position,
             modifiers,
             click_count: 1,
@@ -222,7 +265,7 @@ fn click(position: gpui::Point<gpui::Pixels>, window: &mut Window, cx: &mut gpui
     );
     window.dispatch_event(
         PlatformInput::MouseUp(MouseUpEvent {
-            button: MouseButton::Left,
+            button,
             position,
             modifiers,
             click_count: 1,
@@ -303,5 +346,35 @@ fn paint_cursor(window: &mut Window, (x, y): (f32, f32), ring: Option<((f32, f32
     shape(&mut body, 1.0);
     if let Ok(path) = body.build() {
         window.paint_path(path, rgb(0xff_ff_ff));
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The pointer is drawn from its first move, and once the demo says it is over it goes when
+    /// its last gesture and the click's ring are done - not before.
+    #[test]
+    fn the_pointer_goes_when_the_demo_ends() {
+        let start = Instant::now();
+        let mut pointer = DemoPointer::default();
+        assert!(!pointer.shown(start));
+        pointer.right_click_at((10.0, 10.0), "map", 100, start);
+        assert!(pointer.shown(start));
+        pointer.end();
+        // The gesture still under way: drawn.
+        assert!(pointer.shown(start));
+        // Its click made (as `tick` makes it) and the ring drawing: drawn.
+        pointer.gesture = None;
+        pointer.clicked = Some(((10.0, 10.0), start));
+        assert!(pointer.shown(start + Duration::from_millis(100)));
+        // The ring done: gone.
+        assert!(!pointer.shown(start + RING + Duration::from_millis(1)));
+        assert!(
+            pointer
+                .cursor(start + RING + Duration::from_millis(1))
+                .is_none()
+        );
     }
 }

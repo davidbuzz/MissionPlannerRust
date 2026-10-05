@@ -3227,6 +3227,68 @@ pub enum Page {
     TLogs,
     /// `tablogbrowse`.
     LogBrowse,
+    /// A page a plugin added - `TabListOriginal.Add(tab)`, `tabControlactions.TabPages.Insert` -
+    /// which its form fills: its slot in the run's list of them ([`plugin_page`]).
+    Plugin(u8),
+}
+
+/// A flight screen page a plugin added, which its form fills.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct PluginPage {
+    /// Its `Name`.
+    pub name: &'static str,
+    /// Its header's text.
+    pub text: &'static str,
+    /// The id a script clicks its header by: `fly-tab-` and the name lower-cased, less its
+    /// `tab`.
+    pub id: &'static str,
+    /// The plugin whose form fills it.
+    pub plugin: usize,
+}
+
+thread_local! {
+    /// The pages plugins added this run, by slot. Few and never removed - plugins add them once,
+    /// at `Loaded` - so their names are kept for the run.
+    static PLUGIN_PAGES: std::cell::RefCell<Vec<PluginPage>> =
+        const { std::cell::RefCell::new(Vec::new()) };
+}
+
+/// The page a plugin added in `slot`.
+#[must_use]
+pub fn plugin_page(slot: u8) -> Option<PluginPage> {
+    PLUGIN_PAGES.with_borrow(|pages| pages.get(usize::from(slot)).copied())
+}
+
+/// Plugin `plugin`'s page `name`, "`text`" on its header: the page, the same one when the plugin
+/// adds it again.
+pub fn plugin_page_for(plugin: usize, name: &str, text: &str) -> Page {
+    PLUGIN_PAGES.with_borrow_mut(|pages| {
+        let slot = pages
+            .iter()
+            .position(|page| page.plugin == plugin && page.name == name)
+            .unwrap_or_else(|| {
+                let kept = |text: String| -> &'static str { Box::leak(text.into_boxed_str()) };
+                let id = format!(
+                    "fly-tab-{}",
+                    name.strip_prefix("tab").unwrap_or(name).to_lowercase()
+                );
+                pages.push(PluginPage {
+                    name: kept(name.to_owned()),
+                    text: kept(text.to_owned()),
+                    id: kept(id),
+                    plugin,
+                });
+                pages.len() - 1
+            });
+        Page::Plugin(u8::try_from(slot).unwrap_or(u8::MAX))
+    })
+}
+
+/// Whether plugin `plugin` has a page of its own, so its form is drawn there rather than over
+/// the window.
+#[must_use]
+pub fn plugin_has_page(plugin: usize) -> bool {
+    PLUGIN_PAGES.with_borrow(|pages| pages.iter().any(|page| page.plugin == plugin))
 }
 
 impl Page {
@@ -3251,9 +3313,9 @@ impl Page {
         Self::LogBrowse,
     ];
 
-    /// The page's `Name` in the Designer.
+    /// The page's `Name` in the Designer, or the one its plugin gave it.
     #[must_use]
-    pub const fn name(self) -> &'static str {
+    pub fn name(self) -> &'static str {
         match self {
             Self::Quick => "tabQuick",
             Self::Actions => "tabActions",
@@ -3269,6 +3331,7 @@ impl Page {
             Self::Payload => "tabPayload",
             Self::TLogs => "tabTLogs",
             Self::LogBrowse => "tablogbrowse",
+            Self::Plugin(slot) => plugin_page(slot).map_or("", |page| page.name),
         }
     }
 
@@ -3293,13 +3356,14 @@ impl Page {
             Self::Payload => fl!("flightdata-tabPayload-Text"),
             Self::TLogs => fl!("flightdata-tabTLogs-Text"),
             Self::LogBrowse => fl!("flightdata-tablogbrowse-Text"),
+            Self::Plugin(slot) => plugin_page(slot).map_or("", |page| page.text),
         }
     }
 
     /// The id a script clicks the header by. From the Designer's name, since the two Actions
     /// headers read the same.
     #[must_use]
-    pub const fn id(self) -> &'static str {
+    pub fn id(self) -> &'static str {
         match self {
             Self::Quick => "fly-tab-quick",
             Self::Actions => "fly-tab-actions",
@@ -3315,6 +3379,7 @@ impl Page {
             Self::Payload => "fly-tab-payload",
             Self::TLogs => "fly-tab-tlogs",
             Self::LogBrowse => "fly-tab-logbrowse",
+            Self::Plugin(slot) => plugin_page(slot).map_or("fly-tab-plugin", |page| page.id),
         }
     }
 
@@ -3324,7 +3389,7 @@ impl Page {
     #[must_use]
     pub const fn note(self) -> Option<&'static str> {
         Some(match self {
-            Self::Quick | Self::Actions | Self::Transponder => return None,
+            Self::Quick | Self::Actions | Self::Transponder | Self::Plugin(_) => return None,
             // `// C#: GCSViews/FlightData.Designer.cs:1086`
             Self::Messages => "txt_messagebox: the messages are under the map on this screen.",
             // `// C#: GCSViews/FlightData.Designer.cs:1098-1140`, each wired to a quick-mode
@@ -3420,6 +3485,8 @@ impl Page {
             Self::PreFlight => &[Panel::PreArm, Panel::Health],
             Self::TLogs => &[Panel::Playback],
             Self::LogBrowse => &[Panel::DataFlash],
+            // Its plugin's form, which the plugins draw (`plugins_ui::page_form`).
+            Self::Plugin(_) => &[],
             Self::Transponder => &[Panel::Transponder],
             Self::Payload => &[Panel::Payload],
             Self::Gauges => &[Panel::Gauges],
@@ -3453,6 +3520,8 @@ pub struct Pages {
     pub multiline: bool,
     /// `Settings.Instance["tabcontrolactions"]`: page names, each followed by a `;`.
     setting: Option<String>,
+    /// `TabListOriginal`'s pages beyond the Designer's: the ones plugins added.
+    added: Vec<Page>,
 }
 
 impl Default for Pages {
@@ -3463,6 +3532,7 @@ impl Default for Pages {
             shown: Page::ALL.to_vec(),
             multiline: false,
             setting: None,
+            added: Vec::new(),
         }
     }
 }
@@ -3538,25 +3608,52 @@ impl Pages {
         names
     }
 
+    /// `TabListOriginal`: the Designer's pages, then the ones plugins added.
+    fn originals(&self) -> Vec<Page> {
+        Page::ALL.iter().chain(&self.added).copied().collect()
+    }
+
+    /// A plugin's page, `FlightData.TabListOriginal.Add(tab)` and
+    /// `tabControlactions.TabPages.Insert(index, tab)` from its `Loaded`, which `MainV2.OnLoad`
+    /// runs before it first shows the flight screen - whose `Activate` then applies the saved
+    /// setting (`updateDisplayView`): so a page the setting does not name goes again, and shows
+    /// once it is ticked in Customize. With no setting the strip is left as it is, the page in it.
+    /// `// C#: Plugins/OpenDroneID2/OpenDroneID_Plugin.cs:42-58; MainV2.cs:3195, 3213-3216; GCSViews/FlightData.cs:433-551, 733-791`
+    pub fn add_plugin_page(&mut self, page: Page, index: usize) {
+        if self.added.contains(&page) {
+            return;
+        }
+        self.added.push(page);
+        let index = index.min(self.shown.len());
+        self.shown.insert(index, page);
+        if let Some(setting) = self.setting.clone() {
+            self.load_tab_control_actions(&setting);
+        }
+    }
+
     /// `loadTabControlActions` at start: the saved setting's pages, in its order, the page
     /// showing kept when the strip still has it. An empty setting changes nothing, as the C#
     /// returns before touching the pages.
     /// `// C#: GCSViews/FlightData.cs:733-791`
     pub fn load_tab_control_actions(&mut self, setting: &str) {
         let selected = self.selected;
-        let list: Vec<(Page, bool)> = Page::ALL
+        let originals = self.originals();
+        let list: Vec<(Page, bool)> = originals
             .iter()
             .map(|page| (*page, setting.split(';').any(|name| name == page.name())))
             .collect();
         if list.iter().any(|(_, on)| *on) {
-            // In the setting's order, not `Page::ALL`'s.
+            // In the setting's order, not `TabListOriginal`'s.
             let mut ordered: Vec<(Page, bool)> = setting
                 .split(';')
-                .filter_map(|name| Page::ALL.iter().find(|page| page.name() == name))
+                .filter_map(|name| originals.iter().find(|page| page.name() == name))
                 .map(|page| (*page, true))
                 .collect();
             ordered.dedup();
             self.customize(&ordered);
+            // The setting as saved - `loadTabControlActions` only reads it - so a page it names
+            // that is not here yet, a plugin's, finds itself in it when the plugin adds it.
+            self.setting = Some(setting.to_owned());
             if self.shown.contains(&selected) {
                 self.selected = selected;
             }
@@ -3581,9 +3678,9 @@ impl Pages {
             .get_or_insert_with(|| page_names(&self.shown))
             .clone();
         let names: Vec<&str> = setting.split(';').collect();
-        Page::ALL
-            .iter()
-            .map(|page| (*page, names.contains(&page.name())))
+        self.originals()
+            .into_iter()
+            .map(|page| (page, names.contains(&page.name())))
             .collect()
     }
 
@@ -3603,9 +3700,10 @@ impl Pages {
         if answer.is_empty() {
             return;
         }
+        let originals = self.originals();
         let mut shown = Vec::new();
         for name in answer.split(';') {
-            if let Some(page) = Page::ALL.iter().find(|page| page.name() == name) {
+            if let Some(page) = originals.iter().find(|page| page.name() == name) {
                 shown.push(*page);
             }
         }
@@ -3628,6 +3726,8 @@ impl Pages {
         crate::facts::record("fly.tab.text", self.selected.text());
         crate::facts::record("fly.tabs", page_list(&self.shown, Page::name));
         crate::facts::record("fly.tabs.text", page_list(&self.shown, Page::text));
+        // `TabListOriginal`: what Customize lists, the pages plugins added among them.
+        crate::facts::record("fly.tabs.all", page_list(&self.originals(), Page::name));
         crate::facts::record("fly.tabs.first", self.first_shown);
         crate::facts::record("fly.tabs.multiline", self.multiline);
         crate::facts::record("fly.page.overflow", format!("{:.0}", overflow.max(0.0)));
@@ -10743,6 +10843,49 @@ mod tests {
                 page.name()
             );
         }
+    }
+
+    /// A plugin's page - OpenDroneID's `tabDroneID`, inserted sixth: with no setting saved the
+    /// strip keeps it where it went; with a setting that does not name it, it goes again, as
+    /// `Activate` takes it away, but Customize lists it, and ticked there it shows and is saved;
+    /// and a setting that names it, read before the plugin is loaded, shows it once it is added.
+    #[test]
+    fn a_plugins_page_shows_where_the_setting_names_it() {
+        let page = plugin_page_for(7, "tabDroneID", "Drone ID");
+        assert_eq!(page.name(), "tabDroneID");
+        assert_eq!(page.text(), "Drone ID");
+        assert_eq!(page.id(), "fly-tab-droneid");
+        assert!(plugin_has_page(7));
+        assert!(!plugin_has_page(8));
+        assert_eq!(plugin_page_for(7, "tabDroneID", "Drone ID"), page);
+
+        let mut pages = Pages::default();
+        pages.add_plugin_page(page, 5);
+        assert_eq!(pages.shown().get(5), Some(&page));
+        assert_eq!(pages.shown().len(), Page::ALL.len() + 1);
+
+        let mut pages = Pages::default();
+        pages.load_tab_control_actions("tabQuick;tabActions;");
+        pages.add_plugin_page(page, 5);
+        assert_eq!(pages.shown(), &[Page::Quick, Page::Actions]);
+        let list = pages.customize_list();
+        assert!(list.contains(&(page, false)));
+        let ticked: Vec<(Page, bool)> = list
+            .iter()
+            .map(|(listed, on)| (*listed, *on || *listed == page))
+            .collect();
+        pages.customize(&ticked);
+        assert_eq!(pages.shown(), &[Page::Quick, Page::Actions, page]);
+        assert_eq!(
+            pages.save_tab_control_actions(),
+            "tabQuick;tabActions;tabDroneID;"
+        );
+
+        let mut pages = Pages::default();
+        pages.load_tab_control_actions("tabQuick;tabDroneID;tabActions;");
+        assert_eq!(pages.shown(), &[Page::Quick, Page::Actions]);
+        pages.add_plugin_page(page, 5);
+        assert_eq!(pages.shown(), &[Page::Quick, page, Page::Actions]);
     }
 
     /// The arrows move the row one header at a time and stop at either end; choosing a page

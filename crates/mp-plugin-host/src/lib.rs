@@ -116,10 +116,17 @@ pub trait Surface: Send + 'static {
     fn config_set(&mut self, key: &str, value: &str);
     /// `Host.MainForm.FlightData.saveTabControlActions()`, then `Settings.Instance.Save()`.
     fn save_tab_control_actions(&mut self);
+    /// `FlightData.TabListOriginal.Add(tab)` and `tabControlactions.TabPages.Insert(index,
+    /// tab)`: a flight screen page the plugin's form fills.
+    fn flight_data_tab_add(&mut self, name: &str, text: &str, index: u32);
     /// The demo pointer to a named control, and its click (the owner's Welcome-Demo-Sitl).
     fn demo_click(&mut self, control: &str, millis: u32) -> bool;
     /// The demo pointer to a place on the map, and its click.
     fn demo_click_map(&mut self, lat: f64, lng: f64, millis: u32) -> bool;
+    /// The same with the right button: the map's menu at that place.
+    fn demo_right_click_map(&mut self, lat: f64, lng: f64, millis: u32) -> bool;
+    /// The demo over: its pointer goes once its last gesture is done.
+    fn demo_end(&mut self);
     /// Text typed into what has the keyboard, then Enter.
     fn demo_type(&mut self, text: &str);
     /// Whether a demo gesture is under way.
@@ -206,11 +213,20 @@ impl wit::missionplanner::plugin::host::Host for plugin::State {
     fn save_tab_control_actions(&mut self) {
         self.surface.save_tab_control_actions();
     }
+    fn flight_data_tab_add(&mut self, name: String, text: String, index: u32) {
+        self.surface.flight_data_tab_add(&name, &text, index);
+    }
     fn demo_click(&mut self, control: String, millis: u32) -> bool {
         self.surface.demo_click(&control, millis)
     }
     fn demo_click_map(&mut self, lat: f64, lng: f64, millis: u32) -> bool {
         self.surface.demo_click_map(lat, lng, millis)
+    }
+    fn demo_right_click_map(&mut self, lat: f64, lng: f64, millis: u32) -> bool {
+        self.surface.demo_right_click_map(lat, lng, millis)
+    }
+    fn demo_end(&mut self) {
+        self.surface.demo_end();
     }
     fn demo_type(&mut self, text: String) {
         self.surface.demo_type(&text);

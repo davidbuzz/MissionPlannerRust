@@ -1,9 +1,11 @@
 // The owner's Welcome-Demo-Sitl plugin (2026-10-05) in a web page, as a first visit sees it: no
 // click from here at all. The demo's pointer clicks SIMULATION > Multirotor (the copter starts in
-// the page), PLAN and four waypoints, Write, FLY > Actions, force arm, TakeOff and its OK, Auto,
-// then unticks itself on PLUGINS, saves, and goes back to FLY. Fails unless the planner's own
-// facts (?facts=1) show it all done: the demo's last click FLY, the vehicle armed in Auto with
-// the mission written, and the demo on the disabled list Save && Close wrote. A screenshot of the
+// the page), PLAN, Zoom To Vehicle, Set Home Here on the map's menu at the copter, four
+// waypoints, Write, FLY > Actions, force arm, TakeOff and its OK, Auto, then unticks itself on
+// PLUGINS, saves, and goes back to FLY. Fails unless the planner's own facts (?facts=1) show it
+// all done: the demo's last click FLY and its pointer gone, home and four waypoints on FLIGHT
+// PLAN, the vehicle armed in Auto with the mission written, and the demo on the disabled list
+// Save && Close wrote. A screenshot of the
 // end goes into out-dir, and with DEMO_SHOTS=1 one at each click too - each stalls the page under
 // SwiftShader for seconds, long enough for ArduCopter to disarm a copter waiting for its TakeOff.
 //
@@ -12,10 +14,9 @@ const { chromium } = require("playwright");
 const out = process.argv[2] || ".";
 const url = process.argv[3] || "http://127.0.0.1:8080/planner.html?facts=1";
 const fail = (why) => { console.log(`FAIL: ${why}`); process.exitCode = 1; };
-// The demo's script (welcomedemositl.rs, SCRIPT): nineteen clicks of its own, the last FLY -
-// Drone ID's form closed among them - one more for Drone ID's question at a first visit, and two
+// The demo's script (welcomedemositl.rs, SCRIPT): twenty-two clicks of its own, the last FLY - two
 // more when the copter disarmed before its climb and was armed again.
-const CLICKS = 19;
+const CLICKS = 22;
 (async () => {
   const browser = await chromium.launch({
     headless: true,
@@ -67,10 +68,14 @@ const CLICKS = 19;
   console.log(`after ${((Date.now() - t0) / 1000).toFixed(0)} s: clicks ${facts["demo.clicks"]}, last ${facts["demo.last"]}, screen ${facts.screen}, mode ${facts["vehicle.mode"]}, armed ${facts["vehicle.armed"]}, wps ${facts["vehicle.wps"]}, mission_current ${facts["vehicle.mission_current"]}, disabled ${facts["plugins.disabled"]}, status "${facts.status}"`);
   if (!(Number(facts["demo.clicks"]) >= CLICKS)) fail(`the demo clicked ${facts["demo.clicks"]} times, not ${CLICKS} or more`);
   if (facts["demo.last"] !== "tab-fly") fail(`the demo's last click was ${facts["demo.last"]}, not tab-fly`);
+  if (facts["demo.pointer"] !== "hidden") fail(`the demo's pointer is ${facts["demo.pointer"]} at its end, not hidden`);
   if (facts.screen !== "fly") fail(`the screen is ${facts.screen}, not fly`);
   if (facts["vehicle.armed"] !== "true") fail("the vehicle is not armed");
   if (facts["vehicle.mode"] !== "Auto") fail(`the vehicle is in ${facts["vehicle.mode"]}, not Auto`);
-  // Home and the four waypoints.
+  // On FLIGHT PLAN: home set by the Home Location link, and four waypoints; on the vehicle, home
+  // and the four (the owner's run of 2026-10-05 had one waypoint and no home).
+  if (facts["mission.home"] !== "true") fail("FLIGHT PLAN has no home");
+  if (Number(facts["mission.items"]) !== 4) fail(`FLIGHT PLAN holds ${facts["mission.items"]} waypoints, not four`);
   if (Number(facts["vehicle.wps"]) < 5) fail(`the vehicle holds ${facts["vehicle.wps"]} mission items, not home and four`);
   if (!(facts["plugins.disabled"] ?? "").includes("welcomedemositl.wasm")) fail(`the disabled list is ${facts["plugins.disabled"]}, without the demo`);
   if (facts["plugins.Welcome-Demo-Sitl.state"] !== "running") fail(`the demo is ${facts["plugins.Welcome-Demo-Sitl.state"]}, not loaded this run`);

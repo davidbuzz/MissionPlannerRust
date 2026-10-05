@@ -97,6 +97,28 @@ const DISABLED: &str = "DisabledPlugins";
 /// (build.rs), enabled there.
 const DEMO_FILE: &str = "welcomedemositl.wasm";
 
+/// The plugins off until a user turns them on, by the owner's word (2026-10-05): Open Drone ID.
+/// Not the C#'s, whose plugins are all on until unticked. In force while `DisabledPlugins` has
+/// never been saved; once the plugin manager's Save has written it, it is the user's choice
+/// (`plugin_manager_save` keeps it, empty, where the C# removes it).
+const DISABLED_BY_DEFAULT: &[&str] = &["opendroneid.wasm"];
+
+/// `PluginLoader.DisabledPluginNames` as the settings give it: `DisabledPlugins`, or with that
+/// never saved, [`DISABLED_BY_DEFAULT`].
+/// `// C#: MainV2.cs:3192-3194`
+fn disabled_list(persisted: &crate::settings::Persisted) -> Vec<String> {
+    match persisted.get(DISABLED) {
+        Some(value) => crate::raw_params_grid::get_list(Some(value))
+            .into_iter()
+            .filter(|name| !name.is_empty())
+            .collect(),
+        None => DISABLED_BY_DEFAULT
+            .iter()
+            .map(|name| (*name).to_owned())
+            .collect(),
+    }
+}
+
 /// Where the plugins are: `MP_PLUGINS`, else `plugins` beside the executable.
 /// `// C#: Plugin/PluginLoader.cs:205-206`
 #[must_use]
@@ -230,7 +252,7 @@ impl Plugins {
     /// thread, its terrain and parameter documentation readers set once.
     /// `// C#: MainV2.cs:3185-3196`
     pub fn start(persisted: &crate::settings::Persisted, cx: &mut gpui::App) -> Self {
-        let mut disabled = crate::raw_params_grid::get_list(persisted.get(DISABLED));
+        let mut disabled = disabled_list(persisted);
         // A page opened with `?demo=0` - the browser build's checks - starts without the
         // Welcome-Demo-Sitl, and the plugin manager does not list it.
         if mp_os::page_query("demo").as_deref() == Some("0") {
@@ -279,7 +301,7 @@ impl Plugins {
     /// folder or it is built in.
     /// `// C#: MainV2.cs:4118-4122; Plugin/PluginUI.cs:18-24`
     pub fn open_manager(&mut self, persisted: &crate::settings::Persisted) {
-        let disabled = crate::raw_params_grid::get_list(persisted.get(DISABLED));
+        let disabled = disabled_list(persisted);
         let dir = folder();
         let present = |name: &str| {
             builtin::BUILTIN
@@ -452,6 +474,36 @@ impl Plugins {
                 forms.join(",")
             },
         );
+        // Where each is drawn: over the window, or on its plugin's flight screen page.
+        let floating: Vec<&str> = self
+            .forms
+            .iter()
+            .filter(|form| !crate::fly::plugin_has_page(form.plugin))
+            .map(|form| form.title.as_str())
+            .collect();
+        facts::record(
+            "plugins.forms.floating",
+            if floating.is_empty() {
+                "none".to_owned()
+            } else {
+                floating.join(",")
+            },
+        );
+        let paged: Vec<String> = (0..=u8::MAX)
+            .map_while(crate::fly::plugin_page)
+            .filter_map(|page| {
+                let form = self.forms.iter().find(|form| form.plugin == page.plugin)?;
+                Some(format!("{}@{}", form.title, page.name))
+            })
+            .collect();
+        facts::record(
+            "plugins.forms.paged",
+            if paged.is_empty() {
+                "none".to_owned()
+            } else {
+                paged.join(",")
+            },
+        );
         facts::record("plugins.status", self.status.as_deref().unwrap_or("none"));
     }
 }
@@ -502,15 +554,14 @@ fn fence_point(item: &mp_vehicle::FenceItem) -> FencePoint {
 }
 
 impl MissionPlanner {
-    /// The plugin manager's Save && Close: `DisabledPlugins` set to the rows not ticked, or
-    /// removed when there are none, for the next start's `LoadAll`.
+    /// The plugin manager's Save && Close: `DisabledPlugins` set to the rows not ticked, for the
+    /// next start's `LoadAll`. With none, the C# removes the setting; here it is kept, empty, so
+    /// a plugin off by default ([`DISABLED_BY_DEFAULT`]) that was ticked stays on.
     /// `// C#: Plugin/PluginUI.cs:73-91`
     pub(crate) fn plugin_manager_save(&mut self) {
         if let Some(list) = self.plugins.manager.save() {
-            match crate::raw_params_grid::set_list(&list) {
-                Some(value) => self.persisted.set(DISABLED, value),
-                None => self.persisted.remove(DISABLED),
-            }
+            let value = crate::raw_params_grid::set_list(&list).unwrap_or_default();
+            self.persisted.set(DISABLED, value);
         }
     }
 
@@ -598,6 +649,14 @@ impl MissionPlanner {
             let (clicks, last) = self.plugins.demo.clicks();
             facts::record("demo.clicks", clicks);
             facts::record("demo.last", last.unwrap_or("none"));
+            facts::record(
+                "demo.pointer",
+                if self.plugins.demo.shown(web_time::Instant::now()) {
+                    "shown"
+                } else {
+                    "hidden"
+                },
+            );
         }
     }
 
@@ -764,6 +823,23 @@ impl MissionPlanner {
                 }
                 reply.send(at.is_some());
             }
+            RequestBody::DemoRightClickMap {
+                lat,
+                lng,
+                millis,
+                reply,
+            } => {
+                let at = mp_units::LatLon::new(lat, lng)
+                    .ok()
+                    .and_then(|at| self.map.borrow().window_point(at));
+                if let Some(at) = at {
+                    self.plugins
+                        .demo
+                        .right_click_at(at, "map", millis, web_time::Instant::now());
+                }
+                reply.send(at.is_some());
+            }
+            RequestBody::DemoEnd => self.plugins.demo.end(),
             RequestBody::DemoType(text) => self.plugins.demo.type_text(text),
             RequestBody::DemoBusy(reply) => reply.send(self.plugins.demo.busy()),
             RequestBody::DemoVisible { control, reply } => {
@@ -781,6 +857,14 @@ impl MissionPlanner {
                 self.plugins.show_form(plugin, title, controls);
             }
             RequestBody::FormClose => self.plugins.forms.retain(|form| form.plugin != plugin),
+            // `FlightData.TabListOriginal.Add(tab)` and `tabControlactions.TabPages.Insert(index,
+            // tab)`: the plugin's form fills the page from now on.
+            // `// C#: Plugins/OpenDroneID2/OpenDroneID_Plugin.cs:42-58`
+            RequestBody::FlightDataTabAdd { name, text, index } => {
+                let page = crate::fly::plugin_page_for(plugin, &name, &text);
+                self.fly_pages
+                    .add_plugin_page(page, usize::try_from(index).unwrap_or(usize::MAX));
+            }
         }
     }
 
@@ -957,7 +1041,12 @@ pub fn overlay(
     }
     let size = window.viewport_size();
     let mut top = 72.0;
-    for form in &plugins.forms {
+    // A plugin with a page of its own draws its form there (`page_form`), not over the window.
+    for form in plugins
+        .forms
+        .iter()
+        .filter(|form| !crate::fly::plugin_has_page(form.plugin))
+    {
         out.push(form_panel(
             form,
             (f32::from(size.width) - FORM_WIDTH - 16.0, top),
@@ -1205,6 +1294,40 @@ fn combo(
     column.into_any_element()
 }
 
+/// A form's controls, a row each.
+fn form_rows(form: &Form, window: &Window, cx: &mut Context<MissionPlanner>) -> Vec<AnyElement> {
+    form.controls
+        .iter()
+        .map(|control| control_row(form, control, window, cx))
+        .collect()
+}
+
+/// A flight screen page a plugin added: its form's controls, as its user control fills the C#'s
+/// tab page - or a line saying it has shown none yet.
+/// `// C#: Plugins/OpenDroneID2/OpenDroneID_Plugin.cs:50-55`
+pub fn page_form(
+    this: &MissionPlanner,
+    plugin: usize,
+    window: &Window,
+    cx: &mut Context<MissionPlanner>,
+) -> AnyElement {
+    match this.plugins.forms.iter().find(|form| form.plugin == plugin) {
+        Some(form) => crate::probe::measured(static_id(format!("plugin-page-{plugin}")), div())
+            .flex()
+            .flex_col()
+            .gap_2()
+            .p_2()
+            .children(form_rows(form, window, cx))
+            .into_any_element(),
+        None => div()
+            .p_2()
+            .text_xs()
+            .text_color(rgb(theme::DIM))
+            .child("the plugin has shown nothing here yet")
+            .into_any_element(),
+    }
+}
+
 /// A plugin's form, as a panel at `at`, with a close box that hides it.
 fn form_panel(
     form: &Form,
@@ -1224,29 +1347,20 @@ fn form_panel(
                 .text_color(rgb(theme::DIM))
                 .child(form.title.to_uppercase()),
         )
-        // The close box named by the form's title too, so a plugin can find it: the
-        // Welcome-Demo-Sitl closes Drone ID's, which covers the planning screen's Write.
-        .child(crate::probe::measured(
-            format!("plugin-form-{}-close", form.title.replace(' ', "_")),
-            div().child(
-                crate::probe::measured(close, div())
-                    .id(close)
-                    .px_1()
-                    .text_sm()
-                    .text_color(rgb(theme::DIM))
-                    .cursor_pointer()
-                    .child("\u{d7}")
-                    .on_click(cx.listener(move |this, _event, _window, cx| {
-                        this.plugins.forms.retain(|form| form.plugin != plugin);
-                        cx.notify();
-                    })),
-            ),
-        ));
-    let rows: Vec<AnyElement> = form
-        .controls
-        .iter()
-        .map(|control| control_row(form, control, window, cx))
-        .collect();
+        .child(
+            crate::probe::measured(close, div())
+                .id(close)
+                .px_1()
+                .text_sm()
+                .text_color(rgb(theme::DIM))
+                .cursor_pointer()
+                .child("\u{d7}")
+                .on_click(cx.listener(move |this, _event, _window, cx| {
+                    this.plugins.forms.retain(|form| form.plugin != plugin);
+                    cx.notify();
+                })),
+        );
+    let rows = form_rows(form, window, cx);
     let panel = crate::probe::measured(static_id(format!("plugin-form-{plugin}")), div())
         .flex()
         .flex_col()
@@ -1376,6 +1490,28 @@ fn question_box(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Open Drone ID is off until a user turns it on (the owner, 2026-10-05): with
+    /// `DisabledPlugins` never saved, the disabled list is it; saved - empty, as Save leaves it
+    /// with every row ticked, through config.xml and back - the list is the user's.
+    #[test]
+    fn open_drone_id_is_off_until_a_user_turns_it_on() {
+        let dir = mp_os::temp_dir().join(format!("plugins-default-off-{}", mp_os::process_id()));
+        std::fs::create_dir_all(&dir).expect("a scratch folder");
+        let path = dir.join("config.xml");
+        let mut persisted = crate::settings::Persisted::at(Some(path.clone()));
+        assert_eq!(disabled_list(&persisted), ["opendroneid.wasm"]);
+        persisted.set(DISABLED, "");
+        persisted
+            .save_config(crate::settings::SaveEvent::Plugin)
+            .expect("saved");
+        let read_back = crate::settings::Persisted::at(Some(path));
+        assert_eq!(read_back.get(DISABLED), Some(""));
+        assert!(disabled_list(&read_back).is_empty());
+        persisted.set(DISABLED, "dowding.wasm");
+        assert_eq!(disabled_list(&persisted), ["dowding.wasm"]);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 
     /// The planner carries the plugins Mission Planner ships, so a plain start loads them with
     /// nothing beside the executable: the owner's bug of 2026-10-03 was a start that loaded none,

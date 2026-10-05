@@ -34,9 +34,9 @@ setup cargo build -q --release -p mp-plugins --target wasm32-unknown-unknown --e
 setup mkdir -p $WORK/plugins && cp "${CARGO_TARGET_DIR:-target}/wasm32-unknown-unknown/release/examples/fencedist.wasm" "${CARGO_TARGET_DIR:-target}/wasm32-unknown-unknown/release/examples/menu.wasm" $WORK/plugins/
 
 # Loaded in name order over the built-ins and the folder: anonymizebinlog, dowding, example,
-# fencedist (the folder's), mapicondesc, menu (the folder's, plugin 5), modechange, opendroneid,
-# persistentsimple, terrainmaker.
-expect plugins.count 10
+# fencedist (the folder's), mapicondesc, menu (the folder's, plugin 5), modechange,
+# persistentsimple, terrainmaker - opendroneid off until a user turns it on (the owner, 2026-10-05).
+expect plugins.count 9
 expect plugins.FenceDist.state running
 expect plugins.FenceDist.version 0.10
 expect plugins.FenceDist.author Michael Oborne

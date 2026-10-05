@@ -325,6 +325,11 @@ fn opendroneid_shows_its_tab_and_keeps_the_uas_id() {
             .0
             .starts_with("Restart Mission Planner")
     );
+    // Its page: `tabDroneID`, "Drone ID", inserted sixth.
+    assert_eq!(
+        script.record().flight_tabs,
+        [("tabDroneID".to_owned(), "Drone ID".to_owned(), 5)]
+    );
     let (title, controls) = script.record().form.clone().unwrap();
     assert_eq!(title, "Drone ID");
     let labels: Vec<&str> = controls.iter().map(|c| c.label.as_str()).collect();

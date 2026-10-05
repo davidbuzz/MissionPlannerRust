@@ -123,6 +123,10 @@ pub struct Record {
     pub terrain_reads: usize,
     /// The demo pointer's clicks, in order: a control's name, or `map lat,lng`.
     pub demo_clicks: Vec<String>,
+    /// The flight screen pages added: name, text, index.
+    pub flight_tabs: Vec<(String, String, u32)>,
+    /// Whether the demo said it was over.
+    pub demo_ended: bool,
     pub demo_typed: Vec<String>,
 }
 
@@ -233,6 +237,11 @@ impl Surface for Scripted {
             .config
             .insert("tabcontrolactions".to_owned(), "tabQuick;".to_owned());
     }
+    fn flight_data_tab_add(&mut self, name: &str, text: &str, index: u32) {
+        self.record()
+            .flight_tabs
+            .push((name.to_owned(), text.to_owned(), index));
+    }
     // The demo pointer over the script's screen: a click lands on a control shown, and is
     // recorded.
     fn demo_click(&mut self, control: &str, _millis: u32) -> bool {
@@ -250,6 +259,17 @@ impl Surface for Scripted {
             r.demo_clicks.push(format!("map {lat:.6},{lng:.6}"));
         }
         shown
+    }
+    fn demo_right_click_map(&mut self, lat: f64, lng: f64, _millis: u32) -> bool {
+        let mut r = self.record();
+        let shown = r.shown.contains("map");
+        if shown {
+            r.demo_clicks.push(format!("right {lat:.6},{lng:.6}"));
+        }
+        shown
+    }
+    fn demo_end(&mut self) {
+        self.record().demo_ended = true;
     }
     fn demo_type(&mut self, text: &str) {
         self.record().demo_typed.push(text.to_owned());

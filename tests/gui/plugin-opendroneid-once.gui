@@ -1,0 +1,29 @@
+# The Drone ID plugin asks once, as the C# does (found 2026-10-04 on tridge's Mac: it asked at every
+# start). OpenDroneID_Plugin's forceSettings shows "Restart Mission Planner to enable Drone ID Tab"
+# when `tabcontrolactions` is unset, and saves the flight screen's pages and the settings so that the
+# next start finds it set (Plugins/OpenDroneID2/OpenDroneID_Plugin.cs:66-79, GCSViews/FlightData.cs:
+# 4746-4756). Here on a real first start - a config without the setting - the question comes; it is
+# answered, the window closed by its close box and the planner started again on the same settings:
+# no question the second time, and the plugin running.
+# The built-in plugins: the runner leaves them out unless a script asks for them. The config's
+# empty `DisabledPlugins` turns Open Drone ID on, off until a user does (the owner, 2026-10-05).
+env MP_BUILTIN_PLUGINS 1
+screen fly
+window 1600x1200
+budget 30
+env XDG_DATA_HOME $WORK
+env MP_CONFIG_XML $WORK/config.xml
+setup printf '<?xml version="1.0" encoding="utf-8"?><Config><DisabledPlugins></DisabledPlugins></Config>' > "$WORK/config.xml"
+within 10
+expect plugins.question ~ Restart Mission Planner to enable Drone ID Tab
+click plugin-question-ok
+expect plugins.question none
+restart
+settle 2
+within 10
+expect plugins.Open_Drone_ID.state running
+expect plugins.question none
+# The setting the answer saved does not name the page, so the strip does not have it, as in the
+# C#; the tabs' Customize lists it.
+expect fly.tabs.all ~ tabDroneID
+expect plugins.forms.floating none
