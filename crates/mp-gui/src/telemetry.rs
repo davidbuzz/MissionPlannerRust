@@ -493,6 +493,8 @@ impl Telemetry {
         let recording = Self::recording_path();
         let config = LinkConfig {
             record_path: recording.clone(),
+            // Packet to pixel, when frames are being measured (frametimes.rs).
+            stamp_arrivals: crate::frametimes::enabled(),
             ..LinkConfig::default()
         };
         match Link::connect(url, config) {
@@ -553,6 +555,23 @@ impl Telemetry {
     #[must_use]
     pub fn error(&self) -> Option<&str> {
         self.error.as_deref()
+    }
+
+    /// One number that changes when any vehicle's published state takes a message, or the link
+    /// opens, closes or reconnects: `MP_REPAINT=data`'s sign of new data (repaint.rs). Read from
+    /// the snapshots, so a change is one a frame can draw.
+    #[must_use]
+    pub fn change_mark(&self) -> u64 {
+        let Some(link) = &self.link else {
+            return 0;
+        };
+        let applied = link
+            .vehicles()
+            .into_iter()
+            .filter_map(|id| link.vehicle(id))
+            .map(|handle| handle.load().messages_applied)
+            .fold(0_u64, u64::wrapping_add);
+        applied.wrapping_mul(4) | u64::from(link.is_running()) << 1 | u64::from(link.reconnecting())
     }
 
     /// Takes a consistent view for this frame.

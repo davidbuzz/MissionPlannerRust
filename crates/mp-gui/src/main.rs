@@ -104,6 +104,7 @@ mod stderr_log;
 mod storm;
 // What each screen's frames cost in an ordinary run (`MP_FRAMES`).
 mod frametimes;
+mod repaint;
 mod survey_ui;
 mod telemetry;
 mod tour;
@@ -742,13 +743,28 @@ impl MissionPlanner {
         };
 
         // Repaint on a timer. The link thread owns the data and publishes snapshots; the UI only
-        // ever reads one, so this cannot block on I/O.
+        // ever reads one, so this cannot block on I/O. MP_REPAINT chooses another way, to be
+        // measured: repaint.rs.
         cx.spawn(async move |this, cx| {
+            let policy = repaint::Policy::from_env().unwrap_or_else(|| {
+                repaint::Policy::Tick(refresh_interval(
+                    std::env::var("MP_BENCH").is_ok(),
+                    storm::enabled(),
+                ))
+            });
+            let mut watch = repaint::Watch::new(web_time::Instant::now());
             loop {
-                let interval =
-                    refresh_interval(std::env::var("MP_BENCH").is_ok(), storm::enabled());
-                cx.background_executor().timer(interval).await;
-                if this.update(cx, |_, cx| cx.notify()).is_err() {
+                cx.background_executor().timer(policy.wake()).await;
+                let looked = this.update(cx, |this, cx| {
+                    let mark = match policy {
+                        repaint::Policy::Tick(_) => 0,
+                        repaint::Policy::Data { .. } => this.telemetry.change_mark(),
+                    };
+                    if watch.repaint(policy, mark, web_time::Instant::now()) {
+                        cx.notify();
+                    }
+                });
+                if looked.is_err() {
                     break;
                 }
             }
@@ -3124,6 +3140,11 @@ impl Render for MissionPlanner {
         storm::frame_started();
         frametimes::begin(self.screen.label());
         let view = self.telemetry.view();
+        frametimes::showing(
+            view.state
+                .as_ref()
+                .map(|state| (state.messages_applied, state.packet_in)),
+        );
         frametimes::lap("view");
 
         // The sticks send from their own thread; this keeps them addressed to the vehicle being
@@ -4696,6 +4717,8 @@ ENVIRONMENT:
                  Hz of telemetry, and measure each frame (see crates/mp-gui/src/storm.rs)
     MP_FRAMES    development only: 1 measures each screen's frames in an ordinary run, as
                  facts (see crates/mp-gui/src/frametimes.rs)
+    MP_REPAINT   development only: tick:<ms>, data or data:<ms> - when to repaint (see
+                 crates/mp-gui/src/repaint.rs)
     MP_PLUGINS   load the WebAssembly plugins from this folder rather than plugins/ beside the
                  executable (tests)
 ";
@@ -5083,6 +5106,7 @@ mod tests {
             "MP_CONFIG_XML",
             "MP_STORM",
             "MP_FRAMES",
+            "MP_REPAINT",
         ] {
             assert!(
                 USAGE.contains(variable),

@@ -102,3 +102,59 @@ frame's layout and paint until that view is told it changed. That is how Zed kee
 windows cheap; here it means moving each such page's state behind its own entity - a refactor, not
 an easy win.
 
+
+## Packet to pixel and the repaint policy (2026-10-05)
+
+The owner's question: is repainting at 30 Hz rather than Mission Planner's 10 Hz worth it, or would
+it draw old data more often; should the screen repaint on new data, with a floor of once a second;
+and can a tethered vehicle streaming at 100 Hz be drawn at 100 Hz. With `MP_FRAMES` the link now
+stamps each vehicle state with its newest message's arrival, and frametimes publishes, per screen:
+`fresh` and `stale` (frames that drew a state with a message the frame before had not, and frames
+that drew the same again), `latency` (a fresh frame's packet to pixel: the newest message's arrival
+to the frame presented), `wait` (the part of it before the frame began - the link's publish, then
+the wait for a repaint) and `age` (how old the newest message on screen is at each frame).
+`MP_REPAINT` chooses the policy (`crates/mp-gui/src/repaint.rs`): `tick:<ms>`, or `data[:<ms>]` -
+repaint when a vehicle's published state has taken a message, looked for every 2 ms, and at least
+every second (or `<ms>`).
+
+Release build, lavapipe on Xvfb, 1600x1200, the flight screen held still for 20 s; the SITL copter
+with every stream rate set to 4 or 50 Hz (config.xml's `CMB_rate*`), and `MP_STORM`'s in-memory
+vehicle at 100 and 200 Hz (whose own repaint is every 16 ms). Milliseconds, p50 / p99.
+
+| run | policy | fps | fresh / stale | wait | render + paint | present |
+|---|---|---|---|---|---|---|
+| idle | 100 ms (today) | 9 | - | - | 5.1 | 51 |
+| idle | data | **1** | - | - | 4.2 | 45 |
+| SITL 4 Hz | 100 ms | 6 | 100 / **40** | 78 / 177 | 8.7 | 123 |
+| SITL 4 Hz | 16 ms | 6 | 74 / 35 | 70 / 204 | 9.1 | 125 |
+| SITL 4 Hz | data | 4 | 90 / **0** | **16** / 216 | 8.9 | 136 |
+| SITL 50 Hz | 100 ms | 5 | 110 / 0 | 10 / 48 | 9.6 | 135 |
+| SITL 50 Hz | data | 3 | 80 / 0 | 10 / 69 | 9.8 | 140 |
+| storm 100 Hz | data | 6 | 130 / 0 | 8.7 / 15 | 6.9 | 132 |
+| storm 200 Hz | data | 6 | 130 / 0 | 5.3 / 12 | 6.9 | 128 |
+
+What it says:
+
+- **Present dominates here, and is lavapipe's.** Drawing a 1600x1200 frame in software takes
+  110-170 ms, so no policy draws more than about 6 frames a second on this machine, and the
+  latency facts' absolute numbers (150-230 ms) are mostly that. On a GPU present is a few
+  milliseconds; the planner's own share of a connected frame, render and paint, is ~7-9 ms at the
+  median and ~12-14 ms at the 99th percentile (storm.rs's `frame.p99_us`: 12.7-13.9 ms).
+- **A faster timer draws old data.** At the SITL's 4 Hz, 29% of the 10 Hz timer's frames showed
+  nothing new, and the 16 ms timer's as many: the timer only shortens the wait until the next
+  frame, and redraws the same state in between.
+- **Repainting on new data** drew no stale frame, cut the wait from a 4 Hz packet to its frame from
+  78 ms to 16 ms at the median, and drew one frame a second with nothing arriving - the floor
+  the owner asked for - where the timer draws ten.
+- **Before any policy, the link held data back**: a message arriving within the 5 ms publish
+  interval of the last publish waited for the link's next read to return - the next packet, or
+  the 100 ms read timeout - ~104 ms when it came alone; fixed (`crates/mp-link/tests/publish_latency.rs`).
+- **100 Hz**: the link and the snapshot bus keep up at 100 and 200 Hz (the storm arrived at 99 and
+  199 Hz; every frame fresh, the wait 5-9 ms). Drawing at 100 Hz needs each frame's render, paint
+  and present under 10 ms and a display of 100 Hz or more: the planner's part is under that at the
+  median and over it at the 99th percentile on this machine, so a GPU machine would draw most of a
+  100 Hz stream's states and skip a few. To be measured on the owner's machine with a GPU.
+
+Left before `data` could be the default: what changes without a vehicle's message - map tiles
+arriving, the demo's pointer, a progress bar - asks for its own frames rather than leaning on the
+10 Hz timer (found by the GUI suite run with `MP_REPAINT=data`); and the owner's choice.

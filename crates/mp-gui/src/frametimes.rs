@@ -52,6 +52,16 @@
 //! | `first_us` | the first frame on the screen, whole |
 //! | `lap.<name>.p50_us`, `lap.<name>.p99_us` | a stretch of `render` ending at [`lap`]`(name)`, so where the render part goes |
 //! | `spent.<name>.p50_us`, `spent.<name>.p99_us` | paint code's own time in the frame, as it reports it with [`spent`]: `hud`, `map` |
+//! | `fresh`, `stale` | frames that showed the vehicle's state with a message it had not shown before, and frames that showed only what the frame before had |
+//! | `latency.count`, `latency.p50_us`, `latency.p99_us`, `latency.max_us` | packet to pixel: from the newest message in a fresh frame's state arriving at the link to that frame presented |
+//! | `wait.p50_us`, `wait.p99_us` | the part of that before the frame began: the link's publish, then the wait for a repaint |
+//! | `age.p50_us`, `age.p99_us` | how old the newest message on screen is when each frame is presented, fresh or stale |
+//!
+//! Packet to pixel (the owner's question of 2026-10-05: is a faster repaint worth it, or is it
+//! old data drawn more often?): with `MP_FRAMES` the link stamps each vehicle state with when its
+//! newest message arrived (`mp_link::LinkConfig::stamp_arrivals`, `VehicleState::packet_in`), and
+//! the frame says which state it drew ([`showing`]) - the vehicle's `messages_applied` tells a
+//! state with something new from the one the frame before drew.
 
 // This module is internal to the binary; `pub` here documents intent rather than exporting API.
 #![allow(unreachable_pub)]
@@ -92,6 +102,14 @@ struct Screen {
     gaps: Vec<Duration>,
     /// The first frame on the screen, whole.
     first: Option<Duration>,
+    /// Frames that drew something new from the vehicle, and frames that did not.
+    fresh: u128,
+    stale: u128,
+    /// A fresh frame's packet to pixel, and the part of it before the frame began.
+    latency: Vec<Duration>,
+    wait: Vec<Duration>,
+    /// The newest message's age at every frame's present.
+    age: Vec<Duration>,
     /// When the first counted frame began, and the last.
     since: Option<Instant>,
     last: Option<Instant>,
@@ -112,6 +130,7 @@ impl Screen {
             sorted(&self.present),
             sorted(&self.gaps),
         );
+        let (latency, wait, age) = (sorted(&self.latency), sorted(&self.wait), sorted(&self.age));
         let span = match (self.since, self.last) {
             (Some(since), Some(last)) => last.saturating_duration_since(since),
             _ => Duration::ZERO,
@@ -137,6 +156,19 @@ impl Screen {
             ("gap.p99_us", us(percentile(&gaps, 99))),
             ("gap.max_us", us(gaps.last().copied().unwrap_or_default())),
             ("first_us", us(self.first.unwrap_or_default())),
+            ("fresh", self.fresh),
+            ("stale", self.stale),
+            ("latency.count", latency.len() as u128),
+            ("latency.p50_us", us(percentile(&latency, 50))),
+            ("latency.p99_us", us(percentile(&latency, 99))),
+            (
+                "latency.max_us",
+                us(latency.last().copied().unwrap_or_default()),
+            ),
+            ("wait.p50_us", us(percentile(&wait, 50))),
+            ("wait.p99_us", us(percentile(&wait, 99))),
+            ("age.p50_us", us(percentile(&age, 50))),
+            ("age.p99_us", us(percentile(&age, 99))),
         ]
         .into_iter()
         .map(|(what, value)| (format!("frames.{screen}.{what}"), value))
@@ -174,6 +206,16 @@ struct Drawing {
     laps: Vec<(&'static str, Duration)>,
     /// Paint code's own time, by name, summed over the frame.
     spent: BTreeMap<&'static str, Duration>,
+    /// The vehicle state it draws: [`showing`].
+    data: Option<Shown>,
+}
+
+/// The vehicle state a frame draws: its `messages_applied`, and when its newest message arrived
+/// at the link, when the link stamped it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct Shown {
+    applied: u64,
+    packet_in: Option<Instant>,
 }
 
 /// A frame painted and waiting to be presented.
@@ -188,8 +230,11 @@ struct Painted {
     paint: Duration,
     /// The first frame after arriving on its screen.
     first: bool,
+    /// When it began.
+    started: Instant,
     laps: Vec<(&'static str, Duration)>,
     spent: BTreeMap<&'static str, Duration>,
+    data: Option<Shown>,
 }
 
 /// The frame being drawn and every screen's frames so far.
@@ -203,6 +248,8 @@ struct Clock {
     painted: Option<Painted>,
     /// The screen the frame before was on, and when it began.
     previous: Option<(&'static str, Instant)>,
+    /// The `messages_applied` of the last state presented, on whatever screen.
+    applied: Option<u64>,
     screens: BTreeMap<&'static str, Screen>,
 }
 
@@ -216,6 +263,7 @@ impl Clock {
             lap_from: (now, Duration::ZERO),
             laps: Vec::new(),
             spent: BTreeMap::new(),
+            data: None,
         });
         self.harness = Duration::ZERO;
     }
@@ -250,6 +298,7 @@ impl Clock {
             built,
             laps,
             spent,
+            data,
             ..
         }) = self.frame.take()
         else {
@@ -273,8 +322,10 @@ impl Clock {
             render,
             paint,
             first: arrived,
+            started,
             laps,
             spent,
+            data,
         });
         let gap = self
             .previous
@@ -299,6 +350,11 @@ impl Clock {
     fn presented(&mut self, now: Instant) -> Option<Vec<(String, u128)>> {
         let frame = self.painted.take()?;
         let present = now.saturating_duration_since(frame.at);
+        // Whether the frame drew something new, before the visit's first frame is set apart, so
+        // the next frame is judged against this one.
+        let fresh = frame
+            .data
+            .map(|shown| self.applied.replace(shown.applied) != Some(shown.applied));
         let counted = self.screens.entry(frame.screen).or_default();
         if frame.first {
             // Opening the page: kept apart, and the visit's facts published from nothing, so a
@@ -308,6 +364,23 @@ impl Clock {
         }
         if counted.whole.len() >= MAX_FRAMES {
             return None;
+        }
+        if let (Some(fresh), Some(shown)) = (fresh, frame.data) {
+            if fresh {
+                counted.fresh += 1;
+            } else {
+                counted.stale += 1;
+            }
+            if let Some(packet_in) = shown.packet_in {
+                let age = now.saturating_duration_since(packet_in);
+                counted.age.push(age);
+                if fresh {
+                    counted.latency.push(age);
+                    counted
+                        .wait
+                        .push(frame.started.saturating_duration_since(packet_in));
+                }
+            }
         }
         counted.whole.push(frame.cost + present);
         counted.render.push(frame.render);
@@ -337,6 +410,18 @@ pub fn begin(screen: &'static str) {
     if enabled() {
         let now = Instant::now();
         CLOCK.with_borrow_mut(|clock| clock.begin(screen, now));
+    }
+}
+
+/// The vehicle state the frame being drawn shows: its `messages_applied` and `packet_in`, `None`
+/// with no vehicle. Called once the frame has its view.
+pub fn showing(state: Option<(u64, Option<Instant>)>) {
+    if enabled() {
+        CLOCK.with_borrow_mut(|clock| {
+            if let Some(drawing) = clock.frame.as_mut() {
+                drawing.data = state.map(|(applied, packet_in)| Shown { applied, packet_in });
+            }
+        });
     }
 }
 
@@ -534,5 +619,49 @@ mod tests {
         assert_eq!(clock.screens["fly"].whole, [ms(3)]);
         assert_eq!(clock.screens["fly"].render, [ms(1)]);
         assert_eq!(clock.screens["fly"].paint, [ms(2)]);
+    }
+
+    /// The owner's question of 2026-10-05, whether a faster repaint shows new data or old data
+    /// more often: a frame that draws a state with a message the frame before had not is fresh,
+    /// and its packet to pixel runs from that message's arrival to the frame presented; a frame
+    /// that draws the same state again is stale, and only the age of what it shows is kept.
+    #[test]
+    fn packet_to_pixel_is_timed_on_the_frames_that_show_something_new() {
+        let t0 = Instant::now();
+        let mut clock = Clock::default();
+        // Each frame: render 2, paint 3, present 4 - presented 9 ms after it began.
+        let mut show = |start: u64, applied: u64, arrived: Option<u64>| {
+            let at = t0 + ms(start);
+            clock.begin("fly", at);
+            if let Some(drawing) = clock.frame.as_mut() {
+                drawing.data = Some(Shown {
+                    applied,
+                    packet_in: arrived.map(|arrived| t0 + ms(arrived)),
+                });
+            }
+            clock.rendered(at + ms(2));
+            clock.painted(at + ms(5));
+            clock.presented(at + ms(9));
+        };
+        // The visit's first frame, set apart.
+        show(100, 1, Some(95));
+        // A message at 190, drawn by the frame at 200: fresh, presented at 209.
+        show(200, 2, Some(190));
+        // Nothing new by 300: stale, its newest message 119 ms old when presented.
+        show(300, 2, Some(190));
+        // A message at 395: fresh again.
+        show(400, 3, Some(395));
+        // A vehicle whose link does not stamp arrivals: fresh, but not timed.
+        show(500, 4, None);
+        let screen = &clock.screens["fly"];
+        assert_eq!((screen.fresh, screen.stale), (3, 1));
+        assert_eq!(screen.latency, [ms(19), ms(14)]);
+        assert_eq!(screen.wait, [ms(10), ms(5)]);
+        assert_eq!(screen.age, [ms(19), ms(119), ms(14)]);
+        let facts = screen.facts("fly");
+        assert_eq!(fact(&facts, "frames.fly.latency.count"), 2);
+        assert_eq!(fact(&facts, "frames.fly.latency.max_us"), 19_000);
+        assert_eq!(fact(&facts, "frames.fly.fresh"), 3);
+        assert_eq!(fact(&facts, "frames.fly.stale"), 1);
     }
 }
