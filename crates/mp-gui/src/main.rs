@@ -3127,6 +3127,22 @@ impl Render for MissionPlanner {
         // initialise, and every earlier signal - a window handle, a running executor - survives
         // that.
         smoke::painted();
+        // And whether the window's text system shapes text at all (smoke.rs).
+        if smoke::enabled() && smoke::text_unasked() {
+            let run = gpui::TextRun {
+                len: smoke::TEXT_PROBE.len(),
+                font: window.text_style().font(),
+                color: gpui::black(),
+                background_color: None,
+                underline: None,
+                strikethrough: None,
+            };
+            let line =
+                window
+                    .text_system()
+                    .shape_line(smoke::TEXT_PROBE.into(), px(14.0), &[run], None);
+            smoke::text_shaped(smoke::different_glyphs(&line));
+        }
         // Controls that were not measured in the frame just finished have left the screen.
         probe::begin_frame();
         // What that frame left cut off, for the debug build's banner.
