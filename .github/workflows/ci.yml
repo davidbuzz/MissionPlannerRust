@@ -100,7 +100,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
         with:
-          targets: x86_64-pc-windows-gnu, wasm32-unknown-unknown
+          targets: x86_64-pc-windows-gnu
       - uses: Swatinem/rust-cache@v2
       # MinGW links the Windows binaries, and libffi's build script compiles libffi with it for
       # this target (Cargo.toml's [patch] for RustPython); libffi uses its bundled configure.
@@ -122,11 +122,35 @@ jobs:
             file target/x86_64-pc-windows-gnu/debug/$exe.exe
             file target/x86_64-pc-windows-gnu/debug/$exe.exe | grep -q "PE32+ executable"
           done
-      # The core stays portable: the protocol, units, log and mission crates compile for wasm. A
-      # check is enough here, since nothing ships for this target yet.
-      - name: wasm
-        run: cargo check --target wasm32-unknown-unknown
-             -p mp-mavlink -p mp-mavlink-dialects -p mp-units -p mp-log
+
+  wasm:
+    name: browser build (wasm32)
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+          components: rust-src
+      - uses: Swatinem/rust-cache@v2
+      # ring's C, under ureq's HTTPS, compiled for wasm32: the runner's clang has the target.
+      - run: sudo apt-get update && sudo apt-get install -y clang llvm
+      # The whole planner for a web page (experiments/web-experiment/README.md), checked as the
+      # browser build compiles it: std rebuilt with atomics for gpui_web's threads, which takes
+      # nightly features - RUSTC_BOOTSTRAP on the pinned toolchain, as Zed's own CI checks gpui for
+      # the web - and getrandom's browser backend. It replaces the check of seven core crates on
+      # plain stable, which wasm_thread (the planner's threads, Web Workers in a page) now refuses.
+      # A check catches what breaks the browser build: a std call a page cannot make, a crate
+      # that does not build there.
+      - name: the planner for the web
+        env:
+          RUSTC_BOOTSTRAP: "1"
+          CARGO_TARGET_WASM32_UNKNOWN_UNKNOWN_RUSTFLAGS: -C target-feature=+atomics,+bulk-memory,+mutable-globals --cfg getrandom_backend="wasm_js"
+          CC_wasm32_unknown_unknown: clang
+          AR_wasm32_unknown_unknown: llvm-ar
+        run: cargo -Zbuild-std=std,panic_abort check --target wasm32-unknown-unknown
+             -p mp-gui -p mp-mavlink -p mp-mavlink-dialects -p mp-units -p mp-log
              -p mp-vehicle -p mp-mission -p fencedist
 
   sitl:
