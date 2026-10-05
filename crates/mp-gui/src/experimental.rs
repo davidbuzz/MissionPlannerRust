@@ -37,10 +37,12 @@
 //!   GND_ABS_PRESS, else BARO1_GND_PRESS), Lockup MAV (asked twice), Bootloader Upgrade (the "BL
 //!   Update" questions, then `FLASH_BOOTLOADER`), Toggle Safety Switch ("Are you sure?", then the
 //!   flight screen's Toggle_Safety_Switch, the same `setMode` with `SAFETY_ARMED`); what the C#
-//!   shows in a box
-//!   when one fails is said on the status line, by the owner's ruling; and decode HWIDs, the ids
-//!   typed taken apart as `Device.DeviceStructure` does, in a box (one line of ids here, where
-//!   the C#'s box takes several);
+//!   shows in a box when one fails is said on the status line, by the owner's ruling; and decode
+//!   HWIDs, the ids typed taken apart as `Device.DeviceStructure` does, in a box (one line of ids
+//!   here, where the C#'s box takes several);
+//! * a tool with files: Param Restore (a parameter file written as `but_paramrestore_Click` writes
+//!   it) and mag calb log (`MagCalib.ProcessLog`: a log read and fitted, `magoffset.dxf` drawn, and
+//!   the offsets to the compass page's `SaveOffsets`);
 //! * out of scope by a ruling, dimmed, its press saying why on the status line: Follow Me, OSDVideo,
 //!   Moving Base and the four Swarm tools (PLAN.md section 12 D13, 2026-09-25), Lang Edit (the
 //!   translation editor, with languages muted, 2026-09-25), Custom GDAL (no GDAL bindings, the
@@ -63,6 +65,7 @@ use crate::config::optional::{InputBox, input_box};
 use crate::fly::{PLEASE_CONNECT, error_box};
 use crate::telemetry::Report;
 use crate::{MissionPlanner, facts, theme};
+use mp_calibration::magcal_log::{DXF_NAME, Processed, process_log};
 use mp_firmware::flow::Buttons;
 use mp_link::requests::CMD_FLASH_BOOTLOADER;
 
@@ -255,6 +258,7 @@ pub(crate) fn tool(name: &str) -> Tool {
         "but_hwids" => Tool::Act(Act::DecodeHwids),
         "but_blupdate" => Tool::Act(Act::BootloaderUpgrade),
         "but_disablearmswitch" => Tool::Act(Act::ToggleSafety),
+        "BUT_magfit2" => Tool::Act(Act::MagCalLog),
         "BUT_follow_me" | "but_osdvideo" | "BUT_movingbase" | "BUT_swarm" | "BUT_followleader"
         | "but_trimble" | "but_followswarm" => Tool::Unavailable(SECTION_12_D13),
         "BUT_lang_edit" => Tool::Unavailable(LANGUAGES_MUTED),
@@ -297,6 +301,11 @@ pub(crate) enum Act {
     /// motor outputs' state as the custom mode - the flight screen's Toggle_Safety_Switch, which
     /// is the same code. `// C#: temp.cs:1105-1118; GCSViews/FlightData.cs:1819-1830`
     ToggleSafety,
+    /// `BUT_magfit2_Click`: `MagCalib.ProcessLog(0)` - a log asked for, read and fitted off the
+    /// window's thread (magcal_log's `process_log`), `magoffset.dxf` drawn, and the offsets
+    /// handed to `SaveOffsets` (the compass page's, its boxes over every screen).
+    /// `// C#: temp.cs:410-413; MagCalib.cs:93-133`
+    MagCalLog,
 }
 
 /// Param Restore's first box.
@@ -305,6 +314,8 @@ const RESTORE_NOTICE: &str = "This process make take a some time";
 /// `ParamFile.FileMask`, the file dialog's filter.
 /// `// C#: ExtLibs/Utilities/ParamFile.cs:15`
 const PARAM_FILE_MASK: &str = "Parameter File|*.param;*.parm|All Files|*.*";
+/// `ProcessLog`'s dialog's filter. `// C#: MagCalib.cs:97`
+const LOG_FILE_MASK: &str = "Log Files|*.tlog;*.log;*.bin";
 
 /// `but_hwids_Click`'s report: for every whole number in each line, the line (its tabs as
 /// spaces) and the device that id names, a line each.
@@ -373,8 +384,17 @@ enum Asking {
     Message { text: String },
     /// Param Restore's notice, whose OK asks for the file.
     Notice,
-    /// Param Restore's `OpenFileDialog`, the path typed (as every file dialog here).
-    Path(crate::config::firmware::PathBox),
+    /// An `OpenFileDialog`, the path typed (as every file dialog here), and whose it is.
+    Path(crate::config::firmware::PathBox, Opened),
+}
+
+/// Whose file dialog is showing.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Opened {
+    /// Param Restore's parameter file.
+    ParamRestore,
+    /// mag calb log's log.
+    MagCalLog,
 }
 
 /// What an input box's answer is for.
@@ -396,6 +416,10 @@ pub(crate) struct Experimental {
     /// The input box's keyboard, made the first time one shows.
     focus: Option<gpui::FocusHandle>,
     scroll: gpui::ScrollHandle,
+    /// mag calb log's reading and fitting, on its thread, until its answer comes.
+    magcal: Option<std::sync::mpsc::Receiver<Processed>>,
+    /// What the last one came to, for the facts.
+    magcal_last: Option<String>,
 }
 
 impl Default for Experimental {
@@ -406,6 +430,8 @@ impl Default for Experimental {
             asking: None,
             focus: None,
             scroll: gpui::ScrollHandle::new(),
+            magcal: None,
+            magcal_last: None,
         }
     }
 }
@@ -504,6 +530,17 @@ fn act(
             this.experimental.asking = Some(Asking::Notice);
             focus_input(this, window, cx);
         }
+        // `InitialDirectory = Settings.Instance.LogDir`.
+        Act::MagCalLog => {
+            let folder = crate::fly::log_directory()
+                .map(|folder| folder.to_string_lossy().into_owned())
+                .unwrap_or_default();
+            this.experimental.asking = Some(Asking::Path(
+                crate::config::firmware::PathBox::new(&folder, LOG_FILE_MASK),
+                Opened::MagCalLog,
+            ));
+            focus_input(this, window, cx);
+        }
     }
 }
 
@@ -572,7 +609,7 @@ fn send(this: &mut MissionPlanner, what: Act) {
             }
             true
         }
-        Act::Qnh | Act::DecodeHwids | Act::ParamRestore => true,
+        Act::Qnh | Act::DecodeHwids | Act::ParamRestore | Act::MagCalLog => true,
     };
     if !sent {
         this.file_status = Some(error_box(PLEASE_CONNECT));
@@ -603,7 +640,7 @@ fn answer(this: &mut MissionPlanner, yes: bool) {
             });
         }
         Asking::Confirm { then, .. } => send(this, then),
-        Asking::Message { .. } | Asking::Notice | Asking::Path(_) => {}
+        Asking::Message { .. } | Asking::Notice | Asking::Path(..) => {}
         Asking::Input {
             input,
             then: Answered::Hwids,
@@ -645,30 +682,97 @@ fn answer(this: &mut MissionPlanner, yes: bool) {
 /// Param Restore's notice answered: the file asked for, in a box with the parameter files' filter.
 /// `// C#: temp.cs:1269-1281`
 fn notice_ok(this: &mut MissionPlanner) {
-    this.experimental.asking = Some(Asking::Path(crate::config::firmware::PathBox::new(
-        "",
-        PARAM_FILE_MASK,
-    )));
+    this.experimental.asking = Some(Asking::Path(
+        crate::config::firmware::PathBox::new("", PARAM_FILE_MASK),
+        Opened::ParamRestore,
+    ));
 }
 
-/// Param Restore's file dialog answered: with a file, `ParamFile.loadParamFile` and its parameters
-/// restored (params.rs's `restore`, on the status line as it goes); Cancel does nothing. A name
-/// that is no file keeps the box, as `OpenFileDialog` keeps asking. The file's parameters go in
-/// their name order, which the planner's file reader keeps, where the C#'s dictionary keeps the
-/// file's - the same for every file Mission Planner writes, which it writes sorted.
-/// `// C#: temp.cs:1279-1290`
-fn restore_file(this: &mut MissionPlanner, ok: bool) {
-    let Some(Asking::Path(path)) = this.experimental.asking.take() else {
+/// A file dialog answered: Cancel does nothing; a name that is no file keeps the box, as
+/// `OpenFileDialog` keeps asking; a file goes to the tool that asked.
+fn path_answered(this: &mut MissionPlanner, ok: bool) {
+    let Some(Asking::Path(path, opened)) = this.experimental.asking.take() else {
         return;
     };
     if !ok {
         return;
     }
     let Some(file) = path.chosen() else {
-        this.experimental.asking = Some(Asking::Path(path));
+        this.experimental.asking = Some(Asking::Path(path, opened));
         return;
     };
-    match mp_params::param_file::ParamFile::load(&file) {
+    match opened {
+        Opened::ParamRestore => restore_file(this, &file),
+        Opened::MagCalLog => read_mag_log(this, file),
+    }
+}
+
+/// mag calb log's log chosen: `ProcessLog`'s reading, fitting and drawing on a thread of its own,
+/// where the C#'s window waits on them; [`tick`] takes its answer. One at a time: a second log
+/// chosen while one is read waits for nothing and is not read, as the C#'s waiting window allows
+/// no second.
+/// `// C#: MagCalib.cs:109-131`
+fn read_mag_log(this: &mut MissionPlanner, file: std::path::PathBuf) {
+    if this.experimental.magcal.is_some() {
+        return;
+    }
+    let (sender, receiver) = std::sync::mpsc::channel();
+    let spawned = wasm_thread::Builder::new()
+        .name("mp-magcal-log".to_owned())
+        .spawn(move || {
+            let data = mp_settings::user_data_directory();
+            let _ = sender.send(process_log(&file, 0, data.as_deref()));
+        });
+    match spawned {
+        Ok(_) => this.experimental.magcal = Some(receiver),
+        Err(error) => log::debug!("mag calb log: {error}"),
+    }
+}
+
+/// Once a frame: mag calb log's answer, when it comes - the offsets to `SaveOffsets`, the box the
+/// C# shows on the status line (the owner's ruling: no box for it), or nothing, as its `catch`
+/// shows nothing. `// C#: MagCalib.cs:115-130`
+pub(crate) fn tick(this: &mut MissionPlanner) {
+    let Some(receiver) = this.experimental.magcal.as_ref() else {
+        return;
+    };
+    let processed = match receiver.try_recv() {
+        Ok(processed) => processed,
+        Err(std::sync::mpsc::TryRecvError::Empty) => {
+            crate::repaint::in_flight();
+            return;
+        }
+        Err(std::sync::mpsc::TryRecvError::Disconnected) => {
+            Processed::Quiet("the reading stopped without an answer".to_owned())
+        }
+    };
+    this.experimental.magcal = None;
+    this.experimental.magcal_last = Some(match &processed {
+        Processed::Offsets {
+            offsets: [x, y, z],
+            drawing,
+        } => format!("offsets {x} {y} {z}; {DXF_NAME} {drawing} bytes"),
+        Processed::Said(text) => format!("said: {text}"),
+        Processed::Quiet(why) => format!("quiet: {why}"),
+    });
+    match processed {
+        Processed::Offsets { offsets, .. } => {
+            let view = this.telemetry.view();
+            this.compass
+                .save_offsets(&offsets, &view.parameters, this.telemetry.is_open());
+        }
+        Processed::Said(text) => this.file_status = Some(text.to_owned()),
+        Processed::Quiet(why) => log::debug!("mag calb log: {why}"),
+    }
+}
+
+/// Param Restore's file: `ParamFile.loadParamFile` and its parameters restored (params.rs's
+/// `restore`, on the status line as it goes). The file's parameters go in their name order, which
+/// the planner's file reader keeps, where the C#'s dictionary keeps the file's - the same for every
+/// file Mission Planner writes, which it writes sorted.
+/// `// C#: temp.cs:1279-1290`
+fn restore_file(this: &mut MissionPlanner, file: &std::path::Path) {
+    match mp_params::param_file::ParamFile::load(file) {
         Ok(params) => this.start_param_writes(crate::params::ParamWrites::restore(
             params.iter().map(|(name, value)| (name.to_owned(), value)),
         )),
@@ -714,7 +818,7 @@ fn asking_box(
             notice_ok,
             cx,
         )),
-        Asking::Path(path) => {
+        Asking::Path(path, _) => {
             let focus = this.experimental.focus.as_ref()?;
             Some(crate::config::firmware::path_box(
                 IDS,
@@ -723,18 +827,18 @@ fn asking_box(
                 window,
                 |this, event| {
                     let outcome = match this.experimental.asking.as_mut() {
-                        Some(Asking::Path(path)) => path.field.key(event),
+                        Some(Asking::Path(path, _)) => path.field.key(event),
                         _ => return false,
                     };
                     match outcome {
-                        crate::textfield::KeyOutcome::Submitted => restore_file(this, true),
-                        crate::textfield::KeyOutcome::Cancelled => restore_file(this, false),
+                        crate::textfield::KeyOutcome::Submitted => path_answered(this, true),
+                        crate::textfield::KeyOutcome::Cancelled => path_answered(this, false),
                         crate::textfield::KeyOutcome::Changed => {}
                         crate::textfield::KeyOutcome::Ignored => return false,
                     }
                     true
                 },
-                restore_file,
+                path_answered,
                 cx,
             ))
         }
@@ -915,7 +1019,16 @@ pub(crate) fn record_facts(state: &Experimental) {
             Some(Asking::Input { input, .. }) => format!("{}: {}", input.title, input.prompt),
             Some(Asking::Message { text }) => format!("message: {}", text.trim_end()),
             Some(Asking::Notice) => RESTORE_NOTICE.to_owned(),
-            Some(Asking::Path(path)) => format!("{}: {}", path.caption, path.field.value()),
+            Some(Asking::Path(path, _)) => format!("{}: {}", path.caption, path.field.value()),
+        },
+    );
+    // mag calb log: reading, or what the last reading came to.
+    facts::record(
+        "experimental.magcal",
+        if state.magcal.is_some() {
+            "reading"
+        } else {
+            state.magcal_last.as_deref().unwrap_or("none")
         },
     );
 }
@@ -961,8 +1074,9 @@ mod tests {
                 Tool::Unavailable(why) => assert!(!why.is_empty()),
             }
         }
-        assert_eq!(opens, 20);
+        assert_eq!(opens, 21);
         assert_eq!(tool("but_paramrestore"), Tool::Act(Act::ParamRestore));
+        assert_eq!(tool("BUT_magfit2"), Tool::Act(Act::MagCalLog));
         assert_eq!(tool("but_blupdate"), Tool::Act(Act::BootloaderUpgrade));
         assert_eq!(tool("but_disablearmswitch"), Tool::Act(Act::ToggleSafety));
         assert_eq!(tool("but_messageinterval"), Tool::MessageInterval);

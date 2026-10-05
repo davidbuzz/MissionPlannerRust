@@ -1,0 +1,48 @@
+# EXPERIMENTAL's mag calb log (temp.cs:410-413: MagCalib.ProcessLog(0), MagCalib.cs:93-133), with
+# no vehicle: the log asked for, the dialog opening in the log directory with ProcessLog's filter;
+# the log read and fitted off the window's thread; magoffset.dxf drawn into the data directory;
+# and the offsets handed to SaveOffsets - with no link, its box that says to write them down, over
+# this tab as the compass page's boxes are over every screen. A telemetry log of a vehicle standing
+# still has too few samples: the C#'s box's words, on the status line by the owner's ruling.
+#
+# Run as: tools/gui-headless.sh experimental-magcal
+screen fly
+window 1600x1200
+budget 20
+# 20: one run took 10.1 s (2026-10-06).
+env XDG_DATA_HOME $WORK
+env MP_CONFIG_XML $WORK/config.xml
+env MP_LOG_DIR $WORK/logs
+setup printf '<?xml version="1.0" encoding="utf-8"?><Config><tabcontrolactions>tabQuick;</tabcontrolactions></Config>' > "$WORK/config.xml"
+setup mkdir -p "$WORK/logs" && cp testdata/dataflash.bin "$WORK/logs/flight.bin" && cp testdata/mavlink/autotest.tlog "$WORK/logs/still.tlog"
+
+key ctrl+f
+expect screen experimental
+expect experimental.magcal none
+
+# A dataflash log: its MAG lines fitted, the drawing written, the offsets to write down.
+click experimental-BUT_magfit2
+expect experimental.asking Open: $WORK/logs/
+click experimental-path-value
+key ctrl+a
+type $WORK/logs/flight.bin
+key Return
+expect experimental.asking none
+within 30
+expect experimental.magcal ~ magoffset.dxf
+expect experimental.magcal ~ offsets
+expect config.compass.dialog ~ New offsets for compass #1 are
+expect config.compass.dialog ~ Please write these down for manual entry
+click compass-dialog-ok
+expect config.compass.dialog none
+
+# A telemetry log of a vehicle standing still: too few samples, and no box.
+click experimental-BUT_magfit2
+click experimental-path-value
+key ctrl+a
+type $WORK/logs/still.tlog
+key Return
+within 30
+expect experimental.magcal said: Log does not contain enough data
+expect status Log does not contain enough data
+expect config.compass.dialog none

@@ -33,7 +33,9 @@
 //! `--ellipsoid` also prints the C#'s log lines for its fits (`magcal`, `magcalel`), which is where
 //! the ellipsoid it fits is to be seen: `ProcessLog` hands only the offsets on.
 //!
-//! Not done: the `magoffset.dxf` `doDXF` writes into the data directory (netDxf is not ported).
+//! The reading and the fit are `mp_calibration::magcal_log`'s, which the planner's EXPERIMENTAL
+//! "mag calb log" shares. This verb writes no `magoffset.dxf`: `doDXF`'s drawing goes into the
+//! planner's data directory when the planner reads a log, and a command line asked for offsets.
 //! `// C#: MagCalib.cs:93-133, 813-1117`
 
 #![allow(clippy::print_stdout, clippy::print_stderr)]
@@ -41,105 +43,11 @@
 use std::fmt::Write as _;
 use std::process::ExitCode;
 
-use mp_calibration::magcalib::{
-    self, DataflashSamples, LogFit, Sample, TITLE, TlogSamples, fit_dataflash, fit_tlog,
-};
-use mp_log::TlogReader;
-use mp_log::convert::flight_mode_name;
-use mp_log::dflogbuffer::DfLogBuffer;
-use mp_mavlink_dialects::all::{DIALECT, MavMessage};
+use mp_calibration::magcal_log::{Gathered, compass_one, gather};
+use mp_calibration::magcalib::{self, DataflashSamples, LogFit, TITLE, fit_dataflash, fit_tlog};
 
 /// The usage line.
 pub(crate) const USAGE: &str = "headless-planner magcal <log> [--ellipsoid] [--min-throttle N]";
-
-/// What a pass over a log gathered.
-#[derive(Debug, Clone)]
-pub(crate) enum Gathered {
-    /// `getOffsets`' pass over a telemetry log.
-    Tlog(TlogSamples),
-    /// `getOffsetsLog`'s pass over a dataflash log.
-    Dataflash(DataflashSamples),
-}
-
-/// `ProcessLog`'s choice: a name ending in `tlog`, whatever its case, is a telemetry log.
-/// `// C#: MagCalib.cs:115`
-pub(crate) fn is_tlog(path: &str) -> bool {
-    path.to_lowercase().ends_with("tlog")
-}
-
-/// Reads a log's samples the way the C# path for its name does.
-///
-/// # Errors
-///
-/// A dataflash line the C# would throw on - a `MagY` or `OfsY` column missing beside a `MagX` and
-/// `OfsX`, or a value `float.Parse` refuses - which `ProcessLog` catches and shows nothing for.
-pub(crate) fn gather(path: &str, data: &[u8], throttle: i32) -> Result<Gathered, String> {
-    if is_tlog(path) {
-        Ok(Gathered::Tlog(gather_tlog(data, throttle)))
-    } else {
-        gather_dataflash(data).map(Gathered::Dataflash)
-    }
-}
-
-/// `getOffsets`' read loop: every frame the log holds, decoded, into [`TlogSamples`].
-/// `// C#: MagCalib.cs:988-1057`
-fn gather_tlog(data: &[u8], throttle: i32) -> TlogSamples {
-    let mut samples = TlogSamples::new(throttle);
-    let mut reader = TlogReader::new(data);
-    while let Some(record) = reader.next_record(&DIALECT) {
-        let Ok((frame, _)) = mp_mavlink::parse(record.frame, &DIALECT) else {
-            continue;
-        };
-        // `DebugPacket` returning null: a message this build does not know.
-        let Some(message) = MavMessage::decode(frame.msgid, frame.payload) else {
-            continue;
-        };
-        samples.message(&message);
-    }
-    samples
-}
-
-/// `getOffsetsLog`'s read loop: `GetEnumeratorType` over `MAG`, `MAG2` and `MAG3`, each line with
-/// a `MagX` and an `OfsX` column parsed into [`DataflashSamples`]. `// C#: MagCalib.cs:829-899`
-fn gather_dataflash(data: &[u8]) -> Result<DataflashSamples, String> {
-    let mut buffer = DfLogBuffer::new(data, &flight_mode_name);
-    let mut samples = DataflashSamples::new();
-    for (number, line) in buffer.items_of(&["MAG", "MAG2", "MAG3"]) {
-        let msgtype = line.msgtype().to_owned();
-        let mut column = |name: &str| buffer.dflog.find_message_offset(&msgtype, name);
-        let (Some(magx), Some(ofsx)) = (column("MagX"), column("OfsX")) else {
-            continue;
-        };
-        let rest = [
-            column("MagY"),
-            column("MagZ"),
-            column("OfsY"),
-            column("OfsZ"),
-        ];
-        let [Some(magy), Some(magz), Some(ofsy), Some(ofsz)] = rest else {
-            return Err(format!(
-                "line {number}: {msgtype} has MagX and OfsX but not the rest"
-            ));
-        };
-        let value = |index: usize| -> Result<f32, String> {
-            let text = line.items.get(index).and_then(Option::as_deref);
-            text.and_then(|text| text.trim().parse::<f32>().ok())
-                .ok_or_else(|| format!("line {number}: {msgtype} value {text:?} is not a number"))
-        };
-        let mag = [value(magx)?, value(magy)?, value(magz)?];
-        let ofs = [value(ofsx)?, value(ofsy)?, value(ofsz)?];
-        samples.line(&msgtype, mag, ofs);
-    }
-    Ok(samples)
-}
-
-/// Compass 1's samples, which are what `ProcessLog` fits and shows.
-pub(crate) fn compass_one(gathered: &Gathered) -> &[Sample] {
-    match gathered {
-        Gathered::Tlog(samples) => &samples.data,
-        Gathered::Dataflash(samples) => &samples.data[0],
-    }
-}
 
 /// A list of values as `{0},{1},{2}` writes them.
 fn commas(values: &[f64]) -> String {
@@ -391,14 +299,6 @@ mod tests {
             let gathered = gather(log, &data, 0).unwrap();
             assert_eq!(fixture(log, &gathered), expected, "{log}");
         }
-    }
-
-    #[test]
-    fn the_name_decides_the_path() {
-        assert!(is_tlog("flight.TLOG"));
-        assert!(is_tlog("oddtlog"));
-        assert!(!is_tlog("00000001.BIN"));
-        assert!(!is_tlog("flight.log"));
     }
 
     #[test]

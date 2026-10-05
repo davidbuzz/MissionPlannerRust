@@ -5447,7 +5447,7 @@ pub fn port_open(view: &TelemetryView) -> bool {
 
 /// `Settings.Instance.LogDir`, where Load Log's dialog opens: the directory flights are recorded
 /// into, as the recorder finds it. `// C#: GCSViews/FlightData.cs:1274, ExtLibs/Utilities/Settings.cs:127-140`
-fn log_directory() -> Option<std::path::PathBuf> {
+pub(crate) fn log_directory() -> Option<std::path::PathBuf> {
     std::env::var_os("MP_LOG_DIR")
         .map(std::path::PathBuf::from)
         .or_else(|| {

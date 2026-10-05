@@ -70,6 +70,8 @@ anyhow = "1"
 # interface, so a second nalgebra would not do.
 levenberg-marquardt = "0.15"
 nalgebra = { version = "0.34", default-features = false, features = ["std"] }
+# netDxf's place (PLAN.md's vendored-replacements table): `MagCalib.doDXF`'s `magoffset.dxf`.
+dxf = "0.6"
 # Tile fetching. Blocking and small: the tile thread is a dedicated thread that is allowed to
 # block, exactly like the link's I/O thread, so an async runtime would be machinery with no user.
 # rustls rather than the system TLS, so a Windows build needs no extra toolchain and a Linux one

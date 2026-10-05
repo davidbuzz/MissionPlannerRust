@@ -3336,6 +3336,8 @@ impl Render for MissionPlanner {
         if self.compass.dialog().is_some() && !self.compass_focus.dialog.is_focused(window) {
             self.compass_focus.dialog.focus(window, cx);
         }
+        // EXPERIMENTAL's mag calb log, its answer handed to the Compass page's SaveOffsets.
+        experimental::tick(self);
         // The Servo Output, Serial Ports and ESC Calibration pages: each page object disposed
         // with its screen, a number that lost the focus read, the numbers' timers, and every
         // write's answer.

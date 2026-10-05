@@ -1776,6 +1776,13 @@ impl<H: Copy> Compass<H> {
         self.jobs.len() + usize::from(self.running.is_some())
     }
 
+    /// `MagCalib.SaveOffsets(ofs)` from elsewhere - EXPERIMENTAL's "mag calb log" - run as this
+    /// page runs its own ([`save_job`]), its boxes over every screen as this page's are.
+    /// `// C#: MagCalib.cs:124-125, 1271-1325`
+    pub fn save_offsets(&mut self, ofs: &[f64], parameters: &[(String, f64)], open: bool) {
+        self.jobs.push_back(save_job(1, ofs, parameters, open));
+    }
+
     /// A new instance: what disposing the screen and making it again leaves. Boxes already
     /// showing, and requests already made, outlive it, as a modal box and an `await` outlive the
     /// control that started them.

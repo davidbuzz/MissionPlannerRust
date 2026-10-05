@@ -306,7 +306,7 @@ standard library it carries (`rustpython-pylib`) and its documentation strings
 permissions the GPL's section 7 lets this work remove.
 
 <!-- BEGIN crates: written by `cargo xtask licences` from `cargo metadata`; not edited by hand -->
-998 crates, every target's, from `cargo metadata` over Cargo.lock; each licence is one `deny.toml` admits (`xtask/tests/licences.rs` holds both).
+1002 crates, every target's, from `cargo metadata` over Cargo.lock; each licence is one `deny.toml` admits (`xtask/tests/licences.rs` holds both).
 
 | Crate | Version | Licence | Source |
 |---|---|---|---|
@@ -508,6 +508,7 @@ permissions the GPL's section 7 lets this work remove.
 | downcast-rs | 1.2.1 | MIT/Apache-2.0 | crates.io |
 | dunce | 1.0.5 | CC0-1.0 OR MIT-0 OR Apache-2.0 | crates.io |
 | dwrote | 0.11.5 | MPL-2.0 | crates.io |
+| dxf | 0.6.2 | MIT | crates.io |
 | dyn-clone | 1.0.20 | MIT OR Apache-2.0 | crates.io |
 | either | 1.18.0 | MIT OR Apache-2.0 | crates.io |
 | embed-resource | 3.0.11 | MIT | crates.io |
@@ -516,6 +517,7 @@ permissions the GPL's section 7 lets this work remove.
 | encoding_rs | 0.8.41 | (Apache-2.0 OR MIT) AND BSD-3-Clause | crates.io |
 | endi | 1.1.1 | MIT | crates.io |
 | endian-type | 0.1.2 | MIT | crates.io |
+| enum_primitive | 0.1.1 | MIT | crates.io |
 | enumflags2 | 0.7.12 | MIT OR Apache-2.0 | crates.io |
 | enumflags2_derive | 0.7.12 | MIT OR Apache-2.0 | crates.io |
 | enumn | 0.1.14 | MIT OR Apache-2.0 | crates.io |
@@ -779,6 +781,7 @@ permissions the GPL's section 7 lets this work remove.
 | num-integer | 0.1.47 | MIT OR Apache-2.0 | crates.io |
 | num-iter | 0.1.46 | MIT OR Apache-2.0 | crates.io |
 | num-rational | 0.4.2 | MIT OR Apache-2.0 | crates.io |
+| num-traits | 0.1.43 | MIT/Apache-2.0 | crates.io |
 | num-traits | 0.2.19 | MIT OR Apache-2.0 | crates.io |
 | num_cpus | 1.17.0 | MIT OR Apache-2.0 | crates.io |
 | num_enum | 0.7.6 | BSD-3-Clause OR MIT OR Apache-2.0 | crates.io |
@@ -1270,6 +1273,7 @@ permissions the GPL's section 7 lets this work remove.
 | xkeysym | 0.2.1 | MIT OR Apache-2.0 OR Zlib | crates.io |
 | xml | 1.4.0 | MIT | crates.io |
 | xml-rs | 0.8.29 | MIT | crates.io |
+| xmltree | 0.9.0 | MIT | crates.io |
 | xmlwriter | 0.1.0 | MIT | crates.io |
 | y4m | 0.8.0 | MIT | crates.io |
 | yazi | 0.2.1 | Apache-2.0 OR MIT | crates.io |

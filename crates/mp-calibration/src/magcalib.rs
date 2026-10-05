@@ -522,7 +522,7 @@ pub struct TlogSamples {
     /// The samples, filtered, in log order.
     pub data: Vec<Sample>,
     /// Every sample taken, before the filter - what the C# draws into its `.dxf`.
-    pub vertexes: usize,
+    pub vertexes: Vec<Sample>,
 }
 
 impl TlogSamples {
@@ -539,7 +539,7 @@ impl TlogSamples {
             min: [0.0; 3],
             max: [0.0; 3],
             data: Vec::new(),
-            vertexes: 0,
+            vertexes: Vec::new(),
         }
     }
 
@@ -563,7 +563,7 @@ impl TlogSamples {
                     f32::from(imu.ymag) - self.offset[1],
                     f32::from(imu.zmag) - self.offset[2],
                 ];
-                self.vertexes += 1;
+                self.vertexes.push(sample);
                 for ((value, min), max) in sample.iter().zip(&mut self.min).zip(&mut self.max) {
                     set_min_or_max(*value, min, max);
                 }
@@ -661,7 +661,7 @@ pub struct LogFit {
 
 /// `getOffsets` after its pass over the log: at least [`MIN_SAMPLES`], the farthest sixteenth
 /// dropped, the sphere, the ellipsoid, the nine-parameter ellipsoid again, and the offsets of the
-/// last. The `.dxf` it writes is not (see the ledger).
+/// last. The `.dxf` it writes is [`magcal_log::dxf`](crate::magcal_log::dxf).
 ///
 /// # Errors
 ///
@@ -1075,7 +1075,7 @@ mod tests {
         pass.message(&imu(400));
         assert_eq!(pass.data, vec![[195.0, 107.0, -300.0]]);
         assert_eq!(pass.offset(), [5.0, -7.0, 0.0]);
-        assert_eq!(pass.vertexes, 1);
+        assert_eq!(pass.vertexes, vec![[195.0, 107.0, -300.0]]);
         // Extremes start at zero: -(195 + 0) / 2, -(107 + 0) / 2, -(0 - 300) / 2.
         assert_eq!(pass.old_method(), [-97.5, -53.5, 150.0]);
     }
