@@ -407,7 +407,10 @@ impl MissionPlanner {
             self.telemetry.clear_log_download();
             let path = Self::plan_directory().join(format!("log_{id}.bin"));
             self.file_status = Some(match mp_os::fs::write(&path, &bytes) {
-                Ok(()) => format!("wrote {} ({} bytes)", path.display(), bytes.len()),
+                Ok(()) => {
+                    crate::page_files::saved(&path);
+                    format!("wrote {} ({} bytes)", path.display(), bytes.len())
+                }
                 Err(err) => format!("could not write {}: {err}", path.display()),
             });
             let size = u32::try_from(bytes.len()).unwrap_or(u32::MAX);

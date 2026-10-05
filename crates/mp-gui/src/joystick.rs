@@ -1921,6 +1921,7 @@ pub fn export_config(dir: &Path, to: &Path) -> Result<usize, String> {
         mp_os::fs::remove_file(to).map_err(|err| format!("{}: {err}", to.display()))?;
     }
     mp_os::fs::write(to, zip).map_err(|err| format!("{}: {err}", to.display()))?;
+    crate::page_files::saved(to);
     Ok(files.len())
 }
 

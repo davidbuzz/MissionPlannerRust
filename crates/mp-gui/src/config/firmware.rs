@@ -2851,6 +2851,7 @@ pub fn path_box(
                             path.field.value(),
                             &mp_settings::data_directory().unwrap_or_default(),
                         ),
+                        handle,
                     )
                 }).flatten()),
         )

@@ -2383,6 +2383,7 @@ impl SikRadio {
                 let file = path.field.value().trim().to_owned();
                 if ok && !file.is_empty() {
                     if mp_os::fs::write(&file, text).is_ok() {
+                        crate::page_files::saved(std::path::Path::new(&file));
                         self.show(format!("Saved settings to {file} OK"));
                     } else {
                         self.show(format!("Failed to save settings to {file}"));

@@ -1,0 +1,39 @@
+# LOGS' Telemetry Logs and DataFlash Logs pages are the flight screen's (logs_tab.rs, the owner's
+# word of 2026-10-04), and so are the dialogs their buttons open: Load Log's and the conversions'
+# file dialogs, the log downloader, Auto Analysis's report and the Geo Reference Images form. They
+# were drawn only in the flight screen's body, so on LOGS a click on Load Log set its question and
+# showed nothing, the page waiting on a dialog that was not there (found 2026-10-06). Here each
+# box is answered through its own OK, which is on screen only if the box is.
+#
+# Load Log's box opens in tlogdir, the log directory: the tlog typed there plays, as on the flight
+# screen (GCSViews/FlightData.cs:1276-1302). Convert .Bin to .Log's opens there too and converts the
+# DataFlash log typed (GCSViews/FlightData.cs:1084-1130).
+
+env MP_LOG_DIR $WORK/logs
+setup mkdir -p $WORK/logs && cp testdata/mavlink/autotest.tlog $WORK/logs/flight.tlog && cp testdata/dataflash.bin $WORK/logs/
+
+screen logs
+window 1600x1200
+budget 20
+
+click logs-tab-tlogs
+expect logs.page tlogs
+click fly-loadtelem
+expect fly.prompt ~ Telemetry log
+expect fly.prompt.value ~ /logs/
+type flight.tlog
+expect fly.prompt.value ~ /logs/flight.tlog
+click fly-prompt-ok
+expect fly.prompt none
+expect fly.playback.file flight.tlog
+
+click logs-tab-dataflash
+expect logs.page dataflash
+click fly-bintolog
+expect fly.prompt Binary Log
+expect fly.prompt.value ~ /logs/
+type dataflash.bin
+click fly-prompt-ok
+expect fly.prompt none
+within 15
+expect fly.logs.convert.last bintolog

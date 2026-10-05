@@ -3014,6 +3014,26 @@ fn actions_tab(
 }
 
 impl Prompt {
+    /// For a dialog standing for an `OpenFileDialog`, the C#'s `Filter`: what the browser's
+    /// picker takes in a page (page_files.rs). None for any other.
+    /// `// C#: GCSViews/FlightData.cs:1086, 1139, 1295, 1315; GCSViews/FlightData.resx (openScriptDialog.Filter); Log/MatLabForms.cs:47; Utilities/POI.cs:175`
+    #[must_use]
+    pub const fn opens_file(self) -> Option<&'static str> {
+        match self {
+            Self::LoadLog => Some(
+                "Telemetry log (*.tlog)|*.tlog;*.tlog.*|Mavlink Log (*.mavlog)|*.mavlog",
+            ),
+            Self::Convert(Conversion::BinToLog) => Some("Binary Log|*.bin;*.BIN"),
+            Self::Convert(Conversion::DflogToKml | Conversion::Matlab) => {
+                Some("Log Files|*.log;*.bin;*.BIN;*.LOG")
+            }
+            Self::Convert(Conversion::LogAnalysis) => Some("*.log;*.bin|*.log;*.bin;*.BIN;*.LOG"),
+            Self::PoiLoad => Some("Poi File|*.txt"),
+            Self::SelectScript => Some("Python Files|*.py|All files|*.*"),
+            _ => None,
+        }
+    }
+
     /// Whether this stands for an `OpenFileDialog` or a `SaveFileDialog`: its answer is a path,
     /// typed, and the box is drawn wider for it.
     #[must_use]
@@ -3112,6 +3132,19 @@ pub fn prompt_dialog(
             focus.prompt.is_focused(window),
             px(310.0),
             on_key,
+        ));
+    }
+    // In a page, a file from the computer too: the browser's picker (page_files.rs), its file put
+    // in the folder the box shows.
+    if let Some(filter) = prompt.opens_file() {
+        dialog = dialog.children(crate::page_files::browse_button(
+            "fly-prompt-browse",
+            crate::page_files::accept_filter(filter),
+            crate::page_files::folder_of(
+                tab.prompt_field.value(),
+                &mp_settings::data_directory().unwrap_or_default(),
+            ),
+            &focus.prompt,
         ));
     }
     if let Prompt::FlyToHereAlt { frame } = prompt {
@@ -7520,6 +7553,15 @@ fn hud_items_chooser(
     .into_any_element()
 }
 
+/// Auto Analysis's report, once a log has been analysed: the one form of the flight screen's that
+/// its DataFlash Logs page opens, which the LOGS tab shows too.
+pub fn analysis_report(data: &FlightData, cx: &mut Context<MissionPlanner>) -> Option<AnyElement> {
+    data.conversions
+        .report
+        .as_ref()
+        .map(|report| log_analyzer_window(report, cx))
+}
+
 /// What the flight screen shows over itself besides the question, the HUD's windows, the Log
 /// Downloader and the quick view's chooser: the HUD's menu, its User Items form, Auto
 /// Analysis's report, Customize's form, and the strip's and quick views' menus.
@@ -8633,7 +8675,10 @@ impl MissionPlanner {
         };
         let rendered = crate::poi::render(self.fly_data.pois.points());
         self.file_status = Some(match mp_os::fs::write(&path, rendered) {
-            Ok(()) => format!("Save File: {}", path.display()),
+            Ok(()) => {
+                crate::page_files::saved(&path);
+                format!("Save File: {}", path.display())
+            }
             Err(err) => error_box(format!("{}: {err}", path.display())),
         });
     }
@@ -11395,6 +11440,35 @@ mod tests {
         assert!(Prompt::PoiCoords.takes_text());
         assert!(Prompt::LoadLog.takes_text());
         assert_eq!(Prompt::LoadLog.title(), "Load Log");
+    }
+
+    #[test]
+    fn the_dialogs_that_open_a_file_give_the_browsers_picker_their_filter() {
+        use crate::page_files::accept_filter;
+        let accept = |prompt: Prompt| prompt.opens_file().map(accept_filter);
+        assert_eq!(accept(Prompt::LoadLog).as_deref(), Some(".tlog,.mavlog"));
+        assert_eq!(
+            accept(Prompt::Convert(Conversion::BinToLog)).as_deref(),
+            Some(".bin")
+        );
+        for kind in [
+            Conversion::DflogToKml,
+            Conversion::Matlab,
+            Conversion::LogAnalysis,
+        ] {
+            assert_eq!(
+                accept(Prompt::Convert(kind)).as_deref(),
+                Some(".log,.bin"),
+                "{kind:?}"
+            );
+        }
+        assert_eq!(accept(Prompt::PoiLoad).as_deref(), Some(".txt"));
+        // "All files|*.*" beside the scripts: any file.
+        assert_eq!(accept(Prompt::SelectScript).as_deref(), Some(""));
+        // A save or a question has no picker.
+        for prompt in [Prompt::PoiSave, Prompt::RawSensorCsv, Prompt::TakeOff] {
+            assert_eq!(prompt.opens_file(), None, "{prompt:?}");
+        }
     }
 
     // --- The DataFlash Logs page's conversions ------------------------------------------------

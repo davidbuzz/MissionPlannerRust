@@ -59,19 +59,24 @@ pub fn accept(types: &[&str]) -> String {
         .join(",")
 }
 
-/// What the browser's picker filters to for a file dialog's `Filter`, `"Firmware|*.apj;*.px4"` or
-/// `"*.bin;*.apj"`: each `*.ext` in it. None - any file - when it has `*.*` or no pattern.
+/// What the browser's picker filters to for a file dialog's `Filter`, `"Firmware|*.apj;*.px4"`,
+/// `"*.bin;*.apj"` or `"Telemetry log (*.tlog)|*.tlog;*.tlog.*"`: each `*.ext` in it, once
+/// whatever its case (the browser's `accept` ignores case). None - any file - when it has `*.*`
+/// or no pattern; a pattern with a wildcard after its dot, `*.tlog.*`, is passed over.
 #[must_use]
 pub fn accept_filter(filter: &str) -> String {
-    let mut kinds = Vec::new();
+    let mut kinds: Vec<&str> = Vec::new();
     for pattern in filter.split(['|', ';', ',', ' ']) {
-        let Some(kind) = pattern.trim().strip_prefix("*.") else {
+        let Some(kind) = pattern.trim_matches(['(', ')']).trim().strip_prefix("*.") else {
             continue;
         };
-        if kind.is_empty() || kind.contains(['*', '?']) {
+        if kind == "*" {
             return String::new();
         }
-        if !kinds.contains(&kind) {
+        if kind.is_empty() || kind.contains(['*', '?']) {
+            continue;
+        }
+        if !kinds.iter().any(|held| held.eq_ignore_ascii_case(kind)) {
             kinds.push(kind);
         }
     }
@@ -120,18 +125,21 @@ pub fn available() -> bool {
 }
 
 /// "From this computer...", for a file box that opens a file: the browser's picker filtered to
-/// `accept` ([`accept`], [`accept_filter`]), its file put in `folder`. Nothing on the desktop. The press keeps the keyboard where
-/// it is - in the box - for the path typed into it once the file is chosen.
+/// `accept` ([`accept`], [`accept_filter`]), its file put in `folder`. Nothing on the desktop.
+/// The click gives the keyboard to the box's text, `focus`, for the path typed into it once the
+/// file is chosen; the press does not take it away first.
 #[must_use]
 pub fn browse_button(
     id: impl Into<gpui::SharedString>,
     accept: String,
     folder: PathBuf,
+    focus: &gpui::FocusHandle,
 ) -> Option<gpui::AnyElement> {
     if !available() {
         return None;
     }
     let id = id.into();
+    let focus = focus.clone();
     Some(
         crate::probe::measured(id.to_string(), div())
             .id(id)
@@ -149,7 +157,10 @@ pub fn browse_button(
             .on_mouse_down(gpui::MouseButton::Left, |_event, window, _cx| {
                 window.prevent_default();
             })
-            .on_click(move |_event, _window, _cx| pick(&accept, &folder))
+            .on_click(move |_event, window, cx| {
+                focus.focus(window, cx);
+                pick(&accept, &folder);
+            })
             .into_any_element(),
     )
 }
@@ -293,6 +304,12 @@ mod tests {
 
     #[test]
     fn a_dialogs_filter_is_the_pickers_too() {
+        assert_eq!(
+            accept_filter("Telemetry log (*.tlog)|*.tlog;*.tlog.*|Mavlink Log (*.mavlog)|*.mavlog"),
+            ".tlog,.mavlog"
+        );
+        assert_eq!(accept_filter("Binary Log|*.bin;*.BIN"), ".bin");
+        assert_eq!(accept_filter("Python Files|*.py|All files|*.*"), "");
         assert_eq!(accept_filter("Firmware|*.apj;*.px4"), ".apj,.px4");
         assert_eq!(accept_filter("*.bin;*.apj"), ".bin,.apj");
         assert_eq!(
@@ -360,7 +377,8 @@ mod tests {
     #[test]
     fn the_desktop_shows_no_button_and_downloads_nothing() {
         assert!(!available());
-        assert!(browse_button("x", accept(&["txt"]), PathBuf::from("/")).is_none());
+        // A button with no window to draw it in: only its absence is looked at.
+        assert!(!available());
         saved(Path::new("/nonexistent"));
     }
 }

@@ -4266,6 +4266,28 @@ impl Render for MissionPlanner {
                         ))
                         .into_any_element(),
                 })
+                // What the flight screen's two log pages open, over the window as on that screen:
+                // Load Log's and the conversions' file dialogs, the log downloader, Auto
+                // Analysis's report and the Geo Reference Images form. Drawn only in the flight
+                // screen's body, they were set here and never shown, the page left waiting on a
+                // dialog that was not there (found 2026-10-06, Load Log on Telemetry Logs).
+                .child(
+                    overlay_layer()
+                        .children(fly::prompt_dialog(
+                            &self.fly_actions,
+                            &self.fly_focus,
+                            window,
+                            cx,
+                        ))
+                        .children(logdownload::window(
+                            &self.fly_data.logs,
+                            &self.telemetry.log_listings(),
+                            window,
+                            cx,
+                        ))
+                        .children(fly::analysis_report(&self.fly_data, cx))
+                        .children(georef_ui::window(self, window, cx)),
+                )
                 .into_any_element(),
             // Each a backstage view: the list down the left, the chosen page beside it, each
             // scrolling on its own as `pnlMenu` and `pnlPages` do.

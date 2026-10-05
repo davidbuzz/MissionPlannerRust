@@ -11494,7 +11494,7 @@ fn prompt_dialog(
                 on_key,
             ));
             if prompt.is_file_dialog() {
-                dialog = dialog.child(file_list(prompt, &menus.dialog_directory, cx));
+                dialog = dialog.child(file_list(prompt, &menus.dialog_directory, focus, cx));
             }
             dialog.child(buttons).into_any_element()
         }
@@ -11531,7 +11531,12 @@ fn prompt_dialog(
 /// the files to choose from (the owner, 2026-10-04): the folder, then a row per entry - `..`, the
 /// folders, the files of the dialog's filter. A click puts the entry in the box, a folder's so
 /// the list opens it next; a double click on a file takes it.
-fn file_list(prompt: &Prompt, directory: &Path, cx: &mut Context<MissionPlanner>) -> AnyElement {
+fn file_list(
+    prompt: &Prompt,
+    directory: &Path,
+    focus: &gpui::FocusHandle,
+    cx: &mut Context<MissionPlanner>,
+) -> AnyElement {
     let (folder, entries) = dialog_listing(prompt.value(), directory, prompt.file_types());
     let rows: Vec<AnyElement> = entries
         .iter()
@@ -11576,6 +11581,7 @@ fn file_list(prompt: &Prompt, directory: &Path, cx: &mut Context<MissionPlanner>
                 "plan-file-browse",
                 crate::page_files::accept(prompt.file_types()),
                 folder.clone(),
+                focus,
             )
         })
         .flatten();

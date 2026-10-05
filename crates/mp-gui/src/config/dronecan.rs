@@ -3423,10 +3423,11 @@ impl DroneCan {
             }
             PathFor::SaveParams => {
                 let file = PathBuf::from(path.field.value());
-                if let Some(window) = self.params_window_mut()
-                    && let Err(error) = window.save(&file)
-                {
-                    self.status = Some(error.to_string());
+                if let Some(window) = self.params_window_mut() {
+                    match window.save(&file) {
+                        Ok(()) => crate::page_files::saved(&file),
+                        Err(error) => self.status = Some(error.to_string()),
+                    }
                 }
             }
         }

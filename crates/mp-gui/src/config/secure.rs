@@ -419,6 +419,7 @@ impl Secure {
                 self.threw(format!("{path}: {err}"));
                 return;
             }
+            crate::page_files::saved(Path::new(&path));
             self.written.push(PathBuf::from(path));
         }
         self.pubkey = key.public_base64();
@@ -473,7 +474,10 @@ impl Secure {
     /// `File.WriteAllBytes` of what was signed, or the exception.
     fn save_signed(&mut self, signed: Result<Vec<u8>, String>, to: &Path) {
         match signed.and_then(|bytes| mp_os::fs::write(to, bytes).map_err(|err| err.to_string())) {
-            Ok(()) => self.written.push(to.to_path_buf()),
+            Ok(()) => {
+                crate::page_files::saved(to);
+                self.written.push(to.to_path_buf());
+            }
             Err(why) => self.threw(why),
         }
     }

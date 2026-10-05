@@ -4,7 +4,8 @@
 // types; QGroundControl's plan chosen there is put in the box's folder - kept in the browser's
 // storage - and loaded as a double click loads a listed file. Save File then saves the mission as
 // .waypoints and as .mission, and each is handed to the browser as a download of that name, with
-// what was saved in it. Fails otherwise, or on any error in the page.
+// what was saved in it. Then LOGS' Review a Log: a DataFlash log chosen in its picker opens. Fails
+// otherwise, or on any error in the page.
 //
 //   NODE_PATH=<a node_modules holding playwright> node check/files_check.js [out-dir] [url]
 const fs = require("fs");
@@ -13,8 +14,9 @@ const { chromium } = require("playwright");
 const out = process.argv[2] || ".";
 const url = process.argv[3] || "http://127.0.0.1:8080/?facts=1&demo=0";
 const fail = (why) => { console.log(`FAIL: ${why}`); process.exitCode = 1; };
-const PLAN_TAB = [281, 43];
+const PLAN_TAB = [281, 43], LOGS_TAB = [636, 43];
 const PLAN_FILE = path.join(__dirname, "../../testdata/missions/qgc_survey.plan");
+const LOG_FILE = path.join(__dirname, "../../testdata/dataflash.bin");
 (async () => {
   const browser = await chromium.launch({
     headless: true,
@@ -112,6 +114,21 @@ const PLAN_FILE = path.join(__dirname, "../../testdata/missions/qgc_survey.plan"
     try { good = test(text); } catch (_) {}
     if (!good) fail(`${name} downloaded is not the mission saved: ${JSON.stringify(text.slice(0, 120))}`);
     await until(`${name} saved`, (f) => (f.status ?? "").includes(`saved 4 items`) && (f.status ?? "").includes(name));
+  }
+
+  // LOGS' Review a Log: its box names a log in the plan directory and does not hold the keyboard
+  // until clicked; the picker's button gives it the keyboard, and the log chosen opens.
+  await page.mouse.click(...LOGS_TAB);
+  await until("LOGS' Review a Log", (f) => f.screen === "logs" && f["logs.page"] === "review");
+  const logBrowse = await at("log-browse");
+  if (logBrowse) {
+    const [chooser] = await Promise.all([page.waitForEvent("filechooser", { timeout: 10000 }), page.mouse.click(...logBrowse)]);
+    const accept = await chooser.element().evaluate((input) => input.accept);
+    console.log(`Review a Log's picker: accept "${accept}"`);
+    if (accept !== ".bin,.log") fail(`Review a Log's picker takes "${accept}", not ".bin,.log"`);
+    await chooser.setFiles({ name: "flight.bin", mimeType: "application/octet-stream", buffer: fs.readFileSync(LOG_FILE) });
+    const f = await until("the log opened", (f) => f["log.open"] === "true" && Number(f["log.fields"]) > 0, 60000);
+    console.log(`log.open ${f["log.open"]}, log.fields ${f["log.fields"]}`);
   }
 
   for (const error of [...new Set(errors)].slice(0, 5)) console.log(`error: ${error.slice(0, 300)}`);

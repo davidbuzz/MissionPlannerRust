@@ -838,6 +838,23 @@ pub fn input_box(
                 }
             }),
         ))
+        // A box standing for an `OpenFileDialog` (MAVFtp's Upload): in a page, a file from the
+        // computer too, the browser's picker (page_files.rs).
+        .children(
+            (input.title == crate::config::firmware::OPEN_FILE)
+                .then(|| {
+                    crate::page_files::browse_button(
+                        format!("{id}-browse"),
+                        String::new(),
+                        crate::page_files::folder_of(
+                            input.field.value(),
+                            &mp_settings::data_directory().unwrap_or_default(),
+                        ),
+                        handle,
+                    )
+                })
+                .flatten(),
+        )
         .child(div().flex().justify_end().gap_2().children(buttons));
     let size = window.viewport_size();
     gpui::deferred(

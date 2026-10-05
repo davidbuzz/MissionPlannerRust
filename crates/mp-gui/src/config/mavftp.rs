@@ -2479,7 +2479,9 @@ fn write_unused(folder: &Path, name: &str, data: &[u8]) -> std::io::Result<()> {
         file = PathBuf::from(format!("{}{a}", base.display()));
         a += 1;
     }
-    mp_os::fs::write(file, data)
+    mp_os::fs::write(&file, data)?;
+    crate::page_files::saved(&file);
+    Ok(())
 }
 
 // ---------------------------------------------------------------------------------------------

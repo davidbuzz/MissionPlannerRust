@@ -2446,6 +2446,7 @@ impl LogBrowse {
         }
         match mp_os::fs::write(&path, text) {
             Ok(()) => {
+                crate::page_files::saved(&path);
                 self.refused = None;
                 self.exported = Some(format!("{rows} rows"));
                 self.status = Some(format!("{rows} rows written to {}", path.display()));
@@ -2473,6 +2474,11 @@ impl LogBrowse {
             });
         match written {
             Ok(exported) => {
+                for name in &exported.files {
+                    if let Some(file) = export::place(&folder, name) {
+                        crate::page_files::saved(&file);
+                    }
+                }
                 self.refused = None;
                 self.exported = Some(format!("{} files", exported.files.len()));
                 self.status = Some(format!(
@@ -3127,6 +3133,14 @@ fn file_panel(
                             this.open_log();
                             cx.notify();
                         }),
+                    ))
+                    // In a page, a log from the computer too: the browser's picker
+                    // (page_files.rs), the log put in the plan directory the box names logs in.
+                    .children(crate::page_files::browse_button(
+                        "log-browse",
+                        crate::page_files::accept_filter("*.bin;*.BIN;*.log;*.LOG"),
+                        MissionPlanner::plan_directory(),
+                        name_focus,
                     )),
             )
             .children(browse.status().map(|status| {
