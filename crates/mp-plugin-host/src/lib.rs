@@ -21,7 +21,7 @@
 //! The WebAssembly plugin host: Mission Planner's plugins, loaded from `plugins/` beside the
 //! executable and run on wasmtime's component model.
 //!
-//! PLAN.md §13.6 row 96, on row 95's experiment (`experiments/wasm-plugin-host`). The C# loads
+//! PLAN.md §13.6 row 96, on row 95's experiment (removed 2026-10-05, this crate its successor). The C# loads
 //! every `.dll` in its plugins folder and compiles every `.cs` there at run time
 //! (`Plugin/PluginLoader.cs`); each plugin derives `MissionPlanner.Plugin.Plugin` and reaches the
 //! application through a `PluginHost` (`Plugin/Plugin.cs`). Neither a .NET assembly nor run-time

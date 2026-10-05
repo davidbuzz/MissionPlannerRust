@@ -128,16 +128,6 @@ const UNNAMED: &[(&str, u8, &str)] = &[
         "WebCamService.Capture's part: the camera devices, their formats and the frames the HUD draws under itself",
     ),
     (
-        "wasm-plugin-host",
-        11,
-        "§5.1's mp-plugin-host as an experiment (PLAN.md §13.6 row 95): wasmtime loading, driving and sandboxing a plugin",
-    ),
-    (
-        "fencedist",
-        11,
-        "the experiment's plugin: the C#'s FenceDist and menu examples built for wasm32, a member so it type-checks natively",
-    ),
-    (
         "mp-plugins",
         11,
         "the plugins the host loads (PLAN.md §13.6 row 96): the C#'s four real plugins and its examples on the WIT world, built for wasm32, a member so they type-check natively",

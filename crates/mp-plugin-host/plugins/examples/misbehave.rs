@@ -19,7 +19,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
 //! Not a port: the host's own test of the two faults the C# cannot survive, carried over from the
-//! experiment's `explode` and `spin` (`experiments/wasm-plugin-host`). "Panic" on the flight
+//! experiment's `explode` and `spin` (PLAN.md §13.6 row 95). "Panic" on the flight
 //! screen's map menu panics; "Spin" never returns; with the setting `misbehave` at `loop`, `Loop`
 //! panics on its third run, and at `idle`, `Loaded` says no.
 

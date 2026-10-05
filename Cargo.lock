@@ -2291,10 +2291,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "fencedist"
-version = "0.0.0"
-
-[[package]]
 name = "filedescriptor"
 version = "0.8.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -9089,14 +9085,6 @@ dependencies = [
  "indexmap",
  "wasm-encoder",
  "wasmparser",
-]
-
-[[package]]
-name = "wasm-plugin-host"
-version = "0.0.0"
-dependencies = [
- "anyhow",
- "wasmtime",
 ]
 
 [[package]]

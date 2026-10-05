@@ -151,7 +151,7 @@ jobs:
           AR_wasm32_unknown_unknown: llvm-ar
         run: cargo -Zbuild-std=std,panic_abort check --target wasm32-unknown-unknown
              -p mp-gui -p mp-mavlink -p mp-mavlink-dialects -p mp-units -p mp-log
-             -p mp-vehicle -p mp-mission -p fencedist
+             -p mp-vehicle -p mp-mission
 
   sitl:
     name: integration against ArduPilot SITL
