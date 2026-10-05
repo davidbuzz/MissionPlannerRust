@@ -16,6 +16,16 @@ async function placeOf(page, name, ms = 10000) {
   return null;
 }
 
+/// A click as a hand makes one: the pointer over the control first, the press a moment later.
+/// Playwright's own click moves and presses at once; files_check's click on Review a Log's picker
+/// button made no click in two runs of four that way, and none failed with a moment between
+/// (2026-10-06). Why is not known: gpui hit-tests every mouse event against the frame drawn.
+async function clickAt(page, place) {
+  await page.mouse.move(...place);
+  await page.waitForTimeout(100);
+  await page.mouse.click(...place);
+}
+
 /// Clicks `name`; false when it never showed.
 async function clickNamed(page, name, ms) {
   const place = await placeOf(page, name, ms);
@@ -24,8 +34,8 @@ async function clickNamed(page, name, ms) {
     process.exitCode = 1;
     return false;
   }
-  await page.mouse.click(...place);
+  await clickAt(page, place);
   return true;
 }
 
-module.exports = { placeOf, clickNamed };
+module.exports = { placeOf, clickAt, clickNamed };

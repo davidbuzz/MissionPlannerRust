@@ -12,6 +12,7 @@
 const fs = require("fs");
 const path = require("path");
 const { chromium } = require("playwright");
+const { clickAt } = require("./clicks");
 const out = process.argv[2] || ".";
 const url = process.argv[3] || "http://127.0.0.1:8080/?facts=1&demo=0";
 const fail = (why) => { console.log(`FAIL: ${why}`); process.exitCode = 1; };
@@ -50,7 +51,7 @@ const TLOG = fs.readFileSync(path.join(__dirname, "../../testdata/mavlink/autote
     fail(`${name} never showed, or never stayed put`);
     return null;
   };
-  const click = async (name) => { const xy = await at(name); if (xy) await page.mouse.click(...xy); };
+  const click = async (name) => { const xy = await at(name); if (xy) await clickAt(page, xy); };
   // The logs the browser keeps, by name.
   const kept = () => page.evaluate(async (dir) => {
     try {

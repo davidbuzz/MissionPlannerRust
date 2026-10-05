@@ -11,6 +11,7 @@
 const fs = require("fs");
 const path = require("path");
 const { chromium } = require("playwright");
+const { clickAt } = require("./clicks");
 const out = process.argv[2] || ".";
 const url = process.argv[3] || "http://127.0.0.1:8080/?facts=1&demo=0";
 const fail = (why) => { console.log(`FAIL: ${why}`); process.exitCode = 1; };
@@ -52,7 +53,7 @@ const LOG_FILE = path.join(__dirname, "../../testdata/dataflash.bin");
     fail(`${name} never showed, or never stayed put`);
     return null;
   };
-  const click = async (name) => { const xy = await at(name); if (xy) await page.mouse.click(...xy); return xy; };
+  const click = async (name) => { const xy = await at(name); if (xy) await clickAt(page, xy); return xy; };
 
   await page.goto(url, { waitUntil: "load" });
   await until("the planner up", (f) => f.screen === "fly", 60000);
@@ -64,7 +65,7 @@ const LOG_FILE = path.join(__dirname, "../../testdata/dataflash.bin");
   await until("Load File's box", (f) => f["plan.prompt"] === "Open");
   const browse = await at("plan-file-browse");
   if (browse) {
-    const [chooser] = await Promise.all([page.waitForEvent("filechooser", { timeout: 10000 }), page.mouse.click(...browse)]);
+    const [chooser] = await Promise.all([page.waitForEvent("filechooser", { timeout: 10000 }), clickAt(page, browse)]);
     const accept = await chooser.element().evaluate((input) => input.accept);
     console.log(`the picker: accept "${accept}", multiple ${chooser.isMultiple()}`);
     if (!accept.split(",").includes(".plan")) fail(`the picker does not take a .plan: accept "${accept}"`);
@@ -121,8 +122,25 @@ const LOG_FILE = path.join(__dirname, "../../testdata/dataflash.bin");
   await page.mouse.click(...LOGS_TAB);
   await until("LOGS' Review a Log", (f) => f.screen === "logs" && f["logs.page"] === "review");
   const logBrowse = await at("log-browse");
-  if (logBrowse) {
-    const [chooser] = await Promise.all([page.waitForEvent("filechooser", { timeout: 10000 }), page.mouse.click(...logBrowse)]);
+  // Whether the planner asked for the picker, and with the click's activation still live.
+  await page.evaluate(() => {
+    const open = globalThis.mprPickFile;
+    globalThis.pickerAsked = [];
+    globalThis.mprPickFile = (accept) => {
+      globalThis.pickerAsked.push(navigator.userActivation.isActive);
+      return open(accept);
+    };
+  });
+  const chooser = !logBrowse ? null : await Promise.all([
+    page.waitForEvent("filechooser", { timeout: 10000 }),
+    clickAt(page, logBrowse),
+  ]).then(([chooser]) => chooser).catch(async () => {
+    const asked = await page.evaluate(() => globalThis.pickerAsked);
+    await page.screenshot({ path: `${out}/files-no-picker.png` });
+    fail(`Review a Log's picker never opened: the planner asked ${asked.length} times, the click's activation live ${JSON.stringify(asked)}, clicked at ${logBrowse}`);
+    return null;
+  });
+  if (chooser) {
     const accept = await chooser.element().evaluate((input) => input.accept);
     console.log(`Review a Log's picker: accept "${accept}"`);
     if (accept !== ".bin,.log") fail(`Review a Log's picker takes "${accept}", not ".bin,.log"`);
