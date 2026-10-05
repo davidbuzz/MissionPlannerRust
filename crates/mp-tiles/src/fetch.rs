@@ -105,6 +105,8 @@ pub enum FetchError {
 /// Cheap to clone: the agent inside is shared, connection pool and all.
 #[derive(Debug, Clone)]
 pub struct TileFetcher {
+    // In a web page the browser asks (mp_os::http), not the agent.
+    #[cfg_attr(target_family = "wasm", allow(dead_code))]
     agent: ureq::Agent,
 }
 
@@ -151,6 +153,7 @@ impl TileFetcher {
     /// A GET carrying the headers `GetTileImageUsingHttp` and `GetContentUsingHttp` send: the
     /// User-Agent, `Accept: */*`, and the provider's `Referer` when it has one.
     /// `// C#: ExtLibs/GMap.NET.Core/GMap.NET.MapProviders/GMapProvider.cs:401-406, 447-453`
+    #[cfg(not(target_family = "wasm"))]
     fn get(
         &self,
         url: &str,

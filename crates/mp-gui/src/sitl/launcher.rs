@@ -490,6 +490,8 @@ impl Launcher for NotAvailable {
 
 /// The folder holding the local WebAssembly builds and `bridge.mjs`: the first of
 /// [`local_wasm_candidates`] that has the bridge.
+// The desktop's "try local wasm", Node and the bridge; a page runs the SITL itself (PageWasm).
+#[cfg_attr(target_family = "wasm", allow(dead_code))]
 #[must_use]
 pub fn local_wasm_dir() -> Option<PathBuf> {
     local_wasm_candidates(
@@ -503,6 +505,7 @@ pub fn local_wasm_dir() -> Option<PathBuf> {
 /// Where the WebAssembly builds may be, in order: `MP_SITL_WASM`; `sitl-wasm` beside the
 /// executable, as the release archives put it; `share/missionplanner-rust/sitl-wasm` beside its
 /// `bin`, as the Debian package installs it; the source tree's `tools/sitl/wasm` this was built from.
+#[cfg_attr(target_family = "wasm", allow(dead_code))]
 #[must_use]
 pub fn local_wasm_candidates(named: Option<PathBuf>, exe: Option<PathBuf>) -> Vec<PathBuf> {
     let beside = exe.as_deref().and_then(Path::parent);
@@ -522,6 +525,7 @@ pub fn local_wasm_candidates(named: Option<PathBuf>, exe: Option<PathBuf>) -> Ve
 
 /// Node: `MP_NODE`, else `node` on `PATH`, else where Homebrew and the installers put it - a
 /// program started from the Finder has no shell's `PATH`.
+#[cfg_attr(target_family = "wasm", allow(dead_code))]
 #[must_use]
 pub fn find_node() -> Option<PathBuf> {
     if let Some(node) = std::env::var_os("MP_NODE").map(PathBuf::from) {
@@ -540,8 +544,10 @@ pub fn find_node() -> Option<PathBuf> {
 }
 
 /// The bridge script in the WebAssembly folder.
+#[cfg_attr(target_family = "wasm", allow(dead_code))]
 pub const BRIDGE: &str = "bridge.mjs";
 /// The port the bridge serves, the C#'s SITL port (`model::SITL_LINK`).
+#[cfg_attr(target_family = "wasm", allow(dead_code))]
 pub const LOCAL_WASM_PORT: u16 = 5760;
 
 /// The local WebAssembly module for a picture's file: all four vehicles are built, the heli as
@@ -579,6 +585,7 @@ pub fn local_wasm_arguments(line: &str) -> Vec<String> {
 }
 
 /// A command-line word, quoted when it holds a space, for [`model::split_arguments`] and Windows.
+#[cfg_attr(target_family = "wasm", allow(dead_code))]
 fn quote(word: &str) -> String {
     if word.contains(' ') {
         format!("\"{word}\"")
@@ -590,6 +597,7 @@ fn quote(word: &str) -> String {
 /// The owner's "try local wasm" (2026-10-04): the four vehicles' WebAssembly builds in
 /// `tools/sitl/wasm/`, started under Node by `bridge.mjs`, which serves their SERIAL0 on
 /// tcp:127.0.0.1:5760. Not in the C#.
+#[cfg_attr(target_family = "wasm", allow(dead_code))]
 #[derive(Debug)]
 pub struct LocalWasm {
     /// `simulator`: the bridges started.

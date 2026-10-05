@@ -43,6 +43,8 @@ use std::rc::Rc;
 use gpui::{Application, Platform};
 
 /// Builds the platform backend for this target.
+// A page is started by gpui_web's own entry (main.rs), not through this.
+#[cfg_attr(target_family = "wasm", allow(dead_code))]
 #[must_use]
 pub fn current_platform(headless: bool) -> Rc<dyn Platform> {
     #[cfg(any(target_os = "linux", target_os = "freebsd"))]

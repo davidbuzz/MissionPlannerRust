@@ -29,6 +29,7 @@
 //! `// C#: GCSViews/ConfigurationView/ConfigDroneCAN.cs:1487-1633`
 
 use std::net::{Ipv4Addr, SocketAddrV4, UdpSocket};
+#[cfg(not(target_family = "wasm"))]
 use std::time::Duration;
 
 use crate::crc::compute;

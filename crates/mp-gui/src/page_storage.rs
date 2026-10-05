@@ -28,6 +28,8 @@
 /// reads it (`mp_os::fs::mem::encode`); empty when nothing has.
 #[wasm_bindgen::prelude::wasm_bindgen]
 #[must_use]
+// Exported to the page by wasm-bindgen, not to another crate.
+#[allow(unreachable_pub)]
 pub fn planner_storage_take() -> Vec<u8> {
     mp_os::fs::mem::encode(&mp_os::fs::mem::STORE.take_changes())
 }
