@@ -86,8 +86,13 @@ click fly-triggercamera
 expect fly.sent COMMAND_LONG MAV_CMD_DO_DIGICAM_CONTROL 0,0,0,0,1,0,0
 expect fly.ack ~ MAV_CMD_DO_DIGICAM_CONTROL:
 
-# Camera Overlap: dimmed, and a click says why.
+# Camera Overlap, ported since (fly-cameraoverlap.gui has the whole of it): a click turns it on
+# and closes the menu, a second turns it off.
+expect fly.camera_overlap false
 click map@0.5x0.5:right
 expect fly.menu map
 click fly-cameraoverlap
-expect status ~ Camera Overlap is not ported
+expect fly.camera_overlap true
+click map@0.5x0.5:right
+click fly-cameraoverlap
+expect fly.camera_overlap false

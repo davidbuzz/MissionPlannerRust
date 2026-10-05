@@ -37,7 +37,7 @@ expect params.held > 1000
 expect config.proximity.window false
 click setup-page-ConfigAdvanced
 expect setup.page ConfigAdvanced
-expect config.advanced.buttons.enabled Warning Manager,MAVLink Inspector,Proximity,Mavlink Signing,FFT
+expect config.advanced.buttons.enabled Warning Manager,MAVLink Inspector,Proximity,Mavlink Signing,Mavlink Mirror,NMEA,Param gen,FFT,Spectrogram,Support Proxy
 
 # The constructor: the vehicle shown, 5 m and 80 cm.
 click advanced-but_proximity

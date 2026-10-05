@@ -4,7 +4,13 @@
 # render, paint and present parts, the gap, and the first frame on arriving. It asserts only that
 # each screen was measured; the numbers are the point - run it with MP_FACTS_KEEP=<file> and read
 # frames.* there (docs/perf.md).
+#
+# On the old 10 Hz timer (MP_REPAINT=tick:100): it measures what a frame of each screen costs, and
+# since 2026-10-05 an idle planner repaints on new data, about one frame a second - too few to
+# measure, and none of them what a vehicle's stream makes it draw. The timer keeps the numbers
+# those of docs/perf.md.
 env MP_FRAMES 1
+env MP_REPAINT tick:100
 env XDG_DATA_HOME $WORK
 screen fly
 window 1600x1200

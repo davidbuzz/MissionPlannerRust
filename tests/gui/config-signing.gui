@@ -41,7 +41,7 @@ expect params.held > 1000
 expect config.authkeys.window false
 click setup-page-ConfigAdvanced
 expect setup.page ConfigAdvanced
-expect config.advanced.buttons.enabled Warning Manager,MAVLink Inspector,Proximity,Mavlink Signing,FFT
+expect config.advanced.buttons.enabled Warning Manager,MAVLink Inspector,Proximity,Mavlink Signing,Mavlink Mirror,NMEA,Param gen,FFT,Spectrogram,Support Proxy
 
 # The constructor: the store, the grid from it, the timer.
 click advanced-but_signkey
