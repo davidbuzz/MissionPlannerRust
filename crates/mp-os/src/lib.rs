@@ -222,6 +222,26 @@ fn on_main_thread() -> bool {
 /// own words.
 #[cfg(target_family = "wasm")]
 pub fn http(method: &str, url: &str, body: Option<&str>) -> Result<(u16, Vec<u8>), String> {
+    // A page that came over https may not ask over plain http (the browser refuses it as mixed
+    // content), so there the https address is the only one.
+    let protocol = js_sys::Reflect::get(&js_sys::global(), &"location".into())
+        .and_then(|location| js_sys::Reflect::get(&location, &"protocol".into()))
+        .ok()
+        .and_then(|protocol| protocol.as_string())
+        .unwrap_or_default();
+    let addresses = https_first(url);
+    if protocol == "https:"
+        && let Some(secure) = addresses.first()
+    {
+        return http_once(method, secure, body);
+    }
+    // A status is an answer (`Ok`); an `Err` is none.
+    ask_https_first(url, |address| http_once(method, address, body), |_| false)
+}
+
+/// One request of [`http`]'s, to one address.
+#[cfg(target_family = "wasm")]
+fn http_once(method: &str, url: &str, body: Option<&str>) -> Result<(u16, Vec<u8>), String> {
     let text = |err: wasm_bindgen::JsValue| format!("{url}: {err:?}");
     let request = web_sys::XmlHttpRequest::new().map_err(text)?;
     request.open_with_async(method, url, false).map_err(text)?;
@@ -238,6 +258,46 @@ pub fn http(method: &str, url: &str, body: Option<&str>) -> Result<(u16, Vec<u8>
     }
     let answer = request.response().map_err(text)?;
     Ok((status, js_sys::Uint8Array::new(&answer).to_vec()))
+}
+
+/// The addresses to ask for `url`, in turn, until one answers: over https first, and for an
+/// address written `http://` the plain one after it (the owner, 2026-10-05: "it should all start
+/// with trying https, and only then if it doesnt work try http"). Many of the planner's addresses
+/// are Mission Planner's own, written `http://` - Google's version page among them, which a page
+/// on GitHub Pages could not ask at all, so its satellite tiles kept a version Google no longer
+/// serves and no map drew. "Answers" is any answer, an error status too: a server that answers
+/// over https has answered, and only no answer at all - no connection, a TLS failure, a time out
+/// - goes on to plain http. An https address is asked as written, and only so.
+#[must_use]
+pub fn https_first(url: &str) -> Vec<std::borrow::Cow<'_, str>> {
+    match url.strip_prefix("http://") {
+        Some(rest) => vec![format!("https://{rest}").into(), url.into()],
+        None => vec![url.into()],
+    }
+}
+
+/// Asks `ask` each of [`https_first`]'s addresses for `url` in turn, until one answers: the first
+/// answer, else the plain address's failure, as the address written would have failed.
+/// `answered` tells an error that is an answer - an error status - from no answer at all.
+///
+/// # Errors
+/// The last address's error, when none answered.
+pub fn ask_https_first<T, E>(
+    url: &str,
+    mut ask: impl FnMut(&str) -> Result<T, E>,
+    answered: impl Fn(&E) -> bool,
+) -> Result<T, E> {
+    let addresses = https_first(url);
+    let Some((last, first)) = addresses.split_last() else {
+        return ask(url);
+    };
+    for address in first {
+        match ask(address) {
+            Err(error) if !answered(&error) => {}
+            result => return result,
+        }
+    }
+    ask(last)
 }
 
 /// The value the web page's address gives `name` after its `?` (`?demo=0`), from
@@ -272,6 +332,57 @@ fn query_value(search: &str, name: &str) -> Option<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn https_is_asked_first_and_plain_http_after_it() {
+        let google = "http://maps.google.com/maps/api/js?v=3.2&sensor=false";
+        assert_eq!(
+            https_first(google),
+            [
+                "https://maps.google.com/maps/api/js?v=3.2&sensor=false",
+                google
+            ]
+        );
+        // An https address is asked as written, and only so.
+        let tile = "https://khms1.google.com/kh/v=1015";
+        assert_eq!(https_first(tile), [tile]);
+    }
+
+    #[test]
+    fn plain_http_is_asked_only_when_https_has_no_answer() {
+        let url = "http://firmware.ardupilot.org/manifest.json.gz";
+        let asked = |https: Result<u16, &'static str>| {
+            let mut asked = Vec::new();
+            let result = ask_https_first(
+                url,
+                |address| {
+                    asked.push(address.to_owned());
+                    if address.starts_with("https://") {
+                        https
+                    } else {
+                        Ok(200)
+                    }
+                },
+                |error| *error == "status 404",
+            );
+            (result, asked)
+        };
+        // https answers: asked once.
+        let (result, asked_at) = asked(Ok(200));
+        assert_eq!(result, Ok(200));
+        assert_eq!(asked_at, ["https://firmware.ardupilot.org/manifest.json.gz"]);
+        // https answers with an error status: that is its answer.
+        let (result, asked_at) = asked(Err("status 404"));
+        assert_eq!(result, Err("status 404"));
+        assert_eq!(asked_at.len(), 1);
+        // https does not answer: then plain http, as written.
+        let (result, asked_at) = asked(Err("connection refused"));
+        assert_eq!(result, Ok(200));
+        assert_eq!(asked_at, [
+            "https://firmware.ardupilot.org/manifest.json.gz",
+            url
+        ]);
+    }
 
     #[test]
     fn on_the_desktop_os_recv_timeout_is_recv_timeout() {

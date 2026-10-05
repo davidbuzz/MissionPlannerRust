@@ -335,12 +335,18 @@ fn download(url: &str) -> Result<Vec<u8>, FetchError> {
         url: url.to_owned(),
         reason,
     };
-    let mut response = ureq::get(url)
-        .config()
-        .timeout_global(Some(Duration::from_secs(60)))
-        .build()
-        .call()
-        .map_err(|err| http(err.to_string()))?;
+    // Over https first, then the address as written (mp_os::https_first).
+    let call = |address: &str| {
+        ureq::get(address)
+            .config()
+            .timeout_global(Some(Duration::from_secs(60)))
+            .build()
+            .call()
+    };
+    let mut response = mp_os::ask_https_first(url, call, |error| {
+        matches!(error, ureq::Error::StatusCode(_))
+    })
+    .map_err(|err| http(err.to_string()))?;
     let mut bytes = Vec::new();
     response
         .body_mut()

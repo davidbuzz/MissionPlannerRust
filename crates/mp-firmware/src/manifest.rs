@@ -1673,12 +1673,16 @@ impl Fetch for Http {
 #[cfg(not(target_family = "wasm"))]
 impl Fetch for Http {
     fn get(&self, url: &str) -> Result<Vec<u8>, String> {
-        let mut response = ureq::get(url)
-            .header("User-Agent", USER_AGENT)
-            .config()
-            .timeout_global(Some(TIMEOUT))
-            .build()
-            .call()
+        // Over https first, then the address as written (mp_os::https_first), here and below.
+        let call = |address: &str| {
+            ureq::get(address)
+                .header("User-Agent", USER_AGENT)
+                .config()
+                .timeout_global(Some(TIMEOUT))
+                .build()
+                .call()
+        };
+        let mut response = mp_os::ask_https_first(url, call, |error| matches!(error, ureq::Error::StatusCode(_)))
             .map_err(|err| err.to_string())?;
         response
             .body_mut()
@@ -1691,12 +1695,15 @@ impl Fetch for Http {
     /// `HttpClient.PostAsync(uri, new StringContent(data))`, `EnsureSuccessStatusCode` and the
     /// body. `// C#: ExtLibs/Utilities/Download.cs:306-315`
     fn post(&self, url: &str, data: &str) -> Result<String, String> {
-        let mut response = ureq::post(url)
-            .header("User-Agent", USER_AGENT)
-            .config()
-            .timeout_global(Some(TIMEOUT))
-            .build()
-            .send(data)
+        let call = |address: &str| {
+            ureq::post(address)
+                .header("User-Agent", USER_AGENT)
+                .config()
+                .timeout_global(Some(TIMEOUT))
+                .build()
+                .send(data)
+        };
+        let mut response = mp_os::ask_https_first(url, call, |error| matches!(error, ureq::Error::StatusCode(_)))
             .map_err(|err| err.to_string())?;
         response
             .body_mut()
@@ -1711,13 +1718,15 @@ impl Fetch for Http {
         if !is_absolute_url(url) {
             return Ok(false);
         }
-        match ureq::head(url)
-            .header("User-Agent", USER_AGENT)
-            .config()
-            .timeout_global(Some(Duration::from_secs(30)))
-            .build()
-            .call()
-        {
+        let call = |address: &str| {
+            ureq::head(address)
+                .header("User-Agent", USER_AGENT)
+                .config()
+                .timeout_global(Some(Duration::from_secs(30)))
+                .build()
+                .call()
+        };
+        match mp_os::ask_https_first(url, call, |error| matches!(error, ureq::Error::StatusCode(_))) {
             Ok(_) => Ok(true),
             Err(ureq::Error::StatusCode(_)) => Ok(false),
             Err(err) => Err(err.to_string()),
@@ -1732,12 +1741,15 @@ impl Fetch for Http {
         url: &str,
         progress: &mut dyn FnMut(u64, Option<u64>),
     ) -> Result<Vec<u8>, String> {
-        let mut response = ureq::get(url)
-            .header("User-Agent", USER_AGENT)
-            .config()
-            .timeout_global(Some(Duration::from_secs(30)))
-            .build()
-            .call()
+        let call = |address: &str| {
+            ureq::get(address)
+                .header("User-Agent", USER_AGENT)
+                .config()
+                .timeout_global(Some(Duration::from_secs(30)))
+                .build()
+                .call()
+        };
+        let mut response = mp_os::ask_https_first(url, call, |error| matches!(error, ureq::Error::StatusCode(_)))
             .map_err(|err| err.to_string())?;
         let length = response.body().content_length();
         let mut reader = response.body_mut().as_reader();

@@ -156,11 +156,18 @@ impl TileFetcher {
         url: &str,
         referer: &str,
     ) -> Result<ureq::http::Response<ureq::Body>, FetchError> {
-        let mut request = self.agent.get(url).header("Accept", ACCEPT);
-        if !referer.is_empty() {
-            request = request.header("Referer", referer);
-        }
-        request.call().map_err(|error| FetchError::Request {
+        // Over https first, then the address as written (mp_os::https_first).
+        let call = |address: &str| {
+            let mut request = self.agent.get(address).header("Accept", ACCEPT);
+            if !referer.is_empty() {
+                request = request.header("Referer", referer);
+            }
+            request.call()
+        };
+        mp_os::ask_https_first(url, call, |error| {
+            matches!(error, ureq::Error::StatusCode(_))
+        })
+        .map_err(|error| FetchError::Request {
             url: url.to_owned(),
             message: error.to_string(),
         })
