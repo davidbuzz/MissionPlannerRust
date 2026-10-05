@@ -22,10 +22,11 @@ python3 experiments/web-experiment/www/serve.py 8080
 At a first visit the Welcome-Demo-Sitl plugin (the owner's, 2026-10-05; not in Mission Planner)
 shows the planner at work: a drawn pointer clicks SIMULATION and Multirotor, PLAN, Zoom To
 Vehicle on its zoom icon, Set Home Here on the map's right-click menu at the copter, four
-waypoints around it, Write, FLY and Actions, force arm, TakeOff and Auto, so the copter flies the
-mission; then it unticks itself on PLUGINS and saves, goes back to FLY, and its pointer goes.
-Where the planner refuses something - Write's message box, say - it answers the box and stops,
-saying why on the status line. It is a
+waypoints around it, a survey - Polygon > Draw a Polygon on the map's menu, four corners to the
+left of the waypoints, Auto WP > Survey (Grid) and its Accept - Write, FLY and Actions, force arm,
+TakeOff and Auto, so the copter flies the mission; then it unticks itself on PLUGINS and saves,
+goes back to FLY, and its pointer goes. Where the planner refuses something - Write's message box,
+say - it answers the box and stops, saying why on the status line. It is a
 plugin like the others, built into the browser build only, and the PLUGINS tab turns it off.
 Until the page keeps its settings, every visit runs it again. `planner.html?demo=0` starts
 without it, as every check but `demo_check.js` does.

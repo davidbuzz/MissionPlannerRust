@@ -1,11 +1,12 @@
 // The owner's Welcome-Demo-Sitl plugin (2026-10-05) in a web page, as a first visit sees it: no
 // click from here at all. The demo's pointer clicks SIMULATION > Multirotor (the copter starts in
 // the page), PLAN, Zoom To Vehicle, Set Home Here on the map's menu at the copter, four
-// waypoints, Write, FLY > Actions, force arm, TakeOff and its OK, Auto, then unticks itself on
+// waypoints, Polygon > Draw a Polygon and four corners to their left, Auto WP > Survey (Grid) and
+// its Accept, Write, FLY > Actions, force arm, TakeOff and its OK, Auto, then unticks itself on
 // PLUGINS, saves, and goes back to FLY. Fails unless the planner's own facts (?facts=1) show it
-// all done: the demo's last click FLY and its pointer gone, home and four waypoints on FLIGHT
-// PLAN, the vehicle armed in Auto with the mission written, and the demo on the disabled list
-// Save && Close wrote. A screenshot of the
+// all done: the demo's last click FLY and its pointer gone, home, four waypoints and the survey's
+// rows after them on FLIGHT PLAN, no message box left, the vehicle armed in Auto with the mission
+// written, and the demo on the disabled list Save && Close wrote. A screenshot of the
 // end goes into out-dir, and with DEMO_SHOTS=1 one at each click too - each stalls the page under
 // SwiftShader for seconds, long enough for ArduCopter to disarm a copter waiting for its TakeOff.
 //
@@ -14,9 +15,9 @@ const { chromium } = require("playwright");
 const out = process.argv[2] || ".";
 const url = process.argv[3] || "http://127.0.0.1:8080/planner.html?facts=1";
 const fail = (why) => { console.log(`FAIL: ${why}`); process.exitCode = 1; };
-// The demo's script (welcomedemositl.rs, SCRIPT): twenty-two clicks of its own, the last FLY - two
-// more when the copter disarmed before its climb and was armed again.
-const CLICKS = 22;
+// The demo's script (welcomedemositl.rs, SCRIPT): thirty-three clicks of its own, the last FLY -
+// two more when the copter disarmed before its climb and was armed again.
+const CLICKS = 33;
 (async () => {
   const browser = await chromium.launch({
     headless: true,
@@ -52,7 +53,7 @@ const CLICKS = 22;
       if (process.env.DEMO_SHOTS === "1") await shot(`demo-${String(clicks).padStart(2, "0")}`);
     }
     // What PLAN's Write did, whenever it changes: the mission, the transfer, any question.
-    const plan = ["mission.items", "mission.written", "plan.transfer", "plan.prompt", "plan.prompt.text", "status"]
+    const plan = ["mission.items", "survey.points", "survey.dialog", "survey.dialog.grid.points", "survey.dialog.prompt", "survey.dialog.prompt.text", "survey.dialog.added", "mission.written", "plan.transfer", "plan.prompt", "plan.prompt.text", "status"]
       .map((key) => `${key}=${facts[key] ?? "-"}`).join(" ");
     if (plan !== lastPlan) {
       lastPlan = plan;
@@ -72,11 +73,17 @@ const CLICKS = 22;
   if (facts.screen !== "fly") fail(`the screen is ${facts.screen}, not fly`);
   if (facts["vehicle.armed"] !== "true") fail("the vehicle is not armed");
   if (facts["vehicle.mode"] !== "Auto") fail(`the vehicle is in ${facts["vehicle.mode"]}, not Auto`);
-  // On FLIGHT PLAN: home set by the Home Location link, and four waypoints; on the vehicle, home
-  // and the four (the owner's run of 2026-10-05 had one waypoint and no home).
+  // On FLIGHT PLAN: home set by Set Home Here, four waypoints, and the survey's rows after them
+  // (the owner's run of 2026-10-05 had one waypoint and no home; the survey his word the same
+  // day); on the vehicle, home and all of them. No box left over the window - the survey's
+  // camera file in a page with no files said "operation not supported on this platform".
+  const added = Number(facts["survey.dialog.added"]);
   if (facts["mission.home"] !== "true") fail("FLIGHT PLAN has no home");
-  if (Number(facts["mission.items"]) !== 4) fail(`FLIGHT PLAN holds ${facts["mission.items"]} waypoints, not four`);
-  if (Number(facts["vehicle.wps"]) < 5) fail(`the vehicle holds ${facts["vehicle.wps"]} mission items, not home and four`);
+  if (facts["survey.dialog"] !== "closed") fail(`the survey dialog is ${facts["survey.dialog"]}, not closed by its Accept`);
+  if (!(added > 0)) fail(`the survey's Accept added ${facts["survey.dialog.added"]} rows`);
+  if (Number(facts["mission.items"]) !== 4 + added) fail(`FLIGHT PLAN holds ${facts["mission.items"]} rows, not four waypoints and the survey's ${added}`);
+  if (Number(facts["vehicle.wps"]) !== 5 + added) fail(`the vehicle holds ${facts["vehicle.wps"]} mission items, not home, four and the survey's ${added}`);
+  if (facts["plan.prompt"] !== "none") fail(`a message box is left: ${facts["plan.prompt.text"]}`);
   if (!(facts["plugins.disabled"] ?? "").includes("welcomedemositl.wasm")) fail(`the disabled list is ${facts["plugins.disabled"]}, without the demo`);
   if (facts["plugins.Welcome-Demo-Sitl.state"] !== "running") fail(`the demo is ${facts["plugins.Welcome-Demo-Sitl.state"]}, not loaded this run`);
   for (const error of [...new Set(errors)].slice(0, 5)) console.log(`error: ${error.slice(0, 300)}`);

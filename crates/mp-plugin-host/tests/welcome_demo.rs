@@ -37,8 +37,14 @@ const SCREEN: &[&str] = &[
     "tab-plan",
     "plan-zoomicon",
     "menu-zoomToVehicle",
+    "plan-zoomlevel-down",
     "menu-setHomeHere",
     "map",
+    "menu-polygon",
+    "menu-addPolygonPoint2",
+    "menu-autoWP",
+    "menu-surveyGrid",
+    "survey-BUT_Accept",
     "plan-write",
     "tab-fly",
     "fly-tab-actions",
@@ -51,13 +57,14 @@ const SCREEN: &[&str] = &[
     "plugin-manager-save",
 ];
 
-/// The planning map after the Home Location link: zoom 17's few hundred metres around the field.
+/// The planning map after Zoom To Vehicle: zoom 17's few hundred metres around the field, room
+/// for squares of 82 m a half side - the survey's 60 m and more.
 fn zoomed_in() -> Area {
     Area {
         top: LAT + 0.0025,
         bottom: LAT - 0.0025,
-        left: LNG - 0.004,
-        right: LNG + 0.004,
+        left: LNG - 0.006,
+        right: LNG + 0.006,
     }
 }
 
@@ -95,9 +102,9 @@ fn run_out(plugin: &mut Plugin, limit: usize) {
     panic!("the demo was still going after {limit} looks");
 }
 
-/// The owner's sequence: SIMULATION > Multirotor, PLAN and four waypoints, Write, FLY > Actions,
-/// force arm, TakeOff and its OK, Auto, then its own box unticked and saved on PLUGINS, and back
-/// to FLY; then no more loops.
+/// The owner's sequence: SIMULATION > Multirotor, PLAN and four waypoints, a polygon of four
+/// corners and a Survey (Grid) over it, Write, FLY > Actions, force arm, TakeOff and its OK, Auto,
+/// then its own box unticked and saved on PLUGINS, and back to FLY; then no more loops.
 #[test]
 fn the_demo_clicks_the_owners_sequence_then_rests() {
     let Some((mut plugin, script)) = load("welcomedemositl") else {
@@ -146,6 +153,17 @@ fn the_demo_clicks_the_owners_sequence_then_rests() {
             "map",
             "map",
             "map",
+            "right-click map",
+            "menu-polygon",
+            "menu-addPolygonPoint2",
+            "map",
+            "map",
+            "map",
+            "map",
+            "right-click map",
+            "menu-autoWP",
+            "menu-surveyGrid",
+            "survey-BUT_Accept",
             "plan-write",
             "tab-fly",
             "fly-tab-actions",
@@ -171,7 +189,8 @@ fn the_demo_clicks_the_owners_sequence_then_rests() {
     assert!(clicks.contains(&format!("right {LAT:.6},{LNG:.6}")));
 }
 
-/// The four waypoints the demo clicks on a planning map showing `view`.
+/// The eight corners the demo clicks on a planning map showing `view`: the four waypoints, then
+/// the survey polygon's four.
 fn corners_on(view: Area) -> Vec<(f64, f64)> {
     let Some((mut plugin, script)) = load("welcomedemositl") else {
         return Vec::new();
@@ -190,8 +209,8 @@ fn corners_on(view: Area) -> Vec<(f64, f64)> {
             })
             .collect()
     };
-    for _ in 0..400 {
-        if maps(&script).len() == 4 {
+    for _ in 0..800 {
+        if maps(&script).len() == 8 {
             break;
         }
         plugin.run_loop().unwrap();
@@ -199,38 +218,50 @@ fn corners_on(view: Area) -> Vec<(f64, f64)> {
     maps(&script)
 }
 
-/// The square's corners for a half side of `half` metres.
-fn square(half: f64) -> [(f64, f64); 4] {
+/// A square's corners for a half side of `half` metres, its middle `west` half sides west of the
+/// vehicle.
+fn square(half: f64, west: f64) -> [(f64, f64); 4] {
     let d_lat = half / 111_320.0;
     let d_lng = half / (111_320.0 * LAT.to_radians().cos());
+    let lng = LNG - west * d_lng;
     [
-        (LAT + d_lat, LNG + d_lng),
-        (LAT - d_lat, LNG + d_lng),
-        (LAT - d_lat, LNG - d_lng),
-        (LAT + d_lat, LNG - d_lng),
+        (LAT + d_lat, lng + d_lng),
+        (LAT - d_lat, lng + d_lng),
+        (LAT - d_lat, lng - d_lng),
+        (LAT + d_lat, lng - d_lng),
     ]
 }
 
-/// The waypoints: a square around the vehicle, clockwise from the north-east, its half side
-/// 0.6 of the room to the planning map's nearest edge - so every corner is on the map, as at
-/// zoom 19.7, where the first try put one above it - and at most 150 metres.
+fn assert_corners(got: &[(f64, f64)], want: [(f64, f64); 4]) {
+    assert_eq!(got.len(), 4);
+    for ((lat, lng), (want_lat, want_lng)) in got.iter().zip(want) {
+        assert!((lat - want_lat).abs() < 2e-6, "{lat} against {want_lat}");
+        assert!((lng - want_lng).abs() < 2e-6, "{lng} against {want_lng}");
+    }
+}
+
+/// The waypoints: a square around the vehicle, clockwise from the north-east; the survey
+/// polygon's (the owner's word, 2026-10-05): a square as big, to its left, a half side clear of
+/// it. Their half side is 0.6 of the room to the planning map's edges - north, south and east of
+/// the vehicle, and to the west a quarter of the room, which holds the survey's square's far
+/// side four half sides out - so every corner is on the map, as at zoom 19.7, where the first try
+/// put one above it; and at most 150 metres.
 #[test]
-fn the_mission_is_a_square_around_the_vehicle_inside_the_map() {
-    // 0.0005 degrees to the top and bottom edges, 55.66 m; 0.001 east and west, 90.8 m: a half
-    // side of 0.6 of 55.66 m.
+fn the_mission_and_the_survey_are_squares_inside_the_map() {
+    // 0.003 degrees to the top and bottom edges, 334 m; 0.006 east and west, 545 m, a quarter of
+    // which to the west is 136 m: a half side of 0.6 of 136 m.
     let corners = corners_on(Area {
-        top: LAT + 0.0005,
-        bottom: LAT - 0.0005,
-        left: LNG - 0.001,
-        right: LNG + 0.001,
+        top: LAT + 0.003,
+        bottom: LAT - 0.003,
+        left: LNG - 0.006,
+        right: LNG + 0.006,
     });
     if corners.is_empty() {
         return;
     }
-    for ((lat, lng), (want_lat, want_lng)) in corners.iter().zip(square(0.6 * 55.66)) {
-        assert!((lat - want_lat).abs() < 2e-6, "{lat} against {want_lat}");
-        assert!((lng - want_lng).abs() < 2e-6, "{lng} against {want_lng}");
-    }
+    let west = 0.006 * 111_320.0 * LAT.to_radians().cos() / 4.0;
+    assert_corners(&corners[..4], square(0.6 * west, 0.0));
+    assert_corners(&corners[4..], square(0.6 * west, 3.0));
     // A map kilometres across, though not too far out: 150 m.
     let corners = corners_on(Area {
         top: LAT + 0.02,
@@ -238,11 +269,42 @@ fn the_mission_is_a_square_around_the_vehicle_inside_the_map() {
         left: LNG - 0.02,
         right: LNG + 0.02,
     });
-    assert_eq!(corners.len(), 4);
-    for ((lat, lng), (want_lat, want_lng)) in corners.iter().zip(square(150.0)) {
-        assert!((lat - want_lat).abs() < 2e-6, "{lat} against {want_lat}");
-        assert!((lng - want_lng).abs() < 2e-6, "{lng} against {want_lng}");
-    }
+    assert_corners(&corners[..4], square(150.0, 0.0));
+    assert_corners(&corners[4..], square(150.0, 3.0));
+}
+
+/// The map's menu for the survey is opened in the middle of its square: the polygon drawn there,
+/// and Auto WP chosen over it.
+#[test]
+fn the_surveys_menu_opens_in_its_square() {
+    let Some((mut plugin, script)) = load("welcomedemositl") else {
+        return;
+    };
+    assert!(plugin.init().unwrap());
+    everything_shown(&script);
+    script.with(|r| {
+        r.cs.insert("armed".to_owned(), CsValue::Flag(true));
+        r.cs.insert("alt".to_owned(), CsValue::Number(5.0));
+        r.cs.insert("mode".to_owned(), CsValue::Text("Auto".to_owned()));
+    });
+    run_out(&mut plugin, 1000);
+    let half = 0.6 * 0.006 * 111_320.0 * LAT.to_radians().cos() / 4.0;
+    let middle = LNG - 3.0 * half / (111_320.0 * LAT.to_radians().cos());
+    let rights: Vec<String> = script
+        .record()
+        .demo_clicks
+        .iter()
+        .filter(|click| click.starts_with("right "))
+        .cloned()
+        .collect();
+    assert_eq!(
+        rights,
+        [
+            format!("right {LAT:.6},{LNG:.6}"),
+            format!("right {LAT:.6},{middle:.6}"),
+            format!("right {LAT:.6},{middle:.6}"),
+        ]
+    );
 }
 
 /// Between clicks it waits for what they were for: no TakeOff before the vehicle is armed, and
@@ -408,6 +470,139 @@ fn a_refused_write_is_answered_and_the_demo_stops() {
     );
     assert_eq!(plugin.loop_rate_hz(), 0.0);
     assert!(script.record().demo_ended);
+}
+
+/// A planning map too near for a survey - the browser's, nearer than the 17 Zoom To Vehicle
+/// brings a wider map in to, gave squares of a few tens of metres, and the survey's 50 m lines
+/// none: "Bad Grid" (2026-10-05) - is zoomed out on the Zoom box's down arrow until the squares can
+/// be 60 m a half side, before Set Home Here and the corners.
+#[test]
+fn a_map_too_near_is_zoomed_out_for_the_survey() {
+    let Some((mut plugin, script)) = load("welcomedemositl") else {
+        return;
+    };
+    assert!(plugin.init().unwrap());
+    everything_shown(&script);
+    // Zoom 19's hundred metres or so: room for squares of 20 m.
+    let near = Area {
+        top: LAT + 0.0005,
+        bottom: LAT - 0.0005,
+        left: LNG - 0.0015,
+        right: LNG + 0.0015,
+    };
+    script.with(|r| r.view_area = Some(near));
+    let downs = |script: &Scripted| {
+        script
+            .record()
+            .demo_clicks
+            .iter()
+            .filter(|click| *click == "plan-zoomlevel-down")
+            .count()
+    };
+    for _ in 0..400 {
+        if downs(&script) == 3 {
+            break;
+        }
+        plugin.run_loop().unwrap();
+    }
+    assert_eq!(downs(&script), 3, "{:?}", script.record().demo_clicks);
+    assert!(
+        !script
+            .record()
+            .demo_clicks
+            .iter()
+            .any(|click| click == "menu-setHomeHere"),
+        "Set Home Here before the map was wide enough"
+    );
+    // Wide enough now: no more presses, and on to Set Home Here and the corners.
+    script.with(|r| r.view_area = Some(zoomed_in()));
+    for _ in 0..400 {
+        if script
+            .record()
+            .demo_clicks
+            .iter()
+            .any(|click| click.starts_with("map "))
+        {
+            break;
+        }
+        plugin.run_loop().unwrap();
+    }
+    let clicks = script.record().demo_clicks.clone();
+    assert!(clicks.iter().any(|click| click == "menu-setHomeHere"));
+    assert!(clicks.iter().any(|click| click.starts_with("map ")));
+    assert_eq!(downs(&script), 3);
+    assert!(script.record().status.is_empty());
+}
+
+/// A planning map that will not zoom out stops the demo after six levels, saying so.
+#[test]
+fn a_map_that_will_not_widen_stops_the_demo() {
+    let Some((mut plugin, script)) = load("welcomedemositl") else {
+        return;
+    };
+    assert!(plugin.init().unwrap());
+    everything_shown(&script);
+    script.with(|r| {
+        r.view_area = Some(Area {
+            top: LAT + 0.0005,
+            bottom: LAT - 0.0005,
+            left: LNG - 0.0015,
+            right: LNG + 0.0015,
+        });
+    });
+    run_out(&mut plugin, 2000);
+    let clicks = script.record().demo_clicks.clone();
+    assert_eq!(
+        clicks
+            .iter()
+            .filter(|click| *click == "plan-zoomlevel-down")
+            .count(),
+        12
+    );
+    assert!(!clicks.iter().any(|click| click.starts_with("map ")));
+    assert_eq!(
+        script.record().status,
+        ["Welcome demo stopped: the planning map would not zoom out far enough for the survey"]
+    );
+}
+
+/// The survey's Accept refused - its message box over the dialog, or the planner's after it -
+/// is answered, and the demo stops, saying so, rather than clicking Write behind the box.
+#[test]
+fn a_refused_accept_is_answered_and_the_demo_stops() {
+    for box_ok in ["survey-prompt-ok", "plan-prompt-ok"] {
+        let Some((mut plugin, script)) = load("welcomedemositl") else {
+            return;
+        };
+        assert!(plugin.init().unwrap());
+        everything_shown(&script);
+        for _ in 0..1000 {
+            if script.record().demo_clicks.last().map(String::as_str) == Some("survey-BUT_Accept") {
+                break;
+            }
+            plugin.run_loop().unwrap();
+        }
+        script.with(|r| {
+            r.shown.insert(box_ok.to_owned());
+        });
+        ticks(&mut plugin, 10);
+        assert_eq!(
+            script.record().demo_clicks.last().map(String::as_str),
+            Some(box_ok)
+        );
+        assert!(
+            !script
+                .record()
+                .demo_clicks
+                .iter()
+                .any(|click| click == "plan-write")
+        );
+        assert_eq!(
+            script.record().status,
+            ["Welcome demo stopped: the survey's Accept did not add its grid"]
+        );
+        assert_eq!(plugin.loop_rate_hz(), 0.0);
+    }
 }
 
 /// A planning map still far out - the planner's zoom 3, which the owner's run met - takes no

@@ -21,9 +21,12 @@
 //! Welcome-Demo-Sitl, the owner's plugin (2026-10-05), not in the C#: a first visit shows what
 //! the planner does. A drawn pointer moves as a hand would and clicks, in order, SIMULATION and
 //! its Multirotor (a copter starts in the simulator and the planner connects to it), PLAN, its zoom
-//! icon's Zoom To Vehicle, Set Home Here on the map's right-click menu at the copter, four
-//! waypoints around the copter, Write, FLY and its Actions page, force arm, TakeOff and its
-//! prompt's OK, and Auto, so the copter flies the mission; then the PLUGINS tab, where it unticks
+//! icon's Zoom To Vehicle (and the Zoom box's down arrow while the map is too near for the
+//! survey), Set Home Here on the map's right-click menu at the copter, four
+//! waypoints around the copter, a survey - Polygon > Draw a Polygon on the map's menu, four
+//! corners of a square as big to the left, Auto WP > Survey (Grid) and its Accept - Write, FLY and
+//! its Actions page, force arm, TakeOff and its prompt's OK, and Auto, so the copter flies the
+//! mission; then the PLUGINS tab, where it unticks
 //! its own Enabled box and saves, so the next start leaves it out, and back to FLY to watch, where
 //! its pointer goes.
 //!
@@ -56,18 +59,33 @@ const SHOW_WAIT: u32 = 20;
 const QUESTION_OK: &str = "plugin-question-ok";
 /// The planner's own message box's OK: what Write says when it will not write.
 const PLAN_PROMPT_OK: &str = "plan-prompt-ok";
+/// The Survey (Grid) dialog's message box's OK: what its Accept says when it will not add.
+const SURVEY_PROMPT_OK: &str = "survey-prompt-ok";
 /// The planning map taller than this, in metres, is too far out for waypoints a click apart: Zoom
 /// To Vehicle brings it in to zoom 17, a few hundred metres.
 const VIEW_MOST: f64 = 5_000.0;
 /// This plugin's Enabled box on the PLUGINS tab, named by its file.
 const OWN_BOX: &str = "plugin-manager-enabled-welcomedemositl.wasm";
 /// Half the mission square's side as a part of the vehicle's distance to the planning map's
-/// nearest edge, so every corner is on screen and well inside it whatever the zoom...
+/// nearest edge - to the west, the survey's square's far side - so every corner is on screen and
+/// well inside it whatever the zoom...
 const SQUARE_PART: f64 = 0.6;
+/// The survey's square: as big as the mission's, its centre this many half sides west of the
+/// copter, so a half side clear of the mission's square.
+const SURVEY_OFFSET: f64 = 3.0;
 /// ...and at most this, in metres: near enough to watch the copter fly it.
 const SQUARE_MAX: f64 = 150.0;
 /// Without the map's view, or this little room around the vehicle, the half side in metres.
 const SQUARE_SMALL: f64 = 5.0;
+/// The half side, in metres, the survey needs at least: its lines are 50 m apart by default
+/// (`NUM_Distance`, Grid/GridUI.Designer.cs), and a square under about two of them across gets
+/// none - "Bad Grid" (the browser, 2026-10-05: its planning map, already nearer than 17, which
+/// Zoom To Vehicle leaves as it is, gave squares of a few tens of metres).
+const SQUARE_LEAST: f64 = 60.0;
+/// The Zoom box's down arrow, half a zoom level a press (`Zoomlevel.Increment`).
+const ZOOM_OUT: &str = "plan-zoomlevel-down";
+/// Presses of it at most: six zoom levels.
+const ZOOM_OUTS: u32 = 12;
 /// Metres in a degree of latitude.
 const METRES_PER_DEGREE: f64 = 111_320.0;
 /// How often a copter that disarmed before it climbed is armed again: ArduCopter disarms a
@@ -92,6 +110,24 @@ enum Until {
     Auto,
 }
 
+/// The two squares on the planning map.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Square {
+    /// The four waypoints', around the copter.
+    Mission,
+    /// The survey polygon's, to the left of the mission's.
+    Survey,
+}
+
+/// Where on the planning map a right click opens its menu.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Spot {
+    /// The copter.
+    Vehicle,
+    /// The middle of the survey's square.
+    Survey,
+}
+
 /// One step of the demo.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Act {
@@ -100,18 +136,22 @@ enum Act {
     /// The same if the control comes on screen within so many seconds, else on without it: a
     /// prompt that is asked only the first time.
     Answer(&'static str, u32),
-    /// The pointer to a corner of the mission square on the planning map, and a click there,
-    /// which adds a waypoint.
-    Waypoint(usize),
-    /// The pointer to the copter on the map, and a right click there: the map's menu.
-    RightClickVehicle,
+    /// The pointer to a corner of a square on the planning map, and a click there, which adds a
+    /// waypoint - or, once Draw a Polygon has been chosen, a corner of the polygon.
+    Corner(Square, usize),
+    /// The pointer to a spot on the map, and a right click there: the map's menu.
+    RightClick(Spot),
+    /// The Zoom box's down arrow, pressed while the map is too near for squares of
+    /// [`SQUARE_LEAST`].
+    WidenForSquares,
     /// Wait for something, at most so many seconds.
     Wait(Until, u32),
     /// A pause, in ticks.
     Pause(u32),
-    /// Write's answer: a message box from the planner within so many seconds is a refusal -
-    /// "Your home location is invalid", say - answered, and the demo stops, saying so.
-    Written(u32),
+    /// The answer to the click before: a message box from the planner or the survey dialog
+    /// within so many seconds is a refusal - Write's "Your home location is invalid", say -
+    /// answered, and the demo stops, saying what did not happen.
+    Refusal(u32, &'static str),
 }
 
 /// The demo, in order.
@@ -129,17 +169,35 @@ const SCRIPT: &[Act] = &[
     Act::Click("plan-zoomicon"),
     Act::Click("menu-zoomToVehicle"),
     Act::Pause(TICKS),
+    Act::WidenForSquares,
     // Set Home Here, on the map's right-click menu at the copter: the home Write sends, without
     // which it says "Your home location is invalid" (the owner's run, 2026-10-05).
-    Act::RightClickVehicle,
+    Act::RightClick(Spot::Vehicle),
     Act::Click("menu-setHomeHere"),
     Act::Pause(TICKS),
-    Act::Waypoint(0),
-    Act::Waypoint(1),
-    Act::Waypoint(2),
-    Act::Waypoint(3),
+    Act::Corner(Square::Mission, 0),
+    Act::Corner(Square::Mission, 1),
+    Act::Corner(Square::Mission, 2),
+    Act::Corner(Square::Mission, 3),
+    // A survey (the owner's word, 2026-10-05): Polygon > Draw a Polygon on the map's menu, which
+    // makes the map's clicks the polygon's corners; four of them, in a square to the left of the
+    // mission's; then Auto WP > Survey (Grid) over it, and Accept, which adds the grid's rows
+    // after the four waypoints and closes the dialog.
+    // `// C#: GCSViews/FlightPlanner.cs:1731-1758, 6755-6760; Grid/GridUI.cs:1604`
+    Act::RightClick(Spot::Survey),
+    Act::Click("menu-polygon"),
+    Act::Click("menu-addPolygonPoint2"),
+    Act::Corner(Square::Survey, 0),
+    Act::Corner(Square::Survey, 1),
+    Act::Corner(Square::Survey, 2),
+    Act::Corner(Square::Survey, 3),
+    Act::RightClick(Spot::Survey),
+    Act::Click("menu-autoWP"),
+    Act::Click("menu-surveyGrid"),
+    Act::Click("survey-BUT_Accept"),
+    Act::Refusal(2, "the survey's Accept did not add its grid"),
     Act::Click("plan-write"),
-    Act::Written(4),
+    Act::Refusal(4, "Write did not write the mission"),
     Act::Click("tab-fly"),
     Act::Click("fly-tab-actions"),
     Act::Click("force-arm"),
@@ -166,10 +224,12 @@ struct State {
     ticks: u32,
     /// Ticks still to rest before the next look.
     resting: u32,
-    /// The mission square's corners, latitude and longitude, fixed at the first waypoint.
-    corners: Option<[(f64, f64); 4]>,
+    /// The two squares' corners, latitude and longitude, fixed at the first waypoint.
+    squares: Option<Squares>,
     /// Times armed again after a disarm before the climb.
     rearmed: u32,
+    /// Presses of the Zoom box's down arrow.
+    zoom_outs: u32,
     /// Finished, or stopped: no more loops.
     finished: bool,
 }
@@ -178,8 +238,9 @@ static STATE: Mutex<State> = Mutex::new(State {
     step: 0,
     ticks: 0,
     resting: 0,
-    corners: None,
+    squares: None,
     rearmed: 0,
+    zoom_outs: 0,
     finished: false,
 });
 
@@ -236,26 +297,66 @@ fn view_height() -> f64 {
     })
 }
 
-/// The mission square around the vehicle, its corners clockwise from the north-east, sized to
-/// the planning map as last drawn: a part of the room between the vehicle and the map's nearest
-/// edge, so a click on each corner lands on the map.
-fn square() -> [(f64, f64); 4] {
+/// The two squares, each's corners clockwise from the north-east.
+#[derive(Debug, Clone, Copy)]
+struct Squares {
+    mission: [(f64, f64); 4],
+    survey: [(f64, f64); 4],
+    /// The survey square's middle.
+    survey_middle: (f64, f64),
+}
+
+impl Squares {
+    fn corners(&self, square: Square) -> &[(f64, f64); 4] {
+        match square {
+            Square::Mission => &self.mission,
+            Square::Survey => &self.survey,
+        }
+    }
+}
+
+/// Metres east in a degree of longitude at `lat`.
+fn metres_per_degree_east(lat: f64) -> f64 {
+    METRES_PER_DEGREE * lat.to_radians().cos().max(0.01)
+}
+
+/// The squares' half side the planning map as last drawn has room for, in metres, before the
+/// limits: a part of the room between the vehicle and the map's edges - north, south and east
+/// the mission square's, west the survey square's far side - so a click on each corner lands on
+/// the map. None known, none.
+fn room_for_half() -> f64 {
     let (lat, lng) = (number("lat"), number("lng"));
-    let metres_per_degree_east = METRES_PER_DEGREE * lat.to_radians().cos().max(0.01);
-    let room = host::fp_view_area().map_or(0.0, |area| {
+    let east_metres = metres_per_degree_east(lat);
+    host::fp_view_area().map_or(0.0, |area| {
         let north_south = (area.top - lat).min(lat - area.bottom) * METRES_PER_DEGREE;
-        let east_west = (area.right - lng).min(lng - area.left) * metres_per_degree_east;
-        north_south.min(east_west)
-    });
-    let half = (room * SQUARE_PART).clamp(SQUARE_SMALL, SQUARE_MAX);
+        let east = (area.right - lng) * east_metres;
+        let west = (lng - area.left) * east_metres / (SURVEY_OFFSET + 1.0);
+        north_south.min(east).min(west) * SQUARE_PART
+    })
+}
+
+/// The mission square around the vehicle and the survey's to its left: [`room_for_half`], at
+/// most [`SQUARE_MAX`].
+fn squares() -> Squares {
+    let (lat, lng) = (number("lat"), number("lng"));
+    let metres_per_degree_east = metres_per_degree_east(lat);
+    let half = room_for_half().clamp(SQUARE_SMALL, SQUARE_MAX);
     let d_lat = half / METRES_PER_DEGREE;
     let d_lng = half / metres_per_degree_east;
-    [
-        (lat + d_lat, lng + d_lng),
-        (lat - d_lat, lng + d_lng),
-        (lat - d_lat, lng - d_lng),
-        (lat + d_lat, lng - d_lng),
-    ]
+    let around = |lng: f64| {
+        [
+            (lat + d_lat, lng + d_lng),
+            (lat - d_lat, lng + d_lng),
+            (lat - d_lat, lng - d_lng),
+            (lat + d_lat, lng - d_lng),
+        ]
+    };
+    let survey_lng = lng - SURVEY_OFFSET * d_lng;
+    Squares {
+        mission: around(lng),
+        survey: around(survey_lng),
+        survey_middle: (lat, survey_lng),
+    }
 }
 
 /// One look: the step under way advanced, or waited on.
@@ -275,7 +376,11 @@ fn tick(state: &mut State) {
     // A message box over the window takes the click; a user reads it and presses OK first.
     if matches!(
         act,
-        Act::Click(_) | Act::Answer(..) | Act::Waypoint(_) | Act::RightClickVehicle
+        Act::Click(_)
+            | Act::Answer(..)
+            | Act::Corner(..)
+            | Act::RightClick(_)
+            | Act::WidenForSquares
     ) && host::demo_visible(QUESTION_OK)
     {
         if host::demo_click(QUESTION_OK, MOVE_MS) {
@@ -298,20 +403,36 @@ fn tick(state: &mut State) {
                 state.next(0);
             }
         }
-        Act::Waypoint(corner) => {
-            if state.corners.is_none() && view_height() > VIEW_MOST {
+        Act::Corner(square, corner) => {
+            if state.squares.is_none() && view_height() > VIEW_MOST {
                 state.stop("the planning map is too far out to place waypoints");
                 return;
             }
-            let corners = *state.corners.get_or_insert_with(square);
-            let Some(&(lat, lng)) = corners.get(corner) else {
-                state.stop("no such corner of the mission");
+            let squares = *state.squares.get_or_insert_with(squares);
+            let Some(&(lat, lng)) = squares.corners(square).get(corner) else {
+                state.stop("no such corner");
                 return;
             };
             if host::demo_click_map(lat, lng, MOVE_MS) {
                 state.next(DWELL);
             } else if state.ticks > SHOW_WAIT * TICKS {
-                state.stop("the mission's corner is not on the map");
+                state.stop(match square {
+                    Square::Mission => "the mission's corner is not on the map",
+                    Square::Survey => "the survey's corner is not on the map",
+                });
+            }
+        }
+        Act::WidenForSquares => {
+            if room_for_half() >= SQUARE_LEAST {
+                state.next(0);
+            } else if state.zoom_outs >= ZOOM_OUTS {
+                state.stop("the planning map would not zoom out far enough for the survey");
+            } else if host::demo_click(ZOOM_OUT, MOVE_MS) {
+                // Looked at again once the map has drawn at the new zoom.
+                state.zoom_outs += 1;
+                state.resting = DWELL;
+            } else if state.ticks > SHOW_WAIT * TICKS {
+                state.stop(&format!("{ZOOM_OUT} not on screen"));
             }
         }
         Act::Wait(until, seconds) => {
@@ -338,17 +459,27 @@ fn tick(state: &mut State) {
                 });
             }
         }
-        Act::RightClickVehicle => {
-            if host::demo_right_click_map(number("lat"), number("lng"), MOVE_MS) {
+        Act::RightClick(spot) => {
+            let (lat, lng) = match spot {
+                Spot::Vehicle => (number("lat"), number("lng")),
+                Spot::Survey => state.squares.get_or_insert_with(squares).survey_middle,
+            };
+            if host::demo_right_click_map(lat, lng, MOVE_MS) {
                 state.next(DWELL);
             } else if state.ticks > SHOW_WAIT * TICKS {
-                state.stop("the copter is not on the map");
+                state.stop(match spot {
+                    Spot::Vehicle => "the copter is not on the map",
+                    Spot::Survey => "the survey's square is not on the map",
+                });
             }
         }
-        Act::Written(seconds) => {
-            if host::demo_visible(PLAN_PROMPT_OK) {
-                let _ = host::demo_click(PLAN_PROMPT_OK, MOVE_MS);
-                state.stop("Write did not write the mission");
+        Act::Refusal(seconds, what) => {
+            if let Some(ok) = [PLAN_PROMPT_OK, SURVEY_PROMPT_OK]
+                .into_iter()
+                .find(|ok| host::demo_visible(ok))
+            {
+                let _ = host::demo_click(ok, MOVE_MS);
+                state.stop(what);
             } else if state.ticks > seconds * TICKS {
                 state.next(0);
             }
