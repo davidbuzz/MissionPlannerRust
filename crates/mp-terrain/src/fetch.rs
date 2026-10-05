@@ -58,7 +58,9 @@ const OCEAN_MIN_NAMES: usize = 38000;
 /// `GetAsync` reads the body before it returns.
 const HTTP_TIMEOUT: Duration = Duration::from_secs(100);
 
-/// `HttpClient.MaxResponseContentBufferSize`'s default, `int.MaxValue`.
+/// `HttpClient.MaxResponseContentBufferSize`'s default, `int.MaxValue`. (In a web page the browser
+/// reads the answer.)
+#[cfg(not(target_family = "wasm"))]
 const HTTP_MAX_BODY: u64 = 2_147_483_647;
 
 /// `Environment.NewLine`, which `StreamWriter.WriteLine` ends a listing's lines with.
@@ -109,6 +111,8 @@ pub trait Http: Send + Sync {
 /// The real client: `ureq`, blocking, on the queue thread.
 #[derive(Debug, Clone)]
 pub struct UreqHttp {
+    // In a web page the browser asks (mp_os::http), not the agent.
+    #[cfg_attr(target_family = "wasm", allow(dead_code))]
     agent: ureq::Agent,
 }
 
@@ -141,11 +145,13 @@ impl Http for UreqHttp {
 
     #[cfg(not(target_family = "wasm"))]
     fn get_status(&self, url: &str) -> Result<(u16, Vec<u8>), HttpError> {
-        let mut response = self
-            .agent
-            .get(url)
-            .call()
-            .map_err(|error| HttpError(format!("{url}: {error}")))?;
+        // Over https first, then the address as written (mp_os::https_first).
+        let mut response = mp_os::ask_https_first(
+            url,
+            |address| self.agent.get(address).call(),
+            |error| matches!(error, ureq::Error::StatusCode(_)),
+        )
+        .map_err(|error| HttpError(format!("{url}: {error}")))?;
         let status = response.status().as_u16();
         response
             .body_mut()
