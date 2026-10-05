@@ -165,7 +165,8 @@ if (!globalThis.crossOriginIsolated) {
     }, 8000);
 } else {
     hint.textContent = "The first visit downloads the whole planner; later visits start from the browser's cache.";
-    (keepFaults(), loadFiles())
+    const logBudget = Number(new URLSearchParams(location.search).get("logbudget")) * 1048576 || undefined;
+    (keepFaults(), loadFiles(logBudget))
         // The files the last visit kept, for the planner to take in as it starts (storage.js).
         .catch((err) => { console.warn("storage: " + err); return []; })
         .then((files) => { globalThis.mpStorageFiles = files; return init({ module_or_path: plannerModule() }); })

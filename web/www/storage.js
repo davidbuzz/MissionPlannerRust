@@ -4,7 +4,8 @@
 // system (OPFS), under one folder, the planner's paths as folders within it:
 //
 // - loadFiles(), before the planner starts: every file kept, as [path, bytes] pairs, which the
-//   planner takes in at the top of its main() (mp_os::fs::preload_from_page);
+//   planner takes in at the top of its main() (mp_os::fs::preload_from_page) - its logs only up
+//   to LOG_BUDGET, newest first, the older ones left in the browser's storage unread;
 // - keepFiles(take), once it runs: every half second, what the planner's files changed since -
 //   planner_storage_take(), mp_os::fs::mem::encode's bytes - written to OPFS in order, a file from
 //   where it first differs (a growing log by what it grew), a removal as a removal.
@@ -16,8 +17,20 @@ async function root(create) {
     return top.getDirectoryHandle(ROOT, { create });
 }
 
-/// Every file kept, as [path, Uint8Array] pairs; none when the browser keeps none for the page.
-export async function loadFiles() {
+/// The most of the logs a visit loads, newest first, unless the page says otherwise
+/// (`?logbudget=<MB>`, for the checks). Every file kept is read into memory before the planner
+/// starts, and logs are what grows - a tlog each connection, a DataFlash log each download - so
+/// without a bound a long-used browser would one day start a planner with no memory left.
+export const LOG_BUDGET = 256 * 1048576;
+
+/// A log, by its name: what the planner records and downloads. The in-page SITL's eeprom.bin is
+/// its parameters, not a log.
+const isLog = (name) => /\.(tlog|rlog|bin|log)$/i.test(name) && name !== "eeprom.bin";
+
+/// Every file kept, as [path, Uint8Array] pairs - none when the browser keeps none for the page -
+/// but the logs past `budget` bytes, oldest first, which stay in the browser's storage unread.
+/// What was left is in `globalThis.mpStorageLeft`, [count, bytes, budget], for the planner to say.
+export async function loadFiles(budget = LOG_BUDGET) {
     const files = [];
     let dir;
     try {
@@ -25,6 +38,7 @@ export async function loadFiles() {
     } catch (_) {
         return files;
     }
+    const logs = [];
     async function walk(handle, path) {
         for await (const [name, entry] of handle.entries()) {
             const at = `${path}/${name}`;
@@ -32,11 +46,28 @@ export async function loadFiles() {
                 await walk(entry, at);
             } else {
                 const file = await entry.getFile();
-                files.push([at, new Uint8Array(await file.arrayBuffer())]);
+                if (isLog(name)) logs.push([at, file]);
+                else files.push([at, new Uint8Array(await file.arrayBuffer())]);
             }
         }
     }
     await walk(dir, "");
+    logs.sort((a, b) => b[1].lastModified - a[1].lastModified);
+    let loaded = 0, left = 0, leftBytes = 0;
+    for (const [at, file] of logs) {
+        if (loaded + file.size <= budget) {
+            loaded += file.size;
+            files.push([at, new Uint8Array(await file.arrayBuffer())]);
+        } else {
+            left += 1;
+            leftBytes += file.size;
+        }
+    }
+    if (left > 0) {
+        globalThis.mpStorageLeft = [left, leftBytes, budget];
+        console.info(`storage: ${left} older logs (${(leftBytes / 1048576).toFixed(1)} MB) left unread, ` +
+            `past the ${(budget / 1048576).toFixed(0)} MB of logs a visit loads`);
+    }
     return files;
 }
 

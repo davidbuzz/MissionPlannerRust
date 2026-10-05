@@ -42,9 +42,13 @@ the planner starts it reads every file kept into the page (`loadFiles`), which t
 at the top of its `main()` (`mp_os::fs::preload_from_page`); once it runs, every half second it asks
 the planner what changed (`planner_storage_take`) and writes it, a file from where it first differs,
 so a log is written by what it grew. They live in OPFS's `planner` folder under the planner's own
-paths (`home/web/.local/share/MissionPlannerRust/config.xml`). Every visit loads all of them, logs
-too, so the map's tile cache is not kept (`mp_os::fs::mem::NOT_KEPT`; the browser's own cache keeps
-the tiles' downloads); a browser's site settings clear them. `check/storage_check.js` holds it to
+paths (`home/web/.local/share/MissionPlannerRust/config.xml`). Every visit loads all of them into
+memory - but the logs (`.tlog`, `.rlog`, `.bin`, `.log`; not the SITL's `eeprom.bin`), which grow
+with every connection and download: those are loaded newest first up to 256 MB (`LOG_BUDGET`;
+`?logbudget=<MB>` for the checks), the older ones left in the browser's storage unread, and the
+planner's status line says how many. `check/storage_budget_check.js` holds it to that. The map's
+tile cache is not kept (`mp_os::fs::mem::NOT_KEPT`; the browser's own cache keeps the tiles'
+downloads); a browser's site settings clear them. `check/storage_check.js` holds it to
 a reload: config.xml, saved at start-up, in the browser's storage, and read back. A fault of the
 page's own - a WebAssembly fault ends the planner without its panic hook - is written there as a
 crash report too (`keepFaults`), so the next start asks about the real cause rather than what
@@ -117,6 +121,7 @@ NODE_PATH=<node_modules with playwright> node check/demo_check.js      # the Wel
 NODE_PATH=<node_modules with playwright> node check/pages_check.js <dir> # the GitHub Pages site, no headers
 NODE_PATH=<node_modules with playwright> node check/storage_check.js   # config.xml kept across a reload
 NODE_PATH=<node_modules with playwright> node check/files_check.js     # the browser's picker and downloads
+NODE_PATH=<node_modules with playwright> node check/storage_budget_check.js # the logs a visit loads, newest first
 NODE_PATH=<node_modules with playwright> node check/fault_check.js     # a fault of the page's own, asked about at the next start
 NODE_PATH=<node_modules with playwright> check/tailnet_e2e.sh          # over a tailnet (needs Go)
 ```

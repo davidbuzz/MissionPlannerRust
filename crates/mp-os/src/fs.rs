@@ -65,7 +65,42 @@ pub fn preload_from_page() {
         }));
         // The page's copy is not needed again.
         let _ = js_sys::Reflect::delete_property(&global, &"mpStorageFiles".into());
+        // The logs storage.js left unread, past what a visit loads: [count, bytes, budget].
+        if let Ok(left) = js_sys::Reflect::get(&global, &"mpStorageLeft".into())
+            && js_sys::Array::is_array(&left)
+        {
+            let left = js_sys::Array::from(&left);
+            #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+            let number = |at: u32| left.get(at).as_f64().unwrap_or(0.0) as u64;
+            let _ = LEFT.set(LeftInPage {
+                logs: number(0),
+                bytes: number(1),
+                budget: number(2),
+            });
+        }
     }
+}
+
+/// The logs the browser keeps for the page that this visit did not load, past the most of them a
+/// visit loads (web/www/storage.js's `LOG_BUDGET`): they stay in the browser's storage, unread.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct LeftInPage {
+    /// How many.
+    pub logs: u64,
+    /// Their bytes.
+    pub bytes: u64,
+    /// The most of the logs a visit loads, in bytes.
+    pub budget: u64,
+}
+
+/// What [`preload_from_page`] heard was left unread.
+static LEFT: std::sync::OnceLock<LeftInPage> = std::sync::OnceLock::new();
+
+/// The logs this visit left unread, if any - never on the desktop, where every file is read as it
+/// is asked for.
+#[must_use]
+pub fn left_in_page() -> Option<LeftInPage> {
+    LEFT.get().copied()
 }
 
 /// What is there, asked of a path - std's `Path::exists`, `is_file` and `is_dir` on the desktop,

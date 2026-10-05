@@ -214,6 +214,19 @@ const BYLINE: &str = "by David Buzz";
 /// What the byline says when the pointer is over it (the owner's words, 2026-10-04).
 const BYLINE_TIP: &str = ".. and with thanks to the OG Michael Oborne";
 
+/// What the status line says at the start of a visit that left logs unread (web/www/storage.js):
+/// they are still in the browser's storage, only not loaded.
+fn left_in_page_note(left: mp_os::fs::LeftInPage) -> String {
+    #[allow(clippy::cast_precision_loss)]
+    let megabytes = |bytes: u64| bytes as f64 / 1_048_576.0;
+    format!(
+        "{} older logs ({:.1} MB) are kept in the browser but not loaded: a visit loads the newest {:.0} MB of logs",
+        left.logs,
+        megabytes(left.bytes),
+        megabytes(left.budget)
+    )
+}
+
 /// A path's last part, as `Path.GetFileName` gives it.
 fn file_name_of(path: &std::path::Path) -> String {
     path.file_name().map_or_else(
@@ -882,7 +895,8 @@ impl MissionPlanner {
             adopt_vehicle_mission: false,
             adopt_vehicle_fence: false,
             adopt_vehicle_rally: false,
-            file_status: None,
+            // In a page, the logs past what a visit loads, said once.
+            file_status: mp_os::fs::left_in_page().map(left_in_page_note),
             dragging_waypoint: None,
             // `CMB_altmode` as `config(false)` restores it, else this application's own choice.
             // `// C#: GCSViews/FlightPlanner.cs:2609-2610`
@@ -5002,6 +5016,22 @@ fn main() {
 
 #[cfg(test)]
 mod tests {
+
+    /// A visit that left old logs unread says so, with what it does load.
+    #[test]
+    fn the_logs_a_visit_left_unread_are_said() {
+        let note = super::left_in_page_note(mp_os::fs::LeftInPage {
+            logs: 3,
+            bytes: 3 * 1_048_576 + 524_288,
+            budget: 256 * 1_048_576,
+        });
+        assert_eq!(
+            note,
+            "3 older logs (3.5 MB) are kept in the browser but not loaded: a visit loads the newest 256 MB of logs"
+        );
+        // The desktop reads every file as it is asked for: nothing is left.
+        assert_eq!(mp_os::fs::left_in_page(), None);
+    }
 
     /// The window's title and the header say which program this is: the owner's product name,
     /// one word, never Mission Planner's own - the GUI runner tells our window from a real
