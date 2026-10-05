@@ -51,8 +51,8 @@ mod runner;
 mod web;
 
 pub use channel::{
-    ANSWER_WAIT, ChannelSurface, CsReader, OptionsReader, Reply, Request, RequestBody, Snapshot,
-    TerrainReader,
+    ANSWER_WAIT, ChannelSurface, CsReader, DEMO_ANSWER_WAIT, OptionsReader, Reply, Request,
+    RequestBody, Snapshot, TerrainReader,
 };
 pub use plugin::{Fault, Info, Limits, Plugin, engine, web_config};
 #[cfg(not(target_family = "wasm"))]

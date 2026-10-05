@@ -51,7 +51,7 @@ fn published(link: &Link, applied: u64) -> Duration {
             return started.elapsed();
         }
         assert!(Instant::now() < deadline, "never published");
-        std::thread::sleep(Duration::from_micros(200));
+        wasm_thread::sleep(Duration::from_micros(200));
     }
 }
 
@@ -85,7 +85,7 @@ fn a_lone_message_is_published_within_the_interval() {
         waits.push(published(&link, applied + 2));
         seq = seq.wrapping_add(1);
         // Apart, so each pair starts after a quiet spell, as a vehicle's bursts do.
-        std::thread::sleep(Duration::from_millis(30));
+        wasm_thread::sleep(Duration::from_millis(30));
     }
     waits.sort_unstable();
     let median = waits[waits.len() / 2];

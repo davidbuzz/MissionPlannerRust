@@ -44,6 +44,13 @@ use crate::{
 /// wait as long as the user takes.
 pub const ANSWER_WAIT: Duration = Duration::from_secs(10);
 
+/// How long the Welcome-Demo-Sitl's pointer waits for the window to take a gesture or say what
+/// is on screen: a page drawn in software, as a headless browser draws it, can take longer than
+/// [`ANSWER_WAIT`] between frames, and a gesture the plugin was told had not been taken - it had,
+/// late - was made again (2026-10-05: a survey polygon's corner clicked twice, five corners for
+/// four).
+pub const DEMO_ANSWER_WAIT: Duration = Duration::from_secs(120);
+
 /// A `CurrentState` reader: a field's value by its C# name.
 pub type CsReader = Arc<dyn Fn(&str) -> Option<CsValue> + Send + Sync>;
 
@@ -332,6 +339,9 @@ pub struct ChannelSurface {
     requests: Sender<Request>,
     snapshot: Arc<RwLock<Snapshot>>,
     next_menu_id: u32,
+    /// [`ANSWER_WAIT`] and [`DEMO_ANSWER_WAIT`], unless a test shortened them.
+    answer_wait: Duration,
+    demo_wait: Duration,
 }
 
 impl ChannelSurface {
@@ -347,7 +357,17 @@ impl ChannelSurface {
             requests,
             snapshot,
             next_menu_id: 0,
+            answer_wait: ANSWER_WAIT,
+            demo_wait: DEMO_ANSWER_WAIT,
         }
+    }
+
+    /// The same with other waits, for a test that cannot wait seconds.
+    #[must_use]
+    pub const fn with_waits(mut self, answer: Duration, demo: Duration) -> Self {
+        self.answer_wait = answer;
+        self.demo_wait = demo;
+        self
     }
 
     fn read(&self) -> Snapshot {
@@ -408,7 +428,7 @@ impl Surface for ChannelSurface {
         self.ask(
             |reply| RequestBody::SetParam { name, value, reply },
             false,
-            Some(ANSWER_WAIT),
+            Some(self.answer_wait),
         )
     }
 
@@ -417,7 +437,7 @@ impl Surface for ChannelSurface {
         self.ask(
             |reply| RequestBody::SetMode { mode, reply },
             false,
-            Some(ANSWER_WAIT),
+            Some(self.answer_wait),
         )
     }
 
@@ -429,7 +449,7 @@ impl Surface for ChannelSurface {
                 reply,
             },
             false,
-            Some(ANSWER_WAIT),
+            Some(self.answer_wait),
         )
     }
 
@@ -485,7 +505,7 @@ impl Surface for ChannelSurface {
         self.ask(
             |reply| RequestBody::AddWp { wp, reply },
             -1,
-            Some(ANSWER_WAIT),
+            Some(self.answer_wait),
         )
     }
 
@@ -506,7 +526,7 @@ impl Surface for ChannelSurface {
         self.ask(
             |reply| RequestBody::ConfigGet { key, reply },
             None,
-            Some(ANSWER_WAIT),
+            Some(self.answer_wait),
         )
     }
 
@@ -538,7 +558,7 @@ impl Surface for ChannelSurface {
                 reply,
             },
             false,
-            Some(ANSWER_WAIT),
+            Some(self.demo_wait),
         )
     }
 
@@ -551,7 +571,7 @@ impl Surface for ChannelSurface {
                 reply,
             },
             false,
-            Some(ANSWER_WAIT),
+            Some(self.demo_wait),
         )
     }
 
@@ -564,7 +584,7 @@ impl Surface for ChannelSurface {
                 reply,
             },
             false,
-            Some(ANSWER_WAIT),
+            Some(self.demo_wait),
         )
     }
 
@@ -577,7 +597,7 @@ impl Surface for ChannelSurface {
     }
 
     fn demo_busy(&mut self) -> bool {
-        self.ask(RequestBody::DemoBusy, false, Some(ANSWER_WAIT))
+        self.ask(RequestBody::DemoBusy, false, Some(self.demo_wait))
     }
 
     fn demo_visible(&mut self, control: &str) -> bool {
@@ -585,7 +605,7 @@ impl Surface for ChannelSurface {
         self.ask(
             |reply| RequestBody::DemoVisible { control, reply },
             false,
-            Some(ANSWER_WAIT),
+            Some(self.demo_wait),
         )
     }
 
@@ -642,7 +662,7 @@ impl Surface for ChannelSurface {
         self.ask(
             |reply| RequestBody::WriteUserData { path, data, reply },
             Err("the application did not answer".to_owned()),
-            Some(ANSWER_WAIT),
+            Some(self.answer_wait),
         )
     }
 
