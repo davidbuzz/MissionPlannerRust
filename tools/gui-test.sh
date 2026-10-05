@@ -196,12 +196,26 @@ seconds() { printf '%d.%03d' $(($1 / 1000)) $(($1 % 1000)); }
 # or from an application without the count, $1 new writes of the facts file.
 INPUT_FRAME=""
 wait_publishes() {
-    local seen=0 last now frame
+    local seen=0 last now frame previous="" quiet=0
     if [[ "$INPUT_FRAME" =~ ^[0-9]+$ ]]; then
         for _ in $(seq 1 20); do
             frame=$(fact ui.frame)
-            if [[ "$frame" =~ ^[0-9]+$ ]] && [ "$frame" -ge $((INPUT_FRAME + $1)) ]; then
-                return 0
+            if [[ "$frame" =~ ^[0-9]+$ ]]; then
+                [ "$frame" -ge $((INPUT_FRAME + $1)) ] && return 0
+                # Fewer than asked for, but the input's frame drawn and none since for 150 ms:
+                # the application has settled - one that asked for a frame more, as the planner
+                # does when a box takes the keyboard, draws it at once. A prompt that keeps the
+                # keyboard draws one frame only, and waiting for a second waited out the floor
+                # (plan-circle-survey.gui's prompts, a second a key, 2026-10-06).
+                if [ "$frame" -gt "$INPUT_FRAME" ]; then
+                    if [ "$frame" = "$previous" ]; then
+                        quiet=$((quiet + 1))
+                        [ "$quiet" -ge 3 ] && return 0
+                    else
+                        quiet=0
+                    fi
+                fi
+                previous="$frame"
             fi
             sleep 0.05
         done
@@ -428,6 +442,15 @@ start_app() {
         stamp="$now"
         sleep 0.1
     done
+    # The start counts as the last input, its frames drawn: what follows waits only for frames
+    # after it. A first click had waited for a new one, which a planner repainting on new data
+    # draws only at its one-a-second floor - a second on every script (2026-10-06).
+    local frame
+    # Read here, not with `fact`, which is defined further down the file than this runs.
+    frame=$(sed -n 's/^ui\.frame = \(.*\)$/\1/p' "$FACTS_FILE" 2>/dev/null | tail -1)
+    if [[ "$frame" =~ ^[0-9]+$ ]] && [ "$frame" -gt 0 ]; then
+        INPUT_FRAME=$((frame - 1))
+    fi
     # The window this run drives, for the watchdog's screenshot: a `restart` makes a new one
     # after the watchdog has forked with the old id.
     printf '%s\n' "$WIN_ID" > "$WORK/window"

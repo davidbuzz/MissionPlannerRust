@@ -149,8 +149,8 @@ fn retire(registry: &mut BTreeMap<String, Measured>, finished: u64) -> bool {
     registry.len() != before
 }
 
-/// Records where a control was laid out.
-fn record(name: &str, rect: Rect, visible: Rect) {
+/// Records where a control was laid out; whether that changed what was recorded.
+fn record(name: &str, rect: Rect, visible: Rect) -> bool {
     let clipped = !within(rect, visible);
     let now = frame().load(Ordering::SeqCst);
     if let Ok(mut registry) = registry().os_lock() {
@@ -163,7 +163,7 @@ fn record(name: &str, rect: Rect, visible: Rect) {
         {
             entry.seen = now;
             entry.visible = visible;
-            return;
+            return false;
         }
         registry.insert(
             name.to_owned(),
@@ -176,6 +176,7 @@ fn record(name: &str, rect: Rect, visible: Rect) {
         );
     }
     write();
+    true
 }
 
 /// Whether two rectangles overlap at all.
@@ -366,7 +367,14 @@ pub fn measured(name: impl Into<String>, element: Div) -> Div {
                 height: f32::from(child.size.height),
             })
             .collect();
-        record(&name, judge(&rects, visible), visible);
+        // A control laid out anew: one more frame, so the facts - recorded in `render`, before this
+        // frame's controls are measured - catch up with it. Without it a planner that draws only
+        // on a change (repaint on new data) published the screen it had switched to with the
+        // layout of the one before, and a script ending there read the new screen's controls
+        // as missing (config-basic-tuning.gui's "config-body (missing)", 2026-10-06).
+        if record(&name, judge(&rects, visible), visible) {
+            window.request_animation_frame();
+        }
         crate::storm::exclude(started.elapsed());
     })
 }
@@ -513,6 +521,15 @@ mod tests {
             Some((bounds(34.0, 1242.0, 110.0, 23.0), WINDOW))
         );
         assert_eq!(clipped("never-measured"), None);
+    }
+
+    /// A control is news - asking for a frame more - when it first shows and when it moves; laid
+    /// out again where it was, it is not.
+    #[test]
+    fn a_control_is_news_when_it_shows_or_moves() {
+        assert!(record("news-control", bounds(0.0, 0.0, 10.0, 10.0), WINDOW));
+        assert!(!record("news-control", bounds(0.0, 0.0, 10.0, 10.0), WINDOW));
+        assert!(record("news-control", bounds(1.0, 0.0, 10.0, 10.0), WINDOW));
     }
 
     #[test]

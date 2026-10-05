@@ -3122,6 +3122,8 @@ impl Render for MissionPlanner {
         if window.focused(cx).is_none() {
             self.root_focus.focus(window, cx);
         }
+        // Who holds the keyboard as this frame starts; see the end of `render`.
+        let focused_at_start = window.focused(cx);
         // Counted here because this is the one place that only runs when a frame is actually
         // painted. See smoke.rs: the failure being looked for is a backend that will not
         // initialise, and every earlier signal - a window handle, a running executor - survives
@@ -4598,6 +4600,14 @@ impl Render for MissionPlanner {
             // The same for MP_FRAMES; absent without it.
             .children(frametimes::marker());
         frametimes::rendered();
+        // A control given the keyboard while this frame was built - a prompt opened and focused
+        // as it is drawn - shows its caret, and the controls drawn before it their lost focus,
+        // only on the frame after; repainting on new data draws none unasked, so one is asked for.
+        // Without it the caret came a second late, and a script's keys waited out the floor
+        // (plan-circle-survey.gui's prompts, 2026-10-06).
+        if window.focused(cx) != focused_at_start {
+            window.request_animation_frame();
+        }
         root
     }
 }
