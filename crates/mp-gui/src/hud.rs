@@ -708,7 +708,9 @@ pub struct HudInputs {
     pub altitude: f32,
     /// The controller's target altitude, metres; zero draws no mark.
     pub target_altitude: f32,
-    /// Ground level in the altitude tape's frame; zero draws no ground.
+    /// `groundalt`, bound to `HomeAlt`: home's altitude above sea level, which says only whether
+    /// home is set - the band starts at 0, home on the relative tape; zero draws no ground.
+    /// `// C#: GCSViews/FlightData.Designer.cs:370; ExtLibs/Controls/HUD.cs:2638-2641`
     pub ground_altitude: f32,
     /// Vertical speed, m/s, up positive.
     pub vertical_speed: f32,
@@ -901,7 +903,7 @@ impl HudInputs {
             target_speed: state.target_airspeed() as f32,
             altitude: state.altitude_relative.0 as f32,
             target_altitude: state.target_altitude() as f32,
-            ground_altitude: 0.0,
+            ground_altitude: state.home_altitude.0 as f32,
             vertical_speed: state.climb_rate.0 as f32,
             mode,
             mode_changed_for,
@@ -2105,7 +2107,7 @@ pub fn scene(inputs: &HudInputs, w: f32, h: f32) -> Scene {
         Side::Left,
         speed,
         inputs.target_speed * units.speed,
-        None,
+        false,
         unit_space,
         viewrange,
         fontsize,
@@ -2167,7 +2169,8 @@ pub fn scene(inputs: &HudInputs, w: f32, h: f32) -> Scene {
         Side::Right,
         altitude,
         inputs.target_altitude * units.alt,
-        (inputs.ground_altitude != 0.0).then_some(inputs.ground_altitude),
+        // `groundalt != 0`: home set.
+        inputs.ground_altitude != 0.0,
         unit_space,
         viewrange,
         fontsize,
@@ -2783,7 +2786,7 @@ fn scroller(
     side: Side,
     value: f32,
     target: f32,
-    ground: Option<f32>,
+    home_set: bool,
     space: f32,
     viewrange: f32,
     fontsize: f32,
@@ -2844,7 +2847,8 @@ fn scroller(
     }
     // The target's line where `a` is it: the speed's cut toward zero, `a == (long) _targetspeed`
     // (HUD.cs:2533), the altitude's rounded to even, `a == Math.Round(_targetalt)` (HUD.cs:2630),
-    // as is the ground's, `a == Math.Round(groundalt)` (HUD.cs:2639).
+    // The ground's is `a == 0`, home on the relative tape, since upstream's 5dbb2b048: it was
+    // `a == Math.Round(groundalt)`, home's height above sea level, where the band did not belong.
     #[allow(clippy::cast_precision_loss, clippy::float_cmp)] // the C#'s exact comparisons
     let is_at = |a: i64, level: f32| match side {
         Side::Left => a == to_long(level),
@@ -2879,10 +2883,9 @@ fn scroller(
                 colour::TARGET,
             );
         }
-        if let Some(ground_level) = ground
-            && is_at(a, ground_level)
-            && !ground_drawn
-        {
+        // `a == 0 && groundalt != 0 && ground == false`: home's level, once home is set.
+        // C#: HUD.cs:2638-2641
+        if home_set && a == 0 && !ground_drawn {
             // From ground level down to the bottom of the tape.
             scene.fill(
                 vec![
@@ -3415,6 +3418,39 @@ mod tests {
     const CENTRE: (f32, f32) = (200.0, 150.0);
     const W: f32 = 400.0;
     const H: f32 = 300.0;
+
+    /// The altitude tape's ground band, as upstream's 5dbb2b048 draws it: from 0 - home, on the
+    /// relative tape - once home is set and 0 is in view; not where the tape reads home's height
+    /// above sea level, and not before home is set. `// C#: ExtLibs/Controls/HUD.cs:2638-2641`
+    #[test]
+    fn the_ground_band_starts_at_home_on_the_relative_tape() {
+        let bands = |altitude: f32, home: f32| {
+            let inputs = HudInputs {
+                has_vehicle: true,
+                altitude,
+                ground_altitude: home,
+                ..HudInputs::default()
+            };
+            scene(&inputs, W, H)
+                .items
+                .iter()
+                .filter_map(|item| match item {
+                    Item::Fill { points, colour, .. } if *colour == colour::GROUND_TAPE => {
+                        points.first().map(|point| point.1)
+                    }
+                    _ => None,
+                })
+                .collect::<Vec<f32>>()
+        };
+        // 5 m above a home 40 m above the sea: 0 is in view, below the middle of the tape.
+        let band = bands(5.0, 40.0);
+        assert_eq!(band.len(), 1, "{band:?}");
+        assert!(band[0] > H / 2.0, "the band's top at {}", band[0]);
+        // 40 m above it, the tape reads 27 to 53: home is out of view, and 40 is not home.
+        assert!(bands(40.0, 40.0).is_empty());
+        // Home not set: no band.
+        assert!(bands(5.0, 0.0).is_empty());
+    }
 
     #[test]
     fn level_flight_puts_a_flat_horizon_through_the_centre() {

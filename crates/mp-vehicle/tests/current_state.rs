@@ -220,6 +220,34 @@ fn the_position_comes_from_global_position_int_while_it_is_valid_and_gps_otherwi
     );
 }
 
+/// Without a 2D fix GPS_RAW_INT's speed and course are not taken: ArduPilot sends `vel` 0 then
+/// while VFR_HUD carries the EKF's speed, and the ground speed flickered to 0 between the two
+/// (upstream's 694628ac8). With a fix both are taken again.
+/// `// C#: ExtLibs/ArduPilot/CurrentState.cs:3314-3321`
+#[test]
+fn gps_raw_int_without_a_fix_leaves_the_ground_speed_alone() {
+    let mut state = VehicleState::default();
+    state.apply(&message!(VfrHud, |m| {
+        m.groundspeed = 12.0;
+    }));
+    let raw = |fix_type: u8| {
+        message!(GpsRawInt, |m| {
+            m.fix_type = fix_type;
+            m.eph = u16::MAX;
+            m.epv = u16::MAX;
+            m.vel = 0;
+            m.cog = 4500;
+            m.satellites_visible = 0;
+        })
+    };
+    for no_fix in [0, 1] {
+        state.apply(&raw(no_fix));
+        assert_eq!(state.ground_speed.0, 12.0, "fix_type {no_fix}");
+    }
+    state.apply(&raw(2));
+    assert_eq!(state.ground_speed.0, 0.0, "a 2D fix's vel is taken");
+}
+
 #[test]
 fn gps_raw_int_keeps_its_last_value_where_the_wire_says_unknown() {
     // C#: ExtLibs/ArduPilot/CurrentState.cs:3305-3329
@@ -263,6 +291,7 @@ fn gps_raw_int_keeps_its_last_value_where_the_wire_says_unknown() {
 
     // Unknown hdop, satellites and speed keep the last values; below 0.5 m/s the course holds.
     state.apply(&message!(GpsRawInt, |m| {
+        m.fix_type = 3;
         m.eph = u16::MAX;
         m.satellites_visible = u8::MAX;
         m.vel = 40;

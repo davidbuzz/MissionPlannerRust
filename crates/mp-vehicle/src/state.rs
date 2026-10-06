@@ -672,6 +672,8 @@ const MODE_FLAG_SAFETY_ARMED: u8 = 128;
 const MODE_FLAG_CUSTOM_MODE_ENABLED: u8 = 1;
 /// `MAV_SENSOR_ROTATION_PITCH_270`: facing down. `// C#: ExtLibs/Mavlink/Mavlink.cs:4334`
 const SENSOR_ROTATION_PITCH_270: u8 = 25;
+/// `GPS_FIX_TYPE._2D_FIX`. `// C#: ExtLibs/Mavlink/Mavlink.cs:5008`
+const GPS_FIX_TYPE_2D_FIX: u8 = 2;
 
 /// `(0, 0)` is how the C# holds "no position"; anything else that is a real place is one.
 fn position_or_none(latitude: f64, longitude: f64) -> Option<LatLon> {
@@ -1089,13 +1091,17 @@ impl VehicleState {
         if m.satellites_visible != u8::MAX {
             self.gps.satellites_visible = m.satellites_visible;
         }
-        // C#: CurrentState.cs:3314-3315
-        if m.vel != u16::MAX {
+        // Without a 2D fix ArduPilot sends `vel` 0 while VFR_HUD keeps the EKF's speed, so neither
+        // speed nor course is taken from it then - the ground speed flickered to 0 in GPS-denied
+        // flight, and the ETA, turn radius and wind with it (upstream's 694628ac8).
+        // C#: CurrentState.cs:3314-3318
+        let fix = m.fix_type >= GPS_FIX_TYPE_2D_FIX;
+        if fix && m.vel != u16::MAX {
             self.ground_speed = MetresPerSecond(f64::from(f32::from(m.vel) * 1.0e-2));
         }
-        // C#: CurrentState.cs:3317-3318. The C# compares its display-unit ground speed with 0.5;
+        // C#: CurrentState.cs:3320-3321. The C# compares its display-unit ground speed with 0.5;
         // this compares metres per second, which is the same thing in the default units.
-        if self.ground_speed.0 > 0.5 && m.cog != u16::MAX {
+        if fix && self.ground_speed.0 > 0.5 && m.cog != u16::MAX {
             self.gps.course = f32::from(m.cog) * 1.0e-2;
         }
         // C#: CurrentState.cs:3325-3329

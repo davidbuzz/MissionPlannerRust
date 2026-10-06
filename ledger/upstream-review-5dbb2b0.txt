@@ -316,9 +316,6 @@ crates/mp-gui/src/fly.rs:9916: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:334
 crates/mp-gui/src/fly.rs:10222: GCSViews/FlightData.cs:1553-1597 - GCSViews/FlightData.cs: lines 1553-1597 have changes inside
 crates/mp-gui/src/fly.rs:10449: GCSViews/FlightData.cs:1587-1621 - GCSViews/FlightData.cs: lines 1587-1621 have changes inside
 crates/mp-gui/src/fly.rs:10721: GCSViews/FlightData.cs:1697-1878 - GCSViews/FlightData.cs: lines 1697-1878 have changes inside
-crates/mp-gui/src/hud/golden.rs:24: ExtLibs/Controls/HUD.cs:1954-3333 - ExtLibs/Controls/HUD.cs: lines 1954-3333 have changes inside
-crates/mp-gui/src/hud.rs:2152: HUD.cs:2583-2659 - ExtLibs/Controls/HUD.cs: lines 2583-2659 have changes inside
-crates/mp-gui/src/hud.rs:2847: HUD.cs:2639 - ExtLibs/Controls/HUD.cs: line 2639 changed upstream
 crates/mp-gui/src/joystick.rs:50: ExtLibs/ArduPilot/Joystick/JoystickBase.cs:377-624 - ExtLibs/ArduPilot/Joystick/JoystickBase.cs: lines 377-624 have changes inside
 crates/mp-gui/src/joystick.rs:1074: ExtLibs/ArduPilot/Joystick/JoystickBase.cs:294-364 - ExtLibs/ArduPilot/Joystick/JoystickBase.cs: lines 294-364 have changes inside
 crates/mp-gui/src/joystick.rs:1087: ExtLibs/ArduPilot/Joystick/JoystickBase.cs:294-364 - ExtLibs/ArduPilot/Joystick/JoystickBase.cs: lines 294-364 have changes inside
@@ -672,13 +669,8 @@ crates/mp-transport/src/replay.rs:427: ExtLibs/ArduPilot/Mavlink/MAVLinkInterfac
 crates/mp-vehicle/src/fence.rs:24: MAVLinkInterface.cs:4121 - ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs: line 4121 changed upstream
 crates/mp-vehicle/src/fence.rs:34: ExtLibs/Mavlink/Mavlink.cs:1274-1290 - ExtLibs/Mavlink/Mavlink.cs: lines 1274-1290 have changes inside
 crates/mp-vehicle/src/proximity.rs:44: MAVLinkInterface.cs:5528-5553 - ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs: lines 5528-5553 have changes inside
-crates/mp-vehicle/src/state.rs:24: ExtLibs/ArduPilot/CurrentState.cs:2278-4305 - ExtLibs/ArduPilot/CurrentState.cs: lines 2278-4305 have changes inside
-crates/mp-vehicle/src/state.rs:1050: ExtLibs/ArduPilot/CurrentState.cs:3289-3340 - ExtLibs/ArduPilot/CurrentState.cs: lines 3289-3340 have changes inside
-crates/mp-vehicle/src/state.rs:1092: CurrentState.cs:3314-3315 - ExtLibs/ArduPilot/CurrentState.cs: line 3314-3315 changed upstream
-crates/mp-vehicle/src/state.rs:1096: CurrentState.cs:3317-3318 - ExtLibs/ArduPilot/CurrentState.cs: line 3317-3318 changed upstream
 crates/mp-vehicle/tests/current_state_oracle.rs:93: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:6510-6647 - ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs: lines 6510-6647 have changes inside
 crates/mp-vehicle/tests/current_state_oracle.rs:120: MAVLinkInterface.cs:6608-6640 - ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs: lines 6608-6640 have changes inside
-crates/mp-vehicle/tests/current_state.rs:225: ExtLibs/ArduPilot/CurrentState.cs:3305-3326 - ExtLibs/ArduPilot/CurrentState.cs: lines 3305-3326 have changes inside
 DELIVERABLES.md:167: MAVLinkInterface.cs:1748-4380 - ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs: lines 1748-4380 have changes inside
 DELIVERABLES.md:368: MainV2.cs:4067-4208 - MainV2.cs: lines 4067-4208 have changes inside
 DELIVERABLES.md:446: ConfigESCCalibration.cs:28-45 - GCSViews/ConfigurationView/ConfigESCCalibration.cs: lines 28-45 have changes inside
