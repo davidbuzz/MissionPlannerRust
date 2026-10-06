@@ -1223,7 +1223,7 @@ pub fn setwp_items(parameters: &[(String, f64)], mission_items: usize) -> Vec<St
 
 /// What `CMB_action` lists: the names of `FlightData.actions`, in its order.
 /// `// C#: GCSViews/FlightData.cs:183-207, 353`
-pub const ACTIONS: [&str; 19] = [
+pub const ACTIONS: [&str; 20] = [
     "Loiter_Unlim",
     "Return_To_Launch",
     "Preflight_Calibration",
@@ -1243,6 +1243,7 @@ pub const ACTIONS: [&str; 19] = [
     "Engine_Stop",
     "Terminate_Flight",
     "Format_SD_Card",
+    "Reboot_Mass_Storage",
 ];
 
 /// Whether Do Action asks "Are you sure" first. Five entries are handled before the question
@@ -1368,6 +1369,9 @@ pub fn action_messages(action: &str, context: &ActionContext) -> Sends {
         }
         "System_Time" => vec![commands::system_time(context.now_unix_usec)],
         "Terminate_Flight" => vec![long(commands::CMD_DO_FLIGHTTERMINATION, 1.0, 0.0, 0.0)],
+        // ArduPilot's reboot action 5, "REBOOT_TO_MASS_STORAGE": the board back as a USB drive.
+        // Upstream's of 2026-08-17 (1bb11f578). `// C#: GCSViews/FlightData.cs:1809-1816`
+        "Reboot_Mass_Storage" => vec![long(commands::CMD_PREFLIGHT_REBOOT_SHUTDOWN, 5.0, 0.0, 0.0)],
         // `doReboot()`: `doCommand` sends `PREFLIGHT_REBOOT_SHUTDOWN` twice and does not wait.
         // `// C#: MAVLinkInterface.cs:2550-2560, 2755-2760`
         "Preflight_Reboot_Shutdown" => vec![commands::reboot(target), commands::reboot(target)],
@@ -1451,6 +1455,7 @@ pub fn action_report(action: &str, target: VehicleId) -> Report {
             ..Report::on_timeout(failed)
         },
         "Terminate_Flight"
+        | "Reboot_Mass_Storage"
         | "HighLatency_Enable"
         | "HighLatency_Disable"
         | "Engine_Start"
@@ -9374,6 +9379,7 @@ mod tests {
             "Scripting_cmd_stop",
             "System_Time",
             "Terminate_Flight",
+            "Reboot_Mass_Storage",
             "Preflight_Reboot_Shutdown",
             "HighLatency_Enable",
             "HighLatency_Disable",
@@ -9464,6 +9470,11 @@ mod tests {
             long(&sent("Terminate_Flight")[0]),
             (185, [1., 0., 0., 0., 0., 0., 0.])
         );
+        // Asked first, then PREFLIGHT_REBOOT_SHUTDOWN with ArduPilot's mass storage action, once.
+        assert!(needs_confirmation("Reboot_Mass_Storage"));
+        let mass_storage = sent("Reboot_Mass_Storage");
+        assert_eq!(mass_storage.len(), 1);
+        assert_eq!(long(&mass_storage[0]), (246, [5., 0., 0., 0., 0., 0., 0.]));
         assert_eq!(
             long(&sent("HighLatency_Enable")[0]),
             (2600, [1., 0., 0., 0., 0., 0., 0.])

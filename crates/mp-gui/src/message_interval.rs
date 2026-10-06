@@ -60,7 +60,7 @@ const RATE_WIDTH: f32 = 121.0;
 const FORM_WIDTH: f32 = 300.0;
 
 /// `Enum.GetNames(typeof(MAVLink.MAVLINK_MSG_ID)).ToSortedList(...)`: every message, by name, with
-/// its id - the dialect's table, which holds the same 349 as the C#'s enum. Sorted ordinally, where
+/// its id - the dialect's table, which holds the same 353 as the C#'s enum. Sorted ordinally, where
 /// the C#'s `string.CompareTo` sorts by the culture's rules; for these names of capitals, digits
 /// and underscores the two orders differ only where an underscore meets a letter or digit.
 pub fn messages() -> &'static [(&'static str, u32)] {
@@ -454,7 +454,7 @@ mod tests {
     #[test]
     fn the_list_is_every_message_by_name() {
         let all = messages();
-        assert_eq!(all.len(), 349, "MAVLINK_MSG_ID's names");
+        assert_eq!(all.len(), 353, "MAVLINK_MSG_ID's names");
         assert!(all.windows(2).all(|pair| pair[0].0 < pair[1].0), "sorted");
         assert!(all.contains(&("ATTITUDE", 30)));
         assert!(all.contains(&("HEARTBEAT", 0)));

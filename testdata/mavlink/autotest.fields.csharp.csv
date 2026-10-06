@@ -217,6 +217,9 @@ index,msgid,msgname,field,value
 41,1,SYS_STATUS,errors_count3,0
 41,1,SYS_STATUS,errors_count4,0
 41,1,SYS_STATUS,battery_remaining,-1
+41,1,SYS_STATUS,onboard_control_sensors_present_extended,0
+41,1,SYS_STATUS,onboard_control_sensors_enabled_extended,0
+41,1,SYS_STATUS,onboard_control_sensors_health_extended,0
 42,125,POWER_STATUS,Vcc,5000
 42,125,POWER_STATUS,Vservo,0
 42,125,POWER_STATUS,flags,0
@@ -429,6 +432,9 @@ index,msgid,msgname,field,value
 65,1,SYS_STATUS,errors_count3,0
 65,1,SYS_STATUS,errors_count4,0
 65,1,SYS_STATUS,battery_remaining,100
+65,1,SYS_STATUS,onboard_control_sensors_present_extended,0
+65,1,SYS_STATUS,onboard_control_sensors_enabled_extended,0
+65,1,SYS_STATUS,onboard_control_sensors_health_extended,0
 66,125,POWER_STATUS,Vcc,5000
 66,125,POWER_STATUS,Vservo,0
 66,125,POWER_STATUS,flags,0
@@ -645,6 +651,9 @@ index,msgid,msgname,field,value
 90,1,SYS_STATUS,errors_count3,0
 90,1,SYS_STATUS,errors_count4,0
 90,1,SYS_STATUS,battery_remaining,100
+90,1,SYS_STATUS,onboard_control_sensors_present_extended,0
+90,1,SYS_STATUS,onboard_control_sensors_enabled_extended,0
+90,1,SYS_STATUS,onboard_control_sensors_health_extended,0
 91,125,POWER_STATUS,Vcc,5000
 91,125,POWER_STATUS,Vservo,0
 91,125,POWER_STATUS,flags,0
@@ -904,6 +913,9 @@ index,msgid,msgname,field,value
 121,1,SYS_STATUS,errors_count3,0
 121,1,SYS_STATUS,errors_count4,0
 121,1,SYS_STATUS,battery_remaining,100
+121,1,SYS_STATUS,onboard_control_sensors_present_extended,0
+121,1,SYS_STATUS,onboard_control_sensors_enabled_extended,0
+121,1,SYS_STATUS,onboard_control_sensors_health_extended,0
 122,125,POWER_STATUS,Vcc,5000
 122,125,POWER_STATUS,Vservo,0
 122,125,POWER_STATUS,flags,0
@@ -1116,6 +1128,9 @@ index,msgid,msgname,field,value
 145,1,SYS_STATUS,errors_count3,0
 145,1,SYS_STATUS,errors_count4,0
 145,1,SYS_STATUS,battery_remaining,100
+145,1,SYS_STATUS,onboard_control_sensors_present_extended,0
+145,1,SYS_STATUS,onboard_control_sensors_enabled_extended,0
+145,1,SYS_STATUS,onboard_control_sensors_health_extended,0
 146,125,POWER_STATUS,Vcc,5000
 146,125,POWER_STATUS,Vservo,0
 146,125,POWER_STATUS,flags,0
@@ -1408,6 +1423,9 @@ index,msgid,msgname,field,value
 188,1,SYS_STATUS,errors_count3,0
 188,1,SYS_STATUS,errors_count4,0
 188,1,SYS_STATUS,battery_remaining,100
+188,1,SYS_STATUS,onboard_control_sensors_present_extended,0
+188,1,SYS_STATUS,onboard_control_sensors_enabled_extended,0
+188,1,SYS_STATUS,onboard_control_sensors_health_extended,0
 189,125,POWER_STATUS,Vcc,5000
 189,125,POWER_STATUS,Vservo,0
 189,125,POWER_STATUS,flags,0
@@ -1733,6 +1751,9 @@ index,msgid,msgname,field,value
 239,1,SYS_STATUS,errors_count3,0
 239,1,SYS_STATUS,errors_count4,0
 239,1,SYS_STATUS,battery_remaining,100
+239,1,SYS_STATUS,onboard_control_sensors_present_extended,0
+239,1,SYS_STATUS,onboard_control_sensors_enabled_extended,0
+239,1,SYS_STATUS,onboard_control_sensors_health_extended,0
 240,125,POWER_STATUS,Vcc,5000
 240,125,POWER_STATUS,Vservo,0
 240,125,POWER_STATUS,flags,0
@@ -2016,6 +2037,9 @@ index,msgid,msgname,field,value
 281,1,SYS_STATUS,errors_count3,0
 281,1,SYS_STATUS,errors_count4,0
 281,1,SYS_STATUS,battery_remaining,100
+281,1,SYS_STATUS,onboard_control_sensors_present_extended,0
+281,1,SYS_STATUS,onboard_control_sensors_enabled_extended,0
+281,1,SYS_STATUS,onboard_control_sensors_health_extended,0
 282,125,POWER_STATUS,Vcc,5000
 282,125,POWER_STATUS,Vservo,0
 282,125,POWER_STATUS,flags,0
@@ -2257,6 +2281,9 @@ index,msgid,msgname,field,value
 311,1,SYS_STATUS,errors_count3,0
 311,1,SYS_STATUS,errors_count4,0
 311,1,SYS_STATUS,battery_remaining,100
+311,1,SYS_STATUS,onboard_control_sensors_present_extended,0
+311,1,SYS_STATUS,onboard_control_sensors_enabled_extended,0
+311,1,SYS_STATUS,onboard_control_sensors_health_extended,0
 312,125,POWER_STATUS,Vcc,5000
 312,125,POWER_STATUS,Vservo,0
 312,125,POWER_STATUS,flags,0
@@ -2501,6 +2528,9 @@ index,msgid,msgname,field,value
 342,1,SYS_STATUS,errors_count3,0
 342,1,SYS_STATUS,errors_count4,0
 342,1,SYS_STATUS,battery_remaining,100
+342,1,SYS_STATUS,onboard_control_sensors_present_extended,0
+342,1,SYS_STATUS,onboard_control_sensors_enabled_extended,0
+342,1,SYS_STATUS,onboard_control_sensors_health_extended,0
 343,125,POWER_STATUS,Vcc,5000
 343,125,POWER_STATUS,Vservo,0
 343,125,POWER_STATUS,flags,0
@@ -3105,6 +3135,9 @@ index,msgid,msgname,field,value
 453,1,SYS_STATUS,errors_count3,0
 453,1,SYS_STATUS,errors_count4,0
 453,1,SYS_STATUS,battery_remaining,-1
+453,1,SYS_STATUS,onboard_control_sensors_present_extended,0
+453,1,SYS_STATUS,onboard_control_sensors_enabled_extended,0
+453,1,SYS_STATUS,onboard_control_sensors_health_extended,0
 454,125,POWER_STATUS,Vcc,5000
 454,125,POWER_STATUS,Vservo,0
 454,125,POWER_STATUS,flags,0
@@ -3311,6 +3344,9 @@ index,msgid,msgname,field,value
 476,1,SYS_STATUS,errors_count3,0
 476,1,SYS_STATUS,errors_count4,0
 476,1,SYS_STATUS,battery_remaining,100
+476,1,SYS_STATUS,onboard_control_sensors_present_extended,0
+476,1,SYS_STATUS,onboard_control_sensors_enabled_extended,0
+476,1,SYS_STATUS,onboard_control_sensors_health_extended,0
 477,125,POWER_STATUS,Vcc,5000
 477,125,POWER_STATUS,Vservo,0
 477,125,POWER_STATUS,flags,0
@@ -3521,6 +3557,9 @@ index,msgid,msgname,field,value
 500,1,SYS_STATUS,errors_count3,0
 500,1,SYS_STATUS,errors_count4,0
 500,1,SYS_STATUS,battery_remaining,100
+500,1,SYS_STATUS,onboard_control_sensors_present_extended,0
+500,1,SYS_STATUS,onboard_control_sensors_enabled_extended,0
+500,1,SYS_STATUS,onboard_control_sensors_health_extended,0
 501,125,POWER_STATUS,Vcc,5000
 501,125,POWER_STATUS,Vservo,0
 501,125,POWER_STATUS,flags,0
@@ -3733,6 +3772,9 @@ index,msgid,msgname,field,value
 524,1,SYS_STATUS,errors_count3,0
 524,1,SYS_STATUS,errors_count4,0
 524,1,SYS_STATUS,battery_remaining,100
+524,1,SYS_STATUS,onboard_control_sensors_present_extended,0
+524,1,SYS_STATUS,onboard_control_sensors_enabled_extended,0
+524,1,SYS_STATUS,onboard_control_sensors_health_extended,0
 525,125,POWER_STATUS,Vcc,5000
 525,125,POWER_STATUS,Vservo,0
 525,125,POWER_STATUS,flags,0
@@ -3953,6 +3995,9 @@ index,msgid,msgname,field,value
 550,1,SYS_STATUS,errors_count3,0
 550,1,SYS_STATUS,errors_count4,0
 550,1,SYS_STATUS,battery_remaining,100
+550,1,SYS_STATUS,onboard_control_sensors_present_extended,0
+550,1,SYS_STATUS,onboard_control_sensors_enabled_extended,0
+550,1,SYS_STATUS,onboard_control_sensors_health_extended,0
 551,125,POWER_STATUS,Vcc,5000
 551,125,POWER_STATUS,Vservo,0
 551,125,POWER_STATUS,flags,0
@@ -4197,6 +4242,9 @@ index,msgid,msgname,field,value
 582,1,SYS_STATUS,errors_count3,0
 582,1,SYS_STATUS,errors_count4,0
 582,1,SYS_STATUS,battery_remaining,100
+582,1,SYS_STATUS,onboard_control_sensors_present_extended,0
+582,1,SYS_STATUS,onboard_control_sensors_enabled_extended,0
+582,1,SYS_STATUS,onboard_control_sensors_health_extended,0
 583,125,POWER_STATUS,Vcc,5000
 583,125,POWER_STATUS,Vservo,0
 583,125,POWER_STATUS,flags,0
@@ -4416,6 +4464,9 @@ index,msgid,msgname,field,value
 607,1,SYS_STATUS,errors_count3,0
 607,1,SYS_STATUS,errors_count4,0
 607,1,SYS_STATUS,battery_remaining,100
+607,1,SYS_STATUS,onboard_control_sensors_present_extended,0
+607,1,SYS_STATUS,onboard_control_sensors_enabled_extended,0
+607,1,SYS_STATUS,onboard_control_sensors_health_extended,0
 608,125,POWER_STATUS,Vcc,5000
 608,125,POWER_STATUS,Vservo,0
 608,125,POWER_STATUS,flags,0
@@ -4635,6 +4686,9 @@ index,msgid,msgname,field,value
 632,1,SYS_STATUS,errors_count3,0
 632,1,SYS_STATUS,errors_count4,0
 632,1,SYS_STATUS,battery_remaining,100
+632,1,SYS_STATUS,onboard_control_sensors_present_extended,0
+632,1,SYS_STATUS,onboard_control_sensors_enabled_extended,0
+632,1,SYS_STATUS,onboard_control_sensors_health_extended,0
 633,125,POWER_STATUS,Vcc,5000
 633,125,POWER_STATUS,Vservo,0
 633,125,POWER_STATUS,flags,0
@@ -4868,6 +4922,9 @@ index,msgid,msgname,field,value
 660,1,SYS_STATUS,errors_count3,0
 660,1,SYS_STATUS,errors_count4,0
 660,1,SYS_STATUS,battery_remaining,100
+660,1,SYS_STATUS,onboard_control_sensors_present_extended,0
+660,1,SYS_STATUS,onboard_control_sensors_enabled_extended,0
+660,1,SYS_STATUS,onboard_control_sensors_health_extended,0
 661,125,POWER_STATUS,Vcc,5000
 661,125,POWER_STATUS,Vservo,0
 661,125,POWER_STATUS,flags,0
@@ -5087,6 +5144,9 @@ index,msgid,msgname,field,value
 685,1,SYS_STATUS,errors_count3,0
 685,1,SYS_STATUS,errors_count4,0
 685,1,SYS_STATUS,battery_remaining,100
+685,1,SYS_STATUS,onboard_control_sensors_present_extended,0
+685,1,SYS_STATUS,onboard_control_sensors_enabled_extended,0
+685,1,SYS_STATUS,onboard_control_sensors_health_extended,0
 686,125,POWER_STATUS,Vcc,5000
 686,125,POWER_STATUS,Vservo,0
 686,125,POWER_STATUS,flags,0
@@ -5318,6 +5378,9 @@ index,msgid,msgname,field,value
 713,1,SYS_STATUS,errors_count3,0
 713,1,SYS_STATUS,errors_count4,0
 713,1,SYS_STATUS,battery_remaining,100
+713,1,SYS_STATUS,onboard_control_sensors_present_extended,0
+713,1,SYS_STATUS,onboard_control_sensors_enabled_extended,0
+713,1,SYS_STATUS,onboard_control_sensors_health_extended,0
 714,125,POWER_STATUS,Vcc,5000
 714,125,POWER_STATUS,Vservo,0
 714,125,POWER_STATUS,flags,0
@@ -5537,6 +5600,9 @@ index,msgid,msgname,field,value
 738,1,SYS_STATUS,errors_count3,0
 738,1,SYS_STATUS,errors_count4,0
 738,1,SYS_STATUS,battery_remaining,100
+738,1,SYS_STATUS,onboard_control_sensors_present_extended,0
+738,1,SYS_STATUS,onboard_control_sensors_enabled_extended,0
+738,1,SYS_STATUS,onboard_control_sensors_health_extended,0
 739,125,POWER_STATUS,Vcc,5000
 739,125,POWER_STATUS,Vservo,0
 739,125,POWER_STATUS,flags,0
@@ -5756,6 +5822,9 @@ index,msgid,msgname,field,value
 763,1,SYS_STATUS,errors_count3,0
 763,1,SYS_STATUS,errors_count4,0
 763,1,SYS_STATUS,battery_remaining,100
+763,1,SYS_STATUS,onboard_control_sensors_present_extended,0
+763,1,SYS_STATUS,onboard_control_sensors_enabled_extended,0
+763,1,SYS_STATUS,onboard_control_sensors_health_extended,0
 764,125,POWER_STATUS,Vcc,5000
 764,125,POWER_STATUS,Vservo,0
 764,125,POWER_STATUS,flags,0
@@ -5989,6 +6058,9 @@ index,msgid,msgname,field,value
 791,1,SYS_STATUS,errors_count3,0
 791,1,SYS_STATUS,errors_count4,0
 791,1,SYS_STATUS,battery_remaining,100
+791,1,SYS_STATUS,onboard_control_sensors_present_extended,0
+791,1,SYS_STATUS,onboard_control_sensors_enabled_extended,0
+791,1,SYS_STATUS,onboard_control_sensors_health_extended,0
 792,125,POWER_STATUS,Vcc,5000
 792,125,POWER_STATUS,Vservo,0
 792,125,POWER_STATUS,flags,0
@@ -6208,6 +6280,9 @@ index,msgid,msgname,field,value
 816,1,SYS_STATUS,errors_count3,0
 816,1,SYS_STATUS,errors_count4,0
 816,1,SYS_STATUS,battery_remaining,100
+816,1,SYS_STATUS,onboard_control_sensors_present_extended,0
+816,1,SYS_STATUS,onboard_control_sensors_enabled_extended,0
+816,1,SYS_STATUS,onboard_control_sensors_health_extended,0
 817,125,POWER_STATUS,Vcc,5000
 817,125,POWER_STATUS,Vservo,0
 817,125,POWER_STATUS,flags,0
@@ -6443,6 +6518,9 @@ index,msgid,msgname,field,value
 845,1,SYS_STATUS,errors_count3,0
 845,1,SYS_STATUS,errors_count4,0
 845,1,SYS_STATUS,battery_remaining,100
+845,1,SYS_STATUS,onboard_control_sensors_present_extended,0
+845,1,SYS_STATUS,onboard_control_sensors_enabled_extended,0
+845,1,SYS_STATUS,onboard_control_sensors_health_extended,0
 846,125,POWER_STATUS,Vcc,5000
 846,125,POWER_STATUS,Vservo,0
 846,125,POWER_STATUS,flags,0
@@ -6662,6 +6740,9 @@ index,msgid,msgname,field,value
 870,1,SYS_STATUS,errors_count3,0
 870,1,SYS_STATUS,errors_count4,0
 870,1,SYS_STATUS,battery_remaining,100
+870,1,SYS_STATUS,onboard_control_sensors_present_extended,0
+870,1,SYS_STATUS,onboard_control_sensors_enabled_extended,0
+870,1,SYS_STATUS,onboard_control_sensors_health_extended,0
 871,125,POWER_STATUS,Vcc,5000
 871,125,POWER_STATUS,Vservo,0
 871,125,POWER_STATUS,flags,0
@@ -6897,6 +6978,9 @@ index,msgid,msgname,field,value
 899,1,SYS_STATUS,errors_count3,0
 899,1,SYS_STATUS,errors_count4,0
 899,1,SYS_STATUS,battery_remaining,100
+899,1,SYS_STATUS,onboard_control_sensors_present_extended,0
+899,1,SYS_STATUS,onboard_control_sensors_enabled_extended,0
+899,1,SYS_STATUS,onboard_control_sensors_health_extended,0
 900,125,POWER_STATUS,Vcc,5000
 900,125,POWER_STATUS,Vservo,0
 900,125,POWER_STATUS,flags,0
@@ -7303,6 +7387,9 @@ index,msgid,msgname,field,value
 970,1,SYS_STATUS,errors_count3,0
 970,1,SYS_STATUS,errors_count4,0
 970,1,SYS_STATUS,battery_remaining,100
+970,1,SYS_STATUS,onboard_control_sensors_present_extended,0
+970,1,SYS_STATUS,onboard_control_sensors_enabled_extended,0
+970,1,SYS_STATUS,onboard_control_sensors_health_extended,0
 971,125,POWER_STATUS,Vcc,5000
 971,125,POWER_STATUS,Vservo,0
 971,125,POWER_STATUS,flags,0
@@ -7548,6 +7635,9 @@ index,msgid,msgname,field,value
 1002,1,SYS_STATUS,errors_count3,0
 1002,1,SYS_STATUS,errors_count4,0
 1002,1,SYS_STATUS,battery_remaining,100
+1002,1,SYS_STATUS,onboard_control_sensors_present_extended,0
+1002,1,SYS_STATUS,onboard_control_sensors_enabled_extended,0
+1002,1,SYS_STATUS,onboard_control_sensors_health_extended,0
 1003,125,POWER_STATUS,Vcc,5000
 1003,125,POWER_STATUS,Vservo,0
 1003,125,POWER_STATUS,flags,0
@@ -7773,6 +7863,9 @@ index,msgid,msgname,field,value
 1028,1,SYS_STATUS,errors_count3,0
 1028,1,SYS_STATUS,errors_count4,0
 1028,1,SYS_STATUS,battery_remaining,100
+1028,1,SYS_STATUS,onboard_control_sensors_present_extended,0
+1028,1,SYS_STATUS,onboard_control_sensors_enabled_extended,0
+1028,1,SYS_STATUS,onboard_control_sensors_health_extended,0
 1029,125,POWER_STATUS,Vcc,5000
 1029,125,POWER_STATUS,Vservo,0
 1029,125,POWER_STATUS,flags,0
@@ -7998,6 +8091,9 @@ index,msgid,msgname,field,value
 1054,1,SYS_STATUS,errors_count3,0
 1054,1,SYS_STATUS,errors_count4,0
 1054,1,SYS_STATUS,battery_remaining,100
+1054,1,SYS_STATUS,onboard_control_sensors_present_extended,0
+1054,1,SYS_STATUS,onboard_control_sensors_enabled_extended,0
+1054,1,SYS_STATUS,onboard_control_sensors_health_extended,0
 1055,125,POWER_STATUS,Vcc,5000
 1055,125,POWER_STATUS,Vservo,0
 1055,125,POWER_STATUS,flags,0
@@ -8231,6 +8327,9 @@ index,msgid,msgname,field,value
 1082,1,SYS_STATUS,errors_count3,0
 1082,1,SYS_STATUS,errors_count4,0
 1082,1,SYS_STATUS,battery_remaining,100
+1082,1,SYS_STATUS,onboard_control_sensors_present_extended,0
+1082,1,SYS_STATUS,onboard_control_sensors_enabled_extended,0
+1082,1,SYS_STATUS,onboard_control_sensors_health_extended,0
 1083,125,POWER_STATUS,Vcc,5000
 1083,125,POWER_STATUS,Vservo,0
 1083,125,POWER_STATUS,flags,0
@@ -8506,6 +8605,9 @@ index,msgid,msgname,field,value
 1118,1,SYS_STATUS,errors_count3,0
 1118,1,SYS_STATUS,errors_count4,0
 1118,1,SYS_STATUS,battery_remaining,100
+1118,1,SYS_STATUS,onboard_control_sensors_present_extended,0
+1118,1,SYS_STATUS,onboard_control_sensors_enabled_extended,0
+1118,1,SYS_STATUS,onboard_control_sensors_health_extended,0
 1119,125,POWER_STATUS,Vcc,5000
 1119,125,POWER_STATUS,Vservo,0
 1119,125,POWER_STATUS,flags,0
@@ -8770,6 +8872,9 @@ index,msgid,msgname,field,value
 1151,1,SYS_STATUS,errors_count3,0
 1151,1,SYS_STATUS,errors_count4,0
 1151,1,SYS_STATUS,battery_remaining,100
+1151,1,SYS_STATUS,onboard_control_sensors_present_extended,0
+1151,1,SYS_STATUS,onboard_control_sensors_enabled_extended,0
+1151,1,SYS_STATUS,onboard_control_sensors_health_extended,0
 1152,125,POWER_STATUS,Vcc,5000
 1152,125,POWER_STATUS,Vservo,0
 1152,125,POWER_STATUS,flags,0
@@ -8995,6 +9100,9 @@ index,msgid,msgname,field,value
 1177,1,SYS_STATUS,errors_count3,0
 1177,1,SYS_STATUS,errors_count4,0
 1177,1,SYS_STATUS,battery_remaining,100
+1177,1,SYS_STATUS,onboard_control_sensors_present_extended,0
+1177,1,SYS_STATUS,onboard_control_sensors_enabled_extended,0
+1177,1,SYS_STATUS,onboard_control_sensors_health_extended,0
 1178,125,POWER_STATUS,Vcc,5000
 1178,125,POWER_STATUS,Vservo,0
 1178,125,POWER_STATUS,flags,0
@@ -9220,6 +9328,9 @@ index,msgid,msgname,field,value
 1203,1,SYS_STATUS,errors_count3,0
 1203,1,SYS_STATUS,errors_count4,0
 1203,1,SYS_STATUS,battery_remaining,100
+1203,1,SYS_STATUS,onboard_control_sensors_present_extended,0
+1203,1,SYS_STATUS,onboard_control_sensors_enabled_extended,0
+1203,1,SYS_STATUS,onboard_control_sensors_health_extended,0
 1204,125,POWER_STATUS,Vcc,5000
 1204,125,POWER_STATUS,Vservo,0
 1204,125,POWER_STATUS,flags,0
@@ -9445,6 +9556,9 @@ index,msgid,msgname,field,value
 1229,1,SYS_STATUS,errors_count3,0
 1229,1,SYS_STATUS,errors_count4,0
 1229,1,SYS_STATUS,battery_remaining,100
+1229,1,SYS_STATUS,onboard_control_sensors_present_extended,0
+1229,1,SYS_STATUS,onboard_control_sensors_enabled_extended,0
+1229,1,SYS_STATUS,onboard_control_sensors_health_extended,0
 1230,125,POWER_STATUS,Vcc,5000
 1230,125,POWER_STATUS,Vservo,0
 1230,125,POWER_STATUS,flags,0
@@ -9684,6 +9798,9 @@ index,msgid,msgname,field,value
 1258,1,SYS_STATUS,errors_count3,0
 1258,1,SYS_STATUS,errors_count4,0
 1258,1,SYS_STATUS,battery_remaining,100
+1258,1,SYS_STATUS,onboard_control_sensors_present_extended,0
+1258,1,SYS_STATUS,onboard_control_sensors_enabled_extended,0
+1258,1,SYS_STATUS,onboard_control_sensors_health_extended,0
 1259,125,POWER_STATUS,Vcc,5000
 1259,125,POWER_STATUS,Vservo,0
 1259,125,POWER_STATUS,flags,0
@@ -9917,6 +10034,9 @@ index,msgid,msgname,field,value
 1286,1,SYS_STATUS,errors_count3,0
 1286,1,SYS_STATUS,errors_count4,0
 1286,1,SYS_STATUS,battery_remaining,100
+1286,1,SYS_STATUS,onboard_control_sensors_present_extended,0
+1286,1,SYS_STATUS,onboard_control_sensors_enabled_extended,0
+1286,1,SYS_STATUS,onboard_control_sensors_health_extended,0
 1287,125,POWER_STATUS,Vcc,5000
 1287,125,POWER_STATUS,Vservo,0
 1287,125,POWER_STATUS,flags,0
@@ -10171,6 +10291,9 @@ index,msgid,msgname,field,value
 1319,1,SYS_STATUS,errors_count3,0
 1319,1,SYS_STATUS,errors_count4,0
 1319,1,SYS_STATUS,battery_remaining,100
+1319,1,SYS_STATUS,onboard_control_sensors_present_extended,0
+1319,1,SYS_STATUS,onboard_control_sensors_enabled_extended,0
+1319,1,SYS_STATUS,onboard_control_sensors_health_extended,0
 1320,125,POWER_STATUS,Vcc,5000
 1320,125,POWER_STATUS,Vservo,0
 1320,125,POWER_STATUS,flags,0
@@ -10400,6 +10523,9 @@ index,msgid,msgname,field,value
 1346,1,SYS_STATUS,errors_count3,0
 1346,1,SYS_STATUS,errors_count4,0
 1346,1,SYS_STATUS,battery_remaining,100
+1346,1,SYS_STATUS,onboard_control_sensors_present_extended,0
+1346,1,SYS_STATUS,onboard_control_sensors_enabled_extended,0
+1346,1,SYS_STATUS,onboard_control_sensors_health_extended,0
 1347,125,POWER_STATUS,Vcc,5000
 1347,125,POWER_STATUS,Vservo,0
 1347,125,POWER_STATUS,flags,0
@@ -10625,6 +10751,9 @@ index,msgid,msgname,field,value
 1372,1,SYS_STATUS,errors_count3,0
 1372,1,SYS_STATUS,errors_count4,0
 1372,1,SYS_STATUS,battery_remaining,100
+1372,1,SYS_STATUS,onboard_control_sensors_present_extended,0
+1372,1,SYS_STATUS,onboard_control_sensors_enabled_extended,0
+1372,1,SYS_STATUS,onboard_control_sensors_health_extended,0
 1373,125,POWER_STATUS,Vcc,5000
 1373,125,POWER_STATUS,Vservo,0
 1373,125,POWER_STATUS,flags,0
@@ -10856,6 +10985,9 @@ index,msgid,msgname,field,value
 1399,1,SYS_STATUS,errors_count3,0
 1399,1,SYS_STATUS,errors_count4,0
 1399,1,SYS_STATUS,battery_remaining,100
+1399,1,SYS_STATUS,onboard_control_sensors_present_extended,0
+1399,1,SYS_STATUS,onboard_control_sensors_enabled_extended,0
+1399,1,SYS_STATUS,onboard_control_sensors_health_extended,0
 1400,125,POWER_STATUS,Vcc,5000
 1400,125,POWER_STATUS,Vservo,0
 1400,125,POWER_STATUS,flags,0
@@ -11081,6 +11213,9 @@ index,msgid,msgname,field,value
 1425,1,SYS_STATUS,errors_count3,0
 1425,1,SYS_STATUS,errors_count4,0
 1425,1,SYS_STATUS,battery_remaining,100
+1425,1,SYS_STATUS,onboard_control_sensors_present_extended,0
+1425,1,SYS_STATUS,onboard_control_sensors_enabled_extended,0
+1425,1,SYS_STATUS,onboard_control_sensors_health_extended,0
 1426,125,POWER_STATUS,Vcc,5000
 1426,125,POWER_STATUS,Vservo,0
 1426,125,POWER_STATUS,flags,0
@@ -11306,6 +11441,9 @@ index,msgid,msgname,field,value
 1451,1,SYS_STATUS,errors_count3,0
 1451,1,SYS_STATUS,errors_count4,0
 1451,1,SYS_STATUS,battery_remaining,100
+1451,1,SYS_STATUS,onboard_control_sensors_present_extended,0
+1451,1,SYS_STATUS,onboard_control_sensors_enabled_extended,0
+1451,1,SYS_STATUS,onboard_control_sensors_health_extended,0
 1452,125,POWER_STATUS,Vcc,5000
 1452,125,POWER_STATUS,Vservo,0
 1452,125,POWER_STATUS,flags,0
@@ -11531,6 +11669,9 @@ index,msgid,msgname,field,value
 1477,1,SYS_STATUS,errors_count3,0
 1477,1,SYS_STATUS,errors_count4,0
 1477,1,SYS_STATUS,battery_remaining,100
+1477,1,SYS_STATUS,onboard_control_sensors_present_extended,0
+1477,1,SYS_STATUS,onboard_control_sensors_enabled_extended,0
+1477,1,SYS_STATUS,onboard_control_sensors_health_extended,0
 1478,125,POWER_STATUS,Vcc,5000
 1478,125,POWER_STATUS,Vservo,0
 1478,125,POWER_STATUS,flags,0
@@ -11764,6 +11905,9 @@ index,msgid,msgname,field,value
 1505,1,SYS_STATUS,errors_count3,0
 1505,1,SYS_STATUS,errors_count4,0
 1505,1,SYS_STATUS,battery_remaining,100
+1505,1,SYS_STATUS,onboard_control_sensors_present_extended,0
+1505,1,SYS_STATUS,onboard_control_sensors_enabled_extended,0
+1505,1,SYS_STATUS,onboard_control_sensors_health_extended,0
 1506,125,POWER_STATUS,Vcc,5000
 1506,125,POWER_STATUS,Vservo,0
 1506,125,POWER_STATUS,flags,0
@@ -11997,6 +12141,9 @@ index,msgid,msgname,field,value
 1533,1,SYS_STATUS,errors_count3,0
 1533,1,SYS_STATUS,errors_count4,0
 1533,1,SYS_STATUS,battery_remaining,100
+1533,1,SYS_STATUS,onboard_control_sensors_present_extended,0
+1533,1,SYS_STATUS,onboard_control_sensors_enabled_extended,0
+1533,1,SYS_STATUS,onboard_control_sensors_health_extended,0
 1534,125,POWER_STATUS,Vcc,5000
 1534,125,POWER_STATUS,Vservo,0
 1534,125,POWER_STATUS,flags,0
@@ -12222,6 +12369,9 @@ index,msgid,msgname,field,value
 1559,1,SYS_STATUS,errors_count3,0
 1559,1,SYS_STATUS,errors_count4,0
 1559,1,SYS_STATUS,battery_remaining,100
+1559,1,SYS_STATUS,onboard_control_sensors_present_extended,0
+1559,1,SYS_STATUS,onboard_control_sensors_enabled_extended,0
+1559,1,SYS_STATUS,onboard_control_sensors_health_extended,0
 1560,125,POWER_STATUS,Vcc,5000
 1560,125,POWER_STATUS,Vservo,0
 1560,125,POWER_STATUS,flags,0
@@ -12447,6 +12597,9 @@ index,msgid,msgname,field,value
 1585,1,SYS_STATUS,errors_count3,0
 1585,1,SYS_STATUS,errors_count4,0
 1585,1,SYS_STATUS,battery_remaining,100
+1585,1,SYS_STATUS,onboard_control_sensors_present_extended,0
+1585,1,SYS_STATUS,onboard_control_sensors_enabled_extended,0
+1585,1,SYS_STATUS,onboard_control_sensors_health_extended,0
 1586,125,POWER_STATUS,Vcc,5000
 1586,125,POWER_STATUS,Vservo,0
 1586,125,POWER_STATUS,flags,0
@@ -12672,6 +12825,9 @@ index,msgid,msgname,field,value
 1611,1,SYS_STATUS,errors_count3,0
 1611,1,SYS_STATUS,errors_count4,0
 1611,1,SYS_STATUS,battery_remaining,100
+1611,1,SYS_STATUS,onboard_control_sensors_present_extended,0
+1611,1,SYS_STATUS,onboard_control_sensors_enabled_extended,0
+1611,1,SYS_STATUS,onboard_control_sensors_health_extended,0
 1612,125,POWER_STATUS,Vcc,5000
 1612,125,POWER_STATUS,Vservo,0
 1612,125,POWER_STATUS,flags,0
@@ -12897,6 +13053,9 @@ index,msgid,msgname,field,value
 1637,1,SYS_STATUS,errors_count3,0
 1637,1,SYS_STATUS,errors_count4,0
 1637,1,SYS_STATUS,battery_remaining,100
+1637,1,SYS_STATUS,onboard_control_sensors_present_extended,0
+1637,1,SYS_STATUS,onboard_control_sensors_enabled_extended,0
+1637,1,SYS_STATUS,onboard_control_sensors_health_extended,0
 1638,125,POWER_STATUS,Vcc,5000
 1638,125,POWER_STATUS,Vservo,0
 1638,125,POWER_STATUS,flags,0
@@ -13128,6 +13287,9 @@ index,msgid,msgname,field,value
 1664,1,SYS_STATUS,errors_count3,0
 1664,1,SYS_STATUS,errors_count4,0
 1664,1,SYS_STATUS,battery_remaining,100
+1664,1,SYS_STATUS,onboard_control_sensors_present_extended,0
+1664,1,SYS_STATUS,onboard_control_sensors_enabled_extended,0
+1664,1,SYS_STATUS,onboard_control_sensors_health_extended,0
 1665,125,POWER_STATUS,Vcc,5000
 1665,125,POWER_STATUS,Vservo,0
 1665,125,POWER_STATUS,flags,0
@@ -13353,6 +13515,9 @@ index,msgid,msgname,field,value
 1690,1,SYS_STATUS,errors_count3,0
 1690,1,SYS_STATUS,errors_count4,0
 1690,1,SYS_STATUS,battery_remaining,100
+1690,1,SYS_STATUS,onboard_control_sensors_present_extended,0
+1690,1,SYS_STATUS,onboard_control_sensors_enabled_extended,0
+1690,1,SYS_STATUS,onboard_control_sensors_health_extended,0
 1691,125,POWER_STATUS,Vcc,5000
 1691,125,POWER_STATUS,Vservo,0
 1691,125,POWER_STATUS,flags,0
@@ -13578,6 +13743,9 @@ index,msgid,msgname,field,value
 1716,1,SYS_STATUS,errors_count3,0
 1716,1,SYS_STATUS,errors_count4,0
 1716,1,SYS_STATUS,battery_remaining,100
+1716,1,SYS_STATUS,onboard_control_sensors_present_extended,0
+1716,1,SYS_STATUS,onboard_control_sensors_enabled_extended,0
+1716,1,SYS_STATUS,onboard_control_sensors_health_extended,0
 1717,125,POWER_STATUS,Vcc,5000
 1717,125,POWER_STATUS,Vservo,0
 1717,125,POWER_STATUS,flags,0
@@ -13803,6 +13971,9 @@ index,msgid,msgname,field,value
 1742,1,SYS_STATUS,errors_count3,0
 1742,1,SYS_STATUS,errors_count4,0
 1742,1,SYS_STATUS,battery_remaining,100
+1742,1,SYS_STATUS,onboard_control_sensors_present_extended,0
+1742,1,SYS_STATUS,onboard_control_sensors_enabled_extended,0
+1742,1,SYS_STATUS,onboard_control_sensors_health_extended,0
 1743,125,POWER_STATUS,Vcc,5000
 1743,125,POWER_STATUS,Vservo,0
 1743,125,POWER_STATUS,flags,0
@@ -14028,6 +14199,9 @@ index,msgid,msgname,field,value
 1768,1,SYS_STATUS,errors_count3,0
 1768,1,SYS_STATUS,errors_count4,0
 1768,1,SYS_STATUS,battery_remaining,100
+1768,1,SYS_STATUS,onboard_control_sensors_present_extended,0
+1768,1,SYS_STATUS,onboard_control_sensors_enabled_extended,0
+1768,1,SYS_STATUS,onboard_control_sensors_health_extended,0
 1769,125,POWER_STATUS,Vcc,5000
 1769,125,POWER_STATUS,Vservo,0
 1769,125,POWER_STATUS,flags,0
@@ -14259,6 +14433,9 @@ index,msgid,msgname,field,value
 1795,1,SYS_STATUS,errors_count3,0
 1795,1,SYS_STATUS,errors_count4,0
 1795,1,SYS_STATUS,battery_remaining,100
+1795,1,SYS_STATUS,onboard_control_sensors_present_extended,0
+1795,1,SYS_STATUS,onboard_control_sensors_enabled_extended,0
+1795,1,SYS_STATUS,onboard_control_sensors_health_extended,0
 1796,125,POWER_STATUS,Vcc,5000
 1796,125,POWER_STATUS,Vservo,0
 1796,125,POWER_STATUS,flags,0
@@ -14484,6 +14661,9 @@ index,msgid,msgname,field,value
 1821,1,SYS_STATUS,errors_count3,0
 1821,1,SYS_STATUS,errors_count4,0
 1821,1,SYS_STATUS,battery_remaining,100
+1821,1,SYS_STATUS,onboard_control_sensors_present_extended,0
+1821,1,SYS_STATUS,onboard_control_sensors_enabled_extended,0
+1821,1,SYS_STATUS,onboard_control_sensors_health_extended,0
 1822,125,POWER_STATUS,Vcc,5000
 1822,125,POWER_STATUS,Vservo,0
 1822,125,POWER_STATUS,flags,0
@@ -14709,6 +14889,9 @@ index,msgid,msgname,field,value
 1847,1,SYS_STATUS,errors_count3,0
 1847,1,SYS_STATUS,errors_count4,0
 1847,1,SYS_STATUS,battery_remaining,100
+1847,1,SYS_STATUS,onboard_control_sensors_present_extended,0
+1847,1,SYS_STATUS,onboard_control_sensors_enabled_extended,0
+1847,1,SYS_STATUS,onboard_control_sensors_health_extended,0
 1848,125,POWER_STATUS,Vcc,5000
 1848,125,POWER_STATUS,Vservo,0
 1848,125,POWER_STATUS,flags,0
@@ -14934,6 +15117,9 @@ index,msgid,msgname,field,value
 1873,1,SYS_STATUS,errors_count3,0
 1873,1,SYS_STATUS,errors_count4,0
 1873,1,SYS_STATUS,battery_remaining,100
+1873,1,SYS_STATUS,onboard_control_sensors_present_extended,0
+1873,1,SYS_STATUS,onboard_control_sensors_enabled_extended,0
+1873,1,SYS_STATUS,onboard_control_sensors_health_extended,0
 1874,125,POWER_STATUS,Vcc,5000
 1874,125,POWER_STATUS,Vservo,0
 1874,125,POWER_STATUS,flags,0
@@ -15159,6 +15345,9 @@ index,msgid,msgname,field,value
 1899,1,SYS_STATUS,errors_count3,0
 1899,1,SYS_STATUS,errors_count4,0
 1899,1,SYS_STATUS,battery_remaining,100
+1899,1,SYS_STATUS,onboard_control_sensors_present_extended,0
+1899,1,SYS_STATUS,onboard_control_sensors_enabled_extended,0
+1899,1,SYS_STATUS,onboard_control_sensors_health_extended,0
 1900,125,POWER_STATUS,Vcc,5000
 1900,125,POWER_STATUS,Vservo,0
 1900,125,POWER_STATUS,flags,0
@@ -15390,6 +15579,9 @@ index,msgid,msgname,field,value
 1926,1,SYS_STATUS,errors_count3,0
 1926,1,SYS_STATUS,errors_count4,0
 1926,1,SYS_STATUS,battery_remaining,100
+1926,1,SYS_STATUS,onboard_control_sensors_present_extended,0
+1926,1,SYS_STATUS,onboard_control_sensors_enabled_extended,0
+1926,1,SYS_STATUS,onboard_control_sensors_health_extended,0
 1927,125,POWER_STATUS,Vcc,5000
 1927,125,POWER_STATUS,Vservo,0
 1927,125,POWER_STATUS,flags,0
@@ -15615,6 +15807,9 @@ index,msgid,msgname,field,value
 1952,1,SYS_STATUS,errors_count3,0
 1952,1,SYS_STATUS,errors_count4,0
 1952,1,SYS_STATUS,battery_remaining,100
+1952,1,SYS_STATUS,onboard_control_sensors_present_extended,0
+1952,1,SYS_STATUS,onboard_control_sensors_enabled_extended,0
+1952,1,SYS_STATUS,onboard_control_sensors_health_extended,0
 1953,125,POWER_STATUS,Vcc,5000
 1953,125,POWER_STATUS,Vservo,0
 1953,125,POWER_STATUS,flags,0
@@ -15840,6 +16035,9 @@ index,msgid,msgname,field,value
 1978,1,SYS_STATUS,errors_count3,0
 1978,1,SYS_STATUS,errors_count4,0
 1978,1,SYS_STATUS,battery_remaining,100
+1978,1,SYS_STATUS,onboard_control_sensors_present_extended,0
+1978,1,SYS_STATUS,onboard_control_sensors_enabled_extended,0
+1978,1,SYS_STATUS,onboard_control_sensors_health_extended,0
 1979,125,POWER_STATUS,Vcc,5000
 1979,125,POWER_STATUS,Vservo,0
 1979,125,POWER_STATUS,flags,0
@@ -16065,6 +16263,9 @@ index,msgid,msgname,field,value
 2004,1,SYS_STATUS,errors_count3,0
 2004,1,SYS_STATUS,errors_count4,0
 2004,1,SYS_STATUS,battery_remaining,100
+2004,1,SYS_STATUS,onboard_control_sensors_present_extended,0
+2004,1,SYS_STATUS,onboard_control_sensors_enabled_extended,0
+2004,1,SYS_STATUS,onboard_control_sensors_health_extended,0
 2005,125,POWER_STATUS,Vcc,5000
 2005,125,POWER_STATUS,Vservo,0
 2005,125,POWER_STATUS,flags,0
@@ -16290,6 +16491,9 @@ index,msgid,msgname,field,value
 2030,1,SYS_STATUS,errors_count3,0
 2030,1,SYS_STATUS,errors_count4,0
 2030,1,SYS_STATUS,battery_remaining,100
+2030,1,SYS_STATUS,onboard_control_sensors_present_extended,0
+2030,1,SYS_STATUS,onboard_control_sensors_enabled_extended,0
+2030,1,SYS_STATUS,onboard_control_sensors_health_extended,0
 2031,125,POWER_STATUS,Vcc,5000
 2031,125,POWER_STATUS,Vservo,0
 2031,125,POWER_STATUS,flags,0
@@ -16521,6 +16725,9 @@ index,msgid,msgname,field,value
 2057,1,SYS_STATUS,errors_count3,0
 2057,1,SYS_STATUS,errors_count4,0
 2057,1,SYS_STATUS,battery_remaining,100
+2057,1,SYS_STATUS,onboard_control_sensors_present_extended,0
+2057,1,SYS_STATUS,onboard_control_sensors_enabled_extended,0
+2057,1,SYS_STATUS,onboard_control_sensors_health_extended,0
 2058,125,POWER_STATUS,Vcc,5000
 2058,125,POWER_STATUS,Vservo,0
 2058,125,POWER_STATUS,flags,0
@@ -16746,6 +16953,9 @@ index,msgid,msgname,field,value
 2083,1,SYS_STATUS,errors_count3,0
 2083,1,SYS_STATUS,errors_count4,0
 2083,1,SYS_STATUS,battery_remaining,100
+2083,1,SYS_STATUS,onboard_control_sensors_present_extended,0
+2083,1,SYS_STATUS,onboard_control_sensors_enabled_extended,0
+2083,1,SYS_STATUS,onboard_control_sensors_health_extended,0
 2084,125,POWER_STATUS,Vcc,5000
 2084,125,POWER_STATUS,Vservo,0
 2084,125,POWER_STATUS,flags,0
@@ -16971,6 +17181,9 @@ index,msgid,msgname,field,value
 2109,1,SYS_STATUS,errors_count3,0
 2109,1,SYS_STATUS,errors_count4,0
 2109,1,SYS_STATUS,battery_remaining,100
+2109,1,SYS_STATUS,onboard_control_sensors_present_extended,0
+2109,1,SYS_STATUS,onboard_control_sensors_enabled_extended,0
+2109,1,SYS_STATUS,onboard_control_sensors_health_extended,0
 2110,125,POWER_STATUS,Vcc,5000
 2110,125,POWER_STATUS,Vservo,0
 2110,125,POWER_STATUS,flags,0
@@ -17196,6 +17409,9 @@ index,msgid,msgname,field,value
 2135,1,SYS_STATUS,errors_count3,0
 2135,1,SYS_STATUS,errors_count4,0
 2135,1,SYS_STATUS,battery_remaining,100
+2135,1,SYS_STATUS,onboard_control_sensors_present_extended,0
+2135,1,SYS_STATUS,onboard_control_sensors_enabled_extended,0
+2135,1,SYS_STATUS,onboard_control_sensors_health_extended,0
 2136,125,POWER_STATUS,Vcc,5000
 2136,125,POWER_STATUS,Vservo,0
 2136,125,POWER_STATUS,flags,0
@@ -17421,6 +17637,9 @@ index,msgid,msgname,field,value
 2161,1,SYS_STATUS,errors_count3,0
 2161,1,SYS_STATUS,errors_count4,0
 2161,1,SYS_STATUS,battery_remaining,100
+2161,1,SYS_STATUS,onboard_control_sensors_present_extended,0
+2161,1,SYS_STATUS,onboard_control_sensors_enabled_extended,0
+2161,1,SYS_STATUS,onboard_control_sensors_health_extended,0
 2162,125,POWER_STATUS,Vcc,5000
 2162,125,POWER_STATUS,Vservo,0
 2162,125,POWER_STATUS,flags,0
@@ -17652,6 +17871,9 @@ index,msgid,msgname,field,value
 2188,1,SYS_STATUS,errors_count3,0
 2188,1,SYS_STATUS,errors_count4,0
 2188,1,SYS_STATUS,battery_remaining,100
+2188,1,SYS_STATUS,onboard_control_sensors_present_extended,0
+2188,1,SYS_STATUS,onboard_control_sensors_enabled_extended,0
+2188,1,SYS_STATUS,onboard_control_sensors_health_extended,0
 2189,125,POWER_STATUS,Vcc,5000
 2189,125,POWER_STATUS,Vservo,0
 2189,125,POWER_STATUS,flags,0
@@ -17877,6 +18099,9 @@ index,msgid,msgname,field,value
 2214,1,SYS_STATUS,errors_count3,0
 2214,1,SYS_STATUS,errors_count4,0
 2214,1,SYS_STATUS,battery_remaining,100
+2214,1,SYS_STATUS,onboard_control_sensors_present_extended,0
+2214,1,SYS_STATUS,onboard_control_sensors_enabled_extended,0
+2214,1,SYS_STATUS,onboard_control_sensors_health_extended,0
 2215,125,POWER_STATUS,Vcc,5000
 2215,125,POWER_STATUS,Vservo,0
 2215,125,POWER_STATUS,flags,0
@@ -18102,6 +18327,9 @@ index,msgid,msgname,field,value
 2240,1,SYS_STATUS,errors_count3,0
 2240,1,SYS_STATUS,errors_count4,0
 2240,1,SYS_STATUS,battery_remaining,100
+2240,1,SYS_STATUS,onboard_control_sensors_present_extended,0
+2240,1,SYS_STATUS,onboard_control_sensors_enabled_extended,0
+2240,1,SYS_STATUS,onboard_control_sensors_health_extended,0
 2241,125,POWER_STATUS,Vcc,5000
 2241,125,POWER_STATUS,Vservo,0
 2241,125,POWER_STATUS,flags,0
@@ -18327,6 +18555,9 @@ index,msgid,msgname,field,value
 2266,1,SYS_STATUS,errors_count3,0
 2266,1,SYS_STATUS,errors_count4,0
 2266,1,SYS_STATUS,battery_remaining,100
+2266,1,SYS_STATUS,onboard_control_sensors_present_extended,0
+2266,1,SYS_STATUS,onboard_control_sensors_enabled_extended,0
+2266,1,SYS_STATUS,onboard_control_sensors_health_extended,0
 2267,125,POWER_STATUS,Vcc,5000
 2267,125,POWER_STATUS,Vservo,0
 2267,125,POWER_STATUS,flags,0
@@ -18552,6 +18783,9 @@ index,msgid,msgname,field,value
 2292,1,SYS_STATUS,errors_count3,0
 2292,1,SYS_STATUS,errors_count4,0
 2292,1,SYS_STATUS,battery_remaining,100
+2292,1,SYS_STATUS,onboard_control_sensors_present_extended,0
+2292,1,SYS_STATUS,onboard_control_sensors_enabled_extended,0
+2292,1,SYS_STATUS,onboard_control_sensors_health_extended,0
 2293,125,POWER_STATUS,Vcc,5000
 2293,125,POWER_STATUS,Vservo,0
 2293,125,POWER_STATUS,flags,0
@@ -18783,6 +19017,9 @@ index,msgid,msgname,field,value
 2319,1,SYS_STATUS,errors_count3,0
 2319,1,SYS_STATUS,errors_count4,0
 2319,1,SYS_STATUS,battery_remaining,100
+2319,1,SYS_STATUS,onboard_control_sensors_present_extended,0
+2319,1,SYS_STATUS,onboard_control_sensors_enabled_extended,0
+2319,1,SYS_STATUS,onboard_control_sensors_health_extended,0
 2320,125,POWER_STATUS,Vcc,5000
 2320,125,POWER_STATUS,Vservo,0
 2320,125,POWER_STATUS,flags,0
@@ -19008,6 +19245,9 @@ index,msgid,msgname,field,value
 2345,1,SYS_STATUS,errors_count3,0
 2345,1,SYS_STATUS,errors_count4,0
 2345,1,SYS_STATUS,battery_remaining,100
+2345,1,SYS_STATUS,onboard_control_sensors_present_extended,0
+2345,1,SYS_STATUS,onboard_control_sensors_enabled_extended,0
+2345,1,SYS_STATUS,onboard_control_sensors_health_extended,0
 2346,125,POWER_STATUS,Vcc,5000
 2346,125,POWER_STATUS,Vservo,0
 2346,125,POWER_STATUS,flags,0
@@ -19233,6 +19473,9 @@ index,msgid,msgname,field,value
 2371,1,SYS_STATUS,errors_count3,0
 2371,1,SYS_STATUS,errors_count4,0
 2371,1,SYS_STATUS,battery_remaining,100
+2371,1,SYS_STATUS,onboard_control_sensors_present_extended,0
+2371,1,SYS_STATUS,onboard_control_sensors_enabled_extended,0
+2371,1,SYS_STATUS,onboard_control_sensors_health_extended,0
 2372,125,POWER_STATUS,Vcc,5000
 2372,125,POWER_STATUS,Vservo,0
 2372,125,POWER_STATUS,flags,0
@@ -19458,6 +19701,9 @@ index,msgid,msgname,field,value
 2397,1,SYS_STATUS,errors_count3,0
 2397,1,SYS_STATUS,errors_count4,0
 2397,1,SYS_STATUS,battery_remaining,100
+2397,1,SYS_STATUS,onboard_control_sensors_present_extended,0
+2397,1,SYS_STATUS,onboard_control_sensors_enabled_extended,0
+2397,1,SYS_STATUS,onboard_control_sensors_health_extended,0
 2398,125,POWER_STATUS,Vcc,5000
 2398,125,POWER_STATUS,Vservo,0
 2398,125,POWER_STATUS,flags,0
@@ -19683,6 +19929,9 @@ index,msgid,msgname,field,value
 2423,1,SYS_STATUS,errors_count3,0
 2423,1,SYS_STATUS,errors_count4,0
 2423,1,SYS_STATUS,battery_remaining,100
+2423,1,SYS_STATUS,onboard_control_sensors_present_extended,0
+2423,1,SYS_STATUS,onboard_control_sensors_enabled_extended,0
+2423,1,SYS_STATUS,onboard_control_sensors_health_extended,0
 2424,125,POWER_STATUS,Vcc,5000
 2424,125,POWER_STATUS,Vservo,0
 2424,125,POWER_STATUS,flags,0
@@ -19914,6 +20163,9 @@ index,msgid,msgname,field,value
 2450,1,SYS_STATUS,errors_count3,0
 2450,1,SYS_STATUS,errors_count4,0
 2450,1,SYS_STATUS,battery_remaining,100
+2450,1,SYS_STATUS,onboard_control_sensors_present_extended,0
+2450,1,SYS_STATUS,onboard_control_sensors_enabled_extended,0
+2450,1,SYS_STATUS,onboard_control_sensors_health_extended,0
 2451,125,POWER_STATUS,Vcc,5000
 2451,125,POWER_STATUS,Vservo,0
 2451,125,POWER_STATUS,flags,0
@@ -20139,6 +20391,9 @@ index,msgid,msgname,field,value
 2476,1,SYS_STATUS,errors_count3,0
 2476,1,SYS_STATUS,errors_count4,0
 2476,1,SYS_STATUS,battery_remaining,100
+2476,1,SYS_STATUS,onboard_control_sensors_present_extended,0
+2476,1,SYS_STATUS,onboard_control_sensors_enabled_extended,0
+2476,1,SYS_STATUS,onboard_control_sensors_health_extended,0
 2477,125,POWER_STATUS,Vcc,5000
 2477,125,POWER_STATUS,Vservo,0
 2477,125,POWER_STATUS,flags,0
@@ -20364,6 +20619,9 @@ index,msgid,msgname,field,value
 2502,1,SYS_STATUS,errors_count3,0
 2502,1,SYS_STATUS,errors_count4,0
 2502,1,SYS_STATUS,battery_remaining,100
+2502,1,SYS_STATUS,onboard_control_sensors_present_extended,0
+2502,1,SYS_STATUS,onboard_control_sensors_enabled_extended,0
+2502,1,SYS_STATUS,onboard_control_sensors_health_extended,0
 2503,125,POWER_STATUS,Vcc,5000
 2503,125,POWER_STATUS,Vservo,0
 2503,125,POWER_STATUS,flags,0
@@ -20589,6 +20847,9 @@ index,msgid,msgname,field,value
 2528,1,SYS_STATUS,errors_count3,0
 2528,1,SYS_STATUS,errors_count4,0
 2528,1,SYS_STATUS,battery_remaining,100
+2528,1,SYS_STATUS,onboard_control_sensors_present_extended,0
+2528,1,SYS_STATUS,onboard_control_sensors_enabled_extended,0
+2528,1,SYS_STATUS,onboard_control_sensors_health_extended,0
 2529,125,POWER_STATUS,Vcc,5000
 2529,125,POWER_STATUS,Vservo,0
 2529,125,POWER_STATUS,flags,0
@@ -20814,6 +21075,9 @@ index,msgid,msgname,field,value
 2554,1,SYS_STATUS,errors_count3,0
 2554,1,SYS_STATUS,errors_count4,0
 2554,1,SYS_STATUS,battery_remaining,100
+2554,1,SYS_STATUS,onboard_control_sensors_present_extended,0
+2554,1,SYS_STATUS,onboard_control_sensors_enabled_extended,0
+2554,1,SYS_STATUS,onboard_control_sensors_health_extended,0
 2555,125,POWER_STATUS,Vcc,5000
 2555,125,POWER_STATUS,Vservo,0
 2555,125,POWER_STATUS,flags,0
@@ -21045,6 +21309,9 @@ index,msgid,msgname,field,value
 2581,1,SYS_STATUS,errors_count3,0
 2581,1,SYS_STATUS,errors_count4,0
 2581,1,SYS_STATUS,battery_remaining,100
+2581,1,SYS_STATUS,onboard_control_sensors_present_extended,0
+2581,1,SYS_STATUS,onboard_control_sensors_enabled_extended,0
+2581,1,SYS_STATUS,onboard_control_sensors_health_extended,0
 2582,125,POWER_STATUS,Vcc,5000
 2582,125,POWER_STATUS,Vservo,0
 2582,125,POWER_STATUS,flags,0
@@ -21270,6 +21537,9 @@ index,msgid,msgname,field,value
 2607,1,SYS_STATUS,errors_count3,0
 2607,1,SYS_STATUS,errors_count4,0
 2607,1,SYS_STATUS,battery_remaining,100
+2607,1,SYS_STATUS,onboard_control_sensors_present_extended,0
+2607,1,SYS_STATUS,onboard_control_sensors_enabled_extended,0
+2607,1,SYS_STATUS,onboard_control_sensors_health_extended,0
 2608,125,POWER_STATUS,Vcc,5000
 2608,125,POWER_STATUS,Vservo,0
 2608,125,POWER_STATUS,flags,0
@@ -21495,6 +21765,9 @@ index,msgid,msgname,field,value
 2633,1,SYS_STATUS,errors_count3,0
 2633,1,SYS_STATUS,errors_count4,0
 2633,1,SYS_STATUS,battery_remaining,100
+2633,1,SYS_STATUS,onboard_control_sensors_present_extended,0
+2633,1,SYS_STATUS,onboard_control_sensors_enabled_extended,0
+2633,1,SYS_STATUS,onboard_control_sensors_health_extended,0
 2634,125,POWER_STATUS,Vcc,5000
 2634,125,POWER_STATUS,Vservo,0
 2634,125,POWER_STATUS,flags,0
@@ -21720,6 +21993,9 @@ index,msgid,msgname,field,value
 2659,1,SYS_STATUS,errors_count3,0
 2659,1,SYS_STATUS,errors_count4,0
 2659,1,SYS_STATUS,battery_remaining,100
+2659,1,SYS_STATUS,onboard_control_sensors_present_extended,0
+2659,1,SYS_STATUS,onboard_control_sensors_enabled_extended,0
+2659,1,SYS_STATUS,onboard_control_sensors_health_extended,0
 2660,125,POWER_STATUS,Vcc,5000
 2660,125,POWER_STATUS,Vservo,0
 2660,125,POWER_STATUS,flags,0
@@ -21945,6 +22221,9 @@ index,msgid,msgname,field,value
 2685,1,SYS_STATUS,errors_count3,0
 2685,1,SYS_STATUS,errors_count4,0
 2685,1,SYS_STATUS,battery_remaining,100
+2685,1,SYS_STATUS,onboard_control_sensors_present_extended,0
+2685,1,SYS_STATUS,onboard_control_sensors_enabled_extended,0
+2685,1,SYS_STATUS,onboard_control_sensors_health_extended,0
 2686,125,POWER_STATUS,Vcc,5000
 2686,125,POWER_STATUS,Vservo,0
 2686,125,POWER_STATUS,flags,0
@@ -22176,6 +22455,9 @@ index,msgid,msgname,field,value
 2712,1,SYS_STATUS,errors_count3,0
 2712,1,SYS_STATUS,errors_count4,0
 2712,1,SYS_STATUS,battery_remaining,100
+2712,1,SYS_STATUS,onboard_control_sensors_present_extended,0
+2712,1,SYS_STATUS,onboard_control_sensors_enabled_extended,0
+2712,1,SYS_STATUS,onboard_control_sensors_health_extended,0
 2713,125,POWER_STATUS,Vcc,5000
 2713,125,POWER_STATUS,Vservo,0
 2713,125,POWER_STATUS,flags,0
@@ -22401,6 +22683,9 @@ index,msgid,msgname,field,value
 2738,1,SYS_STATUS,errors_count3,0
 2738,1,SYS_STATUS,errors_count4,0
 2738,1,SYS_STATUS,battery_remaining,100
+2738,1,SYS_STATUS,onboard_control_sensors_present_extended,0
+2738,1,SYS_STATUS,onboard_control_sensors_enabled_extended,0
+2738,1,SYS_STATUS,onboard_control_sensors_health_extended,0
 2739,125,POWER_STATUS,Vcc,5000
 2739,125,POWER_STATUS,Vservo,0
 2739,125,POWER_STATUS,flags,0
@@ -22626,6 +22911,9 @@ index,msgid,msgname,field,value
 2764,1,SYS_STATUS,errors_count3,0
 2764,1,SYS_STATUS,errors_count4,0
 2764,1,SYS_STATUS,battery_remaining,100
+2764,1,SYS_STATUS,onboard_control_sensors_present_extended,0
+2764,1,SYS_STATUS,onboard_control_sensors_enabled_extended,0
+2764,1,SYS_STATUS,onboard_control_sensors_health_extended,0
 2765,125,POWER_STATUS,Vcc,5000
 2765,125,POWER_STATUS,Vservo,0
 2765,125,POWER_STATUS,flags,0
@@ -22851,6 +23139,9 @@ index,msgid,msgname,field,value
 2790,1,SYS_STATUS,errors_count3,0
 2790,1,SYS_STATUS,errors_count4,0
 2790,1,SYS_STATUS,battery_remaining,100
+2790,1,SYS_STATUS,onboard_control_sensors_present_extended,0
+2790,1,SYS_STATUS,onboard_control_sensors_enabled_extended,0
+2790,1,SYS_STATUS,onboard_control_sensors_health_extended,0
 2791,125,POWER_STATUS,Vcc,5000
 2791,125,POWER_STATUS,Vservo,0
 2791,125,POWER_STATUS,flags,0
@@ -23076,6 +23367,9 @@ index,msgid,msgname,field,value
 2816,1,SYS_STATUS,errors_count3,0
 2816,1,SYS_STATUS,errors_count4,0
 2816,1,SYS_STATUS,battery_remaining,100
+2816,1,SYS_STATUS,onboard_control_sensors_present_extended,0
+2816,1,SYS_STATUS,onboard_control_sensors_enabled_extended,0
+2816,1,SYS_STATUS,onboard_control_sensors_health_extended,0
 2817,125,POWER_STATUS,Vcc,5000
 2817,125,POWER_STATUS,Vservo,0
 2817,125,POWER_STATUS,flags,0
@@ -23347,6 +23641,9 @@ index,msgid,msgname,field,value
 2851,1,SYS_STATUS,errors_count3,0
 2851,1,SYS_STATUS,errors_count4,0
 2851,1,SYS_STATUS,battery_remaining,100
+2851,1,SYS_STATUS,onboard_control_sensors_present_extended,0
+2851,1,SYS_STATUS,onboard_control_sensors_enabled_extended,0
+2851,1,SYS_STATUS,onboard_control_sensors_health_extended,0
 2852,125,POWER_STATUS,Vcc,5000
 2852,125,POWER_STATUS,Vservo,0
 2852,125,POWER_STATUS,flags,0
@@ -23576,6 +23873,9 @@ index,msgid,msgname,field,value
 2878,1,SYS_STATUS,errors_count3,0
 2878,1,SYS_STATUS,errors_count4,0
 2878,1,SYS_STATUS,battery_remaining,100
+2878,1,SYS_STATUS,onboard_control_sensors_present_extended,0
+2878,1,SYS_STATUS,onboard_control_sensors_enabled_extended,0
+2878,1,SYS_STATUS,onboard_control_sensors_health_extended,0
 2879,125,POWER_STATUS,Vcc,5000
 2879,125,POWER_STATUS,Vservo,0
 2879,125,POWER_STATUS,flags,0
@@ -23801,6 +24101,9 @@ index,msgid,msgname,field,value
 2904,1,SYS_STATUS,errors_count3,0
 2904,1,SYS_STATUS,errors_count4,0
 2904,1,SYS_STATUS,battery_remaining,100
+2904,1,SYS_STATUS,onboard_control_sensors_present_extended,0
+2904,1,SYS_STATUS,onboard_control_sensors_enabled_extended,0
+2904,1,SYS_STATUS,onboard_control_sensors_health_extended,0
 2905,125,POWER_STATUS,Vcc,5000
 2905,125,POWER_STATUS,Vservo,0
 2905,125,POWER_STATUS,flags,0
@@ -24026,6 +24329,9 @@ index,msgid,msgname,field,value
 2930,1,SYS_STATUS,errors_count3,0
 2930,1,SYS_STATUS,errors_count4,0
 2930,1,SYS_STATUS,battery_remaining,100
+2930,1,SYS_STATUS,onboard_control_sensors_present_extended,0
+2930,1,SYS_STATUS,onboard_control_sensors_enabled_extended,0
+2930,1,SYS_STATUS,onboard_control_sensors_health_extended,0
 2931,125,POWER_STATUS,Vcc,5000
 2931,125,POWER_STATUS,Vservo,0
 2931,125,POWER_STATUS,flags,0
@@ -24251,6 +24557,9 @@ index,msgid,msgname,field,value
 2956,1,SYS_STATUS,errors_count3,0
 2956,1,SYS_STATUS,errors_count4,0
 2956,1,SYS_STATUS,battery_remaining,100
+2956,1,SYS_STATUS,onboard_control_sensors_present_extended,0
+2956,1,SYS_STATUS,onboard_control_sensors_enabled_extended,0
+2956,1,SYS_STATUS,onboard_control_sensors_health_extended,0
 2957,125,POWER_STATUS,Vcc,5000
 2957,125,POWER_STATUS,Vservo,0
 2957,125,POWER_STATUS,flags,0
@@ -24482,6 +24791,9 @@ index,msgid,msgname,field,value
 2983,1,SYS_STATUS,errors_count3,0
 2983,1,SYS_STATUS,errors_count4,0
 2983,1,SYS_STATUS,battery_remaining,100
+2983,1,SYS_STATUS,onboard_control_sensors_present_extended,0
+2983,1,SYS_STATUS,onboard_control_sensors_enabled_extended,0
+2983,1,SYS_STATUS,onboard_control_sensors_health_extended,0
 2984,125,POWER_STATUS,Vcc,5000
 2984,125,POWER_STATUS,Vservo,0
 2984,125,POWER_STATUS,flags,0

@@ -323,7 +323,10 @@ mod tests {
         // A column of MAV_SYS_STATUS_SENSOR_... is unreadable and every entry shares it.
         assert_eq!(sensor_name(GYRO), Some("3D_GYRO"));
         assert_eq!(sensor_name(GPS), Some("GPS"));
-        assert_eq!(sensor_name(1 << 31), None);
+        // Bit 31 has a name since the definitions of 5dbb2b0 (`MAV_SYS_STATUS_EXTENSION_USED`); a
+        // mask that is no one member has none.
+        assert_eq!(sensor_name(1 << 31), Some("EXTENSION_USED"));
+        assert_eq!(sensor_name(GYRO | ACCEL), None);
 
         // The bits added later have no SENSOR in their name, and they are exactly the ones a
         // pre-arm panel shows most often. Against a real board these read as

@@ -285,7 +285,7 @@ pub fn request_param_by_name(target: VehicleId, name: &str) -> MavMessage {
 }
 
 /// `MAV_CMD_PREFLIGHT_REBOOT_SHUTDOWN`.
-const CMD_PREFLIGHT_REBOOT_SHUTDOWN: u16 = 246;
+pub const CMD_PREFLIGHT_REBOOT_SHUTDOWN: u16 = 246;
 
 /// Reboots the autopilot.
 ///

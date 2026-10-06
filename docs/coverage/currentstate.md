@@ -26,8 +26,8 @@ None: every field is held, derivable, plumbing or deliberately dropped.
 | `ratestatusbackup` | `static int` |  |  | plumbing: the saved default that `ResetInternals` copies into the matching `rate*` property: `StreamRates::backups`, which a newly seen vehicle starts from |
 | `ratesensorsbackup` | `static int` |  |  | plumbing: the saved default that `ResetInternals` copies into the matching `rate*` property: `StreamRates::backups`, which a newly seen vehicle starts from |
 | `ratercbackup` | `static int` |  |  | plumbing: the saved default that `ResetInternals` copies into the matching `rate*` property: `StreamRates::backups`, which a newly seen vehicle starts from |
-| `KIndexstatic` | `static int` |  |  | done: `VehicleState::kindex()` (process-wide, -1 until `VehicleState::set_kindex`, which start-up must call with the `kindex` setting and the K-index download, as MainV2.cs:3940-3981 does) |
-| `firmware` | `Firmwares` |  |  | derived: from `autopilot` and `vehicle_type` as MAVLinkInterface.cs:6700-6815 does, `VehicleFamily::from_mav_type` for ArduPilot; the version-string lookup it tries first reads the firmware's `STATUSTEXT` banner (MAVLinkInterface.cs:1827-1830), which is not held here |
+| `KIndexstatic` | `static int` |  |  | done: `VehicleState::kindex()` (process-wide, -1 until `VehicleState::set_kindex`, which start-up must call with the `kindex` setting and the K-index download, as MainV2.cs:3947-3988 does) |
+| `firmware` | `Firmwares` |  |  | derived: from `autopilot` and `vehicle_type` as MAVLinkInterface.cs:6664-6779 does, `VehicleFamily::from_mav_type` for ArduPilot; the version-string lookup it tries first reads the firmware's `STATUSTEXT` banner (MAVLinkInterface.cs:1824-1827), which is not held here |
 | `hilch1` | `int` |  |  | done: `hil_channels[0]` (`RC_CHANNELS_SCALED`, or `HIL_CONTROLS`' roll times 10000) |
 | `hilch2` | `int` |  |  | done: `hil_channels[1]` (`RC_CHANNELS_SCALED`, or `HIL_CONTROLS`' pitch times 10000) |
 | `hilch3` | `int` |  |  | done: `hil_channels[2]` (`RC_CHANNELS_SCALED`, or `HIL_CONTROLS`' throttle times 10000) |
@@ -96,7 +96,7 @@ None: every field is held, derivable, plumbing or deliberately dropped.
 | `vy` | `double` | Velocity Y (ms) | Position | done: `velocity_east` |
 | `vz` | `double` | Velocity Z (ms) | Position | done: `velocity_down` |
 | `vlen` | `double` |  | Position | derived: the length of (`velocity_north`, `velocity_east`, `velocity_down`) |
-| `altoffsethome` | `float` | Alt Home Offset (dist) | Position | done: `alt_offset_home` (0 until the flight screen's Home Alt button writes it, FlightData.cs:1236-1247) |
+| `altoffsethome` | `float` | Alt Home Offset (dist) | Position | done: `alt_offset_home` (0 until the flight screen's Home Alt button writes it, FlightData.cs:1238-1249) |
 | `gpsstatus` | `float` | Gps Status | Position | done: `gps.fix_type` |
 | `gpshdop` | `float` | Gps HDOP | Position | done: `gps.hdop` |
 | `satcount` | `float` | Sat Count | Position | done: `gps.satellites_visible` |
@@ -321,8 +321,8 @@ None: every field is held, derivable, plumbing or deliberately dropped.
 | `targetalt` | `float` |  | NAV | derived: `target_altitude()`, without the C#'s low-pass |
 | `messages` | `List<(DateTime time, string message)>` |  |  | plumbing: the vehicle's `STATUSTEXT` history, which the link keeps (`mp_link::messages::MessageLog`); the state here is `Copy` and holds no text |
 | `message` | `string` |  |  | plumbing: the last `STATUSTEXT`; see `messages` |
-| `messageHigh` | `string` |  |  | derived: mp-gui's `hud::high_priority_message`, from `ekf` and `sensors`. Not derived there yet: the `STATUSTEXT` messages MAVLinkInterface raises to it (severity at or below the setting, default 4, or text starting `Tuning:`, `PreArm:` or `Arm:`; MAVLinkInterface.cs:5397-5420), and the fence-breach (`fence_breach`), over-current (`board.voltage_flags`) and high-latency failure texts |
-| `messageHighSeverity` | `MAVLink.MAV_SEVERITY` |  | Other | derived: EMERGENCY for the messages the C# raises itself; the `STATUSTEXT`'s own severity for the ones MAVLinkInterface raises (MAVLinkInterface.cs:5399-5420) |
+| `messageHigh` | `string` |  |  | derived: mp-gui's `hud::high_priority_message`, from `ekf` and `sensors`. Not derived there yet: the `STATUSTEXT` messages MAVLinkInterface raises to it (severity at or below the setting, default 4, or text starting `Tuning:`, `PreArm:` or `Arm:`; MAVLinkInterface.cs:5377-5400), and the fence-breach (`fence_breach`), over-current (`board.voltage_flags`) and high-latency failure texts |
+| `messageHighSeverity` | `MAVLink.MAV_SEVERITY` |  | Other | derived: EMERGENCY for the messages the C# raises itself; the `STATUSTEXT`'s own severity for the ones MAVLinkInterface raises (MAVLinkInterface.cs:5379-5400) |
 | `battery_voltage` | `double` | Bat Voltage (V) | Battery | done: `battery.voltage` |
 | `battery_voltage3` | `double` | Bat Voltage (V) | Battery | done: `batteries[1].voltage` |
 | `battery_voltage4` | `double` | Bat Voltage (V) | Battery | done: `batteries[2].voltage` |
@@ -396,9 +396,9 @@ None: every field is held, derivable, plumbing or deliberately dropped.
 | `battery_voltage2` | `double` | Bat2 Voltage (V) | Battery | done: `batteries[0].voltage` |
 | `HomeAlt` | `double` |  | Position | done: `home_altitude` |
 | `HomeLocation` | `PointLatLngAlt` |  | Position | done: `home` (with `home_altitude`) |
-| `PlannedHomeLocation` | `PointLatLngAlt` |  | Position | done: `VehicleState::planned_home()` (process-wide, as the C#'s static is; `VehicleState::set_planned_home` is what start-up must call with the `TXT_homelat`, `TXT_homelng` and `TXT_homealt` settings, as MainV2.cs:1012-1025 does) |
+| `PlannedHomeLocation` | `PointLatLngAlt` |  | Position | done: `VehicleState::planned_home()` (process-wide, as the C#'s static is; `VehicleState::set_planned_home` is what start-up must call with the `TXT_homelat`, `TXT_homelng` and `TXT_homealt` settings, as MainV2.cs:1014-1027 does) |
 | `Base` | `PointLatLngAlt` |  | Position | done: `base` ((0, 0, 0) until the RTK injection page or the moving-base control writes it, ConfigSerialInjectGPS.cs:910, 1077, 1098 and Controls/MovingBase.cs:227) |
-| `TrackerLocation` | `PointLatLngAlt` |  | Position | done: `tracker_location()` (home until `VehicleState::set_tracker_location` - the planner's Set Tracker Home, FlightPlanner.cs:760, 6977 - gives it a longitude) |
+| `TrackerLocation` | `PointLatLngAlt` |  | Position | done: `tracker_location()` (home until `VehicleState::set_tracker_location` - the planner's Set Tracker Home, FlightPlanner.cs:760, 6974 - gives it a longitude) |
 | `Location` | `PointLatLngAlt` |  | Position | derived: `position` with `altitude_msl` |
 | `TargetLocation` | `PointLatLngAlt` |  | Position | done: `target_position` with `target_altitude_msl` (the C#'s tag on it, the type mask, is not kept) |
 | `GeoFenceDist` | `float` |  | Other | done: `geo_fence_dist()` (given the fence items the C# reads from `MAVState.fencepoints`, which their owner must pass) |
@@ -443,7 +443,7 @@ None: every field is held, derivable, plumbing or deliberately dropped.
 | `servovoltage` | `float` | Servo Rail Voltage | Hardware | done: `board.servo_voltage` (millivolts, as the C# shows them) |
 | `voltageflag` | `uint` | Voltage Flags | Hardware | done: `board.voltage_flags` |
 | `i2cerrors` | `ushort` |  | Hardware | done: `board.i2c_errors` |
-| `timesincelastshot` | `double` |  | Other | done: `time_since_last_shot` (0 until the flight screen sets it from `VehicleState::shot_interval` over the camera feedback it keeps, as FlightData.cs:4021-4038 does) |
+| `timesincelastshot` | `double` |  | Other | done: `time_since_last_shot` (0 until the flight screen sets it from `VehicleState::shot_interval` over the camera feedback it keeps, as FlightData.cs:4135-4152 does) |
 | `press_abs` | `float` |  | Sensor | done: `press_abs` |
 | `press_temp` | `int` |  | Sensor | done: `press_temp` |
 | `press_abs2` | `float` |  | Sensor | done: `press_abs2` |
@@ -458,7 +458,7 @@ None: every field is held, derivable, plumbing or deliberately dropped.
 | `campointa` | `float` |  | Mount | done: `mount.pointing_a` |
 | `campointb` | `float` |  | Mount | done: `mount.pointing_b` |
 | `campointc` | `float` |  | Mount | done: `mount.pointing_c` |
-| `GimbalPoint` | `PointLatLngAlt` |  | Mount | done: `gimbal_point` (`None` until the flight screen writes what `GimbalPoint.ProjectPoint` projects, FlightData.cs:3964-3995; that projection is not ported) |
+| `GimbalPoint` | `PointLatLngAlt` |  | Mount | done: `gimbal_point` (`None` until the flight screen writes what `GimbalPoint.ProjectPoint` projects, FlightData.cs:4078-4109; that projection is not ported) |
 | `gimballat` | `float` |  | Mount | done: `gimbal_lat()` |
 | `gimballng` | `float` |  | Mount | done: `gimbal_lng()` |
 | `landed` | `bool` |  | Software | derived: `system_status` == MAV_STATE_STANDBY (3); `HIGH_LATENCY`'s landed state is not held |

@@ -36,4 +36,6 @@ for tlog in "$OUT"/*.tlog; do
     echo "dumping $(basename "$tlog")" >&2
     mono "$HERE/MpRefDump.exe" tlog "$tlog" > "$tlog.csharp.csv"
 done
+# Every field of the first 3,000 frames of the autotest flight, by name, for differential_fields.rs.
+mono "$HERE/MpRefDump.exe" fields "$OUT/autotest.tlog" > "$OUT/autotest.fields.csharp.csv"
 echo "regenerated corpora in $OUT" >&2

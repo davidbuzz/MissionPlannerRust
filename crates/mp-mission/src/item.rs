@@ -112,8 +112,9 @@ impl MissionItem {
     /// So the set is not a range. It is Mission Planner's: `Locationwp.isLocationCommand` asks
     /// whether the `MAV_CMD` member carries `[hasLocation()]` in the generated `Mavlink.cs`, and
     /// the link scales by 1e7 exactly when it does (`MAVLinkInterface.cs:4004-4013, 3538-3545`).
-    /// These are those 45 members; a test holds the list to `Mavlink.cs` when the C# tree is
-    /// present.
+    /// These are those 47 members at 5dbb2b0 - `DO_ORBIT`, `DO_FIGURE_EIGHT` and `CONDITION_GATE`
+    /// marked since efb0801's 45, `FIXED_MAG_CAL_YAW` no longer; a test holds the list to
+    /// `Mavlink.cs` when the C# tree is present.
     /// `// C#: ExtLibs/Utilities/locationwp.cs:39-56`
     #[must_use]
     pub const fn is_navigation(&self) -> bool {
@@ -122,6 +123,8 @@ impl MissionItem {
             16..=19
                 | 21..=25
                 | 31
+                | 34
+                | 35
                 | 36
                 | 80..=82
                 | 84
@@ -136,11 +139,11 @@ impl MissionItem {
                 | 252
                 | 611
                 | 4001
+                | 4501
                 | 5000..=5004
                 | 5100
                 | 30001
                 | 31000..=31009
-                | 42006
                 | 43003
         )
     }
@@ -205,8 +208,8 @@ mod tests {
         };
         assert_eq!(
             marked.len(),
-            45,
-            "Mavlink.cs marks 45 MAV_CMD members hasLocation"
+            47,
+            "Mavlink.cs marks 47 MAV_CMD members hasLocation"
         );
         for command in 0..=u16::MAX {
             let item = MissionItem {
