@@ -30,7 +30,7 @@
 //!   vehicle's list on a `MISSION_COUNT` naming it, files every `MISSION_ITEM` and
 //!   `MISSION_ITEM_INT` that is not a guided target (`current` 2, which is `GuidedMode`'s) under
 //!   the list its `mission_type` names, and turns the old protocol's `RALLY_POINT` into an item of
-//!   the rally list (`MAVLinkInterface.cs:5625-5698, 5691-5699`). A download - this link's or
+//!   the rally list (`MAVLinkInterface.cs:5605-5673, 5691-5702`). A download - this link's or
 //!   another ground station's - fills a list that way, and so does a recording;
 //! * this link's own uploads: `setWPTotalAsync` clears the list when the vehicle asks for the
 //!   first item, and `setWPAsync` files each item it sent once the vehicle asks for the next with
@@ -168,17 +168,28 @@ impl MissionPoints {
         }
     }
 
-    /// `processInfoFromStream`'s mission and rally half, for one message from `sysid`/`compid`.
-    /// A message addressed to this ground station (`gcs_sysid`) is about its sender; any other is
-    /// about the vehicle it is addressed to, which is how a recording's own uploads land on the
-    /// vehicle.
-    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:5625-5698, 5691-5699`
-    pub fn observe(&mut self, sysid: u32, compid: u8, gcs_sysid: u32, message: &MavMessage) {
+    /// `processInfoFromStream`'s mission and rally half, for one message from `sysid`/`compid`
+    /// whose header names `header_target` (`TARGET32`) or none. A message addressed to this
+    /// ground station (`gcs_sysid`) or to 0 is about its sender; any other is about the vehicle
+    /// it is addressed to - the header's target first, then the payload's - which is how a
+    /// recording's own uploads land on the vehicle.
+    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:5605-5673, 5691-5702`
+    pub fn observe(
+        &mut self,
+        sysid: u32,
+        compid: u8,
+        gcs_sysid: u32,
+        header_target: Option<u32>,
+        message: &MavMessage,
+    ) {
+        // `GetTargetSystem() ?? sysid`, and the sender for this ground station or 0.
+        // C#: MAVLinkInterface.cs:5607-5614
         let about = |target_system: u8, target_component: u8| {
-            if u32::from(target_system) == gcs_sysid {
+            let system = header_target.unwrap_or(u32::from(target_system));
+            if system == gcs_sysid || system == 0 {
                 VehicleId::new(sysid, compid)
             } else {
-                VehicleId::new(u32::from(target_system), target_component)
+                VehicleId::new(system, target_component)
             }
         };
         match message {
@@ -186,7 +197,7 @@ impl MissionPoints {
             MavMessage::MissionCount(m) => {
                 self.clear(about(m.target_system, m.target_component), m.mission_type);
             }
-            // C#: MAVLinkInterface.cs:5628-5648, `(Locationwp) wp` from the float item; a guided
+            // C#: MAVLinkInterface.cs:5628-5650, `(Locationwp) wp` from the float item; a guided
             // target (current 2) is `GuidedMode`'s, not a list's.
             MavMessage::MissionItem(m) if m.current != 2 => {
                 self.store(
@@ -196,7 +207,7 @@ impl MissionPoints {
                     from_float(m),
                 );
             }
-            // C#: MAVLinkInterface.cs:5649-5671, filed as it came.
+            // C#: MAVLinkInterface.cs:5651-5673, filed as it came.
             MavMessage::MissionItemInt(m) if m.current != 2 => {
                 self.store(
                     about(m.target_system, m.target_component),
@@ -205,7 +216,7 @@ impl MissionPoints {
                     from_int(m),
                 );
             }
-            // C#: MAVLinkInterface.cs:5691-5699, the old protocol's point as a RALLY_POINT item in
+            // C#: MAVLinkInterface.cs:5691-5702, the old protocol's point as a RALLY_POINT item in
             // GLOBAL_RELATIVE_ALT under its index, its break altitude, land direction and flags
             // not carried.
             MavMessage::RallyPoint(m) => {
@@ -237,7 +248,7 @@ impl MissionPoints {
 
 /// An item this link uploaded, as `setWPAsync` files it: `(Locationwp) req` of the
 /// `mavlink_mission_item_int_t` it sent, read out again.
-/// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:4293-4300, 4320-4328`
+/// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:4282-4292, 4319-4329`
 #[must_use]
 pub fn uploaded(item: &MissionItem) -> MissionItem {
     let wire = item.to_wire();
@@ -260,14 +271,14 @@ pub fn uploaded(item: &MissionItem) -> MissionItem {
 /// The message that ended a single `setWP`, which decides what the C# files and where.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Finish {
-    /// A `MISSION_ACK`, whatever its result: filed under the item's own list (`:4098-4133` for a
-    /// float item, `:4273-4309` for an `_INT`).
+    /// A `MISSION_ACK`, whatever its result: filed under the item's own list (`:4090-4124` for a
+    /// float item, `:4264-4299` for an `_INT`).
     Ack,
-    /// A `MISSION_REQUEST` for the item after: filed under the item's own list (`:4134-4182`,
-    /// `:4310-4346`).
+    /// A `MISSION_REQUEST` for the item after: filed under the item's own list (`:4125-4172`,
+    /// `:4300-4346`).
     Request,
     /// A `MISSION_REQUEST_INT` for the item after: a float item is filed in `wps` whatever list
-    /// it belongs to - the branch checks no `mission_type` (`:4183-4215`); an `_INT` item has no
+    /// it belongs to - the branch checks no `mission_type` (`:4173-4213`); an `_INT` item has no
     /// such branch and is filed nowhere.
     RequestInt,
 }
@@ -276,8 +287,8 @@ pub enum Finish {
 /// `MISSION_ITEM_INT` that is neither a guided target (current 2) nor an altitude change (current
 /// 3): the list it goes to, its sequence number and `(Locationwp) req`. `None` for anything else,
 /// the fence included, which [`crate::fence_points::set_wp_item`] files.
-/// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:4104-4118, 4146-4160, 4196-4206,
-/// 4285-4300, 4323-4339`
+/// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:4107-4117, 4145-4155, 4193-4196,
+/// 4282-4292, 4319-4329`
 #[must_use]
 pub fn set_wp_item(message: &MavMessage, finish: Finish) -> Option<(u8, u16, MissionItem)> {
     match message {
@@ -405,18 +416,21 @@ mod tests {
             1,
             1,
             u32::from(GCS),
+            None,
             &item_int(2, MISSION_TYPE_MISSION, -353_630_000),
         );
         points.observe(
             1,
             1,
             u32::from(GCS),
+            None,
             &item_int(0, MISSION_TYPE_MISSION, -353_610_000),
         );
         points.observe(
             1,
             1,
             u32::from(GCS),
+            None,
             &item_int(1, MISSION_TYPE_MISSION, -353_620_000),
         );
         let xs: Vec<f64> = points.wps(VEHICLE).iter().map(|item| item.x).collect();
@@ -427,6 +441,7 @@ mod tests {
             1,
             1,
             u32::from(GCS),
+            None,
             &item_int(1, MISSION_TYPE_MISSION, -353_625_000),
         );
         assert_eq!(points.wps(VEHICLE).len(), 3);
@@ -436,9 +451,10 @@ mod tests {
             1,
             1,
             u32::from(GCS),
+            None,
             &item_int(0, MISSION_TYPE_RALLY, -353_000_000),
         );
-        points.observe(1, 1, u32::from(GCS), &item_int(0, 1, -352_000_000));
+        points.observe(1, 1, u32::from(GCS), None, &item_int(0, 1, -352_000_000));
         assert_eq!(points.rally_points(VEHICLE).len(), 1);
         assert_eq!(points.rally_points(VEHICLE)[0].x, -35.3);
         assert_eq!(points.wps(VEHICLE).len(), 3);
@@ -448,7 +464,13 @@ mod tests {
             unreachable!()
         };
         guided.current = 2;
-        points.observe(1, 1, u32::from(GCS), &MavMessage::MissionItemInt(guided));
+        points.observe(
+            1,
+            1,
+            u32::from(GCS),
+            None,
+            &MavMessage::MissionItemInt(guided),
+        );
         assert_eq!(points.wps(VEHICLE).len(), 3);
         // A ground station's item, as a recording holds it, is about the vehicle it addresses.
         let MavMessage::MissionItemInt(mut theirs) = item_int(0, MISSION_TYPE_MISSION, 40) else {
@@ -459,6 +481,7 @@ mod tests {
             u32::from(GCS),
             190,
             u32::from(GCS),
+            None,
             &MavMessage::MissionItemInt(theirs),
         );
         assert_eq!(points.wps(VehicleId::new(7, 190)).len(), 1);
@@ -471,14 +494,62 @@ mod tests {
                 mission_type,
             })
         };
-        points.observe(1, 1, u32::from(GCS), &count(1));
+        points.observe(1, 1, u32::from(GCS), None, &count(1));
         assert_eq!(points.wps(VEHICLE).len(), 3);
-        points.observe(1, 1, u32::from(GCS), &count(MISSION_TYPE_MISSION));
+        points.observe(1, 1, u32::from(GCS), None, &count(MISSION_TYPE_MISSION));
         assert!(points.wps(VEHICLE).is_empty());
         assert_eq!(points.rally_points(VEHICLE).len(), 1);
         assert_eq!(points.wps(VehicleId::new(7, 190)).len(), 1);
-        points.observe(1, 1, u32::from(GCS), &count(MISSION_TYPE_RALLY));
+        points.observe(1, 1, u32::from(GCS), None, &count(MISSION_TYPE_RALLY));
         assert!(points.rally_points(VEHICLE).is_empty());
+    }
+
+    #[test]
+    fn an_item_to_no_one_is_its_senders_and_a_header_target_comes_before_the_payloads() {
+        // `processInfoFromStream` as of 5dbb2b0 (e6454ccdd): 0 is the sender, as this ground
+        // station is, not a vehicle 0. C#: MAVLinkInterface.cs:5607-5614
+        let mut points = MissionPoints::default();
+        let MavMessage::MissionItemInt(mut to_no_one) = item_int(0, MISSION_TYPE_MISSION, 40)
+        else {
+            unreachable!()
+        };
+        to_no_one.target_system = 0;
+        points.observe(
+            1,
+            1,
+            u32::from(GCS),
+            None,
+            &MavMessage::MissionItemInt(to_no_one),
+        );
+        assert_eq!(points.wps(VEHICLE).len(), 1);
+        assert!(points.wps(VehicleId::new(0, 190)).is_empty());
+        // A recorded upload to a vehicle whose id is over 255: the header's target, not the
+        // payload's 255, which would otherwise be this ground station and so the sender.
+        let wide = VehicleId::new(70_000, 190);
+        points.observe(
+            u32::from(GCS),
+            190,
+            u32::from(GCS),
+            Some(wide.sysid),
+            &item_int(0, MISSION_TYPE_MISSION, 41),
+        );
+        assert_eq!(points.wps(wide).len(), 1);
+        assert!(points.wps(VehicleId::new(u32::from(GCS), 190)).is_empty());
+        // A count in the header's name starts that vehicle's list again.
+        points.observe(
+            u32::from(GCS),
+            190,
+            u32::from(GCS),
+            Some(wide.sysid),
+            &MavMessage::MissionCount(MissionCount {
+                count: 0,
+                target_system: GCS,
+                target_component: 190,
+                mission_type: MISSION_TYPE_MISSION,
+            }),
+        );
+        assert!(points.wps(wide).is_empty());
+        assert_eq!(points.wps(VEHICLE).len(), 1);
     }
 
     #[test]
@@ -488,6 +559,7 @@ mod tests {
             1,
             1,
             u32::from(GCS),
+            None,
             &item_float(0, MISSION_TYPE_MISSION, 0),
         );
         let [filed] = points.wps(VEHICLE)[..] else {
@@ -507,6 +579,7 @@ mod tests {
             1,
             1,
             u32::from(GCS),
+            None,
             &item_float(1, MISSION_TYPE_MISSION, 2),
         );
         assert_eq!(points.wps(VEHICLE).len(), 1);
@@ -514,6 +587,7 @@ mod tests {
             1,
             1,
             u32::from(GCS),
+            None,
             &item_float(1, MISSION_TYPE_MISSION, 3),
         );
         assert_eq!(points.wps(VEHICLE).len(), 2);
@@ -522,6 +596,7 @@ mod tests {
             1,
             1,
             u32::from(GCS),
+            None,
             &MavMessage::RallyPoint(RallyPoint {
                 lat: -353_632_621,
                 lng: 1_491_652_374,

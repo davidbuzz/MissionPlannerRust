@@ -434,7 +434,7 @@ impl LinkSender {
     /// `GPS_RTCM_DATA` fragments, or `GPS_INJECT_DATA` pieces for `target`, as
     /// [`inject::gps_inject_messages`] cuts them, and queued. How many were queued; none once the
     /// link has stopped, as `generatePacket` sends nothing on a closed port.
-    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:3897-3972`
+    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:3887-3962`
     pub fn inject_gps_data(&self, target: VehicleId, data: &[u8], rtcm_message: bool) -> usize {
         let mut messages = Vec::new();
         // One number per message even with two senders at once: the messages are made from the
@@ -464,7 +464,7 @@ impl LinkSender {
     /// empty seed and no key - then signing to it on, or off with its key forgotten. Queued for
     /// the link thread, which does both in that order. What `signing` will be, as the C#'s call
     /// returns it.
-    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:1529-1584`
+    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:1526-1581`
     pub fn setup_signing(&self, target: VehicleId, userseed: &str, key: Option<&[u8]>) -> bool {
         let setup = signing::Setup::new(target, userseed, key);
         if let Ok(mut signing) = self.signing.os_lock() {
@@ -843,6 +843,7 @@ impl Link {
 
     fn queue_request(&self, target: VehicleId, kind: RequestKind) -> RequestId {
         let id = RequestId(self.shared.next_request.fetch_add(1, Ordering::Relaxed));
+        let target = request_target(&self.shared, target);
         if let Ok(mut queue) = self.shared.request_queue.os_lock() {
             queue.push((id, Request::new(target, kind)));
         }
@@ -1577,6 +1578,7 @@ fn run_link(
     let mut pending_actions: Vec<(VehicleId, u8, Action)> = Vec::new();
     // Reused every pass, so a pass with nothing in flight allocates nothing.
     let mut param_actions: Vec<(VehicleId, ParamAction)> = Vec::new();
+    let mut param_recorded: Vec<Vec<u8>> = Vec::new();
     let mut picked_up: Vec<(RequestId, Request)> = Vec::new();
     let mut request_sends: Vec<requests::Outgoing> = Vec::new();
     let mut ftp_sends: Vec<(VehicleId, mp_ftp::mavftp::wire::Header)> = Vec::new();
@@ -1711,10 +1713,22 @@ fn run_link(
                                     | MavMessage::RallyPoint(_)
                             ) {
                                 if let Ok(mut held) = shared.fence_points.os_lock() {
-                                    held.observe(frame.sysid, frame.compid, config.sysid, &msg);
+                                    held.observe(
+                                        frame.sysid,
+                                        frame.compid,
+                                        config.sysid,
+                                        frame.target_system,
+                                        &msg,
+                                    );
                                 }
                                 if let Ok(mut held) = shared.mission_points.os_lock() {
-                                    held.observe(frame.sysid, frame.compid, config.sysid, &msg);
+                                    held.observe(
+                                        frame.sysid,
+                                        frame.compid,
+                                        config.sysid,
+                                        frame.target_system,
+                                        &msg,
+                                    );
                                 }
                             }
                             // A set-WP of one item (setWPAsync) waits for the vehicle's ack or
@@ -2339,7 +2353,19 @@ fn run_link(
             }
         }
         // Parameter fetches: the file read watched, the stream started when it fails.
-        param_fetch::tick(shared, config.timeouts, Instant::now(), &mut param_actions);
+        param_fetch::tick(
+            shared,
+            config.timeouts,
+            Instant::now(),
+            &mut param_actions,
+            &mut param_recorded,
+        );
+        // `SaveToTlog` of a MAVFTP fetch's parameters. C#: MAVLinkInterface.cs:1903-1912
+        for frame in param_recorded.drain(..) {
+            if let Some(writer) = recorder.as_mut() {
+                let _ = writer.write_frame(&frame);
+            }
+        }
         for (id, action) in param_actions.drain(..) {
             match action {
                 ParamAction::Nothing => {}
@@ -2540,7 +2566,7 @@ fn run_link(
         }
 
         // `setupSigning`s asked since the last pass: each `SETUP_SIGNING` sent twice, signed or not
-        // as the vehicle's state still says, then signing switched. C#: MAVLinkInterface.cs:1529-1584
+        // as the vehicle's state still says, then signing switched. C#: MAVLinkInterface.cs:1526-1581
         let setups = shared
             .signing
             .os_lock()
@@ -2630,8 +2656,8 @@ fn expose_handles<'a>(
 /// A `MISSION_REQUEST_INT` files nothing, as in the C#: its `setWPAsync` for an `_INT` item - the
 /// one this link's transfers send - has no branch for that message. Against a vehicle that asks
 /// with it, only the last item - acknowledged - is filed, until the list is read back.
-/// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:3801-3830, 3824-3852, 4273-4309,
-/// 4310-4346`
+/// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:3794-3823, 3824-3853, 4264-4299,
+/// 4300-4346`
 fn file_list_upload(
     shared: &Arc<Shared>,
     id: VehicleId,
@@ -2766,7 +2792,7 @@ fn set_wp_filed(request: &Request, finish: mission_points::Finish) -> Option<Fil
 
 /// `wps[req.seq]`, `fencepoints[req.seq]` or `rallypoints[req.seq]` `= (Locationwp) req`, for a
 /// set-WP's item.
-/// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:4104-4118, 4146-4160, 4196-4206`
+/// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:4107-4117, 4145-4155, 4193-4196`
 fn file_set_wp(shared: &Shared, id: VehicleId, filed: Option<Filed>) {
     match filed {
         Some(Filed::Fence(seq, item)) => {
@@ -2890,19 +2916,15 @@ pub fn target_of(
 /// one - and with none such, or several, or a vehicle whose id is 255 itself, the frame goes as it
 /// is. `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:1292-1297, 1347-1361`
 fn with_wide_target(shared: &Shared, bytes: &[u8]) -> Option<Vec<u8>> {
-    // The vehicles first, which costs no allocation: a link whose vehicles' ids all fit a byte
-    // sends every frame as it is, and its telemetry path allocates nothing.
-    let wide: Vec<VehicleId> = {
-        let handles = shared.handles.os_lock().ok()?;
-        if !handles.keys().any(|id| id.sysid > 255) || handles.keys().any(|id| id.sysid == 255) {
-            return None;
-        }
-        handles
-            .keys()
-            .filter(|id| id.sysid > 255)
-            .copied()
-            .collect()
-    };
+    // The vehicles first: a link whose vehicles' ids all fit a byte sends every frame as it is,
+    // without parsing it.
+    if !shared
+        .handles
+        .os_lock()
+        .is_ok_and(|handles| handles.keys().any(|id| id.sysid > 255))
+    {
+        return None;
+    }
     let (frame, _) = mp_mavlink::parse(bytes, &DIALECT).ok()?;
     if frame.target_system.is_some() {
         return None;
@@ -2912,14 +2934,7 @@ fn with_wide_target(shared: &Shared, bytes: &[u8]) -> Option<Vec<u8>> {
     if system != Some(255) {
         return None;
     }
-    let mut candidates = wide
-        .iter()
-        .filter(|id| component.is_none_or(|c| c == 0 || c == id.compid))
-        .map(|id| id.sysid);
-    let target = candidates.next()?;
-    if candidates.any(|other| other != target) {
-        return None;
-    }
+    let target = the_wide_vehicle(shared, component)?;
     let crc_extra = mp_mavlink::Dialect::crc_extra(&DIALECT, frame.msgid)?;
     let mut out = [0u8; mp_mavlink::MAX_FRAME_LEN];
     let n = mp_mavlink::encode_v2_targeted(
@@ -2935,6 +2950,39 @@ fn with_wide_target(shared: &Shared, bytes: &[u8]) -> Option<Vec<u8>> {
     )
     .ok()?;
     out.get(..n).map(<[u8]>::to_vec)
+}
+
+/// The one vehicle heard whose id is over 255 - of `component`, where one other than 0 is named -
+/// that a payload's 255 means: `None` with no such vehicle, several, or a vehicle whose id is 255
+/// itself heard. Allocates nothing. See [`with_wide_target`].
+fn the_wide_vehicle(shared: &Shared, component: Option<u8>) -> Option<u32> {
+    let handles = shared.handles.os_lock().ok()?;
+    if handles.keys().any(|id| id.sysid == 255) {
+        return None;
+    }
+    let mut candidates = handles
+        .keys()
+        .filter(|id| id.sysid > 255 && component.is_none_or(|c| c == 0 || c == id.compid))
+        .map(|id| id.sysid);
+    let target = candidates.next()?;
+    if candidates.any(|other| other != target) {
+        return None;
+    }
+    Some(target)
+}
+
+/// The vehicle a request is for. A screen that sends what a builder made reads the vehicle back
+/// from the message (`route`, `command_long_parts`), and for one whose id is over 255 the payload
+/// holds 255: that is the vehicle [`with_wide_target`] frames the request to, so its answers -
+/// from the vehicle's whole id - are the ones the request waits for. **Divergence:** the C#'s
+/// `doCommand`, `setWPCurrent` and the rest are handed the vehicle's whole id, and frame and
+/// wait by it. `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:2491, 2800, 2922`
+fn request_target(shared: &Shared, target: VehicleId) -> VehicleId {
+    if target.sysid != 255 {
+        return target;
+    }
+    the_wide_vehicle(shared, Some(target.compid))
+        .map_or(target, |sysid| VehicleId::new(sysid, target.compid))
 }
 
 fn restamp_checksum(frame: &[u8]) -> Option<Vec<u8>> {

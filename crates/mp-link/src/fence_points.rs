@@ -26,14 +26,14 @@
 //! * whatever passes on the link, whoever asked for it - `processInfoFromStream` files every
 //!   fence `MISSION_ITEM` and `MISSION_ITEM_INT` it reads under the vehicle it is about, clears
 //!   that vehicle's fence on a fence `MISSION_COUNT`, and turns the old protocol's `FENCE_POINT`
-//!   into an item (`MAVLinkInterface.cs:5625-5694, 5713-5726`). A download - this link's or
+//!   into an item (`MAVLinkInterface.cs:5605-5673, 5715-5728`). A download - this link's or
 //!   another ground station's - fills it that way, and so does a recording, whose items this
 //!   link sent are read back like any other;
 //! * this link's own uploads: `setWPTotalAsync` clears it when the vehicle asks for the first
 //!   item, and `setWPAsync` files each item it sent once the vehicle asks for the next with
 //!   `MISSION_REQUEST` or answers with `MISSION_ACK` - whatever the answer; a `MISSION_REQUEST_INT`
-//!   files nothing, as the C# has no branch that does (`MAVLinkInterface.cs:3801-3861,
-//!   4098-4215, 4273-4346`). The link thread does this half (`file_fence_upload` in `lib.rs`).
+//!   files nothing, as the C# has no branch that does (`MAVLinkInterface.cs:3794-3866,
+//!   4090-4213, 4264-4346`). The link thread does this half (`file_fence_upload` in `lib.rs`).
 //!
 //! An item is filed as the C# files it: a `MISSION_ITEM_INT` as it came, and everything else
 //! through `Locationwp`, whose round trip through degrees can move a coordinate by one unit of
@@ -112,16 +112,28 @@ impl FencePoints {
         }
     }
 
-    /// `processInfoFromStream`'s fence half, for one message from `sysid`/`compid`. A message
-    /// addressed to this ground station (`gcs_sysid`) is about its sender; any other is about the
-    /// vehicle it is addressed to, which is how a recording's own uploads land on the vehicle.
-    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:5625-5694, 5713-5726`
-    pub fn observe(&mut self, sysid: u32, compid: u8, gcs_sysid: u32, message: &MavMessage) {
+    /// `processInfoFromStream`'s fence half, for one message from `sysid`/`compid` whose header
+    /// names `header_target` (`TARGET32`) or none. A message addressed to this ground station
+    /// (`gcs_sysid`) or to 0 is about its sender; any other is about the vehicle it is addressed
+    /// to - the header's target first, then the payload's - which is how a recording's own
+    /// uploads land on the vehicle.
+    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:5605-5673, 5715-5728`
+    pub fn observe(
+        &mut self,
+        sysid: u32,
+        compid: u8,
+        gcs_sysid: u32,
+        header_target: Option<u32>,
+        message: &MavMessage,
+    ) {
+        // `GetTargetSystem() ?? sysid`, and the sender for this ground station or 0.
+        // C#: MAVLinkInterface.cs:5607-5614
         let about = |target_system: u8, target_component: u8| {
-            if u32::from(target_system) == gcs_sysid {
+            let system = header_target.unwrap_or(u32::from(target_system));
+            if system == gcs_sysid || system == 0 {
                 VehicleId::new(sysid, compid)
             } else {
-                VehicleId::new(u32::from(target_system), target_component)
+                VehicleId::new(system, target_component)
             }
         };
         match message {
@@ -129,7 +141,7 @@ impl FencePoints {
             MavMessage::MissionCount(m) if m.mission_type == FENCE => {
                 self.clear(about(m.target_system, m.target_component));
             }
-            // C#: MAVLinkInterface.cs:5628-5648, `(Locationwp) wp` from the float item.
+            // C#: MAVLinkInterface.cs:5628-5650, `(Locationwp) wp` from the float item.
             MavMessage::MissionItem(m) if m.mission_type == FENCE && m.current != 2 => {
                 let item = FenceItem {
                     command: m.command,
@@ -139,7 +151,7 @@ impl FencePoints {
                 };
                 self.store(about(m.target_system, m.target_component), m.seq, item);
             }
-            // C#: MAVLinkInterface.cs:5649-5671, filed as it came.
+            // C#: MAVLinkInterface.cs:5651-5673, filed as it came.
             MavMessage::MissionItemInt(m) if m.mission_type == FENCE && m.current != 2 => {
                 let item = FenceItem {
                     command: m.command,
@@ -149,7 +161,7 @@ impl FencePoints {
                 };
                 self.store(about(m.target_system, m.target_component), m.seq, item);
             }
-            // C#: MAVLinkInterface.cs:5715-5726, the old protocol's point as an item: the return
+            // C#: MAVLinkInterface.cs:5715-5728, the old protocol's point as an item: the return
             // point at index 0, an inclusion vertex after it, the count less one as `param1`.
             MavMessage::FencePoint(m) => {
                 let command = if m.idx == 0 {
@@ -176,7 +188,7 @@ impl FencePoints {
 
 /// An item this link uploaded, as `setWPAsync` files it: `(Locationwp) req` of the
 /// `mavlink_mission_item_int_t` it sent.
-/// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:4283-4289, 4320-4326`
+/// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:4282-4292, 4319-4329`
 #[must_use]
 pub fn uploaded(item: &MissionItem) -> FenceItem {
     let wire: WireItem = item.to_wire();
@@ -192,7 +204,7 @@ pub fn uploaded(item: &MissionItem) -> FenceItem {
 /// as `setWPAsync` files it in `fencepoints` once the vehicle has taken it: `(Locationwp) req`
 /// under its sequence number, for an item of the fence list that is neither a guided target
 /// (current 2) nor an altitude change (current 3). `None` for anything else.
-/// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:4104-4118, 4146-4160, 4285-4300, 4323-4338`
+/// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:4107-4117, 4145-4155, 4282-4292, 4319-4329`
 #[must_use]
 pub fn set_wp_item(message: &MavMessage) -> Option<(u16, FenceItem)> {
     match message {
@@ -298,13 +310,13 @@ mod tests {
     fn items_are_filed_under_the_vehicle_they_are_about_in_sequence_order() {
         let mut fence = FencePoints::default();
         // The vehicle's answers to a download, addressed to this ground station, out of order.
-        fence.observe(1, 1, u32::from(GCS), &item_int(2, GCS, 5001, 30));
-        fence.observe(1, 1, u32::from(GCS), &item_int(0, GCS, 5001, 10));
-        fence.observe(1, 1, u32::from(GCS), &item_int(1, GCS, 5001, 20));
+        fence.observe(1, 1, u32::from(GCS), None, &item_int(2, GCS, 5001, 30));
+        fence.observe(1, 1, u32::from(GCS), None, &item_int(0, GCS, 5001, 10));
+        fence.observe(1, 1, u32::from(GCS), None, &item_int(1, GCS, 5001, 20));
         let xs: Vec<i32> = fence.items(VEHICLE).iter().map(|item| item.x).collect();
         assert_eq!(xs, [10, 20, 30]);
         // Filed again: replaced, not added.
-        fence.observe(1, 1, u32::from(GCS), &item_int(1, GCS, 5001, 21));
+        fence.observe(1, 1, u32::from(GCS), None, &item_int(1, GCS, 5001, 21));
         assert_eq!(fence.items(VEHICLE).len(), 3);
         assert_eq!(fence.items(VEHICLE)[1].x, 21);
         // A ground station's item, as a recording holds it, is about the vehicle it addresses.
@@ -312,6 +324,7 @@ mod tests {
             u32::from(GCS),
             190,
             u32::from(GCS),
+            None,
             &item_int(0, 7, 5003, 40),
         );
         assert_eq!(fence.items(VehicleId::new(7, 190))[0].x, 40);
@@ -320,6 +333,7 @@ mod tests {
             1,
             1,
             u32::from(GCS),
+            None,
             &MavMessage::MissionCount(MissionCount {
                 count: 3,
                 target_system: GCS,
@@ -332,6 +346,32 @@ mod tests {
     }
 
     #[test]
+    fn a_point_to_no_one_is_its_senders_and_a_header_target_comes_before_the_payloads() {
+        // `processInfoFromStream` as of 5dbb2b0 (e6454ccdd). C#: MAVLinkInterface.cs:5607-5614
+        let mut fence = FencePoints::default();
+        fence.observe(1, 1, u32::from(GCS), None, &item_int(0, 0, 5001, 10));
+        assert_eq!(fence.items(VEHICLE).len(), 1);
+        assert!(fence.items(VehicleId::new(0, 190)).is_empty());
+        let wide = VehicleId::new(70_000, 190);
+        fence.observe(
+            u32::from(GCS),
+            190,
+            u32::from(GCS),
+            Some(wide.sysid),
+            &MavMessage::FencePoint(FencePoint {
+                lat: -35.5,
+                lng: 149.25,
+                target_system: GCS,
+                target_component: 190,
+                idx: 0,
+                count: 2,
+            }),
+        );
+        assert_eq!(fence.items(wide).len(), 1);
+        assert_eq!(fence.items(VEHICLE).len(), 1);
+    }
+
+    #[test]
     fn an_old_fence_point_is_a_return_point_then_inclusion_vertices() {
         let mut fence = FencePoints::default();
         for idx in 0..3 {
@@ -339,6 +379,7 @@ mod tests {
                 1,
                 1,
                 u32::from(GCS),
+                None,
                 &MavMessage::FencePoint(FencePoint {
                     lat: -35.5,
                     lng: 149.25,

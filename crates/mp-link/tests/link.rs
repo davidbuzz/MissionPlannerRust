@@ -439,6 +439,74 @@ fn a_command_to_a_32_bit_vehicle_carries_its_id_in_the_header() {
     assert_eq!(payload[30], 255);
 }
 
+/// A screen's command read back from the message a builder made names 255 for a vehicle whose id
+/// is over 255 - its payload's byte - and the request is that vehicle's: framed to it with its
+/// whole id in the header, and ended by its ack, which comes from that whole id. A second vehicle
+/// over 255 on another component leaves it alone.
+/// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:2800`
+#[test]
+fn a_request_read_back_from_a_payloads_255_is_the_wide_vehicles() {
+    let (mut vehicle_side, gcs_side) = Loopback::pair();
+    let config = LinkConfig {
+        stream_rate_hz: 0,
+        send_heartbeat: false,
+        ..LinkConfig::default()
+    };
+    let link = Link::from_transport(Box::new(gcs_side), config);
+    let wide = VehicleId::new(70_000, 1);
+    vehicle_side
+        .write_all(&heartbeat_from(0, wide.sysid, wide.compid))
+        .unwrap();
+    vehicle_side
+        .write_all(&heartbeat_from(1, 80_000, 2))
+        .unwrap();
+    wait_for("the vehicles", || {
+        link.vehicles().contains(&wide) && link.vehicles().contains(&VehicleId::new(80_000, 2))
+    });
+    let id = link.command(VehicleId::new(255, wide.compid), 400, [0.0; 7], true);
+    let sent = read_sent(&mut vehicle_side, |sent| {
+        sent.iter().any(|frame| frame.2 == 76)
+    });
+    let (_, target, ..) = sent
+        .iter()
+        .find(|frame| frame.2 == 76)
+        .expect("the command went");
+    assert_eq!(*target, Some(wide.sysid));
+
+    let ack = CommandAck {
+        command: 400,
+        result: 0,
+        progress: 0,
+        result_param2: 0,
+        target_system: 255,
+        target_component: 190,
+    };
+    let mut payload = [0u8; CommandAck::LEN];
+    ack.encode(&mut payload);
+    let mut frame = [0u8; mp_mavlink::MAX_FRAME_LEN];
+    let n = encode_v2(
+        &mut frame,
+        2,
+        wide.sysid,
+        wide.compid,
+        CommandAck::ID,
+        &payload,
+        CommandAck::CRC_EXTRA,
+        0,
+    )
+    .unwrap();
+    vehicle_side.write_all(&frame[..n]).unwrap();
+    wait_for("the ack", || {
+        link.request(id)
+            .and_then(|request| request.outcome())
+            .is_some()
+    });
+    assert_eq!(
+        link.request(id).unwrap().outcome(),
+        Some(mp_link::requests::RequestOutcome::Accepted { value: None })
+    );
+}
+
 /// A ground station whose own id is over 255 writes it four bytes wide, with `SYSID32` - its
 /// heartbeats, written by the link thread, and a command queued from outside it, whose checksum
 /// is worked out again after its sequence number is put in.

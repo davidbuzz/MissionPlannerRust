@@ -20,7 +20,7 @@
 
 //! The parameter fetch through the real link thread: `@PARAM/param.pck?withdefaults=1` over
 //! MAVFTP first, the `PARAM_REQUEST_LIST` stream when the vehicle has no such file.
-//! `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:1813-1936`
+//! `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:1810-1928`
 
 #![allow(
     clippy::unwrap_used,
@@ -29,6 +29,7 @@
     clippy::cast_possible_truncation
 )]
 
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use web_time::{Duration, Instant};
@@ -38,10 +39,10 @@ use mp_ftp::mavftp::wire::Header;
 use mp_link::ftp::ftp_message;
 use mp_link::param_fetch::{FetchVia, PARAM_FILE, ParamFetchState};
 use mp_link::{Link, LinkConfig, ProtocolTimeouts};
-use mp_mavlink::{FrameDecoder, encode_v2};
+use mp_mavlink::{FrameDecoder, MavVersion, encode_v2};
 use mp_mavlink_dialects::all::{DIALECT, Heartbeat, MavMessage, ParamValue};
-use mp_params::parampck::{PackedParam, pack};
-use mp_params::{ParamType, encode_param_id};
+use mp_params::parampck::{PackedParam, pack, unpack};
+use mp_params::{ParamType, decode_param_id, encode_param_id};
 use mp_transport::Transport;
 use mp_transport::testing::{Loopback, LoopbackEnd};
 use mp_vehicle::VehicleId;
@@ -163,10 +164,15 @@ fn run_vehicle(
 }
 
 fn link(end: LoopbackEnd) -> Link {
+    recording_link(end, None)
+}
+
+fn recording_link(end: LoopbackEnd, record_path: Option<PathBuf>) -> Link {
     let config = LinkConfig {
         send_heartbeat: false,
         stream_rate_hz: 0,
         timeouts: ProtocolTimeouts::default().faster(20),
+        record_path,
         ..LinkConfig::default()
     };
     let link = Link::from_transport(Box::new(end), config);
@@ -266,4 +272,74 @@ fn without_the_file_the_stream_fills_the_table() {
     let (ftp_requests, list_requests) = vehicle.join().unwrap();
     assert!(ftp_requests > 0, "MAVFTP was tried first");
     assert!(list_requests >= 1, "then the list was asked for");
+}
+
+/// A MAVFTP fetch on a recording link: the recording holds each parameter of the file as the
+/// `PARAM_VALUE` the C#'s `SaveToTlog` writes for it - MAVLink 1 from the vehicle, numbered from
+/// 0, index 0, the count, `(float)a.Value` and the type - in the file's order.
+/// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:1903-1912`
+#[test]
+fn a_mavftp_fetch_records_each_parameter_as_a_param_value() {
+    let (vehicle_side, gcs_side) = Loopback::pair();
+    let stop = Arc::new(AtomicBool::new(false));
+    let entries = table();
+    let file = pack(&entries, true, None);
+    let files = FakeVehicle::new().with_file(PARAM_FILE, &file);
+    let vehicle = run_vehicle(vehicle_side, Arc::clone(&stop), files, Vec::new());
+    // `TlogWriter` refuses to overwrite.
+    let recording = Path::new(env!("CARGO_TARGET_TMPDIR"))
+        .join(format!("param_fetch-{}-recorded.tlog", mp_os::process_id()));
+    let _ = std::fs::remove_file(&recording);
+    let link = recording_link(gcs_side, Some(recording.clone()));
+
+    assert!(link.fetch_params(VEHICLE));
+    assert!(matches!(
+        wait_until_finished(&link),
+        ParamFetchState::Complete {
+            via: FetchVia::MavFtp,
+            ..
+        }
+    ));
+    // Closed, so the recording is flushed.
+    drop(link);
+    stop.store(true, Ordering::Release);
+    vehicle.join().unwrap();
+
+    // The recording, a timestamp and a frame at a time.
+    let bytes = std::fs::read(&recording).unwrap();
+    let _ = std::fs::remove_file(&recording);
+    let mut recorded = Vec::new();
+    let mut at = 0;
+    while at < bytes.len() {
+        at += 8;
+        let (frame, used) = mp_mavlink::parse(&bytes[at..], &DIALECT).unwrap();
+        if let Some(MavMessage::ParamValue(value)) = MavMessage::decode(frame.msgid, frame.payload)
+        {
+            recorded.push((frame.version, frame.seq, frame.sysid, frame.compid, value));
+        }
+        at += used;
+    }
+    let in_the_file = unpack(&file).unwrap();
+    assert_eq!(recorded.len(), in_the_file.len());
+    for (n, ((version, seq, sysid, compid, value), entry)) in
+        recorded.iter().zip(&in_the_file).enumerate()
+    {
+        assert_eq!(*version, MavVersion::V1);
+        assert_eq!(usize::from(*seq), n);
+        assert_eq!((*sysid, *compid), (VEHICLE.sysid, VEHICLE.compid));
+        assert_eq!(decode_param_id(&value.param_id), entry.name);
+        assert_eq!((value.param_count, value.param_index), (8, 0));
+        assert_eq!(value.param_type, entry.value.param_type().to_wire());
+    }
+    let value_of = |name: &str| {
+        recorded
+            .iter()
+            .find(|(.., value)| decode_param_id(&value.param_id) == name)
+            .map(|(.., value)| value.param_value)
+            .unwrap()
+    };
+    // A float through `GetValue`'s seven significant digits, an integer exactly.
+    assert_eq!(value_of("MOT_THST_EXPO"), 0.65);
+    assert_eq!(value_of("BATT_CAPACITY"), 3300.0);
+    assert_eq!(value_of("ACRO_OPTIONS"), 0.0);
 }

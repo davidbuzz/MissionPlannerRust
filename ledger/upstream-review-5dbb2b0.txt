@@ -336,21 +336,6 @@ crates/mp-link/src/current_settings.rs:43: MAVLinkInterface.cs:3061-3073, 3218-3
 crates/mp-link/src/current_settings.rs:43: MAVLinkInterface.cs:3061-3073, 3218-3220, 3247-3264 - ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs: line 3218-3220 changed upstream
 crates/mp-link/src/current_settings.rs:43: MAVLinkInterface.cs:3061-3073, 3218-3220, 3247-3264 - ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs: line 3247-3264 changed upstream
 crates/mp-link/src/current_settings.rs:157: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:3061-3073 - ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs: line 3061-3073 changed upstream
-crates/mp-link/src/fence_points.rs:29: MAVLinkInterface.cs:5625-5694, 5745-5763 - ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs: line 5625-5694 changed upstream
-crates/mp-link/src/fence_points.rs:29: MAVLinkInterface.cs:5625-5694, 5745-5763 - ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs: lines 5745-5763 have changes inside
-crates/mp-link/src/fence_points.rs:35: MAVLinkInterface.cs:3801-3861 - ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs: line 3801-3861 changed upstream
-crates/mp-link/src/fence_points.rs:118: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:5625-5694, 5745-5763 - ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs: line 5625-5694 changed upstream
-crates/mp-link/src/fence_points.rs:118: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:5625-5694, 5745-5763 - ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs: lines 5745-5763 have changes inside
-crates/mp-link/src/fence_points.rs:128: MAVLinkInterface.cs:5627-5644 - ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs: lines 5627-5644 have changes inside
-crates/mp-link/src/fence_points.rs:132: MAVLinkInterface.cs:5645-5670 - ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs: lines 5645-5670 have changes inside
-crates/mp-link/src/fence_points.rs:142: MAVLinkInterface.cs:5671-5698 - ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs: lines 5671-5698 have changes inside
-crates/mp-link/src/fence_points.rs:152: MAVLinkInterface.cs:5747-5763 - ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs: lines 5747-5763 have changes inside
-crates/mp-link/src/fence_points.rs:179: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:4293-4299, 4331-4337 - ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs: lines 4293-4299 have changes inside
-crates/mp-link/src/fence_points.rs:179: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:4293-4299, 4331-4337 - ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs: lines 4331-4337 have changes inside
-crates/mp-link/src/fence_points.rs:195: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:4113-4127, 4146-4160, 4285-4300, 4323-4338 - ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs: line 4146-4160 changed upstream
-crates/mp-link/src/fence_points.rs:195: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:4113-4127, 4146-4160, 4285-4300, 4323-4338 - ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs: line 4285-4300 changed upstream
-crates/mp-link/src/fence_points.rs:195: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:4113-4127, 4146-4160, 4285-4300, 4323-4338 - ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs: line 4323-4338 changed upstream
-crates/mp-link/src/fence_points.rs:195: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:4113-4127, 4146-4160, 4285-4300, 4323-4338 - ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs: lines 4113-4127 have changes inside
 crates/mp-link/src/ftp.rs:25: MAVLinkInterface.cs:5567-5593 - ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs: lines 5567-5593 have changes inside
 crates/mp-link/src/gimbal_manager.rs:35: ExtLibs/ArduPilot/Mavlink/GimbalManagerProtocol.cs:1-357 - ExtLibs/ArduPilot/Mavlink/GimbalManagerProtocol.cs: lines 1-357 have changes inside
 crates/mp-link/src/gimbal_manager.rs:400: GimbalManagerProtocol.cs:139-156 - ExtLibs/ArduPilot/Mavlink/GimbalManagerProtocol.cs: lines 139-156 have changes inside
@@ -370,36 +355,6 @@ crates/mp-link/src/inspector.rs:269: ExtLibs/ArduPilot/PacketInspector.cs:125-15
 crates/mp-link/src/inspector.rs:269: ExtLibs/ArduPilot/PacketInspector.cs:125-153, 186-197 - ExtLibs/ArduPilot/PacketInspector.cs: line 186-197 changed upstream
 crates/mp-link/src/inspector.rs:301: ExtLibs/ArduPilot/PacketInspector.cs:59-79 - ExtLibs/ArduPilot/PacketInspector.cs: line 59-79 changed upstream
 crates/mp-link/src/inspector.rs:309: ExtLibs/ArduPilot/PacketInspector.cs:81-101 - ExtLibs/ArduPilot/PacketInspector.cs: line 81-101 changed upstream
-crates/mp-link/src/lib.rs:346: GCSViews/ConfigurationView/ConfigCompassMot.cs:29, 87-119 - GCSViews/ConfigurationView/ConfigCompassMot.cs: line 29 changed upstream
-crates/mp-link/src/lib.rs:436: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:3897-3972 - ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs: line 3897-3972 changed upstream
-crates/mp-link/src/lib.rs:466: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:1529-1584 - ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs: line 1529-1584 changed upstream
-crates/mp-link/src/lib.rs:779: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:6415-6439 - ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs: lines 6415-6439 have changes inside
-crates/mp-link/src/lib.rs:786: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:5908-5967 - ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs: lines 5908-5967 have changes inside
-crates/mp-link/src/lib.rs:796: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:3398-3565 - ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs: lines 3398-3565 have changes inside
-crates/mp-link/src/lib.rs:814: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:3753-3882 - ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs: lines 3753-3882 have changes inside
-crates/mp-link/src/lib.rs:1090: GCSViews/ConfigurationView/ConfigCompassMot.cs:29, 87-119 - GCSViews/ConfigurationView/ConfigCompassMot.cs: line 29 changed upstream
-crates/mp-link/src/lib.rs:2507: MAVLinkInterface.cs:1529-1584 - ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs: line 1529-1584 changed upstream
-crates/mp-link/src/lib.rs:2597: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:3801-3830, 3832-3861, 4273-4309 - ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs: line 3801-3830 changed upstream
-crates/mp-link/src/lib.rs:2597: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:3801-3830, 3832-3861, 4273-4309 - ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs: line 4273-4309 changed upstream
-crates/mp-link/src/lib.rs:2597: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:3801-3830, 3832-3861, 4273-4309 - ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs: lines 3832-3861 have changes inside
-crates/mp-link/src/lib.rs:2674: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:3811-3828, 3842-3859 - ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs: lines 3811-3828 have changes inside
-crates/mp-link/src/lib.rs:2674: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:3811-3828, 3842-3859 - ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs: lines 3842-3859 have changes inside
-crates/mp-link/src/lib.rs:2722: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:4113-4127, 4146-4160, 4196-4206 - ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs: line 4146-4160 changed upstream
-crates/mp-link/src/lib.rs:2722: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:4113-4127, 4146-4160, 4196-4206 - ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs: line 4196-4206 changed upstream
-crates/mp-link/src/lib.rs:2722: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:4113-4127, 4146-4160, 4196-4206 - ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs: lines 4113-4127 have changes inside
-crates/mp-link/src/mission_points.rs:33: MAVLinkInterface.cs:5625-5698, 5718-5731 - ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs: line 5625-5698 changed upstream
-crates/mp-link/src/mission_points.rs:33: MAVLinkInterface.cs:5625-5698, 5718-5731 - ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs: lines 5718-5731 have changes inside
-crates/mp-link/src/mission_points.rs:175: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:5625-5698, 5718-5731 - ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs: line 5625-5698 changed upstream
-crates/mp-link/src/mission_points.rs:175: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:5625-5698, 5718-5731 - ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs: lines 5718-5731 have changes inside
-crates/mp-link/src/mission_points.rs:185: MAVLinkInterface.cs:5627-5644 - ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs: lines 5627-5644 have changes inside
-crates/mp-link/src/mission_points.rs:189: MAVLinkInterface.cs:5645-5670 - ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs: lines 5645-5670 have changes inside
-crates/mp-link/src/mission_points.rs:199: MAVLinkInterface.cs:5671-5698 - ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs: lines 5671-5698 have changes inside
-crates/mp-link/src/mission_points.rs:208: MAVLinkInterface.cs:5718-5731 - ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs: lines 5718-5731 have changes inside
-crates/mp-link/src/mission_points.rs:240: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:4293-4300, 4331-4339 - ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs: line 4293-4300 changed upstream
-crates/mp-link/src/mission_points.rs:240: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:4293-4300, 4331-4339 - ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs: lines 4331-4339 have changes inside
-crates/mp-link/src/mission_points.rs:279: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:4113-4127, 4146-4160, 4196-4206 - ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs: line 4146-4160 changed upstream
-crates/mp-link/src/mission_points.rs:279: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:4113-4127, 4146-4160, 4196-4206 - ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs: line 4196-4206 changed upstream
-crates/mp-link/src/mission_points.rs:279: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:4113-4127, 4146-4160, 4196-4206 - ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs: lines 4113-4127 have changes inside
 crates/mp-link/src/mission_transfer.rs:63: MAVLinkInterface.cs:4318-4356 - ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs: lines 4318-4356 have changes inside
 crates/mp-link/src/mission_transfer.rs:508: MAVLinkInterface.cs:3530-3534 - ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs: lines 3530-3534 have changes inside
 crates/mp-link/src/mission_transfer.rs:551: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:3800-3803 - ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs: lines 3800-3803 have changes inside
@@ -408,8 +363,6 @@ crates/mp-link/src/param_download.rs:24: ExtLibs/ArduPilot/Mavlink/MAVLinkInterf
 crates/mp-link/src/param_download.rs:182: MAVLinkInterface.cs:2097 - ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs: line 2097 changed upstream
 crates/mp-link/src/param_download.rs:235: MAVLinkInterface.cs:2013-2093 - ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs: lines 2013-2093 have changes inside
 crates/mp-link/src/param_download.rs:271: MAVLinkInterface.cs:2114-2208 - ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs: lines 2114-2208 have changes inside
-crates/mp-link/src/param_fetch.rs:23: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:1781-1936 - ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs: lines 1781-1936 have changes inside
-crates/mp-link/src/param_fetch.rs:128: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:1781-1799, 1813-1936 - ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs: line 1813-1936 changed upstream
 crates/mp-link/src/protocols.rs:28: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:500-586 - ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs: line 500-586 changed upstream
 crates/mp-link/src/protocols.rs:49: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:500-586 - ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs: line 500-586 changed upstream
 crates/mp-link/src/requests.rs:107: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:2847-2951 - ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs: line 2847-2951 changed upstream
@@ -442,7 +395,6 @@ crates/mp-link/tests/compassmot.rs:23: GCSViews/ConfigurationView/ConfigCompassM
 crates/mp-link/tests/current_state.rs:460: MAVList.cs:25-30, 101-117 - ExtLibs/ArduPilot/Mavlink/MAVList.cs: line 101-117 changed upstream
 crates/mp-link/tests/current_state.rs:460: MAVList.cs:25-30, 101-117 - ExtLibs/ArduPilot/Mavlink/MAVList.cs: line 25-30 changed upstream
 crates/mp-link/tests/gimbal_camera.rs:25: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:500-586 - ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs: line 500-586 changed upstream
-crates/mp-link/tests/param_fetch.rs:23: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:1813-1936 - ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs: line 1813-1936 changed upstream
 crates/mp-link/tests/retries.rs:443: MAVLinkInterface.cs:1948-2263 - ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs: line 1948-2263 changed upstream
 crates/mp-link/tests/retries.rs:963: MAVLinkInterface.cs:2688-2837 - ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs: line 2688-2837 changed upstream
 crates/mp-link/tests/retries.rs:1450: MAVLinkInterface.cs:4318-4356 - ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs: lines 4318-4356 have changes inside
