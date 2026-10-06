@@ -1,0 +1,28 @@
+# EXPERIMENTAL's extract gps_inject (temp.cs:768-804): a telemetry log asked for (`tlog|*.tlog`),
+# then where to write (`output.dat` offered, in the log's folder), and every GPS_INJECT_DATA's and
+# GPS_RTCM_DATA's data written there in the log's order - the corrections a base station sent.
+# tests/gui/gps-inject-tlog.py makes a log of 5, 7 and 3 bytes of them among heartbeats; 15 are
+# written. Nothing is said when it is done, as the C# says nothing.
+screen fly
+window 1600x1200
+budget 8
+env XDG_DATA_HOME $WORK
+env MP_CONFIG_XML $WORK/config.xml
+env MP_LOG_DIR $WORK/logs
+setup mkdir -p "$WORK/logs" && python3 tests/gui/gps-inject-tlog.py "$WORK/logs/base.tlog"
+
+key ctrl+f
+expect screen experimental
+expect experimental.gpsinject none
+
+click experimental-but_gpsinj
+expect experimental.asking ~ Open:
+click experimental-path-value
+key ctrl+a
+type $WORK/logs/base.tlog
+key Return
+expect experimental.asking Save As: $WORK/logs/output.dat
+key Return
+expect experimental.asking none
+within 10
+expect experimental.gpsinject wrote 15

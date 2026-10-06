@@ -275,6 +275,7 @@ pub(crate) fn tool(name: &str) -> Tool {
         "but_disablearmswitch" => Tool::Act(Act::ToggleSafety),
         "BUT_magfit2" => Tool::Act(Act::MagCalLog),
         "myButton1" => Tool::Act(Act::SplitDfLog),
+        "but_gpsinj" => Tool::Act(Act::ExtractGpsInject),
         "BUT_clearcustommaps" => Tool::Act(Act::ClearCustomMaps),
         "but_agemapdata" => Tool::Act(Act::AgeMapData),
         "but_armandtakeoff" => Tool::Act(Act::ArmAndTakeoff),
@@ -329,6 +330,11 @@ pub(crate) enum Act {
     /// handed to `SaveOffsets` (the compass page's, its boxes over every screen).
     /// `// C#: temp.cs:410-413; MagCalib.cs:93-133`
     MagCalLog,
+    /// `but_gpsinj_Click`: a telemetry log asked for, then where to write it (`output.dat`
+    /// offered), and every `GPS_INJECT_DATA`'s and `GPS_RTCM_DATA`'s data written there in the
+    /// log's order - the corrections a base station sent - off the window's thread
+    /// ([`gps_inject_bytes`]). `// C#: temp.cs:768-804`
+    ExtractGpsInject,
     /// `myButton1_Click_2`: a log asked for, "How Many" pieces asked (10 offered), and
     /// `DFLogBuffer.SplitLog` writing `<log>_split<i>.bin` beside it, off the window's thread
     /// (mp-log's `split_file`). `// C#: temp.cs:720-734; ExtLibs/Utilities/DFLogBuffer.cs:472-556`
@@ -395,6 +401,10 @@ const LOG_FILE_MASK: &str = "Log Files|*.tlog;*.log;*.bin";
 /// Split DFLog's dialog's filter, and its question with the count it offers.
 /// `// C#: temp.cs:723, 730-731`
 const DFLOG_FILE_MASK: &str = "Log Files|*.log;*.bin;*.BIN;*.LOG";
+/// extract gps_inject's two dialogs: the log's filter, and the file offered to write.
+/// `// C#: temp.cs:771, 775`
+const TLOG_FILE_MASK: &str = "tlog|*.tlog";
+const GPS_INJECT_OFFERED: &str = "output.dat";
 const SPLIT_TITLE: &str = "How Many";
 const SPLIT_PROMPT: &str = "Enter how many pieces to split into";
 const SPLIT_OFFERED: i32 = 10;
@@ -506,6 +516,9 @@ enum Opened {
     MagCalLog,
     /// Split DFLog's log.
     SplitDfLog,
+    /// extract gps_inject's telemetry log, and its `SaveFileDialog`.
+    GpsInjectLog,
+    GpsInjectOut,
 }
 
 /// What an input box's answer is for.
@@ -551,10 +564,75 @@ pub(crate) struct Experimental {
     takeoff: Option<Takeoff>,
     /// How its last step ended, for the facts.
     takeoff_last: Option<&'static str>,
-    /// Split DFLog's splitting, on its thread, until its answer comes.
-    split: Option<std::sync::mpsc::Receiver<Result<usize, String>>>,
-    /// What the last one came to, for the facts.
-    split_last: Option<String>,
+    /// Split DFLog's splitting.
+    split: Job,
+    /// extract gps_inject's log, chosen, while where to write it is asked; and its extracting.
+    gps_inject_log: Option<std::path::PathBuf>,
+    gps_inject: Job,
+}
+
+/// A tool's work on files, on a thread of its own where the C#'s window waits on it - Split
+/// DFLog's, extract gps_inject's: one at a time, its answer taken by [`tick`], and what the last
+/// one came to kept for the facts.
+#[derive(Default)]
+struct Job {
+    running: Option<std::sync::mpsc::Receiver<Result<usize, String>>>,
+    last: Option<String>,
+}
+
+impl Job {
+    /// `work` started on a thread named `name`, unless one is still running.
+    fn start(&mut self, name: &str, work: impl FnOnce() -> Result<usize, String> + Send + 'static) {
+        if self.running.is_some() {
+            return;
+        }
+        let (sender, receiver) = std::sync::mpsc::channel();
+        let spawned = wasm_thread::Builder::new()
+            .name(name.to_owned())
+            .spawn(move || {
+                let _ = sender.send(work());
+            });
+        match spawned {
+            Ok(_) => self.running = Some(receiver),
+            Err(error) => log::debug!("{name}: {error}"),
+        }
+    }
+
+    /// Its answer, once it has come: "wrote" and the count kept, or what failed kept and returned
+    /// for the status line.
+    fn answer(&mut self) -> Option<String> {
+        let receiver = self.running.as_ref()?;
+        let answer = match receiver.try_recv() {
+            Ok(answer) => answer,
+            Err(std::sync::mpsc::TryRecvError::Empty) => {
+                crate::repaint::in_flight();
+                return None;
+            }
+            Err(std::sync::mpsc::TryRecvError::Disconnected) => {
+                Err("the work stopped without an answer".to_owned())
+            }
+        };
+        self.running = None;
+        match answer {
+            Ok(count) => {
+                self.last = Some(format!("wrote {count}"));
+                None
+            }
+            Err(why) => {
+                self.last = Some(format!("failed: {why}"));
+                Some(why)
+            }
+        }
+    }
+
+    /// For the facts: `busy` while it runs, else what the last one came to, or "none".
+    fn fact<'a>(&'a self, busy: &'a str) -> &'a str {
+        if self.running.is_some() {
+            busy
+        } else {
+            self.last.as_deref().unwrap_or("none")
+        }
+    }
 }
 
 impl Default for Experimental {
@@ -568,8 +646,9 @@ impl Default for Experimental {
             scroll: gpui::ScrollHandle::new(),
             magcal: None,
             magcal_last: None,
-            split: None,
-            split_last: None,
+            split: Job::default(),
+            gps_inject_log: None,
+            gps_inject: Job::default(),
             takeoff: None,
             takeoff_last: None,
             sort: None,
@@ -731,6 +810,14 @@ fn act(
             }
         }
         // `InitialDirectory = Settings.Instance.LogDir`.
+        // `OpenFileDialog` with the filter `tlog|*.tlog`, and no folder set. C#: temp.cs:770-772
+        Act::ExtractGpsInject => {
+            this.experimental.asking = Some(Asking::Path(
+                crate::config::firmware::PathBox::new("", TLOG_FILE_MASK),
+                Opened::GpsInjectLog,
+            ));
+            focus_input(this, window, cx);
+        }
         Act::SplitDfLog => {
             let folder = crate::fly::log_directory()
                 .map(|folder| folder.to_string_lossy().into_owned())
@@ -814,6 +901,7 @@ fn send(this: &mut MissionPlanner, what: Act) {
         | Act::ParamRestore
         | Act::MagCalLog
         | Act::SplitDfLog
+        | Act::ExtractGpsInject
         | Act::ClearCustomMaps
         | Act::AgeMapData
         | Act::ArmAndTakeoff
@@ -928,6 +1016,22 @@ fn path_answered(this: &mut MissionPlanner, ok: bool) {
         return;
     };
     if !ok {
+        // **Divergence:** the C# shows its `SaveFileDialog` whatever the log's dialog answered,
+        // and with no log then throws opening it; here a Cancel ends it.
+        this.experimental.gps_inject_log = None;
+        return;
+    }
+    // `SaveFileDialog`: the name typed, whether it is there yet or not.
+    if opened == Opened::GpsInjectOut {
+        use mp_os::fs::FsExt as _;
+        let out = std::path::PathBuf::from(path.field.value().trim());
+        if out.as_os_str().is_empty() || out.os_is_dir() {
+            this.experimental.asking = Some(Asking::Path(path, opened));
+            return;
+        }
+        if let Some(log) = this.experimental.gps_inject_log.take() {
+            extract_gps_inject(this, log, out);
+        }
         return;
     }
     let Some(file) = path.chosen() else {
@@ -937,6 +1041,21 @@ fn path_answered(this: &mut MissionPlanner, ok: bool) {
     match opened {
         Opened::ParamRestore => restore_file(this, &file),
         Opened::MagCalLog => read_mag_log(this, file),
+        // `sfd.FileName = "output.dat"`, the dialog in the log's folder, where Windows' dialogs
+        // open after the last one. C#: temp.cs:775-776
+        Opened::GpsInjectLog => {
+            let folder = file
+                .parent()
+                .map(|dir| dir.to_string_lossy().into_owned())
+                .unwrap_or_default();
+            let mut save = crate::config::firmware::PathBox::new(&folder, TLOG_FILE_MASK);
+            save.field
+                .set(format!("{}{GPS_INJECT_OFFERED}", save.field.value()));
+            save.caption = crate::joystick::SAVE_AS;
+            this.experimental.gps_inject_log = Some(file);
+            this.experimental.asking = Some(Asking::Path(save, Opened::GpsInjectOut));
+        }
+        Opened::GpsInjectOut => {}
         // `InputBox.Show("How Many", ..., ref a)` with `a = 10`.
         Opened::SplitDfLog => {
             this.experimental.asking = Some(Asking::Input {
@@ -958,19 +1077,9 @@ fn split_df_log(this: &mut MissionPlanner, file: std::path::PathBuf, answer: &st
         )));
         return;
     };
-    if this.experimental.split.is_some() {
-        return;
-    }
-    let (sender, receiver) = std::sync::mpsc::channel();
-    let spawned = wasm_thread::Builder::new()
-        .name("mp-split-dflog".to_owned())
-        .spawn(move || {
-            let _ = sender.send(mp_log::dflogbuffer::split_file(&file, pieces));
-        });
-    match spawned {
-        Ok(_) => this.experimental.split = Some(receiver),
-        Err(error) => log::debug!("Split DFLog: {error}"),
-    }
+    this.experimental.split.start("mp-split-dflog", move || {
+        mp_log::dflogbuffer::split_file(&file, pieces)
+    });
 }
 
 /// mag calb log's log chosen: `ProcessLog`'s reading, fitting and drawing on a thread of its own,
@@ -1000,7 +1109,16 @@ fn read_mag_log(this: &mut MissionPlanner, file: std::path::PathBuf) {
 /// shows nothing. `// C#: MagCalib.cs:115-130`
 pub(crate) fn tick(this: &mut MissionPlanner) {
     crate::log_index::tick(this);
-    split_tick(this);
+    // Split DFLog's and extract gps_inject's answers: nothing said when one is done, as the C#
+    // says nothing; what threw on the status line, where the C#'s error box shows it.
+    for job in [
+        &mut this.experimental.split,
+        &mut this.experimental.gps_inject,
+    ] {
+        if let Some(why) = job.answer() {
+            this.file_status = Some(error_box(why));
+        }
+    }
     takeoff_tick(this);
     sort_tick(this);
     map_logs_tick(this);
@@ -1239,30 +1357,45 @@ fn sort_tick(this: &mut MissionPlanner) {
     });
 }
 
-/// Split DFLog's answer, when it comes: nothing said when it is done, as the C# says nothing; what
-/// `SplitLog` threw on the status line, where the C#'s error box shows it.
-fn split_tick(this: &mut MissionPlanner) {
-    let Some(receiver) = this.experimental.split.as_ref() else {
-        return;
-    };
-    let split = match receiver.try_recv() {
-        Ok(split) => split,
-        Err(std::sync::mpsc::TryRecvError::Empty) => {
-            crate::repaint::in_flight();
-            return;
-        }
-        Err(std::sync::mpsc::TryRecvError::Disconnected) => {
-            Err("the split stopped without an answer".to_owned())
-        }
-    };
-    this.experimental.split = None;
-    match split {
-        Ok(pieces) => this.experimental.split_last = Some(format!("wrote {pieces}")),
-        Err(why) => {
-            this.experimental.split_last = Some(format!("failed: {why}"));
-            this.file_status = Some(error_box(why));
-        }
+/// extract gps_inject's bytes: every `GPS_INJECT_DATA`'s and `GPS_RTCM_DATA`'s `data[0..len]`, in
+/// the log's order, as `readPacketAsync` reads a telemetry log - a frame whose checksum fails is
+/// passed over. `Err` where the C#'s `Write` throws: a `len` past the message's `data`.
+/// `// C#: temp.cs:783-801`
+pub(crate) fn gps_inject_bytes(log: &[u8]) -> Result<Vec<u8>, String> {
+    use mp_mavlink_dialects::all::{DIALECT, MavMessage};
+    let mut out = Vec::new();
+    let mut reader = mp_log::reader::TlogReader::new(log);
+    while let Some(record) = reader.next_record(&DIALECT) {
+        let Ok((frame, _)) = mp_mavlink::parse(record.frame, &DIALECT) else {
+            continue;
+        };
+        let message = MavMessage::decode(frame.msgid, frame.payload);
+        let (data, len): (&[u8], u8) = match &message {
+            Some(MavMessage::GpsInjectData(m)) => (&m.data[..], m.len),
+            Some(MavMessage::GpsRtcmData(m)) => (&m.data[..], m.len),
+            _ => continue,
+        };
+        let bytes = data.get(..usize::from(len)).ok_or_else(|| {
+            "Offset and length were out of bounds for the array or count is greater than the \
+             number of elements from index to the end of the source collection."
+                .to_owned()
+        })?;
+        out.extend_from_slice(bytes);
     }
+    Ok(out)
+}
+
+/// extract gps_inject's log and file chosen: the log read and `sfd.OpenFile()` written, on a
+/// thread of its own where the C#'s window waits on them. One at a time.
+/// `// C#: temp.cs:779-803`
+fn extract_gps_inject(this: &mut MissionPlanner, log: std::path::PathBuf, out: std::path::PathBuf) {
+    this.experimental
+        .gps_inject
+        .start("mp-gps-inject", move || {
+            let data = gps_inject_bytes(&mp_os::fs::read(&log).map_err(|e| e.to_string())?)?;
+            mp_os::fs::write(&out, &data).map_err(|e| e.to_string())?;
+            Ok(data.len())
+        });
 }
 
 /// Param Restore's file: `ParamFile.loadParamFile` and its parameters restored (params.rs's
@@ -1556,15 +1689,12 @@ pub(crate) fn record_facts(state: &Experimental) {
             None => state.takeoff_last.unwrap_or("none"),
         },
     );
-    // Split DFLog: splitting, or what the last split came to.
+    // extract gps_inject and Split DFLog: at work, or what the last one came to.
     facts::record(
-        "experimental.split",
-        if state.split.is_some() {
-            "splitting"
-        } else {
-            state.split_last.as_deref().unwrap_or("none")
-        },
+        "experimental.gpsinject",
+        state.gps_inject.fact("extracting"),
     );
+    facts::record("experimental.split", state.split.fact("splitting"));
     // mag calb log: reading, or what the last reading came to.
     facts::record(
         "experimental.magcal",
@@ -1579,6 +1709,69 @@ pub(crate) fn record_facts(state: &Experimental) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// extract gps_inject: the data of every GPS_INJECT_DATA and GPS_RTCM_DATA in the log's
+    /// order, `len` bytes of each, the rest of the log and a frame whose checksum fails passed
+    /// over; a `len` past the message's data what the C#'s `Write` throws.
+    /// `// C#: temp.cs:783-801`
+    #[test]
+    fn extract_gps_inject_writes_every_corrections_data_in_order() {
+        use mp_mavlink_dialects::all::{GpsInjectData, GpsRtcmData, Heartbeat, MavMessage};
+        fn record(out: &mut Vec<u8>, message: &MavMessage, corrupt: bool) {
+            let mut payload = [0u8; 255];
+            let len = message.encode(&mut payload);
+            let mut frame = [0u8; mp_mavlink::MAX_FRAME_LEN];
+            let n = mp_mavlink::encode_v2(
+                &mut frame,
+                0,
+                1,
+                1,
+                message.id(),
+                &payload[..len],
+                message.crc_extra(),
+                0,
+            )
+            .expect("a frame");
+            if corrupt {
+                frame[n - 1] ^= 0xFF;
+            }
+            out.extend_from_slice(&1_759_700_000_000_000_u64.to_be_bytes());
+            out.extend_from_slice(&frame[..n]);
+        }
+        let mut inject = [0u8; 110];
+        inject[..3].copy_from_slice(&[1, 2, 3]);
+        let mut data = [0u8; 180];
+        data[..2].copy_from_slice(&[9, 8]);
+        let rtcm = MavMessage::GpsRtcmData(GpsRtcmData {
+            flags: 0,
+            len: 2,
+            data,
+        });
+        let heartbeat = MavMessage::Heartbeat(Heartbeat {
+            custom_mode: 0,
+            r#type: 2,
+            autopilot: 3,
+            base_mode: 81,
+            system_status: 4,
+            mavlink_version: 3,
+        });
+        let injected = |len| {
+            MavMessage::GpsInjectData(GpsInjectData {
+                target_system: 1,
+                target_component: 1,
+                len,
+                data: inject,
+            })
+        };
+        let mut log = Vec::new();
+        record(&mut log, &heartbeat, false);
+        record(&mut log, &injected(3), false);
+        record(&mut log, &rtcm, true);
+        record(&mut log, &rtcm, false);
+        assert_eq!(gps_inject_bytes(&log), Ok(vec![1, 2, 3, 9, 8]));
+        record(&mut log, &injected(200), false);
+        assert!(gps_inject_bytes(&log).is_err());
+    }
 
     /// The table as the designer has it: 121 controls, 63 of them buttons, in four columns and
     /// 32 rows, no two in one cell.
@@ -1619,10 +1812,11 @@ mod tests {
                 Tool::Unavailable(why) => assert!(!why.is_empty()),
             }
         }
-        assert_eq!(opens, 30);
+        assert_eq!(opens, 31);
         assert_eq!(tool("but_paramrestore"), Tool::Act(Act::ParamRestore));
         assert_eq!(tool("BUT_magfit2"), Tool::Act(Act::MagCalLog));
         assert_eq!(tool("myButton1"), Tool::Act(Act::SplitDfLog));
+        assert_eq!(tool("but_gpsinj"), Tool::Act(Act::ExtractGpsInject));
         assert_eq!(tool("BUT_clearcustommaps"), Tool::Act(Act::ClearCustomMaps));
         assert_eq!(tool("but_agemapdata"), Tool::Act(Act::AgeMapData));
         assert_eq!(tool("but_armandtakeoff"), Tool::Act(Act::ArmAndTakeoff));
