@@ -194,6 +194,9 @@ pub const TEXT_FIELDS: [&str; 6] = [
 pub const NOT_A_NUMBER: &str = super::fftui::NOT_A_NUMBER;
 /// `OverflowException.Message`, for a whole number past an `Int32`.
 pub const TOO_BIG: &str = "Value was either too large or too small for an Int32.";
+/// `OverflowException.Message`, for a whole number past a `UInt32`: the system id's, read with
+/// `uint.Parse` since the C#'s 32-bit system ids (e6454ccdd).
+pub const TOO_BIG_UINT: &str = "Value was either too large or too small for a UInt32.";
 /// `OverflowException.Message` again, for `new PointPair[capacity]` of a negative capacity.
 pub const NEGATIVE_HISTORY: &str = "Arithmetic operation resulted in an overflow.";
 /// `IndexOutOfRangeException.Message`, for a path's word that is not there.
@@ -579,11 +582,29 @@ fn parse_int32(text: &str) -> Result<i32, &'static str> {
         .ok_or(TOO_BIG)
 }
 
+/// `uint.Parse`: optional white space and sign round the digits; a negative number other than 0
+/// is past a `UInt32`, as is a number above its largest.
+fn parse_uint32(text: &str) -> Result<u32, &'static str> {
+    let trimmed = text.trim();
+    let (negative, digits) = match trimmed.strip_prefix('-') {
+        Some(digits) => (true, digits),
+        None => (false, trimmed.strip_prefix('+').unwrap_or(trimmed)),
+    };
+    if digits.is_empty() || !digits.chars().all(|c| c.is_ascii_digit()) {
+        return Err(NOT_A_NUMBER);
+    }
+    let value: u64 = digits.parse().map_err(|_| TOO_BIG_UINT)?;
+    if negative && value != 0 {
+        return Err(TOO_BIG_UINT);
+    }
+    u32::try_from(value).map_err(|_| TOO_BIG_UINT)
+}
+
 /// What Graph It reads from the selected node's path.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Target {
-    /// `int.Parse(path[0].Split(' ')[1])`.
-    pub sysid: i32,
+    /// `uint.Parse(path[0].Split(' ')[1])`: 32-bit since e6454ccdd.
+    pub sysid: u32,
     /// `int.Parse(path[1].Split(' ')[1])`.
     pub compid: i32,
     /// `int.Parse(msgt.Split('#', ')')[1])`.
@@ -610,7 +631,7 @@ pub fn target(path: &str) -> Result<Option<Target>, &'static str> {
             .ok_or(OUT_OF_RANGE)
     };
     Ok(Some(Target {
-        sysid: parse_int32(&word(vehicle, &[' '], 1)?)?,
+        sysid: parse_uint32(&word(vehicle, &[' '], 1)?)?,
         compid: parse_int32(&word(component, &[' '], 1)?)?,
         msgid: parse_int32(&word(message, &['#', ')'], 1)?)?,
         message: word(message, &[' '], 0)?,
@@ -729,7 +750,7 @@ impl Curves {
     #[allow(clippy::cast_precision_loss)] // `IConvertible.ToDouble`, as the C# converts
     pub fn add(&mut self, target: &Target, packet: &Packet) {
         if i64::from(packet.msgid) != i64::from(target.msgid)
-            || i64::from(packet.sysid) != i64::from(target.sysid)
+            || packet.sysid != target.sysid
             || i32::from(packet.compid) != target.compid
         {
             return;
@@ -2781,6 +2802,20 @@ mod tests {
         assert_eq!(
             target("Vehicle x\\Comp 1\\X (1 Hz, #2)\\f"),
             Err(NOT_A_NUMBER)
+        );
+        // A 32-bit system id, `uint.Parse`'s: the largest read, one past it and a negative one
+        // past a UInt32.
+        assert_eq!(
+            target("Vehicle 4294967295\\Comp 1\\X (1 Hz, #2)\\f").map(|t| t.map(|t| t.sysid)),
+            Ok(Some(u32::MAX))
+        );
+        assert_eq!(
+            target("Vehicle 4294967296\\Comp 1\\X (1 Hz, #2)\\f"),
+            Err(TOO_BIG_UINT)
+        );
+        assert_eq!(
+            target("Vehicle -1\\Comp 1\\X (1 Hz, #2)\\f"),
+            Err(TOO_BIG_UINT)
         );
     }
 

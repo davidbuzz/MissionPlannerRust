@@ -299,7 +299,7 @@ pub struct WmiSerialPort<'a> {
 
 /// The friendly name Mission Planner shows beside a port on Windows: the `Name` of the first
 /// `Win32_SerialPort` row whose `DeviceID` matches ignoring case, or nothing.
-// C#: ExtLibs/Comms/CommsSerialPort.cs:313-339 (GetNiceName), Program.cs:510-526 (the WMI query)
+// C#: ExtLibs/Comms/CommsSerialPort.cs:313-340 (GetNiceName), Program.cs:510-526 (the WMI query)
 #[must_use]
 pub fn nice_name(port: &str, wmi: &[WmiSerialPort<'_>]) -> String {
     if NOT_PORTS.contains(&port) {
