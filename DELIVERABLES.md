@@ -126,7 +126,13 @@ signing, zero-copy frame parse/serialize.
   (criterion, release, 2026-09-24, with the fuzz soak on two other cores) - nine times the
   target for the framing and CRC, on one core. The typed decode of every message is
   `tests/no_alloc.rs`'s 211,638 and is not timed separately.
-- **Tests:** `crates/mp-mavlink/tests/roundtrip.rs` (proptest encode→decode identity over every generated message type); the golden decode is `tests/differential_tlog.rs` (35,750 frames against `MAVLink.dll` under mono) with `crates/mp-mavlink-dialects/tests/differential_fields.rs` (24,626 field values by name) and `reference_table.rs` (349 `CRC_EXTRA`/`min_len`/`len` against the shipped assembly); `tests/signing.rs`; the truncation cases live in `tests/robustness.rs` and `tests/decoder.rs`; `fuzz/fuzz_targets/frame_parse.rs` and `message_decode.rs` (24 h soak clean, `fuzz/README.md`); `crates/mp-fuzz-checks/tests/bounded.rs` runs every fuzz property on stable in `cargo test --workspace`; `tests/no_alloc.rs`; `benches/decode.rs` (9.5 M frames/s, recorded above).
+  Against a second binding: tridge's generated Rust binding (pymavlink pull request 1303, the
+  optional submodule `third_party/pymavlink`) is built from the same all.xml, and
+  `tools/wire-agreement/run.sh` holds ours to it byte for byte both ways - tables, typed round
+  trips, the frames each builds and parses of the other's, MAVLink 1 and 2, signed and not,
+  32-bit source and target: 353 messages, 49,908 frames, no difference (2026-10-06; CI's
+  `wire-agreement` job).
+- **Tests:** `crates/mp-mavlink/tests/roundtrip.rs` (proptest encode→decode identity over every generated message type); the golden decode is `tests/differential_tlog.rs` (35,750 frames against `MAVLink.dll` under mono) with `crates/mp-mavlink-dialects/tests/differential_fields.rs` (24,626 field values by name) and `reference_table.rs` (349 `CRC_EXTRA`/`min_len`/`len` against the shipped assembly); `tests/signing.rs`; the truncation cases live in `tests/robustness.rs` and `tests/decoder.rs`; `fuzz/fuzz_targets/frame_parse.rs` and `message_decode.rs` (24 h soak clean, `fuzz/README.md`); `crates/mp-fuzz-checks/tests/bounded.rs` runs every fuzz property on stable in `cargo test --workspace`; `tests/no_alloc.rs`; `benches/decode.rs` (9.5 M frames/s, recorded above); `tools/wire-agreement/` (the reference binding, both ways, any difference fails).
 
 ### D3. Transport layer
 `serial | TCP | UDP | BLE | NTRIP | websocket | file-replay`, device enumeration and hotplug on all three

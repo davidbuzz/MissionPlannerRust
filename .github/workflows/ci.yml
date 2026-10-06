@@ -275,6 +275,37 @@ jobs:
             echo "reference tree absent; skipping regeneration check"
           fi
 
+  # This repository's MAVLink binding against tridge's generated Rust binding (pymavlink pull
+  # request 1303), every message of Mission Planner's all.xml, both ways, byte for byte: any
+  # over-the-wire difference fails (tools/wire-agreement/run.sh).
+  wire-agreement:
+    name: wire agreement with the reference Rust binding
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      # Optional, so a clone does not fetch it: this job does.
+      - run: git submodule update --init --checkout third_party/pymavlink
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: tools/wire-agreement/harness -> ../../../target/wire-agreement/target
+      - name: Install Linux dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libudev-dev
+      # Only the message definitions our dialect is generated from, at the commit it is pinned to.
+      - name: Mission Planner's message definitions
+        run: |
+          commit=$(sed -n 's/^pub const COMMIT: &str = "\(.*\)";/\1/p' xtask/src/upstream.rs)
+          git clone --quiet --filter=blob:none --no-checkout --sparse \
+            https://github.com/ArduPilot/MissionPlanner "$RUNNER_TEMP/missionplanner"
+          git -C "$RUNNER_TEMP/missionplanner" sparse-checkout set --no-cone /ExtLibs/Mavlink/message_definitions/
+          git -C "$RUNNER_TEMP/missionplanner" checkout --quiet "$commit"
+      - run: tools/wire-agreement/run.sh
+        env:
+          MP_SRC: ${{ runner.temp }}/missionplanner
+
   deny:
     name: licences and advisories
     runs-on: ubuntu-latest

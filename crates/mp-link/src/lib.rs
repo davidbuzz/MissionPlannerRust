@@ -2855,7 +2855,11 @@ pub fn is_targeted_to(
 /// `GetTargetSystem()` and `GetTargetComponent()` of a frame and its message: the header's target
 /// first, else the message's `target_system` (`target` in `MANUAL_CONTROL`, `GetTargetSystemField`),
 /// and its `target_component`. `// C#: ExtLibs/Mavlink/MAVLinkMessage.cs:39-54; MavlinkHeader.cs:37-41`
-fn target_of(frame: &mp_mavlink::Frame<'_>, message: &MavMessage) -> (Option<u32>, Option<u8>) {
+#[must_use]
+pub fn target_of(
+    frame: &mp_mavlink::Frame<'_>,
+    message: &MavMessage,
+) -> (Option<u32>, Option<u8>) {
     let fields = message.fields();
     let byte = |name: &str| {
         fields

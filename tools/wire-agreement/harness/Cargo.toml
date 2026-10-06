@@ -1,0 +1,18 @@
+[package]
+name = "wire-agreement"
+description = "This repository's MAVLink binding against tridge's generated Rust binding, byte for byte"
+version = "0.0.0"
+edition = "2024"
+license = "GPL-3.0-only"
+publish = false
+
+# A workspace of its own: the reference binding is generated outside the tree, and only when the
+# optional pymavlink submodule is checked out (tools/wire-agreement/run.sh makes it).
+[workspace]
+
+[dependencies]
+mp-mavlink = { path = "../../../crates/mp-mavlink" }
+mp-mavlink-dialects = { path = "../../../crates/mp-mavlink-dialects" }
+# The product's own signing and target reading of a frame it sends or hears.
+mp-link = { path = "../../../crates/mp-link" }
+mavlink-generated = { path = "../../../target/wire-agreement/mavlink-generated" }

@@ -17,3 +17,6 @@ __pycache__/
 # Playwright for the browser checks, installed beside them (web/check/ci.sh).
 /web/check/node_modules/
 /web/check/package-lock.json
+
+# The wire-agreement harness's copy of the product's lock file (tools/wire-agreement/run.sh).
+/tools/wire-agreement/harness/Cargo.lock
