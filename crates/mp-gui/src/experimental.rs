@@ -277,6 +277,7 @@ pub(crate) fn tool(name: &str) -> Tool {
         "myButton1" => Tool::Act(Act::SplitDfLog),
         "but_gpsinj" => Tool::Act(Act::ExtractGpsInject),
         "BUT_shptopoly" => Tool::Act(Act::ShpToPoly),
+        "but_dashware" => Tool::Act(Act::DashWare),
         "BUT_clearcustommaps" => Tool::Act(Act::ClearCustomMaps),
         "but_agemapdata" => Tool::Act(Act::AgeMapData),
         "but_armandtakeoff" => Tool::Act(Act::ArmAndTakeoff),
@@ -341,6 +342,10 @@ pub(crate) enum Act {
     /// WGS 1984 where a `.prj` sits beside it - off the window's thread ([`shp_to_poly`]).
     /// `// C#: temp.cs:415-495`
     ShpToPoly,
+    /// `but_dashware_Click`: a dataflash log asked for, then "DashWare Types" (the C#'s list
+    /// offered), and `DashWare.Create` writing `<log>.csv` beside it off the window's thread
+    /// (mp-log's `dashware`). `// C#: temp.cs:940-954`
+    DashWare,
     /// `myButton1_Click_2`: a log asked for, "How Many" pieces asked (10 offered), and
     /// `DFLogBuffer.SplitLog` writing `<log>_split<i>.bin` beside it, off the window's thread
     /// (mp-log's `split_file`). `// C#: temp.cs:720-734; ExtLibs/Utilities/DFLogBuffer.cs:472-556`
@@ -418,6 +423,12 @@ const POLY_HEADING: &str = "#Shap to Poly - Mission Planner\r\n";
 const SPLIT_TITLE: &str = "How Many";
 const SPLIT_PROMPT: &str = "Enter how many pieces to split into";
 const SPLIT_OFFERED: i32 = 10;
+/// DashWare's dialog's filter, and its "DashWare Types" box: the title, the prompt and the list
+/// offered. `// C#: temp.cs:943, 948-949`
+const DASHWARE_FILE_MASK: &str = "bin|*.bin;*.BIN";
+const DASHWARE_TITLE: &str = "DashWare Types";
+const DASHWARE_PROMPT: &str = "Enter Messages you want eg PARM;NTUN;CTUN";
+const DASHWARE_OFFERED: &str = "GPS;ATT;NTUN;CTUN;MODE;BAT";
 /// Age Map Data's age: `DateTime.Now.AddDays(-30)`. `// C#: temp.cs:712`
 const AGE_MAP_DATA: web_time::Duration = web_time::Duration::from_secs(30 * 24 * 60 * 60);
 
@@ -531,6 +542,8 @@ enum Opened {
     GpsInjectOut,
     /// Shp to Poly's shapefile.
     ShpFile,
+    /// DashWare's dataflash log.
+    DashWareLog,
 }
 
 /// What an input box's answer is for.
@@ -546,6 +559,8 @@ enum Answered {
     SortFolder,
     /// map logs' `FolderBrowserDialog`.
     MapFolder,
+    /// DashWare's types: the log it reads.
+    DashWareTypes(std::path::PathBuf),
 }
 
 /// The tab's state: the last button pressed, for the facts, the question showing, and where the
@@ -583,10 +598,12 @@ pub(crate) struct Experimental {
     gps_inject: Job,
     /// Shp to Poly's writing.
     shp_to_poly: Job,
+    /// DashWare's writing.
+    dashware: Job,
 }
 
 /// A tool's work on files, on a thread of its own where the C#'s window waits on it - Split
-/// DFLog's, extract gps_inject's, Shp to Poly's: one at a time, its answer taken by [`tick`], and what the last
+/// DFLog's, extract gps_inject's, Shp to Poly's, DashWare's: one at a time, its answer taken by [`tick`], and what the last
 /// one came to kept for the facts.
 #[derive(Default)]
 struct Job {
@@ -664,6 +681,7 @@ impl Default for Experimental {
             gps_inject_log: None,
             gps_inject: Job::default(),
             shp_to_poly: Job::default(),
+            dashware: Job::default(),
             takeoff: None,
             takeoff_last: None,
             sort: None,
@@ -842,6 +860,15 @@ fn act(
             ));
             focus_input(this, window, cx);
         }
+        // `OpenFileDialog` with the filter `bin|*.bin;*.BIN`, and no folder set.
+        // C#: temp.cs:942-944
+        Act::DashWare => {
+            this.experimental.asking = Some(Asking::Path(
+                crate::config::firmware::PathBox::new("", DASHWARE_FILE_MASK),
+                Opened::DashWareLog,
+            ));
+            focus_input(this, window, cx);
+        }
         Act::SplitDfLog => {
             let folder = crate::fly::log_directory()
                 .map(|folder| folder.to_string_lossy().into_owned())
@@ -927,6 +954,7 @@ fn send(this: &mut MissionPlanner, what: Act) {
         | Act::SplitDfLog
         | Act::ExtractGpsInject
         | Act::ShpToPoly
+        | Act::DashWare
         | Act::ClearCustomMaps
         | Act::AgeMapData
         | Act::ArmAndTakeoff
@@ -945,13 +973,18 @@ fn answer(this: &mut MissionPlanner, yes: bool) {
         return;
     };
     if !yes {
-        // Split DFLog never reads the box's answer: Cancel splits into the count it offered.
-        if let Asking::Input {
-            then: Answered::SplitPieces(file),
-            ..
-        } = asking
-        {
-            split_df_log(this, file, &SPLIT_OFFERED.to_string());
+        // Split DFLog and DashWare never read the box's answer: Cancel goes on with what it
+        // offered.
+        match asking {
+            Asking::Input {
+                then: Answered::SplitPieces(file),
+                ..
+            } => split_df_log(this, file, &SPLIT_OFFERED.to_string()),
+            Asking::Input {
+                then: Answered::DashWareTypes(file),
+                ..
+            } => dashware(this, file, DASHWARE_OFFERED),
+            _ => {}
         }
         return;
     }
@@ -976,6 +1009,10 @@ fn answer(this: &mut MissionPlanner, yes: bool) {
             input,
             then: Answered::SplitPieces(file),
         } => split_df_log(this, file, input.field.value()),
+        Asking::Input {
+            input,
+            then: Answered::DashWareTypes(file),
+        } => dashware(this, file, input.field.value()),
         Asking::Input {
             input,
             then: Answered::MapFolder,
@@ -1041,8 +1078,10 @@ fn path_answered(this: &mut MissionPlanner, ok: bool) {
         return;
     };
     if !ok {
-        // **Divergence:** the C# shows its `SaveFileDialog` whatever the log's dialog answered,
-        // and with no log then throws opening it; here a Cancel ends it.
+        // **Divergence:** extract gps_inject shows its `SaveFileDialog` whatever the log's dialog
+        // answered, and with no log then throws opening it; DashWare tests `CheckFileExists`,
+        // which is the dialog's setting and true, asks its types and throws reading no file.
+        // Here a Cancel ends either.
         this.experimental.gps_inject_log = None;
         return;
     }
@@ -1082,6 +1121,13 @@ fn path_answered(this: &mut MissionPlanner, ok: bool) {
         }
         Opened::GpsInjectOut => {}
         Opened::ShpFile => write_polys(this, file),
+        // `InputBox.Show("DashWare Types", ...)`. C#: temp.cs:948-949
+        Opened::DashWareLog => {
+            this.experimental.asking = Some(Asking::Input {
+                input: InputBox::new(DASHWARE_TITLE, DASHWARE_PROMPT, DASHWARE_OFFERED),
+                then: Answered::DashWareTypes(file),
+            });
+        }
         // `InputBox.Show("How Many", ..., ref a)` with `a = 10`.
         Opened::SplitDfLog => {
             this.experimental.asking = Some(Asking::Input {
@@ -1135,12 +1181,14 @@ fn read_mag_log(this: &mut MissionPlanner, file: std::path::PathBuf) {
 /// shows nothing. `// C#: MagCalib.cs:115-130`
 pub(crate) fn tick(this: &mut MissionPlanner) {
     crate::log_index::tick(this);
-    // Split DFLog's, extract gps_inject's and Shp to Poly's answers: nothing said when one is done, as the C#
-    // says nothing; what threw on the status line, where the C#'s error box shows it.
+    // Split DFLog's, extract gps_inject's, Shp to Poly's and DashWare's answers: nothing said
+    // when one is done, as the C# says nothing; what threw on the status line, where the C#'s
+    // error box shows it.
     for job in [
         &mut this.experimental.split,
         &mut this.experimental.gps_inject,
         &mut this.experimental.shp_to_poly,
+        &mut this.experimental.dashware,
     ] {
         if let Some(why) = job.answer() {
             this.file_status = Some(error_box(why));
@@ -1489,6 +1537,21 @@ fn write_polys(this: &mut MissionPlanner, file: std::path::PathBuf) {
         });
 }
 
+/// DashWare's types answered: split on `;`, empty names dropped - none left is the whole log - and
+/// `DashWare.Create(file, file + ".csv", list)` on a thread of its own, where the C#'s window
+/// waits on it. Nothing is said when it is done, as the C# says nothing.
+/// `// C#: temp.cs:950-952`
+fn dashware(this: &mut MissionPlanner, file: std::path::PathBuf, answer: &str) {
+    let list: Vec<String> = answer
+        .split(';')
+        .filter(|name| !name.is_empty())
+        .map(str::to_owned)
+        .collect();
+    this.experimental.dashware.start("mp-dashware", move || {
+        mp_log::dashware::create_file(&file, (!list.is_empty()).then_some(&list[..]))
+    });
+}
+
 /// Param Restore's file: `ParamFile.loadParamFile` and its parameters restored (params.rs's
 /// `restore`, on the status line as it goes). The file's parameters go in their name order, which
 /// the planner's file reader keeps, where the C#'s dictionary keeps the file's - the same for every
@@ -1788,6 +1851,8 @@ pub(crate) fn record_facts(state: &Experimental) {
     facts::record("experimental.split", state.split.fact("splitting"));
     // Shp to Poly: writing, or what the last one came to.
     facts::record("experimental.shptopoly", state.shp_to_poly.fact("writing"));
+    // DashWare: writing, or what the last one came to.
+    facts::record("experimental.dashware", state.dashware.fact("writing"));
     // mag calb log: reading, or what the last reading came to.
     facts::record(
         "experimental.magcal",
@@ -1951,12 +2016,13 @@ mod tests {
                 Tool::Unavailable(why) => assert!(!why.is_empty()),
             }
         }
-        assert_eq!(opens, 32);
+        assert_eq!(opens, 33);
         assert_eq!(tool("but_paramrestore"), Tool::Act(Act::ParamRestore));
         assert_eq!(tool("BUT_magfit2"), Tool::Act(Act::MagCalLog));
         assert_eq!(tool("myButton1"), Tool::Act(Act::SplitDfLog));
         assert_eq!(tool("but_gpsinj"), Tool::Act(Act::ExtractGpsInject));
         assert_eq!(tool("BUT_shptopoly"), Tool::Act(Act::ShpToPoly));
+        assert_eq!(tool("but_dashware"), Tool::Act(Act::DashWare));
         assert_eq!(tool("BUT_clearcustommaps"), Tool::Act(Act::ClearCustomMaps));
         assert_eq!(tool("but_agemapdata"), Tool::Act(Act::AgeMapData));
         assert_eq!(tool("but_armandtakeoff"), Tool::Act(Act::ArmAndTakeoff));

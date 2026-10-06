@@ -1,0 +1,7 @@
+# DashWare.Create's cases, for tools/csharp-reference/regen-dashware.sh: name|log|types.
+# The box's offered answer, temp.cs:946.
+default|dataflash.bin|GPS;ATT;NTUN;CTUN;MODE;BAT
+# Text fields, trimmed; a name the log has not got.
+parm-msg|dataflash.bin|PARM;MSG;NOSUCH
+# The whole log: an answer of nothing but ';' gives the null list.
+all|dataflash.bin|-

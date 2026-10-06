@@ -29,15 +29,17 @@
 //
 // Runs Mission Planner's own converters out of the msbuild output of ExtLibs/Utilities - the same
 // build regen-grid.sh makes - over a log and writes exactly what they write, so
-// crates/mp-log/tests/convert.rs, crates/mp-log/tests/matlab.rs and crates/mp-kml/tests/dflog.rs
-// hold the Rust to the C# rather than to our reading of it. Console-only: BinaryLog.cs,
-// DFLogBuffer.cs, DFLog.cs, LogOutput.cs and MatLab.cs never touch WinForms.
+// crates/mp-log/tests/convert.rs, crates/mp-log/tests/matlab.rs, crates/mp-kml/tests/dflog.rs and
+// crates/mp-log/src/dashware.rs hold the Rust to the C# rather than to our reading of it.
+// Console-only: BinaryLog.cs, DFLogBuffer.cs, DFLog.cs, LogOutput.cs, MatLab.cs and DashWare.cs
+// never touch WinForms.
 //
 // Build:  see regen-log.sh (mcs against the msbuild output of ExtLibs/Utilities)
 // Run:    mono MpLog.exe bintolog    <log.bin> <out.log> <ParameterMetaDataBackup.xml>
 //         mono MpLog.exe dflogtokml  <log> <ParameterMetaDataBackup.xml>
 //         mono MpLog.exe matlab      <log> <ParameterMetaDataBackup.xml>
 //         mono MpLog.exe mkedge      <out.bin>
+//         mono MpLog.exe dashware    <log> <out.csv> <types|-> <ParameterMetaDataBackup.xml>
 //
 // bintolog     BinaryLog.ConvertBin(in, out), what but_bintolog_Click runs per file
 //              (FlightData.cs:1093-1096).
@@ -111,6 +113,20 @@ public static class MpLog
                 MatLab.ProcessLog(args[1]);
                 return 0;
             }
+            if (args.Length == 5 && args[0] == "dashware")
+            {
+                WireFlightModes(args[4]);
+                // The "DashWare Types" answer split as the temp form splits it, "-" the null list
+                // an answer of nothing but ';' gives. temp.cs:950-952
+                List<string> list = null;
+                if (args[3] != "-")
+                {
+                    var split = args[3].Split(new[] { ';' }, StringSplitOptions.RemoveEmptyEntries);
+                    list = split.Length > 0 ? split.ToList() : null;
+                }
+                DashWare.Create(args[1], args[2], list);
+                return 0;
+            }
             if (args.Length == 2 && args[0] == "mkedge")
             {
                 File.WriteAllBytes(args[1], MkEdge());
@@ -127,6 +143,7 @@ public static class MpLog
         Console.Error.WriteLine("       MpLog dflogtokml <log> <ParameterMetaDataBackup.xml>");
         Console.Error.WriteLine("       MpLog matlab <log> <ParameterMetaDataBackup.xml>");
         Console.Error.WriteLine("       MpLog mkedge <out.bin>");
+        Console.Error.WriteLine("       MpLog dashware <log> <out.csv> <types|-> <ParameterMetaDataBackup.xml>");
         return 2;
     }
 

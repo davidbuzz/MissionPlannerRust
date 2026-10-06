@@ -283,11 +283,14 @@ const fn is_number_white(c: char) -> bool {
     c == ' ' || matches!(c, '\t'..='\r')
 }
 
-/// `string.Trim()` for ASCII text: .NET trims every Unicode white space character, which for the
-/// ASCII this module sees is space, `\t` to `\r`, and the separators `\x1C` to `\x1F`.
+/// `string.Trim()`: every character `Char.IsWhiteSpace` names off both ends - below U+0100 space,
+/// `\t` to `\r`, U+0085 and U+00A0, not the separators `\x1C` to `\x1F` (mono, 2026-10-06: a
+/// FILE message's data opening with `\x1F` keeps it through DashWare's `Trim()`), and above them
+/// the Unicode space and line and paragraph separators, which Rust's `char::is_whitespace` names
+/// too.
 #[must_use]
 pub fn trim(text: &str) -> &str {
-    text.trim_matches(|c: char| c.is_whitespace() || matches!(c, '\u{1c}'..='\u{1f}'))
+    text.trim_matches(char::is_whitespace)
 }
 
 /// The `NumberStyles` a parse allows.

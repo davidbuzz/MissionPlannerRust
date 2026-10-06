@@ -4724,6 +4724,7 @@ dependencies = [
  "mp-vehicle",
  "roxmltree 0.20.0",
  "rustfft",
+ "sha2",
  "thiserror 2.0.20",
  "wasm_thread",
  "web-time",

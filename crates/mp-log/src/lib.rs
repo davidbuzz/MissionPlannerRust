@@ -46,6 +46,7 @@
 
 pub mod analysis;
 pub mod convert;
+pub mod dashware;
 pub mod dataflash;
 pub mod dflogbuffer;
 pub mod expression;

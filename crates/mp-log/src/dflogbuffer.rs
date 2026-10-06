@@ -71,6 +71,9 @@ pub struct Label {
 #[derive(Debug, Clone, Default)]
 pub struct DfLog {
     logformat: HashMap<String, Label>,
+    /// `logformat`'s names in the order its `Dictionary` enumerates them: as first added, a format
+    /// read again keeping its place.
+    order: Vec<String>,
     /// `msgoffsetcache`: successful lookups only, never forgotten. The C# keys it by the XOR of the
     /// two strings' hash codes, so two different pairs can in principle collide; this keys it by
     /// the pair.
@@ -94,6 +97,21 @@ impl DfLog {
     #[must_use]
     pub fn label(&self, name: &str) -> Option<&Label> {
         self.logformat.get(name)
+    }
+
+    /// `logformat.Values`: every format, in the order each was first added.
+    pub fn labels(&self) -> impl Iterator<Item = &Label> {
+        self.order
+            .iter()
+            .filter_map(|name| self.logformat.get(name))
+    }
+
+    /// `logformat[name] = label`: replaced where it is, or added at the end.
+    fn set(&mut self, label: Label) {
+        if !self.logformat.contains_key(&label.name) {
+            self.order.push(label.name.clone());
+        }
+        self.logformat.insert(label.name.clone(), label);
     }
 
     /// `logformat.Count`.
@@ -135,21 +153,18 @@ impl DfLog {
             length,
             name: (*name).to_owned(),
         };
-        self.logformat.insert(label.name.clone(), label);
+        self.set(label);
         // "mod for custom logformat that hides the FMT key"
         if !self.logformat.contains_key("FMT") {
-            self.logformat.insert(
-                "FMT".to_owned(),
-                Label {
-                    id: 0x80,
-                    format: "BBnNZ".to_owned(),
-                    field_names: ["Type", "Length", "Name", "Format", "Columns"]
-                        .map(str::to_owned)
-                        .to_vec(),
-                    length: 59,
-                    name: "FMT".to_owned(),
-                },
-            );
+            self.set(Label {
+                id: 0x80,
+                format: "BBnNZ".to_owned(),
+                field_names: ["Type", "Length", "Name", "Format", "Columns"]
+                    .map(str::to_owned)
+                    .to_vec(),
+                length: 59,
+                name: "FMT".to_owned(),
+            });
         }
     }
 
@@ -297,6 +312,38 @@ impl DfItem {
     #[must_use]
     pub fn msgtype(&self) -> &str {
         self.items.first().and_then(|s| s.as_deref()).unwrap_or("")
+    }
+
+    /// `timems`: the line's `TimeMS`, else its `TimeUS` in milliseconds, else its `T`, else 0 -
+    /// each column read with `long.Parse`, whose failure is the `Err`.
+    /// `// C#: ExtLibs/Utilities/DFLog.cs:99-132`
+    ///
+    /// # Errors
+    ///
+    /// The column found is not a whole number.
+    pub fn timems(&self, dflog: &mut DfLog) -> Result<f64, String> {
+        if !dflog.contains(self.msgtype()) {
+            return Ok(0.0);
+        }
+        let column = |dflog: &mut DfLog, name: &str| {
+            let index = dflog.find_message_offset(self.msgtype(), name)?;
+            let text = self.items.get(index).cloned().flatten().unwrap_or_default();
+            Some(
+                netfmt::trim(&text)
+                    .parse::<i64>()
+                    .map_err(|_| "Input string was not in a correct format.".to_owned()),
+            )
+        };
+        #[allow(clippy::cast_precision_loss)] // `long` to `double`, as the C# assigns it
+        if let Some(ms) = column(dflog, "TimeMS") {
+            return ms.map(|ms| ms as f64);
+        }
+        #[allow(clippy::cast_precision_loss)]
+        if let Some(us) = column(dflog, "TimeUS") {
+            return us.map(|us| us as f64 / 1000.0);
+        }
+        #[allow(clippy::cast_precision_loss)]
+        column(dflog, "T").map_or(Ok(0.0), |t| t.map(|t| t as f64))
     }
 
     /// `this[name]`: the field of that column, or `None`.

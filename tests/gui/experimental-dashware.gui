@@ -1,0 +1,45 @@
+# EXPERIMENTAL's DashWare (temp.cs:940-954): a dataflash log asked for (`bin|*.bin;*.BIN`, no folder
+# set), "DashWare Types" asked with GPS;ATT;NTUN;CTUN;MODE;BAT offered, and DashWare.Create writing
+# <log>.csv beside it on a thread of its own - testdata's log as Mission Planner's own DashWare.Create
+# writes it (testdata/dashware/golden, held byte for byte by mp-log's dashware tests). PARM, MSG and a
+# name the log has not got: 997 lines; then Cancel, whose answer the C# never reads - the offered
+# list's 456 lines.
+#
+# Run as: tools/gui-headless.sh experimental-dashware
+screen fly
+window 1600x1200
+budget 20
+env XDG_DATA_HOME $WORK
+env MP_CONFIG_XML $WORK/config.xml
+setup mkdir -p "$WORK/logs" && cp testdata/dataflash.bin "$WORK/logs/flight.bin"
+
+key ctrl+f
+expect screen experimental
+expect experimental.dashware none
+
+# Types typed.
+click experimental-but_dashware
+expect experimental.asking ~ Open:
+click experimental-path-value
+key ctrl+a
+type $WORK/logs/flight.bin
+key Return
+expect experimental.asking DashWare Types: Enter Messages you want eg PARM;NTUN;CTUN
+key ctrl+a
+type PARM;MSG;NOSUCH
+key Return
+expect experimental.asking none
+within 20
+expect experimental.dashware wrote 997
+
+# Cancel: the list offered.
+click experimental-but_dashware
+click experimental-path-value
+key ctrl+a
+type $WORK/logs/flight.bin
+key Return
+expect experimental.asking DashWare Types: Enter Messages you want eg PARM;NTUN;CTUN
+key Escape
+expect experimental.asking none
+within 20
+expect experimental.dashware wrote 456
