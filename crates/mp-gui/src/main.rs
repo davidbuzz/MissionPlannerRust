@@ -4091,7 +4091,7 @@ impl Render for MissionPlanner {
                 // could have changed since the last one - and never while the link is still
                 // retrying the last: `doARM` blocks its caller until the vehicle answers or its
                 // retries run out, so the C# cannot ask again before then either.
-                // `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:2632-2645, 2761-2765`
+                // `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:2629-2642, 2761-2765`
                 const BETWEEN_ATTEMPTS: std::time::Duration =
                     std::time::Duration::from_millis(1000);
                 let now = web_time::Instant::now();
@@ -4146,7 +4146,7 @@ impl Render for MissionPlanner {
             self.telemetry.request_mission();
         }
 
-        // `Open`'s `getParamListMavftp` (`MAVLinkInterface.cs:930-939`): the parameters fetched
+        // `Open`'s `getParamListMavftp` (`MAVLinkInterface.cs:932-941`): the parameters fetched
         // as soon as a vehicle is heard - MAVFTP first, the stream after - unless the whole
         // table is already held (the owner's rule, 2026-09-25: only when we have none). A few
         // names read one by one - the pages' `ReadParam`s, which arrive before this runs - are

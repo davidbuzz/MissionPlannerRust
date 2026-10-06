@@ -804,7 +804,7 @@ pub enum Route {
         item: Box<MavMessage>,
     },
     /// `getHomePosition`: `GET_HOME_POSITION` until a `HOME_POSITION` arrives.
-    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:3343-3387`
+    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:3338-3382`
     GetHome {
         /// The vehicle.
         target: VehicleId,
@@ -1379,7 +1379,7 @@ pub fn action_messages(action: &str, context: &ActionContext) -> Sends {
         "HighLatency_Enable" => vec![long(commands::CMD_CONTROL_HIGH_LATENCY, 1.0, 0.0, 0.0)],
         "HighLatency_Disable" => vec![long(commands::CMD_CONTROL_HIGH_LATENCY, 0.0, 0.0, 0.0)],
         // `setMode(mode, SAFETY_ARMED)`: `DO_SET_MODE` with base 128, then `SET_MODE` twice.
-        // `// C#: FlightData.cs:1829-1840, MAVLinkInterface.cs:4631-4641`
+        // `// C#: FlightData.cs:1829-1840, MAVLinkInterface.cs:4620-4630`
         "Toggle_Safety_Switch" => {
             if target.sysid == 0 {
                 return Err(Refusal::quiet("Not toggling safety on sysid 0"));
@@ -1392,7 +1392,7 @@ pub fn action_messages(action: &str, context: &ActionContext) -> Sends {
                 commands::set_mode_with_base(target.payload_target(), base, custom_mode),
             ]
         }
-        // `doEngineControl(onoff)`. `// C#: MAVLinkInterface.cs:2539-2545`
+        // `doEngineControl(onoff)`. `// C#: MAVLinkInterface.cs:2536-2542`
         "Engine_Start" => vec![long(commands::CMD_DO_ENGINE_CONTROL, 1.0, 0.0, 0.0)],
         "Engine_Stop" => vec![long(commands::CMD_DO_ENGINE_CONTROL, 0.0, 0.0, 0.0)],
         // The generic path: `param1 = 0, param2 = 0, param3 = 1`, adjusted for two entries, and the
@@ -1481,7 +1481,7 @@ pub fn action_report(action: &str, target: VehicleId) -> Report {
 /// `setMode(sysid, compid, name)`: the mode found by name, case-insensitively, then
 /// `DO_SET_MODE` without waiting and `SET_MODE` twice. Nothing for a name the vehicle does not
 /// have, as `translateMode` refuses it.
-/// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:4614-4641, 6660-6693`
+/// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:4603-4630, 6624-6657`
 #[must_use]
 pub fn set_mode_messages(
     target: VehicleId,
@@ -1538,7 +1538,7 @@ pub struct GuidedContext<'a> {
 /// until Fly To Here Alt sets it. The next Fly To Coords on a copter then reads that frame and
 /// sends its height as above sea level rather than above home. The frame is recorded here for
 /// every vehicle, as the ArduPlane path records it.
-/// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:4423-4461, 4527-4534`
+/// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:4412-4450, 4527-4534`
 pub fn set_guided_mode_wp(
     guided: &mut GuidedMode,
     context: &GuidedContext<'_>,
@@ -7674,7 +7674,7 @@ pub fn mouse_down_point(data: &FlightData) -> (f64, f64) {
 }
 
 /// `GET_HOME_POSITION`, which `getHomePositionAsync` sends without waiting for an answer to it -
-/// it waits for `HOME_POSITION` instead. `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:3343-3362`
+/// it waits for `HOME_POSITION` instead. `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:3338-3357`
 #[must_use]
 pub fn get_home_position(target: VehicleId) -> MavMessage {
     commands::command_long(target, requests::CMD_GET_HOME_POSITION, [0.0; 7])
@@ -9924,7 +9924,7 @@ mod tests {
     /// only when home is set - on its first fix, or on arming - so a link that joins a SITL whose
     /// home is already set hears none until it asks, as Mission Planner's does: until then
     /// `HomeAlt` is 0. Run with `--ignored` while SITL is up; it only asks.
-    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:3343-3386, 5674-5680`
+    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:3338-3381, 5674-5680`
     #[test]
     #[ignore = "needs SITL on tcp:127.0.0.1:5763"]
     fn sitl_reports_the_home_set_home_alt_takes() {

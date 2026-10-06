@@ -1,7 +1,7 @@
 # The parameters fetched on connecting, MAVFTP first (PLAN.md §13.6 row 81).
 #
 # The claim: once a vehicle is heard and no parameters are held, the application fetches them
-# without being asked, as MAVLinkInterface.Open does (MAVLinkInterface.cs:930-939) - reading
+# without being asked, as MAVLinkInterface.Open does (MAVLinkInterface.cs:932-941) - reading
 # @PARAM/param.pck?withdefaults=1 over MAVFTP in 110-byte bursts and unpacking it
 # (getParamListMavftp, :1813-1936; parampck.cs), the PARAM_REQUEST_LIST stream only if that will
 # not do. The fact params.fetch says which way they came. The screen's download button runs the

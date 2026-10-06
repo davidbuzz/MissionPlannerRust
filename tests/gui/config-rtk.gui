@@ -5,7 +5,7 @@
 # CommsNTRIP (:336-355, ExtLibs/Comms/CommsNTRIP.cs:96-114), sets the baud box to its first item
 # and disables "Send NTRIP GGA" (:338, 353); the read loop finds each RTCM 3 frame by its CRC-24Q,
 # counts it by number (:725-746), injects it into the vehicle as GPS_RTCM_DATA fragments
-# (:1136-1151, ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:3897-3950) and logs every byte to a
+# (:1136-1151, ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:3887-3940) and logs every byte to a
 # .gpsbase file (:434-445, 709-719); a 1005 puts the base station in cs.Base and on the RTCM Base
 # line (:1062-1086); each constellation's messages turn its light green (:807-875) and each
 # observation message sets the signal bars (:167-252); the Messages Seen label clears them when

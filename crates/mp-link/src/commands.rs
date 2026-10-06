@@ -145,7 +145,7 @@ pub const MSG_ID_AUTOPILOT_VERSION: f32 = 148.0;
 /// `AUTOPILOT_VERSION_REQUEST` message. Mission Planner sends them at connect, before the banner
 /// request, and waits there for the answer (`responcerequired`, true by default); here the
 /// answer arrives with the stream and is read from the vehicle's state when it has.
-/// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:928, 5847-5861`
+/// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:932, 5810-5824`
 #[must_use]
 pub fn get_version(target: VehicleId) -> [MavMessage; 3] {
     [
@@ -167,7 +167,7 @@ pub fn get_version(target: VehicleId) -> [MavMessage; 3] {
 /// The answer is the `STATUSTEXT` banner - `ArduCopter V4.5.7 (1c0c8d9c)` - which is where
 /// Mission Planner reads the firmware version it fetches parameter documentation for. It sends
 /// this at connect and again whenever a new vehicle appears.
-/// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:930, 1856`
+/// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:932, 1853`
 #[must_use]
 pub fn send_banner(target: VehicleId) -> MavMessage {
     command(target, CMD_DO_SEND_BANNER, [0.0; 7])
@@ -558,7 +558,7 @@ pub fn command_long(target: VehicleId, command_id: u16, params: [f32; 7]) -> Mav
 
 /// A `COMMAND_INT`, as `doCommandIntAsync` fills it: `current` and `autocontinue` zero, the frame
 /// as given (the C# defaults it to `GLOBAL`).
-/// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:2847-2881`
+/// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:2844-2878`
 #[must_use]
 pub fn command_int(
     target: VehicleId,
@@ -636,7 +636,7 @@ fn float_mission_item(
 /// `setNewWPAlt` sends a `MISSION_ITEM` with `current` = 3, sequence 0, frame
 /// `GLOBAL_RELATIVE_ALT`, and a location whose only non-zero field is the altitude. The C# waits
 /// 450 ms for a `MISSION_ACK` and re-sends up to ten times.
-/// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:4470-4481, 3965-4033`
+/// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:4459-4470, 3965-4033`
 #[must_use]
 pub fn change_alt(target: VehicleId, altitude_metres: f32) -> MavMessage {
     float_mission_item(
@@ -673,7 +673,7 @@ pub fn guided_mission_item(
 /// position bits - or only the altitude bit when there is no latitude and longitude. With a
 /// position that is `0xFDF8`. The frame is whichever the operator chose, not the `_INT` variant;
 /// ArduPilot treats the two alike for this message.
-/// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:4500-4551, 4439-4443`
+/// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:4489-4540, 4439-4443`
 #[must_use]
 pub fn guided_position_target(
     target: VehicleId,
@@ -784,7 +784,7 @@ pub fn set_gps_global_origin(
 
 /// `MAV_CMD_DO_SET_MODE`, the "new" half of the C#'s `setMode`: param1 the base mode, param2 the
 /// custom mode, sent without waiting for an answer.
-/// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:4631-4641`
+/// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:4620-4630`
 #[must_use]
 pub fn do_set_mode(target: VehicleId, base_mode: u8, custom_mode: u32) -> MavMessage {
     #[allow(clippy::cast_precision_loss)] // mode numbers are small; the C# passes them as float
@@ -799,7 +799,7 @@ pub fn do_set_mode(target: VehicleId, base_mode: u8, custom_mode: u32) -> MavMes
 /// `SET_MODE` with a base mode of the caller's choosing - the "old" half of `setMode`, which the
 /// C# sends twice. [`set_mode`] is this with `CUSTOM_MODE_ENABLED`; Toggle Safety Switch sends it
 /// with `SAFETY_ARMED` instead.
-/// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:4631-4641, GCSViews/FlightData.cs:1827`
+/// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:4620-4630, GCSViews/FlightData.cs:1827`
 #[must_use]
 pub fn set_mode_with_base(target_system: u8, base_mode: u8, custom_mode: u32) -> MavMessage {
     MavMessage::SetMode(SetMode {
@@ -1030,7 +1030,7 @@ mod tests {
 
     /// `getVersion` sends all three requests for `AUTOPILOT_VERSION`, each addressed to the
     /// vehicle: without them ArduPilot never sends the message, so the capabilities stay 0 and
-    /// the MAVFtp page never lists. `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:5847-5861`
+    /// the MAVFtp page never lists. `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:5810-5824`
     #[test]
     fn the_version_request_asks_all_three_ways() {
         let target = VehicleId::new(7, 42);

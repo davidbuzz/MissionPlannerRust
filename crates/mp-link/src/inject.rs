@@ -57,7 +57,7 @@ pub const INJECT_CHUNK: usize = 110;
 /// `seq` is the link's `inject_seq_no`: read for the new message's flags and incremented once per
 /// message sent that way. A message too long to send leaves it alone, as the C# returns before
 /// the increment; so does the old message, which has no sequence number.
-/// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:3897-3972`
+/// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:3887-3962`
 #[must_use]
 pub fn gps_inject_messages(
     target: VehicleId,

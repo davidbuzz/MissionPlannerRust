@@ -1167,7 +1167,7 @@ impl Telemetry {
     /// `getHomePosition`: `GET_HOME_POSITION` until a `HOME_POSITION` arrives, asked again
     /// three more times 700 ms apart, and `report` said when it ends. The position itself lands
     /// in the vehicle's state, as every `HOME_POSITION` does.
-    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:3343-3387`
+    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:3338-3382`
     pub fn get_home_position(&mut self, target: VehicleId, report: Report) -> Option<RequestId> {
         let id = self.link.as_ref()?.get_home_position(target);
         Some(self.awaiting(id, report))
@@ -1292,7 +1292,7 @@ impl Telemetry {
     /// Arms or disarms, with the vehicle's pre-arm checks applied: `doARM`, which waits ten
     /// seconds a try for the acknowledgement "as may need an imu calib". A refusal is said as
     /// `BUT_ARM_Click`'s message box begins, a timeout as its `catch` says it.
-    /// `// C#: GCSViews/FlightData.cs:1036-1081, ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:2632-2657`
+    /// `// C#: GCSViews/FlightData.cs:1036-1081, ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:2629-2654`
     pub fn arm(&mut self, arm: bool) {
         let Some(id) = self.target_id() else {
             return;
@@ -1772,7 +1772,7 @@ impl Telemetry {
     /// request is returned so the caller asks again only once this one has ended, as the C#'s
     /// caller can only call again once `doARM` has returned; nothing is said when it ends,
     /// because the caller says it.
-    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:2632-2645`
+    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:2629-2642`
     pub fn force_arm(&mut self) -> Option<RequestId> {
         self.disable_arming_checks();
         let id = self.target_id()?;
@@ -1783,7 +1783,7 @@ impl Telemetry {
     ///
     /// Sent and not waited for: `setMode` sends `DO_SET_MODE` with `requireack` false and then
     /// `SET_MODE`, and returns; the mode in the next heartbeat is the answer.
-    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:4631-4641`
+    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:4620-4630`
     pub fn set_mode(&self, custom_mode: u32) {
         if let Some((link, id)) = self.target() {
             link.send(&commands::set_mode(id, custom_mode));
@@ -1808,7 +1808,7 @@ impl Telemetry {
     ///
     /// Sent and not waited for: `setGuidedModeWP` puts `SET_POSITION_TARGET_GLOBAL_INT` on the
     /// wire with `generatePacket` and returns.
-    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:4438-4443, 4500-4554`
+    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:4438-4443, 4489-4543`
     pub fn goto(&self, position: LatLon, altitude_metres: f32) {
         if let Some((link, id)) = self.target() {
             link.send(&commands::goto_position(
@@ -1843,7 +1843,7 @@ impl Telemetry {
     /// fetched from it. Sent and not waited for: the C#'s `doCommand` passes `requireack` false.
     /// Without the version request ArduPilot never sends `AUTOPILOT_VERSION`, its capabilities
     /// stay 0 and the MAVFtp page never lists (found by `config-mavftp.gui`, 2026-09-25).
-    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:928-931, 1819-1827, 1856-1857`
+    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:930-933, 1819-1827, 1853-1854`
     pub fn tick(&mut self) {
         let Some(link) = &self.link else {
             return;
@@ -2675,7 +2675,7 @@ mod tests {
     /// sent again, and the vehicle's `MISSION_CURRENT` ends it with nothing to say. The mode
     /// request in the same kind of press goes once, as `setMode` sends it, however long the
     /// vehicle stays quiet about it.
-    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:2457-2501, 4631-4641`
+    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:2457-2501, 4620-4630`
     #[test]
     fn set_wp_whose_first_send_is_lost_is_sent_again_and_a_mode_request_is_sent_once() {
         let (mut telemetry, mut vehicle) = Vehicle::connect(fast());

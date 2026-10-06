@@ -177,7 +177,7 @@ impl Firmware {
 /// Where the C# leaves `cs.firmware` untouched it keeps its initial `ArduCopter2`, so those arms
 /// are `ArduCopter2` here - a generic autopilot that is not a fixed wing reads as a copter in
 /// Mission Planner, and in this port of it.
-/// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:6695-6818; ExtLibs/ArduPilot/CurrentState.cs:102`
+/// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:6659-6782; ExtLibs/ArduPilot/CurrentState.cs:102`
 #[must_use]
 pub fn firmware_of(autopilot: u8, mav_type: u8, banner: Option<&str>) -> Firmware {
     match autopilot {

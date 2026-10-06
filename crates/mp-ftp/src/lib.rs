@@ -25,7 +25,7 @@
 //!
 //! * [`logs`], dataflash log download over `LOG_REQUEST_LIST` and `LOG_DATA` - the transfer half
 //!   of `MAVLinkInterface.GetLogList` and `GetLog` (`ExtLibs/ArduPilot/Mavlink/
-//!   MAVLinkInterface.cs:5977, 6165`), which `Log/LogDownloadMavLink.cs` drives.
+//!   MAVLinkInterface.cs:5939, 6165`), which `Log/LogDownloadMavLink.cs` drives.
 //! * [`mavftp`], the vehicle's file system over `FILE_TRANSFER_PROTOCOL`
 //!   (`ExtLibs/ArduPilot/Mavlink/MAVFtp.cs`): listings, burst and plain reads, uploads, removes,
 //!   renames, directories and the file CRC.

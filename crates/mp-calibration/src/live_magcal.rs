@@ -92,7 +92,7 @@ pub const SENSOR_MAGNETOMETER: u8 = 2;
 pub const SENSOR_SECOND_MAGNETOMETER: u8 = 5;
 
 /// `SetSensorOffsets`: `doCommand(PREFLIGHT_SET_SENSOR_OFFSETS, (int) sensor, x, y, z, 0, 0, 0)`.
-/// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:6488-6491`
+/// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:6449-6452`
 #[must_use]
 pub fn set_sensor_offsets(target: VehicleId, sensor: u8, offsets: [f32; 3]) -> MavMessage {
     let [x, y, z] = offsets;

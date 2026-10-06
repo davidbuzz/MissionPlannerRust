@@ -553,7 +553,7 @@ impl ScriptHost for GuiScriptHost {
     }
 
     /// Sent from here, and `GuidedMode` told, as `setPositionTargetGlobalInt` writes it before
-    /// it sends. `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:4500-4555`
+    /// it sends. `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:4489-4544`
     fn set_position_target(&mut self, target: (u32, u8), position: &PositionTarget) -> bool {
         self.tell(Request::Guided(GuidedUpdate::position_target(position)));
         self.send(&mp_link::commands::guided_position_target(
@@ -1002,7 +1002,7 @@ impl ScriptsTab {
                     reply: reply.clone(),
                 }),
             // `doReboot(true)`: 3, into the bootloader, through `doCommand` as a plain reboot
-            // goes. `// C#: MAVLinkInterface.cs:2555-2564`
+            // goes. `// C#: MAVLinkInterface.cs:2552-2561`
             Request::Reboot { .. } => telemetry
                 .send_handle()
                 .and_then(|(_, id)| {
@@ -1167,7 +1167,7 @@ impl ScriptsTab {
                 Request::SetModeOf { target, ref mode } => {
                     // `setMode(sysid, compid, modein)`: `translateMode` by that vehicle's own
                     // type, then `DO_SET_MODE` not waited for and `SET_MODE` twice, all to it.
-                    // `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:4614-4642`
+                    // `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:4603-4631`
                     let family = telemetry
                         .vehicle_state(target)
                         .and_then(|state| VehicleFamily::from_mav_type(state.vehicle_type));
@@ -2029,7 +2029,7 @@ mod tests {
 
     /// `getWP(sysid, compid, index)` asks the vehicle the script names, and only its answer
     /// counts: the copter answering for another is read past, and the read times out.
-    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:3403-3407, 3480-3486`
+    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:3398-3402, 3480-3486`
     #[test]
     fn get_wp_asks_the_vehicle_the_script_names() {
         use mp_mavlink_dialects::all::MissionItem;
@@ -2218,7 +2218,7 @@ mod tests {
     /// `setGuidedModeWP` on a copter: the position target sent, and the flight screen's
     /// `GuidedMode` given its position and height as `setPositionTargetGlobalInt` gives them,
     /// its frame left as it was.
-    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:4423-4461, 4527-4534`
+    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:4412-4450, 4527-4534`
     #[test]
     fn set_guided_mode_wp_moves_the_flight_screens_guided_mode() {
         use crate::telemetry::scripted::Vehicle;
@@ -2408,7 +2408,7 @@ mod tests {
     /// `setGuidedModeWP(sysid, compid, ...)` reads the named vehicle's mode and puts that
     /// vehicle in Guided - `DO_SET_MODE` and `SET_MODE` twice, all to it - and sends it the
     /// target; the vehicle shown, in Auto, is not touched.
-    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:4423-4461, 4614-4642`
+    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:4412-4450, 4603-4631`
     #[test]
     fn set_guided_mode_wp_on_a_named_vehicle_changes_that_vehicles_mode() {
         use crate::telemetry::scripted::{VEHICLE, Vehicle};

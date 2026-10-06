@@ -133,7 +133,7 @@ pub enum RequestKind {
     },
     /// `getHomePositionAsync`: `GET_HOME_POSITION` - `doCommand` with `requireack` false each
     /// time - until a `HOME_POSITION` arrives, three more times 700 ms apart.
-    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:3343-3387`
+    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:3338-3382`
     GetHomePosition,
     /// `setFencePoint`: `FENCE_POINT`, then `getFencePoint` - `FENCE_FETCH_POINT` until the
     /// vehicle sends that point back - and the point again if what came back is five metres or
@@ -299,7 +299,7 @@ pub const FENCE_POINT_SENDS: u8 = 3;
 pub const FENCE_POINT_TOLERANCE: f64 = 5.0;
 
 /// The `FENCE_POINT` that sets `set` on `target`: `(float) plla.Lat`, `(float) plla.Lng`.
-/// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:6417-6424`
+/// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:6378-6385`
 #[allow(clippy::cast_possible_truncation)] // the C#'s `(float)`
 fn fence_point(target: VehicleId, set: &FencePointSet) -> MavMessage {
     MavMessage::FencePoint(FencePoint {
@@ -336,7 +336,7 @@ fn fence_point_matches(read: &FencePoint, set: &FencePointSet) -> bool {
 
 /// One rally point as `setRallyPoint` puts it in a `mavlink_rally_point_t`: the position as
 /// `(int)(degrees * 1e7)`, the altitude as `(short)`.
-/// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:6445-6456`
+/// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:6406-6417`
 ///
 /// What the machine does, and where it departs from the C# (`setRallyPoint` `:6441-6476`,
 /// `getRallyPoint` `:6346-6412`):

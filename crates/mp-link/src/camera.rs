@@ -29,7 +29,7 @@
 //! making, the starting and the asking (`lib.rs`); this is the state, the commands and the
 //! pipeline a video stream is played with.
 //! `// C#: ExtLibs/ArduPilot/Mavlink/CameraProtocol.cs:1-664,
-//! ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:500-535, ExtLibs/ArduPilot/CurrentState.cs:4657`
+//! ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:502-537, ExtLibs/ArduPilot/CurrentState.cs:4657`
 //!
 //! `VideoStreams`, static in the C# and so shared by every link, is one table per link here
 //! ([`crate::Link::video_streams`]): this application has one link.

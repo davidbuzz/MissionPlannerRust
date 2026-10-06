@@ -22,7 +22,7 @@
 //! seconds on, `Discover` asks everyone for `GIMBAL_MANAGER_INFORMATION` and `StartID` asks the
 //! camera for its information - the deprecated request after a refusal, then the video streams -
 //! and what the vehicle then says is kept where the gimbal video control reads it.
-//! `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:500-586; CameraProtocol.cs:212-298;
+//! `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:502-588; CameraProtocol.cs:212-298;
 //! GimbalManagerProtocol.cs:39-84`
 
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::indexing_slicing)]

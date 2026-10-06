@@ -52,7 +52,7 @@ pub const MAVLINK_TARGETING: u8 = 2;
 
 /// `setMountControl(pa, pb, pc, false)` with the bars' values times a hundred: centi-degrees made
 /// degrees again - pitch, roll and yaw in the first three parameters, the mode in the seventh.
-/// `// C#: GCSViews/FlightData.cs:2959-2963, ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:4592-4598`
+/// `// C#: GCSViews/FlightData.cs:2959-2963, ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:4581-4587`
 #[must_use]
 pub fn mount_control(target: VehicleId, pitch: i32, roll: i32, yaw: i32) -> MavMessage {
     // `(float) trackBar.Value * 100.0f`, then `(float)(pa * 0.01)`.

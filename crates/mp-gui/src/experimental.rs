@@ -298,7 +298,7 @@ pub(crate) enum Act {
     /// `// C#: temp.cs:1420-1432`
     ForceCompassCal,
     /// `but_dfumode_Click`: `doDFUBoot`, `PREFLIGHT_REBOOT_SHUTDOWN` 42, 24, 71, 99 not waited for.
-    /// `// C#: temp.cs:1397-1400; ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:2511-2517`
+    /// `// C#: temp.cs:1397-1400; ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:2508-2514`
     DfuMode,
     /// `BUT_QNH_Click`: the QNH asked for, offered as it is, and set. `// C#: temp.cs:668-682`
     Qnh,

@@ -196,7 +196,7 @@ impl Default for MavSigning {
 }
 
 /// What `setupSigning(sysid, compid, userseed, key)` was asked.
-/// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:1529-1584`
+/// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:1526-1581`
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub struct Setup {
     /// The vehicle.
@@ -307,13 +307,13 @@ impl Signing {
         }
     }
 
-    /// `enableSigning`. `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:1586-1592`
+    /// `enableSigning`. `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:1583-1589`
     pub fn enable(&mut self, id: VehicleId) -> bool {
         self.state(id).signing = true;
         true
     }
 
-    /// `disableSigning`. `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:1594-1600`
+    /// `disableSigning`. `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:1591-1597`
     pub fn disable(&mut self, id: VehicleId) -> bool {
         self.state(id).signing = false;
         false
@@ -337,7 +337,7 @@ impl Signing {
     /// A packet read: true to keep it. An unsigned one is kept; a signed one is counted, then
     /// kept if it passes its vehicle's key or one of `keys` - which becomes the vehicle's, with
     /// its link id, and signing to it on - and dropped if it passes none.
-    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:5035-5065, 5501-5526`
+    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:5035-5065, 5481-5506`
     pub fn check(&mut self, frame: &Frame<'_>, keys: &[[u8; 32]]) -> bool {
         let Some(signature) = frame.signature else {
             return true;
@@ -600,7 +600,7 @@ mod tests {
     /// A vehicle's heartbeat pymavlink signed with the key passes with it, makes it the
     /// vehicle's with its link id, and turns signing to it on; with the wrong key it is dropped
     /// and nothing is adopted. Every signed one is counted, passed or not.
-    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:5035-5065, 5501-5526`
+    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:5035-5065, 5481-5506`
     #[test]
     fn a_signed_packet_passes_its_key_and_no_other() {
         let vehicle = hex("fd0901002a01010000000400000002035103036dd500ff7856341200a3e770ff14d6");
@@ -726,7 +726,7 @@ mod tests {
     /// pymavlink encodes for that key and time to the same bytes; an empty seed clears - zeros
     /// and 0 sent, then signing off and the key forgotten - and anything else turns signing on
     /// without a key.
-    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:1529-1584`
+    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:1526-1581`
     #[test]
     fn setup_signing_sends_the_key_then_switches() {
         let id = VehicleId::new(1, 1);
@@ -820,7 +820,7 @@ mod tests {
     /// sends that vehicle afterwards is signed with it, under the vehicle's `sendlinkid`; and a
     /// `setupSigning` with an empty seed sends its two `SETUP_SIGNING`s - still signed, the switch
     /// coming after them - and then nothing more is signed. The only test that touches the store.
-    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:1381-1432, 1529-1584, 5035-5065`
+    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:1381-1432, 1526-1581, 5035-5065`
     #[test]
     fn a_link_adapts_to_a_signing_vehicle_and_signs_to_it() {
         use mp_mavlink::Message as _;

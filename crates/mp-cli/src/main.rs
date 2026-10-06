@@ -647,7 +647,7 @@ fn fly(url: &str, record_path: Option<&str>) -> std::process::ExitCode {
     wasm_thread::sleep(Duration::from_secs(12));
 
     // Sent and not waited for, as `setMode` sends it: the mode in the next heartbeat is the answer.
-    // `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:4631-4641`
+    // `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:4620-4630`
     println!("mode GUIDED");
     link.send(&commands::set_mode(id, commands::copter_mode::GUIDED));
     wasm_thread::sleep(Duration::from_millis(500));
@@ -2305,7 +2305,7 @@ mod retries {
     /// state's `cs.rateX`, `CurrentState`'s 4 Hz attitude and 2 Hz the rest - in
     /// `UpdateCurrentSettings`' order, each twice as `getDatastream` sends it, and at nothing
     /// faster.
-    /// `// C#: ExtLibs/ArduPilot/CurrentState.cs:201-206, 4635-4666; ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:3247-3264`
+    /// `// C#: ExtLibs/ArduPilot/CurrentState.cs:201-206, 4635-4666; ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:3243-3260`
     #[test]
     fn fly_asks_for_the_streams_at_mission_planners_rates() {
         use std::sync::atomic::AtomicUsize;

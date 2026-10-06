@@ -25,7 +25,7 @@
 //! "Two seconds on" is from the heartbeat. The C# waits first for its `Open` to finish
 //! (`_openComplete`), which a link here has no equivalent of: it has no connect sequence that
 //! holds the port.
-//! `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:500-586, ExtLibs/ArduPilot/CurrentState.cs:4657-4658`
+//! `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:502-588, ExtLibs/ArduPilot/CurrentState.cs:4657-4658`
 
 use mp_os::Lock as _;
 use web_time::{Duration, Instant};
@@ -46,7 +46,7 @@ pub(crate) type Starts = Vec<(VehicleId, Instant)>;
 
 /// `OnMAVDetected`: a camera and a gimbal manager for the components the C# makes them for,
 /// replacing any there were, started [`START_DELAY`] from `now`.
-/// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:500-586`
+/// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:502-588`
 pub(crate) fn detected(shared: &Shared, id: VehicleId, now: Instant, starts: &mut Starts) {
     let camera = camera::is_camera_component(id.compid);
     let manager = camera::is_gimbal_manager_component(id.compid);

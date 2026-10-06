@@ -40,7 +40,7 @@
 //! port open, then [`crate::ProtocolTimeouts::stream_rerequest`] after each time - never while a
 //! log is being played, which the C# plays with its port closed (`CurrentState.cs:4635-4666`).
 //! Each goes out as `requestDatastream` sends it: twice, with the rate as a byte, and not at all
-//! for a rate of -1 (`MAVLinkInterface.cs:3061-3073, 3218-3220, 3247-3264`). After them come
+//! for a rate of -1 (`MAVLinkInterface.cs:3061-3073, 3214-3216, 3243-3260`). After them come
 //! `MAV.Camera?.RequestMessageIntervals(ratestatus)` and `MAV.GimbalManager?.Discover()`
 //! (`crate::camera`, `crate::gimbal_manager`).
 //!

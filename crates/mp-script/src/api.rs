@@ -128,7 +128,7 @@ pub trait ScriptHost {
 
     /// `setMode(sysid, compid, mode)`: the named vehicle put in a mode, not the one flown. This
     /// default is [`ScriptHost::change_mode`], for a host with one vehicle.
-    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:4614-4642`
+    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:4603-4631`
     fn set_mode_of(&mut self, _target: (u32, u8), mode: &str) {
         let _ = self.change_mode(mode);
     }
@@ -253,7 +253,7 @@ pub trait ScriptHost {
     /// `setPositionTargetGlobalInt` as `setGuidedModeWP` calls it for everything but ArduPlane:
     /// a `SET_POSITION_TARGET_GLOBAL_INT` with only the position enabled, sent and not waited
     /// on. Whether it was queued.
-    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:4439-4443, 4500-4555`
+    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:4439-4443, 4489-4544`
     fn set_position_target(&mut self, _target: (u32, u8), _position: &PositionTarget) -> bool {
         false
     }
