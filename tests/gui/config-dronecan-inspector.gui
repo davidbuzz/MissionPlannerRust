@@ -16,7 +16,7 @@ env MP_CONFIG_XML $WORK/config.xml
 env MP_LOG_DIR $WORK
 screen params
 window 1600x1200
-budget 32
+budget 44
 
 expect vehicle.count > 0
 click raw-param-warning-again
@@ -59,10 +59,19 @@ expect config.dronecan.inspector.updates > 1
 expect config.dronecan.inspector.row.0 ~ ID 127 - org.missionplanner ~
 expect config.dronecan.inspector.row.0 ~ Bps
 click dronecan-inspector-toggle-127
-expect config.dronecan.inspector.row.1 ~ uavcan_protocol_NodeStatus (
-expect config.dronecan.inspector.row.1 ~ , #341) ~
+# Under it a node per type the node has sent since the Inspector opened: its NodeStatus each
+# second, and - on the next wall-clock second that is a multiple of ten - its answer to its own
+# GetNodeInfo poll, DroneCAN.cs:313-360 asking each node of its list in turn, itself among them,
+# and MessageReceived raised for its own messages. The tree sorted by text (treeView1.Sort()),
+# the answer is above NodeStatus. Waited for, so the rows are the same whenever the run starts.
+within 12
+expect config.dronecan.inspector.rows 3
+expect config.dronecan.inspector.row.1 ~ uavcan_protocol_GetNodeInfo_res (
+expect config.dronecan.inspector.row.1 ~ , #1) ~
+expect config.dronecan.inspector.row.2 ~ uavcan_protocol_NodeStatus (
+expect config.dronecan.inspector.row.2 ~ , #341) ~
 click dronecan-inspector-toggle-127-341
-expect config.dronecan.inspector.rows 7
+expect config.dronecan.inspector.rows 8
 expect config.dronecan.inspector.type.127.341.uptime_sec UInt32
 expect config.dronecan.inspector.type.127.341.health Byte
 expect config.dronecan.inspector.type.127.341.vendor_specific_status_code UInt16
@@ -91,7 +100,9 @@ expect config.dronecan.inspector.graphs 0
 click dronecan-inspector-subscribe
 expect config.dronecan.subscriber.window true
 expect config.dronecan.subscriber.lines 100
-expect config.dronecan.subscriber.items uavcan_protocol_NodeStatus
+# The types in the order heard: NodeStatus first, as each second's goes out before that second's
+# GetNodeInfo poll, whose answer may follow while this waits.
+expect config.dronecan.subscriber.items ~ uavcan_protocol_NodeStatus
 click dronecan-subscriber-type
 click dronecan-subscriber-type-0
 expect config.dronecan.subscriber.type uavcan_protocol_NodeStatus
