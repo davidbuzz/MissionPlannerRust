@@ -279,8 +279,13 @@ fn resume(with_upload: bool, with_set_current: bool) -> String {
     ack.text
 }
 
+/// **Flappy, disabled in CI (the owner, 2026-10-06):** on CI's hosted SITL the read-back straight
+/// after the set-current sometimes gets no count in the link's six tries, twice over ("Timeout on
+/// read - getWPCount": runs 37318591350 and 37453466254), and passes on the next run. CI's
+/// integration job skips it; it still runs by hand with `--ignored`. NOT_DONE_YET_MATRIX.md holds
+/// the question of why.
 #[test]
-#[ignore = "requires ArduPilot SITL listening on tcp:127.0.0.1:5760"]
+#[ignore = "flappy on CI's hosted SITL, skipped there; requires ArduPilot SITL on tcp:127.0.0.1:5760"]
 fn the_whole_resume_sequence_takes_off() {
     let answer = resume(true, true);
     assert!(answer.contains("accepted"), "{answer}");

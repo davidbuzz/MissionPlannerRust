@@ -183,7 +183,9 @@ jobs:
       # overlap. Within a binary that needs --test-threads=1; between binaries cargo already
       # runs sequentially. Only mp-link's ignored tests are SITL's; the workspace's others need a
       # display, a device, the network or a corpus, and are not this job's.
-      - run: cargo test -p mp-link -- --ignored --test-threads=1
+      # the_whole_resume_sequence_takes_off is flappy on the hosted SITL and skipped (the owner,
+      # 2026-10-06; crates/mp-link/tests/resume_sitl.rs says why).
+      - run: cargo test -p mp-link -- --ignored --test-threads=1 --skip the_whole_resume_sequence_takes_off
 
       # The wrapper's own output is one line naming the simulator's log; the log itself is what
       # says what the vehicle did (a mission upload it still waits for, a timeout), so it is printed
