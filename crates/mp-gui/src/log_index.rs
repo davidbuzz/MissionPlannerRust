@@ -1569,7 +1569,12 @@ mod tests {
             .iter()
             .map(|path| path.strip_prefix(&folder).unwrap().display().to_string())
             .collect();
-        assert_eq!(found, ["a.tlog", "deep/c.tlog", "b.bin", "c.log"]);
+        // The folder's own separator: "deep\c.tlog" on Windows, as the C# shows it there.
+        let deep = std::path::Path::new("deep")
+            .join("c.tlog")
+            .display()
+            .to_string();
+        assert_eq!(found, ["a.tlog", deep.as_str(), "b.bin", "c.log"]);
         let names: Vec<String> = files_of(&folder.join("a.tlog"))
             .iter()
             .map(|path| path.file_name().unwrap().to_string_lossy().into_owned())
