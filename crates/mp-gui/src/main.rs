@@ -115,6 +115,8 @@ mod page_serial;
 mod page_fonts;
 // LogMap: a picture of where a log flew.
 mod log_map;
+// LogIndex: the logs under a folder, each with its picture and what it says.
+mod log_index;
 #[cfg(target_family = "wasm")]
 mod page_storage;
 mod repaint;

@@ -762,14 +762,6 @@ pub fn parse_i32(text: &str) -> Option<i32> {
 /// agree with.
 #[must_use]
 pub fn culture_compare(a: &str, b: &str) -> std::cmp::Ordering {
-    fn primary(c: char) -> (u8, u32) {
-        match c {
-            '0'..='9' => (1, c as u32),
-            'a'..='z' | 'A'..='Z' => (2, c.to_ascii_lowercase() as u32),
-            c if c.is_ascii() => (0, c as u32),
-            c => (3, c as u32),
-        }
-    }
     let by_primary = a.chars().map(primary).cmp(b.chars().map(primary));
     by_primary
         .then_with(|| {
@@ -780,9 +772,38 @@ pub fn culture_compare(a: &str, b: &str) -> std::cmp::Ordering {
         .then_with(|| a.cmp(b))
 }
 
+/// `String.Compare(a, b, StringComparison.CurrentCultureIgnoreCase)`: [`culture_compare`]'s order
+/// with case not looked at, so strings that differ only in case are equal.
+#[must_use]
+pub fn culture_compare_ignore_case(a: &str, b: &str) -> std::cmp::Ordering {
+    a.chars().map(primary).cmp(b.chars().map(primary))
+}
+
+/// A character's place in [`culture_compare`]'s order, case aside.
+fn primary(c: char) -> (u8, u32) {
+    match c {
+        '0'..='9' => (1, c as u32),
+        'a'..='z' | 'A'..='Z' => (2, c.to_ascii_lowercase() as u32),
+        c if c.is_ascii() => (0, c as u32),
+        c => (3, c as u32),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Case aside, the culture's order; strings that differ only in case are equal.
+    #[test]
+    fn culture_order_ignoring_case() {
+        use std::cmp::Ordering::{Equal, Greater, Less};
+        assert_eq!(culture_compare_ignore_case("QUADROTOR", "quadrotor"), Equal);
+        assert_eq!(culture_compare_ignore_case("a.tlog", "B.bin"), Less);
+        assert_eq!(culture_compare_ignore_case("_x", "1x"), Less);
+        assert_eq!(culture_compare_ignore_case("9", "A"), Less);
+        assert_eq!(culture_compare_ignore_case("ab", "a"), Greater);
+        assert_eq!(culture_compare("QUADROTOR", "quadrotor"), Greater);
+    }
 
     #[test]
     fn round_trip_keeps_the_trailing_zeros_it_reads() {

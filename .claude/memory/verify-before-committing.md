@@ -43,3 +43,9 @@ PLAN.md §5.1's layers; mag calb log's commit of 2026-10-06 gave mp-calibration 
 mp-log (L4), which its own crates' tests, clippy and the wasm check all passed, and the graph test
 refused (the code moved up to mp-log the same day). Any Cargo.toml change: `cargo test -p xtask
 --test graph --test licences` before the commit, at least, when the whole workspace is too long.
+
+**A ledger edit gets `cargo xtask ledger check` (with `MP_SRC` set) before the commit.** Two commits
+of 2026-10-06 left it failing unseen: Split DFLog's DFLogBuffer.cs row had an unquoted comma in its
+notes (21 fields, so the row did not parse and the file read as having none), and Sort TLogs'
+LogSort.cs row was `tested` at size M with no omissions (§6.4 owes them from 200 lines up). Write
+rows with Python's `csv` writer on the one line, never by hand, and run the check.

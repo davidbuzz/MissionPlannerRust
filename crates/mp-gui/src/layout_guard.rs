@@ -159,6 +159,11 @@ pub const MAY_SCROLL: &[&str] = &[
     // `// C#: temp.cs:1031-1038`
     "experimental-interval-message-",
     "experimental-interval-rate-",
+    // EXPERIMENTAL's logindex: its list's rows, 150 high, which scroll in its 460-high list, and
+    // its headers, which scroll sideways with them: the twelve columns are 1,206 wide in a list
+    // 1,153 wide. `// C#: Log/LogIndex.Designer.cs:83-87, 96-174`
+    "experimental-logindex-row-",
+    "experimental-logindex-header-",
 ];
 
 /// The rows of the lists that scroll and are named by what they hold - a parameter's name, an

@@ -30,7 +30,8 @@
 //! Each of the 63 buttons is one of ([`tool`]):
 //! * a window this application has, opened as CONFIG > Advanced's button for the same tool opens
 //!   it (`MissionPlanner::open_advanced_tool`): Warning Manager, NMEA, Mavlink, MAVLink Inspector,
-//!   Param gen, FFT, signing, Proximity; and Geo ref images (`georef_ui::open`);
+//!   Param gen, FFT, signing, Proximity; and Geo ref images (`georef_ui::open`), Message Interval
+//!   (message_interval.rs) and logindex (log_index.rs), forms of their own;
 //! * a command to the vehicle, ported here with its questions ([`Act`]): reboot pixhawk ("Are you
 //!   sure?", `doReboot(false, true)`), Force Accel Cal and Force Compass Cal (`PREFLIGHT_CALIBRATION`
 //!   with 76 as param 5 or param 2), DFU Mode (`doDFUBoot`), QNH (an `InputBox` for
@@ -231,6 +232,8 @@ pub(crate) enum Tool {
     Georef,
     /// Message Interval's form (message_interval.rs).
     MessageInterval,
+    /// LogIndex's form (log_index.rs).
+    LogIndex,
     /// A command to the vehicle, ported here.
     Act(Act),
     /// Not here, and why.
@@ -255,6 +258,7 @@ pub(crate) fn tool(name: &str) -> Tool {
         "but_proximity" => Tool::Advanced("but_proximity"),
         "BUT_georefimage" => Tool::Georef,
         "but_messageinterval" => Tool::MessageInterval,
+        "butlogindex" => Tool::LogIndex,
         "but_paramrestore" => Tool::Act(Act::ParamRestore),
         "but_reboot" => Tool::Act(Act::Reboot),
         "BUT_forcecal_accel" => Tool::Act(Act::ForceAccelCal),
@@ -521,6 +525,8 @@ pub(crate) struct Experimental {
     last: Option<&'static str>,
     /// Message Interval's form, while it shows.
     pub(crate) interval: Option<crate::message_interval::IntervalForm>,
+    /// LogIndex's form, while it shows.
+    pub(crate) log_index: Option<crate::log_index::LogIndexForm>,
     asking: Option<Asking>,
     /// The input box's keyboard, made the first time one shows.
     focus: Option<gpui::FocusHandle>,
@@ -552,6 +558,7 @@ impl Default for Experimental {
         Self {
             last: None,
             interval: None,
+            log_index: None,
             asking: None,
             focus: None,
             scroll: gpui::ScrollHandle::new(),
@@ -988,6 +995,7 @@ fn read_mag_log(this: &mut MissionPlanner, file: std::path::PathBuf) {
 /// C# shows on the status line (the owner's ruling: no box for it), or nothing, as its `catch`
 /// shows nothing. `// C#: MagCalib.cs:115-130`
 pub(crate) fn tick(this: &mut MissionPlanner) {
+    crate::log_index::tick(this);
     split_tick(this);
     takeoff_tick(this);
     sort_tick(this);
@@ -1378,6 +1386,7 @@ fn press(
         }
         Tool::Georef => crate::georef_ui::open(this),
         Tool::MessageInterval => crate::message_interval::open(this, cx),
+        Tool::LogIndex => crate::log_index::open(this),
         Tool::Act(what) => act(this, what, window, cx),
         Tool::Unavailable(why) => this.file_status = Some(format!("{text}: {why}")),
     }
@@ -1479,6 +1488,7 @@ pub(crate) fn screen(
         .children(this.extra_setup_overlay(window, cx))
         .children(crate::georef_ui::window(this, window, cx))
         .children(crate::message_interval::window(this, window, cx))
+        .children(crate::log_index::window(this, window, cx))
         .children(asking_box(this, window, cx))
         .into_any_element()
 }
@@ -1498,6 +1508,7 @@ pub(crate) fn record_facts(state: &Experimental) {
     facts::record("experimental.working", working);
     facts::record("experimental.last", state.last.unwrap_or("none"));
     crate::message_interval::record_facts(state.interval.as_ref());
+    crate::log_index::record_facts(state.log_index.as_ref());
     facts::record(
         "experimental.asking",
         match state.asking.as_ref() {
@@ -1594,11 +1605,11 @@ mod tests {
                     assert!(advanced.contains(&button), "{name} ({text}): {button}");
                     opens += 1;
                 }
-                Tool::Georef | Tool::MessageInterval | Tool::Act(_) => opens += 1,
+                Tool::Georef | Tool::MessageInterval | Tool::LogIndex | Tool::Act(_) => opens += 1,
                 Tool::Unavailable(why) => assert!(!why.is_empty()),
             }
         }
-        assert_eq!(opens, 28);
+        assert_eq!(opens, 29);
         assert_eq!(tool("but_paramrestore"), Tool::Act(Act::ParamRestore));
         assert_eq!(tool("BUT_magfit2"), Tool::Act(Act::MagCalLog));
         assert_eq!(tool("myButton1"), Tool::Act(Act::SplitDfLog));
@@ -1611,6 +1622,7 @@ mod tests {
         assert_eq!(tool("but_blupdate"), Tool::Act(Act::BootloaderUpgrade));
         assert_eq!(tool("but_disablearmswitch"), Tool::Act(Act::ToggleSafety));
         assert_eq!(tool("but_messageinterval"), Tool::MessageInterval);
+        assert_eq!(tool("butlogindex"), Tool::LogIndex);
         assert_eq!(tool("BUT_swarm"), Tool::Unavailable(SECTION_12_D13));
         assert_eq!(tool("but_GDAL"), Tool::Unavailable(NO_GDAL));
         assert_eq!(tool("but_anonlog"), Tool::Unavailable(ANON_LOG_RULED));

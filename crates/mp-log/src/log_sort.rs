@@ -74,7 +74,8 @@ const PARAM_VALUE: u32 = 22;
 
 /// `aptype.ToString()`: the C# enum's name, `MAV_TYPE_` dropped, or the number for one it has
 /// not got.
-fn type_name(mav_type: u8) -> String {
+#[must_use]
+pub fn type_name(mav_type: u8) -> String {
     MavType(u32::from(mav_type))
         .name()
         .and_then(|name| name.strip_prefix("MAV_TYPE_"))

@@ -90,6 +90,8 @@ const TEXT_PICTURE: u32 = 100;
 const NO_GPS_DATA: &str = "No gps data";
 const SITL: &str = "SITL";
 /// `SystemFonts.DefaultFont`: Microsoft Sans Serif, 8.25 points - 11 pixels at 96 to the inch.
+/// Asked of the system by name on the desktop; a page has the planner's own font.
+#[cfg(not(target_family = "wasm"))]
 const FONT_FAMILY: &str = "Microsoft Sans Serif";
 const FONT_PIXELS: f64 = 11.0;
 /// `Encode(format, 100)`. `// C#: ExtLibs/MissionPlanner.Drawing/Image.cs:150-154`

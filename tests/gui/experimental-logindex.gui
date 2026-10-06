@@ -1,0 +1,80 @@
+# EXPERIMENTAL's logindex (temp.cs:300-303; Log/LogIndex.cs): its form over the tab, Default Log
+# Dir read - every .tlog, then .bin, then .log in and under the log directory, each with LogMap's
+# picture made first, its date, frame, vehicle, duration, size, home, time in air, distance and
+# camera feedbacks - a column's header sorting the list (FastObjectListView's own), a row chosen
+# and its totals, Delete and its question, the row reading "--- DELETED ---"; a second read adds
+# every log read so far again, the C#'s AddObjects(logs), sorted in.
+# Offline, over a tile cache with nothing in it. What each value is read as is log_index's tests'.
+#
+# Run as: tools/gui-headless.sh experimental-logindex
+screen fly
+window 1600x1200
+budget 15
+# 15: one run took 7.5 s (2026-10-06).
+tiles offline
+env XDG_DATA_HOME $WORK
+env MP_CONFIG_XML $WORK/config.xml
+env MP_LOG_DIR $WORK/logs
+env MP_TILE_CACHE $WORK/cache
+setup printf '<?xml version="1.0" encoding="utf-8"?><Config><tabcontrolactions>tabQuick;</tabcontrolactions></Config>' > "$WORK/config.xml"
+setup mkdir -p "$WORK/logs/deep" "$WORK/cache" && cp testdata/georef/camera.tlog "$WORK/logs/flight.tlog" && cp testdata/dataflash.bin "$WORK/logs/bench.bin" && cp testdata/georef/camera.bin "$WORK/logs/deep/flight.bin"
+
+key ctrl+f
+expect screen experimental
+expect experimental.logindex.open false
+
+click experimental-butlogindex
+expect experimental.logindex.open true
+expect experimental.logindex.rows 0
+expect experimental.logindex.delete.enabled false
+
+# Default Log Dir: the telemetry log first, then the two dataflash logs, the deeper one last.
+click experimental-logindex-default
+within 60
+expect experimental.logindex.rows 3
+expect experimental.logindex.loading none
+expect experimental.logindex.row.0 ~ | QUADROTOR | 1 | 00:02:35.7960000 | flight.tlog | 422834 | -27.4691978,153.0272559,25.0900001525879, | 46 | 451.4545 | 25
+expect experimental.logindex.row.0.picture true
+expect experimental.logindex.row.1 ~ 1/1/0001 12:00:00 AM |
+expect experimental.logindex.row.1 ~ | DFLog Unknown | 0 | 00:00:00 | bench.bin |
+expect experimental.logindex.row.2 ~ | DFLog Unknown | 0 | 00:02:03.1998670 | flight.bin | 1085440 | -27.4698,153.0250999,25.1, | 91 | 451.9137 | 25
+expect experimental.logindex.stats Selected: 0; TimeInAir: 00:00:00; DistTraveled: 0m
+
+# A header clicked sorts by its column: Size, ascending - the order they were read in - then,
+# clicked again, descending.
+click experimental-logindex-header-7
+expect experimental.logindex.sort Size ascending
+expect experimental.logindex.row.0 ~ | flight.tlog |
+click experimental-logindex-header-7
+expect experimental.logindex.sort Size descending
+expect experimental.logindex.row.0 ~ | flight.bin | 1085440 |
+expect experimental.logindex.row.2 ~ | flight.tlog |
+
+# A row chosen: its totals, and Delete enabled.
+click experimental-logindex-row-0
+expect experimental.logindex.selected 0
+expect experimental.logindex.stats Selected: 1; TimeInAir: 00:01:31; DistTraveled: 451m
+expect experimental.logindex.delete.enabled true
+
+# Delete, asked first; Yes deletes its files and the row says so, its times gone. The picture it
+# showed stays, as the C#'s bitmap, loaded for the cell, does.
+click experimental-logindex-delete
+expect experimental.logindex.asking Do you really want to delete 1 logs?
+click experimental-logindex-question-yes
+expect experimental.logindex.asking none
+expect experimental.logindex.row.0 ~ --- DELETED ---
+expect experimental.logindex.row.0.picture true
+expect experimental.logindex.stats Selected: 1; TimeInAir: 00:00:00; DistTraveled: 0m
+
+# Read again: the two logs left, and every log read so far added to the list again, sorted in by
+# size, largest first; the deleted log selected where the list finds it, its last row.
+click experimental-logindex-default
+within 60
+expect experimental.logindex.rows 8
+expect experimental.logindex.loading none
+expect experimental.logindex.row.1 ~ --- DELETED ---
+expect experimental.logindex.row.2 ~ | bench.bin |
+expect experimental.logindex.selected 1
+
+click experimental-logindex-close
+expect experimental.logindex.open false
