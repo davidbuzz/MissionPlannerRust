@@ -112,7 +112,7 @@ pub fn gps_inject_messages(
                 to.copy_from_slice(from);
             }
             out.push(MavMessage::GpsInjectData(GpsInjectData {
-                target_system: target.sysid,
+                target_system: target.payload_target(),
                 target_component: target.compid,
                 #[allow(clippy::cast_possible_truncation)] // at most 110
                 len: copy as u8,

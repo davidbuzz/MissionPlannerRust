@@ -740,7 +740,7 @@ fn run_command(link: &Link, message: &MavMessage) -> Option<RequestOutcome> {
         return None;
     };
     let id = link.command(
-        VehicleId::new(long.target_system, long.target_component),
+        VehicleId::new(u32::from(long.target_system), long.target_component),
         long.command,
         [
             long.param1,
@@ -2388,7 +2388,7 @@ mod retries {
                 result: MAV_RESULT_ACCEPTED,
                 progress: 0,
                 result_param2: 0,
-                target_system: GCS.sysid,
+                target_system: GCS.payload_target(),
                 target_component: GCS.compid,
             }))
         });

@@ -360,8 +360,8 @@ fn arg<T: TryFromObject>(args: &FuncArgs, index: usize, vm: &VirtualMachine) -> 
 }
 
 /// The two ids every link member starts with.
-fn target_arg(args: &FuncArgs, vm: &VirtualMachine) -> PyResult<(u8, u8)> {
-    Ok((arg::<u8>(args, 0, vm)?, arg::<u8>(args, 1, vm)?))
+fn target_arg(args: &FuncArgs, vm: &VirtualMachine) -> PyResult<(u32, u8)> {
+    Ok((arg::<u32>(args, 0, vm)?, arg::<u8>(args, 1, vm)?))
 }
 
 /// A number argument, an int or a float.
@@ -419,7 +419,7 @@ fn waited<T>(
 impl PyLink {
     /// `MAV.sysid`, `MAV.compid`.
     #[pymethod]
-    fn target(&self) -> (u8, u8) {
+    fn target(&self) -> (u32, u8) {
         lock(&self.shared).host.link_target()
     }
 
@@ -917,7 +917,7 @@ mod tests {
     }
 
     impl ScriptHost for Fake {
-        fn link_target(&self) -> (u8, u8) {
+        fn link_target(&self) -> (u32, u8) {
             (1, 1)
         }
         fn is_open(&self) -> bool {
@@ -925,7 +925,7 @@ mod tests {
         }
         fn set_param(
             &mut self,
-            target: (u8, u8),
+            target: (u32, u8),
             name: &str,
             value: f64,
             force: bool,
@@ -935,7 +935,7 @@ mod tests {
         }
         fn command(
             &mut self,
-            target: (u8, u8),
+            target: (u32, u8),
             command: u16,
             params: [f32; 7],
             require_ack: bool,
@@ -943,20 +943,20 @@ mod tests {
             let call = format!("doCommand {target:?} {command} {params:?} {require_ack}");
             self.answer(call, "doCommand", true)
         }
-        fn set_wp_total(&mut self, target: (u8, u8), total: u16, kind: u8) -> Result<(), Timeout> {
+        fn set_wp_total(&mut self, target: (u32, u8), total: u16, kind: u8) -> Result<(), Timeout> {
             self.answer(format!("setWPTotal {target:?} {total} {kind}"), "setWPTotal", ())
         }
-        fn set_wp(&mut self, target: (u8, u8), item: &WpItem) -> Result<u8, Timeout> {
+        fn set_wp(&mut self, target: (u32, u8), item: &WpItem) -> Result<u8, Timeout> {
             self.wps.insert(item.seq, *item);
             self.answer(format!("setWP {target:?} {item:?}"), "setWP", 0)
         }
-        fn set_wp_ack(&mut self, target: (u8, u8), kind: u8) {
+        fn set_wp_ack(&mut self, target: (u32, u8), kind: u8) {
             self.calls.push(format!("setWPACK {target:?} {kind}"));
         }
-        fn set_wp_current(&mut self, target: (u8, u8), seq: u16) -> Result<bool, Timeout> {
+        fn set_wp_current(&mut self, target: (u32, u8), seq: u16) -> Result<bool, Timeout> {
             self.answer(format!("setWPCurrent {target:?} {seq}"), "setWPCurrent", true)
         }
-        fn get_wp(&mut self, target: (u8, u8), index: u16, kind: u8) -> Result<Locationwp, Timeout> {
+        fn get_wp(&mut self, target: (u32, u8), index: u16, kind: u8) -> Result<Locationwp, Timeout> {
             if let Some((abort, started)) = &self.get_wp_waits {
                 // A vehicle that never answers, and a host that gives the wait up at the Abort
                 // button, as the window's does.
@@ -990,7 +990,7 @@ mod tests {
                 }
             }
         }
-        fn set_position_target(&mut self, target: (u8, u8), position: &PositionTarget) -> bool {
+        fn set_position_target(&mut self, target: (u32, u8), position: &PositionTarget) -> bool {
             self.calls.push(format!("setPositionTarget {target:?} {position:?}"));
             true
         }
@@ -1072,7 +1072,7 @@ mod tests {
             fn sleep(&mut self, milliseconds: u32) {
                 self.0.os_lock().unwrap().sleep(milliseconds);
             }
-            fn link_target(&self) -> (u8, u8) {
+            fn link_target(&self) -> (u32, u8) {
                 self.0.os_lock().unwrap().link_target()
             }
             fn is_open(&self) -> bool {
@@ -1080,7 +1080,7 @@ mod tests {
             }
             fn set_param(
                 &mut self,
-                target: (u8, u8),
+                target: (u32, u8),
                 name: &str,
                 value: f64,
                 force: bool,
@@ -1089,7 +1089,7 @@ mod tests {
             }
             fn command(
                 &mut self,
-                target: (u8, u8),
+                target: (u32, u8),
                 command: u16,
                 params: [f32; 7],
                 require_ack: bool,
@@ -1099,21 +1099,21 @@ mod tests {
                     .unwrap()
                     .command(target, command, params, require_ack)
             }
-            fn set_wp_total(&mut self, target: (u8, u8), total: u16, kind: u8) -> Result<(), Timeout> {
+            fn set_wp_total(&mut self, target: (u32, u8), total: u16, kind: u8) -> Result<(), Timeout> {
                 self.0.os_lock().unwrap().set_wp_total(target, total, kind)
             }
-            fn set_wp(&mut self, target: (u8, u8), item: &WpItem) -> Result<u8, Timeout> {
+            fn set_wp(&mut self, target: (u32, u8), item: &WpItem) -> Result<u8, Timeout> {
                 self.0.os_lock().unwrap().set_wp(target, item)
             }
-            fn set_wp_ack(&mut self, target: (u8, u8), kind: u8) {
+            fn set_wp_ack(&mut self, target: (u32, u8), kind: u8) {
                 self.0.os_lock().unwrap().set_wp_ack(target, kind);
             }
-            fn set_wp_current(&mut self, target: (u8, u8), seq: u16) -> Result<bool, Timeout> {
+            fn set_wp_current(&mut self, target: (u32, u8), seq: u16) -> Result<bool, Timeout> {
                 self.0.os_lock().unwrap().set_wp_current(target, seq)
             }
             fn get_wp(
                 &mut self,
-                target: (u8, u8),
+                target: (u32, u8),
                 index: u16,
                 kind: u8,
             ) -> Result<Locationwp, Timeout> {
@@ -1121,7 +1121,7 @@ mod tests {
             }
             fn set_position_target(
                 &mut self,
-                target: (u8, u8),
+                target: (u32, u8),
                 position: &PositionTarget,
             ) -> bool {
                 self.0.os_lock().unwrap().set_position_target(target, position)

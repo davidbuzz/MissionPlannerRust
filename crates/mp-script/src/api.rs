@@ -122,14 +122,14 @@ pub trait ScriptHost {
     /// `setGuidedModeWP(sysid, compid, ...)` reads its `mode` and `firmware`. This default is
     /// [`ScriptHost::cs_field`], for a host with one vehicle.
     /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:4423, 4430`
-    fn cs_field_of(&self, _target: (u8, u8), name: &str) -> Option<CsValue> {
+    fn cs_field_of(&self, _target: (u32, u8), name: &str) -> Option<CsValue> {
         self.cs_field(name)
     }
 
     /// `setMode(sysid, compid, mode)`: the named vehicle put in a mode, not the one flown. This
     /// default is [`ScriptHost::change_mode`], for a host with one vehicle.
     /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:4614-4642`
-    fn set_mode_of(&mut self, _target: (u8, u8), mode: &str) {
+    fn set_mode_of(&mut self, _target: (u32, u8), mode: &str) {
         let _ = self.change_mode(mode);
     }
 
@@ -142,7 +142,7 @@ pub trait ScriptHost {
     /// `MAV.sysid`, `MAV.compid` - here also `sysidcurrent`, `compidcurrent` - the vehicle the
     /// link is talking to, (0, 0) before one is heard.
     /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:289-315`
-    fn link_target(&self) -> (u8, u8) {
+    fn link_target(&self) -> (u32, u8) {
         (0, 0)
     }
 
@@ -159,7 +159,7 @@ pub trait ScriptHost {
     /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:1619-1767`
     fn set_param(
         &mut self,
-        _target: (u8, u8),
+        _target: (u32, u8),
         _name: &str,
         _value: f64,
         _force: bool,
@@ -173,7 +173,7 @@ pub trait ScriptHost {
     /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:2671-2833`
     fn command(
         &mut self,
-        _target: (u8, u8),
+        _target: (u32, u8),
         _command: u16,
         _params: [f32; 7],
         _require_ack: bool,
@@ -211,7 +211,7 @@ pub trait ScriptHost {
     /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:3746-3870`
     fn set_wp_total(
         &mut self,
-        _target: (u8, u8),
+        _target: (u32, u8),
         _total: u16,
         _mission_type: u8,
     ) -> Result<(), Timeout> {
@@ -223,18 +223,18 @@ pub trait ScriptHost {
     /// the item after it - `MAV_MISSION_ACCEPTED` - ten more times 450 ms apart, then the
     /// `TimeoutException`.
     /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:3965-4224`
-    fn set_wp(&mut self, _target: (u8, u8), _item: &WpItem) -> Result<u8, Timeout> {
+    fn set_wp(&mut self, _target: (u32, u8), _item: &WpItem) -> Result<u8, Timeout> {
         Err(Timeout::on("setWP"))
     }
 
     /// `MAV.setWPACK(type)`: a `MISSION_ACK` of `MAV_MISSION_ACCEPTED`, not waited on.
     /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:2431-2447`
-    fn set_wp_ack(&mut self, _target: (u8, u8), _mission_type: u8) {}
+    fn set_wp_ack(&mut self, _target: (u32, u8), _mission_type: u8) {}
 
     /// `MAV.setWPCurrent(sysid, compid, index)`: `MISSION_SET_CURRENT` until a
     /// `MISSION_CURRENT` arrives, five more times 2 s apart, then the `TimeoutException`.
     /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:2452-2501`
-    fn set_wp_current(&mut self, _target: (u8, u8), _seq: u16) -> Result<bool, Timeout> {
+    fn set_wp_current(&mut self, _target: (u32, u8), _seq: u16) -> Result<bool, Timeout> {
         Err(Timeout::on("setWPCurrent"))
     }
 
@@ -243,7 +243,7 @@ pub trait ScriptHost {
     /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:3393-3557`
     fn get_wp(
         &mut self,
-        _target: (u8, u8),
+        _target: (u32, u8),
         _index: u16,
         _mission_type: u8,
     ) -> Result<Locationwp, Timeout> {
@@ -254,7 +254,7 @@ pub trait ScriptHost {
     /// a `SET_POSITION_TARGET_GLOBAL_INT` with only the position enabled, sent and not waited
     /// on. Whether it was queued.
     /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:4439-4443, 4500-4555`
-    fn set_position_target(&mut self, _target: (u8, u8), _position: &PositionTarget) -> bool {
+    fn set_position_target(&mut self, _target: (u32, u8), _position: &PositionTarget) -> bool {
         false
     }
 

@@ -71,7 +71,7 @@ pub(crate) fn command(target: VehicleId, command: u16, params: [f32; 7]) -> MavM
         param6: params[5],
         param7: params[6],
         command,
-        target_system: target.sysid,
+        target_system: target.payload_target(),
         target_component: target.compid,
         confirmation: 0,
     })
@@ -156,7 +156,7 @@ pub fn get_version(target: VehicleId) -> [MavMessage; 3] {
         ),
         command(target, CMD_REQUEST_AUTOPILOT_CAPABILITIES, [0.0; 7]),
         MavMessage::AutopilotVersionRequest(AutopilotVersionRequest {
-            target_system: target.sysid,
+            target_system: target.payload_target(),
             target_component: target.compid,
         }),
     ]
@@ -178,7 +178,7 @@ pub fn send_banner(target: VehicleId) -> MavMessage {
 pub fn set_mode(target: VehicleId, custom_mode: u32) -> MavMessage {
     MavMessage::SetMode(SetMode {
         custom_mode,
-        target_system: target.sysid,
+        target_system: target.payload_target(),
         base_mode: MODE_FLAG_CUSTOM_MODE_ENABLED,
     })
 }
@@ -198,7 +198,7 @@ pub fn param_set(target: VehicleId, name: &str, value: f32) -> MavMessage {
 
     MavMessage::ParamSet(ParamSet {
         param_value: value,
-        target_system: target.sysid,
+        target_system: target.payload_target(),
         target_component: target.compid,
         param_id,
         param_type: PARAM_TYPE_REAL32,
@@ -238,7 +238,7 @@ pub fn goto_position(
         yaw: 0.0,
         yaw_rate: 0.0,
         type_mask: IGNORE_ALL_BUT_POSITION,
-        target_system: target.sysid,
+        target_system: target.payload_target(),
         target_component: target.compid,
         coordinate_frame: FRAME_GLOBAL_RELATIVE_ALT_INT,
     })
@@ -251,7 +251,7 @@ pub fn goto_position(
 #[must_use]
 pub fn request_param_list(target: VehicleId) -> MavMessage {
     MavMessage::ParamRequestList(ParamRequestList {
-        target_system: target.sysid,
+        target_system: target.payload_target(),
         target_component: target.compid,
     })
 }
@@ -264,7 +264,7 @@ pub fn request_param_list(target: VehicleId) -> MavMessage {
 pub fn request_param_by_index(target: VehicleId, index: u16) -> MavMessage {
     MavMessage::ParamRequestRead(ParamRequestRead {
         param_index: i16::try_from(index).unwrap_or(i16::MAX),
-        target_system: target.sysid,
+        target_system: target.payload_target(),
         target_component: target.compid,
         param_id: [0u8; 16],
     })
@@ -278,7 +278,7 @@ pub fn request_param_by_index(target: VehicleId, index: u16) -> MavMessage {
 pub fn request_param_by_name(target: VehicleId, name: &str) -> MavMessage {
     MavMessage::ParamRequestRead(ParamRequestRead {
         param_index: -1,
-        target_system: target.sysid,
+        target_system: target.payload_target(),
         target_component: target.compid,
         param_id: mp_params::encode_param_id(name),
     })
@@ -332,7 +332,7 @@ pub fn request_log_list(target: VehicleId) -> MavMessage {
     MavMessage::LogRequestList(mp_mavlink_dialects::all::LogRequestList {
         start: 0,
         end: u16::MAX,
-        target_system: target.sysid,
+        target_system: target.payload_target(),
         target_component: target.compid,
     })
 }
@@ -348,7 +348,7 @@ pub fn request_log_data(target: VehicleId, id: u16, offset: u32, count: u32) -> 
         ofs: offset,
         count,
         id,
-        target_system: target.sysid,
+        target_system: target.payload_target(),
         target_component: target.compid,
     })
 }
@@ -357,7 +357,7 @@ pub fn request_log_data(target: VehicleId, id: u16, offset: u32, count: u32) -> 
 #[must_use]
 pub fn log_request_end(target: VehicleId) -> MavMessage {
     MavMessage::LogRequestEnd(mp_mavlink_dialects::all::LogRequestEnd {
-        target_system: target.sysid,
+        target_system: target.payload_target(),
         target_component: target.compid,
     })
 }
@@ -370,7 +370,7 @@ pub fn log_request_end(target: VehicleId) -> MavMessage {
 #[must_use]
 pub fn request_mission_list(target: VehicleId, mission_type: u8) -> MavMessage {
     MavMessage::MissionRequestList(MissionRequestList {
-        target_system: target.sysid,
+        target_system: target.payload_target(),
         target_component: target.compid,
         mission_type,
     })
@@ -384,7 +384,7 @@ pub fn request_mission_list(target: VehicleId, mission_type: u8) -> MavMessage {
 pub fn request_mission_item(target: VehicleId, seq: u16, mission_type: u8) -> MavMessage {
     MavMessage::MissionRequestInt(MissionRequestInt {
         seq,
-        target_system: target.sysid,
+        target_system: target.payload_target(),
         target_component: target.compid,
         mission_type,
     })
@@ -395,7 +395,7 @@ pub fn request_mission_item(target: VehicleId, seq: u16, mission_type: u8) -> Ma
 pub fn send_mission_count(target: VehicleId, count: u16, mission_type: u8) -> MavMessage {
     MavMessage::MissionCount(MissionCount {
         count,
-        target_system: target.sysid,
+        target_system: target.payload_target(),
         target_component: target.compid,
         mission_type,
     })
@@ -415,7 +415,7 @@ pub fn send_mission_item(target: VehicleId, item: &MissionItem, mission_type: u8
         z: wire.z,
         seq: wire.seq,
         command: wire.command,
-        target_system: target.sysid,
+        target_system: target.payload_target(),
         target_component: target.compid,
         frame: wire.frame,
         current: wire.current,
@@ -428,7 +428,7 @@ pub fn send_mission_item(target: VehicleId, item: &MissionItem, mission_type: u8
 #[must_use]
 pub fn send_mission_ack(target: VehicleId, result: u8, mission_type: u8) -> MavMessage {
     MavMessage::MissionAck(MissionAck {
-        target_system: target.sysid,
+        target_system: target.payload_target(),
         target_component: target.compid,
         r#type: result,
         mission_type,
@@ -455,7 +455,7 @@ pub fn rc_override(target: VehicleId, channels: [u16; 18]) -> MavMessage {
         chan6_raw: channels[5],
         chan7_raw: channels[6],
         chan8_raw: channels[7],
-        target_system: target.sysid,
+        target_system: target.payload_target(),
         target_component: target.compid,
         chan9_raw: channels[8],
         chan10_raw: channels[9],
@@ -578,7 +578,7 @@ pub fn command_int(
         y,
         z,
         command: command_id,
-        target_system: target.sysid,
+        target_system: target.payload_target(),
         target_component: target.compid,
         frame,
         current: 0,
@@ -596,7 +596,7 @@ pub fn command_int(
 pub fn mission_set_current(target: VehicleId, seq: u16) -> MavMessage {
     MavMessage::MissionSetCurrent(MissionSetCurrent {
         seq,
-        target_system: target.sysid,
+        target_system: target.payload_target(),
         target_component: target.compid,
     })
 }
@@ -622,7 +622,7 @@ fn float_mission_item(
         z: altitude,
         seq: 0,
         command: CMD_NAV_WAYPOINT,
-        target_system: target.sysid,
+        target_system: target.payload_target(),
         target_component: target.compid,
         frame,
         current,
@@ -713,7 +713,7 @@ pub fn guided_position_target(
         yaw: 0.0,
         yaw_rate: 0.0,
         type_mask,
-        target_system: target.sysid,
+        target_system: target.payload_target(),
         target_component: target.compid,
         coordinate_frame: frame,
     })

@@ -364,7 +364,7 @@ impl GuiScriptHost {
 }
 
 /// The ids a script names as a vehicle.
-fn vehicle((sysid, compid): (u8, u8)) -> VehicleId {
+fn vehicle((sysid, compid): (u32, u8)) -> VehicleId {
     VehicleId::new(sysid, compid)
 }
 
@@ -428,7 +428,7 @@ impl ScriptHost for GuiScriptHost {
         wasm_thread::sleep(Duration::from_millis(u64::from(milliseconds)));
     }
 
-    fn cs_field_of(&self, target: (u8, u8), name: &str) -> Option<CsValue> {
+    fn cs_field_of(&self, target: (u32, u8), name: &str) -> Option<CsValue> {
         let request = Request::CsFieldOf {
             target: vehicle(target),
             name: name.to_owned(),
@@ -439,7 +439,7 @@ impl ScriptHost for GuiScriptHost {
         }
     }
 
-    fn set_mode_of(&mut self, target: (u8, u8), mode: &str) {
+    fn set_mode_of(&mut self, target: (u32, u8), mode: &str) {
         let _ = self.ask(Request::SetModeOf {
             target: vehicle(target),
             mode: mode.to_owned(),
@@ -447,7 +447,7 @@ impl ScriptHost for GuiScriptHost {
     }
 
     /// `sysidcurrent`, `compidcurrent`: the vehicle being flown now, (0, 0) before one is heard.
-    fn link_target(&self) -> (u8, u8) {
+    fn link_target(&self) -> (u32, u8) {
         self.current()
             .map_or((0, 0), |(_, id)| (id.sysid, id.compid))
     }
@@ -458,7 +458,7 @@ impl ScriptHost for GuiScriptHost {
 
     fn set_param(
         &mut self,
-        target: (u8, u8),
+        target: (u32, u8),
         name: &str,
         value: f64,
         force: bool,
@@ -478,7 +478,7 @@ impl ScriptHost for GuiScriptHost {
     /// the port closed (`:2693-2694`).
     fn command(
         &mut self,
-        target: (u8, u8),
+        target: (u32, u8),
         command: u16,
         params: [f32; 7],
         require_ack: bool,
@@ -502,7 +502,7 @@ impl ScriptHost for GuiScriptHost {
     }
 
     /// `MISSION_COUNT` through the link's `setWPTotal`, to the vehicle's first request.
-    fn set_wp_total(&mut self, target: (u8, u8), total: u16, kind: u8) -> Result<(), Timeout> {
+    fn set_wp_total(&mut self, target: (u32, u8), total: u16, kind: u8) -> Result<(), Timeout> {
         let request = Request::SetWpTotal {
             target: vehicle(target),
             total,
@@ -511,7 +511,7 @@ impl ScriptHost for GuiScriptHost {
         self.ask_link(request, "setWPTotal").map(|_| ())
     }
 
-    fn set_wp(&mut self, target: (u8, u8), item: &WpItem) -> Result<u8, Timeout> {
+    fn set_wp(&mut self, target: (u32, u8), item: &WpItem) -> Result<u8, Timeout> {
         let request = Request::SetWp {
             target: vehicle(target),
             item: *item,
@@ -522,7 +522,7 @@ impl ScriptHost for GuiScriptHost {
         }
     }
 
-    fn set_wp_ack(&mut self, target: (u8, u8), kind: u8) {
+    fn set_wp_ack(&mut self, target: (u32, u8), kind: u8) {
         // `type = 0`, accepted. `// C#: MAVLinkInterface.cs:2441-2449`
         self.send(&mp_link::commands::send_mission_ack(
             vehicle(target),
@@ -531,7 +531,7 @@ impl ScriptHost for GuiScriptHost {
         ));
     }
 
-    fn set_wp_current(&mut self, target: (u8, u8), seq: u16) -> Result<bool, Timeout> {
+    fn set_wp_current(&mut self, target: (u32, u8), seq: u16) -> Result<bool, Timeout> {
         let request = Request::SetWpCurrent {
             target: vehicle(target),
             seq,
@@ -540,7 +540,7 @@ impl ScriptHost for GuiScriptHost {
     }
 
     /// The one item, of the list asked for, through the link's `getWP`.
-    fn get_wp(&mut self, target: (u8, u8), index: u16, kind: u8) -> Result<Locationwp, Timeout> {
+    fn get_wp(&mut self, target: (u32, u8), index: u16, kind: u8) -> Result<Locationwp, Timeout> {
         let request = Request::GetWp {
             target: vehicle(target),
             index,
@@ -554,7 +554,7 @@ impl ScriptHost for GuiScriptHost {
 
     /// Sent from here, and `GuidedMode` told, as `setPositionTargetGlobalInt` writes it before
     /// it sends. `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:4500-4555`
-    fn set_position_target(&mut self, target: (u8, u8), position: &PositionTarget) -> bool {
+    fn set_position_target(&mut self, target: (u32, u8), position: &PositionTarget) -> bool {
         self.tell(Request::Guided(GuidedUpdate::position_target(position)));
         self.send(&mp_link::commands::guided_position_target(
             vehicle(target),
@@ -606,7 +606,7 @@ fn mission_item(target: VehicleId, item: &WpItem) -> MavMessage {
         z: item.z,
         seq: item.seq,
         command: item.command,
-        target_system: target.sysid,
+        target_system: target.payload_target(),
         target_component: target.compid,
         frame: item.frame,
         current: item.current,

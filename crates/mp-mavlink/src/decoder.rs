@@ -177,11 +177,15 @@ impl FrameDecoder {
                     }
                     break;
                 }
+                Err(ParseError::UnsupportedIncompatFlags { len, .. }) => {
+                    // Skipped whole: its length is known, and its payload is not frames.
+                    stats.unsupported_flags += 1;
+                    *head += len;
+                }
                 Err(err) => {
                     match err {
                         ParseError::Crc { .. } => stats.crc_errors += 1,
                         ParseError::UnknownMessage { .. } => stats.unknown_msgids += 1,
-                        ParseError::UnsupportedIncompatFlags(_) => stats.unsupported_flags += 1,
                         _ => {}
                     }
                     *head += 1;
@@ -226,11 +230,15 @@ impl FrameDecoder {
                     on_frame(&frame);
                     *head += used;
                 }
+                Err(ParseError::UnsupportedIncompatFlags { len, .. }) => {
+                    // Skipped whole: its length is known, and its payload is not frames.
+                    stats.unsupported_flags += 1;
+                    *head += len;
+                }
                 Err(err) => {
                     match err {
                         ParseError::Crc { .. } => stats.crc_errors += 1,
                         ParseError::UnknownMessage { .. } => stats.unknown_msgids += 1,
-                        ParseError::UnsupportedIncompatFlags(_) => stats.unsupported_flags += 1,
                         _ => {}
                     }
                     *head += 1;

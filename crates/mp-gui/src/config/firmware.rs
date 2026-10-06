@@ -4159,7 +4159,7 @@ mod reboot_to_bootloader_tests {
                 MavMessage::CommandLong(long) if long.command == CMD_PREFLIGHT_REBOOT_SHUTDOWN => {
                     assert_eq!(
                         (long.target_system, long.target_component),
-                        (VEHICLE.sysid, VEHICLE.compid)
+                        (VEHICLE.payload_target(), VEHICLE.compid)
                     );
                     Some((long.param1, long.confirmation))
                 }
@@ -4364,7 +4364,7 @@ mod manifest_link_tests {
                 MavMessage::CommandLong(long) if long.command == CMD_PREFLIGHT_REBOOT_SHUTDOWN => {
                     assert_eq!(
                         (long.target_system, long.target_component),
-                        (VEHICLE.sysid, VEHICLE.compid)
+                        (VEHICLE.payload_target(), VEHICLE.compid)
                     );
                     Some((long.param1, long.confirmation))
                 }
@@ -4522,7 +4522,7 @@ mod manifest_link_tests {
                 MavMessage::CommandLong(long) if long.command == CMD_FLASH_BOOTLOADER => {
                     assert_eq!(
                         (long.target_system, long.target_component),
-                        (VEHICLE.sysid, VEHICLE.compid)
+                        (VEHICLE.payload_target(), VEHICLE.compid)
                     );
                     Some(long.param5)
                 }

@@ -85,7 +85,7 @@ struct Row {
     index: u64,
     msgid: u32,
     seq: u8,
-    sysid: u8,
+    sysid: u32,
     compid: u8,
     payload_len: u8,
     crc16: u16,
@@ -95,7 +95,7 @@ struct Row {
 impl Row {
     /// Identity of a frame, ignoring its position in the stream: when we recover a frame the C#
     /// parser dropped, every later index shifts by one, but the frames themselves are unchanged.
-    fn key(&self) -> (u32, u8, u8, u8, u8, u16, &str) {
+    fn key(&self) -> (u32, u8, u32, u8, u8, u16, &str) {
         (
             self.msgid,
             self.seq,

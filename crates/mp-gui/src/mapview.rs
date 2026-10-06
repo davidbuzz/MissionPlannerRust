@@ -189,8 +189,9 @@ pub struct MarkerDetails {
     pub nav_bearing: f32,
     /// `cs.target_bearing`, degrees: the orange line of the plane, rover, boat, sub and tracker.
     pub target: f32,
-    /// `MAV.sysid`: the quad's and single's number, and the plane's colour.
-    pub sysid: u8,
+    /// `MAV.sysid`: the quad's and single's number, and the plane's colour; 32-bit, as the
+    /// markers' `long` since e6454ccdd. `// C#: ExtLibs/Maps/GMapMarkerPlane.cs:54-65`
+    pub sysid: u32,
     /// `AVD_W_DIST_XY`, metres, for the quad's orange circle; `-1` without the parameter.
     pub warn: f32,
     /// `AVD_F_DIST_XY`, metres, for the quad's red circle; `-1` without.
@@ -3816,7 +3817,7 @@ const PLANE_OUTLINE: [(f32, f32); 22] = [
 /// a `which` below zero matches none of the seven and leaves the plane white.
 /// `// C#: ExtLibs/Maps/GMapMarkerPlane.cs:163-178`
 #[must_use]
-pub fn plane_colour(which: i32) -> u32 {
+pub fn plane_colour(which: i64) -> u32 {
     match which % 7 {
         0 => MARKER_RED,
         1 => 0x00_00_00,
@@ -4127,7 +4128,7 @@ fn paint_vehicle(
             fill_through(
                 window,
                 &plane,
-                Hsla::from(rgb(plane_colour(i32::from(details.sysid) - 1))),
+                Hsla::from(rgb(plane_colour(i64::from(details.sysid) - 1))),
             );
         }
         MarkerKind::Rover | MarkerKind::Boat | MarkerKind::Heli | MarkerKind::Sub => {
@@ -4984,6 +4985,8 @@ mod tests {
         assert_eq!(plane_colour(1), 0x00_00_00);
         assert_eq!(plane_colour(7), MARKER_RED);
         assert_eq!(plane_colour(-1), 0xff_ff_ff);
+        // A 32-bit system id, as the C#'s `long` takes it: 4294967294 % 7 is 2.
+        assert_eq!(plane_colour(i64::from(u32::MAX) - 1), 0x00_00_ff);
     }
 
     /// A marker frame's point turned to a heading: at heading 90 the nose, which points up at 0,

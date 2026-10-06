@@ -1732,7 +1732,7 @@ mod tests {
         assert_eq!(long.command, CMD_DO_MOTOR_TEST);
         assert_eq!(
             (long.target_system, long.target_component),
-            (VEHICLE.sysid, VEHICLE.compid)
+            (VEHICLE.payload_target(), VEHICLE.compid)
         );
         assert_eq!(
             [

@@ -55,7 +55,7 @@ pub fn frame(seq: u8, message: &MavMessage) -> Vec<u8> {
         encode_v2(
             &mut out,
             seq,
-            SYSID,
+            u32::from(SYSID),
             COMPID,
             message.id(),
             payload,

@@ -20,9 +20,13 @@
 
 //! Frame layout, parsing and encoding for MAVLink v1 and v2.
 //!
-//! Replaces `ExtLibs/Mavlink/MavlinkParse.cs`. Where the C# version allocates a `byte[]` per
-//! packet and throws on malformed input, this version borrows the caller's buffer and returns
-//! errors the decoder can resynchronise from.
+//! Replaces `ExtLibs/Mavlink/MavlinkParse.cs` and `MavlinkHeader.cs`. Where the C# version
+//! allocates a `byte[]` per packet and throws on malformed input, this version borrows the caller's
+//! buffer and returns errors the decoder can resynchronise from.
+//!
+//! A v2 header is as long as its incompatibility flags make it: `SYSID32` widens the sender's
+//! system id to four bytes, `TARGET32` adds the target system, four bytes, after the message id
+//! (tridge's 32-bit system ids, Mission Planner e6454ccdd). `// C#: ExtLibs/Mavlink/MavlinkHeader.cs`
 
 use crate::crc;
 use crate::dialect::Dialect;
@@ -34,30 +38,58 @@ pub const STX_V2: u8 = 0xFD;
 /// Incompatibility flag marking a signed v2 frame. A parser that does not understand a set
 /// incompatibility flag must drop the frame, per the MAVLink specification.
 pub const INCOMPAT_FLAG_SIGNED: u8 = 0x01;
+/// Incompatibility flag marking a v2 frame whose sender's system id is four bytes wide.
+/// `// C#: ExtLibs/Mavlink/Mavlink.cs:401`
+pub const INCOMPAT_FLAG_SYSID32: u8 = 0x02;
+/// Incompatibility flag marking a v2 frame that carries its target system, four bytes, in the
+/// header after the message id. `// C#: ExtLibs/Mavlink/Mavlink.cs:402`
+pub const INCOMPAT_FLAG_TARGET32: u8 = 0x04;
+/// The incompatibility flags this parser implements; a frame with any other is dropped whole.
+/// `// C#: ExtLibs/Mavlink/MavlinkHeader.cs:5`
+pub const SUPPORTED_INCOMPAT_FLAGS: u8 =
+    INCOMPAT_FLAG_SIGNED | INCOMPAT_FLAG_SYSID32 | INCOMPAT_FLAG_TARGET32;
 /// Maximum payload length the wire format can express.
 pub const MAX_PAYLOAD_LEN: usize = 255;
 /// Length of a v2 signature block: link id (1) + timestamp (6) + truncated HMAC (6).
 pub const SIGNATURE_LEN: usize = 13;
 /// v1 header: STX, len, seq, sysid, compid, msgid.
 pub const V1_HEADER_LEN: usize = 6;
-/// v2 header: STX, len, incompat, compat, seq, sysid, compid, msgid[3].
+/// v2 header without the wide fields: STX, len, incompat, compat, seq, sysid, compid, msgid[3].
 pub const V2_HEADER_LEN: usize = 10;
+/// v2 header at its longest: `SYSID32`'s three more bytes and `TARGET32`'s four.
+pub const V2_MAX_HEADER_LEN: usize = V2_HEADER_LEN + 3 + 4;
 /// Trailing CRC length.
 pub const CHECKSUM_LEN: usize = 2;
-/// Largest frame the wire format can express (v2, full payload, signed).
-pub const MAX_FRAME_LEN: usize = V2_HEADER_LEN + MAX_PAYLOAD_LEN + CHECKSUM_LEN + SIGNATURE_LEN;
+/// Largest frame the wire format can express (v2, both wide fields, full payload, signed).
+pub const MAX_FRAME_LEN: usize = V2_MAX_HEADER_LEN + MAX_PAYLOAD_LEN + CHECKSUM_LEN + SIGNATURE_LEN;
+
+/// A v2 header's length for its incompatibility flags. `// C#: ExtLibs/Mavlink/MavlinkHeader.cs:7-12`
+#[must_use]
+pub const fn v2_header_len(incompat_flags: u8) -> usize {
+    V2_HEADER_LEN
+        + if incompat_flags & INCOMPAT_FLAG_SYSID32 != 0 {
+            3
+        } else {
+            0
+        }
+        + if incompat_flags & INCOMPAT_FLAG_TARGET32 != 0 {
+            4
+        } else {
+            0
+        }
+}
 
 /// Which framing a frame uses.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum MavVersion {
     /// Legacy 6-byte header, 8-bit message ids.
     V1,
-    /// 10-byte header, 24-bit message ids, optional signing.
+    /// 10-byte header (more with `SYSID32` or `TARGET32`), 24-bit message ids, optional signing.
     V2,
 }
 
 impl MavVersion {
-    /// Header length for this framing.
+    /// Header length for this framing, without v2's wide fields.
     #[must_use]
     pub const fn header_len(self) -> usize {
         match self {
@@ -78,12 +110,16 @@ pub struct Frame<'a> {
     pub compat_flags: u8,
     /// Per-link sequence number, used for loss detection.
     pub seq: u8,
-    /// Sending system id.
-    pub sysid: u8,
+    /// Sending system id: 32-bit with `SYSID32`, else the header's one byte.
+    pub sysid: u32,
     /// Sending component id.
     pub compid: u8,
     /// Message id (24-bit on v2, 8-bit on v1).
     pub msgid: u32,
+    /// The header's target system, with `TARGET32`; the payload's `target_system` byte otherwise.
+    pub target_system: Option<u32>,
+    /// The header's length, its wide fields included.
+    pub header_len: usize,
     /// Payload bytes exactly as they appeared on the wire, still truncated for v2.
     pub payload: &'a [u8],
     /// Checksum as transmitted (already verified by [`parse`]).
@@ -124,7 +160,7 @@ impl Frame<'_> {
     /// The bytes a signature is computed over: the frame from `len` through the checksum.
     #[must_use]
     pub fn signable_bytes(&self) -> &[u8] {
-        let end = self.version.header_len() + self.payload.len() + CHECKSUM_LEN;
+        let end = self.header_len + self.payload.len() + CHECKSUM_LEN;
         self.raw.get(..end).unwrap_or(self.raw)
     }
 }
@@ -155,9 +191,17 @@ pub enum ParseError {
         /// Checksum computed over the received bytes.
         actual: u16,
     },
-    /// An incompatibility flag we do not implement is set; the spec requires dropping the frame.
-    #[error("unsupported incompatibility flags {0:#04x}")]
-    UnsupportedIncompatFlags(u8),
+    /// An incompatibility flag we do not implement is set on a frame whose checksum passed; the
+    /// spec requires dropping it. Its length is known all the same, and the frame is skipped
+    /// whole, as the C#'s `ReadPacket` consumes it: a frame inside its payload is not one.
+    /// `// C#: ExtLibs/Mavlink/MavlinkParse.cs:205-218`
+    #[error("unsupported incompatibility flags {flags:#04x}")]
+    UnsupportedIncompatFlags {
+        /// The flags not implemented.
+        flags: u8,
+        /// The whole frame's length, to skip.
+        len: usize,
+    },
 }
 
 /// Why a frame could not be encoded.
@@ -196,7 +240,14 @@ where
         other => return Err(ParseError::BadStx(other)),
     };
 
-    let header_len = version.header_len();
+    // A v2 header's length is in its flags. `// C#: ExtLibs/Mavlink/MavlinkParse.cs:189-198`
+    let header_len = match version {
+        MavVersion::V1 => V1_HEADER_LEN,
+        MavVersion::V2 => match input.get(2) {
+            Some(&flags) => v2_header_len(flags),
+            None => V2_HEADER_LEN,
+        },
+    };
     if input.len() < header_len {
         return Err(ParseError::Incomplete {
             needed: header_len - input.len(),
@@ -204,31 +255,40 @@ where
     }
 
     let payload_len = input[1] as usize;
-    let (incompat_flags, compat_flags, seq, sysid, compid, msgid) = match version {
-        MavVersion::V1 => (0, 0, input[2], input[3], input[4], u32::from(input[5])),
-        MavVersion::V2 => (
+    let read_u32 =
+        |at: usize| u32::from_le_bytes([input[at], input[at + 1], input[at + 2], input[at + 3]]);
+    // `processBuffer`'s reading. `// C#: ExtLibs/Mavlink/MAVLinkMessage.cs:189-245`
+    let (incompat_flags, compat_flags, seq, sysid, compid, msgid, target_system) = match version {
+        MavVersion::V1 => (
+            0,
+            0,
             input[2],
-            input[3],
+            u32::from(input[3]),
             input[4],
-            input[5],
-            input[6],
-            u32::from_le_bytes([input[7], input[8], input[9], 0]),
+            u32::from(input[5]),
+            None,
         ),
+        MavVersion::V2 => {
+            let flags = input[2];
+            let (sysid, at) = if flags & INCOMPAT_FLAG_SYSID32 != 0 {
+                (read_u32(5), 9)
+            } else {
+                (u32::from(input[5]), 6)
+            };
+            let msgid = u32::from_le_bytes([input[at + 1], input[at + 2], input[at + 3], 0]);
+            let target = (flags & INCOMPAT_FLAG_TARGET32 != 0).then(|| read_u32(at + 4));
+            (flags, input[3], input[4], sysid, input[at], msgid, target)
+        }
     };
 
     let signed = incompat_flags & INCOMPAT_FLAG_SIGNED != 0;
-    let unknown_flags = incompat_flags & !INCOMPAT_FLAG_SIGNED;
+    let unknown_flags = incompat_flags & !SUPPORTED_INCOMPAT_FLAGS;
     let sig_len = if signed { SIGNATURE_LEN } else { 0 };
     let total = header_len + payload_len + CHECKSUM_LEN + sig_len;
     if input.len() < total {
         return Err(ParseError::Incomplete {
             needed: total - input.len(),
         });
-    }
-
-    // Length is known, so the whole frame can be skipped even though we refuse to interpret it.
-    if unknown_flags != 0 {
-        return Err(ParseError::UnsupportedIncompatFlags(unknown_flags));
     }
 
     let payload_end = header_len + payload_len;
@@ -238,11 +298,25 @@ where
     let crc_extra = dialect
         .crc_extra(msgid)
         .ok_or(ParseError::UnknownMessage { msgid })?;
+    // Over the header, its wide fields included, and the payload. `// C#: MavlinkParse.cs:222`
     let actual = crc::checksum(&input[1..payload_end], crc_extra);
     if actual != checksum {
         return Err(ParseError::Crc {
             expected: checksum,
             actual,
+        });
+    }
+
+    // A flag this parser does not implement: the frame is dropped whole, as the C# drops it
+    // (`MavlinkParse.cs:217-218`) - a frame in its payload is not one. **Divergence:** only once
+    // its checksum, read where the flags it knows put it, has passed. The C# consumes any
+    // candidate's claimed length; this parser resynchronises a byte at a time past a checksum
+    // failure, and noise shaped like a header has an unknown flag 31 times in 32 - skipped whole,
+    // it would take the frames after it with it.
+    if unknown_flags != 0 {
+        return Err(ParseError::UnsupportedIncompatFlags {
+            flags: unknown_flags,
+            len: total,
         });
     }
 
@@ -261,6 +335,8 @@ where
             sysid,
             compid,
             msgid,
+            target_system,
+            header_len,
             payload,
             checksum,
             signature,
@@ -282,26 +358,67 @@ pub fn trim_payload(payload: &[u8]) -> &[u8] {
     payload.get(..len).unwrap_or(payload)
 }
 
-/// Encodes a MAVLink v2 frame into `out`, returning its length. Does not allocate.
+/// Encodes a MAVLink v2 frame into `out`, returning its length. Does not allocate. A system id
+/// over 255 is written four bytes wide, with `SYSID32`.
 // The argument list mirrors the wire header one-for-one, which is clearer here than a builder.
 // Deliverable 4's link engine will wrap this in a typed sender that carries seq/sysid/compid itself.
 #[allow(clippy::too_many_arguments)]
-#[allow(clippy::indexing_slicing)] // guarded by the BufferTooSmall check below
 pub fn encode_v2(
     out: &mut [u8],
     seq: u8,
-    sysid: u8,
+    sysid: u32,
     compid: u8,
     msgid: u32,
     payload: &[u8],
     crc_extra: u8,
     compat_flags: u8,
 ) -> Result<usize, EncodeError> {
+    encode_v2_targeted(
+        out,
+        seq,
+        sysid,
+        compid,
+        msgid,
+        payload,
+        crc_extra,
+        compat_flags,
+        None,
+    )
+}
+
+/// [`encode_v2`] with a target system: one over 255 goes in the header, four bytes after the
+/// message id, with `TARGET32`; one that fits is the payload's own `target_system` byte, as is
+/// 255 for a wider one (`SetPayloadTarget`), the caller's to write. Source and target widths are
+/// independent. `// C#: ExtLibs/Mavlink/MavlinkParse.cs:287-388; MavlinkHeader.cs:45-82`
+#[allow(clippy::too_many_arguments)]
+#[allow(clippy::indexing_slicing)] // guarded by the BufferTooSmall check below
+pub fn encode_v2_targeted(
+    out: &mut [u8],
+    seq: u8,
+    sysid: u32,
+    compid: u8,
+    msgid: u32,
+    payload: &[u8],
+    crc_extra: u8,
+    compat_flags: u8,
+    target_system: Option<u32>,
+) -> Result<usize, EncodeError> {
     if payload.len() > MAX_PAYLOAD_LEN {
         return Err(EncodeError::PayloadTooLong(payload.len()));
     }
+    let target = target_system.filter(|&target| target > 255);
+    let flags = if sysid > 255 {
+        INCOMPAT_FLAG_SYSID32
+    } else {
+        0
+    } | if target.is_some() {
+        INCOMPAT_FLAG_TARGET32
+    } else {
+        0
+    };
+    let header_len = v2_header_len(flags);
     let trimmed = trim_payload(payload);
-    let total = V2_HEADER_LEN + trimmed.len() + CHECKSUM_LEN;
+    let total = header_len + trimmed.len() + CHECKSUM_LEN;
     if out.len() < total {
         return Err(EncodeError::BufferTooSmall {
             needed: total,
@@ -314,17 +431,29 @@ pub fn encode_v2(
     let id = msgid.to_le_bytes();
     out[0] = STX_V2;
     out[1] = len;
-    out[2] = 0; // incompat flags; signing is applied by a later pass
+    out[2] = flags; // the wide fields' flags; signing is applied by a later pass
     out[3] = compat_flags;
     out[4] = seq;
-    out[5] = sysid;
-    out[6] = compid;
-    out[7] = id[0];
-    out[8] = id[1];
-    out[9] = id[2];
-    out[V2_HEADER_LEN..V2_HEADER_LEN + trimmed.len()].copy_from_slice(trimmed);
+    let mut at = 5;
+    if flags & INCOMPAT_FLAG_SYSID32 != 0 {
+        out[at..at + 4].copy_from_slice(&sysid.to_le_bytes());
+        at += 4;
+    } else {
+        // Under 256: one byte.
+        #[allow(clippy::cast_possible_truncation)]
+        let narrow = sysid as u8;
+        out[at] = narrow;
+        at += 1;
+    }
+    out[at] = compid;
+    out[at + 1..at + 4].copy_from_slice(&id[..3]);
+    at += 4;
+    if let Some(target) = target {
+        out[at..at + 4].copy_from_slice(&target.to_le_bytes());
+    }
+    out[header_len..header_len + trimmed.len()].copy_from_slice(trimmed);
 
-    let payload_end = V2_HEADER_LEN + trimmed.len();
+    let payload_end = header_len + trimmed.len();
     let ck = crc::checksum(&out[1..payload_end], crc_extra);
     out[payload_end..payload_end + CHECKSUM_LEN].copy_from_slice(&ck.to_le_bytes());
     Ok(total)

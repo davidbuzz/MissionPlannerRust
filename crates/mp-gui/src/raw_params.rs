@@ -1337,7 +1337,7 @@ mod tests {
         );
         assert_eq!(
             (long.target_system, long.target_component),
-            (VEHICLE.sysid, VEHICLE.compid)
+            (VEHICLE.payload_target(), VEHICLE.compid)
         );
 
         // Refused: `doCommand`'s false, which the C# does not look at.

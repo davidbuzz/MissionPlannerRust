@@ -166,7 +166,7 @@ pub fn request_datastream(target: VehicleId, stream: u8, hz: i32) -> Option<MavM
     let rate = u16::from(hz as u8);
     Some(MavMessage::RequestDataStream(RequestDataStream {
         req_message_rate: rate,
-        target_system: target.sysid,
+        target_system: target.payload_target(),
         target_component: target.compid,
         req_stream_id: stream,
         start_stop: 1,

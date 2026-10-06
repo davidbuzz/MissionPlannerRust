@@ -846,7 +846,7 @@ pub enum Route {
 pub fn route(message: &MavMessage) -> Route {
     match message {
         MavMessage::MissionSetCurrent(m) => Route::SetCurrent {
-            target: VehicleId::new(m.target_system, m.target_component),
+            target: VehicleId::new(u32::from(m.target_system), m.target_component),
             seq: m.seq,
         },
         MavMessage::CommandLong(m)
@@ -857,11 +857,11 @@ pub fn route(message: &MavMessage) -> Route {
         }
         MavMessage::CommandLong(m) if m.command == requests::CMD_GET_HOME_POSITION => {
             Route::GetHome {
-                target: VehicleId::new(m.target_system, m.target_component),
+                target: VehicleId::new(u32::from(m.target_system), m.target_component),
             }
         }
         MavMessage::CommandInt(m) => Route::CommandInt {
-            target: VehicleId::new(m.target_system, m.target_component),
+            target: VehicleId::new(u32::from(m.target_system), m.target_component),
             command: m.command,
             frame: m.frame,
             params: [m.param1, m.param2, m.param3, m.param4],
@@ -870,22 +870,22 @@ pub fn route(message: &MavMessage) -> Route {
             z: m.z,
         },
         MavMessage::MissionItem(m) => Route::SetWp {
-            target: VehicleId::new(m.target_system, m.target_component),
+            target: VehicleId::new(u32::from(m.target_system), m.target_component),
             item: Box::new(*message),
         },
         MavMessage::MissionItemInt(m) => Route::SetWp {
-            target: VehicleId::new(m.target_system, m.target_component),
+            target: VehicleId::new(u32::from(m.target_system), m.target_component),
             item: Box::new(*message),
         },
         MavMessage::CommandLong(m) => Route::Command {
-            target: VehicleId::new(m.target_system, m.target_component),
+            target: VehicleId::new(u32::from(m.target_system), m.target_component),
             command: m.command,
             params: [
                 m.param1, m.param2, m.param3, m.param4, m.param5, m.param6, m.param7,
             ],
         },
         MavMessage::ParamSet(m) => Route::SetParam {
-            target: VehicleId::new(m.target_system, m.target_component),
+            target: VehicleId::new(u32::from(m.target_system), m.target_component),
             name: mp_params::decode_param_id(&m.param_id),
             value: f64::from(m.param_value),
         },
@@ -1388,8 +1388,8 @@ pub fn action_messages(action: &str, context: &ActionContext) -> Sends {
             let base = commands::MODE_FLAG_SAFETY_ARMED;
             vec![
                 commands::do_set_mode(target, base, custom_mode),
-                commands::set_mode_with_base(target.sysid, base, custom_mode),
-                commands::set_mode_with_base(target.sysid, base, custom_mode),
+                commands::set_mode_with_base(target.payload_target(), base, custom_mode),
+                commands::set_mode_with_base(target.payload_target(), base, custom_mode),
             ]
         }
         // `doEngineControl(onoff)`. `// C#: MAVLinkInterface.cs:2539-2545`
@@ -1442,7 +1442,7 @@ pub fn action_report(action: &str, target: VehicleId) -> Report {
         "Trigger_Camera" => Report {
             fallback: Some(MavMessage::DigicamControl(DigicamControl {
                 extra_value: 0.0,
-                target_system: target.sysid,
+                target_system: target.payload_target(),
                 target_component: target.compid,
                 session: 0,
                 zoom_pos: 0,
@@ -7722,7 +7722,7 @@ pub fn set_ekf_origin_sends(
         return Err(Refusal::error(NO_SRTM));
     }
     Ok(vec![commands::set_gps_global_origin(
-        target.sysid,
+        target.payload_target(),
         latitude,
         longitude,
         answer.alt,

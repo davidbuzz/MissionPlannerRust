@@ -963,7 +963,7 @@ impl Slots {
 pub fn show_config(target: VehicleId, request_id: u32, (screen, index): (u8, u8)) -> MavMessage {
     MavMessage::OsdParamShowConfig(OsdParamShowConfig {
         request_id,
-        target_system: target.sysid,
+        target_system: target.payload_target(),
         target_component: target.compid,
         osd_screen: screen,
         osd_index: index,
@@ -984,7 +984,7 @@ pub fn param_config(target: VehicleId, request_id: u32, change: &Change) -> MavM
         min_value: change.min as f32,
         max_value: change.max as f32,
         increment: change.increment as f32,
-        target_system: target.sysid,
+        target_system: target.payload_target(),
         target_component: target.compid,
         osd_screen: change.screen,
         osd_index: change.index,

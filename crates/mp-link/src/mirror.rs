@@ -185,7 +185,7 @@ impl Mirror {
     pub fn handler(&self) -> impl FnMut(&Packet) + Send + 'static {
         let queue = self.queue.clone();
         let shared = Arc::clone(&self.shared);
-        let mut sequence: BTreeMap<(u8, u8), u8> = BTreeMap::new();
+        let mut sequence: BTreeMap<(u32, u8), u8> = BTreeMap::new();
         move |packet: &Packet| {
             if packet.sent || !shared.running.load(Ordering::Acquire) {
                 return;
@@ -270,7 +270,7 @@ impl Drop for Mirror {
 }
 
 /// A message framed as MAVLink 2, frame `seq` from `sysid` and `compid`.
-fn message_frame(seq: u8, sysid: u8, compid: u8, message: &MavMessage) -> Option<Vec<u8>> {
+fn message_frame(seq: u8, sysid: u32, compid: u8, message: &MavMessage) -> Option<Vec<u8>> {
     let mut payload = [0u8; 255];
     let len = message.encode(&mut payload);
     frame(
@@ -286,7 +286,7 @@ fn message_frame(seq: u8, sysid: u8, compid: u8, message: &MavMessage) -> Option
 /// A MAVLink 2 frame of a payload.
 fn frame(
     seq: u8,
-    sysid: u8,
+    sysid: u32,
     compid: u8,
     msgid: u32,
     payload: &[u8],
@@ -427,7 +427,7 @@ mod tests {
     }
 
     /// Everything one end of a loopback has, decoded: `(seq, sysid, compid, message)`.
-    fn heard(end: &mut LoopbackEnd, decoder: &mut FrameDecoder) -> Vec<(u8, u8, u8, MavMessage)> {
+    fn heard(end: &mut LoopbackEnd, decoder: &mut FrameDecoder) -> Vec<(u8, u32, u8, MavMessage)> {
         let mut out = Vec::new();
         let mut buffer = [0u8; 4096];
         loop {
@@ -519,7 +519,7 @@ mod tests {
             down.extend(heard(&mut vehicle, &mut to_vehicle));
             down.len() >= 2
         });
-        let senders: Vec<(u8, u8, MavMessage)> = down
+        let senders: Vec<(u32, u8, MavMessage)> = down
             .iter()
             .map(|(_, sysid, compid, message)| (*sysid, *compid, *message))
             .collect();

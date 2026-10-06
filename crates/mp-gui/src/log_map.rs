@@ -103,8 +103,9 @@ const JPEG_QUALITY: u8 = 100;
 pub struct Tracks {
     /// `sitl`.
     pub sitl: bool,
-    /// `loc_list`: `sysid * 256 + compid`, or 0, and its points.
-    pub tracks: Vec<(u32, Vec<(f64, f64)>)>,
+    /// `loc_list`: `(ulong)sysid * 256 + compid`, or 0, and its points - 64-bit since the C#'s
+    /// 32-bit system ids. `// C#: ExtLibs/Utilities/LogMap.cs:35, 70`
+    pub tracks: Vec<(u64, Vec<(f64, f64)>)>,
     /// `minx`, `maxx` (longitude), `miny`, `maxy` (latitude).
     bounds: [f64; 4],
 }
@@ -122,7 +123,7 @@ impl Default for Tracks {
 
 impl Tracks {
     /// A point of track `id`, made if it is new.
-    fn add(&mut self, id: u32, lat: f64, lng: f64) {
+    fn add(&mut self, id: u64, lat: f64, lng: f64) {
         match self.tracks.iter_mut().find(|(key, _)| *key == id) {
             Some((_, points)) => points.push((lat, lng)),
             None => self.tracks.push((id, vec![(lat, lng)])),
@@ -170,7 +171,7 @@ pub fn read_tlog(data: &[u8]) -> Tracks {
         if position.lat == 0 || position.lon == 0 {
             continue;
         }
-        let id = u32::from(frame.sysid) * 256 + u32::from(frame.compid);
+        let id = u64::from(frame.sysid) * 256 + u64::from(frame.compid);
         #[allow(clippy::cast_precision_loss)] // `loc.lat / 10000000.0f`: in float, as the C#
         let degrees = |value: i32| f64::from(value as f32 / 10_000_000.0_f32);
         tracks.add(id, degrees(position.lat), degrees(position.lon));

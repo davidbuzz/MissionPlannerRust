@@ -960,7 +960,7 @@ impl Inspector {
     pub fn heard(&mut self, received: &Received, now: Instant) {
         self.heard += 1;
         self.pktinspect.add(
-            received.frame.source_node(),
+            u32::from(received.frame.source_node()),
             0,
             u32::from(received.message.info().id),
             received.clone(),
@@ -998,7 +998,7 @@ impl Inspector {
             let node = received.frame.source_node();
             let info = received.message.info();
             let msgid = info.id;
-            let bps_node = self.pktinspect.seen_bps(node, 0, 0, now);
+            let bps_node = self.pktinspect.seen_bps(u32::from(node), 0, 0, now);
             let Some(id_node) = mavi::child(
                 &mut self.tree,
                 &node.to_string(),
@@ -1018,8 +1018,8 @@ impl Inspector {
             ) else {
                 continue;
             };
-            let rate = self.pktinspect.seen_rate(node, 0, u32::from(msgid), now);
-            let bps = self.pktinspect.seen_bps(node, 0, u32::from(msgid), now);
+            let rate = self.pktinspect.seen_rate(u32::from(node), 0, u32::from(msgid), now);
+            let bps = self.pktinspect.seen_bps(u32::from(node), 0, u32::from(msgid), now);
             let header = header_text(info.name, msgid, rate, bps);
             if msg_node.text != header {
                 msg_node.text = header;

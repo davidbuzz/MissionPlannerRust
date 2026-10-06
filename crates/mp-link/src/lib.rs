@@ -208,8 +208,9 @@ const RECONNECT_POLL: Duration = Duration::from_millis(50);
 /// How the link should behave.
 #[derive(Debug, Clone)]
 pub struct LinkConfig {
-    /// Our own system id, as seen by the vehicle.
-    pub sysid: u8,
+    /// Our own system id, as seen by the vehicle: 32-bit, as the C#'s `gcssysid` (e6454ccdd).
+    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:230`
+    pub sysid: u32,
     /// Our own component id.
     pub compid: u8,
     /// How often to publish state snapshots: 5 ms, so a display up to 200 Hz finds a fresh
@@ -389,7 +390,7 @@ struct Shared {
     gimbal_managers: Mutex<BTreeMap<VehicleId, gimbal_manager::GimbalManager>>,
     /// `CameraProtocol.VideoStreams`: every `VIDEO_STREAM_INFORMATION` a started camera reported,
     /// by its system, component and stream id.
-    video_streams: Mutex<BTreeMap<(u8, u8, u8), mp_mavlink_dialects::all::VideoStreamInformation>>,
+    video_streams: Mutex<BTreeMap<(u32, u8, u8), mp_mavlink_dialects::all::VideoStreamInformation>>,
     /// `OnPacketReceived` and `OnPacketSent`'s subscribers (see [`inspector`]).
     packets: inspector::Subscribers,
     /// Each vehicle's MAVLink 2 signing, the `setupSigning`s waiting, and `Mavlink2Signed` (see
@@ -413,7 +414,7 @@ enum StateWrite {
 #[derive(Debug, Clone)]
 pub struct LinkSender {
     outbound: std::sync::mpsc::Sender<Vec<u8>>,
-    sysid: u8,
+    sysid: u32,
     compid: u8,
     /// The link's `inject_seq_no`.
     inject_seq: Arc<AtomicU32>,
@@ -497,7 +498,7 @@ impl LinkSender {
 /// differently from the link would be a bug found on the wire, by a vehicle.
 fn queue_frame(
     outbound: &std::sync::mpsc::Sender<Vec<u8>>,
-    sysid: u8,
+    sysid: u32,
     compid: u8,
     message: &MavMessage,
 ) -> bool {
@@ -1273,7 +1274,7 @@ impl Link {
     pub fn video_streams(
         &self,
     ) -> Vec<(
-        (u8, u8, u8),
+        (u32, u8, u8),
         mp_mavlink_dialects::all::VideoStreamInformation,
     )> {
         self.shared
@@ -1710,7 +1711,7 @@ fn run_link(
                             let mut taken = false;
                             {
                                 let to_us = |system: u8, component: u8| {
-                                    system == gcs.sysid && component == gcs.compid
+                                    u32::from(system) == gcs.sysid && component == gcs.compid
                                 };
                                 let now = Instant::now();
                                 match &msg {
@@ -1972,7 +1973,7 @@ fn run_link(
                                 // A rally point read back answers the set that asked for it
                                 // (getRallyPoint), if it is addressed to us.
                                 MavMessage::RallyPoint(point) => {
-                                    let to_us = point.target_system == config.sysid
+                                    let to_us = u32::from(point.target_system) == config.sysid
                                         && point.target_component == config.compid;
                                     if let Ok(mut held) = shared.requests.os_lock() {
                                         let now = Instant::now();
@@ -1987,7 +1988,7 @@ fn run_link(
                                 // A fence point read back answers the set or the fetch that
                                 // asked for it (getFencePoint), if it is addressed to us.
                                 MavMessage::FencePoint(point) => {
-                                    let to_us = point.target_system == config.sysid
+                                    let to_us = u32::from(point.target_system) == config.sysid
                                         && point.target_component == config.compid;
                                     if let Ok(mut held) = shared.requests.os_lock() {
                                         let now = Instant::now();
@@ -2273,7 +2274,7 @@ fn run_link(
                     MavMessage::MissionWritePartialList(MissionWritePartialList {
                         start_index: i16::try_from(start).unwrap_or(i16::MAX),
                         end_index: i16::try_from(end).unwrap_or(i16::MAX),
-                        target_system: id.sysid,
+                        target_system: id.payload_target(),
                         target_component: id.compid,
                         mission_type: kind,
                     })
@@ -2619,7 +2620,7 @@ fn file_list_upload(shared: &Arc<Shared>, id: VehicleId, gcs: VehicleId, msg: &M
         ),
         _ => return,
     };
-    if target != (gcs.sysid, gcs.compid) {
+    if (u32::from(target.0), target.1) != (gcs.sysid, gcs.compid) {
         return;
     }
     let Ok(transfers) = shared.missions.os_lock() else {

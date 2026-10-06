@@ -64,12 +64,13 @@ use std::hash::{BuildHasher as _, Hasher as _};
 use std::sync::RwLock;
 use web_time::{Duration, SystemTime, UNIX_EPOCH};
 
-use mp_mavlink::{Dialect as _, FieldValue, Frame, INCOMPAT_FLAG_SIGNED, STX_V2, SigningKey};
+use mp_mavlink::{
+    Dialect as _, FieldValue, Frame, INCOMPAT_FLAG_SIGNED, INCOMPAT_FLAG_SYSID32, STX_V2,
+    SigningKey, v2_header_len,
+};
 use mp_mavlink_dialects::all::{DIALECT, MavMessage, SetupSigning};
 use mp_vehicle::VehicleId;
 
-/// A v2 header: STX, len, incompat, compat, seq, sysid, compid, msgid[3].
-const HEADER_LEN: usize = 10;
 /// The checksum's two bytes.
 const CHECKSUM_LEN: usize = 2;
 /// Seconds from the Unix epoch to 2015-01-01, `new DateTime(2015, 1, 1)`.
@@ -250,7 +251,7 @@ impl Setup {
         };
         MavMessage::SetupSigning(SetupSigning {
             initial_timestamp,
-            target_system: self.target.sysid,
+            target_system: self.target.payload_target(),
             target_component: self.target.compid,
             secret_key,
         })
@@ -394,7 +395,7 @@ impl Signing {
     }
 
     /// The vehicle a frame addressed to `target` is sent for.
-    fn vehicle_for(&self, target: Option<(u8, Option<u8>)>) -> Option<VehicleId> {
+    fn vehicle_for(&self, target: Option<(u32, Option<u8>)>) -> Option<VehicleId> {
         let signing = |id: &&VehicleId| self.vehicles.get(id).is_some_and(|state| state.signing);
         match target {
             Some((system, component)) => {
@@ -418,13 +419,29 @@ impl Signing {
     }
 }
 
-/// Who a v2 frame is addressed to: its message's `target_system` (`target` in the few that name
-/// it so) and `target_component` if it has one; `None` for a message that names no system, or
-/// names system 0, everyone.
-fn target_of(frame: &[u8]) -> Option<(u8, Option<u8>)> {
+/// A v2 frame's header length and message id, wherever its flags put it: after a four-byte
+/// system id with `SYSID32`. `// C#: ExtLibs/Mavlink/MavlinkHeader.cs:7-12, 58-82`
+fn header_of(frame: &[u8]) -> Option<(usize, u32)> {
+    let flags = *frame.get(2)?;
+    let at = if flags & INCOMPAT_FLAG_SYSID32 != 0 { 10 } else { 7 };
+    let msgid = u32::from_le_bytes([*frame.get(at)?, *frame.get(at + 1)?, *frame.get(at + 2)?, 0]);
+    Some((v2_header_len(flags), msgid))
+}
+
+/// Who a v2 frame is addressed to, `GetTargetSystem`'s way: the header's target with
+/// `TARGET32`, else its message's `target_system` (`target` in the few that name it so), and
+/// `target_component` if it has one; `None` for a message that names no system, or names system
+/// 0, everyone. `// C#: ExtLibs/Mavlink/MAVLinkMessage.cs:39-47`
+fn target_of(frame: &[u8]) -> Option<(u32, Option<u8>)> {
     let len = usize::from(*frame.get(1)?);
-    let msgid = u32::from_le_bytes([*frame.get(7)?, *frame.get(8)?, *frame.get(9)?, 0]);
-    let payload = frame.get(HEADER_LEN..HEADER_LEN + len)?;
+    let (header_len, msgid) = header_of(frame)?;
+    let payload = frame.get(header_len..header_len + len)?;
+    // `TARGET32`'s four bytes end the header.
+    let wide = (frame.get(2)? & mp_mavlink::INCOMPAT_FLAG_TARGET32 != 0)
+        .then(|| frame.get(header_len - 4..header_len))
+        .flatten()
+        .and_then(|bytes| bytes.try_into().ok())
+        .map(u32::from_le_bytes);
     let fields = MavMessage::decode(msgid, payload)?.fields();
     let value = |name: &str| {
         fields
@@ -435,7 +452,7 @@ fn target_of(frame: &[u8]) -> Option<(u8, Option<u8>)> {
                 _ => None,
             })
     };
-    let system = value("target_system").or_else(|| value("target"))?;
+    let system = wide.or_else(|| value("target_system").or_else(|| value("target")).map(u32::from))?;
     (system != 0).then(|| (system, value("target_component")))
 }
 
@@ -450,9 +467,9 @@ pub fn sign_frame(frame: &[u8], key: &[u8; 32], link_id: u8, timestamp: u64) -> 
         return None;
     }
     let len = usize::from(*frame.get(1)?);
-    let msgid = u32::from_le_bytes([*frame.get(7)?, *frame.get(8)?, *frame.get(9)?, 0]);
+    let (header_len, msgid) = header_of(frame)?;
     let crc_extra = DIALECT.crc_extra(msgid)?;
-    let end = HEADER_LEN + len + CHECKSUM_LEN;
+    let end = header_len + len + CHECKSUM_LEN;
     let mut out = Vec::with_capacity(end + mp_mavlink::SIGNATURE_LEN);
     out.extend_from_slice(frame.get(..end)?);
     *out.get_mut(2)? |= INCOMPAT_FLAG_SIGNED;
@@ -489,7 +506,7 @@ mod tests {
     }
 
     /// One frame of `message` from `sysid`/`compid` with sequence `seq`, unsigned.
-    fn unsigned(sysid: u8, compid: u8, seq: u8, message: &MavMessage) -> Vec<u8> {
+    fn unsigned(sysid: u32, compid: u8, seq: u8, message: &MavMessage) -> Vec<u8> {
         let mut payload = [0u8; 255];
         let len = message.encode(&mut payload);
         let mut out = [0u8; mp_mavlink::MAX_FRAME_LEN];

@@ -59,8 +59,8 @@ use crate::Shared;
 /// `// C#: ExtLibs/Mavlink/MAVLinkMessage.cs:25-172`
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Packet {
-    /// `sysid`.
-    pub sysid: u8,
+    /// `sysid`, 32-bit (e6454ccdd).
+    pub sysid: u32,
     /// `compid`.
     pub compid: u8,
     /// `msgid`.
@@ -205,7 +205,7 @@ struct Arrival {
 }
 
 /// Arrivals by `GetID(sysid, compid)`, then by message id.
-type Arrivals = BTreeMap<u32, BTreeMap<u32, VecDeque<Arrival>>>;
+type Arrivals = BTreeMap<u64, BTreeMap<u32, VecDeque<Arrival>>>;
 
 /// `PacketInspector<T>`: the newest packet of each message from each system and component, and
 /// the arrivals its rates are worked from.
@@ -213,7 +213,7 @@ type Arrivals = BTreeMap<u32, BTreeMap<u32, VecDeque<Arrival>>>;
 #[derive(Debug, Clone)]
 pub struct PacketInspector<T> {
     /// `_history`.
-    history: BTreeMap<u32, BTreeMap<u32, T>>,
+    history: BTreeMap<u64, BTreeMap<u32, T>>,
     /// `_rate`: an arrival of 1 a packet.
     rate: Arrivals,
     /// `_bps`: an arrival of its size a packet.
@@ -235,8 +235,8 @@ impl<T> Default for PacketInspector<T> {
 
 /// `GetID`: a system and component as one number.
 /// `// C#: ExtLibs/ArduPilot/PacketInspector.cs:212-215`
-fn id_of(sysid: u8, compid: u8) -> u32 {
-    u32::from(sysid) * 256 + u32::from(compid)
+fn id_of(sysid: u32, compid: u8) -> u64 {
+    (u64::from(sysid) << 8) | u64::from(compid)
 }
 
 /// `SeenRate`'s and `SeenBps`'s sum: each arrival in the three seconds before `now`, over the
@@ -269,7 +269,7 @@ impl<T: Clone> PacketInspector<T> {
     /// `// C#: ExtLibs/ArduPilot/PacketInspector.cs:125-153, 186-197`
     pub fn add(
         &mut self,
-        sysid: u8,
+        sysid: u32,
         compid: u8,
         msgid: u32,
         message: T,
@@ -300,7 +300,7 @@ impl<T: Clone> PacketInspector<T> {
     /// `SeenRate`: packets a second of one message from one system and component.
     /// `// C#: ExtLibs/ArduPilot/PacketInspector.cs:59-79`
     #[must_use]
-    pub fn seen_rate(&self, sysid: u8, compid: u8, msgid: u32, now: Instant) -> f64 {
+    pub fn seen_rate(&self, sysid: u32, compid: u8, msgid: u32, now: Instant) -> f64 {
         let id = id_of(sysid, compid);
         per_second(self.rate.get(&id).and_then(|m| m.get(&msgid)), now)
     }
@@ -308,7 +308,7 @@ impl<T: Clone> PacketInspector<T> {
     /// `SeenBps(sysid, compid, msgid)`: its bytes a second.
     /// `// C#: ExtLibs/ArduPilot/PacketInspector.cs:81-101`
     #[must_use]
-    pub fn seen_bps(&self, sysid: u8, compid: u8, msgid: u32, now: Instant) -> f64 {
+    pub fn seen_bps(&self, sysid: u32, compid: u8, msgid: u32, now: Instant) -> f64 {
         let id = id_of(sysid, compid);
         per_second(self.bps.get(&id).and_then(|m| m.get(&msgid)), now)
     }
@@ -326,6 +326,26 @@ mod tests {
 
     /// Ten packets a second for five seconds: the rate is ten a second - the last three seconds'
     /// thirty over three - and the bytes a second ten times each packet's size.
+    /// `VehicleAndInspectorKeysDoNotAlias`: one packet from each of five systems, four of them
+    /// 32-bit, kept apart - `GetID` is `(ulong)sysid << 8 | compid`, which none shares.
+    /// `// C#: MissionPlannerTests/Mavlink/Sysid32Tests.cs:156-177`
+    #[test]
+    fn systems_with_32_bit_ids_are_kept_apart() {
+        let start = Instant::now();
+        let mut mavi = PacketInspector::default();
+        let ids = [1, 257, 0x8000_0001, 0xffff_ff01, u32::MAX];
+        for id in ids {
+            mavi.add(id, 1, 0, id, 10, start);
+        }
+        let mut kept = mavi.packet_messages();
+        kept.sort_unstable();
+        assert_eq!(kept, ids);
+        for id in ids {
+            assert!(mavi.seen_bps(id, 1, 0, at(start, 1_000)) > 0.0, "{id:#x}");
+        }
+        assert!(mavi.seen_bps(2, 1, 0, at(start, 1_000)).abs() < f64::EPSILON);
+    }
+
     #[test]
     fn a_steady_stream_is_its_rate() {
         let start = Instant::now();
@@ -400,7 +420,7 @@ mod tests {
         );
     }
 
-    fn frame(sysid: u8, compid: u8, message: &MavMessage) -> Vec<u8> {
+    fn frame(sysid: u32, compid: u8, message: &MavMessage) -> Vec<u8> {
         let mut payload = [0u8; 255];
         let len = message.encode(&mut payload);
         let mut out = [0u8; mp_mavlink::MAX_FRAME_LEN];

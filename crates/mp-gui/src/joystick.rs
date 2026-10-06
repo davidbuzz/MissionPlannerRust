@@ -2041,7 +2041,7 @@ pub fn perform(
                     fallback: Some(mp_mavlink_dialects::all::MavMessage::DigicamControl(
                         mp_mavlink_dialects::all::DigicamControl {
                             extra_value: 0.0,
-                            target_system: target.sysid,
+                            target_system: target.payload_target(),
                             target_component: target.compid,
                             session: 0,
                             zoom_pos: 0,

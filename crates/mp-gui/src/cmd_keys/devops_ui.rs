@@ -210,11 +210,13 @@ impl Num {
     }
 
     /// `Value`, `Minimum` and `Maximum` as the Designer leaves them: `NumericUpDown`'s 0 and 100
-    /// but for the two set to 1 and regstart's 255 of 255.
-    /// `// C#: Controls/DevopsUI.Designer.cs:75-91, 205-217`
+    /// but for the two set to 1 and regstart's 255 of 255 - and the system id's maximum
+    /// `uint.MaxValue`, as the constructor sets it since the C#'s 32-bit system ids (e6454ccdd).
+    /// `// C#: Controls/DevopsUI.Designer.cs:75-91, 205-217; Controls/DevopsUI.cs:18`
     const fn designer(self) -> (f64, f64, f64) {
         match self {
-            Self::SysId | Self::CompId => (1.0, 0.0, 100.0),
+            Self::SysId => (1.0, 0.0, u32::MAX as f64),
+            Self::CompId => (1.0, 0.0, 100.0),
             Self::BusNo | Self::Address | Self::Count => (0.0, 0.0, 100.0),
             Self::RegStart => (255.0, 0.0, 255.0),
         }
@@ -268,8 +270,8 @@ impl Domain {
 /// One `device_op`'s arguments.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DeviceOp {
-    /// The system and component asked.
-    pub sysid: u8,
+    /// The system and component asked: the system 32-bit, `(uint)num_sysid.Value`.
+    pub sysid: u32,
     pub compid: u8,
     /// `DEVICE_OP_BUSTYPE`.
     pub bustype: u8,
@@ -307,7 +309,7 @@ pub fn message(op: &DeviceOp, request_id: u32) -> MavMessage {
             }
             MavMessage::DeviceOpWrite(DeviceOpWrite {
                 request_id,
-                target_system: op.sysid,
+                target_system: mp_vehicle::VehicleId::new(op.sysid, op.compid).payload_target(),
                 target_component: op.compid,
                 bustype: op.bustype,
                 bus: op.bus,
@@ -321,7 +323,7 @@ pub fn message(op: &DeviceOp, request_id: u32) -> MavMessage {
         }
         None => MavMessage::DeviceOpRead(DeviceOpRead {
             request_id,
-            target_system: op.sysid,
+            target_system: mp_vehicle::VehicleId::new(op.sysid, op.compid).payload_target(),
             target_component: op.compid,
             bustype: op.bustype,
             bus: op.bus,
@@ -515,6 +517,15 @@ impl Form {
         u8::try_from(self.number_mut(num).int()).unwrap_or(u8::MAX)
     }
 
+    /// `(uint)num_sysid.Value`: the box's value, from 0 to `uint.MaxValue`.
+    /// `// C#: Controls/DevopsUI.cs:24`
+    fn system_id(&mut self) -> u32 {
+        // Constrained to the box's range, 0 to `u32::MAX`: whole and in range.
+        #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+        let id = self.number_mut(Num::SysId).commit() as u32;
+        id
+    }
+
     /// `dom_bustype_SelectedItemChanged`: SPI enables the name and disables the bus and the
     /// address; anything else the other way round.
     /// `// C#: Controls/DevopsUI.cs:35-51`
@@ -557,7 +568,7 @@ impl Form {
     fn do_it(&mut self) -> DeviceOp {
         self.leave();
         DeviceOp {
-            sysid: self.byte(Num::SysId),
+            sysid: self.system_id(),
             compid: self.byte(Num::CompId),
             bustype: if self.bustype.text == SPI {
                 SPI_BUS
@@ -577,7 +588,7 @@ impl Form {
     /// `// C#: Controls/DevopsUI.cs:57-59`
     fn test(&self, write: bool) -> DeviceOp {
         DeviceOp {
-            sysid: TEST_TARGET.0,
+            sysid: u32::from(TEST_TARGET.0),
             compid: TEST_TARGET.1,
             bustype: SPI_BUS,
             name: self.spi_name.value().to_owned(),

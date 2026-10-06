@@ -96,7 +96,7 @@ fn summarise_tlog(data: &[u8]) {
     let mut first_time = None;
     let mut last_time = 0u64;
     let mut statustexts = Vec::new();
-    let mut systems: BTreeMap<u8, u64> = BTreeMap::new();
+    let mut systems: BTreeMap<u32, u64> = BTreeMap::new();
     let mut max_altitude = f64::NEG_INFINITY;
     let mut max_speed = 0.0_f64;
 
@@ -223,7 +223,7 @@ fn summarise_dataflash(data: &[u8]) {
     }
 }
 
-fn print_systems(systems: &BTreeMap<u8, u64>) {
+fn print_systems(systems: &BTreeMap<u32, u64>) {
     if systems.len() > 1 {
         let listed: Vec<String> = systems
             .iter()

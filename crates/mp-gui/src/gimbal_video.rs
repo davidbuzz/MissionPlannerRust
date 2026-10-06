@@ -2042,7 +2042,7 @@ impl MissionPlanner {
                             }
                         } else if let MavMessage::CommandInt(c) = &message {
                             let _ = self.telemetry.command_int(
-                                VehicleId::new(c.target_system, c.target_component),
+                                VehicleId::new(u32::from(c.target_system), c.target_component),
                                 c.command,
                                 c.frame,
                                 [c.param1, c.param2, c.param3, c.param4],

@@ -16156,7 +16156,7 @@ mod menu_batch_tests {
                 first.alt,
                 first.target_system
             ),
-            (2, -353_600_000, 1_491_600_000, 50, VEHICLE.sysid)
+            (2, -353_600_000, 1_491_600_000, 50, VEHICLE.payload_target())
         );
 
         // A vehicle that never reads a point back.

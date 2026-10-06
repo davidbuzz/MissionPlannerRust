@@ -729,7 +729,7 @@ impl Curves {
     #[allow(clippy::cast_precision_loss)] // `IConvertible.ToDouble`, as the C# converts
     pub fn add(&mut self, target: &Target, packet: &Packet) {
         if i64::from(packet.msgid) != i64::from(target.msgid)
-            || i32::from(packet.sysid) != target.sysid
+            || i64::from(packet.sysid) != i64::from(target.sysid)
             || i32::from(packet.compid) != target.compid
         {
             return;
@@ -2240,7 +2240,7 @@ mod tests {
     }
 
     /// A packet of `message` from `sysid` and `compid`, its length the frame's, at `at`.
-    fn packet(sysid: u8, compid: u8, message: MavMessage, at: Instant) -> Packet {
+    fn packet(sysid: u32, compid: u8, message: MavMessage, at: Instant) -> Packet {
         Packet {
             sysid,
             compid,

@@ -144,17 +144,27 @@ fn sort_dataflash(log: &Path, master: &Path) -> std::io::Result<()> {
     let data = mp_os::fs::read(log)?;
     let mut buffer = DfLogBuffer::new(&data, &flight_mode_name);
     let parameters = buffer.items_of(&["PARM"]);
-    // `int.Parse(list.First()["Value"].ToString())`, 0 where it throws.
-    let mut parameter = |wanted: &str| -> i64 {
+    // The first `PARM` line with one of `names`: its value, as written.
+    let mut parameter = |names: &[&str]| -> Option<String> {
         parameters
             .iter()
-            .find(|(_, item)| item.get(&mut buffer.dflog, "Name") == Some(wanted))
+            .find(|(_, item)| {
+                item.get(&mut buffer.dflog, "Name")
+                    .is_some_and(|name| names.contains(&name))
+            })
             .and_then(|(_, item)| item.get(&mut buffer.dflog, "Value"))
-            .and_then(|value| value.trim().parse::<i32>().ok())
-            .map_or(0, i64::from)
+            .map(str::to_owned)
     };
-    let sysid = parameter("SYSID_THISMAV");
-    let serial = parameter("BRD_SERIAL_NUM");
+    // `ParseSystemId(list.First()["Value"].ToString())`, the vehicle's id under either name - the
+    // newer firmware's `MAV_SYSID` too - and 0 where it throws.
+    // `// C#: ExtLibs/Utilities/LogSort.cs:89-96`
+    let sysid = parameter(&["SYSID_THISMAV", "MAV_SYSID"])
+        .and_then(|value| parse_system_id(&value))
+        .map_or(0, i64::from);
+    // `int.Parse(list.First()["Value"].ToString())`, 0 where it throws.
+    let serial = parameter(&["BRD_SERIAL_NUM"])
+        .and_then(|value| value.trim().parse::<i32>().ok())
+        .map_or(0, i64::from);
     let messages: Vec<_> = buffer
         .items_of(&["MSG"])
         .into_iter()
@@ -180,21 +190,44 @@ fn sort_dataflash(log: &Path, master: &Path) -> std::io::Result<()> {
     Ok(())
 }
 
+/// `ParseSystemId`: a system id as a dataflash log writes it - an `AP_Int32`, logged signed even
+/// when the id is unsigned - read as `long.Parse(value, NumberStyles.Float)` reads it (a decimal
+/// point or exponent allowed, a fraction not), from `int.MinValue` to `uint.MaxValue`, a negative
+/// one wrapped to the unsigned id it stands for. None where the C# throws.
+/// `// C#: ExtLibs/Utilities/LogSort.cs:17-25`
+#[must_use]
+pub fn parse_system_id(value: &str) -> Option<u32> {
+    let number: f64 = value.trim().parse().ok()?;
+    if !number.is_finite() || number.fract() != 0.0 {
+        return None;
+    }
+    if number < f64::from(i32::MIN) || number > f64::from(u32::MAX) {
+        return None;
+    }
+    // Whole and in range: exact as an i64.
+    #[allow(clippy::cast_possible_truncation)]
+    let id = number as i64;
+    // `unchecked((uint)id)`: a negative id wraps to the unsigned one it stands for.
+    #[allow(clippy::cast_sign_loss, clippy::cast_possible_truncation)]
+    let wrapped = id as u32;
+    Some(wrapped)
+}
+
 /// What a pass over a telemetry log keeps. `// C#: LogSort.cs:76-81, 193`
 #[derive(Debug, Default)]
 struct Pass {
     sitl: bool,
-    sysid: u8,
+    sysid: u32,
     compid: u8,
     mav_type: u8,
     serial: i64,
     /// `hblist`: each heartbeat's system, component and type.
-    heartbeats: Vec<(u8, u8, u8)>,
+    heartbeats: Vec<(u32, u8, u8)>,
 }
 
 impl Pass {
     /// One packet; false once it has read enough. `// C#: LogSort.cs:200-237`
-    fn packet(&mut self, sysid: u8, compid: u8, msgid: u32, payload: &[u8]) -> bool {
+    fn packet(&mut self, sysid: u32, compid: u8, msgid: u32, payload: &[u8]) -> bool {
         if self.heartbeats.len() > HEARTBEATS {
             return false;
         }
@@ -266,11 +299,12 @@ fn sort_mavlink(log: &Path, master: &Path, timestamps: bool) -> std::io::Result<
         mp_os::fs::create_dir_all(&destination)?;
         return move_using_mask(log, &destination);
     }
-    // "find most appropriate"
-    let mut vehicles: Vec<u16> = pass
+    // "find most appropriate": vehicles told apart by `(ulong)sysid * 256 + compid`.
+    // `// C#: ExtLibs/Utilities/LogSort.cs:257`
+    let mut vehicles: Vec<u64> = pass
         .heartbeats
         .iter()
-        .map(|(sysid, compid, _)| u16::from(*sysid) * 256 + u16::from(*compid))
+        .map(|(sysid, compid, _)| u64::from(*sysid) * 256 + u64::from(*compid))
         .collect();
     vehicles.sort_unstable();
     vehicles.dedup();
@@ -416,6 +450,24 @@ mod tests {
 
     fn copy(from: &str, to: &Path) {
         mp_os::fs::write(to, mp_os::fs::read(testdata(from)).unwrap()).unwrap();
+    }
+
+    /// `ParseSystemId`: an `AP_Int32` as logged - whole, with a decimal point or exponent, signed
+    /// and wrapped to the unsigned id - and none for a fraction or what is out of range.
+    #[test]
+    fn system_ids_are_read_as_parse_system_id_reads_them() {
+        assert_eq!(parse_system_id("1"), Some(1));
+        assert_eq!(parse_system_id(" 255 "), Some(255));
+        assert_eq!(parse_system_id("256"), Some(256));
+        assert_eq!(parse_system_id("2.0"), Some(2));
+        assert_eq!(parse_system_id("1e2"), Some(100));
+        assert_eq!(parse_system_id("-1"), Some(u32::MAX));
+        assert_eq!(parse_system_id("-2147483648"), Some(0x8000_0000));
+        assert_eq!(parse_system_id("4294967295"), Some(u32::MAX));
+        assert_eq!(parse_system_id("4294967296"), None);
+        assert_eq!(parse_system_id("-2147483649"), None);
+        assert_eq!(parse_system_id("2.5"), None);
+        assert_eq!(parse_system_id("x"), None);
     }
 
     /// The C#'s names: `MAV_TYPE_` dropped; a number the enum has not got, as itself.

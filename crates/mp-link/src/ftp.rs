@@ -50,7 +50,7 @@ use crate::{Link, Shared};
 pub fn ftp_message(target: VehicleId, payload: &Header) -> MavMessage {
     MavMessage::FileTransferProtocol(FileTransferProtocol {
         target_network: 0,
-        target_system: target.sysid,
+        target_system: target.payload_target(),
         target_component: target.compid,
         payload: payload.encode(),
     })
@@ -228,7 +228,7 @@ mod tests {
                 for request in requests {
                     let head = Header::decode(&request.payload);
                     heard.push((
-                        VehicleId::new(request.target_system, request.target_component),
+                        VehicleId::new(u32::from(request.target_system), request.target_component),
                         head.clone(),
                     ));
                     for reply in vehicle.answer(&head) {

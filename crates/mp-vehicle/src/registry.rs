@@ -36,8 +36,9 @@ use crate::state::VehicleState;
 /// Identifies one MAVLink system/component pair.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct VehicleId {
-    /// System id.
-    pub sysid: u8,
+    /// System id: 32-bit, as `MAVList` keys it since the C#'s 32-bit system ids (e6454ccdd).
+    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVList.cs:32, 132-141`
+    pub sysid: u32,
     /// Component id.
     pub compid: u8,
 }
@@ -45,8 +46,23 @@ pub struct VehicleId {
 impl VehicleId {
     /// Creates an id.
     #[must_use]
-    pub const fn new(sysid: u8, compid: u8) -> Self {
+    pub const fn new(sysid: u32, compid: u8) -> Self {
         Self { sysid, compid }
+    }
+
+    /// The system id in a payload's one-byte `target_system`: the id, or 255 for one wider than
+    /// a byte, whose whole id goes in the frame's header, as `SetPayloadTarget` writes it.
+    /// `// C#: ExtLibs/Mavlink/MavlinkHeader.cs:45-56`
+    #[must_use]
+    pub const fn payload_target(&self) -> u8 {
+        if self.sysid > 255 {
+            u8::MAX
+        } else {
+            // Under 256: the byte itself.
+            #[allow(clippy::cast_possible_truncation)]
+            let narrow = self.sysid as u8;
+            narrow
+        }
     }
 }
 
@@ -87,7 +103,7 @@ impl VehicleRegistry {
     /// clock: [`VehicleRegistry::apply_at`] for a link that knows when the frame arrived.
     ///
     /// Returns the id so the caller can notice new arrivals.
-    pub fn apply(&mut self, sysid: u8, compid: u8, seq: u8, message: &MavMessage) -> VehicleId {
+    pub fn apply(&mut self, sysid: u32, compid: u8, seq: u8, message: &MavMessage) -> VehicleId {
         self.apply_with_clock(sysid, compid, seq, message, None)
     }
 
@@ -108,7 +124,7 @@ impl VehicleRegistry {
     /// ExtLibs/ArduPilot/CurrentState.cs:128`
     pub fn apply_at(
         &mut self,
-        sysid: u8,
+        sysid: u32,
         compid: u8,
         seq: u8,
         message: &MavMessage,
@@ -119,7 +135,7 @@ impl VehicleRegistry {
 
     fn apply_with_clock(
         &mut self,
-        sysid: u8,
+        sysid: u32,
         compid: u8,
         seq: u8,
         message: &MavMessage,
@@ -216,5 +232,43 @@ impl VehicleRegistry {
     /// [`VehicleState::rates`]. The next publish carries the change.
     pub fn working_mut(&mut self, id: VehicleId) -> Option<&mut VehicleState> {
         self.vehicles.get_mut(&id).map(|p| &mut p.working)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A payload's `target_system` byte: the id up to 255, and 255 above - the whole id goes in
+    /// the header - as `SetPayloadTarget` writes it.
+    #[test]
+    fn a_wide_id_is_255_in_a_payload() {
+        assert_eq!(VehicleId::new(0, 1).payload_target(), 0);
+        assert_eq!(VehicleId::new(7, 1).payload_target(), 7);
+        assert_eq!(VehicleId::new(255, 1).payload_target(), 255);
+        assert_eq!(VehicleId::new(256, 1).payload_target(), 255);
+        assert_eq!(VehicleId::new(u32::MAX, 1).payload_target(), 255);
+    }
+
+    /// Two systems that share a low byte are two vehicles, each with its own state.
+    #[test]
+    fn ids_sharing_a_low_byte_are_two_vehicles() {
+        let mut registry = VehicleRegistry::new();
+        let heartbeat = MavMessage::Heartbeat(mp_mavlink_dialects::all::Heartbeat {
+            custom_mode: 0,
+            r#type: 2,
+            autopilot: 3,
+            base_mode: 0,
+            system_status: 3,
+            mavlink_version: 3,
+        });
+        let narrow = registry.apply(1, 1, 0, &heartbeat);
+        let wide = registry.apply(0x0100_0001, 1, 0, &heartbeat);
+        assert_ne!(narrow, wide);
+        assert_eq!(registry.len(), 2);
+        assert_eq!(
+            registry.working(wide).map(|state| state.sysid),
+            Some(0x0100_0001)
+        );
     }
 }

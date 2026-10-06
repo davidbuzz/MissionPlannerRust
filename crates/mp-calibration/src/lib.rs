@@ -105,7 +105,7 @@ fn command(target: VehicleId, command: u16, params: [f32; 7]) -> MavMessage {
         param6: params[5],
         param7: params[6],
         command,
-        target_system: target.sysid,
+        target_system: target.payload_target(),
         target_component: target.compid,
         confirmation: 0,
     })

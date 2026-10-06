@@ -2121,7 +2121,7 @@ impl DroneCan {
                 {
                     let set = MavMessage::ParamSet(ParamSet {
                         param_value: 0.0,
-                        target_system: vehicle.sysid,
+                        target_system: vehicle.payload_target(),
                         target_component: vehicle.compid,
                         param_id: mp_params::encode_param_id("CAN_SLCAN_SERNUM"),
                         // `param_types[name]`: the view carries no types; ArduPilot declares it
@@ -2574,7 +2574,7 @@ impl DroneCan {
         {
             let message = mavlink::filter_modify(
                 &filter.ids,
-                vehicle.sysid,
+                vehicle.payload_target(),
                 vehicle.compid,
                 self.bus_in_use,
                 num_ids,
@@ -2921,7 +2921,7 @@ impl DroneCan {
                     bus.next_forward = now + Duration::from_secs(1);
                     if let Some(vehicle) = view.vehicle
                         && telemetry.send(&mavlink::can_forward(
-                            vehicle.sysid,
+                            vehicle.payload_target(),
                             vehicle.compid,
                             bus.bus,
                         ))
@@ -3002,7 +3002,7 @@ impl DroneCan {
                 };
                 for line in &lines {
                     if let Some(message) =
-                        mavlink::message_of(line, vehicle.sysid, vehicle.compid, bus.bus)
+                        mavlink::message_of(line, vehicle.payload_target(), vehicle.compid, bus.bus)
                         && telemetry.send(&message)
                     {
                         bus.sent += 1;

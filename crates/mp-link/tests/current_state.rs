@@ -132,7 +132,7 @@ impl Peer {
                 MavMessage::RequestDataStream(request) => Some((
                     request.req_stream_id,
                     request.req_message_rate,
-                    VehicleId::new(request.target_system, request.target_component),
+                    VehicleId::new(u32::from(request.target_system), request.target_component),
                 )),
                 _ => None,
             })
@@ -576,7 +576,7 @@ fn a_fence_read_from_the_vehicle_is_its_fence() {
     }
     peer.send(&MavMessage::MissionCount(MissionCount {
         count: 3,
-        target_system: GCS.sysid,
+        target_system: GCS.payload_target(),
         target_component: GCS.compid,
         mission_type: FENCE,
     }));
@@ -592,7 +592,7 @@ fn a_fence_read_from_the_vehicle_is_its_fence() {
             z: 0.0,
             seq: wire.seq,
             command: wire.command,
-            target_system: GCS.sysid,
+            target_system: GCS.payload_target(),
             target_component: GCS.compid,
             frame: 3,
             current: 0,
@@ -627,7 +627,7 @@ fn a_fence_read_from_the_vehicle_is_its_fence() {
     // Another count starts it again.
     peer.send(&MavMessage::MissionCount(MissionCount {
         count: 0,
-        target_system: GCS.sysid,
+        target_system: GCS.payload_target(),
         target_component: GCS.compid,
         mission_type: FENCE,
     }));
@@ -657,7 +657,7 @@ fn this_links_fence_upload_files_what_the_csharp_files() {
             z: 0.0,
             seq: 7,
             command: 5003,
-            target_system: GCS.sysid,
+            target_system: GCS.payload_target(),
             target_component: GCS.compid,
             frame: 3,
             current: 0,
@@ -672,14 +672,14 @@ fn this_links_fence_upload_files_what_the_csharp_files() {
             if with_int {
                 MavMessage::MissionRequestInt(MissionRequestInt {
                     seq,
-                    target_system: GCS.sysid,
+                    target_system: GCS.payload_target(),
                     target_component: GCS.compid,
                     mission_type: FENCE,
                 })
             } else {
                 MavMessage::MissionRequest(MissionRequest {
                     seq,
-                    target_system: GCS.sysid,
+                    target_system: GCS.payload_target(),
                     target_component: GCS.compid,
                     mission_type: FENCE,
                 })
@@ -708,7 +708,7 @@ fn this_links_fence_upload_files_what_the_csharp_files() {
                             peer.send(&request(item.seq + 1));
                         } else {
                             peer.send(&MavMessage::MissionAck(MissionAck {
-                                target_system: GCS.sysid,
+                                target_system: GCS.payload_target(),
                                 target_component: GCS.compid,
                                 r#type: 0,
                                 mission_type: FENCE,

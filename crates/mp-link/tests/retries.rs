@@ -310,7 +310,7 @@ fn command_ack(command: u16, result: u8) -> MavMessage {
         result,
         progress: 0,
         result_param2: 0,
-        target_system: GCS.sysid,
+        target_system: GCS.payload_target(),
         target_component: GCS.compid,
     })
 }
@@ -324,7 +324,7 @@ fn mission_request(seq: u16) -> MavMessage {
 fn mission_request_float(seq: u16) -> MavMessage {
     MavMessage::MissionRequest(MissionRequest {
         seq,
-        target_system: GCS.sysid,
+        target_system: GCS.payload_target(),
         target_component: GCS.compid,
         mission_type: MISSION_TYPE_MISSION,
     })
@@ -2282,7 +2282,7 @@ fn command_int_is_sent_four_times_then_times_out_and_its_ack_ends_it() {
                         result: MAV_RESULT_ACCEPTED,
                         progress: 0,
                         result_param2: 0,
-                        target_system: GCS.sysid,
+                        target_system: GCS.payload_target(),
                         target_component: GCS.compid,
                     }));
                 }
@@ -2306,7 +2306,7 @@ fn command_int_is_sent_four_times_then_times_out_and_its_ack_ends_it() {
                     result: MAV_RESULT_IN_PROGRESS,
                     progress: 0,
                     result_param2: 0,
-                    target_system: GCS.sysid,
+                    target_system: GCS.payload_target(),
                     target_component: GCS.compid,
                 }));
             }
@@ -2360,7 +2360,7 @@ fn set_wp_is_sent_eleven_times_then_times_out_and_an_ack_or_the_next_request_end
                 let (target_system, target_component) = if seen == 1 {
                     (7, 7)
                 } else {
-                    (GCS.sysid, GCS.compid)
+                    (GCS.payload_target(), GCS.compid)
                 };
                 peer.send(&MavMessage::MissionAck(MissionAck {
                     target_system,
@@ -2386,7 +2386,7 @@ fn set_wp_is_sent_eleven_times_then_times_out_and_an_ack_or_the_next_request_end
             if is_item(&message) {
                 peer.send(&MavMessage::MissionRequest(MissionRequest {
                     seq: 1,
-                    target_system: GCS.sysid,
+                    target_system: GCS.payload_target(),
                     target_component: GCS.compid,
                     mission_type: MISSION_TYPE_MISSION,
                 }));
@@ -2406,7 +2406,7 @@ fn set_wp_is_sent_eleven_times_then_times_out_and_an_ack_or_the_next_request_end
         |peer, message| {
             if is_item(&message) {
                 peer.send(&MavMessage::MissionAck(MissionAck {
-                    target_system: GCS.sysid,
+                    target_system: GCS.payload_target(),
                     target_component: GCS.compid,
                     r#type: MISSION_NO_SPACE,
                     mission_type: MISSION_TYPE_MISSION,
@@ -2500,7 +2500,7 @@ fn item_float(seq: u16, command: u16, x: f32, y: f32, to: VehicleId) -> MavMessa
         z: 584.0,
         seq,
         command,
-        target_system: to.sysid,
+        target_system: to.payload_target(),
         target_component: to.compid,
         frame: 3,
         current: 0,
@@ -2521,7 +2521,7 @@ fn item_int(seq: u16, command: u16, x: i32, y: i32, mission_type: u8) -> MavMess
         z: 20.0,
         seq,
         command,
-        target_system: GCS.sysid,
+        target_system: GCS.payload_target(),
         target_component: GCS.compid,
         frame: 0,
         current: 0,
@@ -2655,7 +2655,7 @@ fn get_wp_asks_a_mission_int_vehicle_with_request_int_and_scales_only_location_c
                     assert_eq!((request.seq, request.mission_type), (1, FENCE));
                     assert_eq!(
                         (request.target_system, request.target_component),
-                        (VEHICLE.sysid, VEHICLE.compid)
+                        (VEHICLE.payload_target(), VEHICLE.compid)
                     );
                     peer.send(&item_int(1, command, x, 1_491_652_370, FENCE));
                 }
@@ -2795,7 +2795,7 @@ fn set_wp_total_takes_the_first_request_so_set_wp_sends_item_zero_once() {
     peer.send(&MavMessage::FencePoint(FencePoint {
         lat: -35.0,
         lng: 149.0,
-        target_system: GCS.sysid,
+        target_system: GCS.payload_target(),
         target_component: GCS.compid,
         idx: 0,
         count: 4,
@@ -2807,7 +2807,7 @@ fn set_wp_total_takes_the_first_request_so_set_wp_sends_item_zero_once() {
         if let MavMessage::MissionCount(count) = message {
             peer.send(&MavMessage::MissionRequest(MissionRequest {
                 seq: 0,
-                target_system: GCS.sysid,
+                target_system: GCS.payload_target(),
                 target_component: GCS.compid,
                 mission_type: count.mission_type,
             }));
@@ -2861,7 +2861,7 @@ fn set_wp_total_takes_the_first_request_so_set_wp_sends_item_zero_once() {
             if is_item(&message) {
                 peer.send(&MavMessage::MissionRequest(MissionRequest {
                     seq: 1,
-                    target_system: GCS.sysid,
+                    target_system: GCS.payload_target(),
                     target_component: GCS.compid,
                     mission_type: FENCE,
                 }));
@@ -2882,7 +2882,7 @@ fn set_wp_total_takes_the_first_request_so_set_wp_sends_item_zero_once() {
         |peer, message| {
             if is_item(&message) {
                 peer.send(&MavMessage::MissionAck(MissionAck {
-                    target_system: GCS.sysid,
+                    target_system: GCS.payload_target(),
                     target_component: GCS.compid,
                     r#type: MISSION_ERROR,
                     mission_type: FENCE,
@@ -2947,7 +2947,7 @@ fn set_wp_fills_the_mission_and_rally_lists_as_the_csharp_does() {
         z: 10.0,
         seq: 3,
         command: WAYPOINT,
-        target_system: GCS.sysid,
+        target_system: GCS.payload_target(),
         target_component: GCS.compid,
         frame: 3,
         current: 0,
@@ -2961,7 +2961,7 @@ fn set_wp_fills_the_mission_and_rally_lists_as_the_csharp_does() {
         if let MavMessage::MissionCount(count) = message {
             peer.send(&MavMessage::MissionRequest(MissionRequest {
                 seq: 0,
-                target_system: GCS.sysid,
+                target_system: GCS.payload_target(),
                 target_component: GCS.compid,
                 mission_type: count.mission_type,
             }));
@@ -2991,7 +2991,7 @@ fn set_wp_fills_the_mission_and_rally_lists_as_the_csharp_does() {
     let request = |seq: u16, mission_type: u8| {
         MavMessage::MissionRequest(MissionRequest {
             seq,
-            target_system: GCS.sysid,
+            target_system: GCS.payload_target(),
             target_component: GCS.compid,
             mission_type,
         })
@@ -2999,14 +2999,14 @@ fn set_wp_fills_the_mission_and_rally_lists_as_the_csharp_does() {
     let request_int = |seq: u16, mission_type: u8| {
         MavMessage::MissionRequestInt(MissionRequestInt {
             seq,
-            target_system: GCS.sysid,
+            target_system: GCS.payload_target(),
             target_component: GCS.compid,
             mission_type,
         })
     };
     let ack = |mission_type: u8| {
         MavMessage::MissionAck(MissionAck {
-            target_system: GCS.sysid,
+            target_system: GCS.payload_target(),
             target_component: GCS.compid,
             r#type: MISSION_ACCEPTED,
             mission_type,

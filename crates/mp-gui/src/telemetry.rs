@@ -2018,7 +2018,7 @@ impl Telemetry {
     pub fn video_streams(
         &self,
     ) -> Vec<(
-        (u8, u8, u8),
+        (u32, u8, u8),
         mp_mavlink_dialects::all::VideoStreamInformation,
     )> {
         self.link
@@ -2077,7 +2077,7 @@ pub(crate) fn command_long_parts(message: &MavMessage) -> Option<(VehicleId, u16
         return None;
     };
     Some((
-        VehicleId::new(long.target_system, long.target_component),
+        VehicleId::new(u32::from(long.target_system), long.target_component),
         long.command,
         [
             long.param1,
@@ -2260,7 +2260,7 @@ pub mod scripted {
             result,
             progress: 0,
             result_param2: 0,
-            target_system: GCS.sysid,
+            target_system: GCS.payload_target(),
             target_component: GCS.compid,
         })
     }
@@ -2481,7 +2481,7 @@ mod tests {
             matches!(m, MavMessage::CommandLong(l)
                 if l.command == mp_link::requests::CMD_PREFLIGHT_REBOOT_SHUTDOWN
                     && l.param1 == 1.0
-                    && l.target_system == VEHICLE.sysid
+                    && u32::from(l.target_system) == VEHICLE.sysid
                     && l.target_component == VEHICLE.compid)
         };
         until("the reboot to be sent twice", || {

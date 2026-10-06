@@ -227,7 +227,7 @@ fn an_accepted_command_is_not_reported_as_an_error() {
 }
 
 /// A heartbeat from a chosen system and component.
-fn heartbeat_from(seq: u8, sysid: u8, compid: u8) -> Vec<u8> {
+fn heartbeat_from(seq: u8, sysid: u32, compid: u8) -> Vec<u8> {
     let hb = Heartbeat {
         custom_mode: 0,
         r#type: 2,
@@ -291,6 +291,32 @@ fn two_vehicles_on_one_link_are_tracked_separately() {
             "a handle returned another vehicle's state"
         );
     }
+}
+
+/// `VehicleAndInspectorKeysDoNotAlias` and the first half of
+/// `LiveLinkReadsFragmentedFramesAndTargetsWithoutAliasing`: vehicles 1, 257, 0x80000001,
+/// 0xffffff01 and 0xffffffff - all but the first with 32-bit ids - heard a byte at a time, each a
+/// vehicle of its own under its whole id, with its own state, none taken for another whose low
+/// byte it shares. `// C#: MissionPlannerTests/Mavlink/Sysid32Tests.cs:156-199`
+#[test]
+fn vehicles_with_32_bit_ids_are_each_their_own() {
+    let (mut vehicle_side, gcs_side) = Loopback::pair();
+    let link = Link::from_transport(Box::new(gcs_side), LinkConfig::default());
+    let ids = [1, 257, 0x8000_0001, 0xffff_ff01, u32::MAX];
+    for (seq, id) in ids.into_iter().enumerate() {
+        for byte in heartbeat_from(u8::try_from(seq).unwrap(), id, 1) {
+            vehicle_side.write_all(&[byte]).unwrap();
+        }
+    }
+    wait_for("every vehicle", || link.vehicles().len() >= ids.len());
+    let vehicles = link.vehicles();
+    for id in ids {
+        let vehicle = VehicleId::new(id, 1);
+        assert!(vehicles.contains(&vehicle), "{id:#x}: {vehicles:?}");
+        let state = link.vehicle(vehicle).expect("a handle per vehicle").load();
+        assert_eq!(state.sysid, id, "another vehicle's state under {id:#x}");
+    }
+    assert_eq!(vehicles.len(), ids.len(), "{vehicles:?}");
 }
 
 #[test]

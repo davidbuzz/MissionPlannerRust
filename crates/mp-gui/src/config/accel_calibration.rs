@@ -1117,7 +1117,7 @@ mod tests {
                 mp_calibration::CMD_PREFLIGHT_CALIBRATION,
                 0.0,
                 ACCEL_PARAM5,
-                (VEHICLE.sysid, VEHICLE.compid)
+                (VEHICLE.payload_target(), VEHICLE.compid)
             )]
         );
         // The vehicle's answer to the start is an acknowledgement, which says "calibration" and
@@ -1292,7 +1292,7 @@ mod tests {
                 mp_calibration::CMD_PREFLIGHT_CALIBRATION,
                 0.0,
                 LEVEL_PARAM5,
-                (VEHICLE.sysid, VEHICLE.compid)
+                (VEHICLE.payload_target(), VEHICLE.compid)
             )
         );
         vehicle.send(&ack(mp_calibration::CMD_PREFLIGHT_CALIBRATION, 0));

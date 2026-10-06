@@ -43,11 +43,12 @@ proptest! {
         ..ProptestConfig::default()
     })]
 
-    /// v2 encode -> parse identity, including the trailing-zero truncation rule.
+    /// v2 encode -> parse identity, including the trailing-zero truncation rule, for every system
+    /// id: one over 255 four bytes wide with `SYSID32`.
     #[test]
     fn v2_roundtrip(
         seq in any::<u8>(),
-        sysid in any::<u8>(),
+        sysid in any::<u32>(),
         compid in any::<u8>(),
         payload in proptest::collection::vec(any::<u8>(), 0..=255usize),
     ) {

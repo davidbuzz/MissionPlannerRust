@@ -62,7 +62,7 @@ const CAMERA_FEEDBACK: u32 = 180;
 /// `MAV_TYPE.GCS`, which `getHeartBeat` passes over.
 const GCS: u8 = 6;
 /// The ground station's own packets, which the replay loop does not count.
-const GCS_SYSID: u8 = 255;
+const GCS_SYSID: u32 = 255;
 /// What the C# writes for a dataflash log's frame. `// C#: LogIndex.cs:275`
 const DFLOG_FRAME: &str = "DFLog Unknown";
 /// `DateTime` ticks at the Unix epoch, and ticks in a millisecond.
@@ -80,8 +80,8 @@ pub struct LogInfo {
     pub duration: String,
     /// `Date`, as `DateTime` ticks - 0 for `DateTime.MinValue`.
     pub date_ticks: i64,
-    /// `Aircraft`.
-    pub aircraft: i32,
+    /// `Aircraft`: a `uint` since the C#'s 32-bit system ids (e6454ccdd). `// C#: Log/LogIndex.cs:305`
+    pub aircraft: u32,
     /// `Size`, bytes.
     pub size: u64,
     /// `Home`: latitude, longitude and altitude, or none.
@@ -298,7 +298,7 @@ pub fn process(
 /// One record of a telemetry log.
 struct Packet {
     time: Option<DateTime>,
-    sysid: u8,
+    sysid: u32,
     compid: u8,
     seq: u8,
     msgid: u32,
@@ -380,7 +380,7 @@ fn read_tlog(data: &[u8], info: &mut LogInfo) -> Option<()> {
     }
     let start = last_read;
     info.date_ticks = start.ticks();
-    info.aircraft = current.map_or(0, |id| i32::from(id.sysid));
+    info.aircraft = current.map_or(0, |id| id.sysid);
     info.frame = mp_log::log_sort::type_name(
         current
             .and_then(|id| registry.working(id))

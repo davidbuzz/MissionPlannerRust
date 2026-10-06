@@ -371,7 +371,7 @@ impl ScriptHost for Simulated {
             self.abort.store(true, Ordering::Relaxed);
         }
     }
-    fn link_target(&self) -> (u8, u8) {
+    fn link_target(&self) -> (u32, u8) {
         (1, 1)
     }
     fn is_open(&self) -> bool {
@@ -379,7 +379,7 @@ impl ScriptHost for Simulated {
     }
     fn set_param(
         &mut self,
-        _target: (u8, u8),
+        _target: (u32, u8),
         name: &str,
         value: f64,
         force: bool,
@@ -389,7 +389,7 @@ impl ScriptHost for Simulated {
     }
     fn command(
         &mut self,
-        _target: (u8, u8),
+        _target: (u32, u8),
         command: u16,
         params: [f32; 7],
         _require_ack: bool,
@@ -397,11 +397,11 @@ impl ScriptHost for Simulated {
         self.note(format!("doCommand {command} {params:?}"));
         Ok(true)
     }
-    fn set_wp_total(&mut self, _target: (u8, u8), total: u16, _kind: u8) -> Result<(), Timeout> {
+    fn set_wp_total(&mut self, _target: (u32, u8), total: u16, _kind: u8) -> Result<(), Timeout> {
         self.note(format!("setWPTotal {total}"));
         Ok(())
     }
-    fn set_wp(&mut self, _target: (u8, u8), item: &WpItem) -> Result<u8, Timeout> {
+    fn set_wp(&mut self, _target: (u32, u8), item: &WpItem) -> Result<u8, Timeout> {
         self.note(format!(
             "setWP {} cmd {} frame {} p1 {} {} {} {}",
             item.seq, item.command, item.frame, item.params[0], item.x, item.y, item.z
@@ -409,14 +409,14 @@ impl ScriptHost for Simulated {
         self.mission.insert(item.seq, *item);
         Ok(0)
     }
-    fn set_wp_ack(&mut self, _target: (u8, u8), _kind: u8) {
+    fn set_wp_ack(&mut self, _target: (u32, u8), _kind: u8) {
         self.note("setWPACK".to_owned());
     }
-    fn set_wp_current(&mut self, _target: (u8, u8), seq: u16) -> Result<bool, Timeout> {
+    fn set_wp_current(&mut self, _target: (u32, u8), seq: u16) -> Result<bool, Timeout> {
         self.note(format!("setWPCurrent {seq}"));
         Ok(true)
     }
-    fn get_wp(&mut self, _target: (u8, u8), index: u16, _kind: u8) -> Result<Locationwp, Timeout> {
+    fn get_wp(&mut self, _target: (u32, u8), index: u16, _kind: u8) -> Result<Locationwp, Timeout> {
         self.note(format!("getWP {index}"));
         Ok(match (index, self.mission.get(&index)) {
             (_, Some(item)) => Locationwp {
@@ -438,7 +438,7 @@ impl ScriptHost for Simulated {
             _ => return Err(Timeout::on("getWP")),
         })
     }
-    fn set_position_target(&mut self, _target: (u8, u8), position: &PositionTarget) -> bool {
+    fn set_position_target(&mut self, _target: (u32, u8), position: &PositionTarget) -> bool {
         self.note(format!(
             "setPositionTarget frame {} {} {} {}",
             position.frame, position.lat, position.lng, position.alt

@@ -263,7 +263,7 @@ impl Camera {
         &mut self,
         from: VehicleId,
         message: &MavMessage,
-        streams: &mut std::collections::BTreeMap<(u8, u8, u8), VideoStreamInformation>,
+        streams: &mut std::collections::BTreeMap<(u32, u8, u8), VideoStreamInformation>,
     ) {
         if !self.started || from != self.vehicle {
             return;

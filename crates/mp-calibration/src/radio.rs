@@ -275,7 +275,7 @@ pub fn start_rx_pair(target: VehicleId, spektrum: Spektrum) -> MavMessage {
 pub fn request_rc_channels(target: VehicleId, hz: u8) -> MavMessage {
     MavMessage::RequestDataStream(RequestDataStream {
         req_message_rate: u16::from(hz),
-        target_system: target.sysid,
+        target_system: target.payload_target(),
         target_component: target.compid,
         req_stream_id: DATA_STREAM_RC_CHANNELS,
         start_stop: 1,

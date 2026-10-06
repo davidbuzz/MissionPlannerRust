@@ -218,14 +218,14 @@ const fn wp_request(target: VehicleId, seq: u16, mission_type: u8, int: bool) ->
     if int {
         MavMessage::MissionRequestInt(MissionRequestInt {
             seq,
-            target_system: target.sysid,
+            target_system: target.payload_target(),
             target_component: target.compid,
             mission_type,
         })
     } else {
         MavMessage::MissionRequest(MissionRequest {
             seq,
-            target_system: target.sysid,
+            target_system: target.payload_target(),
             target_component: target.compid,
             mission_type,
         })
@@ -305,7 +305,7 @@ fn fence_point(target: VehicleId, set: &FencePointSet) -> MavMessage {
     MavMessage::FencePoint(FencePoint {
         lat: set.lat as f32,
         lng: set.lng as f32,
-        target_system: target.sysid,
+        target_system: target.payload_target(),
         target_component: target.compid,
         idx: set.idx,
         count: set.count,
@@ -316,7 +316,7 @@ fn fence_point(target: VehicleId, set: &FencePointSet) -> MavMessage {
 /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:5879-5886`
 const fn fence_fetch(target: VehicleId, idx: u8) -> MavMessage {
     MavMessage::FenceFetchPoint(FenceFetchPoint {
-        target_system: target.sysid,
+        target_system: target.payload_target(),
         target_component: target.compid,
         idx,
     })
@@ -390,7 +390,7 @@ fn rally_point(target: VehicleId, set: &RallyPointSet) -> MavMessage {
         alt: set.alt,
         break_alt: set.break_alt,
         land_dir: set.land_dir,
-        target_system: target.sysid,
+        target_system: target.payload_target(),
         target_component: target.compid,
         idx: set.idx,
         count: set.count,
@@ -401,7 +401,7 @@ fn rally_point(target: VehicleId, set: &RallyPointSet) -> MavMessage {
 /// The `RALLY_FETCH_POINT` that reads point `idx` of `target` back.
 const fn rally_fetch(target: VehicleId, idx: u8) -> MavMessage {
     MavMessage::RallyFetchPoint(RallyFetchPoint {
-        target_system: target.sysid,
+        target_system: target.payload_target(),
         target_component: target.compid,
         idx,
     })
@@ -643,7 +643,7 @@ impl Request {
             RequestKind::SetCurrent { seq } => {
                 let message = MavMessage::MissionSetCurrent(MissionSetCurrent {
                     seq: *seq,
-                    target_system: target.sysid,
+                    target_system: target.payload_target(),
                     target_component: target.compid,
                 });
                 self.arm(message, timeouts.set_current, now);
@@ -711,7 +711,7 @@ impl Request {
             } => {
                 let count = MavMessage::MissionCount(MissionCount {
                     count: *total,
-                    target_system: target.sysid,
+                    target_system: target.payload_target(),
                     target_component: target.compid,
                     mission_type: *mission_type,
                 });
@@ -1081,7 +1081,7 @@ fn param_set(
     };
     MavMessage::ParamSet(ParamSet {
         param_value: field.to_param_value_field(),
-        target_system: target.sysid,
+        target_system: target.payload_target(),
         target_component: target.compid,
         param_id: mp_params::encode_param_id(name),
         param_type: declared.to_wire(),

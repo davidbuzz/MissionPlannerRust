@@ -46,8 +46,10 @@ pub use decoder::{DecodeStats, FrameDecoder};
 pub use dialect::{Dialect, MessageInfo, StaticDialect};
 pub use field::{FieldInfo, FieldValue};
 pub use frame::{
-    EncodeError, Frame, INCOMPAT_FLAG_SIGNED, MAX_FRAME_LEN, MAX_PAYLOAD_LEN, MavVersion,
-    ParseError, SIGNATURE_LEN, STX_V1, STX_V2, encode_v1, encode_v2, parse, trim_payload,
+    EncodeError, Frame, INCOMPAT_FLAG_SIGNED, INCOMPAT_FLAG_SYSID32, INCOMPAT_FLAG_TARGET32,
+    MAX_FRAME_LEN, MAX_PAYLOAD_LEN, MavVersion, ParseError, SIGNATURE_LEN, STX_V1, STX_V2,
+    SUPPORTED_INCOMPAT_FLAGS, V2_HEADER_LEN, V2_MAX_HEADER_LEN, encode_v1, encode_v2,
+    encode_v2_targeted, parse, trim_payload, v2_header_len,
 };
 pub use message::Message;
 pub use signing::{SigningKey, sign, verify};

@@ -51,13 +51,13 @@ use mp_transport::testing::{Loopback, LoopbackEnd};
 use mp_vehicle::VehicleId;
 
 /// Autopilots, one per system id.
-const AUTOPILOTS: u8 = 50;
+const AUTOPILOTS: u32 = 50;
 /// `MAV_COMP_ID_GIMBAL`.
 const GIMBAL: u8 = 154;
 /// `MAV_COMP_ID_ONBOARD_COMPUTER`.
 const COMPANION: u8 = 191;
 /// Systems that also carry a gimbal and a companion computer.
-const WITH_PAYLOAD: [u8; 3] = [10, 20, 30];
+const WITH_PAYLOAD: [u32; 3] = [10, 20, 30];
 /// Telemetry rounds: each autopilot sends a heartbeat, an attitude and a position per round.
 const ROUNDS: u16 = 40;
 /// `MAV_CMD_NAV_TAKEOFF`.
@@ -85,7 +85,7 @@ struct Swarm {
     decoder: FrameDecoder,
     /// Each component's own sequence counter, so each one's link quality is measurable.
     seq: BTreeMap<VehicleId, u8>,
-    inbox: VecDeque<(u8, u8, MavMessage)>,
+    inbox: VecDeque<(u32, u8, MavMessage)>,
 }
 
 impl Swarm {
@@ -133,7 +133,7 @@ impl Swarm {
     }
 
     /// Everything the link sends in the next `window`.
-    fn collect(&mut self, window: Duration) -> Vec<(u8, u8, MavMessage)> {
+    fn collect(&mut self, window: Duration) -> Vec<(u32, u8, MavMessage)> {
         let deadline = Instant::now() + window;
         while Instant::now() < deadline {
             self.pump();
@@ -161,11 +161,11 @@ fn heartbeat(component: VehicleId) -> MavMessage {
 }
 
 /// A roll each vehicle alone reports, so a snapshot showing another's is caught.
-fn roll_of(sysid: u8, round: u16) -> f32 {
-    f32::from(sysid) / 100.0 + f32::from(round) / 10_000.0
+fn roll_of(sysid: u32, round: u16) -> f32 {
+    f32::from(u8::try_from(sysid).unwrap()) / 100.0 + f32::from(round) / 10_000.0
 }
 
-fn attitude(sysid: u8, round: u16) -> MavMessage {
+fn attitude(sysid: u32, round: u16) -> MavMessage {
     MavMessage::Attitude(Attitude {
         time_boot_ms: u32::from(round),
         roll: roll_of(sysid, round),
@@ -178,11 +178,11 @@ fn attitude(sysid: u8, round: u16) -> MavMessage {
 }
 
 /// Each vehicle a hundred metres further north than the one before.
-fn latitude_e7(sysid: u8) -> i32 {
-    -353_632_620 + i32::from(sysid) * 9_000
+fn latitude_e7(sysid: u32) -> i32 {
+    -353_632_620 + i32::try_from(sysid).unwrap() * 9_000
 }
 
-fn position(sysid: u8, round: u16) -> MavMessage {
+fn position(sysid: u32, round: u16) -> MavMessage {
     MavMessage::GlobalPositionInt(GlobalPositionInt {
         time_boot_ms: u32::from(round),
         lat: latitude_e7(sysid),
@@ -354,7 +354,7 @@ fn fifty_vehicles_through_one_link_are_routed_apart() {
     });
     for component in &all {
         assert_eq!(
-            asked.get(&(component.sysid, component.compid)),
+            asked.get(&(component.payload_target(), component.compid)),
             Some(&14),
             "streams asked of {component}"
         );
@@ -386,7 +386,7 @@ fn fifty_vehicles_through_one_link_are_routed_apart() {
             result,
             progress: 0,
             result_param2: 0,
-            target_system: GCS.sysid,
+            target_system: GCS.payload_target(),
             target_component: GCS.compid,
         })
     };
@@ -410,7 +410,7 @@ fn fifty_vehicles_through_one_link_are_routed_apart() {
     for sysid in 1..=AUTOPILOTS {
         swarm.send(
             VehicleId::new(sysid, 1),
-            &param("RTL_ALT", f32::from(sysid) * 100.0, 0, 1),
+            &param("RTL_ALT", f32::from(u8::try_from(sysid).unwrap()) * 100.0, 0, 1),
         );
     }
     // A gimbal with a parameter of the same name.

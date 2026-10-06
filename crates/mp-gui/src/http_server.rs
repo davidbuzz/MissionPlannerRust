@@ -819,7 +819,7 @@ fn websocket_raw<C: Connection>(stream: &mut C, head: &str, shared: &Shared) {
 /// A frame the link read, as the bytes a raw websocket is given: the message encoded again
 /// under its sender's ids.
 #[must_use]
-pub fn reencode(sysid: u8, compid: u8, message: &MavMessage) -> Option<Vec<u8>> {
+pub fn reencode(sysid: u32, compid: u8, message: &MavMessage) -> Option<Vec<u8>> {
     let mut payload = [0u8; 255];
     let len = message.encode(&mut payload);
     let mut out = [0u8; 300];

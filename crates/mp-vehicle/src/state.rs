@@ -372,8 +372,8 @@ impl LatLngAlt {
 /// clone with heap traffic.
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
 pub struct VehicleState {
-    /// MAVLink system id.
-    pub sysid: u8,
+    /// MAVLink system id, 32-bit as the C#'s `MAVState.sysid` (e6454ccdd).
+    pub sysid: u32,
     /// MAVLink component id.
     pub compid: u8,
     /// `MAV_TYPE` of the vehicle.
@@ -691,7 +691,7 @@ impl VehicleState {
     /// takes them through `ResetInternals`.
     /// `// C#: ExtLibs/ArduPilot/CurrentState.cs:223-227, 4396-4400`
     #[must_use]
-    pub fn new(sysid: u8, compid: u8) -> Self {
+    pub fn new(sysid: u32, compid: u8) -> Self {
         Self {
             sysid,
             compid,

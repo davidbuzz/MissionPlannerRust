@@ -881,7 +881,7 @@ pub fn request_datastream(telemetry: &Telemetry, stream: u8, hz: i32) -> usize {
     let rate = u16::from(hz as u8);
     let request = MavMessage::RequestDataStream(RequestDataStream {
         req_message_rate: rate,
-        target_system: target.sysid,
+        target_system: target.payload_target(),
         target_component: target.compid,
         req_stream_id: stream,
         start_stop: 1,
@@ -3951,7 +3951,7 @@ mod tests {
                 )
             })
             .collect();
-        let (sysid, compid) = (VEHICLE.sysid, VEHICLE.compid);
+        let (sysid, compid) = (VEHICLE.payload_target(), VEHICLE.compid);
         assert_eq!(
             streams,
             [

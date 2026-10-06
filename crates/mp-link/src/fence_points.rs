@@ -116,12 +116,12 @@ impl FencePoints {
     /// addressed to this ground station (`gcs_sysid`) is about its sender; any other is about the
     /// vehicle it is addressed to, which is how a recording's own uploads land on the vehicle.
     /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:5625-5694, 5713-5726`
-    pub fn observe(&mut self, sysid: u8, compid: u8, gcs_sysid: u8, message: &MavMessage) {
+    pub fn observe(&mut self, sysid: u32, compid: u8, gcs_sysid: u32, message: &MavMessage) {
         let about = |target_system: u8, target_component: u8| {
-            if target_system == gcs_sysid {
+            if u32::from(target_system) == gcs_sysid {
                 VehicleId::new(sysid, compid)
             } else {
-                VehicleId::new(target_system, target_component)
+                VehicleId::new(u32::from(target_system), target_component)
             }
         };
         match message {
@@ -300,23 +300,23 @@ mod tests {
     fn items_are_filed_under_the_vehicle_they_are_about_in_sequence_order() {
         let mut fence = FencePoints::default();
         // The vehicle's answers to a download, addressed to this ground station, out of order.
-        fence.observe(1, 1, GCS, &item_int(2, GCS, 5001, 30));
-        fence.observe(1, 1, GCS, &item_int(0, GCS, 5001, 10));
-        fence.observe(1, 1, GCS, &item_int(1, GCS, 5001, 20));
+        fence.observe(1, 1, u32::from(GCS), &item_int(2, GCS, 5001, 30));
+        fence.observe(1, 1, u32::from(GCS), &item_int(0, GCS, 5001, 10));
+        fence.observe(1, 1, u32::from(GCS), &item_int(1, GCS, 5001, 20));
         let xs: Vec<i32> = fence.items(VEHICLE).iter().map(|item| item.x).collect();
         assert_eq!(xs, [10, 20, 30]);
         // Filed again: replaced, not added.
-        fence.observe(1, 1, GCS, &item_int(1, GCS, 5001, 21));
+        fence.observe(1, 1, u32::from(GCS), &item_int(1, GCS, 5001, 21));
         assert_eq!(fence.items(VEHICLE).len(), 3);
         assert_eq!(fence.items(VEHICLE)[1].x, 21);
         // A ground station's item, as a recording holds it, is about the vehicle it addresses.
-        fence.observe(GCS, 190, GCS, &item_int(0, 7, 5003, 40));
+        fence.observe(u32::from(GCS), 190, u32::from(GCS), &item_int(0, 7, 5003, 40));
         assert_eq!(fence.items(VehicleId::new(7, 190))[0].x, 40);
         // A fence MISSION_COUNT starts that vehicle's fence again.
         fence.observe(
             1,
             1,
-            GCS,
+            u32::from(GCS),
             &MavMessage::MissionCount(MissionCount {
                 count: 3,
                 target_system: GCS,
@@ -335,7 +335,7 @@ mod tests {
             fence.observe(
                 1,
                 1,
-                GCS,
+                u32::from(GCS),
                 &MavMessage::FencePoint(FencePoint {
                     lat: -35.5,
                     lng: 149.25,
