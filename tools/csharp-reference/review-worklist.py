@@ -20,7 +20,14 @@
 # Anything else - a hunk with a real change, an end that cannot be carried, a name more than one
 # file has - stays on the worklist for a person. Without --write nothing is changed; the counts
 # say what would be.
+#
+# `--reviewed PATH` is for a C# file whose every change a person has gone through and ported or
+# found to need nothing: all its entries close, and a citation left on its old lines is carried
+# through an alignment of the two versions' lines as a type-only change leaves them (difflib), the
+# rest of a changed run placed in proportion. `--show` prints each carried end whose text is not
+# the same line before and after, for that person to check before `--write`.
 import argparse
+import difflib
 import os
 import re
 import subprocess
@@ -100,8 +107,10 @@ class Hunks:
                 out.append((a, b, c, d, typed))
         return out
 
-    def carry(self, old):
-        """The old line's number now: through a hunk that replaces its lines one for one too."""
+    def carry(self, old, near=False):
+        """The old line's number now: through a hunk that replaces its lines one for one too, and
+        with `near`, through any hunk - its first line to its first, its last to its last, and
+        between them in proportion."""
         delta = 0
         for a, b, c, d, _ in self.hunks:
             if b == 0:
@@ -111,9 +120,39 @@ class Hunks:
             if old < a:
                 break
             if old < a + b:
-                return c + (old - a) if b == d else None
+                if b == d:
+                    return c + (old - a)
+                if not near or d == 0:
+                    return None
+                if old == a:
+                    return c
+                if old == a + b - 1:
+                    return c + d - 1
+                return c + round((old - a) * (d - 1) / max(b - 1, 1))
             delta += d - b
         return old + delta
+
+
+class Aligned:
+    """Old line numbers to new through an alignment of the two files' lines as a type-only change
+    leaves them: a changed line whose change is the id's type is the same line, and the rest of a
+    changed run is placed in proportion."""
+
+    def __init__(self, old_lines, new_lines):
+        a = [normal(x) for x in old_lines]
+        b = [normal(x) for x in new_lines]
+        self.ops = difflib.SequenceMatcher(None, a, b, autojunk=False).get_opcodes()
+
+    def carry(self, old):
+        i = old - 1
+        for tag, i1, i2, j1, j2 in self.ops:
+            if i1 <= i < i2:
+                if tag == "equal":
+                    return j1 + (i - i1) + 1
+                if tag == "delete" or j2 == j1:
+                    return j1 + 1
+                return j1 + round((i - i1) * (j2 - j1 - 1) / max(i2 - i1 - 1, 1)) + 1
+        return None
 
 
 def main():
@@ -121,6 +160,14 @@ def main():
     parser.add_argument("old")
     parser.add_argument("new")
     parser.add_argument("--write", action="store_true")
+    parser.add_argument(
+        "--reviewed",
+        action="append",
+        default=[],
+        help="a C# path whose every change has been reviewed site by site: its entries close, a "
+        "citation left on old lines carried through a changed hunk to the same place in it",
+    )
+    parser.add_argument("--show", action="store_true", help="print each carried end, old and new")
     args = parser.parse_args()
     new_short = git("rev-parse", "--short=7", args.new).strip()
     worklist = os.path.join(ROOT, "ledger", f"upstream-review-{new_short}.txt")
@@ -134,6 +181,25 @@ def main():
             diffs[path] = Hunks(git("diff", "-U0", args.old, args.new, "--", path))
         return diffs[path]
 
+    texts_at = {}
+
+    def text_at(commit, path, n):
+        if (commit, path) not in texts_at:
+            texts_at[(commit, path)] = git("show", f"{commit}:{path}").split("\n")
+        lines_at = texts_at[(commit, path)]
+        return lines_at[n - 1].strip()[:100] if 0 < n <= len(lines_at) else "?"
+
+    old_text = lambda path, n: text_at(args.old, path, n)
+    new_text = lambda path, n: text_at(args.new, path, n)
+    alignments = {}
+
+    def aligned(path):
+        if path not in alignments:
+            text_at(args.old, path, 1)
+            text_at(args.new, path, 1)
+            alignments[path] = Aligned(texts_at[(args.old, path)], texts_at[(args.new, path)])
+        return alignments[path]
+
     closed, rewrites, kept = set(), [], Counter()
     for index, line in enumerate(lines):
         match = ENTRY.match(line)
@@ -142,6 +208,23 @@ def main():
         h = hunks(match["path"])
         ends = [int(n) for n in match["part"].split("-")]
         first, last = ends[0], ends[-1]
+        if match["path"] in args.reviewed:
+            if match["why"] == "have changes inside":
+                closed.add(index)
+                continue
+            now = [aligned(match["path"]).carry(n) for n in ends]
+            if None in now:
+                kept["an end that cannot be carried"] += 1
+                continue
+            closed.add(index)
+            rewrites.append((index, match["rust"], match["path"], match["part"],
+                             "-".join(str(n) for n in now)))
+            if args.show:
+                for o, n in zip(ends, now):
+                    before, after = old_text(match["path"], o), new_text(match["path"], n)
+                    if normal(before) != normal(after):
+                        print(f"{match['rust']}: {o} -> {n}\n  old {before}\n  new {after}")
+            continue
         if match["why"] == "have changes inside":
             touching = h.new_touching(first, last)
             if touching and all(t[4] for t in touching):

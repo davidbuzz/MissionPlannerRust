@@ -734,7 +734,7 @@ fn await_request(link: &Link, id: RequestId) -> Option<RequestOutcome> {
 /// vehicle acknowledges it - three more times, two seconds apart; ten seconds a try for arming -
 /// and how it ended said on stderr when it did not end well. Anything but a `COMMAND_LONG` is
 /// not sent.
-/// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:2688-2836`
+/// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:2685-2833`
 fn run_command(link: &Link, message: &MavMessage) -> Option<RequestOutcome> {
     let MavMessage::CommandLong(long) = message else {
         return None;
@@ -787,7 +787,7 @@ enum Written {
 /// holds the whole list by the time anything writes; `headless-planner` connects and writes at once, so a
 /// name not yet heard of is read first - `GetParam`, retried the same way - and one the vehicle
 /// never reports is not on it.
-/// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:1638-1770, 2296-2380`
+/// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:1635-1767, 2293-2377`
 fn write_param(link: &Link, id: VehicleId, name: &str, value: f64) -> Written {
     let listed = link
         .params(id)

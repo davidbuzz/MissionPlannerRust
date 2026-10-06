@@ -233,7 +233,7 @@ pub trait ScriptHost {
 
     /// `MAV.setWPCurrent(sysid, compid, index)`: `MISSION_SET_CURRENT` until a
     /// `MISSION_CURRENT` arrives, five more times 2 s apart, then the `TimeoutException`.
-    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:2452-2501`
+    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:2449-2498`
     fn set_wp_current(&mut self, _target: (u32, u8), _seq: u16) -> Result<bool, Timeout> {
         Err(Timeout::on("setWPCurrent"))
     }

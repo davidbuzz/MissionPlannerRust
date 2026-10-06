@@ -80,7 +80,7 @@ expect plan.rally.upload busy
 within 10
 expect plan.rally.upload RALLY_TOTAL=3,0=set,1=set,2=set
 expect plan.prompt none
-# Each point's read-back, a RALLY_POINT, was filed in MAV.rallypoints (MAVLinkInterface.cs:5728).
+# Each point's read-back, a RALLY_POINT, was filed in MAV.rallypoints (MAVLinkInterface.cs:5696).
 expect vehicle.rally 3
 
 # Clear Rally Points: RALLY_TOTAL to 0, the markers and the vehicle's list gone.

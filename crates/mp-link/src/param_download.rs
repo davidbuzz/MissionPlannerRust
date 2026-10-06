@@ -21,7 +21,7 @@
 //! The parameter download: `PARAM_REQUEST_LIST`, then whatever it takes to fill the holes.
 //!
 //! Replaces the loop in `getParamListAsync`
-//! (C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:1948-2263).
+//! (C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:1945-2260).
 //!
 //! # How the C# recovers a lossy stream, and so how this does
 //!
@@ -179,7 +179,7 @@ impl ParamDownload {
         }
     }
 
-    /// The first thing to send. C#: MAVLinkInterface.cs:2097.
+    /// The first thing to send. C#: MAVLinkInterface.cs:2094.
     #[must_use]
     pub const fn begin(&self) -> ParamAction {
         ParamAction::RequestList

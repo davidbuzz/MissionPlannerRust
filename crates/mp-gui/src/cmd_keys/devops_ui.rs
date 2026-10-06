@@ -38,7 +38,7 @@
 //!   disables the bus and the address; I2C the other way round;
 //! * test (`but_test_Click`, `:52-62`): to sysid 1 compid 1 on SPI, the name's device, register
 //!   0xff: two bytes written, 0x72 and 0x00, then two read, and those added as a line;
-//! * `device_op` (`ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:1012-1111`): `DEVICE_OP_READ`, or
+//! * `device_op` (`ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:1014-1113`): `DEVICE_OP_READ`, or
 //!   `DEVICE_OP_WRITE` with bytes to write, to the system and component given - the request
 //!   numbered by a counter of the link's, the name its UTF-8 bytes padded to 40 - and up to a
 //!   second for that component's `DEVICE_OP_READ_REPLY` or `DEVICE_OP_WRITE_REPLY`; the first to
@@ -393,7 +393,7 @@ impl std::fmt::Debug for Op {
 
 /// `device_op`'s start: the two subscriptions for the component's replies - the first to come
 /// is the answer - then the message, numbered `request_id`.
-/// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:1012-1099`
+/// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:1014-1101`
 fn start(telemetry: &Telemetry, op: &DeviceOp, request_id: u32, step: Step) -> Op {
     let answer = Arc::new(Mutex::new(None));
     let sink = Arc::clone(&answer);

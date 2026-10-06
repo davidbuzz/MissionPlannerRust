@@ -373,7 +373,7 @@ impl Signing {
     /// `frame`, written by this link, signed if the vehicle it is for is being signed to - see
     /// the module documentation for which that is - or `None` to send it as it is. `now` gives
     /// the timestamp, asked only when one is signed.
-    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:1341-1352, 1381-1432`
+    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:1350-1358, 1381-1432`
     pub fn sign(&mut self, frame: &[u8], now: impl FnOnce() -> u64) -> Option<Vec<u8>> {
         if !self.vehicles.values().any(|state| state.signing) {
             return None;
@@ -454,7 +454,7 @@ fn target_of(frame: &[u8]) -> Option<(u32, Option<u8>)> {
 /// worked out again over the header that now carries it, and the 13-byte block - `link_id`, the
 /// 48-bit `timestamp`, the first six bytes of SHA-256 over `key`, the frame and those seven -
 /// appended. `None` for anything not a whole v2 frame of a message this dialect knows.
-/// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:1349-1352, 1366-1432`
+/// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:1352-1360, 1366-1432`
 #[must_use]
 pub fn sign_frame(frame: &[u8], key: &[u8; 32], link_id: u8, timestamp: u64) -> Option<Vec<u8>> {
     if frame.first() != Some(&STX_V2) {

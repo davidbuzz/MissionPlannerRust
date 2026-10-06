@@ -270,7 +270,7 @@ pub fn start_rx_pair(target: VehicleId, spektrum: Spektrum) -> MavMessage {
 
 /// `requestDatastream(MAV_DATA_STREAM.RC_CHANNELS, hz)`'s `REQUEST_DATA_STREAM`: the stream
 /// started, at `hz`, rate as a byte.
-/// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:3061-3260`
+/// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:3058-3256`
 #[must_use]
 pub fn request_rc_channels(target: VehicleId, hz: u8) -> MavMessage {
     MavMessage::RequestDataStream(RequestDataStream {

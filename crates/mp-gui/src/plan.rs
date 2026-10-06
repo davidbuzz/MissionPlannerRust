@@ -5534,7 +5534,7 @@ fn capabilities(view: &TelemetryView) -> u32 {
 ///
 /// The C#'s mission branch throws its list away and leaves the geofence as it was: what it
 /// downloads reaches only `MAV.fencepoints`, which `processInfoFromStream` fills as the items
-/// pass (`MAVLinkInterface.cs:5641-5694`) - the link's fence points here - and `writeKML` draws
+/// pass (`MAVLinkInterface.cs:5624-5667`) - the link's fence points here - and `writeKML` draws
 /// as its own "fence" overlay in MISSION mode (`FlightPlanner.cs:1497-1517`). The branch is
 /// reached only when the capabilities change between the menu opening and the click, as the
 /// menu hides Geo-Fence over such a vehicle ([`HIDDEN_ON_MISSION_FENCE`]).

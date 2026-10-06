@@ -523,7 +523,7 @@ impl ScriptHost for GuiScriptHost {
     }
 
     fn set_wp_ack(&mut self, target: (u32, u8), kind: u8) {
-        // `type = 0`, accepted. `// C#: MAVLinkInterface.cs:2441-2449`
+        // `type = 0`, accepted. `// C#: MAVLinkInterface.cs:2438-2446`
         self.send(&mp_link::commands::send_mission_ack(
             vehicle(target),
             0,
@@ -2459,7 +2459,7 @@ mod tests {
     /// screen's `GuidedMode` to its item - a refusal too, as the C# sets it before it returns
     /// the result - and `setGuidedModeWP` on a plane goes that way: Guided (15) asked of it,
     /// then the item with current 2.
-    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:4098-4112, 4122-4141, 4430-4438`
+    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:4090-4103, 4122-4141, 4430-4438`
     #[test]
     fn a_guided_set_wp_moves_the_flight_screens_guided_mode() {
         use mp_mavlink_dialects::all::MissionAck;

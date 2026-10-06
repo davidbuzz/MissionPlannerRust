@@ -104,7 +104,7 @@ pub enum RequestKind {
     /// `doCommandIntAsync`: `COMMAND_INT` until a `COMMAND_ACK` for this command, three more
     /// times two seconds apart as `doCommandAsync` sends, with none of its special cases - and
     /// none of its `IN_PROGRESS` patience: anything but `ACCEPTED` is `false` (`:2940-2949`).
-    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:2847-2951`
+    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:2844-2948`
     CommandInt {
         /// `MAV_CMD`.
         command: u16,
@@ -124,7 +124,7 @@ pub enum RequestKind {
     /// `setWPAsync` for one item: a `MISSION_ITEM` or `MISSION_ITEM_INT` until the vehicle
     /// acknowledges it or asks for the item after it, ten more times 450 ms apart - Change Alt,
     /// and ArduPlane's guided target.
-    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:4061-4235, 4236-4380`
+    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:4051-4224, 4225-4369`
     SetWp {
         /// The item as built, sent as it is. Boxed: a message is the largest thing a kind holds.
         item: Box<MavMessage>,

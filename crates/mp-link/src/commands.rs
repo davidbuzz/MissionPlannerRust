@@ -591,7 +591,7 @@ pub fn command_int(
 ///
 /// The C# re-sends this every 2000 ms, five times, until a `MISSION_CURRENT` arrives from the
 /// vehicle; this builds the message, and whoever sends it owns the retries.
-/// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:2452-2501`
+/// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:2449-2498`
 #[must_use]
 pub fn mission_set_current(target: VehicleId, seq: u16) -> MavMessage {
     MavMessage::MissionSetCurrent(MissionSetCurrent {
@@ -603,7 +603,7 @@ pub fn mission_set_current(target: VehicleId, seq: u16) -> MavMessage {
 
 /// A float `MISSION_ITEM` as `setWPAsync` builds one when `use_int` is false: `x` is the
 /// latitude and `y` the longitude, each cast to `f32`.
-/// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:3996-4043`
+/// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:3986-4033`
 fn float_mission_item(
     target: VehicleId,
     frame: u8,

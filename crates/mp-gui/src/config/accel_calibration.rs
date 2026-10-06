@@ -448,7 +448,7 @@ impl AccelCalibration {
     /// which for param5 1 returns true as soon as it is sent. Then the page listens and the
     /// button reads "Click when Done"; with no vehicle `doCommand` is false, and the box says
     /// `Strings.CommandFailed`.
-    /// `// C#: GCSViews/ConfigurationView/ConfigAccelerometerCalibration.cs:39-89; ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:1213-1234, 2689-2736`
+    /// `// C#: GCSViews/ConfigurationView/ConfigAccelerometerCalibration.cs:39-89; ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:1215-1237, 2689-2736`
     pub fn click_accel(&mut self, telemetry: &Telemetry, view: &TelemetryView) {
         if !self.accel_enabled() {
             return;

@@ -440,7 +440,7 @@ fn echo(value: f32) -> MavMessage {
 }
 
 // ================================================================================================
-// Parameter download: getParamListAsync (C#: MAVLinkInterface.cs:1948-2263)
+// Parameter download: getParamListAsync (C#: MAVLinkInterface.cs:1945-2260)
 // ================================================================================================
 
 /// `PARAM_VALUE` in any order completes the download; nothing is asked for twice.
@@ -960,7 +960,7 @@ fn a_read_answered_only_wrongly_is_sent_four_times_then_times_out() {
 }
 
 // ================================================================================================
-// Commands: doCommandAsync (C#: MAVLinkInterface.cs:2688-2837)
+// Commands: doCommandAsync (C#: MAVLinkInterface.cs:2685-2834)
 // ================================================================================================
 
 /// No ack: four `COMMAND_LONG` 2 s apart (`retrys = 3`, `timeout = 2000`, :2729-2731), each
@@ -1724,7 +1724,7 @@ fn a_vehicle_stuck_on_one_item_uses_up_that_items_retries() {
 /// store. The refusal ends the upload at once, with nothing sent.
 ///
 /// DIVERGENCE: the C#'s `setWPTotal` returns on any `MISSION_ACK` without reading it
-/// (C#: MAVLinkInterface.cs:3863-3876), so `mav_mission.upload` goes on to send item 0 to a
+/// (C#: MAVLinkInterface.cs:3854-3866), so `mav_mission.upload` goes on to send item 0 to a
 /// vehicle that is no longer receiving. What it reports then depends on how the vehicle answers
 /// an item it did not ask for - "Timeout on read - setWP" (:4267) after ten retries if it says
 /// nothing, as this scripted vehicle would - and not that the mission was too big.

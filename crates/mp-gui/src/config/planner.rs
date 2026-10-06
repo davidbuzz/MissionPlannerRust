@@ -74,7 +74,7 @@
 //!
 //! * `requestDatastream`'s `hzratecheck`, which skips a request when the vehicle already sends at
 //!   about that rate: this application does not count packets per message, so every rate but -1
-//!   is sent (`MAVLinkInterface.cs:3061-3239`);
+//!   is sent (`MAVLinkInterface.cs:3058-3235`);
 //! * `GetDefaultLogDir` creating the log directory when the Log Path box is filled
 //!   (`Settings.cs:146-158`): a settings page does not make directories here.
 //!
@@ -869,7 +869,7 @@ pub const RATES: [Rate; 5] = [
 /// `requestDatastream(id, hzrate)` for the vehicle being shown: `REQUEST_DATA_STREAM`, started,
 /// the rate as a byte, sent twice as `getDatastream` sends it. -1 sends nothing. Returns the
 /// number of requests put on the link.
-/// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:3061-3073, 3214-3216, 3243-3262`
+/// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:3058-3069, 3214-3216, 3243-3262`
 pub fn request_datastream(telemetry: &Telemetry, stream: u8, hz: i32) -> usize {
     if hz == -1 {
         return 0;

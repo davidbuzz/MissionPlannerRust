@@ -8,7 +8,7 @@
 # The claim: the script runs to its end - its prints in the console, "done" last - and the
 # vehicle accepted all five items (`fly.script.wps`, counted from the link's set-WP requests
 # ending accepted). It replaces the vehicle's mission, and `MAV.wps` - the link's snapshot of what
-# the vehicle holds, which each accepted setWP fills (MAVLinkInterface.cs:4146-4160, 4196-4206) -
+# the vehicle holds, which each accepted setWP fills (MAVLinkInterface.cs:4136-4150, 4185-4195) -
 # holds the five, so the flight map draws them as FlightData's overlay does (FlightData.cs:
 # 3810-3843): `map.mission` is the four with a position, home among them; the TAKEOFF at 0,0 has
 # none.

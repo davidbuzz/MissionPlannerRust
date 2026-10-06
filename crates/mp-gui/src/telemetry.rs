@@ -146,7 +146,7 @@ pub struct TelemetryView {
     pub parameters_fetched: bool,
     /// Where the parameter fetch is, in words - "MAVFTP 45%", "stream 400 of 1408", "1408 over
     /// MAVFTP" - or "none" before one has been started.
-    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:1813-1936`
+    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:1810-1933`
     pub parameters_fetch: String,
     /// The defaults `@PARAM/param.pck?withdefaults=1` carried, by name; empty when the parameters
     /// came over the stream, which has none to give. Shared between frames, as `parameters` is.
@@ -987,7 +987,7 @@ impl Telemetry {
 
     /// `setParam(sysid, compid, name, value, force)` on `target`, for a caller that reads the
     /// outcome itself with [`Telemetry::request`]. `None` without a link.
-    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:1628-1770`
+    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:1625-1767`
     pub fn write_parameter_on(
         &self,
         target: VehicleId,
@@ -1092,7 +1092,7 @@ impl Telemetry {
     /// `COMMAND_ACK` for it, sent again by the link as the C# sends again - three more times, two
     /// seconds apart; ten for arming; once more after 25 for a calibration - and `report` said
     /// when it ends. `None` without a link.
-    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:2688-2836`
+    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:2685-2833`
     pub fn command(
         &mut self,
         target: VehicleId,
@@ -1116,7 +1116,7 @@ impl Telemetry {
 
     /// `setWPCurrent`: `MISSION_SET_CURRENT` until a `MISSION_CURRENT` arrives, sent again every
     /// two seconds up to five times, and `report` said when it ends.
-    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:2452-2501`
+    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:2449-2498`
     pub fn set_current_waypoint(
         &mut self,
         target: VehicleId,
@@ -1130,7 +1130,7 @@ impl Telemetry {
     /// `doCommandInt` with its acknowledgement waited for: `COMMAND_INT` to `target` until a
     /// `COMMAND_ACK` for it, sent again three more times two seconds apart, anything but
     /// accepted a refusal, and `report` said when it ends.
-    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:2847-2951`
+    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:2844-2948`
     #[allow(clippy::too_many_arguments)] // the C#'s seven, plus the frame and the report
     pub fn command_int(
         &mut self,
@@ -1175,7 +1175,7 @@ impl Telemetry {
 
     /// `doCommand` with `requireack` false: one `COMMAND_LONG` to the vehicle being flown, not
     /// waited for. Whether there was a vehicle to send it to.
-    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:2688-2836`
+    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:2685-2833`
     pub fn command_unacknowledged(&self, command: u16, params: [f32; 7]) -> bool {
         let Some((link, id)) = self.target() else {
             return false;
@@ -1187,7 +1187,7 @@ impl Telemetry {
     /// `setParam` on `target`: `PARAM_SET` until the vehicle echoes the parameter, sent again every
     /// 700 ms up to three times, and `report` said when it ends. Refused without sending for a
     /// name the vehicle has not listed, and not sent for a value it already holds unless `force`.
-    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:1628-1770`
+    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:1625-1767`
     pub fn set_parameter_on(
         &mut self,
         target: VehicleId,
@@ -1202,7 +1202,7 @@ impl Telemetry {
 
     /// `setParam` on the vehicle being flown, for a caller that reads the outcome itself with
     /// [`Telemetry::request`] - a list of writes made one after another, as the C#'s are.
-    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:1628-1770`
+    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:1625-1767`
     pub fn write_parameter(&self, name: &str, value: f64, force: bool) -> Option<RequestId> {
         let (link, id) = self.target()?;
         Some(link.set_param(id, name, value, force))
@@ -1210,7 +1210,7 @@ impl Telemetry {
 
     /// `GetParam`: `PARAM_REQUEST_READ` until the parameter arrives, sent again every 700 ms up to
     /// three times. What arrives goes into the vehicle's table.
-    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:2296-2380`
+    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:2293-2377`
     pub fn read_parameter(&self, name: &str) -> Option<RequestId> {
         let (link, id) = self.target()?;
         Some(link.read_param(id, name))
@@ -1431,7 +1431,7 @@ impl Telemetry {
     /// vehicle's `COMMAND_ACK` - with a refusal said as "Command was denied by the autopilot" and a
     /// timeout as `Strings.ErrorCommunicating` with the motor's number. The request, to read its
     /// outcome with [`Telemetry::request`]; `None` with no vehicle.
-    /// `// C#: GCSViews/ConfigurationView/ConfigMotorTest.cs:305-327, ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:2688-2836`
+    /// `// C#: GCSViews/ConfigurationView/ConfigMotorTest.cs:305-327, ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:2685-2833`
     pub fn test_motor(
         &mut self,
         command: mp_calibration::motor::MotorCommand,
@@ -1559,7 +1559,7 @@ impl Telemetry {
     /// `setParam`, with its checks and its retries, not forced. `None` with no vehicle to write
     /// to; the outcome is read with [`Telemetry::request`] or [`Telemetry::lookup`]. The config
     /// pages use this; the parameter editor uses [`Telemetry::write_parameter`] directly.
-    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:1628-1766`
+    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:1625-1763`
     pub fn set_parameter_confirmed(&self, name: &str, value: f64) -> Option<RequestId> {
         self.write_parameter(name, value, false)
     }
@@ -2675,7 +2675,7 @@ mod tests {
     /// sent again, and the vehicle's `MISSION_CURRENT` ends it with nothing to say. The mode
     /// request in the same kind of press goes once, as `setMode` sends it, however long the
     /// vehicle stays quiet about it.
-    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:2457-2501, 4620-4630`
+    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:2454-2498, 4620-4630`
     #[test]
     fn set_wp_whose_first_send_is_lost_is_sent_again_and_a_mode_request_is_sent_once() {
         let (mut telemetry, mut vehicle) = Vehicle::connect(fast());

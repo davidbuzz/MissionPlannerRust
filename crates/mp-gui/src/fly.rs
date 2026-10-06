@@ -759,7 +759,7 @@ pub type Sends = Result<Vec<MavMessage>, Refusal>;
 #[derive(Debug, Clone, PartialEq)]
 pub enum Route {
     /// `setWPCurrent`: `MISSION_SET_CURRENT` until a `MISSION_CURRENT` arrives.
-    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:2452-2501`
+    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:2449-2498`
     SetCurrent {
         /// The vehicle.
         target: VehicleId,
@@ -767,7 +767,7 @@ pub enum Route {
         seq: u16,
     },
     /// `doCommand` with `requireack`: `COMMAND_LONG` until its `COMMAND_ACK`.
-    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:2688-2836`
+    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:2685-2833`
     Command {
         /// The vehicle.
         target: VehicleId,
@@ -777,7 +777,7 @@ pub enum Route {
         params: [f32; 7],
     },
     /// `doCommandInt`: `COMMAND_INT` until its `COMMAND_ACK`, anything but accepted a refusal.
-    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:2847-2951`
+    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:2844-2948`
     CommandInt {
         /// The vehicle.
         target: VehicleId,
@@ -810,7 +810,7 @@ pub enum Route {
         target: VehicleId,
     },
     /// `setParam`: `PARAM_SET` until the vehicle echoes the parameter.
-    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:1628-1770`
+    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:1625-1767`
     SetParam {
         /// The vehicle.
         target: VehicleId,

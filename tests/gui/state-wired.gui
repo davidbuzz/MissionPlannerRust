@@ -9,7 +9,7 @@
 # (GCSViews/ConfigurationView/ConfigPlanner.cs:574-641), which the link's stream requests read
 # (ExtLibs/ArduPilot/CurrentState.cs:4635-4666). GeoFenceDist measures from MAV.fencepoints, the
 # fence as the traffic on the link has shown it (CurrentState.cs:1617-1753,
-# MAVLinkInterface.cs:5625-5698): 99999 until a fence has passed, then a distance. SITL cannot
+# MAVLinkInterface.cs:5605-5671): 99999 until a fence has passed, then a distance. SITL cannot
 # fly, so time in air and the distance travelled are asserted where they are on the ground: 0.
 #
 # Its own config.xml with an attitude rate of 7 and today's K-index of 5. The fence is drawn in a

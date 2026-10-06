@@ -1183,7 +1183,7 @@ impl RadioInput {
                 Task::Rates(rates) => telemetry.set_stream_rates(rates),
                 Task::Stream(hz) => {
                     // Nothing for a rate of -1, and the rate as a byte otherwise.
-                    // C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:3061-3070, 3252
+                    // C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:3058-3066, 3252
                     if let Some((sender, id)) = telemetry.send_handle()
                         && let Some(request) = request_datastream(id, DATA_STREAM_RC_CHANNELS, hz)
                     {

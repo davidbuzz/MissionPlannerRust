@@ -21,7 +21,7 @@
 //! `GeoFenceDist`: how far the vehicle is from the nearest edge of its geofence.
 //!
 //! The fence itself is not vehicle state - the C# reads it from `MAVState.fencepoints`, which the
-//! fence download and the mission-protocol traffic on the link fill (`MAVLinkInterface.cs:4121,
+//! fence download and the mission-protocol traffic on the link fill (`MAVLinkInterface.cs:4112,
 //! 5641-5694`) - so whoever holds the fence passes it in, as [`FenceItem`]s in sequence order.
 //! The distance is the C#'s arithmetic step for step: its chunking of the items into shapes, its
 //! point-in-polygon test, its cross-track distance to each edge that the vehicle is beside, and
