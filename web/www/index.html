@@ -2,11 +2,22 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<!-- minimum-scale=1: a phone keeps its own width and scrolls across the planner, rather than
+     zooming the page out to fit it (the owner's report of 2026-10-06; the canvas's minimum below). -->
+<meta name="viewport" content="width=device-width, initial-scale=1, minimum-scale=1">
 <meta name="theme-color" content="#0d1117">
 <title>MissionPlannerRust in the browser</title>
 <style>
 html, body { margin: 0; height: 100%; background: #0d1117; } canvas { display: block; }
+/* The planner lays out at no less than 1280x800 - the smallest size crates/mp-gui/tests/layout.rs
+   proves nothing is cut off at - and a smaller screen, a phone's, scrolls to see it all (the
+   owner's report of 2026-10-06: on Android the page was laid out at the phone's width and cut
+   off). gpui sizes its canvas 100% of the page and follows the size it gets. There, a finger's
+   pan scrolls the page, which gpui's own touch-action: none would stop; a tap is still a click. */
+body > canvas { min-width: 1280px; min-height: 800px; }
+@media (max-width: 1279.98px), (max-height: 799.98px) {
+    body > canvas { touch-action: pan-x pan-y !important; }
+}
 /* The loading screen: shown from the first byte of this page until the planner's own canvas is
    up - the planner is tens of megabytes, a long wait on a phone's link (the owner's request,
    2026-10-06). Everything here is inline: nothing more to fetch before it shows. */

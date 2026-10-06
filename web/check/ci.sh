@@ -47,6 +47,8 @@ run storage_check "?facts=1&demo=0"
 run serial_check "?facts=1&demo=0"
 run maptype_check "?facts=1&demo=0"
 run osm_tiles_check "?facts=1&demo=0"
+# An Android phone's screen: the planner laid out at 1280x800 and scrolled to, and no red strip.
+run phone_check "?facts=1&demo=0"
 run plugins_check "?facts=1&demo=0"
 
 # The site as Pages serves it: under the project's path, with no header of its own.

@@ -77,17 +77,35 @@ fn output_path() -> Option<&'static PathBuf> {
     .as_ref()
 }
 
-/// Whether the application measures its controls: under `MP_PROBE`, for the harness, and always
-/// in a debug build, whose own guard says on screen when anything is cut off
-/// (`crate::layout_guard::Banner`; the owner, 2026-10-04: the cut-off guard "mandatory
-/// everywhere"). `MP_PROBE=off` turns it off.
+/// Whether the application measures its controls: where the cut-off guard is wanted
+/// ([`guard_wanted`]), and from whenever something asks for the controls' places at run time
+/// ([`enable`]).
 #[must_use]
 pub fn enabled() -> bool {
+    guard_wanted() || ASKED.load(std::sync::atomic::Ordering::Relaxed)
+}
+
+/// Whether the cut-off guard is wanted, its strip drawn ([`crate::layout_guard::Banner`]): under
+/// `MP_PROBE`, for the harness, and in a debug build, which says on screen when anything is cut
+/// off (the owner, 2026-10-04: the cut-off guard "mandatory everywhere"); `MP_PROBE=off` turns it
+/// off. Not because something turned the probe on at run time - the demo pointer, a web page's
+/// checks - so a release build, the published page among them, never draws the strip (the
+/// owner's report of 2026-10-06: a phone's browser showed the red bar).
+#[must_use]
+pub fn guard_wanted() -> bool {
     static ON: OnceLock<bool> = OnceLock::new();
-    *ON.get_or_init(|| match std::env::var_os("MP_PROBE") {
+    *ON.get_or_init(|| {
+        guard_wanted_with(std::env::var_os("MP_PROBE").as_deref(), cfg!(debug_assertions))
+    })
+}
+
+/// [`guard_wanted`] for `MP_PROBE`'s value and whether this is a debug build.
+#[must_use]
+pub fn guard_wanted_with(probe: Option<&std::ffi::OsStr>, debug: bool) -> bool {
+    match probe {
         Some(value) => value != "off",
-        None => cfg!(debug_assertions),
-    }) || ASKED.load(std::sync::atomic::Ordering::Relaxed)
+        None => debug,
+    }
 }
 
 /// Turned on at run time by what needs controls' places in any build: the demo pointer, which

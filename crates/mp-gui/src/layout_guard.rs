@@ -331,8 +331,10 @@ pub const BANNER_AFTER: std::time::Duration = std::time::Duration::from_millis(5
 /// The debug build's own guard (the owner, 2026-10-04: the cut-off guard "mandatory everywhere"):
 /// what [`hidden`] has named on the screen showing for longer than [`BANNER_AFTER`], said in a red
 /// strip across the window's foot - at whatever size the window is, on every screen, without a
-/// test run. The strip is drawn over the window, so it moves nothing; a release build measures
-/// nothing and never shows it.
+/// test run. The strip is drawn over the window, so it moves nothing. Only where the guard is
+/// wanted ([`crate::probe::guard_wanted`]): a release build never shows it, even with its probe
+/// on for the demo pointer or a page's checks - the published page on a phone showed it (the
+/// owner's report of 2026-10-06).
 #[derive(Debug, Default)]
 pub struct Banner {
     /// What is cut off, described, and since when it has been so.
@@ -349,7 +351,7 @@ impl Banner {
     /// (the owner, 2026-10-04: "are you capturing *all the CUT OFF events into a log ... so you
     /// dont miss them").
     pub fn update(&mut self, place: &str, important: &[&str], size: (f32, f32)) {
-        let names = if crate::probe::enabled() {
+        let names = if crate::probe::enabled() && crate::probe::guard_wanted() {
             hidden(important)
         } else {
             Vec::new()
@@ -410,6 +412,20 @@ impl Banner {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The red strip only where the guard is wanted: a debug build, or `MP_PROBE` asking for it
+    /// (and not `off`); never a release build, whatever turns its probe on at run time - the
+    /// published page on a phone showed it, with the demo pointer's probe on (the owner's report
+    /// of 2026-10-06). web/check/phone_check.js holds the release build to it in a page.
+    #[test]
+    fn the_strip_is_drawn_only_where_the_guard_is_wanted() {
+        use crate::probe::guard_wanted_with;
+        use std::ffi::OsStr;
+        assert!(guard_wanted_with(None, true), "a debug build");
+        assert!(!guard_wanted_with(None, false), "a release build");
+        assert!(guard_wanted_with(Some(OsStr::new("/tmp/probe.txt")), false), "the harness");
+        assert!(!guard_wanted_with(Some(OsStr::new("off")), true), "MP_PROBE=off");
+    }
 
     /// Every screen the window can show has a list, and every list names the connect box, which
     /// is on every screen.

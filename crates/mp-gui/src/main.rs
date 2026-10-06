@@ -3785,6 +3785,13 @@ impl Render for MissionPlanner {
                 self.screen,
                 self.survey.is_open(),
             ));
+            // The red strip's words, or none: what an operator sees of the guard.
+            facts::record(
+                "layout.banner",
+                self.cut_off
+                    .text_at(web_time::Instant::now())
+                    .unwrap_or("none"),
+            );
             prefetch_ui::record_facts(&self.plan_menus);
             facts::record("plan.docking", self.plan_docking.name());
             // The map's zoom and centre, its radius circles and what the pointer is over, and the
