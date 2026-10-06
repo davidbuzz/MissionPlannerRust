@@ -95,7 +95,10 @@ pub fn enabled() -> bool {
 pub fn guard_wanted() -> bool {
     static ON: OnceLock<bool> = OnceLock::new();
     *ON.get_or_init(|| {
-        guard_wanted_with(std::env::var_os("MP_PROBE").as_deref(), cfg!(debug_assertions))
+        guard_wanted_with(
+            std::env::var_os("MP_PROBE").as_deref(),
+            cfg!(debug_assertions),
+        )
     })
 }
 
