@@ -66,10 +66,25 @@ pub enum FtpError {
     /// The same refusal as [`FtpError::Responded`], in the other wording the C# uses for it,
     /// whether or not the command opens a file.
     ///
-    /// C#: e.g. MAVFtp.cs:991-992 (`kCmdCalcFileCRC32`), :1324-1325 (`kCmdListDirectory`),
-    /// :1783-1784 (`kCmdRemoveFile`).
+    /// C#: e.g. MAVFtp.cs:991-992 (`kCmdCalcFileCRC32`), :1363-1364 (`kCmdListDirectory`).
     #[error("Failed to OpenFile - {req_opcode} {error} {errno}")]
     FailedToOpenFile {
+        /// Which command the vehicle refused.
+        req_opcode: Opcode,
+        /// `kErrFailErrno`.
+        error: ErrorCode,
+        /// Why, as the vehicle's errno.
+        errno: Errno,
+    },
+    /// The vehicle refused to remove a file or a directory: the same refusal, naming the path,
+    /// as upstream words it since 54ce49a4b ("A refused remove now names the path in its
+    /// message instead of the copied 'Failed to OpenFile'").
+    ///
+    /// C#: MAVFtp.cs:1737-1738 (`kCmdRemoveDirectory`), :1822-1823 (`kCmdRemoveFile`).
+    #[error("Failed to remove {path} - {req_opcode} {error} {errno}")]
+    FailedToRemove {
+        /// The file or directory.
+        path: String,
         /// Which command the vehicle refused.
         req_opcode: Opcode,
         /// `kErrFailErrno`.

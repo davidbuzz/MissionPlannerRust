@@ -128,6 +128,13 @@ pub enum FtpRequest {
         /// The directory, which must be empty.
         path: String,
     },
+    /// `RemoveDirectoryRecursive(dir, cancel)`: the directory and everything in it, since the
+    /// vehicle removes only an empty one (upstream's 54ce49a4b). [`FtpOutcome::Done`] false when
+    /// cancelled or when a remove is not acknowledged; a refused remove is its error.
+    RemoveDirectoryRecursive {
+        /// The directory.
+        path: String,
+    },
     /// `kCmdCreateDirectory(file, cancel)`.
     CreateDirectory {
         /// The directory.
@@ -205,8 +212,21 @@ enum Job {
         data: Option<Vec<u8>>,
         phase: PutPhase,
     },
+    /// `RemoveDirectoryRecursive`: the directories being emptied, the deepest last, and whether
+    /// listings carry times.
+    RemoveTree {
+        folders: Vec<Folder>,
+        with_time: bool,
+    },
     /// A request that is one command.
     One,
+}
+
+/// A directory `RemoveDirectoryRecursive` is emptying: its entries still to remove, once listed.
+#[derive(Debug, Clone)]
+struct Folder {
+    path: String,
+    entries: std::collections::VecDeque<FtpFileInfo>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -500,6 +520,25 @@ fn first_step(
                 simple(Opcode::REMOVE_DIRECTORY, path.as_bytes(), &path, ctx),
             )
         }
+        FtpRequest::RemoveDirectoryRecursive { path } => {
+            // C#: MAVFtp.cs:604-606: "//" made "/", a trailing "/" dropped.
+            let mut path = path.replace("//", "/");
+            if path.len() > 1 {
+                path = path.trim_end_matches('/').to_owned();
+            }
+            let with_time = !with_time_unsupported;
+            let step = Step::List(List::new(&path, with_time, timeouts, ctx, now));
+            (
+                Job::RemoveTree {
+                    folders: vec![Folder {
+                        path,
+                        entries: std::collections::VecDeque::new(),
+                    }],
+                    with_time,
+                },
+                step,
+            )
+        }
         FtpRequest::CreateDirectory { path } => (
             Job::One,
             simple(Opcode::CREATE_DIRECTORY, path.as_bytes(), &path, ctx),
@@ -515,6 +554,67 @@ fn first_step(
         FtpRequest::ResetSessions => (Job::One, simple(Opcode::RESET_SESSIONS, &[], "", ctx)),
         FtpRequest::TerminateSession => (Job::One, simple(Opcode::TERMINATE_SESSION, &[], "", ctx)),
     }
+}
+
+/// `RemoveDirectoryRecursive`'s next command: the deepest directory's next entry - a file
+/// removed, a directory listed to be emptied first - or, with none left, the directory itself,
+/// each said on the progress line. Cancelled, it stops false.
+/// `// C#: ExtLibs/ArduPilot/Mavlink/MAVFtp.cs:610-630`
+fn remove_next(
+    folders: &mut Vec<Folder>,
+    with_time: bool,
+    timeouts: &FtpTimeouts,
+    ctx: &mut Ctx<'_>,
+    now: Instant,
+) -> Next {
+    if ctx.cancelled {
+        return Next::Done(Ok(FtpOutcome::Done(false)));
+    }
+    let Some(folder) = folders.last_mut() else {
+        return Next::Done(Ok(FtpOutcome::Done(false)));
+    };
+    let Some(entry) = folder.entries.pop_front() else {
+        // C#: MAVFtp.cs:629-630.
+        *ctx.progress = Progress {
+            message: format!("Delete {}", folder.path),
+            percent: -1,
+        };
+        let path = folder.path.clone();
+        return Next::Step(Box::new(Step::Simple(Simple::new(
+            Opcode::REMOVE_DIRECTORY,
+            path.as_bytes(),
+            &path,
+            timeouts,
+            ctx,
+            now,
+        ))));
+    };
+    // C#: MAVFtp.cs:618-624.
+    let path = if folder.path.ends_with('/') {
+        format!("{}{}", folder.path, entry.name)
+    } else {
+        format!("{}/{}", folder.path, entry.name)
+    };
+    *ctx.progress = Progress {
+        message: format!("Delete {path}"),
+        percent: -1,
+    };
+    if entry.is_directory {
+        let step = Step::List(List::new(&path, with_time, timeouts, ctx, now));
+        folders.push(Folder {
+            path,
+            entries: std::collections::VecDeque::new(),
+        });
+        return Next::Step(Box::new(step));
+    }
+    Next::Step(Box::new(Step::Simple(Simple::new(
+        Opcode::REMOVE_FILE,
+        path.as_bytes(),
+        &path,
+        timeouts,
+        ctx,
+        now,
+    ))))
 }
 
 /// A command has returned: what the request does next.
@@ -701,6 +801,61 @@ fn step_finished(
             }),
             None => Ok(FtpOutcome::Done(ans)),
         }),
+        (
+            Job::RemoveTree { folders, with_time },
+            StepResult::List {
+                answer,
+                not_supported,
+                ex,
+                ..
+            },
+        ) => {
+            if let Some(ex) = ex {
+                return Next::Done(Err(ex));
+            }
+            if *with_time && not_supported {
+                *with_time_unsupported = true;
+                *with_time = false;
+                let path = folders
+                    .last()
+                    .map(|folder| folder.path.clone())
+                    .unwrap_or_default();
+                return Next::Step(Box::new(Step::List(List::new(
+                    &path, false, timeouts, ctx, now,
+                ))));
+            }
+            // C#: MAVFtp.cs:613-616: SITL's posix filesystem lists "." and "..", and a nameless
+            // entry stands for one the vehicle skipped.
+            if let Some(folder) = folders.last_mut() {
+                folder.entries = answer
+                    .into_iter()
+                    .filter(|entry| !matches!(entry.name.as_str(), "" | "." | ".."))
+                    .collect();
+            }
+            remove_next(folders, *with_time, timeouts, ctx, now)
+        }
+        (
+            Job::RemoveTree { folders, with_time },
+            StepResult::Simple {
+                opcode, ans, ex, ..
+            },
+        ) => {
+            // C#: MAVFtp.cs:622-624, 630: a remove the vehicle refuses throws; one not
+            // acknowledged ends it false.
+            if let Some(ex) = ex {
+                return Next::Done(Err(ex));
+            }
+            if !ans {
+                return Next::Done(Ok(FtpOutcome::Done(false)));
+            }
+            if opcode == Opcode::REMOVE_DIRECTORY {
+                folders.pop();
+                if folders.is_empty() {
+                    return Next::Done(Ok(FtpOutcome::Done(true)));
+                }
+            }
+            remove_next(folders, *with_time, timeouts, ctx, now)
+        }
         // A command finished that its request never starts; nothing sensible to continue with.
         (_, _) => Next::Done(Ok(FtpOutcome::Done(false))),
     }

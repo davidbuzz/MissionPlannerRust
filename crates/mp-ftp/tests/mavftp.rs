@@ -486,9 +486,10 @@ fn a_refusal_with_an_errno_is_reported_in_the_csharps_words() {
     ) else {
         panic!();
     };
+    // Upstream's wording since 54ce49a4b names the path (MAVFtp.cs:1822-1823).
     assert_eq!(
         error.to_string(),
-        "Failed to OpenFile - kCmdRemoveFile kErrFailErrno EBUSY"
+        "Failed to remove /busy - kCmdRemoveFile kErrFailErrno EBUSY"
     );
     assert_eq!(rig.elapsed(), Duration::from_secs(1));
 }
@@ -866,6 +867,67 @@ fn remove_rename_and_directories() {
             path: "/a/gone".to_owned()
         }
     );
+}
+
+/// `RemoveDirectoryRecursive` (upstream's 54ce49a4b): the vehicle removes only an empty
+/// directory - `kCmdRemoveDirectory` on one with files is refused, the refusal naming its path -
+/// so the files and the directories inside go first, deepest first, "." and ".." passed over,
+/// and then the directory; each path is said on the progress line.
+/// `// C#: ExtLibs/ArduPilot/Mavlink/MAVFtp.cs:594-631, 1737-1738`
+#[test]
+fn a_directory_is_removed_with_everything_in_it() {
+    let mut vehicle = FakeVehicle::new()
+        .with_file("/logs/a.bin", b"1")
+        .with_file("/logs/deep/b.bin", b"2")
+        .with_dir("/logs/deep/empty");
+    vehicle.posix_dots = true;
+    let mut rig = Rig::new(vehicle);
+    let Err(refused) = rig.run(
+        FtpRequest::RemoveDirectory {
+            path: "/logs".to_owned(),
+        },
+        nothing_lost,
+    ) else {
+        panic!("a directory with files in it was removed");
+    };
+    assert!(
+        refused.to_string().starts_with("Failed to remove /logs - "),
+        "{refused}"
+    );
+    rig.sent.clear();
+    assert_eq!(
+        rig.run(
+            FtpRequest::RemoveDirectoryRecursive {
+                path: "//logs/".to_owned()
+            },
+            nothing_lost
+        ),
+        Ok(FtpOutcome::Done(true))
+    );
+    assert!(rig.vehicle.files.is_empty());
+    assert!(!rig.vehicle.dirs.iter().any(|dir| dir.starts_with("/logs")));
+    let removed: Vec<(Opcode, String)> = rig
+        .sent
+        .iter()
+        .filter(|(_, head)| matches!(head.opcode, Opcode::REMOVE_FILE | Opcode::REMOVE_DIRECTORY))
+        .map(|(_, head)| {
+            (
+                head.opcode,
+                String::from_utf8_lossy(head.payload()).into_owned(),
+            )
+        })
+        .collect();
+    assert_eq!(
+        removed,
+        [
+            (Opcode::REMOVE_DIRECTORY, "/logs/deep/empty".to_owned()),
+            (Opcode::REMOVE_FILE, "/logs/deep/b.bin".to_owned()),
+            (Opcode::REMOVE_DIRECTORY, "/logs/deep".to_owned()),
+            (Opcode::REMOVE_FILE, "/logs/a.bin".to_owned()),
+            (Opcode::REMOVE_DIRECTORY, "/logs".to_owned()),
+        ]
+    );
+    assert_eq!(rig.ftp.progress().message, "Delete /logs");
 }
 
 /// `kCmdCreateDirectory` on `EEXIST` sets `Complete` - and then throws anyway, because `ex` was

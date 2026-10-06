@@ -54,6 +54,8 @@ pub struct FakeVehicle {
     /// Another ground station holds the session: opens are refused with
     /// `kErrNoSessionsAvailable` until a `kCmdResetSessions` frees it.
     pub session_held_elsewhere: bool,
+    /// Whether a listing starts with "." and "..", as SITL's posix filesystem lists them.
+    pub posix_dots: bool,
     /// Refuse this opcode with this NAK, every time.
     pub refuse: Option<(Opcode, ErrorCode, Errno)>,
     /// Refuse the next request with this opcode with this NAK, once.
@@ -83,6 +85,7 @@ impl FakeVehicle {
             burst_chunks: ARDUPILOT_BURST_CHUNKS,
             knows_list_with_time: false,
             session_held_elsewhere: false,
+            posix_dots: false,
             refuse: None,
             refuse_once: None,
             open: None,
@@ -235,7 +238,12 @@ impl FakeVehicle {
         ack.offset = request.offset;
         let mut entries = Vec::new();
         let start = usize::try_from(request.offset).unwrap_or(usize::MAX);
-        for (full, is_dir) in self.children(dir).into_iter().skip(start) {
+        let dots = if self.posix_dots {
+            vec![(format!("{dir}/."), true), (format!("{dir}/.."), true)]
+        } else {
+            Vec::new()
+        };
+        for (full, is_dir) in dots.into_iter().chain(self.children(dir)).skip(start) {
             let name = full.rsplit('/').next().unwrap_or(&full);
             let time = self.times.get(&full).copied().unwrap_or(0);
             let size = self.files.get(&full).map_or(0, Vec::len);

@@ -112,10 +112,12 @@ pub(crate) enum Wording {
     Responded,
     /// `"Failed to OpenFile - "`, which several commands that open no file use too.
     FailedToOpenFile,
+    /// `"Failed to remove " + file + " - "`: the two removes, since upstream's 54ce49a4b.
+    FailedToRemove,
 }
 
 impl Wording {
-    fn error(self, head: &Header) -> FtpError {
+    fn error(self, head: &Header, path: &str) -> FtpError {
         let req_opcode = head.req_opcode;
         let error = ErrorCode(head.data_byte(0));
         let errno = Errno(head.data_byte(1));
@@ -126,6 +128,12 @@ impl Wording {
                 errno,
             },
             Self::FailedToOpenFile => FtpError::FailedToOpenFile {
+                req_opcode,
+                error,
+                errno,
+            },
+            Self::FailedToRemove => FtpError::FailedToRemove {
+                path: path.to_owned(),
                 req_opcode,
                 error,
                 errno,
@@ -188,8 +196,8 @@ impl Simple {
     /// | `kCmdCreateFile` | :1139-1236 | yes | failed to open | stops | stops | - | reset, retry |
     /// | `kCmdCalcFileCRC32` | :914-1000 | yes | failed to open | - | stops | - | reset |
     /// | `kCmdCreateDirectory` | :1046-1137 | yes | responded | stops | - | completes | reset |
-    /// | `kCmdRemoveDirectory` | :1661-1744 | yes | failed to open | - | stops | - | reset |
-    /// | `kCmdRemoveFile` | :1746-1829 | yes | failed to open | - | stops | - | reset |
+    /// | `kCmdRemoveDirectory` | :1700-1783 | yes | failed to remove | - | stops | - | reset |
+    /// | `kCmdRemoveFile` | :1785-1868 | yes | failed to remove | - | stops | - | reset |
     /// | `kCmdRename` | :1831-1906 | yes | responded | - | - | - | reset |
     pub(crate) fn new(
         opcode: Opcode,
@@ -252,7 +260,7 @@ impl Simple {
                     self.retry.complete = true;
                 }
                 self.retry.retries = 0;
-                self.ex = Some(self.rules.wording.error(head));
+                self.ex = Some(self.rules.wording.error(head, &self.path));
             }
             if self.rules.exists_completes && error == ErrorCode::FAIL_FILE_EXISTS {
                 self.retry.complete = true;
@@ -327,7 +335,7 @@ fn rules_for(opcode: Opcode, t: &super::FtpTimeouts) -> (Rules, Patience) {
         no_sessions,
     };
     use OnNoSessions::{Ignore, Reset, ResetAndRetry};
-    use Wording::{FailedToOpenFile, Responded};
+    use Wording::{FailedToOpenFile, FailedToRemove, Responded};
     match opcode {
         Opcode::RESET_SESSIONS => (
             rules(false, Responded, false, false, false, Ignore),
@@ -351,7 +359,7 @@ fn rules_for(opcode: Opcode, t: &super::FtpTimeouts) -> (Rules, Patience) {
         ),
         Opcode::CREATE_DIRECTORY => (rules(true, Responded, true, false, true, Reset), t.other),
         Opcode::REMOVE_DIRECTORY | Opcode::REMOVE_FILE => (
-            rules(true, FailedToOpenFile, false, true, false, Reset),
+            rules(true, FailedToRemove, false, true, false, Reset),
             t.other,
         ),
         // kCmdRename, and anything else sent this way.
@@ -451,7 +459,7 @@ impl List {
             }
             if error == ErrorCode::FAIL_ERRNO {
                 self.retry.retries = 0;
-                self.ex = Some(Wording::FailedToOpenFile.error(head));
+                self.ex = Some(Wording::FailedToOpenFile.error(head, ""));
             }
             if error == ErrorCode::FILE_NOT_FOUND {
                 self.retry.retries = 0;
@@ -628,7 +636,7 @@ impl Burst {
             let error = ErrorCode(head.data_byte(0));
             if error == ErrorCode::FAIL_ERRNO {
                 self.retry.retries = 0;
-                self.ex = Some(Wording::Responded.error(head));
+                self.ex = Some(Wording::Responded.error(head, ""));
             }
             if error == ErrorCode::EOF {
                 if self.received() >= self.size {
@@ -862,7 +870,7 @@ impl Read {
             let error = ErrorCode(head.data_byte(0));
             if error == ErrorCode::FAIL_ERRNO {
                 self.retry.retries = 0;
-                self.ex = Some(Wording::Responded.error(head));
+                self.ex = Some(Wording::Responded.error(head, ""));
             }
             if error == ErrorCode::FAIL {
                 self.retry.retries = 0;
@@ -1032,7 +1040,7 @@ impl Write {
             let error = ErrorCode(head.data_byte(0));
             if error == ErrorCode::FAIL_ERRNO {
                 self.retry.retries = 0;
-                self.ex = Some(Wording::Responded.error(head));
+                self.ex = Some(Wording::Responded.error(head, ""));
             }
             if error == ErrorCode::FAIL {
                 self.retry.retries = 0;

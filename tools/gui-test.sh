@@ -574,8 +574,9 @@ expect_once() {
     local KEY OP WANT GOT OTHER VERDICT
     KEY="${2:?expect needs a key}"
     OP="${3:?expect needs a value}"
-    # `expect key value` is equality; `expect key ~ value` is containment; `expect key > n`,
-    # `expect key >= n` and `expect key < n` compare numbers, decimals included.
+    # `expect key value` is equality; `expect key ~ value` is containment and `expect key !~ value`
+    # its absence; `expect key > n`, `expect key >= n` and `expect key < n` compare numbers,
+    # decimals included.
     if [ "$OP" = "~" ]; then
         shift 3
         WANT="$*"
@@ -585,6 +586,21 @@ expect_once() {
             *"$WANT"*) [ -z "$QUIET" ] && echo "  ok   $KEY contains '$WANT'"; return 0 ;;
         esac
         [ -z "$QUIET" ] && echo "FAIL line $LINE_NO: $KEY is '$GOT', expected to contain '$WANT'" >&2
+        return 1
+    elif [ "$OP" = "!~" ]; then
+        shift 3
+        WANT="$*"
+        GOT=$(fact "$KEY")
+        LAST_VALUE="$GOT"
+        if [ -z "$GOT" ] && ! grep -q "^$(fact_key_pattern "$KEY") = " "$FACTS_FILE" 2>/dev/null; then
+            [ -z "$QUIET" ] && no_such_fact "$KEY" ""
+            return 1
+        fi
+        case "$GOT" in
+            *"$WANT"*) ;;
+            *) [ -z "$QUIET" ] && echo "  ok   $KEY does not contain '$WANT'"; return 0 ;;
+        esac
+        [ -z "$QUIET" ] && echo "FAIL line $LINE_NO: $KEY is '$GOT', expected not to contain '$WANT'" >&2
         return 1
     elif [ "$OP" = ">" ] || [ "$OP" = ">=" ] || [ "$OP" = "<" ]; then
         WANT="${4:-}"

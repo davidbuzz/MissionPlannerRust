@@ -166,8 +166,19 @@ pub const TREE_PAGE: usize = 32;
 pub const USER_CANCEL: &str = "User Cancel";
 
 /// `DeleteToolStripMenuItem_Click`'s box, captioned with the file's name.
-/// `// C#: Controls/MavFTPUI.cs:470-471`
+/// `// C#: Controls/MavFTPUI.cs:494`
 pub const FAILED_DELETE: &str = "Failed to delete file";
+/// The same for a folder, since upstream's 54ce49a4b. `// C#: Controls/MavFTPUI.cs:494`
+pub const FAILED_DELETE_FOLDER: &str = "Failed to delete folder";
+/// Delete's question when folders are among the rows: a folder goes with everything in it.
+/// `// C#: Controls/MavFTPUI.cs:452-459`
+#[must_use]
+pub fn delete_question(folders: &[&Item]) -> String {
+    match folders {
+        [one] => format!("Delete the folder {} and everything in it?", one.name),
+        _ => format!("Delete {} folders and everything in them?", folders.len()),
+    }
+}
 
 /// `NewFolderToolStripMenuItem_Click`'s box.
 /// `// C#: Controls/MavFTPUI.cs:565`
@@ -193,10 +204,11 @@ pub const MOUNT_PROMPT: &str = "Enter drive letter or path (e.g. M:\\)";
 /// `DefaultMountPoint`.
 pub const DEFAULT_MOUNT_POINT: &str = "M:\\";
 
-/// What `new Dokan(...)` throws where the driver is not installed - `DllNotFoundException` for
-/// `dokan2.dll`, as the .NET Framework words it - which is every machine this runs on.
-pub const DOKAN_MISSING: &str =
-    "Unable to load DLL 'dokan2.dll': The specified module could not be found.";
+/// What the mount throws where the Dokan driver is not installed - every machine this runs on:
+/// since upstream's 8fdd13f26 `MavFtpDokan` probes for `dokan2.dll` first and throws this
+/// `DllNotFoundException`, rather than letting `new Dokan(...)` throw .NET's own and take the
+/// process down from its finalizer. `// C#: ExtLibs/ArduPilot/MavFtpDokan.cs:102-105`
+pub const DOKAN_MISSING: &str = "The Dokan driver is not installed (dokan2.dll could not be loaded). Install Dokan 2.x from https://github.com/dokan-dev/dokany/releases and try again.";
 
 /// The status strip's line after a mount fails.
 /// `// C#: Controls/MavFTPUI.cs:733-737`
@@ -617,8 +629,8 @@ enum Then {
     Uploaded,
     /// `kCmdCalcFileCRC32` of an upload, against the file's.
     CrcCheck { local: u32 },
-    /// `kCmdRemoveFile`.
-    Removed { name: String },
+    /// `kCmdRemoveFile`, or `RemoveDirectoryRecursive` for a folder.
+    Removed { name: String, folder: bool },
     /// `kCmdCreateDirectory`.
     Created,
     /// `kCmdRename`, `kCmdResetSessions`: nothing is done with them.
@@ -823,6 +835,8 @@ pub struct MavFtp {
     renaming: Option<(usize, TextField)>,
     /// The box asking for a name, a folder or a file.
     prompt: Option<Prompt>,
+    /// Delete's question for folders, and the rows it would delete.
+    delete_question: Option<(String, Vec<Item>)>,
     /// New Folder's or "Mount as Drive"'s box as its OK closed it, until the holder keeps the
     /// answer in `Settings.Instance`.
     answered: Option<InputBox>,
@@ -870,6 +884,7 @@ impl Default for MavFtp {
             menu: None,
             renaming: None,
             prompt: None,
+            delete_question: None,
             answered: None,
             steps: VecDeque::new(),
             running: None,
@@ -1845,7 +1860,8 @@ impl MavFtp {
         self.steps.push_back(Step::Click);
     }
 
-    /// Delete: each selected row removed behind the window, the directory listed again.
+    /// Delete: a folder among the rows is asked about first, since it goes with everything in it;
+    /// then each selected row removed behind the window, the directory listed again.
     /// `// C#: Controls/MavFTPUI.cs:450-504`
     fn delete(&mut self) {
         let rows: Vec<Item> = self
@@ -1853,18 +1869,55 @@ impl MavFtp {
             .iter()
             .filter_map(|index| self.items.get(*index).cloned())
             .collect();
+        let folders: Vec<&Item> = rows.iter().filter(|row| row.directory).collect();
+        if !folders.is_empty() {
+            let question = delete_question(&folders);
+            self.delete_question = Some((question, rows));
+            return;
+        }
+        self.delete_rows(rows);
+    }
+
+    /// Delete's question for folders, while it is asked.
+    #[must_use]
+    pub fn delete_question(&self) -> Option<&str> {
+        self.delete_question
+            .as_ref()
+            .map(|(question, _)| question.as_str())
+    }
+
+    /// The question answered: Yes deletes the rows, No nothing.
+    /// `// C#: Controls/MavFTPUI.cs:453-460`
+    pub fn answer_delete(&mut self, yes: bool) {
+        if let Some((_, rows)) = self.delete_question.take()
+            && yes
+        {
+            self.delete_rows(rows);
+        }
+    }
+
+    /// Each row removed behind the window - a folder with everything in it, each path shown as
+    /// it goes - and the directory listed again.
+    /// `// C#: Controls/MavFTPUI.cs:461-504`
+    fn delete_rows(&mut self, rows: Vec<Item>) {
         for row in rows {
             self.steps
                 .push_back(Step::Status(format!("Delete {}", row.name)));
             // `((DirectoryInfo)Tag).FullName + "/" + Text`: from `/` that is "//name".
+            let path = format!("{}/{}", row.dir, row.name);
+            let request = if row.directory {
+                FtpRequest::RemoveDirectoryRecursive { path }
+            } else {
+                FtpRequest::RemoveFile { path }
+            };
+            // `_mavftp.Progress += progress`: each path into the window.
             self.steps.push_back(Step::Work(Work::dialog(
-                false,
+                true,
                 [Call {
-                    request: FtpRequest::RemoveFile {
-                        path: format!("{}/{}", row.dir, row.name),
-                    },
+                    request,
                     then: Then::Removed {
                         name: row.name.clone(),
+                        folder: row.directory,
                     },
                 }],
             )));
@@ -2226,12 +2279,19 @@ impl MavFtp {
                 Ok(_) => Landed::Threw(BAD_CRC.to_owned()),
                 Err(error) => Landed::Threw(error),
             },
-            Then::Removed { name } => match outcome {
+            // Cancelled: the window closes quietly (C#: MavFTPUI.cs:486-491).
+            Then::Removed { .. } if cancelled => Landed::Next,
+            Then::Removed { name, folder } => match outcome {
                 Ok(FtpOutcome::Done(true)) => Landed::Next,
                 Ok(_) => {
-                    // `CustomMessageBox.Show("Failed to delete file", text)`: the status line.
-                    self.status_line
-                        .push_back(format!("{FAILED_DELETE}: {name}"));
+                    // `CustomMessageBox.Show(isDirectory ? "Failed to delete folder" : "Failed
+                    // to delete file", text)`: the status line.
+                    let failed = if folder {
+                        FAILED_DELETE_FOLDER
+                    } else {
+                        FAILED_DELETE
+                    };
+                    self.status_line.push_back(format!("{failed}: {name}"));
                     Landed::Next
                 }
                 Err(error) => Landed::Threw(error),
@@ -2492,6 +2552,10 @@ fn write_unused(folder: &Path, name: &str, data: &[u8]) -> std::io::Result<()> {
 pub fn record_facts(page: &MavFtp) {
     use crate::facts::record;
     record("config.mavftp.active", page.is_active());
+    record(
+        "config.mavftp.delete.question",
+        page.delete_question().unwrap_or("none"),
+    );
     record("config.mavftp.status", page.status());
     let (value, marquee) = page.bar();
     record(
@@ -3303,6 +3367,19 @@ fn splitter(page: &MavFtp, cx: &mut Context<MissionPlanner>) -> AnyElement {
         .into_any_element()
 }
 
+/// Delete's question's controls. `// C#: Controls/MavFTPUI.cs:453-459`
+const DELETE_IDS: crate::config::firmware::BoxIds = crate::config::firmware::BoxIds {
+    question: "mavftp-delete-question",
+    yes: "mavftp-delete-question-yes",
+    no: "mavftp-delete-question-no",
+    message: "mavftp-delete-message",
+    ok: "mavftp-delete-message-ok",
+    path: "mavftp-delete-path",
+    path_value: "mavftp-delete-path-value",
+    path_ok: "mavftp-delete-path-ok",
+    path_cancel: "mavftp-delete-path-cancel",
+};
+
 /// The progress window, the box asking, or a message box, over the whole window.
 pub fn overlay(
     page: &MavFtp,
@@ -3337,6 +3414,17 @@ pub fn overlay(
             message,
             window,
             |this| this.software_pages2.mavftp.dismiss_message(),
+            cx,
+        ));
+    }
+    if let Some(question) = page.delete_question() {
+        return Some(crate::config::firmware::question_box(
+            DELETE_IDS,
+            "Delete",
+            question,
+            mp_firmware::flow::Buttons::YesNo,
+            window,
+            |this, yes| this.software_pages2.mavftp.answer_delete(yes),
             cx,
         ));
     }
@@ -3556,7 +3644,9 @@ mod tests {
         let Some(designer) =
             crate::config_coverage::source::csharp("Controls/MavFTPUI.Designer.cs")
         else {
-            eprintln!("skipped: MP_SRC does not name a clone of https://github.com/ArduPilot/MissionPlanner");
+            eprintln!(
+                "skipped: MP_SRC does not name a clone of https://github.com/ArduPilot/MissionPlanner"
+            );
             return;
         };
         for (text, width) in COLUMNS {
@@ -3781,6 +3871,71 @@ mod tests {
             "{line}"
         );
         assert!(page.message().is_none(), "no box");
+    }
+
+    /// A folder is asked about first - it goes with everything in it - and No leaves it; Yes
+    /// removes it with its files and folders, deepest first (upstream's 54ce49a4b), and the list
+    /// no longer shows it. `// C#: Controls/MavFTPUI.cs:450-504`
+    #[test]
+    fn a_folder_is_deleted_with_everything_in_it_once_asked() {
+        let bench = Bench::new(vehicle());
+        let mut page = loaded(&bench);
+        page.click_node("/APM");
+        settle(&mut page, &bench);
+        select(&mut page, "LOGS");
+        page.choose(Menu::Delete);
+        assert_eq!(
+            page.delete_question(),
+            Some("Delete the folder LOGS and everything in it?")
+        );
+        page.answer_delete(false);
+        settle(&mut page, &bench);
+        assert!(page.delete_question().is_none());
+        assert!(
+            bench
+                .vehicle
+                .borrow()
+                .files
+                .contains_key("/APM/LOGS/00000001.BIN")
+        );
+        page.choose(Menu::Delete);
+        page.answer_delete(true);
+        settle(&mut page, &bench);
+        assert!(
+            bench
+                .started
+                .borrow()
+                .contains(&FtpRequest::RemoveDirectoryRecursive {
+                    path: "/APM/LOGS".to_owned()
+                })
+        );
+        let vehicle = bench.vehicle.borrow();
+        assert!(!vehicle.files.contains_key("/APM/LOGS/00000001.BIN"));
+        assert!(!vehicle.dirs.contains("/APM/LOGS"));
+        drop(vehicle);
+        assert!(!names(&page).contains(&"LOGS"));
+        assert_eq!(page.status(), READY);
+        // Two folders: the other wording.
+        let two = [
+            Item {
+                name: "a".to_owned(),
+                directory: true,
+                size: String::new(),
+                modified: String::new(),
+                dir: "/APM".to_owned(),
+            },
+            Item {
+                name: "b".to_owned(),
+                directory: true,
+                size: String::new(),
+                modified: String::new(),
+                dir: "/APM".to_owned(),
+            },
+        ];
+        assert_eq!(
+            delete_question(&two.iter().collect::<Vec<_>>()),
+            "Delete 2 folders and everything in them?"
+        );
     }
 
     /// New Folder asks for a name and makes it; the list shows it.

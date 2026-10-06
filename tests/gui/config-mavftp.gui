@@ -23,13 +23,15 @@
 #   tools/gui-test.sh tests/gui/config-mavftp.gui -- tcp:127.0.0.1:5760
 #
 # A run that stops half way can leave the folder mprtest in SITL's working directory; New Folder
-# then puts "Failed to create directory" on the status line until a fresh SITL.
+# then puts "Failed to create directory" on the status line until a fresh SITL. A run to the end
+# deletes it, the folder Delete of upstream's 54ce49a4b.
 
 env MP_CONFIG_XML $WORK/config.xml
 setup mkdir -p $WORK/mavftp/down && printf 'hello from the mavftp page\n' > $WORK/mavftp/hello.txt && printf 'second\n' > $WORK/mavftp/two.txt
 screen params
 window 1600x1200
-budget 41
+budget 48
+# 48: one run took 39.9 s with the folder delete added (2026-10-06).
 # RawParamWarning, on the Full Parameter List's Activate (ConfigRawParams.cs:92): "Show me
 # again?" unticked, so no later visit asks, and OK.
 # The vehicle first: a click before its first heartbeat is a click the screen may forget
@@ -190,6 +192,24 @@ click mavftp-node-/
 click mavftp-col-0
 click mavftp-col-0
 expect config.mavftp.list ~ mprtest
+
+# Delete on a folder asks first (upstream's 54ce49a4b) - No leaves it - and Yes removes it with
+# whatever is in it, deepest first (:450-504; MAVFtp.cs:594-631), so the run leaves SITL's
+# directory as it found it.
+click mavftp-node-/
+expect config.mavftp.list ~ mprtest
+click mavftp-item-mprtest:right
+click mavftp-menu-delete
+expect config.mavftp.delete.question Delete the folder mprtest and everything in it?
+click mavftp-delete-question-no
+expect config.mavftp.delete.question none
+expect config.mavftp.list ~ mprtest
+click mavftp-item-mprtest:right
+click mavftp-menu-delete
+click mavftp-delete-question-yes
+within 20
+expect config.mavftp.list !~ mprtest
+expect config.mavftp.busy false
 
 # Choosing another page hides this one.
 click config-page-ConfigUserDefined
