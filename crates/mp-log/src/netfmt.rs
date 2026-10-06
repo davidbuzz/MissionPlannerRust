@@ -750,6 +750,13 @@ pub fn parse_i32(text: &str) -> Option<i32> {
     i32::try_from(parse_i64(text)?).ok()
 }
 
+/// `uint.Parse(s)` and `uint.TryParse(s, out n)`: `NumberStyles.Integer` - white space and a sign
+/// round the digits, so `-0` is 0 - and a value past a `UInt32` is a failure.
+#[must_use]
+pub fn parse_u32(text: &str) -> Option<u32> {
+    u32::try_from(parse_i64(text)?).ok()
+}
+
 /// `Comparer<string>.Default` under the invariant culture, which is what orders a
 /// `SortedDictionary<string, _>`: a culture-aware comparison, not an ordinal one.
 ///
@@ -949,6 +956,15 @@ mod tests {
         assert_eq!(parse_i32("4.0"), None);
         assert_eq!(parse_i32("3000000000"), None);
         assert_eq!(parse_i64("3000000000"), Some(3_000_000_000));
+        // `uint.TryParse`: a sign is allowed, so -0 is 0; anything else below 0 or past
+        // UInt32.MaxValue is a failure.
+        assert_eq!(parse_u32(" 70000 "), Some(70_000));
+        assert_eq!(parse_u32("4294967295"), Some(u32::MAX));
+        assert_eq!(parse_u32("4294967296"), None);
+        assert_eq!(parse_u32("+5"), Some(5));
+        assert_eq!(parse_u32("-0"), Some(0));
+        assert_eq!(parse_u32("-1"), None);
+        assert_eq!(parse_u32("255.0"), None);
     }
 
     #[test]

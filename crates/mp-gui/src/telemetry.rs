@@ -485,14 +485,21 @@ impl Telemetry {
             .find(|candidate| !candidate.os_exists())
     }
 
-    /// Opens a link. A failure here is shown in the UI rather than killing the process: a ground
-    /// station that exits because a USB cable was not plugged in yet is useless in the field.
+    /// Opens a link, this ground station on it as `gcs_sysid` - `MAVLinkInterface.gcssysid`,
+    /// 32-bit since e6454ccdd. A failure here is shown in the UI rather than killing the process:
+    /// a ground station that exits because a USB cable was not plugged in yet is useless in the
+    /// field. `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:230`
     #[must_use]
-    pub fn connect(url: &str) -> Self {
+    pub fn connect(url: &str, gcs_sysid: u32) -> Self {
         // Every flight is recorded, without being asked. An operator who wanted a recording and
         // did not press a button has lost the flight; one who did not want it has a file.
-        let recording = Self::recording_path();
+        Self::connect_recording(url, gcs_sysid, Self::recording_path())
+    }
+
+    /// [`Self::connect`], recording to `recording` if anywhere.
+    fn connect_recording(url: &str, gcs_sysid: u32, recording: Option<std::path::PathBuf>) -> Self {
         let config = LinkConfig {
+            sysid: gcs_sysid,
             record_path: recording.clone(),
             // Packet to pixel, when frames are being measured (frametimes.rs).
             stamp_arrivals: crate::frametimes::enabled(),
@@ -2402,6 +2409,38 @@ mod tests {
         assert_eq!(telemetry.url(), "tcp:127.0.0.1:5760");
         assert_ne!(telemetry.view().target, telemetry.url(), "described otherwise");
         assert_eq!(Telemetry::idle().url(), "");
+    }
+
+    /// The link a connect opens sends as the ground station's own id - here one over 255, four
+    /// bytes wide with `SYSID32`, as `MAVLinkInterface.gcssysid` has been a uint since e6454ccdd.
+    /// `// C#: MainV2.cs:683-685; ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:230, 1302-1360`
+    #[test]
+    fn a_connect_sends_as_the_ground_stations_own_id() {
+        use mp_mavlink::FrameDecoder;
+        use mp_mavlink_dialects::all::DIALECT;
+        use std::io::Read as _;
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = listener.local_addr().unwrap().port();
+        let telemetry =
+            Telemetry::connect_recording(&format!("tcp:127.0.0.1:{port}"), 70_000, None);
+        assert_eq!(telemetry.error(), None);
+        let (mut stream, _) = listener.accept().unwrap();
+        stream
+            .set_read_timeout(Some(std::time::Duration::from_secs(5)))
+            .unwrap();
+        let mut decoder = FrameDecoder::new();
+        let mut heard = None;
+        let mut buf = [0u8; 512];
+        while heard.is_none() {
+            let n = stream.read(&mut buf).expect("the link's first frames");
+            assert!(n > 0, "the link closed");
+            decoder.push_and_drain(&buf[..n], &DIALECT, |frame| {
+                if frame.msgid == 0 {
+                    heard.get_or_insert((frame.sysid, frame.incompat_flags));
+                }
+            });
+        }
+        assert_eq!(heard, Some((70_000, mp_mavlink::INCOMPAT_FLAG_SYSID32)));
     }
 
     /// What the screens are told a loopback link was opened from, for what is done only on a

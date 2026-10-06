@@ -751,6 +751,8 @@ impl MissionPlanner {
         if persisted.kindex_at_start(&settings::short_date_today()) {
             settings::download_kindex(mp_firmware::manifest::Http);
         }
+        // `MAVLinkInterface.gcssysid` from the `gcsid` key. `// C#: MainV2.cs:683-685`
+        let gcs_sysid = config::planner::gcs_sysid_setting(&persisted);
         let telemetry = match (storm::telemetry(), target) {
             (Some(storm), _) => storm,
             (None, Some(url)) => match url.parse::<mp_transport::LinkUrl>() {
@@ -759,9 +761,9 @@ impl MissionPlanner {
                         fly_data.playback.load(&path, control);
                         telemetry
                     }
-                    Err(_) => Telemetry::connect(&url),
+                    Err(_) => Telemetry::connect(&url, gcs_sysid),
                 },
-                _ => Telemetry::connect(&url),
+                _ => Telemetry::connect(&url, gcs_sysid),
             },
             (None, None) => Telemetry::idle(),
         };
@@ -1724,7 +1726,7 @@ impl MissionPlanner {
     /// port and baud, a network kind's answers under its keys.
     /// `// C#: MainV2.cs:1848-1854; ExtLibs/Comms/CommsTCPSerial.cs:142-143`
     fn open_link(&mut self, url: &str) {
-        self.telemetry = Telemetry::connect(url);
+        self.telemetry = Telemetry::connect(url, self.planner.gcssysid());
         self.mission_requested = false;
         // `Open(false)`, Ctrl+T's: no `getParamList` - as if already asked for.
         self.params_requested = std::mem::take(&mut self.blind_connect);
@@ -3461,9 +3463,12 @@ impl Render for MissionPlanner {
         // A plain reboot on a serial port: the port looked at half a second on and, gone,
         // opened again as the connect button opens it, its parameters fetched afresh; a port
         // that will not open is said on the status line. `// C#: MAVLinkInterface.cs:2570-2580`
+        let gcs_sysid = self.planner.gcssysid();
         match self
             .telemetry
-            .reopen_after_reboot(web_time::Instant::now(), Telemetry::connect)
+            .reopen_after_reboot(web_time::Instant::now(), |url| {
+                Telemetry::connect(url, gcs_sysid)
+            })
         {
             None => {}
             Some(telemetry::Reopened::Connecting) => {

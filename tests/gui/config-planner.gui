@@ -146,6 +146,13 @@ click planner-NUM_tracklength-up
 expect config.planner.number.NUM_tracklength 300
 expect config.planner.NUM_tracklength 300
 
+# The GCS id steps past 255, its maximum uint.MaxValue since e6454ccdd (ConfigPlanner.cs:92), and
+# is MAVLinkInterface.gcssysid at once (:1058-1062).
+click planner-num_gcsid-up
+expect config.planner.number.num_gcsid 256
+expect config.planner.gcsid 256
+expect config.planner.gcssysid 256
+
 # Load Waypoints on connect: the key, and the read on connect it stands for.
 expect config.planner.readmissiononconnect false
 click planner-CHK_loadwponconnect
@@ -268,6 +275,9 @@ expect config.planner.ShowNoFly False
 expect config.planner.check.chk_shownofly false
 expect config.planner.NUM_tracklength 300
 expect config.planner.number.NUM_tracklength 300
+# MainV2's uint.TryParse of gcsid (MainV2.cs:683-685), past a byte.
+expect config.planner.gcssysid 256
+expect config.planner.number.num_gcsid 256
 expect config.planner.GMapMarkerBase_InactiveDisplayStyle Transparent
 expect config.planner.combo.cmb_secondarydisplaystyle Transparent
 expect config.planner.mapCache CacheOnly

@@ -789,7 +789,7 @@ impl MissionPlanner {
             self.save_config(crate::settings::SaveEvent::FlightData);
         }
         // `MainV2.comPort.BaseStream = client; doConnect(comPort, "preset", "5760")`.
-        self.telemetry = crate::telemetry::Telemetry::connect(&link);
+        self.telemetry = crate::telemetry::Telemetry::connect(&link, self.planner.gcssysid());
         self.mission_requested = false;
         self.file_status = Some(match self.telemetry.error() {
             Some(err) => format!("{}: {err}", model::FAILED_TO_CONNECT),

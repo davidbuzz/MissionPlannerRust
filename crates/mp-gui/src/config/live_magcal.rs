@@ -116,7 +116,7 @@ const TIMER: Duration = Duration::from_millis(200);
 /// `// C#: ExtLibs/Controls/ProgressReporterDialogue.cs:190-205`
 const CLOSE_DELAY: Duration = Duration::from_millis(100);
 
-/// `MAV_DATA_STREAM.ALL`. `// C#: ExtLibs/Mavlink/Mavlink.cs:3520-3545`
+/// `MAV_DATA_STREAM.ALL`. `// C#: ExtLibs/Mavlink/Mavlink.cs:3869-3894`
 const STREAM_ALL: u8 = 0;
 /// `MAV_DATA_STREAM.RAW_SENSORS`.
 const STREAM_RAW_SENSORS: u8 = 1;

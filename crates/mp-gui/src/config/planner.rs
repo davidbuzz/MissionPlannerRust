@@ -775,13 +775,30 @@ pub const NUMBERS: [NumberSpec; 3] = [
         (107, 300, 67, 20),
         (100.0, 200_000.0, 100.0, 200.0),
     ),
-    ("num_gcsid", (107, 475, 53, 20), (1.0, 255.0, 1.0, 255.0)),
+    // `num_gcsid.Maximum = uint.MaxValue` on load, over the Designer's 255 (e6454ccdd).
+    // C#: ConfigPlanner.cs:92
+    (
+        "num_gcsid",
+        (107, 475, 53, 20),
+        (1.0, 4_294_967_295.0, 1.0, 255.0),
+    ),
     (
         "num_linelength",
         (768, 500, 67, 20),
         (10.0, 2000.0, 10.0, 200.0),
     ),
 ];
+
+/// `MAVLinkInterface.gcssysid` as `MainV2` sets it at start-up: the `gcsid` key read by
+/// `uint.TryParse`, and 255 - the property's own default - when that fails.
+/// `// C#: MainV2.cs:683-685; ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:230`
+#[must_use]
+pub fn gcs_sysid_setting(settings: &Persisted) -> u32 {
+    settings
+        .get("gcsid")
+        .and_then(mp_log::netfmt::parse_u32)
+        .unwrap_or(255)
+}
 
 /// `txt_log_dir`.
 /// `// C#: GCSViews/ConfigurationView/ConfigPlanner.resx (txt_log_dir.Location, .Size)`
@@ -1295,7 +1312,7 @@ pub struct Planner {
     /// `cs.rateattitude`, `rateposition`, `ratestatus`, `raterc`, `ratesensors`.
     rates: [i32; 5],
     /// `MAVLinkInterface.gcssysid`.
-    gcssysid: u8,
+    gcssysid: u32,
     /// The number box that had the focus last frame.
     focused: Option<usize>,
     effects: Vec<Effect>,
@@ -1345,10 +1362,7 @@ impl Planner {
             joystick: false,
             units: DisplayUnits::default(),
             rates,
-            gcssysid: settings
-                .get("gcsid")
-                .and_then(|value| value.trim().parse().ok())
-                .unwrap_or(255),
+            gcssysid: gcs_sysid_setting(settings),
             focused: None,
             effects: Vec::new(),
             sent: Vec::new(),
@@ -1560,7 +1574,7 @@ impl Planner {
 
     /// `MAVLinkInterface.gcssysid`.
     #[must_use]
-    pub const fn gcssysid(&self) -> u8 {
+    pub const fn gcssysid(&self) -> u32 {
         self.gcssysid
     }
 
@@ -2216,8 +2230,11 @@ impl Planner {
             0 => settings.set("NUM_tracklength", decimal_text(value)),
             1 => {
                 #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
-                // `(byte)num_gcsid.Value`, within 1..255
-                let id = value as u8;
+                // `(uint)num_gcsid.Value`, within 1..uint.MaxValue. **Divergence:** the C#'s
+                // `gcssysid` is a static every packet reads, so an open link sends as the new id
+                // from its next packet; a link here is opened with its id, which is this from the
+                // next connect.
+                let id = value as u32;
                 self.gcssysid = id;
                 settings.set("gcsid", decimal_text(value));
             }
@@ -4274,6 +4291,25 @@ mod tests {
         assert_eq!(settings.get("mapicondesc_default"), Some("{alt}"));
     }
 
+    /// `MAVLinkInterface.gcssysid` as `MainV2` sets it at start-up: `uint.TryParse` of `gcsid`,
+    /// 32-bit, else the property's 255. `// C#: MainV2.cs:683-685`
+    #[test]
+    fn the_gcs_id_is_read_as_a_uint() {
+        let mut settings = Persisted::at(None);
+        assert_eq!(gcs_sysid_setting(&settings), 255);
+        for (text, id) in [
+            ("70000", 70_000),
+            (" 250 ", 250),
+            ("4294967295", u32::MAX),
+            ("4294967296", 255),
+            ("-1", 255),
+            ("lots", 255),
+        ] {
+            settings.set("gcsid", text.to_owned());
+            assert_eq!(gcs_sysid_setting(&settings), id, "{text}");
+        }
+    }
+
     #[test]
     fn the_number_boxes_write_on_every_change() {
         let mut settings = Persisted::at(None);
@@ -4293,10 +4329,21 @@ mod tests {
         assert_eq!(settings.get("NUM_tracklength"), Some("100"));
         planner.number_key(0, &key("enter", None), &mut settings);
         assert_eq!(settings.get("NUM_tracklength"), Some("1234"));
-        // The GCS id, and the byte it sets.
+        // The GCS id, and the id it sets - past 255 too since e6454ccdd (ConfigPlanner.cs:92).
         planner.step(1, false, &mut settings);
         assert_eq!(settings.get("gcsid"), Some("254"));
         assert_eq!(planner.gcssysid(), 254);
+        planner.step(1, true, &mut settings);
+        planner.step(1, true, &mut settings);
+        assert_eq!(settings.get("gcsid"), Some("256"));
+        assert_eq!(planner.gcssysid(), 256);
+        planner.numbers[1].field.set("");
+        for character in ["7", "0", "0", "0", "0"] {
+            planner.number_key(1, &key(character, Some(character)), &mut settings);
+        }
+        planner.number_key(1, &key("enter", None), &mut settings);
+        assert_eq!(settings.get("gcsid"), Some("70000"));
+        assert_eq!(planner.gcssysid(), 70_000);
         // Typed and left: read as the focus leaves.
         planner.tick(Some(2), &mut settings);
         planner.numbers[2].field.set("");
