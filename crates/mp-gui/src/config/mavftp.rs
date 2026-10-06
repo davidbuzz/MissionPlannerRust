@@ -39,20 +39,20 @@
 //! The list is `MultiSelect`: a click selects a row alone, Control toggles one, Shift takes in
 //! the rows from the last one clicked, a press where there is no row selects nothing; its keys
 //! move and extend the selection likewise (Up, Down, Home, End, Page Up, Page Down, Control+Space).
-//! A double click on a row opens the directory of that name (`:587-605`). A column header sorts
+//! A double click on a row opens the directory of that name (`:616-634`). A column header sorts
 //! the list by its column, a column of digits as numbers (`:300-322`), and a header dragged to
 //! another place moves its column there (`AllowColumnReorder`); a header's divider dragged sizes
 //! its column, double-clicked fits it to its texts, until the next listing sizes them all again
 //! (`AutoResizeColumns`, `:196-202`); the splitter between the tree and the list drags, never
 //! nearer an edge than a panel's `MinSize`. `ListView1_MouseDown` is wired to an empty handler
-//! (`:574-577`): there is nothing of it to port.
+//! (`:603-606`): there is nothing of it to port.
 //!
 //! The list's right-click menu - or the menu key, or Shift+F10, which open it in the list's
 //! middle: Download Burst and Download (a burst read and a plain read, into a folder asked for,
-//! under the file's name, numbered when taken, `:324-379, 607-663`), Upload (the files asked for,
+//! under the file's name, numbered when taken, `:324-379, 636-692`), Upload (the files asked for,
 //! each written into the directory, then the vehicle's CRC of it checked against the file's,
-//! `:381-448`), Delete (`:450-480`), Rename (the row's name edited in place, `:482-513`), New
-//! Folder (an `InputBox`, `:515-546`) and GetCRC32 (a box with the vehicle's CRC, `:548-572`). A
+//! `:381-448`), Delete (`:450-504`), Rename (the row's name edited in place, `:511-542`), New
+//! Folder (an `InputBox`, `:544-575`) and GetCRC32 (a box with the vehicle's CRC, `:577-601`). A
 //! second click on a row already selected edits its name too, once the double-click time has
 //! passed (`LabelEdit = true`), ending in the same `ListView1_AfterLabelEdit`; a name left as it
 //! was renames nothing (`e.Label == null`). Files dropped on the list are uploaded

@@ -6,8 +6,8 @@
 # setfromMap takes a new row's altitude from Default Alt and the ground (:1209-1236): Absolute
 # the ground plus Default Alt, Terrain Default Alt, Relative the ground there less the ground
 # under the planned home plus Default Alt. Entering the Lat box says "Click on the Map to set
-# Home " and the next click moves home there (:566-571, 7016-7022), at the ground's height, as
-# the map menu's Set Home Here does (:745-755, 6625-6632).
+# Home " and the next click moves home there (:566-571, 7013-7019), at the ground's height, as
+# the map menu's Set Home Here does (:745-755, 6622-6629).
 #
 # Self-contained, no link: a data directory holding a flat tile at 584 m for SITL's field,
 # S36E149.hgt, and a config.xml with a home and the Planner page's Map Access Mode at CacheOnly -

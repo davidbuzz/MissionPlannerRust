@@ -31,16 +31,16 @@
 //! 1. Send `PARAM_REQUEST_LIST` and take whatever arrives, in any order, keyed by `param_index`.
 //! 2. Start recovering when either the stream has been quiet for four seconds, or the last index
 //!    arrived with holes behind it - no point waiting four seconds for a stream that has ended
-//!    (:2089-2090, :2114).
-//! 3. If less than three quarters arrived, ask for the whole list again, at most twice (:2117).
-//!    A vehicle that has not said how many it has yet does not use up those two (:2119-2124).
+//!    (:2086-2087, :2111).
+//! 3. If less than three quarters arrived, ask for the whole list again, at most twice (:2114).
+//!    A vehicle that has not said how many it has yet does not use up those two (:2116-2121).
 //! 4. Otherwise ask one by one: up to ten `PARAM_REQUEST_READ` by index per round, a round a
 //!    second, each round starting where the last left off so a hole the vehicle never answers
-//!    cannot starve the ones after it (:2135-2205).
-//! 5. Finish when every index up to the reported count has arrived (:2226).
+//!    cannot starve the ones after it (:2132-2202).
+//! 5. Finish when every index up to the reported count has arrived (:2223).
 //!
 //! There is no step 6. The C# never gives up on its own: a hole the vehicle never fills is asked
-//! for once a second until the operator cancels the progress dialog (:2104-2112). This machine
+//! for once a second until the operator cancels the progress dialog (:2101-2109). This machine
 //! does the same, and says so in its state - [`ParamDownloadState::Recovering`] is the
 //! "incomplete" outcome, visible the moment recovery starts, and [`ParamDownload::cancel`] is the
 //! dialog's Cancel. A download never blocks anything, so "never gives up" costs one request a
@@ -48,7 +48,7 @@
 //!
 //! Two places differ from the C#, both on purpose:
 //!
-//! * **The count.** The C# believes the latest `param_count` (:2025); this believes the largest,
+//! * **The count.** The C# believes the latest `param_count` (:2022); this believes the largest,
 //!   as [`mp_params::ParamTable`] does and for the reason given there: ArduPilot revises the count
 //!   upward mid-download, and a download that completes against the smaller figure is thirteen
 //!   parameters short with nothing to say so.

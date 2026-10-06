@@ -2441,7 +2441,7 @@ impl MapViewport {
 /// Whether a position is one worth drawing: a latitude and a longitude that are not 0, which is
 /// what a GPS reports before its fix and what an unset mission item or home holds. Mission
 /// Planner draws nothing at such a position - no route point (`FlightData.cs:3908`), no vehicle
-/// marker (`:962-968`), no waypoint, loiter or landing marker and no leg to it
+/// marker (`:964-970`), no waypoint, loiter or landing marker and no leg to it
 /// (`WPOverlay.cs:134, 183, 231`), no home (`WPOverlay.cs:44`) - and here every layer applies the
 /// same test, and the fit with it, so nothing at 0,0 can be drawn, run a line to, or zoom the map
 /// out to half the world (the owner's report, 2026-10-03).

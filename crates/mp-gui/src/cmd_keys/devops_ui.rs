@@ -34,9 +34,9 @@
 //! * Do It (`but_doit_Click`, `DevopsUI.cs:21-33`): `device_op` with the boxes' numbers, SPI when
 //!   the bus type reads "SPI" and I2C otherwise; the bytes read, in hex, two digits each, as a
 //!   line - or "No Response - " and the result;
-//! * the bus type changed (`dom_bustype_SelectedItemChanged`, `:34-50`): SPI enables the name and
+//! * the bus type changed (`dom_bustype_SelectedItemChanged`, `:35-51`): SPI enables the name and
 //!   disables the bus and the address; I2C the other way round;
-//! * test (`but_test_Click`, `:52-62`): to sysid 1 compid 1 on SPI, the name's device, register
+//! * test (`but_test_Click`, `:53-63`): to sysid 1 compid 1 on SPI, the name's device, register
 //!   0xff: two bytes written, 0x72 and 0x00, then two read, and those added as a line;
 //! * `device_op` (`ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:1014-1113`): `DEVICE_OP_READ`, or
 //!   `DEVICE_OP_WRITE` with bytes to write, to the system and component given - the request

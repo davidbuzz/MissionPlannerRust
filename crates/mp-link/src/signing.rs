@@ -29,17 +29,17 @@
 //!   (`MAVState.cs:61`), and a timestamp in 10 µs since 2015-01-01 that moves on by one when it
 //!   would repeat the last ([`timestamp_at`], [`Signing::sign`]).
 //! * Receiving, `readPacketAsync` (`MAVLinkInterface.cs:5035-5065`) and `CheckSignature`
-//!   (`:5501-5526`): a signed packet is counted, then checked against its vehicle's key and, if
+//!   (`:5481-5506`): a signed packet is counted, then checked against its vehicle's key and, if
 //!   that fails, against every key in the store; one that passes makes that key the vehicle's,
 //!   its link id the vehicle's `linkid`, and turns signing on for it - the C#'s "auto adapt"; one
 //!   that passes none is dropped before anything sees it. Unsigned packets are let through
 //!   whatever the state, as the C# lets them through; a log being played back is not checked.
-//! * `setupSigning` (`:1529-1584`): `SETUP_SIGNING` sent to the vehicle twice, with the key and
+//! * `setupSigning` (`:1526-1581`): `SETUP_SIGNING` sent to the vehicle twice, with the key and
 //!   the time, or zeros and 0 to clear it; then signing on - the key left for the vehicle's own
 //!   signed packets to supply - or off and the key forgotten. Asked from another thread, it is
 //!   queued for the link thread, which sends and switches in that order ([`Signing::queue`]).
 //! * `Mavlink2Signed`, the signed packets read since the start of the current second
-//!   (`:418-422, 4938-4963, 5063`), which the signing window shows.
+//!   (`:420-424, 4912-4937, 5039`), which the signing window shows.
 //!
 //! The key store, `MAVAuthKeys.Keys`, is static in the C# - one for the application, read by every
 //! link - and so is [`auth_keys`] here; the application loads `authkeys.xml` and hands its keys

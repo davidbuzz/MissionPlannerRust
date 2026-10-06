@@ -7,13 +7,13 @@
 # nodes, each named by its card and its node, "Integrated_Webcam_HD: Integrate (/dev/video0)",
 # where DirectShow gives the bare name (the owner's ruling: two nodes share the card) - and
 # binding the list selects the first, whose formats Video Format lists as the C#'s
-# GCSBitmapInfo reads, "<w> x <h> <fps> fps <fourcc>", the first selected (:296-360, 741-750,
+# GCSBitmapInfo reads, "<w> x <h> <fps> fps <fourcc>", the first selected (:297-361, 742-751,
 # 968-989). On Windows the devices are Media Foundation's, each by its bare friendly name, as
 # DirectShow's list names them. Start opens the device in that format; once it runs, video_device and video_options
-# are written as the two combos' indexes and frames arrive (:261-285); the flight screen's HUD
+# are written as the two combos' indexes and frames arrive (:262-286); the flight screen's HUD
 # draws the latest one under everything (HUD.cs:1986-2013, FlightData.cs:1907-1910). Enable
 # HUD Overlay unticked sets hudon false, and the HUD paints the picture alone, its instruments
-# hidden (:374-378, HUD.cs:2005-2008); Activate, while the capture runs, shows hudon in the box
+# hidden (:375-379, HUD.cs:2005-2008); Activate, while the capture runs, shows hudon in the box
 # (:136-145); ticked again, the instruments are back. Stop ends the capture and the HUD's picture
 # goes with it (:287-294, Capture.cs:142-157), and the instruments are drawn whatever hudon is.
 #

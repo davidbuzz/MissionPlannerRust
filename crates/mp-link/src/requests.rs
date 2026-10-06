@@ -183,18 +183,18 @@ pub const CAPABILITY_MISSION_INT: u32 = 4;
 /// The item a `getWP` read, as `getWPAsync` fills its `Locationwp` from it.
 /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:3489-3550`
 ///
-/// What the machine does (`getWPAsync`, `:3413-3565`):
+/// What the machine does (`getWPAsync`, `:3408-3558`):
 ///
-/// * the request goes out (`:3421-3451`) and is sent again every 2.5 s, five more times, and
-///   then the request ends [`RequestOutcome::TimedOut`]: "Timeout on read - getWP" (`:3459-3479`);
+/// * the request goes out (`:3416-3446`) and is sent again every 2.5 s, five more times, and
+///   then the request ends [`RequestOutcome::TimedOut`]: "Timeout on read - getWP" (`:3454-3474`);
 /// * a `MISSION_ITEM` or `MISSION_ITEM_INT` from the vehicle asked, addressed to this ground
-///   station and to `MAV_COMP_ID_MISSIONPLANNER`, answers it (`:3487-3491`, `:3515-3519`) - one
+///   station and to `MAV_COMP_ID_MISSIONPLANNER`, answers it (`:3482-3486`, `:3509-3513`) - one
 ///   of another sequence number asks again at once, a `MISSION_REQUEST` after a `MISSION_ITEM`
 ///   and a `MISSION_REQUEST_INT` after a `MISSION_ITEM_INT`, without spending a retry
-///   (`:3494-3498`, `:3522-3526`); anything else, a `MISSION_ACK` included, is read past;
+///   (`:3488-3492`, `:3516-3520`); anything else, a `MISSION_ACK` included, is read past;
 /// * from a `MISSION_ITEM` the position is the floats as they came; from a `MISSION_ITEM_INT`
 ///   it is divided by 1e7 when the command is one `Locationwp.isLocationCommand` names, and taken
-///   as it came otherwise (`:3539-3547`; `ExtLibs/Utilities/locationwp.cs:39-56`).
+///   as it came otherwise (`:3532-3540`; `ExtLibs/Utilities/locationwp.cs:39-56`).
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
 pub struct WpRead {
     /// `loc.id`, the `MAV_CMD`.
@@ -252,19 +252,19 @@ fn wp_coordinate(command: u16, value: i32) -> f64 {
 /// `(float)` degrees, the count as the C#'s `byte`.
 /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:6376-6400`
 ///
-/// What the machine does (`setFencePoint` `:6415-6439`, `getFencePoint` `:5908-5967`):
+/// What the machine does (`setFencePoint` `:6376-6400`, `getFencePoint` `:5871-5929`):
 ///
-/// * `FENCE_POINT` goes out (`:6430`), then `FENCE_FETCH_POINT` for its index (`:5923`), waiting
+/// * `FENCE_POINT` goes out (`:6391`), then `FENCE_FETCH_POINT` for its index (`:5886`), waiting
 ///   700 ms for a `FENCE_POINT` from the vehicle, of that index, addressed to this ground station
-///   and to `MAV_COMP_ID_MISSIONPLANNER` (`:5948-5957`), sending the fetch three more times
-///   (`:5926-5942`). A `FENCE_POINT` that is not that one is read past, not answered
-///   (`continue`, `:5954-5957`).
+///   and to `MAV_COMP_ID_MISSIONPLANNER` (`:5911-5919`), sending the fetch three more times
+///   (`:5889-5905`). A `FENCE_POINT` that is not that one is read past, not answered
+///   (`continue`, `:5917-5919`).
 /// * Every fetch unanswered ends [`RequestOutcome::TimedOut`]: `getFencePoint`'s
 ///   `TimeoutException`, which `setFencePoint` does not catch, so no further round is made.
-/// * A point that came back within five metres of the one sent (`GetDistance`, `:6433`) ends
+/// * A point that came back within five metres of the one sent (`GetDistance`, `:6394`) ends
 ///   [`RequestOutcome::Accepted`]; one further off sends the point and the fetch again, three
-///   times in all (`retry = 3`, `:6426-6436`), and then ends [`RequestOutcome::Sent`] - sent, not
-///   confirmed: the C#'s `throw new Exception("Could not verify GeoFence Point")` (`:6438`).
+///   times in all (`retry = 3`, `:6387-6397`), and then ends [`RequestOutcome::Sent`] - sent, not
+///   confirmed: the C#'s `throw new Exception("Could not verify GeoFence Point")` (`:6399`).
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct FencePointSet {
     /// `idx`: the point's place, from 0.
@@ -338,17 +338,17 @@ fn fence_point_matches(read: &FencePoint, set: &FencePointSet) -> bool {
 /// `(int)(degrees * 1e7)`, the altitude as `(short)`.
 /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:6406-6417`
 ///
-/// What the machine does, and where it departs from the C# (`setRallyPoint` `:6441-6476`,
-/// `getRallyPoint` `:6346-6412`):
+/// What the machine does, and where it departs from the C# (`setRallyPoint` `:6402-6437`,
+/// `getRallyPoint` `:6308-6373`):
 ///
-/// * `RALLY_POINT` goes out (`:6462`), then `RALLY_FETCH_POINT` for its index (`:6360`), waiting
+/// * `RALLY_POINT` goes out (`:6423`), then `RALLY_FETCH_POINT` for its index (`:6322`), waiting
 ///   700 ms for a `RALLY_POINT` of that index addressed to this ground station, three more times
-///   (`:6363-6378`).
+///   (`:6325-6340`).
 /// * **Divergence:** the C#'s retries send `FENCE_FETCH_POINT` - the rally request's bytes under
-///   the fence message's id (`:6372`, `:6397`) - which no vehicle answers with a rally point, so
+///   the fence message's id (`:6334`, `:6358`) - which no vehicle answers with a rally point, so
 ///   its retries can never succeed. Here they send `RALLY_FETCH_POINT`, as the first ask does.
-/// * A `RALLY_POINT` of another index asks again at once without spending a retry (`:6395-6399`).
-/// * **Divergence:** the C# takes the point as set (`:6466`) when `newfp.plla.Lat == plla.Lat &&
+/// * A `RALLY_POINT` of another index asks again at once without spending a retry (`:6356-6360`).
+/// * **Divergence:** the C# takes the point as set (`:6427`) when `newfp.plla.Lat == plla.Lat &&
 ///   newfp.plla.Lng == rp.lng` - the second half compares degrees with `degrees * 1e7`, and the
 ///   first a double with what came back through 1e7 - so it is all but never true, and every
 ///   point is sent three times and `false` returned, which its caller ignores. Here the point is

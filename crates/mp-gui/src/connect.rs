@@ -20,10 +20,10 @@
 
 //! The main window's connection controls: `ConnectionControl` - the port box `cmb_Connection`
 //! and the baud box `cmb_Baud` - and the CONNECT button `MenuConnect`, with what pressing it does.
-//! Ported from `MainV2.cs` @ efb0801 (GPL-3.0-only): `PopulateSerialportList` (:1283-1300),
-//! `MenuConnect_Click` and `Connect` (:1841-1880), `doDisconnect` (:1389-1447), `doConnect`
-//! (:1448-1700), `CMB_serialport_SelectedIndexChanged` (:1962-1984), `CMB_baudrate_TextChanged`
-//! (:4333-4350); `Controls/ConnectionControl.cs`; the transports' `Open` prompts in
+//! Ported from `MainV2.cs` @ 5dbb2b0 (GPL-3.0-only): `PopulateSerialportList` (:1285-1302),
+//! `MenuConnect_Click` and `Connect` (:1848-1887), `doDisconnect` (:1391-1449), `doConnect`
+//! (:1450-1702), `CMB_serialport_SelectedIndexChanged` (:1969-1991), `CMB_baudrate_TextChanged`
+//! (:4340-4357); `Controls/ConnectionControl.cs`; the transports' `Open` prompts in
 //! `ExtLibs/Comms/CommsTCPSerial.cs:101-145`, `CommsUdpSerial.cs:100-125`,
 //! `CommsUDPSerialConnect.cs:130-150`, `CommsWebSocket.cs:100-110`.
 //!

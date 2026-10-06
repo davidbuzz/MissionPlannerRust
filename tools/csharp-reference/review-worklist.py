@@ -51,6 +51,15 @@ def git(*args):
     ).stdout
 
 
+def lines_of(commit, path):
+    """A file's lines as git counts them: split at `\\n` alone, as text mode would not - it splits
+    at a lone `\\r` too, and MAVFtp.cs has three."""
+    raw = subprocess.run(
+        ["git", "-C", TREE, "show", f"{commit}:{path}"], check=True, capture_output=True
+    ).stdout
+    return [line.decode("utf-8", "replace") for line in raw.split(b"\n")]
+
+
 def normal(line):
     """A line as a type-only change leaves it."""
     line = line.replace("\r", "")
@@ -185,7 +194,7 @@ def main():
 
     def text_at(commit, path, n):
         if (commit, path) not in texts_at:
-            texts_at[(commit, path)] = git("show", f"{commit}:{path}").split("\n")
+            texts_at[(commit, path)] = lines_of(commit, path)
         lines_at = texts_at[(commit, path)]
         return lines_at[n - 1].strip()[:100] if 0 < n <= len(lines_at) else "?"
 

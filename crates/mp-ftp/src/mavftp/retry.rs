@@ -73,9 +73,9 @@ pub struct FtpTimeouts {
     pub reset_sessions: Patience,
     /// Every other command: `new RetryTimeout()`, which is 30 sends a second apart
     /// (RetryTimeout.cs:37). C#: MAVFtp.cs:735 (`kCmdBurstReadFile`), :1061
-    /// (`kCmdCreateDirectory`), :1153 (`kCmdCreateFile`), :1549 (`kCmdReadFile`), :1677
-    /// (`kCmdRemoveDirectory`), :1762 (`kCmdRemoveFile`), :1846 (`kCmdRename`), :1974
-    /// (`kCmdTerminateSession`), :2215 (`kCmdWriteFile`).
+    /// (`kCmdCreateDirectory`), :1192 (`kCmdCreateFile`), :1588 (`kCmdReadFile`), :1716
+    /// (`kCmdRemoveDirectory`), :1801 (`kCmdRemoveFile`), :1885 (`kCmdRename`), :2013
+    /// (`kCmdTerminateSession`), :2254 (`kCmdWriteFile`).
     pub other: Patience,
 }
 

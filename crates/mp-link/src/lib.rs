@@ -47,29 +47,29 @@
 //!
 //! * [`param_download::ParamDownload`] - `getParamListAsync`. `Streaming` → `Recovering` →
 //!   `Complete`, or `Cancelled` by the caller. Recovery after 4000 ms quiet or the last index
-//!   arriving short (:2089, :2114); the whole list again at most twice under three quarters
-//!   (:2117); then rounds of 10 reads (:2187) every 1000 ms (:2135); never gives up by itself
-//!   (:2226). Tests: `parameters_arriving_in_any_order_*`, `the_last_index_arriving_short_*`,
+//!   arriving short (:2086, :2111); the whole list again at most twice under three quarters
+//!   (:2114); then rounds of 10 reads (:2184) every 1000 ms (:2132); never gives up by itself
+//!   (:2223). Tests: `parameters_arriving_in_any_order_*`, `the_last_index_arriving_short_*`,
 //!   `holes_are_read_ten_at_a_time_*`, `a_stream_under_three_quarters_*`,
 //!   `a_hole_never_filled_*`, `a_parameter_outside_a_download_*`,
 //!   `a_parameter_download_over_a_bad_link_*`.
 //! * [`requests::Request`] - one machine for five C# loops, `Queued` → `Waiting` → `Finished`:
-//!   - `SetParam`, `setParamAsync`: 3 retries, 700 ms (:1748, :1754); unknown names and
-//!     unchanged values not sent (:1640-1651). Tests: `a_set_whose_echo_never_comes_*`,
+//!   - `SetParam`, `setParamAsync`: 3 retries, 700 ms (:1745, :1751); unknown names and
+//!     unchanged values not sent (:1637-1648). Tests: `a_set_whose_echo_never_comes_*`,
 //!     `a_late_echo_*`, `an_echo_of_a_different_value_*`, `an_echo_of_another_parameter_*`,
 //!     `a_set_that_cannot_or_need_not_be_sent_*`.
-//!   - `ReadParam`, `GetParamAsync`: 3, 700 ms (:2329, :2333). Test:
+//!   - `ReadParam`, `GetParamAsync`: 3, 700 ms (:2326, :2330). Test:
 //!     `a_read_answered_only_wrongly_*`.
-//!   - `Command`, `doCommandAsync`: 3, 2000 ms (:2729, :2731); arming 10 s (:2764-2768);
-//!     calibration and bootloader 1 retry, 25 s (:2748-2757); `IN_PROGRESS` waits again with no
-//!     retries (:2818-2823); any other result ends it (:2829-2833); reboot and the rest not
-//!     waited for (:2720-2773). Tests: `a_command_never_acknowledged_*`, `in_progress_then_*`,
+//!   - `Command`, `doCommandAsync`: 3, 2000 ms (:2726, :2728); arming 10 s (:2761-2765);
+//!     calibration and bootloader 1 retry, 25 s (:2745-2754); `IN_PROGRESS` waits again with no
+//!     retries (:2815-2820); any other result ends it (:2826-2830); reboot and the rest not
+//!     waited for (:2717-2770). Tests: `a_command_never_acknowledged_*`, `in_progress_then_*`,
 //!     `every_refusal_*`, `an_ack_for_another_command_*`, `acks_arriving_in_the_other_order_*`,
 //!     `arming_waits_*`, `a_calibration_is_sent_twice_*`, `the_commands_not_waited_for_*`.
-//!   - `SetCurrent`, `setWPCurrentAsync`: 5, 2000 ms (:2472, :2476). Test:
+//!   - `SetCurrent`, `setWPCurrentAsync`: 5, 2000 ms (:2469, :2473). Test:
 //!     `set_current_is_sent_six_times_*`.
 //!   - `SetRallyPoint`, `setRallyPoint` and the `getRallyPoint` it reads back with: the point
-//!     sent up to 3 times (:6458), each read back with 3 retries, 700 ms (:6363, :6367);
+//!     sent up to 3 times (:6419), each read back with 3 retries, 700 ms (:6325, :6329);
 //!     `requests::RallyPointSet` says where it departs from the C#. Tests:
 //!     `requests::tests::a_rally_point_*`.
 //!   - `SetFencePoint` and `GetFencePoint`, `setFencePoint` and `getFencePoint`: the point sent

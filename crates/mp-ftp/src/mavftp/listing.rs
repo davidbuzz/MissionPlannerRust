@@ -21,7 +21,7 @@
 //! A directory listing: what one `kCmdListDirectory` acknowledgement says, entry by entry.
 //!
 //! C#: ExtLibs/ArduPilot/Mavlink/MAVFtp.cs:1388-1450 (the ACK half of the listing handler),
-//! :1238-1246 (`ParseListingTime`) and :2420-2452 (`FtpFileInfo`).
+//! :1277-1285 (`ParseListingTime`) and :2459-2491 (`FtpFileInfo`).
 //!
 //! Each entry is a type byte - `F`ile, `D`irectory or `S`kipped - and a NUL-terminated name. A file
 //! is `name<TAB>size`, and in the timed listing both carry a third field, the modification time

@@ -3,12 +3,12 @@
 #
 # config(false) fills the three boxes from config.xml when the screen loads (FlightPlanner.cs:
 # 2592-2612). Each box's KeyPress keeps only what float.TryParse takes of one character - digits,
-# and a '.' in WP Radius, a '-' in Loiter Radius (:6984-6990, 7054-7064, 7075-7085) - and its Leave
+# and a '.' in WP Radius, a '-' in Loiter Radius (:6981-6987, 7051-7061, 7072-7082) - and its Leave
 # puts a number back when it is left holding none: Default Alt 100, Loiter Radius 45, an empty WP
-# Radius the saved one (:6992-6999, 7066-7073, 7087-7106). Clicking the map takes the focus, as
+# Radius the saved one (:6989-6996, 7063-7070, 7084-7103). Clicking the map takes the focus, as
 # the map does in the C#, so it is a Leave. A new waypoint takes Default Alt (setfromMap,
 # :1164-1208), and with Spline ticked a click adds a SPLINE_WAYPOINT, 82 (:588-592, 2059-2062).
-# With no vehicle setWPParams finds no loiter radius parameter and disables that box (:6726-6745).
+# With no vehicle setWPParams finds no loiter radius parameter and disables that box (:6723-6742).
 #
 # Self-contained: its own data directory, holding the boxes config(true) saved
 # last time and a home, so the map has something to show without a vehicle.

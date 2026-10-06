@@ -23,12 +23,12 @@
 //!
 //! * `ls` - a listing, directories then files, as the page's list shows them (:151-194).
 //! * `get` - `GetFile` with its defaults, a burst read of 80-byte chunks (the page's "Download
-//!   Burst", :637), written where asked or, as the page does, under the file's own name without
+//!   Burst", :666), written where asked or, as the page does, under the file's own name without
 //!   overwriting (:361-365).
 //! * `put` - `UploadFile`, then the vehicle's CRC of what arrived against the local file's, as the
 //!   page's upload does (:405-443).
-//! * `rm` - `kCmdRemoveFile` (:468-471).
-//! * `crc` - `kCmdCalcFileCRC32`, printed as the page prints it (:548-571).
+//! * `rm` - `kCmdRemoveFile` (:480-494).
+//! * `crc` - `kCmdCalcFileCRC32`, printed as the page prints it (:577-600).
 
 #![allow(clippy::print_stdout, clippy::print_stderr)]
 

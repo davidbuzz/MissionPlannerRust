@@ -24,12 +24,12 @@
 //! vehicle's link.
 //!
 //! What the C# does with it (`ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:5443-5474`), for
-//! every packet it reads from the vehicle - each one it decodes (`:5449`), and each of a message
-//! it does not know (`:5017`): while the stream is open, write the packet's bytes to it; then,
+//! every packet it reads from the vehicle - each one it decodes (`:5429`), and each of a message
+//! it does not know (`:4993`): while the stream is open, write the packet's bytes to it; then,
 //! while the stream has bytes to read, read them and - when `MirrorStreamWrite` is set - write
 //! them to the vehicle's port. Whatever throws is swallowed. Nothing is read from the stream but
 //! after a packet from the vehicle has been written to it. `Mirrors` is a list, of which
-//! `MirrorStream` and `MirrorStreamWrite` are the first (`:427-460`); everything that sets one
+//! `MirrorStream` and `MirrorStreamWrite` are the first (`:429-462`); everything that sets one
 //! sets the first, so it is one mirror here.
 //!
 //! A [`Mirror`] is that stream with a thread of its own. [`Mirror::handler`] is what to give

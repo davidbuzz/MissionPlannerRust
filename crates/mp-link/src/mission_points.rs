@@ -22,7 +22,7 @@
 //! traffic on the link has shown them - "a snapshot of what is loaded on the ap atm. - derived
 //! from the stream" (`MAVState.cs:310-315`). The flight screen draws the first as its mission
 //! overlay and the second as its rally markers (`FlightData.cs:3924-3957, 4012-4019`), and counts
-//! the first for its Set WP list (`:2571-2576`).
+//! the first for its Set WP list (`:2581-2586`).
 //!
 //! Filled as `fencepoints` is (see [`crate::fence_points`]), from the same three places:
 //!

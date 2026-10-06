@@ -34,9 +34,9 @@
 //! * [`FtpRequest::List`] - `kCmdListDirectory` (MAVFtp.cs:1287-1301): with modification times
 //!   first, and once the vehicle has refused that opcode, plain listings from then on.
 //! * [`FtpRequest::Get`] - `GetFile` (MAVFtp.cs:560-574): reset sessions, open the file, then
-//!   a burst read or a plain one. The burst read (`kCmdBurstReadFile`, :694-870) is what the
+//!   a burst read or a plain one. The burst read (`kCmdBurstReadFile`, :733-909) is what the
 //!   parameter download, the mission download over FTP and the upload page's "Download Burst"
-//!   use; the plain one (`kCmdReadFile`, :1547-1659) is the page's "Download" and the serial
+//!   use; the plain one (`kCmdReadFile`, :1586-1698) is the page's "Download" and the serial
 //!   ports page's `uarts.txt`.
 //! * [`FtpRequest::Put`] - `UploadFile` (MAVFtp.cs:576-592): reset, create, write, reset.
 //! * The one-command requests: `kCmdCalcFileCRC32`, `kCmdRemoveFile`, `kCmdRemoveDirectory`,
@@ -53,12 +53,12 @@
 //!   themselves, then carry on (e.g. MAVFtp.cs:693-697). In the C# that cannot work: the handler
 //!   runs on the thread that reads the link (MAVLinkInterface.cs:5347, 5508-5533), so the nested
 //!   call waits five seconds for an answer nobody can read; and it writes its own payload into
-//!   the shared `fileTransferProtocol` (:39, :1916), so every later retry of the outer command
+//!   the shared `fileTransferProtocol` (:39, :1955), so every later retry of the outer command
 //!   sends a reset instead of the command. The outer command then times out. This port does what
 //!   the code says it means: the reset runs as a command of its own, the outer command waits for
 //!   it, and then resumes, resending *its own* request.
 //! * **Addressing.** The C# addresses every message from the shared `fileTransferProtocol`, whose
-//!   target is only set by the commands that set it (e.g. :596-598). A fresh instance's first
+//!   target is only set by the commands that set it (e.g. :635-637). A fresh instance's first
 //!   `kCmdResetSessions` - the first thing `GetFile` and `UploadFile` do - therefore goes to system
 //!   0, component 0: every vehicle on the link. Here every message goes to the vehicle this
 //!   client is for.
@@ -167,7 +167,7 @@ pub enum FtpOutcome {
     /// `GetFile`'s stream.
     File {
         /// The file, or `None` where `GetFile` returns null: the file never opened (no size,
-        /// MAVFtp.cs:566-567), or a plain read did not finish (:1654-1655).
+        /// MAVFtp.cs:566-567), or a plain read did not finish (:1693-1694).
         data: Option<Vec<u8>>,
         /// Whether the read finished, rather than its retries running out. A burst read that
         /// ran out still returns what it has, holes zero-filled, as the C# does (:862-869).
@@ -680,7 +680,7 @@ fn step_finished(
                     now,
                 ))));
             }
-            // C#: MAVFtp.cs:566-567 and :687, `size = localsize`: -1 unless the ACK came, and
+            // C#: MAVFtp.cs:566-567 and :726, `size = localsize`: -1 unless the ACK came, and
             // the ACK's four bytes as an int if it did.
             let size = value.map_or(-1, |v| i32::from_ne_bytes(v.to_ne_bytes()));
             // C#: MAVFtp.cs:729, "Opened " + file + " " + ans.

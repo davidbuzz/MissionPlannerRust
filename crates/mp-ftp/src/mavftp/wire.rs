@@ -22,7 +22,7 @@
 //! error codes.
 //!
 //! C#: ExtLibs/ArduPilot/Mavlink/MAVFtp.cs:60-463 (`errno`), :466-497 (`FTPErrorCode`), :500-558
-//! (`FTPOpcode`) and :2363-2418 (`FTPPayloadHeader`).
+//! (`FTPOpcode`) and :2402-2457 (`FTPPayloadHeader`).
 
 use std::fmt;
 

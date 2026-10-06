@@ -4,13 +4,13 @@
 # (SoftwareConfig.cs:211-216). Loading it lists "/" and "@SYS/", each a root of the tree - "/"
 # with no name, as Path.GetFileName("/") has it - selects the last, @SYS, and lists it
 # (MavFTPUI.cs:73-125, 151-203). Clicking the root lists it. The list's right-click menu makes a
-# folder (New Folder's InputBox, :515-546), a double click opens it (:587-605), Upload writes two
+# folder (New Folder's InputBox, :544-575), a double click opens it (:616-634), Upload writes two
 # files into it at once - the File name box takes several names in double quotes, as
 # OpenFileDialog's does with Multiselect - and checks the vehicle's CRC of each (:381-448),
-# GetCRC32 shows a CRC in a box (:548-572), Download reads a file back into a folder (:324-379),
-# Rename renames one in place (:482-513), a second click on a selected row renames another
+# GetCRC32 shows a CRC in a box (:577-601), Download reads a file back into a folder (:324-379),
+# Rename renames one in place (:511-542), a second click on a selected row renames another
 # (LabelEdit's delayed edit, ending in the same ListView1_AfterLabelEdit), the list's keys select
-# both and Delete removes them together (:450-480). Each is proved by the list the vehicle gives
+# both and Delete removes them together (:450-504). Each is proved by the list the vehicle gives
 # after. The tree's keys move its selection and list nothing (the C# wires no AfterSelect); its
 # plus and the right button list a node and leave the selection (NodeMouseClick, :151-203).
 #

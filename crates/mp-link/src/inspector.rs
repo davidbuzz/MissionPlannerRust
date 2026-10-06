@@ -24,7 +24,7 @@
 //! * [`Packet`] and [`Link::on_packet`](crate::Link::on_packet): `MAVLinkInterface`'s
 //!   `OnPacketReceived`, raised for each packet read once the C# has handled it
 //!   (`ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:5347-5349`), and `OnPacketSent`, raised for
-//!   each packet written (`:1456-1461`, `:1506-1511`). One handler hears both, [`Packet::sent`]
+//!   each packet written (`:1453-1458`, `:1503-1508`). One handler hears both, [`Packet::sent`]
 //!   saying which; it runs on the link thread, as the C#'s runs on its reader's, and ends when
 //!   its [`PacketSubscription`] is dropped - the C#'s `-=`.
 //! * [`PacketInspector`]: `ExtLibs/ArduPilot/PacketInspector.cs`, the newest packet of each

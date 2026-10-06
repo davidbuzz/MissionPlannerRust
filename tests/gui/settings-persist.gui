@@ -4,7 +4,7 @@
 # writes all of it on start-up, on the FLIGHT DATA and FLIGHT PLAN buttons, after Connect and on
 # closing (MainV2.cs:1109, 1311-1325, 1853, 2178; ExtLibs/Utilities/Settings.cs:507-550). A quick
 # view's choice goes in when it is made (FlightData.cs:2485-2492) and FlightData.Activate binds it
-# again (:462-494). The planning screen's boxes go in when the screen is deactivated, config(true)
+# again (:464-496). The planning screen's boxes go in when the screen is deactivated, config(true)
 # (FlightPlanner.cs:340-344, 2572-2592): MainV2 reads the home back at start-up (MainV2.cs:1014-
 # 1025) and config(false) the panel boxes (FlightPlanner.cs:2592-2612). The map type goes in when
 # it is changed (:2237), the altitude frame's number too (:2166).

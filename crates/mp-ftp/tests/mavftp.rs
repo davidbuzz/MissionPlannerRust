@@ -152,7 +152,7 @@ fn file_data(outcome: Result<FtpOutcome, FtpError>) -> (Vec<u8>, bool) {
 /// Forty files are more than one acknowledgement holds, so the listing asks again at the count of
 /// entries so far until the vehicle says end of file (MAVFtp.cs:1378-1379, 1458-1463). The timed
 /// listing goes first and ArduPilot does not know it (kErrUnknownCommand), so the plain one
-/// follows (:1252-1261, 1306-1317).
+/// follows (:1291-1300, 1345-1356).
 #[test]
 fn a_listing_runs_across_offsets_until_the_vehicle_says_end_of_file() {
     let mut vehicle = FakeVehicle::new().with_dir("/APM/LOGS");
@@ -293,8 +293,8 @@ fn a_lost_listing_reply_is_asked_for_again_after_a_second() {
 /// `GetFile` with a burst: reset, open, burst. The chunk at 240 is lost; the burst runs on to the
 /// end, sees the hole, and switches to `kCmdReadFile` at 240 (MAVFtp.cs:865-879, 934-951).
 ///
-/// It asks twice. The last chunk shows the hole and asks for it (:826-840); the end-of-file NAK
-/// ArduPilot sends behind that chunk arrives before the answer and asks again (:746-769). The C#
+/// It asks twice. The last chunk shows the hole and asks for it (:865-879); the end-of-file NAK
+/// ArduPilot sends behind that chunk arrives before the answer and asks again (:785-808). The C#
 /// does the same; the second answer arrives after the file is whole and nobody reads it.
 #[test]
 fn a_burst_read_with_a_lost_chunk_reads_the_hole_after_the_burst() {
@@ -352,7 +352,7 @@ fn a_burst_that_stops_short_is_asked_to_continue() {
 
 /// The chunk that says "burst complete" is lost, so nobody asks for the next burst. After the
 /// second `RetryTimeout()` waits (MAVFtp.cs:735), the request goes again - from where the data got
-/// to, which the handler kept moving (:813-816).
+/// to, which the handler kept moving (:852-855).
 #[test]
 fn a_lost_end_of_burst_is_recovered_by_the_timeout() {
     let content = numbered(1000);
@@ -496,7 +496,7 @@ fn a_refusal_with_an_errno_is_reported_in_the_csharps_words() {
 
 /// `kErrFail` stops `kCmdOpenFileRO` (MAVFtp.cs:678-684) but not `kCmdCalcFileCRC32`, which has
 /// no branch for it and so sends all three times, thirty seconds apart, and answers "no CRC"
-/// (:928, 941-970).
+/// (:967, 980-1009).
 #[test]
 fn err_fail_stops_some_commands_and_not_others() {
     let mut vehicle = FakeVehicle::new().with_file("/f", b"x");
@@ -705,7 +705,7 @@ fn the_vehicles_crc_matches_the_crc_of_what_was_read() {
 // --- writes -----------------------------------------------------------------------------------
 
 /// `UploadFile`: reset, create, write, reset (MAVFtp.cs:576-583). The first chunk goes alone and
-/// each answer to the latest send releases the next five (:2309-2330).
+/// each answer to the latest send releases the next five (:2348-2369).
 #[test]
 fn an_upload_writes_every_chunk_between_two_resets() {
     let content = numbered(1000);

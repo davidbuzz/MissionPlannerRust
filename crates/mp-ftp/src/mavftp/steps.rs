@@ -525,19 +525,19 @@ impl List {
 /// # How it decides the file is whole
 ///
 /// Chunks are written at their offset, and their extents kept in a sorted list that merges
-/// neighbours (`SimplifyChunkList`, :872-893). The file is whole when the extents add up to the
+/// neighbours (`SimplifyChunkList`, :911-932). The file is whole when the extents add up to the
 /// size - and "the size" is not fixed: it starts as `kCmdOpenFileRO`'s answer and is cut to the
-/// end of any chunk shorter than `readsize` (:785-789), which is how a virtual file such as
+/// end of any chunk shorter than `readsize` (:824-828), which is how a virtual file such as
 /// `@SYS/threads.txt`, that opens claiming whatever size, ends where its data does.
 ///
 /// A burst that reaches the end with holes switches to `kCmdReadFile` for the first hole
-/// (`FindMissing`, :895-912), one request per hole, each answer triggering the next. A NAK saying
+/// (`FindMissing`, :934-951), one request per hole, each answer triggering the next. A NAK saying
 /// end of file does the same, or finishes if nothing is missing.
 ///
 /// Once switched to reads, a burst chunk still in flight is ignored: its `req_opcode` is no
-/// longer the one being asked (:777).
+/// longer the one being asked (:816).
 ///
-/// `DoWork` giving up does not make this fail: the C# returns whatever has arrived (:862-869),
+/// `DoWork` giving up does not make this fail: the C# returns whatever has arrived (:901-908),
 /// holes zero-filled, and so does this, with [`BurstResult::ended`] false to say so.
 #[derive(Debug, Clone)]
 pub(crate) struct Burst {

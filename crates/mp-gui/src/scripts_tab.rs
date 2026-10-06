@@ -1331,7 +1331,7 @@ impl Waiting {
     /// the member's timeout, and so is one still under way on a link whose port has closed,
     /// which nothing will end now: the C#'s loop sends into the closed port (`generatePacket`
     /// returns at once, `MAVLinkInterface.cs:1265-1268`), reads nothing (`readPacketAsync`'s
-    /// empty read, `:4697`, `:4932`, `:4968-4969`) and throws its `TimeoutException` when its
+    /// empty read, `:4686`, `:4906`, `:4942-4943`) and throws its `TimeoutException` when its
     /// retries are spent - here at once.
     fn follow(&self, telemetry: &Telemetry) -> Option<(Reply, Option<GuidedUpdate>)> {
         let timed_out = |member: &str| Reply::TimedOut(Timeout::on(member).0);

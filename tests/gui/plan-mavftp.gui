@@ -1,7 +1,7 @@
 # The MAVFTP box: with `chk_usemavftp` ticked, Write packs the mission as `missionpck.pack` does
 # and uploads it as `@MISSION/mission.dat` over MAVFTP (saveWPs, GCSViews/FlightPlanner.cs:6237-
 # 6256), and Read fetches the same file and unpacks it into the grid (getWPs, :3985-4008). The
-# tick is kept as `UseMissionMAVFTP` (:319, 8403-8406). A failure of either falls back to the
+# tick is kept as `UseMissionMAVFTP` (:319, 8400-8403). A failure of either falls back to the
 # mission protocol, as the C#'s `catch` does.
 #
 # Two waypoints written over MAVFTP, the grid cleared, then read back over MAVFTP: the two return

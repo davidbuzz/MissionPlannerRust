@@ -1479,7 +1479,7 @@ fn an_upload_asked_out_of_order_sends_what_was_asked() {
 ///
 /// DIVERGENCE: the C# is waiting for a request for item 2 when the request for 3 arrives, and
 /// sends item 1 again for it (C#: MAVLinkInterface.cs:4307-4345), until its ten retries run out
-/// and it throws "Timeout on read - setWP" (:4267) - a failure too, but five seconds later and
+/// and it throws "Timeout on read - setWP" (:4258) - a failure too, but five seconds later and
 /// blaming the link. A vehicle that accepts a mission it was never sent all of is not holding
 /// the mission on screen; it fails here at once, with the item.
 #[test]
@@ -1726,7 +1726,7 @@ fn a_vehicle_stuck_on_one_item_uses_up_that_items_retries() {
 /// DIVERGENCE: the C#'s `setWPTotal` returns on any `MISSION_ACK` without reading it
 /// (C#: MAVLinkInterface.cs:3854-3866), so `mav_mission.upload` goes on to send item 0 to a
 /// vehicle that is no longer receiving. What it reports then depends on how the vehicle answers
-/// an item it did not ask for - "Timeout on read - setWP" (:4267) after ten retries if it says
+/// an item it did not ask for - "Timeout on read - setWP" (:4258) after ten retries if it says
 /// nothing, as this scripted vehicle would - and not that the mission was too big.
 #[test]
 fn a_refused_count_ends_the_upload_with_the_refusal() {
