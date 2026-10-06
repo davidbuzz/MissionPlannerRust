@@ -1823,8 +1823,11 @@ impl MissionPlanner {
         let url = connect::url(asking.kind, &port, &baud, &asking.answers);
         // Asked for Install Firmware's Bootloader Update: its own link, not the window's.
         if self.install_firmware.take_bl_asking() {
-            self.install_firmware
-                .bl_open(url.as_deref(), web_time::Instant::now());
+            self.install_firmware.bl_open(
+                url.as_deref(),
+                self.planner.gcssysid(),
+                web_time::Instant::now(),
+            );
             return;
         }
         if let Some(url) = url {
@@ -1968,8 +1971,11 @@ impl MissionPlanner {
                 // Bootloader Update, "Failed to find device on mavlink".
                 self.connect_box.asking = None;
                 if self.install_firmware.take_bl_asking() {
-                    self.install_firmware
-                        .bl_open(None, web_time::Instant::now());
+                    self.install_firmware.bl_open(
+                        None,
+                        self.planner.gcssysid(),
+                        web_time::Instant::now(),
+                    );
                 }
             }
         }
@@ -3468,8 +3474,7 @@ impl Render for MissionPlanner {
             .telemetry
             .reopen_after_reboot(web_time::Instant::now(), |url| {
                 Telemetry::connect(url, gcs_sysid)
-            })
-        {
+            }) {
             None => {}
             Some(telemetry::Reopened::Connecting) => {
                 self.file_status = Some(telemetry::CONNECTING_MAVLINK.to_owned());

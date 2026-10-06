@@ -1691,12 +1691,13 @@ impl InstallFirmware {
     /// Bootloader Update on the manifest page, once `doConnect` has what it opens: the link from
     /// the port box's `url`, waiting for `Open`'s heartbeats. `None` - `doConnect` opening
     /// nothing, or a link that will not open - is "Failed to find device on mavlink" at once.
+    /// The link sends as `gcs_sysid`, `MAVLinkInterface.gcssysid`.
     /// `// C#: GCSViews/ConfigurationView/ConfigFirmwareManifest.cs:537-546`
-    pub fn bl_open(&mut self, url: Option<&str>, now: Instant) {
+    pub fn bl_open(&mut self, url: Option<&str>, gcs_sysid: u32, now: Instant) {
         if !self.open || self.connected {
             return;
         }
-        match url.and_then(|url| bl_link(url).map(|link| (link, url))) {
+        match url.and_then(|url| bl_link(url, gcs_sysid).map(|link| (link, url))) {
             Some((link, _)) => {
                 self.bl = Some(BlLink {
                     link,
@@ -2018,18 +2019,24 @@ pub(super) fn heartbeats(view: &TelemetryView) -> u64 {
 /// The link `doConnect(mav, port, baud, false)` opens for Bootloader Update: recorded, as
 /// `doConnect` opens a `.tlog` for every link it connects; asking for no streams and sending no
 /// heartbeat, as nothing in the C# reads or announces a `MAVLinkInterface` that is not
-/// `MainV2.comPort` - `doCommand` reads its own answer. `None` when it will not open.
-/// `// C#: MainV2.cs:1593-1638`
-fn bl_link(url: &str) -> Option<Telemetry> {
-    let config = mp_link::LinkConfig {
-        record_path: Telemetry::recording_path(),
+/// `MainV2.comPort` - `doCommand` reads its own answer - and as this ground station's own id,
+/// the `gcssysid` every `MAVLinkInterface` sends as. `None` when it will not open.
+/// `// C#: MainV2.cs:1593-1638; ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:230`
+fn bl_link(url: &str, gcs_sysid: u32) -> Option<Telemetry> {
+    mp_link::Link::connect(url, bl_config(gcs_sysid, Telemetry::recording_path()))
+        .ok()
+        .map(|link| Telemetry::over(link, url))
+}
+
+/// [`bl_link`]'s link, recording to `record_path` if anywhere.
+fn bl_config(gcs_sysid: u32, record_path: Option<std::path::PathBuf>) -> mp_link::LinkConfig {
+    mp_link::LinkConfig {
+        sysid: gcs_sysid,
+        record_path,
         send_heartbeat: false,
         stream_rate_hz: 0,
         ..mp_link::LinkConfig::default()
-    };
-    mp_link::Link::connect(url, config)
-        .ok()
-        .map(|link| Telemetry::over(link, url))
+    }
 }
 
 /// What the Install Firmware pages say of a flow's stop: the px4 upload stops before the board
@@ -3190,7 +3197,7 @@ impl MissionPlanner {
                 .then(|| crate::connect::url(kind, &port, &self.connect_box.baud, &[]))
                 .flatten();
             self.install_firmware
-                .bl_open(url.as_deref(), Instant::now());
+                .bl_open(url.as_deref(), self.planner.gcssysid(), Instant::now());
             return;
         };
         self.install_firmware.bl_asking = true;
@@ -3927,10 +3934,22 @@ mod tests {
     /// Bootloader Update on the manifest page with no link to open - AUTO, a cancelled
     /// question - is "Failed to find device on mavlink" on the status line, not a box.
     /// `// C#: GCSViews/ConfigurationView/ConfigFirmwareManifest.cs:542-546`
+    /// Bootloader Update's link sends as this ground station's own id, a 32-bit one too, and
+    /// neither announces itself nor asks for streams.
+    /// `// C#: MainV2.cs:1593-1638; ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:230`
+    #[test]
+    fn the_bootloader_link_sends_as_the_ground_stations_id() {
+        let config = bl_config(70_000, None);
+        assert_eq!(config.sysid, 70_000);
+        assert!(!config.send_heartbeat);
+        assert_eq!(config.stream_rate_hz, 0);
+        assert_eq!(config.record_path, None);
+    }
+
     #[test]
     fn bootloader_update_with_nothing_to_open_finds_no_device() {
         let mut page = loaded("CubeOrange-BL");
-        page.bl_open(None, Instant::now());
+        page.bl_open(None, 255, Instant::now());
         assert_eq!(page.take_status().as_deref(), Some(NO_DEVICE_ON_MAVLINK));
         assert!(page.bl.is_none());
         assert!(page.message().is_none(), "no box");
