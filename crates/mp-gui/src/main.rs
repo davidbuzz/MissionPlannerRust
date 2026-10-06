@@ -69,6 +69,8 @@ mod logs_tab;
 mod mapview;
 // EXPERIMENTAL's Message Interval form.
 mod message_interval;
+// EXPERIMENTAL's adjust aircraft baro height: its window.
+mod baro_height;
 mod metadata;
 mod params;
 mod payload;

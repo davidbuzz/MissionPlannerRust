@@ -1,0 +1,40 @@
+# EXPERIMENTAL's adjust aircraft baro height (temp.cs:1169-1187), against SITL: the copter's ground
+# pressure, BARO1_GND_PRESS (it has no GND_ABS_PRESS), read from it; "use at your own risk!!!";
+# then the window, titled "0", with a number from -100 to 100 whose every change writes the
+# pressure read plus 11.1 Pa a step: Up once, one write; Down once, a second. Typing into the box
+# does not work yet (crates/mp-gui/src/baro_height.rs), so it is not tested here.
+#
+# Run as: tools/gui-test.sh tests/gui/experimental-baro.gui -- tcp:127.0.0.1:5760
+screen fly
+window 1600x1200
+budget 20
+env XDG_DATA_HOME $WORK
+env MP_CONFIG_XML $WORK/config.xml
+setup printf '<?xml version="1.0" encoding="utf-8"?><Config><tabcontrolactions>tabQuick;</tabcontrolactions></Config>' > "$WORK/config.xml"
+
+within 30
+expect vehicle.count > 0
+key ctrl+f
+expect screen experimental
+expect experimental.baro none
+
+click experimental-but_acbarohight
+within 10
+expect experimental.baro warning
+click experimental-message-ok
+expect experimental.baro form
+expect experimental.baro.param BARO1_GND_PRESS
+expect experimental.baro.read > 50000
+expect experimental.baro.value 0
+expect experimental.baro.writes 0
+
+# Up: 1, written. Down: 0 again, written again.
+click experimental-baro-up
+expect experimental.baro.value 1
+expect experimental.baro.writes 1
+click experimental-baro-down
+expect experimental.baro.value 0
+expect experimental.baro.writes 2
+
+click experimental-baro-close
+expect experimental.baro none

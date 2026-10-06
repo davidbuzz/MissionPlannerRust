@@ -207,6 +207,12 @@ impl NumericUpDown {
             .map_or(self.value, |typed| typed.clamp(self.minimum, self.maximum))
     }
 
+    /// `Value` as last validated, which `ValueChanged` follows - not the text being typed.
+    #[must_use]
+    pub const fn held(&self) -> f64 {
+        self.value
+    }
+
     /// `ValidateEditText`: the text read into `Value`, and the box showing `Value` again.
     pub fn commit(&mut self) -> f64 {
         self.value = self.value();

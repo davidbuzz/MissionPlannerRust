@@ -278,6 +278,7 @@ pub(crate) fn tool(name: &str) -> Tool {
         "but_gpsinj" => Tool::Act(Act::ExtractGpsInject),
         "BUT_shptopoly" => Tool::Act(Act::ShpToPoly),
         "but_dashware" => Tool::Act(Act::DashWare),
+        "but_acbarohight" => Tool::Act(Act::BaroHeight),
         "BUT_clearcustommaps" => Tool::Act(Act::ClearCustomMaps),
         "but_agemapdata" => Tool::Act(Act::AgeMapData),
         "but_armandtakeoff" => Tool::Act(Act::ArmAndTakeoff),
@@ -346,6 +347,10 @@ pub(crate) enum Act {
     /// offered), and `DashWare.Create` writing `<log>.csv` beside it off the window's thread
     /// (mp-log's `dashware`). `// C#: temp.cs:940-954`
     DashWare,
+    /// `but_acbarohight_Click`: the ground pressure read from the vehicle, "use at your own
+    /// risk!!!", and a number from -100 to 100 whose every change writes it back 11.1 Pa a step
+    /// away (crate::baro_height). `// C#: temp.cs:1169-1187`
+    BaroHeight,
     /// `myButton1_Click_2`: a log asked for, "How Many" pieces asked (10 offered), and
     /// `DFLogBuffer.SplitLog` writing `<log>_split<i>.bin` beside it, off the window's thread
     /// (mp-log's `split_file`). `// C#: temp.cs:720-734; ExtLibs/Utilities/DFLogBuffer.cs:472-556`
@@ -497,10 +502,10 @@ const QNH_PROMPT: &str = "Enter the QNH in pascals (103040 = 1030.4 hPa)";
 const HWID_TITLE: &str = "hwid";
 const HWID_PROMPT: &str = "Enter the ID number";
 
-/// The parameter QNH sets: `GND_ABS_PRESS` where the vehicle has it, else `BARO1_GND_PRESS`.
-/// `// C#: temp.cs:670`
+/// The parameter QNH and adjust aircraft baro height set: `GND_ABS_PRESS` where the vehicle has
+/// it, else `BARO1_GND_PRESS`. `// C#: temp.cs:670, 1171`
 #[must_use]
-fn qnh_param(parameters: &[(String, f64)]) -> &'static str {
+pub(crate) fn qnh_param(parameters: &[(String, f64)]) -> &'static str {
     if parameters.iter().any(|(name, _)| name == "GND_ABS_PRESS") {
         "GND_ABS_PRESS"
     } else {
@@ -600,6 +605,8 @@ pub(crate) struct Experimental {
     shp_to_poly: Job,
     /// DashWare's writing.
     dashware: Job,
+    /// adjust aircraft baro height, under way.
+    pub(crate) baro: Option<crate::baro_height::BaroHeight>,
 }
 
 /// A tool's work on files, on a thread of its own where the C#'s window waits on it - Split
@@ -682,6 +689,7 @@ impl Default for Experimental {
             gps_inject: Job::default(),
             shp_to_poly: Job::default(),
             dashware: Job::default(),
+            baro: None,
             takeoff: None,
             takeoff_last: None,
             sort: None,
@@ -702,7 +710,7 @@ impl std::fmt::Debug for Experimental {
 }
 
 /// The box ids of this tab's questions.
-const IDS: BoxIds = BoxIds {
+pub(crate) const IDS: BoxIds = BoxIds {
     question: "experimental-question",
     yes: "experimental-question-yes",
     no: "experimental-question-no",
@@ -860,6 +868,7 @@ fn act(
             ));
             focus_input(this, window, cx);
         }
+        Act::BaroHeight => crate::baro_height::open(this, cx),
         // `OpenFileDialog` with the filter `bin|*.bin;*.BIN`, and no folder set.
         // C#: temp.cs:942-944
         Act::DashWare => {
@@ -955,6 +964,7 @@ fn send(this: &mut MissionPlanner, what: Act) {
         | Act::ExtractGpsInject
         | Act::ShpToPoly
         | Act::DashWare
+        | Act::BaroHeight
         | Act::ClearCustomMaps
         | Act::AgeMapData
         | Act::ArmAndTakeoff
@@ -1181,6 +1191,7 @@ fn read_mag_log(this: &mut MissionPlanner, file: std::path::PathBuf) {
 /// shows nothing. `// C#: MagCalib.cs:115-130`
 pub(crate) fn tick(this: &mut MissionPlanner) {
     crate::log_index::tick(this);
+    crate::baro_height::tick(this);
     // Split DFLog's, extract gps_inject's, Shp to Poly's and DashWare's answers: nothing said
     // when one is done, as the C# says nothing; what threw on the status line, where the C#'s
     // error box shows it.
@@ -1784,6 +1795,7 @@ pub(crate) fn screen(
         .children(crate::georef_ui::window(this, window, cx))
         .children(crate::message_interval::window(this, window, cx))
         .children(crate::log_index::window(this, window, cx))
+        .children(crate::baro_height::window(this, window, cx))
         .children(asking_box(this, window, cx))
         .into_any_element()
 }
@@ -1804,6 +1816,7 @@ pub(crate) fn record_facts(state: &Experimental) {
     facts::record("experimental.last", state.last.unwrap_or("none"));
     crate::message_interval::record_facts(state.interval.as_ref());
     crate::log_index::record_facts(state.log_index.as_ref());
+    crate::baro_height::record_facts(state.baro.as_ref());
     facts::record(
         "experimental.asking",
         match state.asking.as_ref() {
@@ -2016,13 +2029,14 @@ mod tests {
                 Tool::Unavailable(why) => assert!(!why.is_empty()),
             }
         }
-        assert_eq!(opens, 33);
+        assert_eq!(opens, 34);
         assert_eq!(tool("but_paramrestore"), Tool::Act(Act::ParamRestore));
         assert_eq!(tool("BUT_magfit2"), Tool::Act(Act::MagCalLog));
         assert_eq!(tool("myButton1"), Tool::Act(Act::SplitDfLog));
         assert_eq!(tool("but_gpsinj"), Tool::Act(Act::ExtractGpsInject));
         assert_eq!(tool("BUT_shptopoly"), Tool::Act(Act::ShpToPoly));
         assert_eq!(tool("but_dashware"), Tool::Act(Act::DashWare));
+        assert_eq!(tool("but_acbarohight"), Tool::Act(Act::BaroHeight));
         assert_eq!(tool("BUT_clearcustommaps"), Tool::Act(Act::ClearCustomMaps));
         assert_eq!(tool("but_agemapdata"), Tool::Act(Act::AgeMapData));
         assert_eq!(tool("but_armandtakeoff"), Tool::Act(Act::ArmAndTakeoff));
