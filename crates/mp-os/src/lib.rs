@@ -289,6 +289,44 @@ fn on_main_thread() -> bool {
     MAIN.with(|main| *main)
 }
 
+/// The script beside the page that the planner's threads are made from (web/www/thread-worker.js).
+pub const THREAD_WORKER: &str = "thread-worker.js";
+
+/// The page's threads made from [`THREAD_WORKER`], a script of the site's own, rather than from
+/// the `blob:` address wasm_thread makes one up for (the owner's bug of 2026-10-06: OpenStreetMap's
+/// tiles refused in the page, "403 Access blocked"). A worker's requests carry its script's address
+/// as their `Referer`, and the Fetch standard strips a `blob:` address to none ("strip url for use
+/// as a referrer": a local scheme gives no referrer); OpenStreetMap's tile servers refuse a request
+/// with no `Referer` (https://osm.wiki/Blocked), and the tiles are fetched on these threads. Made
+/// from the site's script, they send the page's origin, as the browser's referrer policy cuts it.
+/// Every thread here - gpui's, the tile store's, the planner's own - is made by
+/// `wasm_thread::Builder::new()`, which starts from this default; so first thing, before any is.
+#[cfg(target_family = "wasm")]
+pub fn threads_from_the_site() {
+    let Some(page) = js_sys::Reflect::get(&js_sys::global(), &"location".into())
+        .and_then(|location| js_sys::Reflect::get(&location, &"href".into()))
+        .ok()
+        .and_then(|href| href.as_string())
+    else {
+        return;
+    };
+    wasm_thread::Builder::empty()
+        .worker_script_url(beside_page(&page, THREAD_WORKER))
+        .set_default();
+}
+
+/// The address of `file` in the page's folder: the page's address without its query, fragment or
+/// last segment, then `file`.
+#[must_use]
+pub fn beside_page(page: &str, file: &str) -> String {
+    let page = page.split(['?', '#']).next().unwrap_or(page);
+    let folder = page
+        .rfind('/')
+        .and_then(|slash| page.get(..=slash))
+        .unwrap_or(page);
+    format!("{folder}{file}")
+}
+
 /// An HTTP request in a web page, blocking: a synchronous `XMLHttpRequest`, which a browser
 /// allows in a Web Worker - the threads the planner fetches tiles, terrain and catalogues on (on
 /// the page's main thread it refuses a binary answer). The status and the body; a status that is
@@ -412,6 +450,29 @@ fn query_value(search: &str, name: &str) -> Option<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The threads' script is beside the page wherever the page is: at a server's root, under
+    /// GitHub Pages' project path, with a query, a fragment, or a file name of its own.
+    #[test]
+    fn the_thread_script_is_beside_the_page() {
+        let at = |page| beside_page(page, THREAD_WORKER);
+        assert_eq!(
+            at("http://127.0.0.1:8080/?facts=1&demo=0"),
+            "http://127.0.0.1:8080/thread-worker.js"
+        );
+        assert_eq!(
+            at("https://davidbuzz.github.io/MissionPlannerRust/?vehicle=copter#map"),
+            "https://davidbuzz.github.io/MissionPlannerRust/thread-worker.js"
+        );
+        assert_eq!(
+            at("https://example.org/planner/index.html?a=/b/c"),
+            "https://example.org/planner/thread-worker.js"
+        );
+        assert_eq!(
+            at("https://example.org/planner/index.html#/x/y"),
+            "https://example.org/planner/thread-worker.js"
+        );
+    }
 
     #[test]
     fn https_is_asked_first_and_plain_http_after_it() {

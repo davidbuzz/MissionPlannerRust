@@ -4893,6 +4893,9 @@ fn main() {
     #[cfg(target_family = "wasm")]
     {
         console_error_panic_hook::set_once();
+        // Threads from the site's own script, so their requests carry a Referer (mp-os), before
+        // anything makes one.
+        mp_os::threads_from_the_site();
         // The files the last visit kept, before anything reads one (page_storage.rs).
         mp_os::fs::preload_from_page();
         gpui_web::init_logging();
