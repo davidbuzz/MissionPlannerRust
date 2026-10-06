@@ -401,18 +401,43 @@ mod tests {
     fn stream_items_are_filed_by_list_under_the_vehicle_they_are_about_in_order() {
         let mut points = MissionPoints::default();
         // A download's answers, addressed to this ground station, out of order.
-        points.observe(1, 1, u32::from(GCS), &item_int(2, MISSION_TYPE_MISSION, -353_630_000));
-        points.observe(1, 1, u32::from(GCS), &item_int(0, MISSION_TYPE_MISSION, -353_610_000));
-        points.observe(1, 1, u32::from(GCS), &item_int(1, MISSION_TYPE_MISSION, -353_620_000));
+        points.observe(
+            1,
+            1,
+            u32::from(GCS),
+            &item_int(2, MISSION_TYPE_MISSION, -353_630_000),
+        );
+        points.observe(
+            1,
+            1,
+            u32::from(GCS),
+            &item_int(0, MISSION_TYPE_MISSION, -353_610_000),
+        );
+        points.observe(
+            1,
+            1,
+            u32::from(GCS),
+            &item_int(1, MISSION_TYPE_MISSION, -353_620_000),
+        );
         let xs: Vec<f64> = points.wps(VEHICLE).iter().map(|item| item.x).collect();
         assert_eq!(xs, [-35.361, -35.362, -35.363]);
         assert_eq!(points.wps(VEHICLE)[1].z, 50.0);
         // Filed again: replaced, not added.
-        points.observe(1, 1, u32::from(GCS), &item_int(1, MISSION_TYPE_MISSION, -353_625_000));
+        points.observe(
+            1,
+            1,
+            u32::from(GCS),
+            &item_int(1, MISSION_TYPE_MISSION, -353_625_000),
+        );
         assert_eq!(points.wps(VEHICLE).len(), 3);
         assert_eq!(points.wps(VEHICLE)[1].x, -35.3625);
         // A rally item goes to the rally list, a fence item to neither (fence_points has it).
-        points.observe(1, 1, u32::from(GCS), &item_int(0, MISSION_TYPE_RALLY, -353_000_000));
+        points.observe(
+            1,
+            1,
+            u32::from(GCS),
+            &item_int(0, MISSION_TYPE_RALLY, -353_000_000),
+        );
         points.observe(1, 1, u32::from(GCS), &item_int(0, 1, -352_000_000));
         assert_eq!(points.rally_points(VEHICLE).len(), 1);
         assert_eq!(points.rally_points(VEHICLE)[0].x, -35.3);
@@ -430,7 +455,12 @@ mod tests {
             unreachable!()
         };
         theirs.target_system = 7;
-        points.observe(u32::from(GCS), 190, u32::from(GCS), &MavMessage::MissionItemInt(theirs));
+        points.observe(
+            u32::from(GCS),
+            190,
+            u32::from(GCS),
+            &MavMessage::MissionItemInt(theirs),
+        );
         assert_eq!(points.wps(VehicleId::new(7, 190)).len(), 1);
         // A MISSION_COUNT starts the list it names again, and only that one.
         let count = |mission_type: u8| {
@@ -454,7 +484,12 @@ mod tests {
     #[test]
     fn a_float_item_goes_through_locationwp_and_an_old_rally_point_becomes_an_item() {
         let mut points = MissionPoints::default();
-        points.observe(1, 1, u32::from(GCS), &item_float(0, MISSION_TYPE_MISSION, 0));
+        points.observe(
+            1,
+            1,
+            u32::from(GCS),
+            &item_float(0, MISSION_TYPE_MISSION, 0),
+        );
         let [filed] = points.wps(VEHICLE)[..] else {
             panic!("one item")
         };
@@ -468,9 +503,19 @@ mod tests {
         );
         // A guided target or an altitude change from the stream: current 2 is GuidedMode's and
         // not filed; current 3 the stream files, as its `else` takes everything but 2.
-        points.observe(1, 1, u32::from(GCS), &item_float(1, MISSION_TYPE_MISSION, 2));
+        points.observe(
+            1,
+            1,
+            u32::from(GCS),
+            &item_float(1, MISSION_TYPE_MISSION, 2),
+        );
         assert_eq!(points.wps(VEHICLE).len(), 1);
-        points.observe(1, 1, u32::from(GCS), &item_float(1, MISSION_TYPE_MISSION, 3));
+        points.observe(
+            1,
+            1,
+            u32::from(GCS),
+            &item_float(1, MISSION_TYPE_MISSION, 3),
+        );
         assert_eq!(points.wps(VEHICLE).len(), 2);
 
         points.observe(

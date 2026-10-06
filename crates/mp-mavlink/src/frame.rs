@@ -63,6 +63,25 @@ pub const CHECKSUM_LEN: usize = 2;
 /// Largest frame the wire format can express (v2, both wide fields, full payload, signed).
 pub const MAX_FRAME_LEN: usize = V2_MAX_HEADER_LEN + MAX_PAYLOAD_LEN + CHECKSUM_LEN + SIGNATURE_LEN;
 
+/// A v2 frame's header length and message id, wherever its flags put them: the id after a
+/// four-byte sender with `SYSID32`. `None` for what is not the start of a v2 frame.
+/// `// C#: ExtLibs/Mavlink/MAVLinkMessage.cs:217-230`
+#[must_use]
+pub fn v2_layout(frame: &[u8]) -> Option<(usize, u32)> {
+    if frame.first() != Some(&STX_V2) {
+        return None;
+    }
+    let flags = *frame.get(2)?;
+    let at = if flags & INCOMPAT_FLAG_SYSID32 != 0 {
+        10
+    } else {
+        7
+    };
+    let id = frame.get(at..at + 3)?;
+    let msgid = u32::from_le_bytes([*id.first()?, *id.get(1)?, *id.get(2)?, 0]);
+    Some((v2_header_len(flags), msgid))
+}
+
 /// A v2 header's length for its incompatibility flags. `// C#: ExtLibs/Mavlink/MavlinkHeader.cs:7-12`
 #[must_use]
 pub const fn v2_header_len(incompat_flags: u8) -> usize {

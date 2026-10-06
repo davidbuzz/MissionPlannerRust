@@ -26,7 +26,7 @@ use web_time::{Duration, Instant};
 
 use mp_link::messages::Severity;
 use mp_link::{Link, LinkConfig};
-use mp_mavlink::{FrameDecoder, Message as _, encode_v2};
+use mp_mavlink::{FrameDecoder, Message as _, encode_v2, encode_v2_targeted};
 use mp_mavlink_dialects::all::{CommandAck, DIALECT, Heartbeat, MavMessage, Statustext};
 use mp_transport::Transport;
 use mp_transport::testing::Loopback;
@@ -317,6 +317,156 @@ fn vehicles_with_32_bit_ids_are_each_their_own() {
         assert_eq!(state.sysid, id, "another vehicle's state under {id:#x}");
     }
     assert_eq!(vehicles.len(), ids.len(), "{vehicles:?}");
+}
+
+/// What the link writes, read off the vehicle's end until `enough` says so or five seconds pass:
+/// each frame's sender, header target, message id and payload.
+type Sent = (u32, Option<u32>, u32, Vec<u8>);
+fn read_sent(
+    vehicle_side: &mut dyn Transport,
+    mut enough: impl FnMut(&[Sent]) -> bool,
+) -> Vec<Sent> {
+    let mut decoder = FrameDecoder::new();
+    let mut sent = Vec::new();
+    let deadline = Instant::now() + Duration::from_secs(5);
+    let mut buf = [0u8; 512];
+    while Instant::now() < deadline && !enough(&sent) {
+        let n = vehicle_side.read(&mut buf).unwrap();
+        decoder.push_and_drain(&buf[..n], &DIALECT, |frame| {
+            sent.push((
+                frame.sysid,
+                frame.target_system,
+                frame.msgid,
+                frame.payload.to_vec(),
+            ));
+        });
+        wasm_thread::sleep(Duration::from_millis(5));
+    }
+    sent
+}
+
+/// `IsTargetedTo`, as `WideHeaderTargetKeepsPayloadComponent` holds it: a system and component of
+/// its own, 0, or none at all is this ground station; anything else is not.
+/// `// C#: MissionPlannerTests/Mavlink/Sysid32Tests.cs:112-129`
+#[test]
+fn what_is_addressed_to_this_ground_station() {
+    let us = VehicleId::new(255, 190);
+    assert!(mp_link::is_targeted_to(Some(255), Some(190), us));
+    assert!(mp_link::is_targeted_to(Some(0), Some(0), us));
+    assert!(mp_link::is_targeted_to(None, None, us));
+    assert!(!mp_link::is_targeted_to(Some(254), Some(190), us));
+    assert!(!mp_link::is_targeted_to(Some(255), Some(12), us));
+    let wide = VehicleId::new(0x8000_0000, 12);
+    assert!(mp_link::is_targeted_to(Some(0x8000_0000), Some(12), wide));
+    assert!(!mp_link::is_targeted_to(Some(255), Some(12), wide));
+}
+
+/// The rest of `LiveLinkReadsFragmentedFramesAndTargetsWithoutAliasing`: a command whose header
+/// names another receiver, 0xfffffffe, is not this ground station's and goes no further - not
+/// to the inspector, not into the vehicle's state - while the next frame from the same vehicle
+/// does. `// C#: MissionPlannerTests/Mavlink/Sysid32Tests.cs:200-204;
+/// ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:5072-5076`
+#[test]
+fn a_frame_whose_header_names_another_receiver_goes_no_further() {
+    let (mut vehicle_side, gcs_side) = Loopback::pair();
+    let link = Link::from_transport(Box::new(gcs_side), LinkConfig::default());
+    let heard = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+    let sink = std::sync::Arc::clone(&heard);
+    let _subscription = link.on_packet(move |packet| {
+        if !packet.sent {
+            sink.lock().unwrap().push((packet.sysid, packet.msgid));
+        }
+    });
+    let source = 0xffff_ff01;
+    let command = mp_link::commands::command_long(VehicleId::new(0xffff_fffe, 190), 300, [0.0; 7]);
+    let mut payload = [0u8; 255];
+    let len = command.encode(&mut payload);
+    let mut frame = [0u8; mp_mavlink::MAX_FRAME_LEN];
+    let n = encode_v2_targeted(
+        &mut frame,
+        0,
+        source,
+        1,
+        command.id(),
+        &payload[..len],
+        command.crc_extra(),
+        0,
+        Some(0xffff_fffe),
+    )
+    .unwrap();
+    vehicle_side.write_all(&frame[..n]).unwrap();
+    vehicle_side
+        .write_all(&heartbeat_from(1, source, 1))
+        .unwrap();
+    wait_for("the heartbeat after it", || {
+        heard.lock().unwrap().contains(&(source, 0))
+    });
+    assert!(
+        !heard.lock().unwrap().contains(&(source, 76)),
+        "the command for another receiver reached the inspector"
+    );
+}
+
+/// The send half: a command to vehicle 0xffffffff goes from this ground station (255) with the
+/// whole id in its header, `TARGET32`, and 255 in its payload's byte - `SetPayloadTarget` - as the
+/// C#'s `sendPacket(..., uint.MaxValue, 1)` writes it.
+/// `// C#: MissionPlannerTests/Mavlink/Sysid32Tests.cs:206-209`
+#[test]
+fn a_command_to_a_32_bit_vehicle_carries_its_id_in_the_header() {
+    let (mut vehicle_side, gcs_side) = Loopback::pair();
+    let config = LinkConfig {
+        stream_rate_hz: 0,
+        send_heartbeat: false,
+        ..LinkConfig::default()
+    };
+    let link = Link::from_transport(Box::new(gcs_side), config);
+    let wide = VehicleId::new(u32::MAX, 1);
+    vehicle_side
+        .write_all(&heartbeat_from(0, wide.sysid, 1))
+        .unwrap();
+    wait_for("the vehicle", || link.vehicles().contains(&wide));
+    assert!(link.send(&mp_link::commands::command_long(wide, 300, [0.0; 7])));
+    let sent = read_sent(&mut vehicle_side, |sent| {
+        sent.iter().any(|frame| frame.2 == 76)
+    });
+    let (sysid, target, _, payload) = sent
+        .iter()
+        .find(|frame| frame.2 == 76)
+        .expect("the command went");
+    assert_eq!(*sysid, 255);
+    assert_eq!(*target, Some(u32::MAX));
+    // COMMAND_LONG's target_system, after its seven floats and the command.
+    assert_eq!(payload[30], 255);
+}
+
+/// A ground station whose own id is over 255 writes it four bytes wide, with `SYSID32` - its
+/// heartbeats, written by the link thread, and a command queued from outside it, whose checksum
+/// is worked out again after its sequence number is put in.
+#[test]
+fn a_ground_station_with_a_32_bit_id_writes_it_four_bytes_wide() {
+    let (mut vehicle_side, gcs_side) = Loopback::pair();
+    let config = LinkConfig {
+        sysid: 0x0001_0000,
+        heartbeat_interval: Duration::from_millis(20),
+        stream_rate_hz: 0,
+        ..LinkConfig::default()
+    };
+    let link = Link::from_transport(Box::new(gcs_side), config);
+    assert!(link.send(&mp_link::commands::command_long(
+        VehicleId::new(1, 1),
+        300,
+        [0.0; 7]
+    )));
+    let sent = read_sent(&mut vehicle_side, |sent| {
+        sent.iter().any(|frame| frame.2 == 0) && sent.iter().any(|frame| frame.2 == 76)
+    });
+    for message in [0, 76] {
+        let (sysid, ..) = sent
+            .iter()
+            .find(|frame| frame.2 == message)
+            .unwrap_or_else(|| panic!("message {message} went, checksum and all"));
+        assert_eq!(*sysid, 0x0001_0000, "message {message}");
+    }
 }
 
 #[test]

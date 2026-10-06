@@ -1266,7 +1266,12 @@ impl Link {
     /// `MAVlist[id].GimbalManager`: the component's gimbal manager as it stands.
     #[must_use]
     pub fn gimbal_manager(&self, id: VehicleId) -> Option<gimbal_manager::GimbalManager> {
-        self.shared.gimbal_managers.os_lock().ok()?.get(&id).cloned()
+        self.shared
+            .gimbal_managers
+            .os_lock()
+            .ok()?
+            .get(&id)
+            .cloned()
     }
 
     /// `CameraProtocol.VideoStreams`, in key order: (system, component, stream id).
@@ -1469,6 +1474,8 @@ fn send_frame(
     stats: &mut LinkStats,
     bytes: &[u8],
 ) -> bool {
+    let widened = with_wide_target(shared, bytes);
+    let bytes = widened.as_deref().unwrap_or(bytes);
     let signed = shared
         .signing
         .os_lock()
@@ -1649,6 +1656,15 @@ fn run_link(
                             let _ = writer.write_frame(frame.raw);
                         }
                         if let Some(msg) = MavMessage::decode(frame.msgid, frame.payload) {
+                            // A frame whose header names its target, and not this ground
+                            // station or everyone, goes no further on a live link once recorded.
+                            // C#: MAVLinkInterface.cs:5072-5076
+                            if !logreadmode && frame.target_system.is_some() {
+                                let (system, component) = target_of(frame, &msg);
+                                if !is_targeted_to(system, component, gcs) {
+                                    return;
+                                }
+                            }
                             // `OnPacketReceived`, for whoever listens: the MAVLink Inspector.
                             // C#: MAVLinkInterface.cs:5347-5349
                             if shared.packets.any() {
@@ -1685,7 +1701,7 @@ fn run_link(
                             // MAVState.fencepoints, wps and rallypoints have them: from this
                             // link's own upload, before the transfer moves on, and from whatever
                             // passes (see `fence_points` and `mission_points`).
-                            file_list_upload(shared, id, gcs, &msg);
+                            file_list_upload(shared, id, gcs, &msg, frame.target_system);
                             if matches!(
                                 msg,
                                 MavMessage::MissionCount(_)
@@ -1710,8 +1726,15 @@ fn run_link(
                             // item. A HOME_POSITION answers a getHomePosition.
                             let mut taken = false;
                             {
+                                // `IsTargetedTo(gcssysid, MAV_COMP_ID_MISSIONPLANNER)`: the
+                                // header's target first, and 0 everyone.
+                                // C#: MAVLinkInterface.cs:3799, 3829, 3861, 4097, 4130, 4178
                                 let to_us = |system: u8, component: u8| {
-                                    u32::from(system) == gcs.sysid && component == gcs.compid
+                                    is_targeted_to(
+                                        frame.target_system.or(Some(u32::from(system))),
+                                        Some(component),
+                                        gcs,
+                                    )
                                 };
                                 let now = Instant::now();
                                 match &msg {
@@ -1973,8 +1996,14 @@ fn run_link(
                                 // A rally point read back answers the set that asked for it
                                 // (getRallyPoint), if it is addressed to us.
                                 MavMessage::RallyPoint(point) => {
-                                    let to_us = u32::from(point.target_system) == config.sysid
-                                        && point.target_component == config.compid;
+                                    // C#: MAVLinkInterface.cs:5917, 6353 (IsTargetedTo)
+                                    let to_us = is_targeted_to(
+                                        frame
+                                            .target_system
+                                            .or(Some(u32::from(point.target_system))),
+                                        Some(point.target_component),
+                                        gcs,
+                                    );
                                     if let Ok(mut held) = shared.requests.os_lock() {
                                         let now = Instant::now();
                                         for request in held.values_mut() {
@@ -1988,8 +2017,14 @@ fn run_link(
                                 // A fence point read back answers the set or the fetch that
                                 // asked for it (getFencePoint), if it is addressed to us.
                                 MavMessage::FencePoint(point) => {
-                                    let to_us = u32::from(point.target_system) == config.sysid
-                                        && point.target_component == config.compid;
+                                    // C#: MAVLinkInterface.cs:5917, 6353 (IsTargetedTo)
+                                    let to_us = is_targeted_to(
+                                        frame
+                                            .target_system
+                                            .or(Some(u32::from(point.target_system))),
+                                        Some(point.target_component),
+                                        gcs,
+                                    );
                                     if let Ok(mut held) = shared.requests.os_lock() {
                                         let now = Instant::now();
                                         for request in held.values_mut() {
@@ -2597,7 +2632,13 @@ fn expose_handles<'a>(
 /// with it, only the last item - acknowledged - is filed, until the list is read back.
 /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:3801-3830, 3824-3852, 4273-4309,
 /// 4310-4346`
-fn file_list_upload(shared: &Arc<Shared>, id: VehicleId, gcs: VehicleId, msg: &MavMessage) {
+fn file_list_upload(
+    shared: &Arc<Shared>,
+    id: VehicleId,
+    gcs: VehicleId,
+    msg: &MavMessage,
+    header_target: Option<u32>,
+) {
     // (the item asked for, whether a request may file, to whom it is addressed, the list)
     let (asked, files, target, kind) = match msg {
         MavMessage::MissionRequestInt(m) => (
@@ -2620,7 +2661,12 @@ fn file_list_upload(shared: &Arc<Shared>, id: VehicleId, gcs: VehicleId, msg: &M
         ),
         _ => return,
     };
-    if (u32::from(target.0), target.1) != (gcs.sysid, gcs.compid) {
+    // `IsTargetedTo(gcssysid, MAV_COMP_ID_MISSIONPLANNER)`. C#: MAVLinkInterface.cs:4272, 4304
+    if !is_targeted_to(
+        header_target.or(Some(u32::from(target.0))),
+        Some(target.1),
+        gcs,
+    ) {
         return;
     }
     let Ok(transfers) = shared.missions.os_lock() else {
@@ -2793,11 +2839,106 @@ fn route_transfer(shared: &Arc<Shared>, id: VehicleId, msg: &MavMessage) -> Opti
 }
 
 /// Recomputes a v2 frame's checksum after its sequence byte was re-stamped.
+/// `IsTargetedTo(system, component)`: a message for no system, system 0 or `system`, and for no
+/// component, component 0 or `component`. `target_system` is `GetTargetSystem`'s - the header's
+/// with `TARGET32`, else the payload's byte. `// C#: ExtLibs/Mavlink/MAVLinkMessage.cs:39-62`
+#[must_use]
+pub fn is_targeted_to(
+    target_system: Option<u32>,
+    target_component: Option<u8>,
+    to: VehicleId,
+) -> bool {
+    target_system.is_none_or(|system| system == 0 || system == to.sysid)
+        && target_component.is_none_or(|component| component == 0 || component == to.compid)
+}
+
+/// `GetTargetSystem()` and `GetTargetComponent()` of a frame and its message: the header's target
+/// first, else the message's `target_system` (`target` in `MANUAL_CONTROL`, `GetTargetSystemField`),
+/// and its `target_component`. `// C#: ExtLibs/Mavlink/MAVLinkMessage.cs:39-54; MavlinkHeader.cs:37-41`
+fn target_of(frame: &mp_mavlink::Frame<'_>, message: &MavMessage) -> (Option<u32>, Option<u8>) {
+    let fields = message.fields();
+    let byte = |name: &str| {
+        fields
+            .iter()
+            .find(|(field, _)| *field == name)
+            .and_then(|(_, value)| match value {
+                mp_mavlink::FieldValue::Unsigned(value) => u8::try_from(*value).ok(),
+                _ => None,
+            })
+    };
+    let payload_system = byte("target_system").or_else(|| {
+        matches!(message, MavMessage::ManualControl(_))
+            .then(|| byte("target"))
+            .flatten()
+    });
+    (
+        frame.target_system.or(payload_system.map(u32::from)),
+        byte("target_component"),
+    )
+}
+
+/// `generatePacket`'s header target, for a frame this link sends: to a vehicle whose id is over
+/// 255 a message that names a target carries the whole id in its header, with `TARGET32`, and 255
+/// in its payload's byte (`SetPayloadTarget`). The frame again with it, or `None` to send it as it
+/// is. **Divergence:** the C# frames to the vehicle it is asked to send to (`MAV.sysid` unless
+/// told otherwise); this link's sends name no vehicle but the payload's byte, so a 255 there is the
+/// one vehicle heard whose id is over 255 - of the component the message names, where it names
+/// one - and with none such, or several, or a vehicle whose id is 255 itself, the frame goes as it
+/// is. `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:1292-1297, 1347-1361`
+fn with_wide_target(shared: &Shared, bytes: &[u8]) -> Option<Vec<u8>> {
+    // The vehicles first, which costs no allocation: a link whose vehicles' ids all fit a byte
+    // sends every frame as it is, and its telemetry path allocates nothing.
+    let wide: Vec<VehicleId> = {
+        let handles = shared.handles.os_lock().ok()?;
+        if !handles.keys().any(|id| id.sysid > 255) || handles.keys().any(|id| id.sysid == 255) {
+            return None;
+        }
+        handles
+            .keys()
+            .filter(|id| id.sysid > 255)
+            .copied()
+            .collect()
+    };
+    let (frame, _) = mp_mavlink::parse(bytes, &DIALECT).ok()?;
+    if frame.target_system.is_some() {
+        return None;
+    }
+    let message = MavMessage::decode(frame.msgid, frame.payload)?;
+    let (system, component) = target_of(&frame, &message);
+    if system != Some(255) {
+        return None;
+    }
+    let mut candidates = wide
+        .iter()
+        .filter(|id| component.is_none_or(|c| c == 0 || c == id.compid))
+        .map(|id| id.sysid);
+    let target = candidates.next()?;
+    if candidates.any(|other| other != target) {
+        return None;
+    }
+    let crc_extra = mp_mavlink::Dialect::crc_extra(&DIALECT, frame.msgid)?;
+    let mut out = [0u8; mp_mavlink::MAX_FRAME_LEN];
+    let n = mp_mavlink::encode_v2_targeted(
+        &mut out,
+        frame.seq,
+        frame.sysid,
+        frame.compid,
+        frame.msgid,
+        frame.payload,
+        crc_extra,
+        frame.compat_flags,
+        Some(target),
+    )
+    .ok()?;
+    out.get(..n).map(<[u8]>::to_vec)
+}
+
 fn restamp_checksum(frame: &[u8]) -> Option<Vec<u8>> {
     let payload_len = usize::from(*frame.get(1)?);
-    let msgid = u32::from_le_bytes([*frame.get(7)?, *frame.get(8)?, *frame.get(9)?, 0]);
+    // The header as long as its flags make it: this link's own id may be 32-bit.
+    let (header_len, msgid) = mp_mavlink::v2_layout(frame)?;
     let crc_extra = mp_mavlink::Dialect::crc_extra(&DIALECT, msgid)?;
-    let payload_end = 10 + payload_len;
+    let payload_end = header_len + payload_len;
     let checksum = mp_mavlink::crc::checksum(frame.get(1..payload_end)?, crc_extra);
 
     let mut out = frame.to_vec();

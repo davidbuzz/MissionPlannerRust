@@ -207,9 +207,7 @@ pub fn set_wp_item(message: &MavMessage) -> Option<(u16, FenceItem)> {
                 },
             ))
         }
-        MavMessage::MissionItemInt(m)
-            if m.mission_type == FENCE && !matches!(m.current, 2 | 3) =>
-        {
+        MavMessage::MissionItemInt(m) if m.mission_type == FENCE && !matches!(m.current, 2 | 3) => {
             Some((
                 m.seq,
                 FenceItem {
@@ -310,7 +308,12 @@ mod tests {
         assert_eq!(fence.items(VEHICLE).len(), 3);
         assert_eq!(fence.items(VEHICLE)[1].x, 21);
         // A ground station's item, as a recording holds it, is about the vehicle it addresses.
-        fence.observe(u32::from(GCS), 190, u32::from(GCS), &item_int(0, 7, 5003, 40));
+        fence.observe(
+            u32::from(GCS),
+            190,
+            u32::from(GCS),
+            &item_int(0, 7, 5003, 40),
+        );
         assert_eq!(fence.items(VehicleId::new(7, 190))[0].x, 40);
         // A fence MISSION_COUNT starts that vehicle's fence again.
         fence.observe(

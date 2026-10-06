@@ -65,8 +65,7 @@ use std::sync::RwLock;
 use web_time::{Duration, SystemTime, UNIX_EPOCH};
 
 use mp_mavlink::{
-    Dialect as _, FieldValue, Frame, INCOMPAT_FLAG_SIGNED, INCOMPAT_FLAG_SYSID32, STX_V2,
-    SigningKey, v2_header_len,
+    Dialect as _, FieldValue, Frame, INCOMPAT_FLAG_SIGNED, STX_V2, SigningKey, v2_layout,
 };
 use mp_mavlink_dialects::all::{DIALECT, MavMessage, SetupSigning};
 use mp_vehicle::VehicleId;
@@ -419,22 +418,13 @@ impl Signing {
     }
 }
 
-/// A v2 frame's header length and message id, wherever its flags put it: after a four-byte
-/// system id with `SYSID32`. `// C#: ExtLibs/Mavlink/MavlinkHeader.cs:7-12, 58-82`
-fn header_of(frame: &[u8]) -> Option<(usize, u32)> {
-    let flags = *frame.get(2)?;
-    let at = if flags & INCOMPAT_FLAG_SYSID32 != 0 { 10 } else { 7 };
-    let msgid = u32::from_le_bytes([*frame.get(at)?, *frame.get(at + 1)?, *frame.get(at + 2)?, 0]);
-    Some((v2_header_len(flags), msgid))
-}
-
 /// Who a v2 frame is addressed to, `GetTargetSystem`'s way: the header's target with
 /// `TARGET32`, else its message's `target_system` (`target` in the few that name it so), and
 /// `target_component` if it has one; `None` for a message that names no system, or names system
 /// 0, everyone. `// C#: ExtLibs/Mavlink/MAVLinkMessage.cs:39-47`
 fn target_of(frame: &[u8]) -> Option<(u32, Option<u8>)> {
     let len = usize::from(*frame.get(1)?);
-    let (header_len, msgid) = header_of(frame)?;
+    let (header_len, msgid) = v2_layout(frame)?;
     let payload = frame.get(header_len..header_len + len)?;
     // `TARGET32`'s four bytes end the header.
     let wide = (frame.get(2)? & mp_mavlink::INCOMPAT_FLAG_TARGET32 != 0)
@@ -452,7 +442,11 @@ fn target_of(frame: &[u8]) -> Option<(u32, Option<u8>)> {
                 _ => None,
             })
     };
-    let system = wide.or_else(|| value("target_system").or_else(|| value("target")).map(u32::from))?;
+    let system = wide.or_else(|| {
+        value("target_system")
+            .or_else(|| value("target"))
+            .map(u32::from)
+    })?;
     (system != 0).then(|| (system, value("target_component")))
 }
 
@@ -467,7 +461,7 @@ pub fn sign_frame(frame: &[u8], key: &[u8; 32], link_id: u8, timestamp: u64) -> 
         return None;
     }
     let len = usize::from(*frame.get(1)?);
-    let (header_len, msgid) = header_of(frame)?;
+    let (header_len, msgid) = v2_layout(frame)?;
     let crc_extra = DIALECT.crc_extra(msgid)?;
     let end = header_len + len + CHECKSUM_LEN;
     let mut out = Vec::with_capacity(end + mp_mavlink::SIGNATURE_LEN);
@@ -539,6 +533,47 @@ mod tests {
     fn frames(bytes: &[u8], mut each: impl FnMut(&Frame<'_>)) {
         let mut decoder = FrameDecoder::new();
         decoder.push_and_drain(bytes, &DIALECT, |frame| each(frame));
+    }
+
+    /// A frame with both wide fields - a 32-bit sender and `TARGET32` - signed by the link: the
+    /// flag set and the checksum worked out where its header ends, the signature over the whole
+    /// header; its target read from the header, as `GetTargetSystem` reads it.
+    #[test]
+    fn a_frame_with_32_bit_ids_is_signed_over_its_whole_header() {
+        let command = MavMessage::CommandLong(mp_mavlink_dialects::all::CommandLong {
+            param1: 0.0,
+            param2: 0.0,
+            param3: 0.0,
+            param4: 0.0,
+            param5: 0.0,
+            param6: 0.0,
+            param7: 0.0,
+            command: 300,
+            target_system: 255,
+            target_component: 190,
+            confirmation: 1,
+        });
+        let mut payload = [0u8; 255];
+        let len = command.encode(&mut payload);
+        let mut out = [0u8; mp_mavlink::MAX_FRAME_LEN];
+        let n = mp_mavlink::encode_v2_targeted(
+            &mut out,
+            9,
+            0x0001_0000,
+            190,
+            command.id(),
+            &payload[..len],
+            command.crc_extra(),
+            0,
+            Some(u32::MAX),
+        )
+        .unwrap();
+        assert_eq!(target_of(&out[..n]), Some((u32::MAX, Some(190))));
+        let signed = sign_frame(&out[..n], &KEY, 3, TIMESTAMP).expect("signed");
+        let (frame, _) = mp_mavlink::parse(&signed, &DIALECT).expect("its checksum holds");
+        assert_eq!(frame.sysid, 0x0001_0000);
+        assert_eq!(frame.target_system, Some(u32::MAX));
+        assert!(mp_mavlink::verify(&SigningKey::new(KEY), &frame));
     }
 
     /// pymavlink signs the GCS's heartbeat - seq 7, from 255/190, link id 3 - to these bytes

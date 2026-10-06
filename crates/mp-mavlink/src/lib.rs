@@ -49,7 +49,7 @@ pub use frame::{
     EncodeError, Frame, INCOMPAT_FLAG_SIGNED, INCOMPAT_FLAG_SYSID32, INCOMPAT_FLAG_TARGET32,
     MAX_FRAME_LEN, MAX_PAYLOAD_LEN, MavVersion, ParseError, SIGNATURE_LEN, STX_V1, STX_V2,
     SUPPORTED_INCOMPAT_FLAGS, V2_HEADER_LEN, V2_MAX_HEADER_LEN, encode_v1, encode_v2,
-    encode_v2_targeted, parse, trim_payload, v2_header_len,
+    encode_v2_targeted, parse, trim_payload, v2_header_len, v2_layout,
 };
 pub use message::Message;
 pub use signing::{SigningKey, sign, verify};
