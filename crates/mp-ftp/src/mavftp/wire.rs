@@ -28,7 +28,7 @@ use std::fmt;
 
 /// Bytes in a `FILE_TRANSFER_PROTOCOL` payload.
 ///
-/// C#: MAVFtp.cs:2363 (`[StructLayout(LayoutKind.Sequential, Pack = 1, Size = 251)]`).
+/// C#: MAVFtp.cs:2402 (`[StructLayout(LayoutKind.Sequential, Pack = 1, Size = 251)]`).
 pub const PAYLOAD_LEN: usize = 251;
 
 /// Bytes of header before the data.
@@ -36,7 +36,7 @@ pub const HEADER_LEN: usize = 12;
 
 /// Bytes of data after the header.
 ///
-/// C#: MAVFtp.cs:2391 (`SizeConst = 251 - 12`).
+/// C#: MAVFtp.cs:2430 (`SizeConst = 251 - 12`).
 pub const DATA_LEN: usize = PAYLOAD_LEN - HEADER_LEN;
 
 /// A command or response opcode: `FTPOpcode`.
@@ -365,7 +365,7 @@ impl fmt::Display for Errno {
 
 /// One `FILE_TRANSFER_PROTOCOL` payload, laid out as the C#'s `FTPPayloadHeader`.
 ///
-/// C#: MAVFtp.cs:2363-2392. Little-endian and packed, as `MavlinkUtil.StructureToByteArray`
+/// C#: MAVFtp.cs:2402-2431. Little-endian and packed, as `MavlinkUtil.StructureToByteArray`
 /// writes it on the little-endian machines Mission Planner runs on.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Header {
@@ -410,7 +410,7 @@ impl Header {
     /// Sets `data` the way the C#'s conversion to bytes does when a request carries data: `size`
     /// becomes the data's length as a byte, and the data is cut or zero-padded to fit.
     ///
-    /// C#: MAVFtp.cs:2394-2407 (`value.size = (byte)(value.data.Length);`,
+    /// C#: MAVFtp.cs:2433-2446 (`value.size = (byte)(value.data.Length);`,
     /// `value.data.MakeSize(251 - 12)`). The cast wraps, so a path of 256 bytes goes out saying
     /// it has none; nothing here stops it, because nothing in the C# does.
     pub fn set_data(&mut self, bytes: &[u8]) {

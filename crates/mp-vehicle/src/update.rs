@@ -25,7 +25,7 @@
 //! Two kinds of update drive it, as in the C#. A message sets a property whose setter does
 //! arithmetic against `datetime` - `alt`, `current` - which [`VehicleState::apply`] does as it
 //! goes. And `UpdateCurrentSettings`, which the C# calls on every vehicle after each read from the
-//! link (`MainV2.cs:3058-3069`) and after each packet of a log (`Log/MavlinkLog.cs:141-144`),
+//! link (`MainV2.cs:3065-3076`) and after each packet of a log (`Log/MavlinkLog.cs:141-144`),
 //! counts the seconds: [`VehicleState::update_current_settings`], which
 //! [`crate::VehicleRegistry::update_current_settings`] calls on every vehicle.
 //!
@@ -33,7 +33,7 @@
 //!
 //! As everywhere in this crate, what is held is SI. **Divergence:** the C# holds two of these in
 //! the user's units instead: `distTraveled` adds each second's distance times `multiplierdist`
-//! (`CurrentState.cs:4612-4613`), and `verticalspeed` differentiates the `alt` getter, which
+//! (`CurrentState.cs:4615-4616`), and `verticalspeed` differentiates the `alt` getter, which
 //! applies `multiplieralt`, and then multiplies by `multiplierspeed` again when read
 //! (`CurrentState.cs:1043-1051`). Both are the same numbers as here in metric units; in feet the
 //! C#'s are in feet, and its vertical speed in feet per second times the speed multiplier.
@@ -45,7 +45,7 @@ use crate::clock::DateTime;
 use crate::state::VehicleState;
 
 /// `MAV_SYS_STATUS_SENSOR_DIFFERENTIAL_PRESSURE`, the airspeed sensor, which must be enabled and
-/// healthy for the low-airspeed warning. `// C#: ExtLibs/Mavlink/Mavlink.cs:2867`
+/// healthy for the low-airspeed warning. `// C#: ExtLibs/Mavlink/Mavlink.cs:2918`
 const DIFFERENTIAL_PRESSURE: u32 =
     MavSysStatusSensor::MAV_SYS_STATUS_SENSOR_DIFFERENTIAL_PRESSURE.0;
 
@@ -145,7 +145,7 @@ impl VehicleState {
     /// link that is shut and not replaying, on which the distance restarts from 0 - at the first
     /// second that would add to it. The link thread and a replay pass false.
     ///
-    /// The C#'s 50 ms rate limit around this (`CurrentState.cs:4584`) is its callers' cadence,
+    /// The C#'s 50 ms rate limit around this (`CurrentState.cs:4587`) is its callers' cadence,
     /// and the rest of the method belongs to the link - the stream requests, which read
     /// [`VehicleState::rates`] - or is its own `dowindcalc` estimate, which is not ported (see
     /// [`VehicleState::wind_speed`]).
@@ -156,15 +156,15 @@ impl VehicleState {
     /// the log's time and decides at random whether the first second counts;
     /// [`crate::VehicleRegistry::apply_at`] starts it at the first packet's time, which on a live
     /// link is the same instant.
-    /// `// C#: ExtLibs/ArduPilot/CurrentState.cs:4580-4627`
+    /// `// C#: ExtLibs/ArduPilot/CurrentState.cs:4583-4630`
     pub fn update_current_settings(&mut self, link_closed: bool) {
-        // C#: CurrentState.cs:4602-4604
+        // C#: CurrentState.cs:4605-4607
         if self.datetime.second() == self.last_second_counter.second() {
             return;
         }
         self.last_second_counter = self.datetime;
 
-        // C#: CurrentState.cs:4606-4619. `lastpos` and `lat`, `lng` must each be non-zero; the
+        // C#: CurrentState.cs:4609-4622. `lastpos` and `lat`, `lng` must each be non-zero; the
         // position is `None` for the C#'s (0, 0).
         let nonzero = |p: &LatLon| p.latitude() != 0.0 && p.longitude() != 0.0;
         if let (Some(last), Some(here)) = (self.last_pos, self.position)
@@ -180,7 +180,7 @@ impl VehicleState {
         }
         self.last_pos = self.position;
 
-        // C#: CurrentState.cs:4621-4626. `ch3percent`, from VFR_HUD. **Divergence:** before the
+        // C#: CurrentState.cs:4624-4629. `ch3percent`, from VFR_HUD. **Divergence:** before the
         // first one the C# works a percentage out of servo 3 and the SERVO3_* parameters instead
         // (CurrentState.cs:971-1003), which are not held here, so this reads 0 until then.
         if (f32::from(self.throttle_percent) > 12.0 || self.ground_speed.0 > 3.0) && self.armed {
@@ -256,9 +256,9 @@ impl VehicleState {
     /// (which is `f64::MAX`); `None` with no shots, which leaves the field as it was.
     ///
     /// `camera_times_usec` is `CAMERA_FEEDBACK.time_usec` of each shot in `MAV.camerapoints`'
-    /// order (`MAVLinkInterface.cs:5736-5745`); whoever keeps that list sets
+    /// order (`MAVLinkInterface.cs:5704-5713`); whoever keeps that list sets
     /// [`VehicleState::time_since_last_shot`] from this each time the map redraws.
-    /// `// C#: GCSViews/FlightData.cs:4021-4038`
+    /// `// C#: GCSViews/FlightData.cs:4135-4152`
     #[must_use]
     #[allow(clippy::cast_precision_loss)] // `mark.time_usec / 1000.0`, a ulong in a double
     pub fn shot_interval(camera_times_usec: impl IntoIterator<Item = u64>) -> Option<f64> {
@@ -276,7 +276,7 @@ impl VehicleState {
     /// `ARSPD_FBW_MIN` - the C# reads `parent.param` for them itself. The owner of the parameter
     /// table calls this when either is fetched or changes; the warning takes the value up the
     /// next time `VFR_HUD` checks, at most every five seconds in the air, as the C# does.
-    /// `// C#: ExtLibs/ArduPilot/CurrentState.cs:3858-3880`
+    /// `// C#: ExtLibs/ArduPilot/CurrentState.cs:3861-3883`
     pub fn set_airspeed_min_params(
         &mut self,
         airspeed_min: Option<f64>,
@@ -293,7 +293,7 @@ impl VehicleState {
     /// was last read - 0 at first, which never warns. **Divergence:** the C# times the five
     /// seconds on the wall clock; this times them on [`VehicleState::datetime`], which on a live
     /// link is the wall clock and in a replay is the flight's.
-    /// `// C#: ExtLibs/ArduPilot/CurrentState.cs:3858-3888`
+    /// `// C#: ExtLibs/ArduPilot/CurrentState.cs:3861-3891`
     pub(crate) fn check_low_airspeed(&mut self, airspeed: f32) {
         if self.time_since_arm_in_air > 0.0
             && self.datetime.seconds_since(self.last_airspeed_min_check) > 5.0
@@ -323,9 +323,9 @@ impl VehicleState {
     ///
     /// **Divergence:** the C# measures against `DateTime.Now`; this measures against
     /// [`VehicleState::datetime`], which on a live link is `DateTime.Now` as the packet was read
-    /// (`MAVLinkInterface.cs:4721`), and in a replay is the time the packet was recorded - where
+    /// (`MAVLinkInterface.cs:4710`), and in a replay is the time the packet was recorded - where
     /// the C#'s figure is how fast the file is being read rather than anything about the vehicle.
-    /// `// C#: ExtLibs/ArduPilot/CurrentState.cs:3699-3713`
+    /// `// C#: ExtLibs/ArduPilot/CurrentState.cs:3702-3716`
     #[allow(clippy::cast_precision_loss)] // `imu.time_usec * 1.0e-6`, a ulong in a double
     pub(crate) fn update_speedup(&mut self, time_usec: u64) {
         let time = time_usec as f64 * 1.0e-6;

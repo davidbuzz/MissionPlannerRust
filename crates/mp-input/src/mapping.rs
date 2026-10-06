@@ -32,7 +32,7 @@
 //!
 //! One thing is added, and it is not the C#'s: a position is never sent as one of the message's
 //! control values ([`SAFE_MIN_US`], [`SAFE_MAX_US`]).
-//! `// C#: ExtLibs/ArduPilot/Joystick/JoystickBase.cs:729-996, 1030-1147; MainV2.cs:2272-2442`
+//! `// C#: ExtLibs/ArduPilot/Joystick/JoystickBase.cs:729-996, 1030-1147; MainV2.cs:2279-2449`
 
 use crate::Reading;
 use crate::config::{ButtonFunction, JoyButton, JoystickAxis, JoystickConfig};
@@ -87,7 +87,7 @@ pub struct Channels(pub [u16; CHANNELS]);
 impl Channels {
     /// Every channel ignored, which is what a channel with no axis is sent as: `ushort.MaxValue`
     /// on channels 1 to 8 and 0 on 9 to 18.
-    /// `// C#: MainV2.cs:2282-2317`
+    /// `// C#: MainV2.cs:2289-2324`
     #[must_use]
     pub const fn ignored() -> Self {
         // Written out rather than looped, so the split between the two conventions is visible on
@@ -455,7 +455,7 @@ pub struct Overrides {
 }
 
 /// `MANUAL_CONTROL`'s four axes: channels 1 to 4's values, 0 for a channel with no axis.
-/// `// C#: MainV2.cs:2409-2420`
+/// `// C#: MainV2.cs:2416-2427`
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub struct ManualControl {
     /// `x`, from channel 1.
@@ -487,7 +487,7 @@ impl Overrides {
     /// `UINT16_MAX` axis asking for "ignore" by name. The C# sends whatever `(ushort)` makes, so a
     /// vehicle listing `RCn_MIN` as 0 would have a stick at the bottom of its travel sent as 0,
     /// "give this channel back to the transmitter": a release nobody asked for.
-    /// `// C#: MainV2.cs:2276-2354`
+    /// `// C#: MainV2.cs:2283-2361`
     #[must_use]
     pub fn channels(&self) -> Channels {
         let mut channels = Channels::ignored();
@@ -508,7 +508,7 @@ impl Overrides {
     }
 
     /// `MANUAL_CONTROL`'s axes.
-    /// `// C#: MainV2.cs:2409-2420`
+    /// `// C#: MainV2.cs:2416-2427`
     #[must_use]
     pub fn manual(&self) -> ManualControl {
         let axis = |channel| self.get(channel).unwrap_or(0);

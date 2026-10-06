@@ -4,7 +4,7 @@
 # vehicle's mission is read, everything before the waypoint except home, takeoffs and the "do"
 # commands is dropped, the rest is written back and read into the planner, waypoint 1 is made
 # current, and on a copter the vehicle is put in Guided, armed and told to take off to the
-# waypoint's height before Auto. `GCSViews/FlightData.cs:1481-1627`
+# waypoint's height before Auto. `GCSViews/FlightData.cs:1483-1629`
 #
 # The five-item mission below resumed at 4 keeps home, the takeoff and the DO_CHANGE_SPEED and
 # drops waypoint 2: four items.
@@ -12,7 +12,7 @@
 # On ArduCopter the resume ends in "Command Failed", as Mission Planner's does. The C# sends the
 # TAKEOFF, sleeps a second, and sends it again until the vehicle is within 2 m of the waypoint's
 # height, and a TAKEOFF refused is "Command Failed" and the end of it
-# (`GCSViews/FlightData.cs:1587-1605`). ArduCopter refuses every take-off once the vehicle has
+# (`GCSViews/FlightData.cs:1589-1607`). ArduCopter refuses every take-off once the vehicle has
 # left the ground (`Mode::do_user_takeoff_U_m`: "can't takeoff again!"), and 8 m at 2.5 m/s is
 # more than three seconds' climb, so one of the repeats is always refused - the runs of
 # 2026-09-24 16:36 and 16:38 said so. The vehicle, armed in Guided, climbs on to the first

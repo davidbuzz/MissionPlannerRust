@@ -29,7 +29,7 @@
 //! **Local time is UTC here.** The C# converts through the machine's time zone in three places -
 //! a dataflash item's time is built in local time and turned back with `ToUniversalTime`
 //! (`DFLog.cs:702-711`, `GeoRefImageBase.cs:228`), a tlog's receive time is `ToLocalTime`d
-//! (`MavlinkParse.cs:146-148`), and KML writes the offset of a local time - and on any machine
+//! (`MavlinkParse.cs:150-152`), and KML writes the offset of a local time - and on any machine
 //! those round trips give back what went in, except across a daylight-saving change inside one
 //! log. This port keeps the kind, so the files write what a machine on UTC writes, which is what the
 //! oracle runs under.

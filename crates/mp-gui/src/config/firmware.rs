@@ -184,11 +184,11 @@ pub const FAILED_TO_UPGRADE_BOOTLOADER: &str = "Failed to upgrade bootloader";
 
 /// `doCommand`'s `TimeoutException` once its retry has gone unanswered, which the manifest
 /// page's handler does not catch: the application's error handler shows it in the C#, the status
-/// line here. `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:2784-2797`
+/// line here. `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:2781-2794`
 pub const DO_COMMAND_TIMEOUT: &str = "Timeout on read - doCommand";
 
 /// `MAVLinkInterface.CONNECT_TIMEOUT_SECONDS`' default: how long `Open` waits for heartbeats.
-/// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:325`
+/// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:327`
 pub(super) const CONNECT_TIMEOUT: Duration = Duration::from_secs(30);
 
 /// How often the manifest page's [`Watcher`] enumerates the serial ports while the page is
@@ -507,7 +507,7 @@ const REBOOT_WINDOW: std::time::Duration = std::time::Duration::from_secs(3);
 
 /// How long `getHeartBeat` reads for a vehicle's heartbeat before it gives up: 2.2 s (or 200
 /// packets read, which a board sending only heartbeats never reaches).
-/// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:1197`
+/// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:1199`
 pub(super) const HEARTBEAT_WAIT: std::time::Duration = std::time::Duration::from_millis(2200);
 
 /// How long the link thread may take to write the reboots before the port is closed under them:
@@ -556,7 +556,7 @@ const REBOOT_WAITS: RebootWaits = RebootWaits {
 /// bootloader: "No Response from board" on the bench CubeOrange's second Windows flash. The
 /// C#'s own connect passes those heartbeats over ("no broadcast compid's (ping adsb)"); so does
 /// this.
-/// `// C#: Utilities/Firmware.cs:797-837; ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:821-826, 1153-1203, 2553-2559, 2591-2618, 2717, 2758-2763`
+/// `// C#: Utilities/Firmware.cs:797-837; ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:823-828, 1155-1205, 2550-2556, 2588-2615, 2714, 2755-2760`
 fn reboot_to_bootloader(
     link: &mp_link::Link,
     started: web_time::Instant,
@@ -614,7 +614,7 @@ fn reboot_to_bootloader(
 /// The vehicle the reboots go to: the autopilot, component 1, if it has been heard, else any
 /// component but 0 - a ping ADS-B receiver's broadcast id, which `Open`'s connect loop passes
 /// over and so does this ([`reboot_to_bootloader`]'s divergence).
-/// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:821-826`
+/// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:823-828`
 fn rebootable_vehicle(
     link: &mp_link::Link,
 ) -> Option<(mp_vehicle::VehicleId, mp_vehicle::StateHandle)> {
@@ -1118,7 +1118,7 @@ impl Default for InstallFirmware {
 
 /// Whether `Open`'s connect loop would be done: the vehicle shown heard twice from component 1,
 /// or four times from another.
-/// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:869-891`
+/// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:871-893`
 pub(super) fn heard_enough(view: &TelemetryView) -> bool {
     let (Some(vehicle), Some(state)) = (view.vehicle, view.state.as_deref()) else {
         return false;
@@ -1131,7 +1131,7 @@ pub(super) fn heard_enough(view: &TelemetryView) -> bool {
 /// arrival from Windows' `WM_DEVICECHANGE` and probes the ports on any, where here there is no
 /// such message and an arrival is seen only as a serial port new or changed (`port_identities`),
 /// so a device that brings none - a memory stick, say - starts no probe.
-/// `// C#: MainV2.cs:4520-4577; GCSViews/ConfigurationView/ConfigFirmwareManifest.cs:134-137`
+/// `// C#: MainV2.cs:4527-4584; GCSViews/ConfigurationView/ConfigFirmwareManifest.cs:134-137`
 #[must_use]
 pub fn arrived(seen: &[String], now: &[String]) -> bool {
     now.iter().any(|port| !seen.contains(port))
@@ -1141,7 +1141,7 @@ pub fn arrived(seen: &[String], now: &[String]) -> bool {
 /// ports every [`ARRIVAL_POLL`] - off the UI thread, as the enumeration asks the OS for its
 /// devices (SetupAPI on Windows) - and sending the list each time a port has appeared since the
 /// enumeration before ([`arrived`]). Dropped, it stops: `DeviceChanged -= Instance_DeviceChanged`.
-/// `// C#: GCSViews/ConfigurationView/ConfigFirmwareManifest.cs:47-48, 126, 134-137; MainV2.cs:4520-4577`
+/// `// C#: GCSViews/ConfigurationView/ConfigFirmwareManifest.cs:47-48, 126, 134-137; MainV2.cs:4527-4584`
 #[derive(Debug)]
 struct Watcher {
     /// Set when dropped; the thread ends at its next enumeration.
@@ -1291,7 +1291,7 @@ impl InstallFirmware {
     /// The SETUP screen disposed and made anew - a connect, a disconnect, its tab clicked again -
     /// where leaving the page only deactivates it: a new page object, with no bootloader found.
     /// Kept across the page's own deactivations ([`Self::close`]), as the C#'s page object is.
-    /// `// C#: MainV2.cs:1329, 1347, 1422, 1745, 3179; ExtLibs/Controls/MainSwitcher.cs:112-135`
+    /// `// C#: MainV2.cs:1331, 1349, 1424, 1747, 3186; ExtLibs/Controls/MainSwitcher.cs:112-135`
     pub fn screen_disposed(&mut self) {
         self.found = None;
     }
@@ -1300,7 +1300,7 @@ impl InstallFirmware {
     /// arrival, watches the ports, and closes the page when the screen changes, as leaving
     /// Initial Setup deactivates its page - and forgets the bootloader found, as leaving disposes
     /// the screen and the page object with it (`HWConfig` is not a persistent screen).
-    /// `// C#: MainV2.cs:3179; ExtLibs/Controls/MainSwitcher.cs:112-135`
+    /// `// C#: MainV2.cs:3186; ExtLibs/Controls/MainSwitcher.cs:112-135`
     pub fn tick(&mut self, on_setup: bool) {
         while let Ok(board) = self.found_receiver.try_recv() {
             self.found_board(board);
@@ -2019,7 +2019,7 @@ pub(super) fn heartbeats(view: &TelemetryView) -> u64 {
 /// `doConnect` opens a `.tlog` for every link it connects; asking for no streams and sending no
 /// heartbeat, as nothing in the C# reads or announces a `MAVLinkInterface` that is not
 /// `MainV2.comPort` - `doCommand` reads its own answer. `None` when it will not open.
-/// `// C#: MainV2.cs:1591-1636`
+/// `// C#: MainV2.cs:1593-1638`
 fn bl_link(url: &str) -> Option<Telemetry> {
     let config = mp_link::LinkConfig {
         record_path: Telemetry::recording_path(),
@@ -3169,7 +3169,7 @@ impl MissionPlanner {
     /// again deactivates this page, which here closes the link the page holds before its
     /// questions are asked, where the C#'s handler runs on past its disposed page; the rest
     /// describe a connection of the window's that there is not.
-    /// `// C#: GCSViews/ConfigurationView/ConfigFirmwareManifest.cs:535-546; MainV2.cs:1448-1840, 2459-2500; ExtLibs/Controls/ControlHelpers.cs:101-111`
+    /// `// C#: GCSViews/ConfigurationView/ConfigFirmwareManifest.cs:535-546; MainV2.cs:1450-1847, 2466-2507; ExtLibs/Controls/ControlHelpers.cs:101-111`
     pub(crate) fn manifest_bootloader_update(
         &mut self,
         window: &mut Window,
@@ -4174,7 +4174,7 @@ mod reboot_to_bootloader_tests {
     /// Seen, then the next heartbeat waited for, then `doCommand` 3 and `doCommand` 1, each
     /// written twice and neither waited on: four frames, 3, 3, 1, 1, and nothing after them
     /// however long the copter stays quiet.
-    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:2591-2618, 2717, 2758-2763`
+    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:2588-2615, 2714, 2755-2760`
     #[test]
     fn four_frames_3_3_1_1_go_out_after_the_next_heartbeat() {
         let (link, mut vehicle) = Vehicle::link(fast());
@@ -4204,7 +4204,7 @@ mod reboot_to_bootloader_tests {
 
     /// No second heartbeat: `getHeartBeat` gives up after its 2.2 s, and the ids the first one
     /// set still send the four frames.
-    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:1197-1201, 2594-2614`
+    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:1199-1203, 2591-2611`
     #[test]
     fn the_four_frames_go_out_when_the_next_heartbeat_never_comes() {
         let (link, mut vehicle) = Vehicle::link(fast());
@@ -4250,7 +4250,7 @@ mod reboot_to_bootloader_tests {
     /// passed over - no reboot goes to it, and none goes out on it alone - and the autopilot's
     /// next heartbeat after its first sends the four frames to the autopilot. The C# would have
     /// sent nothing when the receiver's came first (the owner's ruling of 2026-09-27).
-    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:821-826, 2591-2614`
+    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:823-828, 2588-2611`
     #[test]
     fn an_adsb_receivers_heartbeat_is_passed_over() {
         use mp_mavlink_dialects::all::Heartbeat;
@@ -4396,7 +4396,7 @@ mod manifest_link_tests {
     /// The window's link already open: `Open` returns at once, and `doReboot(true, false)` holds
     /// its reboots until the copter's next heartbeat - then 3, 3, 1, 1, and the instruction's
     /// box.
-    /// `// C#: GCSViews/ConfigurationView/ConfigFirmwareManifest.cs:517-522; ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:2591-2618, 2758-2763`
+    /// `// C#: GCSViews/ConfigurationView/ConfigFirmwareManifest.cs:517-522; ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:2588-2615, 2755-2760`
     #[test]
     fn the_link_open_the_next_heartbeat_brings_the_four_reboots_and_the_box() {
         let (mut telemetry, mut vehicle) = Vehicle::connect(fast());
@@ -4443,7 +4443,7 @@ mod manifest_link_tests {
 
     /// The link opened by the click: `Open` waits for the copter's second heartbeat, then
     /// `doReboot` for the one after; without it, 2.2 s on, the reboots go out anyway.
-    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:869-891, 1197-1201, 2594-2614`
+    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:871-893, 1199-1203, 2591-2611`
     #[test]
     fn a_link_opened_waits_for_two_heartbeats_then_reboots_when_the_next_does_not_come() {
         let (mut telemetry, mut vehicle) = Vehicle::connect(fast());
@@ -4636,7 +4636,7 @@ mod manifest_link_tests {
 
     /// The command unanswered through its wait and its one retry: `doCommand`'s timeout, said
     /// on the status line.
-    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:2753-2757, 2784-2797`
+    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:2750-2754, 2781-2794`
     #[test]
     fn an_unanswered_command_times_out_on_the_status_line() {
         let (telemetry, mut vehicle) = Vehicle::connect(fast());

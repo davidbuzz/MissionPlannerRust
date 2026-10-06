@@ -767,7 +767,7 @@ impl<H: Copy> SimplePids<H> {
     /// handler that the first timeout ends with "Failed to change setting" and the exception's
     /// words.
     /// `// C#: ExtLibs/Controls/RangeControl.cs:188-208; GCSViews/ConfigurationView/ConfigSimplePids.cs:172-209;
-    /// ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:1765`
+    /// ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:1762`
     fn value_changed(&mut self, index: usize, from_track: bool) {
         let Some(control) = self.controls.get_mut(index) else {
             return;

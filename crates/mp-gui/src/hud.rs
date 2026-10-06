@@ -61,7 +61,7 @@
 //!
 //! With `displayicons` on, the battery, the GPS fix, Vibe, EKF and the pre-arm line are drawn
 //! as `HUDT`'s bitmaps (`ExtLibs/Controls/Resources/*.png`) at the rectangles `doPaint()` gives
-//! `DrawImage` (`HUD.cs:2893, 3008, 3173-3295`). The scene records which picture goes where
+//! `DrawImage` (`HUD.cs:2895, 3010, 3175-3297`). The scene records which picture goes where
 //! ([`Item::Icon`]); [`paint`] stretches the bitmap, carried by [`crate::pictures`], into its
 //! rectangle as `DrawImage` does (`HUD.cs:1502-1591`). Should a bitmap not be carried it draws
 //! the stand-in [`icon_items`]: what the picture shows - a coloured badge with its words, or a
@@ -294,7 +294,7 @@ impl Icon {
         }
     }
 
-    /// The GPS fix's picture. `// C#: ExtLibs/Controls/HUD.cs:2936-2986`
+    /// The GPS fix's picture. `// C#: ExtLibs/Controls/HUD.cs:2938-2988`
     #[must_use]
     pub const fn gps(fix_type: u8) -> Self {
         match fix_type {
@@ -452,7 +452,7 @@ pub const ELEMENTS: &[(Element, Status)] = &[
     (Element::RollIndicator, Status::Drawn),
     (Element::Reticle, Status::Drawn),
     // From `AOA` and `SSA`, once the vehicle has sent a non-zero one (`displayAOASSA`).
-    // C#: ExtLibs/ArduPilot/CurrentState.cs:3903-3911, ExtLibs/Controls/HUD.cs:889-930
+    // C#: ExtLibs/ArduPilot/CurrentState.cs:3906-3914, ExtLibs/Controls/HUD.cs:889-930
     (Element::FlightPathVector, Status::Drawn),
     (Element::HeadingTape, Status::Drawn),
     (Element::HeadingBugs, Status::Drawn),
@@ -464,18 +464,18 @@ pub const ELEMENTS: &[(Element, Status)] = &[
     (Element::ModeAndWaypoint, Status::Drawn),
     (Element::LinkInfo, Status::Drawn),
     // From `AOA` against `crit_AOA`, the `AOA_CRIT` parameter, shown with the flight path
-    // vector. C#: ExtLibs/ArduPilot/CurrentState.cs:1017-1036, 3903-3911
+    // vector. C#: ExtLibs/ArduPilot/CurrentState.cs:1017-1036, 3906-3914
     (Element::Aoa, Status::Drawn),
     (Element::Battery, Status::Drawn),
     (Element::Gps, Status::Drawn),
     // Drawn from a given list. There is no editor for the list and no stored one yet: the C#'s
-    // checkboxes and `hud1_useritem_` settings are not ported (GCSViews/FlightData.cs:336-348,
+    // checkboxes and `hud1_useritem_` settings are not ported (GCSViews/FlightData.cs:338-350,
     // 2436-2472), so on a live vehicle the list is empty.
     (Element::CustomItems, Status::Drawn),
     (Element::ArmedBanner, Status::Drawn),
     (Element::Failsafe, Status::Drawn),
     (Element::Message, Status::Drawn),
-    // Vibe, and the "CPU" beside it (HUD.cs:3206-3207) from `load`, `SYS_STATUS.load` / 10.
+    // Vibe, and the "CPU" beside it (HUD.cs:3208-3209) from `load`, `SYS_STATUS.load` / 10.
     // C#: ExtLibs/ArduPilot/CurrentState.cs:2949
     (Element::Vibe, Status::Drawn),
     (Element::Ekf, Status::Drawn),
@@ -516,10 +516,10 @@ pub fn missing() -> Vec<Element> {
 }
 
 /// How long ARMED stays up after arming.
-/// `// C#: ExtLibs/Controls/HUD.cs:3106`
+/// `// C#: ExtLibs/Controls/HUD.cs:3108`
 pub const ARMED_BANNER: Duration = Duration::from_secs(8);
 /// How long the mode name shows red after a mode change.
-/// `// C#: ExtLibs/Controls/HUD.cs:2738`
+/// `// C#: ExtLibs/Controls/HUD.cs:2740`
 pub const MODE_CHANGE_FLASH: Duration = Duration::from_secs(2);
 /// How long a high-priority message stays on the display.
 /// `// C#: ExtLibs/ArduPilot/CurrentState.cs:1271`
@@ -605,7 +605,7 @@ pub fn gps_fix_text(fix_type: u8) -> String {
 /// units under 1000, cut toward zero; from 1000, kilometres to one place ("k") where the unit
 /// is "m", and otherwise - feet, or no unit set - miles of 5280 ("mi"). The place is
 /// `Math.Round(double, 1)`'s, halves to even, and the number is written as a `float` writes.
-/// `// C#: ExtLibs/Controls/HUD.cs:2749-2769`
+/// `// C#: ExtLibs/Controls/HUD.cs:2751-2771`
 #[must_use]
 pub fn wp_distance_text(distance: f32, unit: &str) -> String {
     if distance >= 1000.0 {
@@ -665,7 +665,7 @@ pub fn crit_aoa(parameters: &[(String, f64)]) -> f32 {
 /// shown, and reads each value by reflection as it paints. There is no reflection here, so the
 /// caller reads the value and hands it over. The C# draws them in the `Hashtable`'s enumeration
 /// order, which nothing defines; these are drawn in the list's order.
-/// `// C#: ExtLibs/Controls/HUD.cs:949-968, GCSViews/FlightData.cs:948-955`
+/// `// C#: ExtLibs/Controls/HUD.cs:949-968, GCSViews/FlightData.cs:950-957`
 #[derive(Debug, Clone, PartialEq)]
 pub struct CustomItem {
     /// The prefix the user typed: `Header`.
@@ -756,7 +756,7 @@ pub struct HudInputs {
     /// Vibration on x, y and z, m/s²: `vibex`, `vibey`, `vibez`.
     pub vibe: [f32; 3],
     /// The autopilot's main-loop load, percent: `load`, `SYS_STATUS.load` / 10. 0 until the
-    /// vehicle reports one, as the C#'s `_load` starts (HUD.cs:3388).
+    /// vehicle reports one, as the C#'s `_load` starts (HUD.cs:3390).
     pub cpu_load: f32,
     /// The worst EKF variance, or 1 when the flags say the filter has no answer: `ekfstatus`.
     pub ekf_status: f32,
@@ -771,37 +771,37 @@ pub struct HudInputs {
     /// `groundspeed`, `wp_dist` and the rest before the bindings hand them over, and the unit
     /// names `FlightData.Activate` sets on the HUD. Metres and metres per second until the
     /// caller says otherwise: `MainV2` runs `ChangeUnits` before the flight screen first shows.
-    /// `// C#: ExtLibs/ArduPilot/CurrentState.cs:23-38, GCSViews/FlightData.cs:442-444, MainV2.cs:836`
+    /// `// C#: ExtLibs/ArduPilot/CurrentState.cs:23-38, GCSViews/FlightData.cs:444-446, MainV2.cs:838`
     pub units: DisplayUnits,
     /// `displayCellVoltage`, which Battery Cell Voltage turns on: the HUD then shows the pack's
     /// voltage over `batterycellcount`. Off in the Designer and in `CheckBatteryShow`'s default.
-    /// `// C#: ExtLibs/Controls/HUD.cs:245, GCSViews/FlightData.cs:597-602, 6115-6140`
+    /// `// C#: ExtLibs/Controls/HUD.cs:245, GCSViews/FlightData.cs:599-604, 6229-6254`
     pub display_cell_voltage: bool,
     /// `batterycellcount`: the count Battery Cell Voltage's "Cell Count" prompt sets. The
     /// Designer's 4 is replaced at load by `CheckBatteryShow`, whose default is 0 - and at 0 no
     /// cell voltage is drawn, whatever `display_cell_voltage` says. The prompt takes any `int`.
-    /// `// C#: GCSViews/FlightData.Designer.cs:338, GCSViews/FlightData.cs:517, 601, 6130-6139`
+    /// `// C#: GCSViews/FlightData.Designer.cs:338, GCSViews/FlightData.cs:519, 603, 6244-6253`
     pub battery_cell_count: i32,
     /// `displayicons`, which Show icons turns over: pictures in place of the battery, GPS, Vibe,
     /// EKF and pre-arm text. Off in the Designer and in `HUD_showicons`'s default.
-    /// `// C#: GCSViews/FlightData.Designer.cs:402, GCSViews/FlightData.cs:427, 6484-6496`
+    /// `// C#: GCSViews/FlightData.Designer.cs:402, GCSViews/FlightData.cs:429, 6598-6610`
     pub display_icons: bool,
     /// The second battery's voltage, current and remaining: `battery_voltage2`, `current2`,
     /// `battery_remaining2`. Drawn on the lower line while the voltage is above 0 and no cell
     /// voltage is shown (`batteryon2` is true from the constructor and nothing turns it off).
-    /// `// C#: GCSViews/FlightData.Designer.cs:341, 359-361, ExtLibs/Controls/HUD.cs:2906-2912`
+    /// `// C#: GCSViews/FlightData.Designer.cs:341, 359-361, ExtLibs/Controls/HUD.cs:2908-2914`
     pub battery_voltage2: f32,
     /// See [`HudInputs::battery_voltage2`].
     pub battery_current2: f32,
     /// See [`HudInputs::battery_voltage2`].
     pub battery_remaining2: i8,
     /// The second GPS's fix: `gpsstatus2`. 0 draws nothing for it.
-    /// `// C#: GCSViews/FlightData.Designer.cs:367, ExtLibs/Controls/HUD.cs:2935-3027`
+    /// `// C#: GCSViews/FlightData.Designer.cs:367, ExtLibs/Controls/HUD.cs:2937-3029`
     pub gps_fix2: u8,
     /// `hudon`, which Enable HUD Overlay sets: false draws the camera's picture alone while there
     /// is one ([`paint_over_camera`]); with no picture it changes nothing. True from the
     /// constructor; the flight screen hands over the Planner page's.
-    /// `// C#: ExtLibs/Controls/HUD.cs:211-212, 274, 1988-2013; ConfigPlanner.cs:374-378`
+    /// `// C#: ExtLibs/Controls/HUD.cs:211-212, 274, 1988-2013; ConfigPlanner.cs:375-379`
     pub hud_on: bool,
 }
 
@@ -922,13 +922,13 @@ impl HudInputs {
             message,
             // The angles as `AOA_SSA` sent them, in degrees, and the critical angle, drawn only
             // while `displayAOASSA` is on. C#: GCSViews/FlightData.Designer.cs:395-397,
-            // ExtLibs/Controls/HUD.cs:2233, 2805
+            // ExtLibs/Controls/HUD.cs:2233, 2807
             aoa_ssa: display_aoa_ssa.then(|| AoaSsa {
                 aoa: state.aoa,
                 ssa: state.ssa,
                 crit_aoa: crit_aoa(parameters),
             }),
-            // No editor and no stored list yet. C#: GCSViews/FlightData.cs:336-348, 2436-2472
+            // No editor and no stored list yet. C#: GCSViews/FlightData.cs:338-350, 2446-2482
             custom_items: Vec::new(),
             vibe: [state.vibration.x, state.vibration.y, state.vibration.z],
             // C#: GCSViews/FlightData.Designer.cs:354, ExtLibs/ArduPilot/CurrentState.cs:2949
@@ -1054,7 +1054,7 @@ const PREARM_CHECK: u32 = 0x1000_0000;
 /// healthy, or not enabled at all - so a vehicle that has not yet sent `SYS_STATUS` reads as
 /// ready, as it does in the C#. The C#'s `connected &&` is the caller's: this is asked only of
 /// a vehicle on the link.
-/// `// C#: ExtLibs/ArduPilot/CurrentState.cs:179-182, 4935-4942`
+/// `// C#: ExtLibs/ArduPilot/CurrentState.cs:179-182, 4938-4945`
 #[must_use]
 pub const fn prearm_ready(state: &VehicleState) -> bool {
     state.sensors.health & PREARM_CHECK != 0 || state.sensors.enabled & PREARM_CHECK == 0
@@ -1065,7 +1065,7 @@ pub const fn prearm_ready(state: &VehicleState) -> bool {
 /// The property's name picks the format: seven optional decimals for a latitude or longitude,
 /// none for the mAh used, `hh:mm:ss` for the time in the air, the header alone for `string`,
 /// and two optional decimals for everything else.
-/// `// C#: ExtLibs/Controls/HUD.cs:3036-3068`
+/// `// C#: ExtLibs/Controls/HUD.cs:3038-3070`
 #[must_use]
 pub fn custom_item_text(item: &CustomItem) -> Option<String> {
     let value = item.value?;
@@ -1522,7 +1522,7 @@ pub struct Scene {
     pub owners: Vec<(Element, usize)>,
     /// The rectangles `doPaint()` keeps for a click - `vibehitzone`, `ekfhitzone` - where it
     /// sets them: at the text, or at the picture with the icons on. Left, top, width, height.
-    /// `// C#: ExtLibs/Controls/HUD.cs:3150-3158, 3211-3219`
+    /// `// C#: ExtLibs/Controls/HUD.cs:3152-3160, 3213-3221`
     pub zones: Vec<(Element, (f32, f32, f32, f32))>,
 }
 
@@ -1533,7 +1533,7 @@ impl Scene {
     /// build's tessellator refuses it (lyon's `PositionIsNaN`) and draws nothing, a debug build
     /// stops in lyon's path builder, which asserts every point is finite. Leaving it out here is
     /// the release build's picture in both. What GDI+ does with such a polygon the C# does not
-    /// say (`doPaint()` catches whatever it throws, HUD.cs:3327-3330).
+    /// say (`doPaint()` catches whatever it throws, HUD.cs:3329-3332).
     fn finite(points: &[(f32, f32)]) -> bool {
         points.iter().all(|(x, y)| x.is_finite() && y.is_finite())
     }
@@ -2149,7 +2149,7 @@ pub fn scene(inputs: &HudInputs, w: f32, h: f32) -> Scene {
     scene.drew(Element::SpeedTape);
 
     // Altitude scroller on the right, with the ground filled in below ground level.
-    // C#: HUD.cs:2583-2659
+    // C#: HUD.cs:2583-2661
     let right_box = Rect {
         left: w - w / 10.0,
         top: halfheight - halfheight / 2.0,
@@ -2175,7 +2175,7 @@ pub fn scene(inputs: &HudInputs, w: f32, h: f32) -> Scene {
         halfheight,
     );
     // `((int) _alt).ToString("0 ") + altunit`: cut toward zero, not rounded, and the x64
-    // runtime's cast, so a NaN or infinite altitude reads `int.MinValue`. C#: HUD.cs:2733
+    // runtime's cast, so a NaN or infinite altitude reads `int.MinValue`. C#: HUD.cs:2735
     let whole = to_int(f64::from(altitude));
     scene.owned_label(
         Element::AltitudeTape,
@@ -2188,7 +2188,7 @@ pub fn scene(inputs: &HudInputs, w: f32, h: f32) -> Scene {
     scene.drew(Element::AltitudeTape);
 
     // Vertical speed beside it: a tapered box, a blue bar from the middle for the climb rate,
-    // clamped at ±6 of the user's speed unit. C#: HUD.cs:2660-2711
+    // clamped at ±6 of the user's speed unit. C#: HUD.cs:2662-2713
     //
     // The C# binds `verticalspeed`, its own derivative of `alt` - already in the altitude unit -
     // multiplied again by `multiplierspeed`, so with feet and knots the bar reads feet per second
@@ -2248,7 +2248,7 @@ pub fn scene(inputs: &HudInputs, w: f32, h: f32) -> Scene {
     scene.drew(Element::Vsi);
 
     // Mode, and distance to the waypoint with its number, under the altitude scroller. The
-    // mode is red for two seconds after it changes. C#: HUD.cs:2737-2772
+    // mode is red for two seconds after it changes. C#: HUD.cs:2739-2774
     let mode_colour = if inputs
         .mode_changed_for
         .is_some_and(|since| since < MODE_CHANGE_FLASH)
@@ -2282,7 +2282,7 @@ pub fn scene(inputs: &HudInputs, w: f32, h: f32) -> Scene {
     scene.drew(Element::ModeAndWaypoint);
 
     // Link quality as three bars and a percentage, with the clock, above the altitude
-    // scroller; a red cross when the link is dead. C#: HUD.cs:2773-2803
+    // scroller; a red cross when the link is dead. C#: HUD.cs:2775-2805
     let base = right_box.top - fontsize * 2.2 - 2.0;
     let bar_bottom = right_box.top - fontsize - 2.0 - 20.0;
     for (threshold, dx, dy) in [
@@ -2329,7 +2329,7 @@ pub fn scene(inputs: &HudInputs, w: f32, h: f32) -> Scene {
     // the top, split at the C#'s 90, 60 and 10 percent, and a black arrow at the angle of attack
     // as a fraction of the critical one - on the green band's bottom edge at zero, on the red
     // band's bottom edge at the critical angle, held to the bar's ends beyond them. Shown with
-    // the flight path vector. C#: HUD.cs:2804-2843, the percentages at 356-358
+    // the flight path vector. C#: HUD.cs:2806-2845, the percentages at 356-358
     if let Some(angles) = inputs.aoa_ssa {
         const RED: f32 = 90.0;
         const YELLOW: f32 = 60.0;
@@ -2377,19 +2377,19 @@ pub fn scene(inputs: &HudInputs, w: f32, h: f32) -> Scene {
         scene.drew(Element::Aoa);
     }
 
-    // The text lines along the bottom. C#: HUD.cs:2846-2854
+    // The text lines along the bottom. C#: HUD.cs:2848-2856
     let y_bot_offset = if fontsize >= 8.0 { fontsize / 3.0 } else { 2.0 };
     let y_text_offset = fontsize + y_bot_offset + 2.0;
     let x_pos = fontsize;
     let y_upper = h - 2.0 * y_text_offset - y_bot_offset - 4.0;
     let y_lower = h - y_text_offset - y_bot_offset - 4.0;
     // The pictures' strip: `(fontsize + 8) * 3` wide and `fontsize + 8` high, `fontsize + 13`
-    // up from the bottom. C#: HUD.cs:3002-3008, 3152-3153, 3213-3214, 3268-3269
+    // up from the bottom. C#: HUD.cs:3004-3010, 3154-3155, 3215-3216, 3270-3271
     let icons = inputs.display_icons;
     let wide = (fontsize + 8.0) * 3.0;
     let strip_top = h - (fontsize + 13.0);
 
-    // Battery: voltage, current and remaining, coloured by the alert level. C#: HUD.cs:2855-2925
+    // Battery: voltage, current and remaining, coloured by the alert level. C#: HUD.cs:2857-2927
     let battery_colour = if inputs.battery_critical {
         colour::ALERT
     } else if inputs.battery_low {
@@ -2398,7 +2398,7 @@ pub fn scene(inputs: &HudInputs, w: f32, h: f32) -> Scene {
         colour::INK
     };
     // `(_batterylevel / _batterycellcount).ToString("0.00v")`, when Battery Cell Voltage is on
-    // with a count that is not 0. C#: HUD.cs:2897-2898, 2904-2905
+    // with a count that is not 0. C#: HUD.cs:2899-2900, 2906-2907
     #[allow(clippy::cast_precision_loss)] // the C#'s float divided by an int
     let cell = (inputs.display_cell_voltage && inputs.battery_cell_count != 0)
         .then(|| format_single_fixed(inputs.battery_voltage / inputs.battery_cell_count as f32, 2));
@@ -2412,7 +2412,7 @@ pub fn scene(inputs: &HudInputs, w: f32, h: f32) -> Scene {
     if icons {
         // The battery's picture at the left edge, half as wide as it is high, by the alert
         // level and then by the charge left; the numbers beside it on the lower line, and the
-        // cell voltage alone above them. C#: HUD.cs:2861-2899
+        // cell voltage alone above them. C#: HUD.cs:2863-2901
         let icon = if inputs.battery_critical {
             Icon::BattRed
         } else if inputs.battery_low {
@@ -2453,7 +2453,7 @@ pub fn scene(inputs: &HudInputs, w: f32, h: f32) -> Scene {
         }
     } else {
         // The lower line is the cell voltage's, or failing it the second battery's while its
-        // voltage is above 0; either puts the first battery's a line up. C#: HUD.cs:2901-2923
+        // voltage is above 0; either puts the first battery's a line up. C#: HUD.cs:2903-2925
         let mut pack_line = y_upper;
         if let Some(cell) = cell {
             scene.owned_label(
@@ -2496,7 +2496,7 @@ pub fn scene(inputs: &HudInputs, w: f32, h: f32) -> Scene {
     // has no GPS at all - under the first's, which then goes up a line. `col` is not reset
     // between the two, so a second receiver after a red first is red whatever its fix; that is
     // the C#'s and is kept. With the icons on, each fix's picture at the right of the strip.
-    // C#: HUD.cs:2926-3027
+    // C#: HUD.cs:2928-3029
     let mut gps_colour = colour::INK;
     for (index, fix) in [inputs.gps_fix, inputs.gps_fix2].into_iter().enumerate() {
         if fix <= 1 {
@@ -2541,7 +2541,7 @@ pub fn scene(inputs: &HudInputs, w: f32, h: f32) -> Scene {
     // The attitude was NaN: "NaN Error " and the time, in red, at (50, 50) with no transform
     // in force, at `Height / 30 + 10` - `int` arithmetic, so the height's thirtieth cut down.
     // The C# writes `DateTime.Now` in the machine's regional format; this writes the clock the
-    // display already shows, `HH:MM:SS`, as the time. C#: ExtLibs/Controls/HUD.cs:3025-3027,
+    // display already shows, `HH:MM:SS`, as the time. C#: ExtLibs/Controls/HUD.cs:3027-3029,
     // and 2018-2025 for the flag
     if nan_error {
         scene.label(
@@ -2555,7 +2555,7 @@ pub fn scene(inputs: &HudInputs, w: f32, h: f32) -> Scene {
 
     // The user's extra fields, header then value, from above the battery line upward, an
     // eighth of the way across; a field whose value cannot be read leaves no gap.
-    // C#: HUD.cs:3029-3077
+    // C#: HUD.cs:3031-3079
     let mut custom_y = h - (fontsize + 2.0) * 3.0 - fontoffset - fontsize - 8.0;
     for item in &inputs.custom_items {
         // `GetValue` reads the property at paint time, through its getter - so `alt`, `wp_dist`
@@ -2582,7 +2582,7 @@ pub fn scene(inputs: &HudInputs, w: f32, h: f32) -> Scene {
     scene.drew(Element::CustomItems);
 
     // ARMED for eight seconds after arming, DISARMED whenever disarmed, SAFE while the safety
-    // switch holds the motors: red, above the centre. C#: HUD.cs:3084-3119
+    // switch holds the motors: red, above the centre. C#: HUD.cs:3086-3121
     let banner_y = halfheight - halfheight / 3.0;
     if inputs.armed {
         if inputs.armed_for.is_some_and(|since| since < ARMED_BANNER) {
@@ -2614,7 +2614,7 @@ pub fn scene(inputs: &HudInputs, w: f32, h: f32) -> Scene {
     }
     scene.drew(Element::ArmedBanner);
 
-    // FAILSAFE, when the vehicle reports MAV_STATE_CRITICAL. C#: HUD.cs:3120-3126, FailsafeH = 5
+    // FAILSAFE, when the vehicle reports MAV_STATE_CRITICAL. C#: HUD.cs:3122-3128, FailsafeH = 5
     if inputs.failsafe {
         scene.label(
             "FAILSAFE",
@@ -2627,7 +2627,7 @@ pub fn scene(inputs: &HudInputs, w: f32, h: f32) -> Scene {
     scene.drew(Element::Failsafe);
 
     // The high-priority message, below the centre, in its severity's colour.
-    // C#: HUD.cs:3128-3145
+    // C#: HUD.cs:3130-3147
     if let Some((text, message_colour)) = &inputs.message {
         scene.label(
             text.clone(),
@@ -2643,7 +2643,7 @@ pub fn scene(inputs: &HudInputs, w: f32, h: f32) -> Scene {
     // with the icons on, the green, amber or red VIBE picture in the strip, four pictures in
     // from the right. `vibehitzone` is set to where either goes: a 40-pixel box at the text, or
     // the picture's rectangle, which is drawn two pixels below it. Clipping does not enter into
-    // it. C#: HUD.cs:3148-3204
+    // it. C#: HUD.cs:3150-3206
     let vibe_zone = if icons {
         (
             w - wide * 4.0 + wide / 2.0 - 5.0,
@@ -2677,7 +2677,7 @@ pub fn scene(inputs: &HudInputs, w: f32, h: f32) -> Scene {
         );
     }
     // "CPU" in red at the right edge of Vibe's box when the autopilot reports a full load -
-    // exactly 100, as the C# compares it. C#: HUD.cs:3206-3207
+    // exactly 100, as the C# compares it. C#: HUD.cs:3208-3209
     if inputs.cpu_load == 100.0 {
         scene.owned_label(
             Element::Vibe,
@@ -2691,7 +2691,7 @@ pub fn scene(inputs: &HudInputs, w: f32, h: f32) -> Scene {
     scene.drew(Element::Vibe);
 
     // "EKF" left of it: white, orange past 0.5, red past 0.8; with the icons on, its picture
-    // five in from the right. `ekfhitzone` as Vibe's. C#: HUD.cs:3209-3262
+    // five in from the right. `ekfhitzone` as Vibe's. C#: HUD.cs:3211-3264
     let ekf_zone = if icons {
         (
             w - wide * 5.0 + wide / 2.0 - 10.0,
@@ -2726,7 +2726,7 @@ pub fn scene(inputs: &HudInputs, w: f32, h: f32) -> Scene {
 
     // While disarmed, the pre-arm state on the upper text line: "Ready to Arm" in white, or
     // "Not Ready to Arm" in red starting two characters further left; with the icons on, the
-    // green or red picture, two wide, above EKF's. C#: HUD.cs:3264-3301, HUDT.resx
+    // green or red picture, two wide, above EKF's. C#: HUD.cs:3266-3303, HUDT.resx
     // NotReadyToArm and ReadyToArm
     if !inputs.armed {
         if icons {
@@ -2995,7 +2995,7 @@ impl Rect {
 }
 
 /// Where `DrawImage` puts a picture for a click rectangle: the same box, two pixels lower.
-/// `// C#: ExtLibs/Controls/HUD.cs:3173, 3184, 3197, 3232, 3243, 3255, 3284, 3295`
+/// `// C#: ExtLibs/Controls/HUD.cs:3175, 3186, 3199, 3234, 3245, 3257, 3286, 3297`
 const fn picture_at(zone: (f32, f32, f32, f32)) -> (f32, f32, f32, f32) {
     (zone.0, zone.1 + 2.0, zone.2, zone.3)
 }
@@ -3146,7 +3146,7 @@ fn tinted(colour: u32, alpha: f32) -> Hsla {
 /// rasteriser at the HUD's size and encoded as JPEG at quality 50, which is what `GrabScreenshot`
 /// reads back from OpenGL and `objBitmap.Save(streamjpg, ici, eps)` makes of it. The camera's
 /// picture under the display is not in the frame here (the C#'s read-back has it).
-/// `// C#: ExtLibs/Controls/HUD.cs:247-282, 3314-3323, 3349-3364`
+/// `// C#: ExtLibs/Controls/HUD.cs:247-282, 3316-3325, 3351-3366`
 #[must_use]
 pub fn frame_jpeg(scene: &Scene, width: u32, height: u32) -> Option<Vec<u8>> {
     let image = raster::render(scene, width, height);
@@ -3172,7 +3172,7 @@ pub fn paint(scene: &Scene, bounds: Bounds<Pixels>, window: &mut Window, cx: &mu
 /// to the control, and the scene over it without its sky and ground, which `doPaint` leaves out
 /// (`bgon = false`) while there is a picture - or, with `hud_on` false, nothing over it: the
 /// picture alone. With no picture, [`paint`], whatever `hud_on` is.
-/// `// C#: ExtLibs/Controls/HUD.cs:1024-1047, 1986-2013, 2067-2099; GCSViews/FlightData.cs:1897-1900`
+/// `// C#: ExtLibs/Controls/HUD.cs:1024-1047, 1986-2013, 2067-2099; GCSViews/FlightData.cs:1907-1910`
 pub fn paint_over_camera(
     camera: Option<&std::sync::Arc<gpui::RenderImage>>,
     scene: &Scene,
@@ -3744,8 +3744,8 @@ mod tests {
     /// The angles reach the display from an `AOA_SSA` message through `displayAOASSA`: nothing
     /// until the vehicle sends an angle that is not 0; then the flight path vector at the
     /// message's degrees and the AOA scale against `AOA_CRIT`; and both stay up when the angles
-    /// go back to 0. C#: ExtLibs/ArduPilot/CurrentState.cs:1017-1036, 3903-3911,
-    /// ExtLibs/Controls/HUD.cs:889-930, 2232-2245, 2804-2843
+    /// go back to 0. C#: ExtLibs/ArduPilot/CurrentState.cs:1017-1036, 3906-3914,
+    /// ExtLibs/Controls/HUD.cs:889-930, 2232-2245, 2806-2845
     #[test]
     fn the_angles_come_from_aoa_ssa_once_one_is_not_zero() {
         let mut state = VehicleState::default();
@@ -3890,7 +3890,7 @@ mod tests {
 
     /// The AOA scale's bands and arrow: 10/30/50/10 percent of the bar in red, yellow, green
     /// and blue from the top; the arrow's tip at the green band's bottom at zero, at the red
-    /// band's bottom at the critical angle, and held to the bar beyond. C#: HUD.cs:2804-2843
+    /// band's bottom at the critical angle, and held to the bar beyond. C#: HUD.cs:2806-2845
     #[test]
     fn the_aoa_scale_puts_the_arrow_by_the_critical_angle() {
         assert!(!scene(&flying(), W, H).drawn.contains(&Element::Aoa));
@@ -3954,7 +3954,7 @@ mod tests {
 
     /// Extra fields go up from above the battery line at an eighth of the width, each in the
     /// format its property's name picks, and one that cannot be read leaves no gap.
-    /// C#: HUD.cs:3029-3077
+    /// C#: HUD.cs:3031-3079
     #[test]
     fn custom_items_stack_upward_in_the_csharps_formats() {
         let item = |header: &str, name: &str, value: Option<f64>| CustomItem {
@@ -4027,7 +4027,7 @@ mod tests {
     }
 
     /// "Vibe": white up to 30 on every axis, orange past 30 on any, red past 60, at
-    /// width - 18 characters on the lower text line. C#: HUD.cs:3148-3204
+    /// width - 18 characters on the lower text line. C#: HUD.cs:3150-3206
     #[test]
     fn vibe_is_coloured_by_the_worst_axis() {
         let (fontsize, _, lower) = text_lines(H);
@@ -4056,7 +4056,7 @@ mod tests {
 
     /// "CPU" appears in red at the right of Vibe's box only at a load of exactly 100: a
     /// `SYS_STATUS.load` of 1000, the message counting in tenths of a percent.
-    /// C#: HUD.cs:3206-3207, ExtLibs/ArduPilot/CurrentState.cs:2949
+    /// C#: HUD.cs:3208-3209, ExtLibs/ArduPilot/CurrentState.cs:2949
     #[test]
     fn cpu_shows_only_at_full_load() {
         let (fontsize, _, lower) = text_lines(H);
@@ -4083,7 +4083,7 @@ mod tests {
     }
 
     /// "EKF": white up to 0.5, orange past it, red past 0.8, at width - 23 characters on the
-    /// lower text line. C#: HUD.cs:3209-3262
+    /// lower text line. C#: HUD.cs:3211-3264
     #[test]
     fn ekf_is_coloured_by_the_status() {
         let (fontsize, _, lower) = text_lines(H);
@@ -4136,7 +4136,7 @@ mod tests {
 
     /// While disarmed, "Ready to Arm" in white at width - 24 characters or "Not Ready to Arm"
     /// in red at width - 26, on the upper text line less four; armed, neither.
-    /// C#: HUD.cs:3264-3301
+    /// C#: HUD.cs:3266-3303
     #[test]
     fn prearm_shows_only_while_disarmed() {
         let (fontsize, upper, _) = text_lines(H);
@@ -4725,7 +4725,7 @@ mod tests {
 
     /// The Designer's and the settings' defaults: no cell voltage, a count of 0, no icons, and
     /// metres and metres per second. A vehicle's inputs leave the menu's settings alone.
-    /// `// C#: GCSViews/FlightData.Designer.cs:401-402, GCSViews/FlightData.cs:427, 597-602`
+    /// `// C#: GCSViews/FlightData.Designer.cs:401-402, GCSViews/FlightData.cs:429, 599-604`
     #[test]
     fn the_menus_settings_start_off() {
         let inputs = HudInputs::default();
@@ -4743,8 +4743,8 @@ mod tests {
 
     /// The tapes and the waypoint line in the user's units: each number is the SI value times
     /// the C#'s single-precision multiplier, written as .NET writes a float, with the unit's
-    /// name after it. `// C#: ExtLibs/Controls/HUD.cs:2552-2577, 2733, 2749-2769,
-    /// ExtLibs/ArduPilot/CurrentState.cs:327, 496, 529, 1093, MainV2.cs:4262, 4317`
+    /// name after it. `// C#: ExtLibs/Controls/HUD.cs:2552-2577, 2735, 2751-2771,
+    /// ExtLibs/ArduPilot/CurrentState.cs:327, 496, 529, 1093, MainV2.cs:4269, 4324`
     #[test]
     fn the_tapes_read_in_the_users_units() {
         let metric = readout_facts(&scene(&flying(), W, H));
@@ -4792,7 +4792,7 @@ mod tests {
 
     /// From 1000 of the unit the distance is kilometres where the unit is metres, and miles of
     /// 5280 otherwise, to a place rounded halves to even; under 1000, whole units cut toward
-    /// zero. `// C#: ExtLibs/Controls/HUD.cs:2749-2769`
+    /// zero. `// C#: ExtLibs/Controls/HUD.cs:2751-2771`
     #[test]
     fn the_waypoint_distance_goes_to_kilometres_or_miles_past_1000() {
         assert_eq!(wp_distance_text(999.9, "m"), "999m");
@@ -4813,7 +4813,7 @@ mod tests {
     }
 
     /// A float is written from seven significant digits, a double from fifteen; "0.00" keeps
-    /// its places. `// C#: ExtLibs/Controls/HUD.cs:2560, 2893, 2898, 2918`
+    /// its places. `// C#: ExtLibs/Controls/HUD.cs:2560, 2895, 2900, 2920`
     #[test]
     fn a_float_is_written_as_dotnet_writes_a_float() {
         assert_eq!(format_single_fixed(12.6, 2), "12.60");
@@ -4830,7 +4830,7 @@ mod tests {
     /// Battery Cell Voltage: with a count that is not 0, "Cell" and the pack's voltage over it
     /// on the lower line at two sizes up, and the pack's line moved to the upper; a count of 0,
     /// or the setting off, leaves the pack's line where it was. The count is any `int`.
-    /// `// C#: ExtLibs/Controls/HUD.cs:2896-2923, GCSViews/FlightData.cs:6115-6140`
+    /// `// C#: ExtLibs/Controls/HUD.cs:2898-2925, GCSViews/FlightData.cs:6229-6254`
     #[test]
     fn the_cell_voltage_takes_the_lower_line() {
         let (fontsize, upper, lower) = text_lines(H);
@@ -4872,7 +4872,7 @@ mod tests {
 
     /// The second battery: its line on the lower line while its voltage is above 0 and no cell
     /// voltage is shown, the first battery's then up a line; its values from `BATTERY_STATUS`
-    /// for battery 2. `// C#: ExtLibs/Controls/HUD.cs:2906-2923, GCSViews/FlightData.Designer.cs:359-361`
+    /// for battery 2. `// C#: ExtLibs/Controls/HUD.cs:2908-2925, GCSViews/FlightData.Designer.cs:359-361`
     #[test]
     fn the_second_battery_takes_the_lower_line() {
         let two = HudInputs {
@@ -4916,7 +4916,7 @@ mod tests {
 
     /// The second GPS: nothing while it has no GPS; otherwise "GPS2:" on the lower line and the
     /// first up a line. The colour carries from the first to the second, as the C#'s `col` does.
-    /// `// C#: ExtLibs/Controls/HUD.cs:2926-3027`
+    /// `// C#: ExtLibs/Controls/HUD.cs:2928-3029`
     #[test]
     fn the_second_gps_goes_under_the_first() {
         let (fontsize, upper, lower) = text_lines(H);
@@ -4963,7 +4963,7 @@ mod tests {
     /// Show icons: each readout's picture where `doPaint()` puts it - the battery at the left
     /// edge with its numbers beside it, the GPS fixes at the right of the strip, Vibe four and
     /// EKF five pictures in, the pre-arm picture above EKF's while disarmed - and no text for
-    /// them. The click rectangles follow the pictures. `// C#: ExtLibs/Controls/HUD.cs:2861-2899,
+    /// them. The click rectangles follow the pictures. `// C#: ExtLibs/Controls/HUD.cs:2863-2901,
     /// 2997-3009, 3150-3207, 3211-3301`
     #[test]
     fn show_icons_draws_the_pictures_where_the_csharp_puts_them() {
@@ -5136,7 +5136,7 @@ mod tests {
     }
 
     /// Each readout's picture follows its level as its text's colour does.
-    /// `// C#: ExtLibs/Controls/HUD.cs:2861-2885, 2936-2986, 3166-3200, 3226-3259, 3280-3300`
+    /// `// C#: ExtLibs/Controls/HUD.cs:2863-2887, 2938-2988, 3168-3202, 3228-3261, 3282-3302`
     #[test]
     fn the_pictures_follow_the_levels() {
         let icons_of = |inputs: HudInputs| {
@@ -5295,7 +5295,7 @@ mod tests {
     }
 
     /// The user's extra fields are read through the getters, so a distance is in feet where the
-    /// units say so and a heading is as it was. `// C#: ExtLibs/Controls/HUD.cs:949-968, 3029-3077`
+    /// units say so and a heading is as it was. `// C#: ExtLibs/Controls/HUD.cs:949-968, 3031-3079`
     #[test]
     fn custom_items_are_shown_in_the_users_units() {
         let mut inputs = in_feet_and_knots();

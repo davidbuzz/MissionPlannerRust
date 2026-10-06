@@ -1,6 +1,6 @@
 # TakeOff, as the flight map menu's does it (takeOffToolStripMenuItem_Click): its box offers
 # takeoff_alt - 5 the first time - the answer is saved, the vehicle is put in Guided and then told
-# to take off. It does not arm; the pilot arms first. `GCSViews/FlightData.cs:5290-5315`
+# to take off. It does not arm; the pilot arms first. `GCSViews/FlightData.cs:5404-5429`
 #
 # The owner's bug report of 2026-09-26, "unable to get simulation to takeoff": the button then sent
 # the take-off alone, with no box and no Guided, and a copter armed in Stabilize refuses a take-off

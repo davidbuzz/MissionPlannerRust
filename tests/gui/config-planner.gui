@@ -2,21 +2,21 @@
 #
 # The claim: disconnected, SoftwareConfig lists the Planner page as the one to open first
 # (SoftwareConfig.cs:257), and Activate fills every control from Settings.Instance - writing the
-# severity's default and the aircraft icon's keys as it does (ConfigPlanner.cs:95-103, 238-244).
+# severity's default and the aircraft icon's keys as it does (ConfigPlanner.cs:96-104, 239-245).
 # Each control writes the key its handler writes, under the C#'s own name (config.planner.<key>),
 # and the ones that act at once act: the unit combos run ChangeUnits (config.planner.units.*,
-# MainV2.cs:4247-4330), a telemetry rate sets cs.rate (config.planner.rates), Enable Speech shows
+# MainV2.cs:4254-4337), a telemetry rate sets cs.rate (config.planner.rates), Enable Speech shows
 # the speech boxes and each speech box asks for its templates in the C#'s InputBoxes
-# (ConfigPlanner.cs:380-550), Map is rotated unticks No Fly (:755-765), Load Waypoints on connect
-# sets the read on connect (MainV2.cs:1750-1759), Joystick Setup opens the joystick page
+# (ConfigPlanner.cs:381-551), Map is rotated unticks No Fly (:755-765), Load Waypoints on connect
+# sets the read on connect (MainV2.cs:1752-1761), Joystick Setup opens the joystick page
 # (:552-555), and Enable HUD Overlay sets the HUD's hudon (hud.hudon), which MainV2 reads back at
-# the next start (:374-378, MainV2.cs:938-939). The dimmed controls - theme, language, GDI+ and the rest - do nothing; the video
+# the next start (:374-378, MainV2.cs:940-941). The dimmed controls - theme, language, GDI+ and the rest - do nothing; the video
 # controls are tests/gui/config-video.gui's.
 #
 # Settings.Instance is Mission Planner's config.xml, one dictionary: a handler puts its key in it
 # as its control changes, and the file is written whole at the next SaveConfig - never by this
 # page, which saves nothing, but at start-up, on the FLIGHT DATA button and on the close box
-# (MainV2.cs:1107, 1309-1315, 2171). So config.saves stays at the start-up save while the page is
+# (MainV2.cs:1109, 1311-1317, 2178). So config.saves stays at the start-up save while the page is
 # used, and the dictionary holds each change at once (config.distunits is the dictionary's own
 # fact, settings.rs's, for the key config.planner.distunits shows); FLIGHT DATA saves; and after
 # `restart` - which closes through the close box, which saves again - the page, and what MainV2
@@ -167,7 +167,7 @@ expect config.planner.CHK_GDIPlus none
 expect config.planner.check.CHK_GDIPlus false
 
 # Enable HUD Overlay: ticked as the Designer has it, hudon true from the HUD's constructor. A click
-# sets hudon and writes CHK_hudshow (ConfigPlanner.cs:374-378). No camera runs, so the HUD draws
+# sets hudon and writes CHK_hudshow (ConfigPlanner.cs:375-379). No camera runs, so the HUD draws
 # its instruments all the same (HUD.cs:1988-2013); config-video.gui unticks it over a picture.
 expect config.planner.check.CHK_hudshow true
 expect config.planner.CHK_hudshow none
@@ -207,7 +207,7 @@ expect config.planner.check.CHK_speechwaypoint true
 expect config.planner.check.CHK_maprotation true
 expect config.saves 2
 # With no capture Activate leaves the overlay box as the Designer has it, ticked, whatever hudon
-# is (ConfigPlanner.cs:136-145); hudon stays as the click left it.
+# is (ConfigPlanner.cs:137-146); hudon stays as the click left it.
 expect config.planner.check.CHK_hudshow true
 expect hud.hudon false
 
@@ -220,7 +220,7 @@ expect config.page ConfigPlanner
 expect config.planner.active true
 
 # The units, the rates and the read on connect, which MainV2 sets up from the file before any
-# page shows (MainV2.cs:836, 981-1002, 1750-1759), and the combos Activate sets.
+# page shows (MainV2.cs:838, 983-1004, 1752-1761), and the combos Activate sets.
 expect config.distunits Feet
 expect config.altunits Feet
 expect config.speedunits knots
@@ -237,7 +237,7 @@ expect config.planner.combo.CMB_rateattitude 10
 expect config.planner.loadwpsonconnect True
 expect config.planner.readmissiononconnect true
 expect config.planner.check.CHK_loadwponconnect true
-# hudon, which MainV2 reads from CHK_hudshow (MainV2.cs:938-939); the box the Designer's.
+# hudon, which MainV2 reads from CHK_hudshow (MainV2.cs:940-941); the box the Designer's.
 expect config.planner.CHK_hudshow False
 expect hud.hudon false
 expect config.planner.check.CHK_hudshow true

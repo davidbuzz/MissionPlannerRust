@@ -485,7 +485,7 @@ impl FirmwareLegacy {
     /// The screen kept under a new key: Force Bootloader's `Open(false)` moved the window's link,
     /// for which `MainV2` shows no screen again, so the page object is the same one
     /// ([`crate::setup::Backstage::rekey`]).
-    /// `// C#: GCSViews/ConfigurationView/ConfigFirmware.cs:623; MainV2.cs:1419-1425, 1740-1748`
+    /// `// C#: GCSViews/ConfigurationView/ConfigFirmware.cs:623; MainV2.cs:1421-1427, 1742-1750`
     pub fn rekey(&mut self, key: Key) {
         if self.made_for.is_some() {
             self.made_for = Some(key);
@@ -1764,7 +1764,7 @@ mod force_bootloader_tests {
     /// rate as the window's link, waits for the copter's second heartbeat, then `doReboot` for
     /// the next - then 3, 3, 1, 1, and "Please ignore the unplug ..." over this page until its
     /// OK. The handler holds the page, and SETUP, until it is done.
-    /// `// C#: GCSViews/ConfigurationView/ConfigFirmware.cs:619-629; ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:668-700, 869-891, 2591-2618, 2758-2763`
+    /// `// C#: GCSViews/ConfigurationView/ConfigFirmware.cs:619-629; ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:670-702, 871-893, 2588-2615, 2755-2760`
     #[test]
     fn the_click_opens_the_port_and_reboots_the_board_into_its_bootloader() {
         let (link, mut vehicle) = Vehicle::link(fast());
@@ -1839,7 +1839,7 @@ mod force_bootloader_tests {
 
     /// The window's link already open: `Open` returns at once and opens nothing; `doReboot`
     /// waits for the next heartbeat, or 2.2 s, and the reboots go out.
-    /// `// C#: GCSViews/ConfigurationView/ConfigFirmware.cs:623-627; ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:668-671, 1197-1201, 2594-2614`
+    /// `// C#: GCSViews/ConfigurationView/ConfigFirmware.cs:623-627; ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:670-673, 1199-1203, 2591-2611`
     #[test]
     fn the_link_open_opens_nothing_and_reboots() {
         let (mut telemetry, mut vehicle) = Vehicle::connect(fast());
@@ -1871,7 +1871,7 @@ mod force_bootloader_tests {
 
     /// Nothing heard before `CONNECT_TIMEOUT_SECONDS`: "Failed to connect and send the reboot
     /// command" on the status line - no box - nothing sent, and the window to close its link.
-    /// `// C#: GCSViews/ConfigurationView/ConfigFirmware.cs:630-638; ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:791-796`
+    /// `// C#: GCSViews/ConfigurationView/ConfigFirmware.cs:630-638; ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:793-798`
     #[test]
     fn nothing_heard_in_time_is_failed_to_connect_on_the_status_line() {
         let (link, mut vehicle) = Vehicle::link(fast());
@@ -1986,7 +1986,7 @@ mod force_bootloader_tests {
     /// The link Force Bootloader opened moves SETUP's key without showing the screen again, so
     /// the page object is kept under the new key - leaving the page and coming back finds the
     /// same one, its labels and all - where a new screen would be a new object.
-    /// `// C#: GCSViews/ConfigurationView/ConfigFirmware.cs:623; MainV2.cs:1419-1425, 1740-1748`
+    /// `// C#: GCSViews/ConfigurationView/ConfigFirmware.cs:623; MainV2.cs:1421-1427, 1742-1750`
     #[test]
     fn the_page_object_is_kept_under_the_link_it_opened() {
         let mut view = TelemetryView::disconnected("serial:/dev/ttyACM0:115200");

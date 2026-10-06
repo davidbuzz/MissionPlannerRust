@@ -289,7 +289,7 @@ fn pkcs8_seed(der: &[u8]) -> Result<Vec<u8>, String> {
 }
 
 /// Where `pattern` first starts in `src`, as `Extensions.Search` finds it.
-/// `// C#: ExtLibs/Utilities/Extensions.cs:964-977`
+/// `// C#: ExtLibs/Utilities/Extensions.cs:957-970`
 #[must_use]
 pub fn search(src: &[u8], pattern: &[u8]) -> Option<usize> {
     if pattern.is_empty() {

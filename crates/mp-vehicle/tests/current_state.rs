@@ -222,7 +222,7 @@ fn the_position_comes_from_global_position_int_while_it_is_valid_and_gps_otherwi
 
 #[test]
 fn gps_raw_int_keeps_its_last_value_where_the_wire_says_unknown() {
-    // C#: ExtLibs/ArduPilot/CurrentState.cs:3305-3326
+    // C#: ExtLibs/ArduPilot/CurrentState.cs:3305-3329
     let mut state = VehicleState::default();
     state.apply(&message!(GpsRawInt, |m| {
         m.lat = -353_632_620;
@@ -281,14 +281,14 @@ fn gps_raw_int_keeps_its_last_value_where_the_wire_says_unknown() {
     }));
     assert_eq!(state.ground_speed.0, f64::from(40.0_f32 * 1.0e-2));
 
-    // GPS_STATUS writes the satellite count unconditionally. C#: CurrentState.cs:3381
+    // GPS_STATUS writes the satellite count unconditionally. C#: CurrentState.cs:3384
     state.apply(&message!(GpsStatus, |m| m.satellites_visible = 9));
     assert_eq!(state.gps.satellites_visible, 9);
 }
 
 #[test]
 fn gps2_raw_takes_every_field_as_it_arrives() {
-    // C#: ExtLibs/ArduPilot/CurrentState.cs:3346-3364
+    // C#: ExtLibs/ArduPilot/CurrentState.cs:3349-3367
     let mut state = VehicleState::default();
     state.apply(&message!(Gps2Raw, |m| {
         m.lat = -353_000_000;
@@ -328,7 +328,7 @@ fn gps2_raw_takes_every_field_as_it_arrives() {
 
 #[test]
 fn vfr_hud_negates_the_throttle_while_the_motors_are_reversed() {
-    // C#: ExtLibs/ArduPilot/CurrentState.cs:3846-3855
+    // C#: ExtLibs/ArduPilot/CurrentState.cs:3849-3858
     let hud = message!(VfrHud, |m| {
         m.airspeed = 18.5;
         m.groundspeed = 17.25;
@@ -473,7 +473,7 @@ fn the_other_batteries_follow_their_ids_with_their_own_rules() {
 
 #[test]
 fn a_sik_radio_report_reaches_every_vehicle_on_the_link() {
-    // C#: ExtLibs/ArduPilot/CurrentState.cs:2280-2282, 3389-3409
+    // C#: ExtLibs/ArduPilot/CurrentState.cs:2280-2282, 3392-3412
     let mut registry = VehicleRegistry::new();
     let autopilot = VehicleId::new(1, 1);
     registry.apply(1, 1, 0, &message!(Heartbeat, |m| m.r#type = 2));
@@ -642,7 +642,7 @@ fn a_rangefinder_message_outranks_every_distance_sensor_for_good() {
 
 #[test]
 fn servo_outputs_fill_by_port() {
-    // C#: ExtLibs/ArduPilot/CurrentState.cs:3639-3676
+    // C#: ExtLibs/ArduPilot/CurrentState.cs:3642-3679
     let mut state = VehicleState::default();
     assert!(state.apply(&message!(ServoOutputRaw, |m| {
         m.servo1_raw = 1100;
@@ -669,7 +669,7 @@ fn servo_outputs_fill_by_port() {
 
 #[test]
 fn the_last_auto_waypoint_is_remembered_for_resume_mission() {
-    // C#: ExtLibs/ArduPilot/CurrentState.cs:3420-3422
+    // C#: ExtLibs/ArduPilot/CurrentState.cs:3423-3425
     let mut state = VehicleState::default();
     let current = |seq| message!(MissionCurrent, |m| m.seq = seq);
     state.apply(&message!(Heartbeat, |m| {
@@ -694,7 +694,7 @@ fn the_last_auto_waypoint_is_remembered_for_resume_mission() {
 
 #[test]
 fn home_carries_its_altitude() {
-    // C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:5703-5707
+    // C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:5676-5680
     let mut state = VehicleState::default();
     state.apply(&message!(HomePosition, |m| {
         m.latitude = -353_632_620;
@@ -762,7 +762,7 @@ fn the_ekf_status_is_the_worst_variance_unless_a_flag_forces_red() {
 
 #[test]
 fn the_first_airspeed_sensor_sets_the_airspeed_and_its_temperature_in_degrees() {
-    // C#: ExtLibs/ArduPilot/CurrentState.cs:4209-4213
+    // C#: ExtLibs/ArduPilot/CurrentState.cs:4212-4216
     let mut state = VehicleState::default();
     assert!(state.apply(&message!(Airspeed, |m| {
         m.airspeed = 21.5;
@@ -917,7 +917,7 @@ fn high_latency2_scales_its_compressed_fields() {
 /// Every `HEARTBEAT` and `HIGH_LATENCY2` is counted, and nothing else is: the two messages
 /// `getHeartBeat` returns on, so the firmware page's `doReboot(true, false)` can wait for the
 /// next heartbeat as it does.
-/// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:1166-1203, 2591-2603`
+/// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:1168-1205, 2588-2600`
 #[test]
 fn heartbeats_and_high_latency_reports_are_counted_as_getheartbeat_takes_them() {
     let mut state = VehicleState::default();

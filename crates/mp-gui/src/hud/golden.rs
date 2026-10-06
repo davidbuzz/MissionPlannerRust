@@ -21,7 +21,7 @@
 //! Golden frames of the display: DELIVERABLES.md Deliverable 9, PLAN.md §13.6 row 75.
 //!
 //! Every case is a [`HudInputs`] turned into a [`super::scene`] - the geometry of `doPaint()`,
-//! `// C#: ExtLibs/Controls/HUD.cs:1954-3333` - drawn by [`raster`] and compared with the image
+//! `// C#: ExtLibs/Controls/HUD.cs:1954-3335` - drawn by [`raster`] and compared with the image
 //! committed at `testdata/hud/<case>.png`. A change that moves a line, a number or a colour of
 //! the display changes the picture, and the comparison fails with the count of pixels, the box
 //! they are in and, in the temporary directory, the new frame and a picture of the difference.
@@ -32,7 +32,7 @@
 //!   the link plays it, and each chosen moment drawn through [`live_inputs`] - the function the
 //!   flight screen calls every frame - with the display's clocks run on the log's own time. A
 //!   sheet of six frames a case: around the hardest roll, around the hardest pitch, and across
-//!   arming, where ARMED shows and then goes after its eight seconds (`HUD.cs:3084-3119`).
+//!   arming, where ARMED shows and then goes after its eight seconds (`HUD.cs:3086-3121`).
 //! * **Hard cases**, from inputs written here: level flight, a bank, the nose straight up and
 //!   straight down (the gimbal lock of a pitch of ±90°), inverted, a NaN attitude, NaN
 //!   readouts, an infinite speed, altitude and heading, a lost GPS fix as text and as its
@@ -160,7 +160,7 @@ fn hard_cases() -> Vec<(&'static str, HudInputs)> {
             },
         ),
         // An ATTITUDE of NaNs, which the wire can carry: drawn level, heading 0, with the red
-        // "NaN Error" line (HUD.cs:2018-2025, 3025-3027).
+        // "NaN Error" line (HUD.cs:2018-2025, 3027-3029).
         (
             "nan_attitude",
             HudInputs {
@@ -207,7 +207,7 @@ fn hard_cases() -> Vec<(&'static str, HudInputs)> {
                 ..cruising()
             },
         ),
-        // The fix lost: GPS1's "No Fix" in red (HUD.cs:2926-3028).
+        // The fix lost: GPS1's "No Fix" in red (HUD.cs:2928-3030).
         (
             "lost_fix",
             HudInputs {
@@ -570,7 +570,7 @@ fn the_comparison_catches_a_moved_line_a_changed_number_and_a_changed_colour() {
         ..cruising()
     });
     assert!(seen, "waypoint 3 to 8: {how:?}");
-    // Only a colour: EKF past 0.5 is the same word in orange (HUD.cs:3209-3263).
+    // Only a colour: EKF past 0.5 is the same word in orange (HUD.cs:3211-3265).
     let (seen, how) = differs(HudInputs {
         ekf_status: 0.6,
         ..cruising()
@@ -733,7 +733,7 @@ fn corners(drawn: &super::Scene) -> Vec<(f32, f32)> {
 /// horizon level and the tape at north, and "NaN Error" with the time in red at (50, 50), at
 /// `Height / 30 + 10`. The frame is the level frame at heading 0 but for that line: every pixel
 /// that differs lies within the line's glyphs. No shape has a corner gpui cannot draw.
-/// `// C#: ExtLibs/Controls/HUD.cs:2018-2025, 3025-3027`
+/// `// C#: ExtLibs/Controls/HUD.cs:2018-2025, 3027-3029`
 #[test]
 fn a_nan_attitude_is_drawn_level_with_the_nan_error_line() {
     let level = HudInputs {

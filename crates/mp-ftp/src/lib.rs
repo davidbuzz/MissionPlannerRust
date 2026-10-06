@@ -25,7 +25,7 @@
 //!
 //! * [`logs`], dataflash log download over `LOG_REQUEST_LIST` and `LOG_DATA` - the transfer half
 //!   of `MAVLinkInterface.GetLogList` and `GetLog` (`ExtLibs/ArduPilot/Mavlink/
-//!   MAVLinkInterface.cs:5977, 6203`), which `Log/LogDownloadMavLink.cs` drives.
+//!   MAVLinkInterface.cs:5977, 6165`), which `Log/LogDownloadMavLink.cs` drives.
 //! * [`mavftp`], the vehicle's file system over `FILE_TRANSFER_PROTOCOL`
 //!   (`ExtLibs/ArduPilot/Mavlink/MAVFtp.cs`): listings, burst and plain reads, uploads, removes,
 //!   renames, directories and the file CRC.
@@ -52,7 +52,7 @@ use mavftp::wire::{Errno, ErrorCode, Opcode};
 pub enum FtpError {
     /// The vehicle refused a command with `kErrFailErrno`.
     ///
-    /// C#: e.g. MAVFtp.cs:632-633, `new Exception("Mavftp responded - " + ftphead.req_opcode + " "
+    /// C#: e.g. MAVFtp.cs:671-672, `new Exception("Mavftp responded - " + ftphead.req_opcode + " "
     /// + errorcode + " " + _ftp_errno)`.
     #[error("Mavftp responded - {req_opcode} {error} {errno}")]
     Responded {
@@ -66,7 +66,7 @@ pub enum FtpError {
     /// The same refusal as [`FtpError::Responded`], in the other wording the C# uses for it,
     /// whether or not the command opens a file.
     ///
-    /// C#: e.g. MAVFtp.cs:952-953 (`kCmdCalcFileCRC32`), :1324-1325 (`kCmdListDirectory`),
+    /// C#: e.g. MAVFtp.cs:991-992 (`kCmdCalcFileCRC32`), :1324-1325 (`kCmdListDirectory`),
     /// :1783-1784 (`kCmdRemoveFile`).
     #[error("Failed to OpenFile - {req_opcode} {error} {errno}")]
     FailedToOpenFile {
@@ -79,12 +79,12 @@ pub enum FtpError {
     },
     /// The vehicle refused a command with `kErrFail`.
     ///
-    /// C#: e.g. MAVFtp.cs:644, `new Exception("Mavftp responded - Err Fail")`.
+    /// C#: e.g. MAVFtp.cs:683, `new Exception("Mavftp responded - Err Fail")`.
     #[error("Mavftp responded - Err Fail")]
     ErrFail,
     /// The vehicle said the file is not there: `kErrFileNotFound`.
     ///
-    /// C#: e.g. MAVFtp.cs:651, `new FileNotFoundException("File Not Found", file)`.
+    /// C#: e.g. MAVFtp.cs:690, `new FileNotFoundException("File Not Found", file)`.
     #[error("File Not Found")]
     FileNotFound {
         /// The path asked for.
@@ -93,7 +93,7 @@ pub enum FtpError {
     /// The vehicle opened a file and gave its size as negative - two gigabytes or more, read as
     /// an `int`.
     ///
-    /// C#: MAVFtp.cs:713 and :1562, `new MemoryStream(size)`, which throws
+    /// C#: MAVFtp.cs:752 and :1562, `new MemoryStream(size)`, which throws
     /// `ArgumentOutOfRangeException` for it. The wording is this port's: the C#'s is .NET's.
     #[error("the vehicle gave the file's size as {0}, which is not a size")]
     NegativeSize(i32),

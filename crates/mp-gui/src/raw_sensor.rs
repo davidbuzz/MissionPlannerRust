@@ -40,7 +40,7 @@
 //! where the C# closes it only while its port is open; a failed write or a file that cannot be
 //! made goes on the status line where the C# would throw.
 //! `// C#: Controls/RAW_Sensor.cs, Controls/RAW_Sensor.Designer.cs, Controls/RAW_Sensor.resx,
-//! GCSViews/FlightData.cs:1464-1469`
+//! GCSViews/FlightData.cs:1466-1471`
 
 // This module is internal to the binary; `pub` here documents intent rather than exporting API.
 #![allow(unreachable_pub)]
@@ -216,7 +216,7 @@ impl RawSensor {
     /// a link and not reading a log that says "Please connect first" and closes the form, which
     /// is `Err` here with the window left shut; with one it asks for the RAW_SENSORS stream,
     /// which is the caller's to send. The form is new each time: every setting starts over.
-    /// `// C#: GCSViews/FlightData.cs:1464-1469, Controls/RAW_Sensor.cs:22-29, 209-220, 239-267`
+    /// `// C#: GCSViews/FlightData.cs:1466-1471, Controls/RAW_Sensor.cs:22-29, 209-220, 239-267`
     pub fn open(&mut self, connected: bool) -> Result<(), &'static str> {
         *self = Self::new();
         if !connected {
@@ -450,7 +450,7 @@ fn servo_out(state: &VehicleState) -> [i32; 8] {
 impl MissionPlanner {
     /// `BUT_RAWSensor_Click`: the form made and shown, or "Please connect first" on the status
     /// line (the C#'s box, under the owner's rule) with no window. `ThemeManager.ApplyThemeTo`
-    /// is the palette's business here. `// C#: GCSViews/FlightData.cs:1464-1469`
+    /// is the palette's business here. `// C#: GCSViews/FlightData.cs:1466-1471`
     pub(crate) fn raw_sensor_open(&mut self) {
         let view = self.telemetry.view();
         match self.raw_sensor.open(view.connected) {

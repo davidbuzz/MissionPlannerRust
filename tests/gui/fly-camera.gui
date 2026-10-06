@@ -9,7 +9,7 @@
 # waited for. Camera Overlap works on the CAMERA_FEEDBACK photo markers, which this map does not
 # draw: it is dimmed and says so. The C#'s menu is on the map; this application's map menu entries
 # are the map's right-click menu, contextMenuStripMap, each acting where the menu was opened.
-# `GCSViews/FlightData.cs:4457-4546, 5381-5391, ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:4557-4569`
+# `GCSViews/FlightData.cs:4571-4660, 5495-5505, ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:4546-4558`
 #
 # Needs SITL (a copter): tools/gui-test.sh tests/gui/fly-camera.gui -- tcp:127.0.0.1:5760
 

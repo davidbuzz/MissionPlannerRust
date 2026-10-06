@@ -36,7 +36,7 @@ expect hud.missing.list none
 # The readouts as drawn, in metres with no units configured (hud-units.gui changes them): the
 # speed tape's number and lines, the altitude, the waypoint line, the pack on the lower text line
 # with no cell voltage and no second battery, SITL's one GPS, and text rather than pictures.
-# `ExtLibs/Controls/HUD.cs:2552-2577, 2733, 2769, 2917-2923, 3014`
+# `ExtLibs/Controls/HUD.cs:2552-2577, 2735, 2771, 2919-2925, 3016`
 expect hud.speed ~ m/s
 expect hud.airspeed ~ AS
 expect hud.groundspeed ~ GS

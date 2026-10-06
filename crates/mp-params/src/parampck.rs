@@ -41,7 +41,7 @@
 //!
 //! Leading zero bytes before an entry are padding - ArduPilot pads so that a value never crosses
 //! a read packet boundary - and are skipped. Mission Planner asks for the file as
-//! `@PARAM/param.pck?withdefaults=1` (`MAVLinkInterface.cs:1877`), and ArduPilot answers with the
+//! `@PARAM/param.pck?withdefaults=1` (`MAVLinkInterface.cs:1874`), and ArduPilot answers with the
 //! defaults where it has them, in the `0x671c` format, or the plain file where it has not.
 
 use crate::{ParamType, ParamValue};

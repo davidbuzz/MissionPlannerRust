@@ -2,7 +2,7 @@
 # keys and a click reaching the vehicle, and Settings.
 #
 # The claim: Mini map is CheckOnClick; unchecked it hides the map and Swap with map, checked it
-# shows both (FlightData.cs:6547-6551). Swap with map is Mini from full sized and Full Sized from
+# shows both (FlightData.cs:6661-6665). Swap with map is Mini from full sized and Full Sized from
 # the mini video (6552-6562). A click on the picture focuses it (GimbalVideoControl.cs:609-612);
 # with the focus the keys steer: Alt+F takes a picture - IMAGE_START_CAPTURE to the camera, which
 # needs no capability (459-511, CameraProtocol.cs:397-409); W held is a pitch rate the manager has

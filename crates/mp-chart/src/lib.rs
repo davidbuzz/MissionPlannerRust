@@ -44,7 +44,7 @@ mod lod;
 
 /// How long the tuning graph shows, in seconds.
 ///
-/// Ten, matching `xScale.Min = xScale.Max - 10.0`. `// C#: GCSViews/FlightData.cs:5346`
+/// Ten, matching `xScale.Min = xScale.Max - 10.0`. `// C#: GCSViews/FlightData.cs:5460`
 pub const WINDOW_SECONDS: f64 = 10.0;
 
 /// One sample.
@@ -554,7 +554,7 @@ pub fn trace(series: &Series, from: f64, to: f64, columns: usize) -> Vec<(f64, f
 ///
 /// Rolls forward once the newest sample passes the right-hand edge, as the C# does - it moves the
 /// axis rather than scrolling every frame, so a trace stays still until it reaches the edge.
-/// `// C#: GCSViews/FlightData.cs:5342-5347`
+/// `// C#: GCSViews/FlightData.cs:5456-5461`
 #[must_use]
 pub fn window(latest: f64) -> (f64, f64) {
     let end = latest.max(WINDOW_SECONDS);

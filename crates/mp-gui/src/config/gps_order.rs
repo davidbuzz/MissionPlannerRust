@@ -96,7 +96,7 @@ pub const DETECTED_2: &str = "GPS_CAN_NODEID2";
 pub const ERROR_TEXT: &str = "Error";
 
 /// The caption for GPS1's set timing out: `"Failed to set param " + ex`.
-/// `// C#: GCSViews/ConfigurationView/ConfigGPSOrder.cs:84; ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:1765`
+/// `// C#: GCSViews/ConfigurationView/ConfigGPSOrder.cs:84; ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:1762`
 pub const FAILED_1: &str =
     "Failed to set param System.TimeoutException: Timeout on read - setParam GPS1_CAN_OVRIDE";
 /// The caption for GPS2's.

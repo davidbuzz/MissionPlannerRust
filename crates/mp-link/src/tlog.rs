@@ -21,7 +21,7 @@
 //! Recording the link: writing telemetry logs.
 //!
 //! The link records itself, as `MAVLinkInterface.SaveToTlog` does in Mission Planner
-//! (`ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:1467`): an 8-byte big-endian microsecond
+//! (`ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:1464`): an 8-byte big-endian microsecond
 //! timestamp, then the frame exactly as it crossed the wire. This lives with the link rather than
 //! beside the reader in `mp-log` because PLAN.md §5.1 puts the log crates at L4, above the link at
 //! L3, and a recorder the link cannot reach records nothing. `mp-log`'s `tests/tlog.rs` reads back

@@ -2,7 +2,7 @@
 # which writes a five-item mission item by item - `MAV.setWPTotal(5)`, five `MAV.setWP`s of
 # `Locationwp`s made with `Locationwp().Set(...)` and `Locationwp.x.SetValue(...)`, in
 # `MAVLink.MAV_FRAME.GLOBAL_RELATIVE_ALT`, and `MAV.setWPACK()`. Ported from Script.cs:35-53 (the
-# assemblies IronPython loads, the scope's `MAV`) and MAVLinkInterface.cs:2434-2450, 3753-4235,
+# assemblies IronPython loads, the scope's `MAV`) and MAVLinkInterface.cs:2431-2447, 3746-4224,
 # through crates/mp-script/src/clr/shim.py and the tab's host (crates/mp-gui/src/scripts_tab.rs).
 #
 # The claim: the script runs to its end - its prints in the console, "done" last - and the

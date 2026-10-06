@@ -1663,7 +1663,7 @@ impl Writer {
 }
 
 /// `double.toDMS()`: whole degrees, whole minutes and the seconds as a `float`, each truncated
-/// toward zero. `// C#: ExtLibs/Utilities/Extensions.cs:1024-1031`
+/// toward zero. `// C#: ExtLibs/Utilities/Extensions.cs:1017-1024`
 #[allow(clippy::cast_possible_truncation)]
 #[must_use]
 pub fn to_dms(angle: f64) -> (i32, i32, f32) {

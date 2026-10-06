@@ -1,4 +1,4 @@
-# The flight screen's Scripts tab, ported from GCSViews/FlightData.cs:786-812, 1012-1017,
+# The flight screen's Scripts tab, ported from GCSViews/FlightData.cs:788-814, 1014-1019,
 # 1223-1233, 1630-1641, 4727-4776 and FlightData.resx (PLAN.md §13.6 row 94, §12 D20).
 #
 # The claim: the tab shows the .resx's labels and buttons - "Script Status: No Script Running",

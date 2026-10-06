@@ -1,5 +1,5 @@
 # Ctrl+Z: Mission Planner's camera test, MainV2.ProcessCmdKey's `new Camera().test(MainV2.comPort)`
-# (MainV2.cs:4154-4159; ExtLibs/ArduPilot/Camera.cs:12-35; crates/mp-gui/src/cmd_keys/camera.rs).
+# (MainV2.cs:4161-4166; ExtLibs/ArduPilot/Camera.cs:12-35; crates/mp-gui/src/cmd_keys/camera.rs).
 #
 # The claim: against tests/gui/camera-vehicle.py - a copter, system 1 component 1, with a camera,
 # component 100, that acknowledges every command sent to it and refuses the second - Ctrl+Z finds

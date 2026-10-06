@@ -35,7 +35,7 @@
 //! four-byte line in its type's list. The C# keeps three eight-byte lists per record
 //! (`linestartoffset`, `messageindex`, `messageindexline`), so this is about half of what the
 //! original spends, and nothing here grows with the size of a record.
-//! `// C#: ExtLibs/Utilities/DFLogBuffer.cs:28-40, 98-126`
+//! `// C#: ExtLibs/Utilities/DFLogBuffer.cs:27-39, 97-125`
 
 use std::collections::BTreeMap;
 
@@ -231,7 +231,7 @@ impl RecordIndex {
     ///
     /// A log of more than a few tens of megabytes is walked in pieces, a thread each; see
     /// [`Self::check`] for why that finds exactly the records one walk would.
-    /// `// C#: ExtLibs/Utilities/DFLogBuffer.cs:98-126, 206-330`
+    /// `// C#: ExtLibs/Utilities/DFLogBuffer.cs:97-125, 205-329`
     #[must_use]
     pub fn build(data: &[u8]) -> Self {
         Self::build_split(data, Split::of(data.len()))
@@ -507,7 +507,7 @@ impl RecordIndex {
     /// The instance fields, from the `#` in each `FMTU`'s `UnitIds`: the last `FMTU` of a type
     /// that marks one decides it, so the records are read from the end and a type already
     /// decided is not read again.
-    /// `// C#: ExtLibs/Utilities/DFLogBuffer.cs:230-245`
+    /// `// C#: ExtLibs/Utilities/DFLogBuffer.cs:229-244`
     fn read_instances(&mut self, data: &[u8]) {
         let mut by_type = BTreeMap::new();
         let mut by_position = BTreeMap::new();
@@ -571,7 +571,7 @@ impl RecordIndex {
     /// The first `GPS`-named record with a fix, read through the index: `DFItem` sets
     /// `gpsstarttime` from the first message whose type starts with GPS and that has a fix, and
     /// after that never looks again.
-    /// `// C#: ExtLibs/Utilities/DFLog.cs:163-208; ExtLibs/Utilities/DFLogBuffer.cs:311-329`
+    /// `// C#: ExtLibs/Utilities/DFLog.cs:163-208; ExtLibs/Utilities/DFLogBuffer.cs:310-328`
     fn first_fix(&self, data: &[u8]) -> Option<GpsStart> {
         const LABELS: [&str; 7] = ["Status", "TimeMS", "GMS", "Week", "GWk", "TimeUS", "T"];
         let mut columns = PerFormat::default();
@@ -785,7 +785,7 @@ impl RecordIndex {
     /// `GetEnumeratorType(string[])` walks, merging the types' line lists.
     ///
     /// `data_only` leaves out `FMT` records whatever they are named, as `next_message` does.
-    /// `// C#: ExtLibs/Utilities/DFLogBuffer.cs:701-760`
+    /// `// C#: ExtLibs/Utilities/DFLogBuffer.cs:756-815`
     pub(crate) fn rows(&self, wanted: impl Fn(&str) -> bool, data_only: bool) -> Rows<'_> {
         let cursors = (0u8..=u8::MAX)
             .filter(|msg_type| !(data_only && *msg_type == FMT_TYPE))

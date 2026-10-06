@@ -22,13 +22,13 @@
 //!
 //! The C# makes a `MAVFtp` over a `MAVLinkInterface`, which subscribes each command's handler to
 //! `FILE_TRANSFER_PROTOCOL` from that vehicle (`SubscribeToPacketType(..., _sysid, _compid)`,
-//! ExtLibs/ArduPilot/Mavlink/MAVFtp.cs:612; MAVLinkInterface.cs:5567-5593) and sends with
+//! ExtLibs/ArduPilot/Mavlink/MAVFtp.cs:651; MAVLinkInterface.cs:5547-5573) and sends with
 //! `sendPacket`. Here the link thread plays both parts: every `FILE_TRANSFER_PROTOCOL` from a
 //! vehicle goes to that vehicle's client ([`route`]), every pass of the loop lets the clients' waits
 //! run out ([`tick`]), and what they want sent is sent. What a reply means is `mp-ftp`'s.
 //!
 //! Replies are matched by who sent them, not by whom they are addressed to, as the C#'s
-//! subscription matches them (MAVLinkInterface.cs:5541-5543).
+//! subscription matches them (MAVLinkInterface.cs:5521-5523).
 
 use mp_os::Lock as _;
 use std::sync::Arc;
@@ -328,7 +328,7 @@ mod tests {
             panic!("{got:?}");
         };
         assert_eq!(data, content);
-        // The burst's last report, as MAVFtp.cs:864 makes it.
+        // The burst's last report, as MAVFtp.cs:903 makes it.
         let (busy, progress) = link.ftp_progress(VEHICLE).unwrap();
         assert!(!busy);
         assert_eq!(progress.message, "/APM/param.pck");

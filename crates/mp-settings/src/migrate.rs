@@ -41,7 +41,7 @@
 //! Each artefact is copied from the C# directory the C# keeps it in to the same directory under
 //! this application's name: the user data directory for most, the shared data directory for
 //! `UserAlerts.json` and `History` (the two differ on Windows only). `logo.png` and `logo.txt` the
-//! C# reads beside its executable (`GetRunningDirectory`, `Program.cs:209-221`), which is not a
+//! C# reads beside its executable (`GetRunningDirectory`, `Program.cs:211-223`), which is not a
 //! data directory; they are copied from the user data directory if a user put them there.
 
 use mp_os::fs::FsExt as _;
@@ -76,9 +76,9 @@ pub const ARTEFACTS: &[(&str, Kept)] = &[
     ("UserAlerts.json", Kept::Shared),
     // `// C#: ExtLibs/ArduPilot/Mavlink/MAVAuthKeys.cs:18`
     ("authkeys.xml", Kept::User),
-    // `// C#: Program.cs:220` (beside the executable in the C#)
+    // `// C#: Program.cs:222` (beside the executable in the C#)
     ("logo.png", Kept::User),
-    // `// C#: Program.cs:209-211` (beside the executable in the C#)
+    // `// C#: Program.cs:211-213` (beside the executable in the C#)
     ("logo.txt", Kept::User),
     // A folder. `// C#: temp.cs:250`
     ("History", Kept::Shared),

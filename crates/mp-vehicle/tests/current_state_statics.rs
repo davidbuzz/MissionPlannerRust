@@ -63,7 +63,7 @@ fn heartbeat() -> MavMessage {
 
 #[test]
 fn the_kindex_is_minus_one_until_set_and_shared() {
-    // C#: ExtLibs/ArduPilot/CurrentState.cs:51, 2073-2074; MainV2.cs:3977-3981
+    // C#: ExtLibs/ArduPilot/CurrentState.cs:51, 2073-2074; MainV2.cs:3984-3988
     let _guard = lock();
     assert_eq!(VehicleState::kindex(), -1);
     VehicleState::set_kindex(4);
@@ -77,7 +77,7 @@ fn the_kindex_is_minus_one_until_set_and_shared() {
 
 #[test]
 fn a_new_vehicle_takes_the_saved_stream_rates() {
-    // C#: ExtLibs/ArduPilot/CurrentState.cs:201-206, 227, 4393-4397
+    // C#: ExtLibs/ArduPilot/CurrentState.cs:201-206, 227, 4396-4400
     let _guard = lock();
     let defaults = StreamRates {
         attitude: 4,
@@ -95,7 +95,7 @@ fn a_new_vehicle_takes_the_saved_stream_rates() {
         defaults
     );
 
-    // Planner's combo sets the saved default and this vehicle's rate (ConfigPlanner.cs:576-584):
+    // Planner's combo sets the saved default and this vehicle's rate (ConfigPlanner.cs:577-585):
     // a vehicle seen after takes the new default, one seen before keeps its own.
     let changed = StreamRates {
         attitude: 10,
@@ -120,7 +120,7 @@ fn a_new_vehicle_takes_the_saved_stream_rates() {
 
 #[test]
 fn the_planned_home_is_shared_and_unset_until_given() {
-    // C#: ExtLibs/ArduPilot/CurrentState.cs:41, 1584-1589; MainV2.cs:1012-1025
+    // C#: ExtLibs/ArduPilot/CurrentState.cs:41, 1584-1589; MainV2.cs:1014-1027
     let _guard = lock();
     assert_eq!(VehicleState::planned_home(), LatLngAlt::ZERO);
     let home = LatLngAlt {
@@ -174,12 +174,12 @@ fn the_tracker_location_is_home_until_it_has_a_longitude() {
 
 #[test]
 fn named_values_claim_custom_fields_in_order_and_run_out_at_twenty() {
-    // C#: ExtLibs/ArduPilot/CurrentState.cs:236-258, 3913-4012, 2283-2285
+    // C#: ExtLibs/ArduPilot/CurrentState.cs:236-258, 3916-4015, 2283-2285
     let _guard = lock();
     let mut registry = VehicleRegistry::new();
     let autopilot = VehicleId::new(1, 1);
     let at = |seconds: i64| DateTime::from_ticks(639_000_000_000_000_000 + seconds * 10_000_000);
-    // A field a setting named first is kept for it (MainV2.cs:993-1000), in capitals.
+    // A field a setting named first is kept for it (MainV2.cs:995-1002), in capitals.
     assert!(VehicleState::add_custom_field_name(0, "MAV_SETTING"));
     assert!(
         !VehicleState::add_custom_field_name(0, "MAV_OTHER"),

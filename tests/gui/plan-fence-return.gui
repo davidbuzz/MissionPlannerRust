@@ -1,7 +1,7 @@
 # Geo-Fence > Set Return Location, and Save to File's first question (PLAN.md 13.4, Deliverable 11).
 #
 # setReturnLocationToolStripMenuItem_Click puts the red "GeoFence Return" marker where the menu was
-# opened, MouseDownStart (GCSViews/FlightPlanner.cs:6663-6670). saveToFileToolStripMenuItem_Click
+# opened, MouseDownStart (GCSViews/FlightPlanner.cs:6660-6667). saveToFileToolStripMenuItem_Click
 # asks for none of the file until there is one: "Please set a return location" (:5959-5965).
 #
 # Its own data directory, with a home, so the map shows Canberra without a vehicle.

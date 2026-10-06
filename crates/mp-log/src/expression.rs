@@ -346,7 +346,7 @@ pub fn records_in(
 ///
 /// The instance is the value of the field the type's `FMTU` marks with `#`, as `DFItem.instance`
 /// reads it; a type without one has none.
-/// `// C#: ExtLibs/Utilities/DFLogBuffer.cs:701-773`
+/// `// C#: ExtLibs/Utilities/DFLogBuffer.cs:756-828`
 #[must_use]
 pub fn records_of(data: &[u8], names: &[String]) -> Vec<(usize, LogMessage, Option<i64>)> {
     let instance_fields = crate::plot::instance_fields(data);

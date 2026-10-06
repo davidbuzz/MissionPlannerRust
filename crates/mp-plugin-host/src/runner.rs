@@ -23,7 +23,7 @@
 //! menu clicks and form events.
 //!
 //! The C# runs every plugin's `Loop` on one shared thread and its menu clicks on the window's
-//! thread (`// C#: MainV2.cs:2506-2574`); a plugin that blocks there blocks them all, or the
+//! thread (`// C#: MainV2.cs:2513-2581`); a plugin that blocks there blocks them all, or the
 //! window. Here each plugin has its own thread, which also takes its clicks, so a plugin waits
 //! only on itself; the window hears from it through [`Request`]s it drains once a frame.
 
@@ -123,7 +123,7 @@ struct Handle {
 }
 
 /// How long closing waits for the plugins' `Exit`s: the C# waits for its plugin thread's
-/// (`// C#: MainV2.cs:2084`); a plugin blocked on a question nobody will answer is not waited
+/// (`// C#: MainV2.cs:2091`); a plugin blocked on a question nobody will answer is not waited
 /// for past this.
 const EXIT_WAIT: Duration = Duration::from_secs(2);
 
@@ -381,7 +381,7 @@ impl PluginHost {
     }
 
     /// `Exit` for every running plugin, and their threads waited for up to [`EXIT_WAIT`].
-    /// `// C#: MainV2.cs:2556-2574`
+    /// `// C#: MainV2.cs:2563-2581`
     pub fn shutdown(&mut self) {
         for handle in &self.handles {
             let _ = handle.commands.send(Command::Exit);

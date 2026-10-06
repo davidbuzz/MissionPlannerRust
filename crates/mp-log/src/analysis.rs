@@ -21,7 +21,7 @@
 //! Auto Analysis: ArduPilot's `LogAnalyzer`, which Mission Planner runs as `runner.exe`, ported
 //! and run in-process.
 //!
-//! `BUT_loganalysis_Click` (`GCSViews/FlightData.cs:1311-1385`) converts a `.bin` to a temporary
+//! `BUT_loganalysis_Click` (`GCSViews/FlightData.cs:1313-1387`) converts a `.bin` to a temporary
 //! `.log` with `BinaryLog.ConvertBin`, then `LogAnalyzer.CheckLogFile` (`Utilities/LogAnalyzer.cs:
 //! 18-115`) downloads `LogAnalyzer64.zip` from firmware.ardupilot.org into
 //! `<data dir>/LogAnalyzer/`, extracts it and runs `runner.exe -x "<log>.xml" -s "<log>"` there -
@@ -42,7 +42,7 @@
 //! the XML Python 2.7 wrote for the same text (`testdata/dataflash/golden/loganalysis`, made by
 //! `tools/loganalyzer-golden.sh`), and `report` to the C#'s reading of the analyzer's example
 //! output, byte for byte.
-//! `// C#: GCSViews/FlightData.cs:1311-1385; Utilities/LogAnalyzer.cs; Controls/LogAnalyzer.cs;
+//! `// C#: GCSViews/FlightData.cs:1313-1387; Utilities/LogAnalyzer.cs; Controls/LogAnalyzer.cs;
 //! LogAnalyzer/py2exe`
 
 mod checks;
@@ -164,7 +164,7 @@ pub fn analyse_text(text: &str, filename: &str) -> Result<String, String> {
 /// # Errors
 ///
 /// Each of the button's message boxes: see [`AnalysisError`].
-/// `// C#: GCSViews/FlightData.cs:1311-1385`
+/// `// C#: GCSViews/FlightData.cs:1313-1387`
 pub fn analyse(log: &Path, mode_name: ModeName<'_>) -> Result<Analysis, AnalysisError> {
     analyse_to(log, None, mode_name)
 }

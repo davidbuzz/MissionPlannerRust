@@ -3,7 +3,7 @@
 # in place of their text: the battery at the left edge with its numbers beside it, the fix at the
 # right of the bottom strip, Vibe four and EKF five pictures in, the pre-arm picture above EKF's.
 # The click rectangles for Vibe and EKF move with them (vibehitzone, ekfhitzone). Clicked again,
-# the text is back. `GCSViews/FlightData.cs:6484-6496, ExtLibs/Controls/HUD.cs:2861-2899,
+# the text is back. `GCSViews/FlightData.cs:6598-6610, ExtLibs/Controls/HUD.cs:2863-2901,
 # 2997-3009, 3150-3301`
 #
 # The pictures are Mission Planner's bitmaps, which this application does not ship; each is drawn

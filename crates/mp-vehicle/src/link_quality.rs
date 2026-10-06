@@ -26,7 +26,7 @@
 /// at; the C# hands it to every vehicle on the link instead, and so does
 /// [`crate::VehicleRegistry::apply`]. Signal and noise are the radio's own 0 to 255 scale, as
 /// sent - the C# keeps them unconverted too.
-/// `// C#: ExtLibs/ArduPilot/CurrentState.cs:2280-2282, 3389-3395`
+/// `// C#: ExtLibs/ArduPilot/CurrentState.cs:2280-2282, 3392-3398`
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub struct Radio {
     /// Local signal strength (`rssi`).
@@ -105,7 +105,7 @@ impl LinkQuality {
     ///
     /// The C# also zeroes it when nothing valid has arrived for ten seconds; that clock is not
     /// kept here, and the HUD's "no vehicle" state covers the same case.
-    /// `// C#: ExtLibs/ArduPilot/CurrentState.cs:4590-4599`
+    /// `// C#: ExtLibs/ArduPilot/CurrentState.cs:4593-4602`
     #[must_use]
     pub fn quality_percent(&self) -> u8 {
         let sent = self.received + self.lost;

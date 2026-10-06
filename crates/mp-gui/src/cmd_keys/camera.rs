@@ -18,7 +18,7 @@
 //
 // SPDX-License-Identifier: GPL-3.0-only
 
-//! Ctrl+Z: `new Camera().test(MainV2.comPort)` (`MainV2.cs:4154-4159`), `ExtLibs/ArduPilot/
+//! Ctrl+Z: `new Camera().test(MainV2.comPort)` (`MainV2.cs:4161-4166`), `ExtLibs/ArduPilot/
 //! Camera.cs`'s `test`: the first component on the link that is a camera (`MAV_COMP_ID_CAMERA`)
 //! asked, one `doCommand` after another, for its information, its video stream's, its settings,
 //! its mode, its storage's, and to start streaming - each with its parameters all 0. No camera,
@@ -194,7 +194,7 @@ impl CameraTest {
 
     /// Once a frame: the command waited on, when it has ended, followed by the next - unless it
     /// went unanswered, which is `doCommand`'s throw and the end of the test.
-    /// `// C#: ExtLibs/ArduPilot/Camera.cs:14-34; ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:2783-2798`
+    /// `// C#: ExtLibs/ArduPilot/Camera.cs:14-34; ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:2780-2795`
     pub fn tick(&mut self, telemetry: &mut Telemetry) {
         let Some((id, made)) = self.run.and_then(|run| run.waiting) else {
             return;

@@ -337,7 +337,7 @@ fn a_panic_in_loop_unloads_the_plugin() {
 }
 
 /// The plugin thread's rule: `Loop` when `NextRun` has passed and then `1000 / loopratehz` ms
-/// on - 20 ms at 50 Hz - not every tick. `// C#: MainV2.cs:2524-2540`
+/// on - 20 ms at 50 Hz - not every tick. `// C#: MainV2.cs:2531-2547`
 #[test]
 fn loop_runs_at_its_rate() {
     let Some((mut plugin, script)) = load("misbehave") else {

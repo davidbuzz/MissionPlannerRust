@@ -6,7 +6,7 @@
 # waypoint and .param files at the goldens' sizes beside the .kmz, and the .mat named for the
 # log's 11439 lines at the golden's size. The C# says nothing when one works; the status line
 # says where the files went.
-# `GCSViews/FlightData.cs:1082-1098, 1135-1202, 1387-1390, Log/MatLabForms.cs:43-74,
+# `GCSViews/FlightData.cs:1084-1100, 1137-1204, 1389-1392, Log/MatLabForms.cs:43-74,
 # GCSViews/FlightData.resx (tableLayoutPanel2.LayoutSettings), testdata/dataflash/golden/`
 #
 # Auto Analysis runs ArduPilot's LogAnalyzer checks, ported into mp_log::analysis, on the log

@@ -192,7 +192,7 @@ impl SpeedGauge {
     /// `MaxValue = float.Parse(max)`: the maximum changed where the text is a number above the
     /// minimum, and left as it was otherwise, as the control leaves a maximum that is not above
     /// its minimum; text that is not a number throws in the C#, which has no `catch` here, and is
-    /// .NET's message. `// C#: GCSViews/FlightData.cs:3140-3148`
+    /// .NET's message. `// C#: GCSViews/FlightData.cs:3153-3161`
     pub fn set_max(&mut self, text: &str) -> Result<(), &'static str> {
         let value =
             crate::fly::dotnet_float(text).ok_or("Input string was not in a correct format.")?;
@@ -534,7 +534,7 @@ impl Dial {
 /// heading, the vertical speed hidden - and a quarter where it is wider, the vertical speed
 /// first; a squarer page puts them two by two, half its shorter side each. The speed dial's size
 /// and place: (left, top, side).
-/// `// C#: GCSViews/FlightData.cs:5217-5278`
+/// `// C#: GCSViews/FlightData.cs:5331-5392`
 #[must_use]
 pub fn speed_place(width: f32, height: f32) -> (f32, f32, f32) {
     let ratio = width / height.max(1.0);

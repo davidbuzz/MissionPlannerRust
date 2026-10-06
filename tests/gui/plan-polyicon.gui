@@ -4,7 +4,7 @@
 # `ContextMenuStripPoly_Opening` shows them for the FENCE mission type - Fence Inclusion and Fence
 # Exclusion, which turn the drawn polygon into the fence, or into an exclusion polygon of it, and
 # clear the polygon. The right button over the icon clears the polygon and closes the map's menu.
-# `GCSViews/FlightPlanner.cs:2697-2715, 3287-3305, 4905-4906, 7607-7618; Controls/Icon/Polygon.cs`
+# `GCSViews/FlightPlanner.cs:2697-2715, 3287-3305, 4905-4906, 7604-7615; Controls/Icon/Polygon.cs`
 #
 # Needs no link: tools/gui-test.sh tests/gui/plan-polyicon.gui
 

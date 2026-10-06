@@ -7,11 +7,11 @@
 # every edit of a box, and goes when one is emptied. map.home is read back from the map itself.
 #
 # The flight screen draws the vehicle's home instead, and only once the vehicle's mission is held
-# (FlightData.cs:3808-3845): with no vehicle there is none. plan-home-marker-vehicle.gui has the
+# (FlightData.cs:3922-3959): with no vehicle there is none. plan-home-marker-vehicle.gui has the
 # vehicle's.
 #
 # Self-contained: its own data directory, holding a config.xml with the home the
-# planning screen saved last time, which Activate puts in the boxes (FlightPlanner.cs:7208-7216).
+# planning screen saved last time, which Activate puts in the boxes (FlightPlanner.cs:7205-7213).
 
 env XDG_DATA_HOME $WORK
 env MP_PLAN_DIR $WORK
@@ -31,7 +31,7 @@ expect map.home.label true
 # A home typed into the boxes moves the marker with each box (TXT_home*_TextChanged -> writeKML).
 click plan-home-lat
 # Entering the Lat box shows "Click on the Map to set Home " (TXT_homelat_Enter,
-# FlightPlanner.cs:7016-7022); OK gives the box the keyboard back.
+# FlightPlanner.cs:7013-7019); OK gives the box the keyboard back.
 click plan-prompt-ok
 key ctrl+u
 type 51.5

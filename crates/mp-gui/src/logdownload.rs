@@ -311,7 +311,7 @@ impl LogDownloader {
 
 impl MissionPlanner {
     /// `BUT_DFMavlink_Click`, then the form's `Log_Load`: the list asked for, or why not, and
-    /// the warning to an armed vehicle. `// C#: GCSViews/FlightData.cs:1204-1209,
+    /// the warning to an armed vehicle. `// C#: GCSViews/FlightData.cs:1206-1211,
     /// Log/LogDownloadMavLink.cs:51-89`
     pub(crate) fn logs_open(&mut self) {
         let view = self.telemetry.view();

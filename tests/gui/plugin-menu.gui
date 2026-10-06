@@ -1,7 +1,7 @@
 # The plugin manager's Exercise, the owner's request of 2026-10-04: a test for each working
 # plugin that starts the planner, opens the manager with Ctrl+P - the PLUGINS tab, by the owner's
 # word - (MainV2.ProcessCmdKey,
-# MainV2.cs:4118-4122), finds the plugin's row - loaded, enabled, green - and tries it: its Try
+# MainV2.cs:4125-4129), finds the plugin's row - loaded, enabled, green - and tries it: its Try
 # lists what it added to the maps' menus, and a click on one runs it as the map's menu would.
 # The config holds `tabcontrolactions`, so the Drone ID plugin's message does not show at start.
 # And an empty `DisabledPlugins`: every plugin on, Open Drone ID too, which is off until a user

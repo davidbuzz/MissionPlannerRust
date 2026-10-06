@@ -170,7 +170,7 @@ pub fn land(position: LatLon, frame: u8) -> MissionItem {
 /// `TAKEOFF` with the altitude and pitch asked for: Takeoff. The handler writes `Param1` and the
 /// Alt column directly and never calls `setfromMap`, so there is no position.
 ///
-/// `// C#: GCSViews/FlightPlanner.cs:6780-6837`
+/// `// C#: GCSViews/FlightPlanner.cs:6777-6834`
 #[must_use]
 pub const fn takeoff(altitude: f64, pitch: f64, frame: u8) -> MissionItem {
     MissionItem {
@@ -182,7 +182,7 @@ pub const fn takeoff(altitude: f64, pitch: f64, frame: u8) -> MissionItem {
 
 /// `DO_SET_ROI` at a position: the region of interest.
 ///
-/// `// C#: GCSViews/FlightPlanner.cs:6673-6693`
+/// `// C#: GCSViews/FlightPlanner.cs:6670-6690`
 #[must_use]
 pub fn set_roi(position: LatLon, altitude: f64, frame: u8) -> MissionItem {
     placed(DO_SET_ROI, frame, position, altitude)

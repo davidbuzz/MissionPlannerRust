@@ -45,7 +45,7 @@
 //!
 //! Both readings are wrong for the other autopilot, and both produce numbers that look like data.
 //! Mission Planner handles this by carrying two types per parameter
-//! (`MAVLinkInterface.cs:1705`), and so do we: a wire type saying how to read the bytes, and a
+//! (`MAVLinkInterface.cs:1702`), and so do we: a wire type saying how to read the bytes, and a
 //! storage type saying what the vehicle keeps.
 //!
 //! # The rounding trap

@@ -21,7 +21,7 @@
 //! The font behind the planner's Text entry: `new Font("1CamBam_Stick_3", size * 1.35f)` and
 //! `GraphicsPath.AddString(text, family, style, emSize, PointF(0, 0), StringFormat)`, read here
 //! from the font file itself with `ttf-parser`.
-//! `// C#: GCSViews/FlightPlanner.cs:6839-6858`
+//! `// C#: GCSViews/FlightPlanner.cs:6836-6855`
 //!
 //! **Where this differs from GDI+, and why.** GDI+ lays the string out with the font's own metrics
 //! and, on Windows, falls back to Microsoft Sans Serif when `1CamBam_Stick_3` is not installed;

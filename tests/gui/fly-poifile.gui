@@ -5,7 +5,7 @@
 # C#'s dialogs are the platform's; here the path is typed, into a box that starts in the folder
 # poi.txt is kept in, which is a scratch one through XDG_DATA_HOME. The C#'s menu is on the map;
 # the entries are the map's right-click menu, under Add Poi.
-# `Utilities/POI.cs:143-207, GCSViews/FlightData.cs:3362-3365, 4741-4744`
+# `Utilities/POI.cs:143-207, GCSViews/FlightData.cs:3476-3479, 4855-4858`
 #
 # Self-contained, no link: tools/gui-test.sh tests/gui/fly-poifile.gui
 

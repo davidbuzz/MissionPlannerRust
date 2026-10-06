@@ -182,7 +182,7 @@ impl Firmware {
 pub fn firmware_of(autopilot: u8, mav_type: u8, banner: Option<&str>) -> Firmware {
     match autopilot {
         AUTOPILOT_ARDUPILOTMEGA => {
-            // C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:6704-6720
+            // C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:6668-6684
             const LOOKUP: [(&str, Firmware); 6] = [
                 ("ArduPlane V", Firmware::ArduPlane),
                 ("ArduCopter V", Firmware::ArduCopter2),
@@ -199,7 +199,7 @@ pub fn firmware_of(autopilot: u8, mav_type: u8, banner: Option<&str>) -> Firmwar
                     return *firmware;
                 }
             }
-            // C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:6722-6783
+            // C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:6686-6747
             match mav_type {
                 // FIXED_WING, FLAPPING_WING, VTOL_DUOROTOR to VTOL_RESERVED5.
                 1 | 16 | 19..=25 => Firmware::ArduPlane,
@@ -212,13 +212,13 @@ pub fn firmware_of(autopilot: u8, mav_type: u8, banner: Option<&str>) -> Firmwar
                 _ => Firmware::Other,
             }
         }
-        // C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:6787-6795
+        // C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:6751-6759
         AUTOPILOT_UDB if mav_type == TYPE_FIXED_WING => Firmware::ArduPlane,
-        // C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:6797-6805
+        // C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:6761-6769
         AUTOPILOT_GENERIC if mav_type == TYPE_FIXED_WING => Firmware::Ateryx,
-        // C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:6807-6809
+        // C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:6771-6773
         AUTOPILOT_PX4 => Firmware::Px4,
-        // C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:6811-6818 - a GIMBAL is `Gimbal`,
+        // C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:6775-6782 - a GIMBAL is `Gimbal`,
         // which no page branches on; anything else keeps the initial `ArduCopter2`.
         AUTOPILOT_UDB | AUTOPILOT_GENERIC => Firmware::ArduCopter2,
         _ if mav_type == 26 => Firmware::Other,
@@ -582,7 +582,7 @@ impl<H: Copy> Saver<H> {
     /// A write that times out ends the save, as `setParam`'s `TimeoutException` ends the C#'s;
     /// one the vehicle does not have, or already holds the value of, does not (`setParam` returns
     /// false or true for those, and the C# does not look). An empty combo ends it too.
-    /// `// C#: GCSViews/ConfigurationView/ConfigFlightModes.cs:356-413; ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:1640-1651, 1765`
+    /// `// C#: GCSViews/ConfigurationView/ConfigFlightModes.cs:356-413; ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:1637-1648, 1762`
     pub fn advance<W: ParamWriter<Handle = H>>(&mut self, writer: &W) {
         if self.state != SaveState::Saving {
             return;

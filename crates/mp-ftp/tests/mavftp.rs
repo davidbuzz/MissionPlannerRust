@@ -150,7 +150,7 @@ fn file_data(outcome: Result<FtpOutcome, FtpError>) -> (Vec<u8>, bool) {
 // --- listings ---------------------------------------------------------------------------------
 
 /// Forty files are more than one acknowledgement holds, so the listing asks again at the count of
-/// entries so far until the vehicle says end of file (MAVFtp.cs:1339-1340, 1419-1424). The timed
+/// entries so far until the vehicle says end of file (MAVFtp.cs:1378-1379, 1458-1463). The timed
 /// listing goes first and ArduPilot does not know it (kErrUnknownCommand), so the plain one
 /// follows (:1252-1261, 1306-1317).
 #[test]
@@ -215,7 +215,7 @@ fn a_listing_runs_across_offsets_until_the_vehicle_says_end_of_file() {
 }
 
 /// A vehicle that knows the timed listing gets asked it, and its times come through
-/// (MAVFtp.cs:1367-1389, 1240-1246).
+/// (MAVFtp.cs:1406-1428, 1279-1285).
 #[test]
 fn a_vehicle_that_knows_timed_listings_gives_times() {
     let mut vehicle = FakeVehicle::new()
@@ -250,7 +250,7 @@ fn a_vehicle_that_knows_timed_listings_gives_times() {
 }
 
 /// A lost acknowledgement part way through: the listing waits its second and asks for the same
-/// offset again, five sends in all (MAVFtp.cs:1287, RetryTimeout.cs:63-76).
+/// offset again, five sends in all (MAVFtp.cs:1326, RetryTimeout.cs:63-76).
 #[test]
 fn a_lost_listing_reply_is_asked_for_again_after_a_second() {
     let mut vehicle = FakeVehicle::new();
@@ -291,7 +291,7 @@ fn a_lost_listing_reply_is_asked_for_again_after_a_second() {
 // --- reads ------------------------------------------------------------------------------------
 
 /// `GetFile` with a burst: reset, open, burst. The chunk at 240 is lost; the burst runs on to the
-/// end, sees the hole, and switches to `kCmdReadFile` at 240 (MAVFtp.cs:826-840, 895-912).
+/// end, sees the hole, and switches to `kCmdReadFile` at 240 (MAVFtp.cs:865-879, 934-951).
 ///
 /// It asks twice. The last chunk shows the hole and asks for it (:826-840); the end-of-file NAK
 /// ArduPilot sends behind that chunk arrives before the answer and asks again (:746-769). The C#
@@ -333,7 +333,7 @@ fn a_burst_read_with_a_lost_chunk_reads_the_hole_after_the_burst() {
 }
 
 /// A burst the vehicle marks complete before the end is asked to continue from where it got to
-/// (MAVFtp.cs:813-816, 843-848).
+/// (MAVFtp.cs:852-855, 882-887).
 #[test]
 fn a_burst_that_stops_short_is_asked_to_continue() {
     let content = numbered(1000);
@@ -351,7 +351,7 @@ fn a_burst_that_stops_short_is_asked_to_continue() {
 }
 
 /// The chunk that says "burst complete" is lost, so nobody asks for the next burst. After the
-/// second `RetryTimeout()` waits (MAVFtp.cs:696), the request goes again - from where the data got
+/// second `RetryTimeout()` waits (MAVFtp.cs:735), the request goes again - from where the data got
 /// to, which the handler kept moving (:813-816).
 #[test]
 fn a_lost_end_of_burst_is_recovered_by_the_timeout() {
@@ -378,7 +378,7 @@ fn a_lost_end_of_burst_is_recovered_by_the_timeout() {
 }
 
 /// ArduPilot's `@SYS` files open claiming a size they do not have. A plain read asks chunk after
-/// chunk until the vehicle says end of file, which is what completes it (MAVFtp.cs:1599-1600).
+/// chunk until the vehicle says end of file, which is what completes it (MAVFtp.cs:1638-1639).
 #[test]
 fn a_plain_read_ends_on_end_of_file() {
     let content = b"SERIAL0 OTG1 TX=0 RX=0\nSERIAL1 UART4 TX=0 RX=0\n".repeat(4);
@@ -398,7 +398,7 @@ fn a_plain_read_ends_on_end_of_file() {
     );
 }
 
-/// The same file by burst: the short last chunk cuts the size (MAVFtp.cs:785-789) and the file is
+/// The same file by burst: the short last chunk cuts the size (MAVFtp.cs:824-828) and the file is
 /// whole without waiting for anything else.
 #[test]
 fn a_burst_read_ends_at_its_short_chunk() {
@@ -415,7 +415,7 @@ fn a_burst_read_ends_at_its_short_chunk() {
 }
 
 /// A plain read whose chunk is lost waits its second and asks for the same offset again
-/// (MAVFtp.cs:1549, 1612-1617).
+/// (MAVFtp.cs:1588, 1651-1656).
 #[test]
 fn a_plain_read_asks_again_for_a_lost_chunk() {
     let content = numbered(500);
@@ -436,7 +436,7 @@ fn a_plain_read_asks_again_for_a_lost_chunk() {
 }
 
 /// A file that is not there: the vehicle says so at once, and the C# says so two seconds later,
-/// when `kCmdOpenFileRO`'s wait runs out (MAVFtp.cs:608, 646-652, RetryTimeout.cs:63-76).
+/// when `kCmdOpenFileRO`'s wait runs out (MAVFtp.cs:647, 685-691, RetryTimeout.cs:63-76).
 #[test]
 fn a_file_that_is_not_there_is_reported_when_the_open_wait_runs_out() {
     let mut rig = Rig::new(FakeVehicle::new());
@@ -458,7 +458,7 @@ fn a_file_that_is_not_there_is_reported_when_the_open_wait_runs_out() {
 // --- refusals ---------------------------------------------------------------------------------
 
 /// `kErrFailErrno`: stop retrying, and throw with the errno named, in the words of the command's
-/// handler (MAVFtp.cs:626-634).
+/// handler (MAVFtp.cs:665-673).
 #[test]
 fn a_refusal_with_an_errno_is_reported_in_the_csharps_words() {
     let mut vehicle = FakeVehicle::new().with_file("/secret", b"x");
@@ -474,7 +474,7 @@ fn a_refusal_with_an_errno_is_reported_in_the_csharps_words() {
     assert_eq!(rig.sent_as(Opcode::OPEN_FILE_RO).len(), 1);
     assert_eq!(rig.elapsed(), Duration::from_secs(2));
 
-    // kCmdRemoveFile words the same refusal the other way (MAVFtp.cs:1778-1785).
+    // kCmdRemoveFile words the same refusal the other way (MAVFtp.cs:1817-1824).
     let mut vehicle = FakeVehicle::new().with_file("/busy", b"x");
     vehicle.refuse = Some((Opcode::REMOVE_FILE, ErrorCode::FAIL_ERRNO, Errno(16)));
     let mut rig = Rig::new(vehicle);
@@ -493,7 +493,7 @@ fn a_refusal_with_an_errno_is_reported_in_the_csharps_words() {
     assert_eq!(rig.elapsed(), Duration::from_secs(1));
 }
 
-/// `kErrFail` stops `kCmdOpenFileRO` (MAVFtp.cs:639-645) but not `kCmdCalcFileCRC32`, which has
+/// `kErrFail` stops `kCmdOpenFileRO` (MAVFtp.cs:678-684) but not `kCmdCalcFileCRC32`, which has
 /// no branch for it and so sends all three times, thirty seconds apart, and answers "no CRC"
 /// (:928, 941-970).
 #[test]
@@ -540,7 +540,7 @@ fn err_fail_stops_some_commands_and_not_others() {
 }
 
 /// `kErrNoSessionsAvailable` on the open: the sessions are reset, and the open goes again - its
-/// own request, not the reset's - when its wait runs out (MAVFtp.cs:654-658). See the module notes
+/// own request, not the reset's - when its wait runs out (MAVFtp.cs:693-697). See the module notes
 /// in `mavftp/mod.rs` for why this is not what the C# manages to do.
 #[test]
 fn no_sessions_available_resets_the_sessions_and_opens_again() {
@@ -579,7 +579,7 @@ fn no_sessions_available_resets_the_sessions_and_opens_again() {
 // --- sessions ---------------------------------------------------------------------------------
 
 /// `kCmdTerminateSession` is acknowledged; unanswered, it is sent thirty times a second apart
-/// and answers false (MAVFtp.cs:1963-2016, RetryTimeout.cs:37).
+/// and answers false (MAVFtp.cs:2002-2055, RetryTimeout.cs:37).
 #[test]
 fn terminating_the_session() {
     let mut rig = Rig::new(FakeVehicle::new());
@@ -610,7 +610,7 @@ fn terminating_the_session() {
     assert_eq!(rig.elapsed(), Duration::from_secs(30));
 }
 
-/// `kCmdResetSessions`: five sends a second apart (MAVFtp.cs:1919).
+/// `kCmdResetSessions`: five sends a second apart (MAVFtp.cs:1958).
 #[test]
 fn resetting_the_sessions() {
     let mut rig = Rig::new(FakeVehicle::new());
@@ -628,7 +628,7 @@ fn resetting_the_sessions() {
 }
 
 /// Cancelling: the command notices at the next event and ends when its wait runs out
-/// (`RetriesCurrent = 999`, e.g. MAVFtp.cs:853-859).
+/// (`RetriesCurrent = 999`, e.g. MAVFtp.cs:892-898).
 #[test]
 fn a_cancelled_read_ends_when_its_wait_runs_out() {
     let mut rig = Rig::new(FakeVehicle::new().with_file("/f", &numbered(500)));
@@ -735,7 +735,7 @@ fn an_upload_writes_every_chunk_between_two_resets() {
 }
 
 /// An empty file is created and nothing is written: `kCmdWriteFile` returns false before it sends
-/// anything (MAVFtp.cs:2230-2231), and `UploadFile` does not look.
+/// anything (MAVFtp.cs:2269-2270), and `UploadFile` does not look.
 #[test]
 fn an_empty_upload_creates_the_file_and_writes_nothing() {
     let mut rig = Rig::new(FakeVehicle::new());
@@ -758,7 +758,7 @@ fn an_empty_upload_creates_the_file_and_writes_nothing() {
             Opcode::RESET_SESSIONS
         ]
     );
-    // The write still took its sequence number (MAVFtp.cs:2218-2224).
+    // The write still took its sequence number (MAVFtp.cs:2257-2263).
     assert_eq!(rig.sent[2].1.seq_number, rig.sent[1].1.seq_number + 2);
 }
 
@@ -807,11 +807,11 @@ fn remove_rename_and_directories() {
         ),
         Ok(FtpOutcome::Done(true))
     );
-    // C#: MAVFtp.cs:1839, "src\0dest".
+    // C#: MAVFtp.cs:1878, "src\0dest".
     assert_eq!(rig.sent[0].1.payload(), b"/a/one\0/a/two");
     assert!(rig.vehicle.files.contains_key("/a/two"));
 
-    // C#: MAVFtp.cs:1748, "//" becomes "/".
+    // C#: MAVFtp.cs:1787, "//" becomes "/".
     assert_eq!(
         rig.run(
             FtpRequest::RemoveFile {
@@ -833,7 +833,7 @@ fn remove_rename_and_directories() {
         ),
         Ok(FtpOutcome::Done(true))
     );
-    // kErrFailFileExists completes it (MAVFtp.cs:1094-1097).
+    // kErrFailFileExists completes it (MAVFtp.cs:1133-1136).
     assert_eq!(
         rig.run(
             FtpRequest::CreateDirectory {
@@ -869,7 +869,7 @@ fn remove_rename_and_directories() {
 }
 
 /// `kCmdCreateDirectory` on `EEXIST` sets `Complete` - and then throws anyway, because `ex` was
-/// set on the line after (MAVFtp.cs:1076-1087, 1134-1135).
+/// set on the line after (MAVFtp.cs:1115-1126, 1173-1174).
 #[test]
 fn a_directory_that_exists_by_errno_is_still_an_error() {
     let mut vehicle = FakeVehicle::new();

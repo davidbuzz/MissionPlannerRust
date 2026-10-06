@@ -24,7 +24,7 @@
 //! `Plugin::load` is `PluginLoader.Load` and `InitPlugin` less the `Init` call
 //! (`// C#: Plugin/PluginLoader.cs:99-201`); `init`, `loaded`, `run_loop` and `exit` are the
 //! calls the loader and `MainV2`'s plugin thread make; [`Plugin::tick`] is that thread's rate
-//! rule (`// C#: MainV2.cs:2514-2540`).
+//! rule (`// C#: MainV2.cs:2521-2547`).
 
 use std::fmt;
 use web_time::{Duration, Instant};
@@ -345,7 +345,7 @@ impl Plugin {
     /// The plugin thread's rule at `now`: `Loop` when `NextRun` has passed and `loopratehz` is
     /// above zero, `NextRun` moved on by `1000 / loopratehz` ms before the call, so `Loop` may
     /// change the rate for the next. Returns whether `Loop` ran.
-    /// `// C#: MainV2.cs:2524-2540`
+    /// `// C#: MainV2.cs:2531-2547`
     ///
     /// # Errors
     /// The plugin's fault.
@@ -381,7 +381,7 @@ impl Plugin {
     }
 
     /// `Exit`: the plugin is being unloaded.
-    /// `// C#: MainV2.cs:2556-2569`
+    /// `// C#: MainV2.cs:2563-2576`
     ///
     /// # Errors
     /// The plugin's fault.

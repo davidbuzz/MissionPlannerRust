@@ -335,7 +335,7 @@ const MODE_LAND: u32 = 9;
 #[test]
 #[ignore = "requires ArduPilot SITL listening on tcp:127.0.0.1:5760"]
 fn a_user_takeoff_in_guided_is_accepted_once_armed() {
-    // Resume Mission's third loop (`FlightData.cs:1587-1600`): Guided until the vehicle is in
+    // Resume Mission's third loop (`FlightData.cs:1589-1602`): Guided until the vehicle is in
     // it, arm until armed, then `doCommand(TAKEOFF, 0,0,0,0,0,0, alt)` - and the C# gives up
     // with "The Command failed to execute" the moment the vehicle refuses. `fly-resumemis.gui`
     // has been failing at exactly that step, so this asks the firmware the same question

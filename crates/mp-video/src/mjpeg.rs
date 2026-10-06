@@ -37,7 +37,7 @@ use wasm_thread::JoinHandle;
 use crate::{Feed, Frame, VideoError, convert, multipart};
 
 /// `CaptureMJPEG.URL`'s first value, and Set MJPEG source's answer when `mjpeg_url` is not set.
-/// `// C#: ExtLibs/Utilities/CaptureMJPEG.cs:20; GCSViews/FlightData.cs:4894-4896`
+/// `// C#: ExtLibs/Utilities/CaptureMJPEG.cs:20; GCSViews/FlightData.cs:5008-5010`
 pub const DEFAULT_URL: &str = "http://127.0.0.1:56781/map.jpg";
 
 /// How long a read waits: `ReadTimeout = 10000`.

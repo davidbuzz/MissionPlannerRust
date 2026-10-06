@@ -23,8 +23,8 @@
 //! Several properties are rates or running totals over time - the vertical speed, the time in
 //! air, the distance travelled, the battery's used capacity - and the C# measures them against
 //! `CurrentState.datetime`, which `MAVLinkInterface` stamps before each packet: with
-//! `DateTime.Now` on a live link (`MAVLinkInterface.cs:4721`) and with the packet's recorded time
-//! when a `.tlog` is played back (`MAVLinkInterface.cs:6649`). [`DateTime`] is that value, held as
+//! `DateTime.Now` on a live link (`MAVLinkInterface.cs:4710`) and with the packet's recorded time
+//! when a `.tlog` is played back (`MAVLinkInterface.cs:6613`). [`DateTime`] is that value, held as
 //! the C# holds it - ticks of 100 ns since 0001-01-01 - so the arithmetic on it is the C#'s to the
 //! bit, including against `DateTime.MinValue`, the value every one of these clocks starts at.
 //!
@@ -70,14 +70,14 @@ impl DateTime {
     /// microseconds since the Unix epoch cut to whole milliseconds, `new DateTime(1970, 1, 1)
     /// .AddMilliseconds(dateint / 1000)`. `None` for a stamp the C# ignores - 9,999,999 hours or
     /// more - which leaves its clock where it was.
-    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:6539-6558`
+    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:6500-6519`
     #[must_use]
     pub fn from_tlog_micros(micros: u64) -> Option<Self> {
-        // C#: MAVLinkInterface.cs:6553
+        // C#: MAVLinkInterface.cs:6514
         if micros / 1000 / 1000 / 60 / 60 >= 9_999_999 {
             return None;
         }
-        // C#: MAVLinkInterface.cs:6555, `dateint / 1000` in integer arithmetic: whole
+        // C#: MAVLinkInterface.cs:6516, `dateint / 1000` in integer arithmetic: whole
         // milliseconds, which AddMilliseconds keeps whole. Below 9,999,999 hours it fits.
         let millis = i64::try_from(micros / 1000).ok()?;
         Some(Self {
@@ -85,7 +85,7 @@ impl DateTime {
         })
     }
 
-    /// Now, what a live link stamps each packet with (`MAVLinkInterface.cs:4721`). UTC; see the
+    /// Now, what a live link stamps each packet with (`MAVLinkInterface.cs:4710`). UTC; see the
     /// module documentation.
     #[must_use]
     pub fn now() -> Self {
@@ -140,7 +140,7 @@ mod tests {
             UNIX_EPOCH_TICKS + 1_767_225_607_123 * TICKS_PER_MILLISECOND
         );
         assert_eq!(time.second(), 7);
-        // The C# ignores a stamp of 9,999,999 hours or more (MAVLinkInterface.cs:6553).
+        // The C# ignores a stamp of 9,999,999 hours or more (MAVLinkInterface.cs:6514).
         assert_eq!(DateTime::from_tlog_micros(9_999_999 * 3_600_000_000), None);
         assert!(DateTime::from_tlog_micros(9_999_998 * 3_600_000_000).is_some());
     }

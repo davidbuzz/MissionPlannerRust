@@ -208,7 +208,7 @@ fn preview(dialog: &Dialog) -> (Vec<MissionItem>, Vec<LatLon>) {
 
 /// `surveyGridToolStripMenuItem_Click`: `GridPlugin.but_Click`, which shows the dialog when the
 /// drawn polygon has more than two points.
-/// `// C#: GCSViews/FlightPlanner.cs:6755-6760; Grid/GridPlugin.cs:37-61`
+/// `// C#: GCSViews/FlightPlanner.cs:6752-6757; Grid/GridPlugin.cs:37-61`
 pub fn open(this: &mut MissionPlanner, window: &mut Window, cx: &mut Context<MissionPlanner>) {
     let polygon = this.plan.polygon().to_vec();
     if polygon.len() <= 2 {

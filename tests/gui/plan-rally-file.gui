@@ -3,7 +3,7 @@
 #
 # setRallyPointToolStripMenuItem_Click asks "Altitude", offering Default Alt, and puts a
 # GMapMarkerRallyPt - the purple pin - at the click, or says "Invalid Alt" (GCSViews/
-# FlightPlanner.cs:6635-6661). Save Rally to File writes "RALLY lat lng alt 0 0 0" a marker
+# FlightPlanner.cs:6632-6658). Save Rally to File writes "RALLY lat lng alt 0 0 0" a marker
 # (:6020-6063). Clear Rally Points sets RALLY_TOTAL to 0 - with no vehicle there is none to set,
 # and the C# catches that - and clears the markers (:2096-2110). Load Rally from File reads each
 # row through float.Parse and a truncation to 1e-7 degrees (:4414-4464). The .ral laid out

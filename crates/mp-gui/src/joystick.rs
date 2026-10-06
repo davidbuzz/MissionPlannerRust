@@ -302,7 +302,7 @@ impl Wire {
             let message = match frame.manual {
                 // `rc.target = comPort.MAV.compid`: the C#'s, which a vehicle whose system id is
                 // not its component id does not take as its own.
-                // `// C#: MainV2.cs:2409-2435`
+                // `// C#: MainV2.cs:2416-2442`
                 Some(manual) => mp_link::commands::manual_control(
                     vehicle.compid,
                     manual.x,
@@ -457,7 +457,7 @@ pub enum Host {
     /// `// C#: GCSViews/InitialSetup.cs:278-281`
     Setup,
     /// Planner's Joystick Setup button: `new JoystickSetup().ShowUserControl()`.
-    /// `// C#: GCSViews/ConfigurationView/ConfigPlanner.cs:552-555`
+    /// `// C#: GCSViews/ConfigurationView/ConfigPlanner.cs:553-556`
     Planner,
 }
 
@@ -1084,7 +1084,7 @@ impl Sticks {
     /// The flight screen's `but_disablejoystick_Click`: `enabled = false` and `clearRCOverride` -
     /// the release, which the reader sends and repeats - and, unlike the page's Disable, the
     /// joystick kept, acquired and no longer flying, as `MainV2.joystick` keeps it.
-    /// `// C#: GCSViews/FlightData.cs:1211-1221; ExtLibs/ArduPilot/Joystick/JoystickBase.cs:294-364`
+    /// `// C#: GCSViews/FlightData.cs:1213-1223; ExtLibs/ArduPilot/Joystick/JoystickBase.cs:294-364`
     pub fn disable_joystick(&mut self) {
         if !self.is_enabled() {
             return;
@@ -2031,7 +2031,7 @@ pub fn perform(
             );
         }
         // `setDigicamControl(true)`, called outside the `try`: a timeout says nothing, and a
-        // refusal sends `DIGICAM_CONTROL`. `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:4558-4570`
+        // refusal sends `DIGICAM_CONTROL`. `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:4547-4559`
         ButtonFunction::DigicamControl => {
             telemetry.command(
                 target,

@@ -221,7 +221,7 @@ const RTL: usize = 3;
 
 /// `(float)CurrentState.fromDistDisplayUnit(input)`: `input / multiplierdist` in doubles, as a
 /// float.
-/// `// C#: ExtLibs/ArduPilot/CurrentState.cs:4375-4378`
+/// `// C#: ExtLibs/ArduPilot/CurrentState.cs:4378-4381`
 #[must_use]
 #[allow(clippy::cast_possible_truncation)] // `(float)`
 pub fn from_dist_display_unit(input: f64, units: DisplayUnits) -> f32 {

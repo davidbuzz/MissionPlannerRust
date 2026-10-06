@@ -1,7 +1,7 @@
 # The HUD's cell voltage: Battery Cell Voltage on the HUD's menu asks "Cell Count", starting at 4,
 # and the HUD then draws "Cell" and the pack's voltage over the count on the lower text line, the
 # pack's own line moved up one; clicked again it turns the line off without asking. A count of 0
-# draws nothing. `GCSViews/FlightData.cs:6115-6140, ExtLibs/Controls/HUD.cs:2896-2923`
+# draws nothing. `GCSViews/FlightData.cs:6229-6254, ExtLibs/Controls/HUD.cs:2898-2925`
 #
 # Depends on fly.rs enabling the menu entry (fly-hud-batterycells) and porting its InputBox, which
 # another change carries; until then the menu entry is dimmed and this fails at the prompt. The

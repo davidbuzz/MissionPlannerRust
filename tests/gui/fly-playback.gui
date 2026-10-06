@@ -4,7 +4,7 @@
 # reading "Pause" while it plays and "Play" when not); the end of the file stops it; and the track
 # bar moves the file to its percentage (tracklog_Scroll), a press beside the thumb moving it by its
 # LargeChange, 5, with lbl_logpercent saying where the file is.
-# `GCSViews/FlightData.cs:556-594, 1674-1678, 3474-3568, 5361-5378, 5543-5577, 5630-5660,
+# `GCSViews/FlightData.cs:558-596, 1676-1680, 3588-3682, 5475-5492, 5657-5691, 5744-5774,
 # GCSViews/FlightData.Designer.cs:2193-2320`
 #
 # Plays the recorded copter flight - 36 seconds of it - so it needs no vehicle. Run from the

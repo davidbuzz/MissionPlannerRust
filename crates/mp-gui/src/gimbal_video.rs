@@ -22,7 +22,7 @@
 //! keyboard and mouse steering the gimbal - shown full sized in the map's place with the map as a
 //! mini map, as a mini video over the map, or popped out in a window of its own; its settings
 //! form, `GimbalControlSettingsForm`; and its Video Stream form, `VideoStreamSelector`.
-//! `// C#: GCSViews/FlightData.cs:6534-6712; Controls/GimbalVideoControl.cs:1-797;
+//! `// C#: GCSViews/FlightData.cs:6648-6826; Controls/GimbalVideoControl.cs:1-797;
 //! Controls/GimbalVideoControl.Designer.cs; Controls/GimbalControlSettingsForm.cs:1-433;
 //! Controls/VideoStreamSelector.cs:1-55; ExtLibs/Controls/KeyBindingButton.cs;
 //! ExtLibs/Controls/ClickBindingButton.cs`
@@ -1135,7 +1135,7 @@ pub enum MenuItem {
 impl MenuItem {
     /// The menu in the Designer's order, a separator before the entries marked, then the three
     /// `FlightData` adds. `// C#: Controls/GimbalVideoControl.Designer.cs:61-74;
-    /// GCSViews/FlightData.cs:6581-6583`
+    /// GCSViews/FlightData.cs:6695-6697`
     pub const ALL: [(Self, bool); 13] = [
         (Self::VideoStream, false),
         (Self::Retract, true),
@@ -1152,7 +1152,7 @@ impl MenuItem {
         (Self::Close, false),
     ];
 
-    /// Its text. `// C#: Controls/GimbalVideoControl.Designer.cs:76-133; GCSViews/FlightData.cs:6534-6536`
+    /// Its text. `// C#: Controls/GimbalVideoControl.Designer.cs:76-133; GCSViews/FlightData.cs:6648-6650`
     #[must_use]
     pub const fn text(self) -> &'static str {
         match self {
@@ -1555,7 +1555,7 @@ impl Shown {
 
 /// `splitContainer1_Panel2_Resize`'s mini video: 30% of the panel each way (truncated), the
 /// smaller fitted to the picture's shape, at the bottom right left of the zoom bar.
-/// `// C#: GCSViews/FlightData.cs:6597-6610`
+/// `// C#: GCSViews/FlightData.cs:6711-6724`
 #[must_use]
 #[allow(clippy::cast_possible_truncation)] // the C#'s `(int)`
 pub fn mini_video_box(panel: (i32, i32), image: (u32, u32), zoom_bar: i32) -> (i32, i32, i32, i32) {
@@ -1570,7 +1570,7 @@ pub fn mini_video_box(panel: (i32, i32), image: (u32, u32), zoom_bar: i32) -> (i
 }
 
 /// `splitContainer1_Panel2_Resize`'s mini map: 30% each way at the bottom right.
-/// `// C#: GCSViews/FlightData.cs:6611-6619`
+/// `// C#: GCSViews/FlightData.cs:6725-6733`
 #[must_use]
 #[allow(clippy::cast_possible_truncation)] // the C#'s `(int)`
 pub fn mini_map_box(panel: (i32, i32)) -> (i32, i32, i32, i32) {
@@ -1609,7 +1609,7 @@ impl GimbalVideo {
     }
 
     /// `gimbalVideoShowMiniMap.CheckedChanged`: the map shown with it, and Swap with map.
-    /// `// C#: GCSViews/FlightData.cs:6547-6551`
+    /// `// C#: GCSViews/FlightData.cs:6661-6665`
     pub fn set_show_mini_map(&mut self, checked: bool) {
         if self.show_mini_map == checked {
             return;
@@ -1621,7 +1621,7 @@ impl GimbalVideo {
 
     /// `gimbalVideoFullSizedToolStripMenuItem_Click`, the control already made: the video
     /// filling the panel, the map the mini map where Mini map is checked, a pop-out closed.
-    /// `// C#: GCSViews/FlightData.cs:6624-6649`
+    /// `// C#: GCSViews/FlightData.cs:6738-6763`
     pub fn full_sized(&mut self) {
         if self.placed.is_none() {
             return;
@@ -1634,7 +1634,7 @@ impl GimbalVideo {
     }
 
     /// `gimbalVideoMiniToolStripMenuItem_Click`: the map filling the panel, the video the mini
-    /// video, a pop-out closed. `// C#: GCSViews/FlightData.cs:6651-6676`
+    /// video, a pop-out closed. `// C#: GCSViews/FlightData.cs:6765-6790`
     pub fn mini(&mut self) {
         self.map_fill = true;
         self.map_visible = true;
@@ -1647,7 +1647,7 @@ impl GimbalVideo {
     }
 
     /// `gimbalVideoPopOutToolStripMenuItem_Click`: the map full sized and the video in a new
-    /// form - any form it was in closed first. `// C#: GCSViews/FlightData.cs:6678-6712`
+    /// form - any form it was in closed first. `// C#: GCSViews/FlightData.cs:6792-6826`
     pub fn pop_out(&mut self) {
         self.map_fill = true;
         self.map_visible = true;
@@ -1662,7 +1662,7 @@ impl GimbalVideo {
     }
 
     /// `gimbalVideoSwapPosition.Click`: Full Sized from the mini video, Mini otherwise.
-    /// `// C#: GCSViews/FlightData.cs:6552-6562`
+    /// `// C#: GCSViews/FlightData.cs:6666-6676`
     pub fn swap(&mut self) {
         let mini = matches!(self.placed, Some((Parent::Panel { fill: false }, _)));
         if mini {
@@ -1673,7 +1673,7 @@ impl GimbalVideo {
     }
 
     /// `gimbalVideoClose.Click`: Mini, hidden, `Stop`, `Dispose` - so the next item makes a new
-    /// control. `// C#: GCSViews/FlightData.cs:6563-6569`
+    /// control. `// C#: GCSViews/FlightData.cs:6677-6683`
     pub fn close(&mut self) {
         self.mini();
         self.dispose();
@@ -1899,7 +1899,7 @@ impl MissionPlanner {
     /// `gimbalVideoControl`'s getter: the control made if there is none - its preferences read,
     /// its yaw lock their default, GStreamer looked for, the auto-connect timer started - and the
     /// three menu items shown on it, Mini map checked.
-    /// `// C#: GCSViews/FlightData.cs:6539-6587; Controls/GimbalVideoControl.cs:99-209`
+    /// `// C#: GCSViews/FlightData.cs:6653-6701; Controls/GimbalVideoControl.cs:99-209`
     fn gimbal_video_control(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         if self.fly_data.gimbal_video.control.is_some() {
             return;
@@ -1968,19 +1968,19 @@ impl MissionPlanner {
         video.set_show_mini_map(true);
     }
 
-    /// Full Sized. `// C#: GCSViews/FlightData.cs:6624-6649`
+    /// Full Sized. `// C#: GCSViews/FlightData.cs:6738-6763`
     pub fn gimbal_video_full_sized(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         self.gimbal_video_control(window, cx);
         self.fly_data.gimbal_video.full_sized();
     }
 
-    /// Mini. `// C#: GCSViews/FlightData.cs:6651-6676`
+    /// Mini. `// C#: GCSViews/FlightData.cs:6765-6790`
     pub fn gimbal_video_mini(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         self.gimbal_video_control(window, cx);
         self.fly_data.gimbal_video.mini();
     }
 
-    /// Pop Out, and the Payload tab's Video Control. `// C#: GCSViews/FlightData.cs:6678-6712`
+    /// Pop Out, and the Payload tab's Video Control. `// C#: GCSViews/FlightData.cs:6792-6826`
     pub fn gimbal_video_pop_out(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         self.gimbal_video_control(window, cx);
         self.fly_data.gimbal_video.pop_out();
@@ -2071,7 +2071,7 @@ impl MissionPlanner {
     }
 
     /// A menu item of the control's. `// C#: Controls/GimbalVideoControl.cs:311-333, 713-763;
-    /// GCSViews/FlightData.cs:6547-6569`
+    /// GCSViews/FlightData.cs:6661-6683`
     pub fn gimbal_menu(&mut self, item: MenuItem, window: &mut Window, cx: &mut Context<Self>) {
         let video = &mut self.fly_data.gimbal_video;
         if let Some(control) = video.control.as_mut() {
@@ -2241,7 +2241,7 @@ fn repaint_task(cx: &mut Context<MissionPlanner>) -> gpui::Task<()> {
 
 /// The map's panel with the gimbal video in it: the map as drawn, the mini video over it, or the
 /// video filling it with the mini map over that - and the pop-out window, the menu, the forms and
-/// the mouse marker. `// C#: GCSViews/FlightData.cs:6589-6712`
+/// the mouse marker. `// C#: GCSViews/FlightData.cs:6703-6826`
 pub fn map_place(
     this: &MissionPlanner,
     map: AnyElement,
@@ -2851,7 +2851,7 @@ fn row_button(
 /// `VideoBoxContextMenu`, where the right button came up: the Designer's items with
 /// `UITimer_Tick`'s enabling of the capture items, and the three `FlightData` adds as their
 /// `Visible` has them. `// C#: Controls/GimbalVideoControl.Designer.cs:61-133;
-/// Controls/GimbalVideoControl.cs:699-711; GCSViews/FlightData.cs:6534-6583`
+/// Controls/GimbalVideoControl.cs:699-711; GCSViews/FlightData.cs:6648-6697`
 fn context_menu(
     control: &GimbalVideoControl,
     this: &MissionPlanner,
@@ -3018,7 +3018,7 @@ fn form_frame(
 
 /// The pop-out: `new Form { Text = "Gimbal Control", Size = (600, 400), CenterParent }` with the
 /// control filling it, shown owned by the main window. Its close box closes it, and the control
-/// with it. `// C#: GCSViews/FlightData.cs:6692-6711`
+/// with it. `// C#: GCSViews/FlightData.cs:6806-6825`
 fn pop_out_window(
     control: &GimbalVideoControl,
     this: &MissionPlanner,
@@ -3875,6 +3875,7 @@ mod tests {
                 q: [1.0, 0.0, 0.0, 0.0],
                 hfov: 60.0,
                 vfov: 40.0,
+                camera_device_id: 0,
             }),
             &mut streams,
         );

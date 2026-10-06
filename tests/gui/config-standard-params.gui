@@ -4,7 +4,7 @@
 # The claim: SoftwareConfig adds the page only when the display view's displayStandardParams is on
 # (SoftwareConfig.cs:196-199). Neither preset turns it on (DisplayView.cs:344, 425), so on SITL's
 # copter in the Advanced view - Mission Planner's default - the list goes from Extended Tuning to
-# Onboard OSD without it. The Planner page's Layout box (ConfigPlanner.cs:1018-1033) chooses a
+# Onboard OSD without it. The Planner page's Layout box (ConfigPlanner.cs:1019-1034) chooses a
 # Custom view, read from custom.displayview (DisplayView.cs:442-455; here beside config.xml), which
 # turns it on; the CONFIG screen is made anew when its tab is clicked (MainSwitcher.cs:112-153), and
 # its list then has the page. Showing it binds a control per Standard parameter with a display

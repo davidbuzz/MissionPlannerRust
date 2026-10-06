@@ -2,7 +2,7 @@
 # two vehicles on the link, picking the one whose GPS has no fix - GLOBAL_POSITION_INT at
 # latitude 0 - used to put its marker on the equator and refit the map to Brisbane and the
 # equator at once, half the world. Mission Planner draws no marker and no route point at such a
-# position (FlightData.cs:962-968, 3794) and no waypoint, leg or home there (WPOverlay.cs:44,
+# position (FlightData.cs:964-970, 3908) and no waypoint, leg or home there (WPOverlay.cs:44,
 # 134, 231); crates/mp-gui/src/mapview.rs is_fixed applies that to every layer and to the fit.
 #
 # The claim: against tests/gui/zero-vehicles.py - system 1 at Brisbane with a creeping route and

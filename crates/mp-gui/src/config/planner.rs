@@ -26,7 +26,7 @@
 //! each handler puts its key in that dictionary as its control changes, under the C#'s own name,
 //! and the file is written at the next `SaveConfig` - on the FLIGHT DATA and FLIGHT PLAN buttons,
 //! after Connect and on closing - with every other key in it. The page saves nothing itself; the
-//! C# has no save button either (`MainV2.cs:1107, 1309-1323, 1846, 2171`).
+//! C# has no save button either (`MainV2.cs:1109, 1311-1325, 1853, 2178`).
 //!
 //! What acts at once, as it does in the C#:
 //!
@@ -49,11 +49,11 @@
 //!   the status line, where the C# has a message box (the owner's ruling of 2026-09-25). Enable
 //!   HUD Overlay sets the HUD's `hudon`, saved as `CHK_hudshow`: unticked, the HUD draws the
 //!   camera's picture alone while there is one, and everything as before while there is none
-//!   (`ConfigPlanner.cs:374-378`, `HUD.cs:1988-2009`).
+//!   (`ConfigPlanner.cs:375-379`, `HUD.cs:1988-2009`).
 //!
 //! Dimmed, each naming what it stands for here, are the controls whose handler drives something
 //! this application does not have: GDI+ (gpui draws the HUD); the UI language (English only); the
-//! theme and Custom (the dark palette is ratified); OSD Color (its handler's body is commented out, `ConfigPlanner.cs:432-439`);
+//! theme and Custom (the dark palette is ratified); OSD Color (its handler's body is commented out, `ConfigPlanner.cs:433-440`);
 //! Start/Stop Vario; Password Protect Config; ADSB (no ADSB server client); OptOut Anon Stats (no
 //! analytics); Beta Updates (no updater); Mavlink Message Debug; Testing Screen.
 //! `CHK_AutoParamCommit` is not drawn: `Activate` hides it outside a display view with the
@@ -62,7 +62,7 @@
 //! not have.
 //!
 //! Layout picks the display view (`display_view.rs`): Basic, Advanced or Custom, each saved as
-//! `displayview` (`ConfigPlanner.cs:1018-1033`). `Activate` selects the view's name, and, the
+//! `displayview` (`ConfigPlanner.cs:1019-1034`). `Activate` selects the view's name, and, the
 //! handler checking no `startup`, a selection that changes runs it: the preset of that name is
 //! made the view again (`:55-73`). The page object here lives as long as the application, where
 //! the C#'s is made with its screen, so that happens at its first `Activate`, and after only when
@@ -83,7 +83,7 @@
 //! the speech templates - are written and kept; the screens that read them in the C# do not read
 //! them here yet. Nor does the flight screen show its values in the units this page sets
 //! (`fly.rs` holds `multiplieralt` at 1), nor does the link take the GCS id or these rates when
-//! it connects: it asks for every stream at `LinkConfig::stream_rate_hz` (`MainV2.cs:981-1002`).
+//! it connects: it asks for every stream at `LinkConfig::stream_rate_hz` (`MainV2.cs:983-1004`).
 
 // This module is internal to the binary; `pub` here documents intent rather than exporting API.
 #![allow(unreachable_pub)]
@@ -144,11 +144,11 @@ fn get_int(settings: &Persisted, key: &str, default: i32) -> i32 {
 /// Every `Settings.Instance` key `ConfigPlanner` reads or writes, by the C#'s name, each published
 /// as `config.planner.<key>`. Keys the C# spells two ways (`GMapMarkerBase_Length` read,
 /// `GMapMarkerBase_length` written) are both here, as the C# has both.
-/// `// C#: GCSViews/ConfigurationView/ConfigPlanner.cs:47-1166`
+/// `// C#: GCSViews/ConfigurationView/ConfigPlanner.cs:47-1167`
 const KEYS: &[&str] = &[
-    // C#: ConfigPlanner.cs:95-102, 413
+    // C#: ConfigPlanner.cs:96-103, 414
     "severity",
-    // C#: ConfigPlanner.cs:148-166
+    // C#: ConfigPlanner.cs:149-167
     "speechenable",
     "speechwaypointenabled",
     "speechmodeenabled",
@@ -168,32 +168,32 @@ const KEYS: &[&str] = &[
     "Params_BG",
     "SlowMachine",
     "speech_armed_only",
-    // C#: ConfigPlanner.cs:169, 690
+    // C#: ConfigPlanner.cs:170, 691
     "NUM_tracklength",
-    // C#: ConfigPlanner.cs:172-176
+    // C#: ConfigPlanner.cs:173-177
     "loadwpsonconnect",
     "CHK_resetapmonconnect",
     "CHK_rtsresetesp32",
-    // C#: ConfigPlanner.cs:573-640, by each combo's `Name`
+    // C#: ConfigPlanner.cs:574-641, by each combo's `Name`
     "CMB_rateattitude",
     "CMB_rateposition",
     "CMB_ratestatus",
     "CMB_raterc",
     "CMB_ratesensors",
-    // C#: ConfigPlanner.cs:184-189
+    // C#: ConfigPlanner.cs:185-190
     "analyticsoptout",
     "CHK_GDIPlus",
     "CHK_maprotation",
     "CHK_disttohomeflightdata",
-    // C#: ConfigPlanner.cs:194
+    // C#: ConfigPlanner.cs:195
     "hudcolor",
-    // C#: ConfigPlanner.cs:208-213
+    // C#: ConfigPlanner.cs:209-214
     "distunits",
     "speedunits",
     "altunits",
-    // `Settings.LogDir`. C#: ConfigPlanner.cs:235, 792; ExtLibs/Utilities/Settings.cs:127-140
+    // `Settings.LogDir`. C#: ConfigPlanner.cs:236, 793; ExtLibs/Utilities/Settings.cs:127-140
     "logdirectory",
-    // C#: ConfigPlanner.cs:238-244, 1079-1159
+    // C#: ConfigPlanner.cs:239-245, 1080-1160
     "GMapMarkerBase_DisplayCOG",
     "GMapMarkerBase_DisplayHeading",
     "GMapMarkerBase_DisplayNavBearing",
@@ -204,11 +204,11 @@ const KEYS: &[&str] = &[
     "GMapMarkerBase_Length",
     "GMapMarkerBase_length",
     "GMapMarkerBase_InactiveDisplayStyle",
-    // C#: ConfigPlanner.cs:249, 1165
+    // C#: ConfigPlanner.cs:250, 1166
     "mapCache",
-    // C#: ConfigPlanner.cs:1032; MainV2.cs:363
+    // C#: ConfigPlanner.cs:1033; MainV2.cs:363
     "displayview",
-    // The speech templates and levels. C#: ConfigPlanner.cs:442-549, 660-686, 811-916
+    // The speech templates and levels. C#: ConfigPlanner.cs:443-550, 661-687, 812-917
     "speechwaypoint",
     "speechmode",
     "speechcustom",
@@ -223,14 +223,14 @@ const KEYS: &[&str] = &[
     "speechlowgroundspeedtrigger",
     "speechlowairspeed",
     "speechlowairspeedtrigger",
-    // C#: ConfigPlanner.cs:1060; MainV2.cs:683
+    // C#: ConfigPlanner.cs:1061; MainV2.cs:683
     "gcsid",
     // `ThemeManager.thmColor.strThemeName`, which CMB_theme shows. C#: Utilities/ThemeManager.cs:287
     "theme",
-    // C#: ConfigPlanner.cs:215-232, 276-278
+    // C#: ConfigPlanner.cs:216-233, 277-279
     "video_device",
     "video_options",
-    // `hudon`. C#: ConfigPlanner.cs:374-378; MainV2.cs:938-939
+    // `hudon`. C#: ConfigPlanner.cs:375-379; MainV2.cs:940-941
     "CHK_hudshow",
 ];
 
@@ -326,7 +326,7 @@ const fn check(
 }
 
 /// The speech boxes Enable Speech shows and hides.
-/// `// C#: GCSViews/ConfigurationView/ConfigPlanner.cs:387-408`
+/// `// C#: GCSViews/ConfigurationView/ConfigPlanner.cs:388-409`
 pub const SPEECH_BOXES: [&str; 8] = [
     "CHK_speechArmedOnly",
     "CHK_speechwaypoint",
@@ -340,14 +340,14 @@ pub const SPEECH_BOXES: [&str; 8] = [
 
 /// Every check box the page draws, with the key `Activate` sets it from.
 /// `// C#: GCSViews/ConfigurationView/ConfigPlanner.resx; ConfigPlanner.Designer.cs:37-892;
-/// ConfigPlanner.cs:148-189, 238-243`
+/// ConfigPlanner.cs:149-190, 239-244`
 pub const CHECKS: &[CheckSpec] = &[
     check(
         "CHK_hudshow",
         "Enable HUD Overlay",
         (520, 10, 133, 18),
         // Written by the handler; read by `MainV2` into `hudon`, which `Activate` shows while a
-        // capture runs. C#: ConfigPlanner.cs:136-145, 374-378; MainV2.cs:938-939
+        // capture runs. C#: ConfigPlanner.cs:137-146, 375-379; MainV2.cs:940-941
         Some("CHK_hudshow"),
         true,
         None,
@@ -685,10 +685,10 @@ const RATES_SENSORS: &[&str] = &[
 ];
 
 /// Every combo box the page draws.
-/// `// C#: GCSViews/ConfigurationView/ConfigPlanner.resx; ConfigPlanner.cs:46, 81-88, 117-118, 246`
+/// `// C#: GCSViews/ConfigurationView/ConfigPlanner.resx; ConfigPlanner.cs:46, 81-88, 118-119, 247`
 pub const COMBOS: &[ComboSpec] = &[
     // Bound at run time, to the devices and to a device's formats: [`Video`]'s lists.
-    // `// C#: GCSViews/ConfigurationView/ConfigPlanner.cs:352, 741-750`
+    // `// C#: GCSViews/ConfigurationView/ConfigPlanner.cs:353, 742-751`
     combo("CMB_videosources", (107, 8, 245, 21), &[], None),
     combo("CMB_videoresolutions", (107, 35, 408, 21), &[], None),
     combo(
@@ -831,7 +831,7 @@ const fn stream(id: MavDataStream) -> u8 {
 }
 
 /// The five rates, in `cs`'s order: attitude, position, status, RC, sensors.
-/// `// C#: GCSViews/ConfigurationView/ConfigPlanner.cs:573-640; ExtLibs/ArduPilot/CurrentState.cs:199-206`
+/// `// C#: GCSViews/ConfigurationView/ConfigPlanner.cs:574-641; ExtLibs/ArduPilot/CurrentState.cs:199-206`
 pub const RATES: [Rate; 5] = [
     Rate {
         combo: "CMB_rateattitude",
@@ -938,7 +938,7 @@ const fn ask(
 const SAY: &str = "What do you want it to say?";
 
 /// What each speech box asks when it is ticked, in order; a Cancel ends the handler.
-/// `// C#: GCSViews/ConfigurationView/ConfigPlanner.cs:442-458, 460-476, 478-494, 518-550,
+/// `// C#: GCSViews/ConfigurationView/ConfigPlanner.cs:443-459, 461-477, 479-495, 519-551,
 /// 660-686, 811-833, 877-916, 1109-1134`
 fn steps(name: &str) -> &'static [Step] {
     const WAYPOINT: &[Step] = &[ask(
@@ -1060,7 +1060,7 @@ pub struct Message {
 
 /// `Program.handleException`'s box, which an exception out of a handler reaches: its caption, and
 /// the text before the exception.
-/// `// C#: Program.cs:791-793`
+/// `// C#: Program.cs:793-795`
 const UNHANDLED: (&str, &str) = ("Send Error", "An error has occurred\n");
 
 // -------------------------------------------------------------------------------------------------
@@ -1156,7 +1156,7 @@ pub enum Effect {
     /// `requestDatastream(stream, hz)`.
     Stream(u8, i32),
     /// `loadwpsonconnect`: whether the mission is read when a vehicle connects.
-    /// `// C#: MainV2.cs:1750-1759`
+    /// `// C#: MainV2.cs:1752-1761`
     ReadMissionOnConnect(bool),
     /// `GMaps.Instance.Mode` changed: the map's tile store is made again.
     MapAccess,
@@ -1166,7 +1166,7 @@ pub enum Effect {
     BrowseLogDirectory,
     /// `BUT_videostart`: `new Capture(index, media)` and `Start()` for the device and format
     /// chosen; [`run_video`] does it and, when it starts, writes the two settings.
-    /// `// C#: GCSViews/ConfigurationView/ConfigPlanner.cs:261-285`
+    /// `// C#: GCSViews/ConfigurationView/ConfigPlanner.cs:262-286`
     VideoStart {
         /// `CMB_videosources.SelectedIndex`'s device.
         device: mp_video::Device,
@@ -1174,7 +1174,7 @@ pub enum Effect {
         mode: mp_video::Mode,
     },
     /// `BUT_videostop`: `MainV2.cam.Dispose()`, and `MainV2.cam = null`.
-    /// `// C#: GCSViews/ConfigurationView/ConfigPlanner.cs:287-294`
+    /// `// C#: GCSViews/ConfigurationView/ConfigPlanner.cs:288-295`
     VideoStop,
     /// Words for the status line: "Camera Fail: " and why, where the C# has a message box.
     Status(String),
@@ -1183,7 +1183,7 @@ pub enum Effect {
 /// The video controls: `CMB_videosources` and `CMB_videoresolutions` with what they are bound
 /// to, and whether a capture runs, which is `MainV2.cam` being set and `BUT_videostart` disabled.
 /// The capture itself is the application's (`MissionPlanner::video`), as `MainV2.cam` is.
-/// `// C#: GCSViews/ConfigurationView/ConfigPlanner.cs:136-145, 215-232, 261-360, 741-750`
+/// `// C#: GCSViews/ConfigurationView/ConfigPlanner.cs:137-146, 216-233, 262-361, 742-751`
 pub struct Video {
     /// Where devices come from: V4L2 on Linux (`mp_video::platform_source`). None elsewhere yet,
     /// where the lists stay empty as the C#'s do under mono (`MainV2.MONO`).
@@ -1309,14 +1309,14 @@ pub struct Planner {
     /// `FlightData.myhud.hudon`: whether the HUD's instruments are drawn over the camera's
     /// picture. The HUD's property, held here as `MAVLinkInterface.gcssysid` is: `MainV2` sets it
     /// from `CHK_hudshow` before any page shows, and Enable HUD Overlay sets it.
-    /// `// C#: ExtLibs/Controls/HUD.cs:211-212, 274; MainV2.cs:938-939; ConfigPlanner.cs:374-378`
+    /// `// C#: ExtLibs/Controls/HUD.cs:211-212, 274; MainV2.cs:940-941; ConfigPlanner.cs:375-379`
     hudon: bool,
 }
 
 impl Planner {
     /// What `MainV2` sets up from the settings before any page shows: `ChangeUnits`, the rates'
     /// backups (`ResetInternals` copies them into `cs`), `gcssysid`, and the HUD's `hudon`.
-    /// `// C#: MainV2.cs:683, 836, 938-939, 981-1002; ExtLibs/ArduPilot/CurrentState.cs:199-206,
+    /// `// C#: MainV2.cs:683, 838, 940-941, 983-1004; ExtLibs/ArduPilot/CurrentState.cs:199-206,
     /// 4385-4397`
     #[must_use]
     pub fn new(settings: &Persisted) -> Self {
@@ -1357,7 +1357,7 @@ impl Planner {
             // `hudon = bool.Parse(Settings.Instance["CHK_hudshow"])` when the key is there, else
             // the HUD's own true. A value `bool.Parse` refuses throws out of `MainV2`'s
             // constructor; here it leaves the HUD's true.
-            // C#: MainV2.cs:938-939; ExtLibs/Controls/HUD.cs:268-274
+            // C#: MainV2.cs:940-941; ExtLibs/Controls/HUD.cs:268-274
             hudon: get_bool(settings, "CHK_hudshow", true),
         };
         planner.change_units(settings);
@@ -1386,7 +1386,7 @@ impl Planner {
 
     /// Whether a box is drawn: the speech boxes only while Enable Speech is ticked. Their `.resx`
     /// `Visible` is false, and Enable Speech's handler sets it to its own state.
-    /// `// C#: GCSViews/ConfigurationView/ConfigPlanner.cs:380-409`
+    /// `// C#: GCSViews/ConfigurationView/ConfigPlanner.cs:381-410`
     #[must_use]
     pub fn shown(&self, name: &str) -> bool {
         !SPEECH_BOXES.contains(&name) || self.checked("CHK_enablespeech")
@@ -1454,7 +1454,7 @@ impl Planner {
     /// `CMB_videosources_Click`: the device list bound again, which selects its first device
     /// and so runs `SelectedIndexChanged` for it. Under mono the C# returns at once; with no
     /// source here the list stays as it was.
-    /// `// C#: GCSViews/ConfigurationView/ConfigPlanner.cs:741-750`
+    /// `// C#: GCSViews/ConfigurationView/ConfigPlanner.cs:742-751`
     fn video_click(&mut self, settings: &Persisted) {
         let Some(source) = self.video.source.clone() else {
             return;
@@ -1480,7 +1480,7 @@ impl Planner {
     ///
     /// Divergence: V4L2 where the C# has DirectShow's `IAMStreamConfig`, and only the MJPEG and
     /// YUYV formats are listed - the two `mp_video` decodes.
-    /// `// C#: GCSViews/ConfigurationView/ConfigPlanner.cs:296-360, 968-989`
+    /// `// C#: GCSViews/ConfigurationView/ConfigPlanner.cs:297-361, 969-990`
     fn video_device_changed(&mut self, settings: &Persisted) {
         let (Some(source), Some(device)) =
             (self.video.source.clone(), self.video.device().cloned())
@@ -1582,7 +1582,7 @@ impl Planner {
     }
 
     /// `MainV2.ChangeUnits`, from the settings as they are now.
-    /// `// C#: MainV2.cs:4247-4330`
+    /// `// C#: MainV2.cs:4254-4337`
     fn change_units(&mut self, settings: &Persisted) {
         self.units = self.units.change_units(
             settings.get("distunits"),
@@ -1603,7 +1603,7 @@ impl Planner {
     }
 
     /// `SetCheckboxFromConfig`: the key's value, when it is set.
-    /// `// C#: GCSViews/ConfigurationView/ConfigPlanner.cs:767-771`
+    /// `// C#: GCSViews/ConfigurationView/ConfigPlanner.cs:768-772`
     fn set_from_config(&mut self, name: &'static str, settings: &Persisted) {
         let Some(key) = CHECKS
             .iter()
@@ -1624,7 +1624,7 @@ impl Planner {
     /// `GMapMarkerBase_Length` and written as `GMapMarkerBase_length`, so it comes back as 500
     /// and is written as 500 on every activation. The Log Path box's text is set to `LogDir`,
     /// and its `TextChanged` writes the directory back when it exists.
-    /// `// C#: GCSViews/ConfigurationView/ConfigPlanner.cs:26-51, 55-256, 787-794, 1079-1140`
+    /// `// C#: GCSViews/ConfigurationView/ConfigPlanner.cs:26-51, 55-257, 788-795, 1080-1141`
     pub fn activate(&mut self, settings: &mut Persisted, default_log_dir: Option<&Path>) {
         self.active = true;
         self.open = None;
@@ -1644,7 +1644,7 @@ impl Planner {
             self.layout_hidden = true;
         }
         // C#: ConfigPlanner.cs:81 - `KnownColor`'s names; `hudcolor` selects one.
-        // C#: ConfigPlanner.cs:194-205
+        // C#: ConfigPlanner.cs:195-206
         self.dim_text.insert(
             "CMB_osdcolor",
             settings.get("hudcolor").unwrap_or("").to_owned(),
@@ -1653,7 +1653,7 @@ impl Planner {
         for name in ["CMB_distunits", "CMB_speedunits", "CMB_altunits"] {
             self.selected.insert(name, Some(0));
         }
-        // C#: ConfigPlanner.cs:88-90; MainV2.cs:712-717 - the theme loaded at start-up.
+        // C#: ConfigPlanner.cs:88-90; MainV2.cs:714-719 - the theme loaded at start-up.
         self.dim_text.insert(
             "CMB_theme",
             settings
@@ -1661,12 +1661,12 @@ impl Planner {
                 .unwrap_or("BurntKermit.mpsystheme")
                 .to_owned(),
         );
-        // C#: ConfigPlanner.cs:92
+        // C#: ConfigPlanner.cs:93
         let gcsid = f64::from(self.gcssysid);
         if self.numbers[1].set(gcsid) {
             self.number_changed(1, settings);
         }
-        // C#: ConfigPlanner.cs:95-103
+        // C#: ConfigPlanner.cs:96-104
         if settings.get("severity").is_some() {
             let index = usize::try_from(get_int(settings, "severity", 0)).ok();
             self.selected.insert(
@@ -1677,9 +1677,9 @@ impl Planner {
             self.selected.insert("CMB_severity", Some(4));
             settings.set("severity", "4");
         }
-        // C#: ConfigPlanner.cs:106-134 - the UI culture's language; English only here.
+        // C#: ConfigPlanner.cs:107-135 - the UI culture's language; English only here.
         self.dim_text.insert("CMB_language", String::new());
-        // C#: ConfigPlanner.cs:136-145 - Start disabled while a capture runs, which
+        // C#: ConfigPlanner.cs:137-146 - Start disabled while a capture runs, which
         // `Video::running` holds across activations, and the overlay box set to `hudon`, its
         // handler run when that changes it. With no capture the box is what the Designer gave
         // the page the C# makes with the CONFIG screen - ticked, set before the handler is
@@ -1694,7 +1694,7 @@ impl Planner {
         } else {
             self.checks.insert("CHK_hudshow", true);
         }
-        // C#: ConfigPlanner.cs:148-166
+        // C#: ConfigPlanner.cs:149-167
         for name in [
             "CHK_enablespeech",
             "CHK_speechwaypoint",
@@ -1717,12 +1717,12 @@ impl Planner {
         ] {
             self.set_from_config(name, settings);
         }
-        // C#: ConfigPlanner.cs:169
+        // C#: ConfigPlanner.cs:170
         let track = f64::from(get_int(settings, "NUM_tracklength", 200));
         if self.numbers[0].set(track) {
             self.number_changed(0, settings);
         }
-        // C#: ConfigPlanner.cs:172-176
+        // C#: ConfigPlanner.cs:173-177
         for name in [
             "CHK_loadwponconnect",
             "CHK_resetapmonconnect",
@@ -1730,11 +1730,11 @@ impl Planner {
         ] {
             self.set_from_config(name, settings);
         }
-        // C#: ConfigPlanner.cs:178-182
+        // C#: ConfigPlanner.cs:179-183
         for (rate, value) in RATES.iter().zip(self.rates) {
             self.select_text(rate.combo, &value.to_string());
         }
-        // C#: ConfigPlanner.cs:184-189
+        // C#: ConfigPlanner.cs:185-190
         for name in [
             "chk_analytics",
             "CHK_GDIPlus",
@@ -1743,7 +1743,7 @@ impl Planner {
         ] {
             self.set_from_config(name, settings);
         }
-        // C#: ConfigPlanner.cs:208-213
+        // C#: ConfigPlanner.cs:209-214
         for (name, key) in [
             ("CMB_distunits", "distunits"),
             ("CMB_speedunits", "speedunits"),
@@ -1753,7 +1753,7 @@ impl Planner {
                 self.select_text(name, &value);
             }
         }
-        // C#: ConfigPlanner.cs:215-232 - the saved device and format, by index. The indexes are
+        // C#: ConfigPlanner.cs:216-233 - the saved device and format, by index. The indexes are
         // the C#'s and as fragile as they are there: a camera plugged in before this one, or a
         // node renumbered, selects another device (kept so, the owner not having said otherwise).
         if settings.get("video_device").is_some() {
@@ -1779,7 +1779,7 @@ impl Planner {
                 }
             }
         }
-        // C#: ConfigPlanner.cs:235, 787-794; ExtLibs/Utilities/Settings.cs:127-140
+        // C#: ConfigPlanner.cs:236, 788-795; ExtLibs/Utilities/Settings.cs:127-140
         let log_dir = settings
             .get("logdirectory")
             .filter(|dir| !dir.is_empty())
@@ -1791,7 +1791,7 @@ impl Planner {
             self.log_dir.set(log_dir);
             self.log_dir_changed(settings);
         }
-        // C#: ConfigPlanner.cs:238-242, 1079-1107
+        // C#: ConfigPlanner.cs:239-243, 1080-1108
         for (name, key) in [
             ("chk_displaycog", "GMapMarkerBase_DisplayCOG"),
             ("chk_displayheading", "GMapMarkerBase_DisplayHeading"),
@@ -1804,12 +1804,12 @@ impl Planner {
                 settings.set(key, bool_text(value));
             }
         }
-        // C#: ConfigPlanner.cs:243
+        // C#: ConfigPlanner.cs:244
         let tooltip = settings
             .get("mapicondesc")
             .is_some_and(|text| !text.is_empty());
         self.checks.insert("chk_displaytooltip", tooltip);
-        // C#: ConfigPlanner.cs:244, 1136-1140
+        // C#: ConfigPlanner.cs:245, 1137-1141
         let length = f64::from(get_int(settings, "GMapMarkerBase_Length", 500));
         if self.numbers[2].set(length) {
             self.number_changed(2, settings);
@@ -1821,7 +1821,7 @@ impl Planner {
             .to_owned();
         self.selected.insert("cmb_secondarydisplaystyle", Some(0));
         self.select_text("cmb_secondarydisplaystyle", &style);
-        // C#: ConfigPlanner.cs:246-253; Program.cs:321-325 - the mode is the setting's, or
+        // C#: ConfigPlanner.cs:247-254; Program.cs:323-327 - the mode is the setting's, or
         // GMap's default.
         let mode = settings
             .get("mapCache")
@@ -1865,15 +1865,15 @@ impl Planner {
     }
 
     /// A box's `CheckedChanged`.
-    /// `// C#: GCSViews/ConfigurationView/ConfigPlanner.cs:380-1134`
+    /// `// C#: GCSViews/ConfigurationView/ConfigPlanner.cs:381-1135`
     fn checked_changed(&mut self, name: &'static str, checked: bool, settings: &mut Persisted) {
         let key = CHECKS
             .iter()
             .find(|spec| spec.name == name)
             .and_then(|spec| spec.key);
         match name {
-            // C#: ConfigPlanner.cs:380-409 - the speech boxes show and hide with it.
-            // C#: ConfigPlanner.cs:1073-1077; 647-655; 693-696; 773-776; 918-922; 966;
+            // C#: ConfigPlanner.cs:381-410 - the speech boxes show and hide with it.
+            // C#: ConfigPlanner.cs:1074-1078; 647-655; 693-696; 773-776; 918-922; 966;
             // 1013-1016; 1063-1071; 1079-1107
             "CHK_enablespeech"
             | "CHK_speechArmedOnly"
@@ -1896,17 +1896,17 @@ impl Planner {
             }
             // `FlightData.myhud.hudon = CHK_hudshow.Checked`, saved as `CHK_hudshow`: the HUD
             // draws its instruments over the camera's picture, or the picture alone.
-            // C#: ConfigPlanner.cs:374-378; ExtLibs/Controls/HUD.cs:2005-2008
+            // C#: ConfigPlanner.cs:375-379; ExtLibs/Controls/HUD.cs:2005-2008
             "CHK_hudshow" => {
                 self.hudon = checked;
                 settings.set("CHK_hudshow", bool_text(checked));
             }
-            // C#: ConfigPlanner.cs:693-696; MainV2.cs:1750-1759
+            // C#: ConfigPlanner.cs:694-697; MainV2.cs:1752-1761
             "CHK_loadwponconnect" => {
                 settings.set("loadwpsonconnect", bool_text(checked));
                 self.effects.push(Effect::ReadMissionOnConnect(checked));
             }
-            // C#: ConfigPlanner.cs:442-458, 460-476, 478-494, 518-550, 660-686, 811-833, 877-916
+            // C#: ConfigPlanner.cs:443-459, 461-477, 479-495, 519-551, 661-687, 812-834, 878-917
             "CHK_speechwaypoint"
             | "CHK_speechmode"
             | "CHK_speechcustom"
@@ -1921,7 +1921,7 @@ impl Planner {
                     self.ask(steps(name), settings);
                 }
             }
-            // C#: ConfigPlanner.cs:1109-1134
+            // C#: ConfigPlanner.cs:1110-1135
             "chk_displaytooltip" => {
                 if checked {
                     self.ask(steps(name), settings);
@@ -1929,7 +1929,7 @@ impl Planner {
                     settings.set("mapicondesc", "");
                 }
             }
-            // C#: ConfigPlanner.cs:755-765 - and the map's bearing put back to 0, which a map
+            // C#: ConfigPlanner.cs:756-766 - and the map's bearing put back to 0, which a map
             // that does not rotate is already at.
             "CHK_maprotation" => {
                 settings.set("CHK_maprotation", bool_text(checked));
@@ -1938,7 +1938,7 @@ impl Planner {
                     self.checked_changed("chk_shownofly", false, settings);
                 }
             }
-            // C#: ConfigPlanner.cs:1040-1047
+            // C#: ConfigPlanner.cs:1041-1048
             "chk_shownofly" => {
                 settings.set("ShowNoFly", bool_text(checked));
                 if checked && self.checked("CHK_maprotation") {
@@ -1968,7 +1968,7 @@ impl Planner {
     /// OK on the `InputBox`: the answer kept as `InputBox` keeps it, then written by the handler,
     /// and the handler's next box shown. The box keeps it before the handler parses it, so an
     /// altitude that is not a number is kept too.
-    /// `// C#: ExtLibs/Controls/InputBox.cs:73-84, 178-184; GCSViews/ConfigurationView/ConfigPlanner.cs:680-683`
+    /// `// C#: ExtLibs/Controls/InputBox.cs:73-84, 178-184; GCSViews/ConfigurationView/ConfigPlanner.cs:681-684`
     pub fn answer(&mut self, settings: &mut Persisted) {
         let Some(prompt) = self.prompt.take() else {
             return;
@@ -1982,7 +1982,7 @@ impl Planner {
         );
         match prompt.step.store {
             Store::Text => settings.set(prompt.step.key, answer),
-            // C#: ConfigPlanner.cs:683 - saved in metres.
+            // C#: ConfigPlanner.cs:684 - saved in metres.
             Store::AltHeight => {
                 let Ok(value) = answer.trim().parse::<f64>() else {
                     self.queued.clear();
@@ -1998,7 +1998,7 @@ impl Planner {
                 let metres = value / f64::from(self.units.alt);
                 settings.set(prompt.step.key, mp_log::netfmt::double(metres));
             }
-            // C#: ConfigPlanner.cs:1126-1127
+            // C#: ConfigPlanner.cs:1127-1128
             Store::IconDescription => {
                 settings.set("mapicondesc", answer.clone());
                 settings.set("mapicondesc_default", answer);
@@ -2033,7 +2033,7 @@ impl Planner {
     }
 
     /// A click on a combo: its list dropped down, or put away. Video Device's `Click` binds its
-    /// list first (`ConfigPlanner.cs:741-750`).
+    /// list first (`ConfigPlanner.cs:742-751`).
     pub fn toggle_dropdown(&mut self, name: &'static str, settings: &Persisted) {
         let live = COMBOS
             .iter()
@@ -2078,7 +2078,7 @@ impl Planner {
                 return;
             }
             list.selected = key;
-            // C#: ConfigPlanner.cs:296-360 - Video Format has no handler.
+            // C#: ConfigPlanner.cs:297-361 - Video Format has no handler.
             if name == "CMB_videosources" {
                 self.video_device_changed(settings);
             }
@@ -2091,11 +2091,11 @@ impl Planner {
             return;
         }
         match name {
-            // C#: ConfigPlanner.cs:1018-1033
+            // C#: ConfigPlanner.cs:1019-1034
             "CMB_Layout" => self.layout_changed(index, settings),
-            // C#: ConfigPlanner.cs:411-414
+            // C#: ConfigPlanner.cs:412-415
             "CMB_severity" => settings.set("severity", index.to_string()),
-            // C#: ConfigPlanner.cs:557-571, 1049-1055
+            // C#: ConfigPlanner.cs:558-572, 1050-1056
             "CMB_distunits" | "CMB_speedunits" | "CMB_altunits" => {
                 let key = match name {
                     "CMB_distunits" => "distunits",
@@ -2105,16 +2105,16 @@ impl Planner {
                 settings.set(key, text);
                 self.change_units(settings);
             }
-            // C#: ConfigPlanner.cs:1142-1159
+            // C#: ConfigPlanner.cs:1143-1160
             "cmb_secondarydisplaystyle" => {
                 settings.set("GMapMarkerBase_InactiveDisplayStyle", text);
             }
-            // C#: ConfigPlanner.cs:1161-1167
+            // C#: ConfigPlanner.cs:1162-1168
             "CMB_mapCache" => {
                 settings.set("mapCache", text);
                 self.effects.push(Effect::MapAccess);
             }
-            // C#: ConfigPlanner.cs:573-640
+            // C#: ConfigPlanner.cs:574-641
             _ => {
                 let Some((rate, held)) = RATES
                     .iter()
@@ -2137,7 +2137,7 @@ impl Planner {
 
     /// `CMB_Layout_SelectedIndexChanged`: the preset of the name chosen made the view - which the
     /// setter saves as `displayview` - and saved again.
-    /// `// C#: GCSViews/ConfigurationView/ConfigPlanner.cs:1018-1033; MainV2.cs:357-366`
+    /// `// C#: GCSViews/ConfigurationView/ConfigPlanner.cs:1019-1034; MainV2.cs:357-366`
     fn layout_changed(&mut self, index: usize, settings: &mut Persisted) {
         let Some(name) = DisplayName::ALL.get(index).copied() else {
             return;
@@ -2207,7 +2207,7 @@ impl Planner {
     }
 
     /// A number box's `ValueChanged`.
-    /// `// C#: GCSViews/ConfigurationView/ConfigPlanner.cs:688-691, 1057-1061, 1136-1140`
+    /// `// C#: GCSViews/ConfigurationView/ConfigPlanner.cs:689-692, 1058-1062, 1137-1141`
     fn number_changed(&mut self, index: usize, settings: &mut Persisted) {
         let Some(value) = self.numbers.get(index).map(Number::value) else {
             return;
@@ -2237,14 +2237,14 @@ impl Planner {
     }
 
     /// The folder the Browse dialog returned, put in the box.
-    /// `// C#: GCSViews/ConfigurationView/ConfigPlanner.cs:778-785`
+    /// `// C#: GCSViews/ConfigurationView/ConfigPlanner.cs:779-786`
     pub fn browsed(&mut self, folder: &Path, settings: &mut Persisted) {
         self.log_dir.set(folder.display().to_string());
         self.log_dir_changed(settings);
     }
 
     /// `OnLogDirTextChanged`: `LogDir` set to the text when it names a directory that exists.
-    /// `// C#: GCSViews/ConfigurationView/ConfigPlanner.cs:787-794`
+    /// `// C#: GCSViews/ConfigurationView/ConfigPlanner.cs:788-795`
     fn log_dir_changed(&self, settings: &mut Persisted) {
         let path = self.log_dir.value();
         if !path.is_empty() && Path::new(path).os_is_dir() {
@@ -2253,7 +2253,7 @@ impl Planner {
     }
 
     /// A click on a button. A dimmed one does nothing.
-    /// `// C#: GCSViews/ConfigurationView/ConfigPlanner.cs:552-555, 778-785, 1169-1192`
+    /// `// C#: GCSViews/ConfigurationView/ConfigPlanner.cs:553-556, 779-786, 1170-1193`
     pub fn press(&mut self, name: &'static str, map_cache: &Path) {
         let live = BUTTONS
             .iter()
@@ -2262,7 +2262,7 @@ impl Planner {
             return;
         }
         match name {
-            // C#: ConfigPlanner.cs:261-285 - disabled while a capture runs; else stop first,
+            // C#: ConfigPlanner.cs:262-286 - disabled while a capture runs; else stop first,
             // then the device and format chosen opened. The settings are written once it has
             // started, by `run_video`.
             "BUT_videostart" if !self.video.running => {
@@ -2281,7 +2281,7 @@ impl Planner {
                     }
                 }
             }
-            // C#: ConfigPlanner.cs:287-294
+            // C#: ConfigPlanner.cs:288-295
             "BUT_videostop" => {
                 self.video.running = false;
                 self.effects.push(Effect::VideoStop);
@@ -2318,7 +2318,7 @@ impl Planner {
 /// the status line's words, if any.
 ///
 /// Divergence: `mp_video` over V4L2 where the C# builds a DirectShow graph.
-/// `// C#: GCSViews/ConfigurationView/ConfigPlanner.cs:261-294; ExtLibs/WebCamService/Capture.cs:
+/// `// C#: GCSViews/ConfigurationView/ConfigPlanner.cs:262-295; ExtLibs/WebCamService/Capture.cs:
 /// 77-111, 142-157, 220-231`
 pub fn run_video(
     planner: &mut Planner,
@@ -2386,14 +2386,14 @@ fn camera_image(frame: &mp_video::Frame) -> Option<Arc<gpui::RenderImage>> {
 
 /// Whether the map reads tiles from its cache only: `mapCache` is `CacheOnly`. The map's tile
 /// store has no mode that fetches without caching, so `ServerOnly` is `ServerAndCache` here.
-/// `// C#: Program.cs:321-325; ConfigPlanner.cs:1161-1167`
+/// `// C#: Program.cs:323-327; ConfigPlanner.cs:1162-1168`
 #[must_use]
 pub fn cache_only(settings: &Persisted) -> bool {
     settings.get("mapCache") == Some("CacheOnly")
 }
 
 /// Whether the mission is read when a vehicle connects: `loadwpsonconnect`.
-/// `// C#: MainV2.cs:1750-1759`
+/// `// C#: MainV2.cs:1752-1761`
 #[must_use]
 pub fn load_wps_on_connect(settings: &Persisted) -> bool {
     get_bool(settings, "loadwpsonconnect", false)
@@ -2433,7 +2433,7 @@ impl MissionPlanner {
     /// Runs one of the page's handlers over `Settings.Instance` and does what it asked for that
     /// needs no window; returns the rest. What the handler writes is in the dictionary at once and
     /// in `config.xml` at the next `SaveConfig`, as the C#'s handlers leave it.
-    /// `// C#: ExtLibs/Utilities/Settings.cs:58-61; MainV2.cs:2219-2237`
+    /// `// C#: ExtLibs/Utilities/Settings.cs:58-61; MainV2.cs:2226-2244`
     fn planner_apply(&mut self, handler: impl FnOnce(&mut Planner, &mut Persisted)) -> Vec<Effect> {
         handler(&mut self.planner, &mut self.persisted);
         let mut rest = Vec::new();
@@ -2527,11 +2527,11 @@ impl MissionPlanner {
     /// Once a frame: the capture's latest frame made the HUD's picture - once per new frame, the
     /// last one's image taken out of the window's atlas - and what the capture says handed to the
     /// page. With no capture, no picture: `Dispose` clears the HUD's (`camimage(null)`).
-    /// `// C#: ExtLibs/WebCamService/Capture.cs:142-157; GCSViews/FlightData.cs:1897-1900`
+    /// `// C#: ExtLibs/WebCamService/Capture.cs:142-157; GCSViews/FlightData.cs:1907-1910`
     pub(crate) fn video_tick(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         self.planner.video_status(self.video.as_ref());
         // The HUD menu's sources - GStreamer, MJPEG - set the same picture, and a runtime being
-        // downloaded for GStreamer says how it goes. `// C#: MainV2.cs:3421-3486`
+        // downloaded for GStreamer says how it goes. `// C#: MainV2.cs:3428-3493`
         self.hud_video_tick();
         let latest = self
             .fly_data
@@ -2636,7 +2636,7 @@ impl MissionPlanner {
             body = body.child(combo_box(planner, spec, cx));
         }
         for spec in BUTTONS {
-            // Start is disabled while a capture runs. C#: ConfigPlanner.cs:136-145, 280
+            // Start is disabled while a capture runs. C#: ConfigPlanner.cs:137-146, 281
             let disabled = spec.0 == "BUT_videostart" && planner.video_running();
             body = body.child(button(spec, planner.blocked() || disabled, cx));
         }
@@ -3146,7 +3146,7 @@ fn backdrop(id: &'static str, window: AnyElement) -> AnyElement {
 
 /// `new JoystickSetup().ShowUserControl()`: the joystick page in a window of its own size - 702 by
 /// 331, grown as the page grows its rows (`Ctl_SizeChanged`) - with no title and a close box.
-/// `// C#: GCSViews/ConfigurationView/ConfigPlanner.cs:552-555; Utilities/ExtensionsMP.cs:110-144;
+/// `// C#: GCSViews/ConfigurationView/ConfigPlanner.cs:553-556; Utilities/ExtensionsMP.cs:110-144;
 /// Joystick/JoystickSetup.resx ($this.Size)`
 fn joystick_window(
     sticks: &crate::joystick::Sticks,
@@ -3424,7 +3424,7 @@ mod tests {
 
     /// Video Device lists the devices when it is clicked, which selects the first and lists its
     /// formats; choosing another lists that one's; Video Format has no handler.
-    /// `// C#: ConfigPlanner.cs:296-360, 741-750, 968-989`
+    /// `// C#: ConfigPlanner.cs:297-361, 742-751, 969-990`
     #[test]
     fn clicking_video_device_lists_the_devices_and_the_first_ones_formats() {
         let mut settings = Persisted::at(None);
@@ -3501,7 +3501,7 @@ mod tests {
 
     /// Start stops first, opens the device in the format, and once it runs writes the two
     /// indexes and disables itself; the frames arrive; Stop ends it and enables Start again.
-    /// `// C#: ConfigPlanner.cs:261-294`
+    /// `// C#: ConfigPlanner.cs:262-295`
     #[test]
     fn start_captures_and_writes_the_two_indexes_and_stop_ends_it() {
         let mut settings = Persisted::at(None);
@@ -3626,7 +3626,7 @@ mod tests {
 
     /// Activate with the two indexes saved selects the device and the format by index; an index
     /// the lists do not have leaves the first; no key lists nothing.
-    /// `// C#: ConfigPlanner.cs:215-232`
+    /// `// C#: ConfigPlanner.cs:216-233`
     #[test]
     fn activate_selects_the_saved_device_and_format_by_index() {
         let mut settings = Persisted::at(None);
@@ -3718,10 +3718,10 @@ mod tests {
         let mut settings = Persisted::at(None);
         let planner = activated(&mut settings);
         assert!(planner.is_active());
-        // C#: ConfigPlanner.cs:99-103 - Warning, and written.
+        // C#: ConfigPlanner.cs:100-104 - Warning, and written.
         assert_eq!(settings.get("severity"), Some("4"));
         assert_eq!(planner.combo_text("CMB_severity"), "Warning");
-        // C#: ConfigPlanner.cs:238-242 - read with a default of true, ticked from the Designer's
+        // C#: ConfigPlanner.cs:239-243 - read with a default of true, ticked from the Designer's
         // unticked, so each handler writes True.
         for key in [
             "GMapMarkerBase_DisplayCOG",
@@ -3732,7 +3732,7 @@ mod tests {
         ] {
             assert_eq!(settings.get(key), Some("True"), "{key}");
         }
-        // C#: ConfigPlanner.cs:244, 1138 - read under one spelling, written under another.
+        // C#: ConfigPlanner.cs:245, 1139 - read under one spelling, written under another.
         assert_eq!(settings.get("GMapMarkerBase_length"), Some("500"));
         assert_eq!(settings.get("GMapMarkerBase_Length"), None);
         assert_eq!(planner.number("num_linelength"), Some(500.0));
@@ -3841,7 +3841,7 @@ mod tests {
         assert_eq!(planner.dropdown(), None);
         assert_eq!(settings.get("altunits"), Some("Feet"));
         assert_eq!(planner.combo_text("CMB_altunits"), "Feet");
-        // C#: MainV2.cs:4273-4292 - 3.2808399f and "ft".
+        // C#: MainV2.cs:4280-4299 - 3.2808399f and "ft".
         assert_eq!(planner.units().alt_unit, "ft");
         assert_eq!(planner.units().alt, "3.2808399".parse::<f32>().unwrap());
         // The distance and speed are ChangeUnits' defaults, set with it.
@@ -3877,7 +3877,7 @@ mod tests {
         );
         assert_eq!(settings.get("CMB_rateattitude"), Some("10"));
         assert_eq!(planner.rates()[0], 10);
-        // C#: ConfigPlanner.cs:582-584 - EXTRA1 then EXTRA2.
+        // C#: ConfigPlanner.cs:583-585 - EXTRA1 then EXTRA2.
         assert_eq!(
             planner.take_effects(),
             [Effect::Stream(10, 10), Effect::Stream(11, 10)]
@@ -3887,7 +3887,7 @@ mod tests {
             index_of("CMB_ratesensors", "25"),
             &mut settings,
         );
-        // C#: ConfigPlanner.cs:636-638 - EXTRA3 then RAW_SENSORS.
+        // C#: ConfigPlanner.cs:637-639 - EXTRA3 then RAW_SENSORS.
         assert_eq!(
             planner.take_effects(),
             [Effect::Stream(12, 25), Effect::Stream(1, 25)]
@@ -4113,7 +4113,7 @@ mod tests {
         let prompt = planner.prompt.as_mut().expect("the altitude");
         prompt.field.set("10");
         planner.answer(&mut settings);
-        // C#: ConfigPlanner.cs:683 - 10 / 3.2808399f, as `double.ToString()` writes it.
+        // C#: ConfigPlanner.cs:684 - 10 / 3.2808399f, as `double.ToString()` writes it.
         let expected = mp_log::netfmt::double(10.0 / f64::from(3.280_84_f32));
         assert_eq!(settings.get("speechaltheight"), Some(expected.as_str()));
         assert!(expected.starts_with("3.0479999"), "{expected}");
@@ -4186,7 +4186,7 @@ mod tests {
     /// under `"InputBox"` and the caption and question with all but letters and digits taken
     /// out, URL-encoded, before the handler looks at it - so an altitude that is not a number is
     /// kept too. Cancel keeps nothing.
-    /// `// C#: ExtLibs/Controls/InputBox.cs:73-84, 178-184; GCSViews/ConfigurationView/ConfigPlanner.cs:454-546, 672-683, 822-829, 889-912, 1121`
+    /// `// C#: ExtLibs/Controls/InputBox.cs:73-84, 178-184; GCSViews/ConfigurationView/ConfigPlanner.cs:455-547, 673-684, 823-830, 890-913, 1122`
     #[test]
     fn each_question_keeps_its_ok_answer_under_the_input_box_key() {
         let mut keys: Vec<String> = SPEECH_BOXES
@@ -4379,7 +4379,7 @@ mod tests {
     /// Layout: `Activate` selects the view's name - its first time raising the handler, which
     /// makes the preset the view and saves it - and a choice makes that preset the view: Basic
     /// takes the Advanced pages away, Custom with no file is Advanced again.
-    /// `// C#: GCSViews/ConfigurationView/ConfigPlanner.cs:55-73, 1018-1033; MainV2.cs:357-366`
+    /// `// C#: GCSViews/ConfigurationView/ConfigPlanner.cs:55-73, 1019-1034; MainV2.cs:357-366`
     #[test]
     fn layout_chooses_the_display_view() {
         use crate::display_view::{DisplayName, DisplayView, SETTING, current, flag};
@@ -4440,7 +4440,7 @@ mod tests {
     /// without it; a click sets `hudon` and writes the key. `Activate` shows `hudon` only while a
     /// capture runs - running the handler when that changes the box - and otherwise the
     /// Designer's tick, whatever `hudon` is.
-    /// `// C#: ConfigPlanner.cs:136-145, 374-378; MainV2.cs:938-939; HUD.cs:274`
+    /// `// C#: ConfigPlanner.cs:137-146, 375-379; MainV2.cs:940-941; HUD.cs:274`
     #[test]
     fn enable_hud_overlay_sets_hudon_and_activate_shows_it_while_capturing() {
         // Nothing saved: the HUD's own true.
@@ -4610,7 +4610,7 @@ mod tests {
     /// `Settings.Instance[key] = ...` puts the key in the dictionary and nothing on disk; the
     /// next `SaveConfig` writes it with every key the page does not have, as the C# wrote them;
     /// and the next start reads it back - `MainV2`'s `ChangeUnits`, then `Activate`.
-    /// `// C#: ExtLibs/Utilities/Settings.cs:58-61, 507-550; MainV2.cs:836, 1309-1315`
+    /// `// C#: ExtLibs/Utilities/Settings.cs:58-61, 507-550; MainV2.cs:838, 1311-1317`
     #[test]
     fn a_change_is_in_the_dictionary_at_once_and_in_config_xml_after_the_next_save() {
         let scratch = Scratch::new("save");
@@ -4623,7 +4623,7 @@ mod tests {
             &mut settings,
         );
         planner.click("CHK_enablespeech", &mut settings);
-        // `speechcustom`'s default ends in a space. C#: ConfigPlanner.cs:486
+        // `speechcustom`'s default ends in a space. C#: ConfigPlanner.cs:487
         planner.click("CHK_speechcustom", &mut settings);
         planner.answer(&mut settings);
         let custom = "Heading to Waypoint {wpn}, altitude is {alt}, Ground speed is {gsp} ";

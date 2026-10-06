@@ -2,7 +2,7 @@
 #
 # FlightData draws home as part of the vehicle's mission overlay: once MAV.wps holds anything, a
 # GMapMarkerWP "H" at cs.HomeLocation - HOME_POSITION - or at cs.PlannedHomeLocation while that is
-# 0,0 (GCSViews/FlightData.cs:3808-3845). So there is no marker until the mission has been read,
+# 0,0 (GCSViews/FlightData.cs:3922-3959). So there is no marker until the mission has been read,
 # and then it is the vehicle's home. SITL's is the Canberra Model Aircraft Club, -35.36 149.16.
 #
 # Its own data directory, with a planned home in Brisbane. ArduPilot sends

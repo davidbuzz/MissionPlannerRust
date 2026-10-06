@@ -26,8 +26,8 @@
 //! puts the bars back to zero, sets the mount to MAVLink targeting with no stabilisation
 //! (`DO_MOUNT_CONFIGURE`) and sends the zeros. Neither waits for an answer: `setMountControl` and
 //! `setMountConfigure` send with `requireack` false.
-//! `// C#: GCSViews/FlightData.cs:1471-1478, 2946-2950, GCSViews/FlightData.Designer.cs:2088-2191,
-//! ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:4572-4605`
+//! `// C#: GCSViews/FlightData.cs:1473-1480, 2959-2963, GCSViews/FlightData.Designer.cs:2088-2191,
+//! ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:4561-4594`
 //!
 //! Video Control, the page's fifth control, opens the gimbal's video in a window of its own: the
 //! map menu's Gimbal Video Pop Out (`crate::gimbal_video`).
@@ -52,7 +52,7 @@ pub const MAVLINK_TARGETING: u8 = 2;
 
 /// `setMountControl(pa, pb, pc, false)` with the bars' values times a hundred: centi-degrees made
 /// degrees again - pitch, roll and yaw in the first three parameters, the mode in the seventh.
-/// `// C#: GCSViews/FlightData.cs:2946-2950, ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:4592-4598`
+/// `// C#: GCSViews/FlightData.cs:2959-2963, ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:4592-4598`
 #[must_use]
 pub fn mount_control(target: VehicleId, pitch: i32, roll: i32, yaw: i32) -> MavMessage {
     // `(float) trackBar.Value * 100.0f`, then `(float)(pa * 0.01)`.
@@ -75,7 +75,7 @@ pub fn mount_control(target: VehicleId, pitch: i32, roll: i32, yaw: i32) -> MavM
 }
 
 /// `setMountConfigure(mode, stabroll, stabpitch, stabyaw)`: the mode and the three
-/// stabilisation flags as 1 or 0. `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:4572-4585`
+/// stabilisation flags as 1 or 0. `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:4561-4574`
 #[must_use]
 pub fn mount_configure(target: VehicleId, mode: u8, stabilise: [bool; 3]) -> MavMessage {
     let command = u16::try_from(MavCmd::MAV_CMD_DO_MOUNT_CONFIGURE.0).unwrap_or(u16::MAX);

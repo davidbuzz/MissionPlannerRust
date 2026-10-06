@@ -3,11 +3,11 @@
 # CurrentState's getters multiply alt, airspeed, groundspeed, wp_dist, DistToHome and the rest by
 # multiplieralt, multiplierspeed or multiplierdist (ExtLibs/ArduPilot/CurrentState.cs:327, 354,
 # 496, 529, 1093, 1781), which MainV2.ChangeUnits sets from the Planner page's unit combos
-# (MainV2.cs:4247-4330, ConfigPlanner.cs:557-570, 1049-1054); FlightData.Activate names the units
-# on the HUD (GCSViews/FlightData.cs:442-444), and each quick view's description names its unit
-# through GetNameandUnit (CurrentState.cs:4526-4552). The HUD draws its speed and AS/GS lines with
+# (MainV2.cs:4254-4337, ConfigPlanner.cs:558-571, 1050-1055); FlightData.Activate names the units
+# on the HUD (GCSViews/FlightData.cs:444-446), and each quick view's description names its unit
+# through GetNameandUnit (CurrentState.cs:4529-4555). The HUD draws its speed and AS/GS lines with
 # speedunit, its altitude with altunit and the waypoint distance with distunit
-# (ExtLibs/Controls/HUD.cs:2552-2577, 2733, 2749-2769).
+# (ExtLibs/Controls/HUD.cs:2552-2577, 2735, 2751-2771).
 #
 # The claim: with nothing set everything is in metres and metres per second; after Feet, Feet and
 # knots on the Planner page, the HUD's facts and the quick views' descriptions name ft and kts,

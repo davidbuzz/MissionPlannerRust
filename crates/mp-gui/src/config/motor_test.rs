@@ -141,7 +141,7 @@ const CHANGE_THROTTLE: &str = "Change Throttle";
 pub const TOO_HIGH: &str = "Throttle percent above 20, too high";
 /// `Program.handleException`'s box, which an exception out of an `async void` handler reaches:
 /// its caption, and the text before the exception.
-/// `// C#: Program.cs:791-793`
+/// `// C#: Program.cs:793-795`
 const UNHANDLED: (&str, &str) = ("Send Error", "An error has occurred\n");
 
 /// `NUM_thr_percent`: `Minimum` -100, `Maximum` the default 100, `Value` 5.
@@ -612,7 +612,7 @@ impl MotorTest {
     /// whole number - kept all the same, the box keeping it before the `ref int` overload parses
     /// it - is `int.Parse`'s `FormatException`, which escapes the `async void` handler to
     /// `Program.handleException`'s box and leaves the page disabled.
-    /// `// C#: GCSViews/ConfigurationView/ConfigMotorTest.cs:354-358, 382-387; ExtLibs/Controls/InputBox.cs:21-27, 73-84, 178-184; Program.cs:791-793`
+    /// `// C#: GCSViews/ConfigurationView/ConfigMotorTest.cs:354-358, 382-387; ExtLibs/Controls/InputBox.cs:21-27, 73-84, 178-184; Program.cs:793-795`
     pub fn answer(&mut self, telemetry: &Telemetry, settings: &mut crate::settings::Persisted) {
         let Some(prompt) = self.prompt.take() else {
             return;
@@ -715,7 +715,7 @@ impl MotorTest {
             self.spin_write = None;
             match outcome {
                 // `setParamAsync`'s `TimeoutException`, out of the `async void` handler: the
-                // page stays disabled (MAVLinkInterface.cs:1765; Program.cs:791-793).
+                // page stays disabled (MAVLinkInterface.cs:1762; Program.cs:793-795).
                 RequestOutcome::TimedOut => {
                     self.last_spin = Some(format!("{} {value} timed out", spin.param()));
                     self.messages.push_back(Message {

@@ -488,7 +488,7 @@ impl<'a> DataflashReader<'a> {
     /// This is the walk that finds those offsets. The rules are the ones [`Self::next_message`]
     /// has always applied - resynchronise on garbage, skip a type with no format, skip a type
     /// whose format contradicts itself - because both are the same walk.
-    /// `// C#: ExtLibs/Utilities/DFLogBuffer.cs:98-126`
+    /// `// C#: ExtLibs/Utilities/DFLogBuffer.cs:97-125`
     pub fn next_record(&mut self) -> Option<RecordAt> {
         match self.walk.step(self.data, true) {
             Step::Record(record) => Some(record),
@@ -568,7 +568,7 @@ pub fn decode_as(format: Option<&MessageFormat>, bytes: &[u8]) -> Option<LogMess
 /// once, and then reads those bytes of each record and nothing else. A field is found exactly as
 /// [`LogMessage::field`] finds it in a decoded record - the first with the label, among the fields
 /// the record decodes to - so a read here and a lookup there agree.
-/// `// C#: ExtLibs/Utilities/DFLogBuffer.cs:696-760`
+/// `// C#: ExtLibs/Utilities/DFLogBuffer.cs:751-815`
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) struct Column {
     /// Where the field starts, counted from the record's first header byte.

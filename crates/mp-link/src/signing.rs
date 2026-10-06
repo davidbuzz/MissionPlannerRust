@@ -23,12 +23,12 @@
 //! format - the signature block and its SHA-256 - is `mp_mavlink::signing`'s; this is when a frame
 //! is signed, with which key, and what is done with one that arrives signed.
 //!
-//! * Sending, `generatePacket` (`MAVLinkInterface.cs:1336-1436`): a frame for a vehicle whose
+//! * Sending, `generatePacket` (`MAVLinkInterface.cs:1345-1433`): a frame for a vehicle whose
 //!   `signing` is on carries the signed flag and a signature over the vehicle's key - zeros while
 //!   it has none - its `sendlinkid`, a random byte chosen when the vehicle is first heard
 //!   (`MAVState.cs:61`), and a timestamp in 10 µs since 2015-01-01 that moves on by one when it
 //!   would repeat the last ([`timestamp_at`], [`Signing::sign`]).
-//! * Receiving, `readPacketAsync` (`MAVLinkInterface.cs:5059-5089`) and `CheckSignature`
+//! * Receiving, `readPacketAsync` (`MAVLinkInterface.cs:5035-5065`) and `CheckSignature`
 //!   (`:5501-5526`): a signed packet is counted, then checked against its vehicle's key and, if
 //!   that fails, against every key in the store; one that passes makes that key the vehicle's,
 //!   its link id the vehicle's `linkid`, and turns signing on for it - the C#'s "auto adapt"; one
@@ -51,7 +51,7 @@
 //!   `generatePacket` is called for - and, for a message that names none (the heartbeat) or
 //!   names a component never heard, the first vehicle of that system, or on the link, that is
 //!   signing. The C#'s heartbeat loop sends one heartbeat per kind of vehicle, signed for those
-//!   that sign (`MainV2.cs:2944-2971`); one link here sends one, signed when any vehicle signs,
+//!   that sign (`MainV2.cs:2951-2978`); one link here sends one, signed when any vehicle signs,
 //!   which a vehicle that does not sign accepts all the same;
 //! * `enableSigning` and `disableSigning` also set the vehicle's `mavlinkv2`, which decides
 //!   whether the C# frames as MAVLink 1; this link frames everything as MAVLink 2, so it is not
@@ -100,7 +100,7 @@ pub fn auth_keys() -> Vec<[u8; 32]> {
 /// after the Unix epoch: the signing timestamp, 10 µs since 2015, by the C#'s arithmetic -
 /// `TimeSpan.TotalMilliseconds` is the ticks times 1/10000 in a double, so the last digit can be
 /// a unit from the exact count. 0 before 2015.
-/// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:1396, 1555`
+/// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:1393, 1552`
 #[must_use]
 #[allow(
     clippy::cast_possible_truncation,
@@ -220,7 +220,7 @@ impl core::fmt::Debug for Setup {
 impl Setup {
     /// The key `setupSigning` works out: `key` when there is one, `Array.Resize`d to 32 bytes,
     /// else the SHA-256 of `userseed`'s UTF-8; an empty seed with no key clears signing.
-    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:1534-1549`
+    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:1531-1546`
     #[must_use]
     pub fn new(target: VehicleId, userseed: &str, key: Option<&[u8]>) -> Self {
         let (key, clear) = match key {
@@ -240,7 +240,7 @@ impl Setup {
     }
 
     /// The `SETUP_SIGNING` it sends: the key and `timestamp`, or, clearing, zeros and 0.
-    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:1551-1565`
+    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:1548-1562`
     #[must_use]
     pub const fn message(&self, timestamp: u64) -> MavMessage {
         let (initial_timestamp, secret_key) = if self.clear {
@@ -277,7 +277,7 @@ impl Signing {
     }
 
     /// `Mavlink2Signed`: signed packets read since the count last started again.
-    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:418`
+    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:420`
     #[must_use]
     pub const fn signed_packets(&self) -> u32 {
         self.signed
@@ -297,7 +297,7 @@ impl Signing {
     /// `setupSigning`'s end, its `SETUP_SIGNING`s sent: `enableSigning`, the key left for the
     /// vehicle's signed packets to supply ("we will auto adapt to this key"), or the key
     /// forgotten and `disableSigning`. Returns `signing` as the C#'s call does.
-    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:1571-1584`
+    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:1568-1581`
     pub fn finish(&mut self, setup: &Setup) -> bool {
         if setup.clear {
             self.state(setup.target).key = None;
@@ -326,7 +326,7 @@ impl Signing {
 
     /// A packet read in the second `second` (`DateTime.UtcNow.Second`): a new second starts the
     /// count again.
-    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:4938, 4958-4963`
+    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:4912, 4932-4937`
     pub fn new_second(&mut self, second: u8) {
         if self.second != second {
             self.second = second;
@@ -337,7 +337,7 @@ impl Signing {
     /// A packet read: true to keep it. An unsigned one is kept; a signed one is counted, then
     /// kept if it passes its vehicle's key or one of `keys` - which becomes the vehicle's, with
     /// its link id, and signing to it on - and dropped if it passes none.
-    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:5059-5089, 5501-5526`
+    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:5035-5065, 5501-5526`
     pub fn check(&mut self, frame: &Frame<'_>, keys: &[[u8; 32]]) -> bool {
         let Some(signature) = frame.signature else {
             return true;
@@ -373,7 +373,7 @@ impl Signing {
     /// `frame`, written by this link, signed if the vehicle it is for is being signed to - see
     /// the module documentation for which that is - or `None` to send it as it is. `now` gives
     /// the timestamp, asked only when one is signed.
-    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:1341-1352, 1384-1435`
+    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:1341-1352, 1381-1432`
     pub fn sign(&mut self, frame: &[u8], now: impl FnOnce() -> u64) -> Option<Vec<u8>> {
         if !self.vehicles.values().any(|state| state.signing) {
             return None;
@@ -443,7 +443,7 @@ fn target_of(frame: &[u8]) -> Option<(u8, Option<u8>)> {
 /// worked out again over the header that now carries it, and the 13-byte block - `link_id`, the
 /// 48-bit `timestamp`, the first six bytes of SHA-256 over `key`, the frame and those seven -
 /// appended. `None` for anything not a whole v2 frame of a message this dialect knows.
-/// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:1349-1352, 1369-1435`
+/// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:1349-1352, 1366-1432`
 #[must_use]
 pub fn sign_frame(frame: &[u8], key: &[u8; 32], link_id: u8, timestamp: u64) -> Option<Vec<u8>> {
     if frame.first() != Some(&STX_V2) {
@@ -548,7 +548,7 @@ mod tests {
     /// A vehicle's heartbeat pymavlink signed with the key passes with it, makes it the
     /// vehicle's with its link id, and turns signing to it on; with the wrong key it is dropped
     /// and nothing is adopted. Every signed one is counted, passed or not.
-    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:5059-5089, 5501-5526`
+    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:5035-5065, 5501-5526`
     #[test]
     fn a_signed_packet_passes_its_key_and_no_other() {
         let vehicle = hex("fd0901002a01010000000400000002035103036dd500ff7856341200a3e770ff14d6");
@@ -589,7 +589,7 @@ mod tests {
 
     /// The timestamp is the C#'s: 10 µs since 2015-01-01 UTC, 0 before, and one sent at the same
     /// instant as the last moves on by one.
-    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:1396-1401`
+    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:1393-1398`
     #[test]
     fn the_timestamp_is_ten_microseconds_since_2015_and_never_repeats() {
         let at = |seconds: u64, micros: u64| {
@@ -627,7 +627,7 @@ mod tests {
 
     /// Signing on with no key yet - `setupSigning`'s "auto adapt" - signs with 32 zero bytes and
     /// the vehicle's `sendlinkid`; with signing off nothing is signed.
-    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:1406-1416`
+    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:1403-1413`
     #[test]
     fn a_vehicle_with_no_key_is_signed_to_with_zeros() {
         let mut signing = Signing::default();
@@ -768,7 +768,7 @@ mod tests {
     /// sends that vehicle afterwards is signed with it, under the vehicle's `sendlinkid`; and a
     /// `setupSigning` with an empty seed sends its two `SETUP_SIGNING`s - still signed, the switch
     /// coming after them - and then nothing more is signed. The only test that touches the store.
-    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:1384-1435, 1529-1584, 5059-5089`
+    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:1381-1432, 1529-1584, 5035-5065`
     #[test]
     fn a_link_adapts_to_a_signing_vehicle_and_signs_to_it() {
         use mp_mavlink::Message as _;

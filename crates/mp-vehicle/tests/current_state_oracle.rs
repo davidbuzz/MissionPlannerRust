@@ -90,13 +90,13 @@ fn same(ours: f64, theirs: f64) -> bool {
 /// next start byte, skipping whatever is not one, as long as its header says. What it reads need
 /// not be a frame: past bytes that are not MAVLink it can start inside a stamp, and then the
 /// packet is garbage that fails its checksum, and still counts.
-/// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:6510-6647`
+/// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:6471-6611`
 fn records(data: &[u8]) -> Vec<Record<'_>> {
     let is_stx = |byte: u8| matches!(byte, 0xFE | 0xFD);
     let mut out = Vec::new();
     let mut pos = 0;
     while pos < data.len() {
-        // C#: MAVLinkInterface.cs:6535-6563
+        // C#: MAVLinkInterface.cs:6496-6524
         let mut stamp = None;
         if is_stx(data[pos]) {
             // "rewind 8bytes"
@@ -107,7 +107,7 @@ fn records(data: &[u8]) -> Vec<Record<'_>> {
             stamp = Some(u64::from_be_bytes(bytes));
             pos += available;
         }
-        // C#: MAVLinkInterface.cs:6576-6604, the start byte, scanning past anything else.
+        // C#: MAVLinkInterface.cs:6537-6565, the start byte, scanning past anything else.
         let Some(start) = data[pos..].iter().position(|&byte| is_stx(byte)) else {
             out.push(Record {
                 stamp,
@@ -117,7 +117,7 @@ fn records(data: &[u8]) -> Vec<Record<'_>> {
             break;
         };
         let start = pos + start;
-        // C#: MAVLinkInterface.cs:6608-6640
+        // C#: MAVLinkInterface.cs:6569-6604
         let v2 = data[start] == 0xFD;
         let length = data.get(start + 1).map_or(1, |&len| {
             let signed = v2 && data.get(start + 2).is_some_and(|flags| flags & 1 != 0);
@@ -269,7 +269,7 @@ fn ours(state: &VehicleState) -> Vec<(&'static str, f64)> {
 
 /// The two parameters the low-airspeed warning reads, as a parameter table would hand them to
 /// [`VehicleState::set_airspeed_min_params`]: `MAVLinkInterface` files every `PARAM_VALUE` in
-/// the sender's `MAV.param` as it passes, log playback included (`MAVLinkInterface.cs:5766-5796`),
+/// the sender's `MAV.param` as it passes, log playback included (`MAVLinkInterface.cs:5729-5759`),
 /// and the C#'s `VFR_HUD` reads them from there.
 #[derive(Default)]
 struct AirspeedParams {
@@ -307,7 +307,7 @@ fn replay_against_the_csharp(name: &str, path: &str) -> Oracle {
     let autopilot = VehicleId::new(1, 1);
     let mut registry = VehicleRegistry::new();
     let mut params = AirspeedParams::default();
-    // C#: MAVLinkInterface.cs:483, `lastlogread` starts at MinValue and keeps its last value
+    // C#: MAVLinkInterface.cs:485, `lastlogread` starts at MinValue and keeps its last value
     // through a record without a usable stamp.
     let mut last_log_read = DateTime::MIN;
     let mut next = rows.iter().peekable();
@@ -321,7 +321,7 @@ fn replay_against_the_csharp(name: &str, path: &str) -> Oracle {
         let mut record = first;
         // One readPacketAsync: a record, and after one that fails its checksum with a start
         // byte in its last twenty bytes, the next, in the same call.
-        // C#: MAVLinkInterface.cs:4697-4716, 4995-5021
+        // C#: MAVLinkInterface.cs:4686-4705, 4971-4997
         loop {
             position = record.end;
             if let Some(time) = record.stamp.and_then(DateTime::from_tlog_micros) {

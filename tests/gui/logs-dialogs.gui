@@ -6,8 +6,8 @@
 # box is answered through its own OK, which is on screen only if the box is.
 #
 # Load Log's box opens in tlogdir, the log directory: the tlog typed there plays, as on the flight
-# screen (GCSViews/FlightData.cs:1276-1302). Convert .Bin to .Log's opens there too and converts the
-# DataFlash log typed (GCSViews/FlightData.cs:1084-1130).
+# screen (GCSViews/FlightData.cs:1278-1304). Convert .Bin to .Log's opens there too and converts the
+# DataFlash log typed (GCSViews/FlightData.cs:1086-1132).
 
 env MP_LOG_DIR $WORK/logs
 setup mkdir -p $WORK/logs && cp testdata/mavlink/autotest.tlog $WORK/logs/flight.tlog && cp testdata/dataflash.bin $WORK/logs/

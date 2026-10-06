@@ -21,7 +21,7 @@
 //! Create Matlab file: a dataflash log as a MATLAB `.mat` (level 5, uncompressed), as Mission
 //! Planner's `MatLab.ProcessLog` writes it with csmatio.
 //!
-//! `BUT_matlab_Click` hands each chosen file to `MatLab.ProcessLog` (`GCSViews/FlightData.cs:1387`,
+//! `BUT_matlab_Click` hands each chosen file to `MatLab.ProcessLog` (`GCSViews/FlightData.cs:1389`,
 //! `Log/MatLabForms.cs:43-74`), which walks the log's lines as `DFLogBuffer` gives them
 //! ([`crate::dflogbuffer`]) and writes `<log>-<lines>.mat` beside it, holding:
 //!

@@ -23,22 +23,22 @@
 //!
 //! Mission Planner's serial reader reads whatever each port has waiting and then calls
 //! `UpdateCurrentSettings` on every vehicle listed on that port, once a pass of a loop that waits
-//! a millisecond between passes (`MainV2.cs:2617-2621, 3027-3069`); a log played on the flight
-//! screen does the same after each packet (`GCSViews/FlightData.cs:3533-3543`). The method rate
+//! a millisecond between passes (`MainV2.cs:2624-2628, 3034-3076`); a log played on the flight
+//! screen does the same after each packet (`GCSViews/FlightData.cs:3647-3657`). The method rate
 //! limits itself to one run in 50 ms of the wall clock, per vehicle, from the moment that
-//! vehicle's state was made (`CurrentState.cs:131, 4585-4587`). The link thread does exactly
+//! vehicle's state was made (`CurrentState.cs:131, 4588-4590`). The link thread does exactly
 //! that, after each read: [`Clocks::due`] is the rate limit, and
 //! [`mp_vehicle::VehicleState::update_current_settings`] is the once-a-second counting inside it.
 //!
 //! "Every vehicle listed" is `MAVList`'s visible list: a system and component become visible
 //! when they send a `HEARTBEAT`, a `HIGH_LATENCY2` or a `UAVCAN_NODE_STATUS`; anything else they
 //! send makes them a hidden entry that is never updated (`MAVList.cs:25-30, 101-126`;
-//! `MAVLinkInterface.cs:5041-5047, 5276-5360`).
+//! `MAVLinkInterface.cs:5017-5023, 5256-5340`).
 //!
 //! Inside the rate limit, the method also asks the vehicle for its telemetry: seven
 //! `REQUEST_DATA_STREAM`s at the vehicle's own [`StreamRates`] - the first time it runs with the
 //! port open, then [`crate::ProtocolTimeouts::stream_rerequest`] after each time - never while a
-//! log is being played, which the C# plays with its port closed (`CurrentState.cs:4632-4663`).
+//! log is being played, which the C# plays with its port closed (`CurrentState.cs:4635-4666`).
 //! Each goes out as `requestDatastream` sends it: twice, with the rate as a byte, and not at all
 //! for a rate of -1 (`MAVLinkInterface.cs:3061-3073, 3218-3220, 3247-3264`). After them come
 //! `MAV.Camera?.RequestMessageIntervals(ratestatus)` and `MAV.GimbalManager?.Discover()`
@@ -57,7 +57,7 @@ use mp_mavlink_dialects::all::{MavMessage, RequestDataStream};
 use mp_vehicle::{StreamRates, VehicleId};
 
 /// `UpdateCurrentSettings`' rate limit: `DateTime.Now > lastupdate.AddMilliseconds(50)`.
-/// `// C#: ExtLibs/ArduPilot/CurrentState.cs:4585`
+/// `// C#: ExtLibs/ArduPilot/CurrentState.cs:4588`
 pub const UPDATE_INTERVAL: Duration = Duration::from_millis(50);
 
 /// `MAV_DATA_STREAM_RAW_SENSORS`.
@@ -101,7 +101,7 @@ impl Clocks {
     }
 
     /// Takes note of a message the vehicle sent: `HEARTBEAT`, `HIGH_LATENCY2` and
-    /// `UAVCAN_NODE_STATUS` list it. `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:5276-5360`
+    /// `UAVCAN_NODE_STATUS` list it. `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:5256-5340`
     pub const fn heard(&mut self, message: &MavMessage) {
         if matches!(
             message,
@@ -115,7 +115,7 @@ impl Clocks {
 
     /// Whether `UpdateCurrentSettings` runs for this vehicle now, and if so, notes that it has:
     /// listed, and more than [`UPDATE_INTERVAL`] since it last ran.
-    /// `// C#: MainV2.cs:3058-3069; ExtLibs/ArduPilot/CurrentState.cs:4583-4587`
+    /// `// C#: MainV2.cs:3065-3076; ExtLibs/ArduPilot/CurrentState.cs:4586-4590`
     pub fn due(&mut self, now: Instant) -> bool {
         if !self.visible || now.saturating_duration_since(self.last_update) <= UPDATE_INTERVAL {
             return false;
@@ -127,7 +127,7 @@ impl Clocks {
     /// Whether the streams are to be asked for now, and if so, notes that they have been and
     /// when to ask again: `!(lastdata.AddSeconds(8) > DateTime.Now)`, then `lastdata =
     /// DateTime.Now.AddSeconds(30)` - `rerequest` is the two together.
-    /// `// C#: ExtLibs/ArduPilot/CurrentState.cs:4633-4634, 4662`
+    /// `// C#: ExtLibs/ArduPilot/CurrentState.cs:4636-4637, 4665`
     pub fn streams_due(&mut self, now: Instant, rerequest: Duration) -> bool {
         if self.streams_due.is_some_and(|due| now < due) {
             return false;
@@ -138,7 +138,7 @@ impl Clocks {
 }
 
 /// The seven streams `UpdateCurrentSettings` asks for, in its order, each with the rate it reads
-/// from the vehicle's state. `// C#: ExtLibs/ArduPilot/CurrentState.cs:4638-4652`
+/// from the vehicle's state. `// C#: ExtLibs/ArduPilot/CurrentState.cs:4641-4655`
 #[must_use]
 pub const fn stream_requests(rates: StreamRates) -> [(u8, i32); 7] {
     [

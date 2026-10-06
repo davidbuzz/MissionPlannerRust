@@ -38,7 +38,7 @@
 //! opened as its buttons open them and drawn here over every screen but the two that draw the
 //! Advanced page's windows already.
 //!
-//! `// C#: MainV2.cs:4067-4208`
+//! `// C#: MainV2.cs:4074-4215`
 
 mod camera;
 mod devops_ui;
@@ -52,7 +52,7 @@ use gpui::{AnyElement, Context, Keystroke, Window};
 use crate::{MissionPlanner, Screen};
 
 /// `FlightData.ProcessCmdKey`'s Control and a digit: the tab's place, Ctrl+1 the first and
-/// Ctrl+0 the tenth. `// C#: GCSViews/FlightData.cs:865-916`
+/// Ctrl+0 the tenth. `// C#: GCSViews/FlightData.cs:867-918`
 #[must_use]
 pub(crate) fn fly_tab_key(keystroke: &Keystroke) -> Option<usize> {
     let modifiers = &keystroke.modifiers;
@@ -86,7 +86,7 @@ pub(crate) enum PlaybackKey {
 const KEYPAD_NAMED: bool = cfg!(target_os = "linux");
 
 /// The playback key `keystroke` is, compared as `keyData ==` does: the key alone.
-/// `// C#: GCSViews/FlightData.cs:918-941`
+/// `// C#: GCSViews/FlightData.cs:920-943`
 #[must_use]
 pub(crate) fn playback_key(keystroke: &Keystroke, keypad_named: bool) -> Option<PlaybackKey> {
     let modifiers = &keystroke.modifiers;
@@ -151,7 +151,7 @@ const fn draws_advanced_windows(screen: Screen) -> bool {
 /// The forms over the window, whichever screen shows: the first open of Ctrl+X's, Ctrl+W's and
 /// Ctrl+J's; then Ctrl+L's spectrogram and Ctrl+G's NMEA output, which SETUP and EXPERIMENTAL
 /// draw with the Advanced page's other windows (`extra_setup_overlay`), so here only elsewhere.
-/// `// C#: MainV2.cs:4124-4152, 4195-4200`
+/// `// C#: MainV2.cs:4131-4159, 4202-4207`
 pub(crate) fn overlay(
     this: &MissionPlanner,
     window: &Window,
@@ -318,7 +318,7 @@ where
 
 /// Ctrl+Y's message once the command has been answered or refused, and when it went unanswered
 /// or there was no link to send it on (`doCommand`'s exception). On the status line, as the
-/// owner ruled for such boxes. `// C#: MainV2.cs:4158-4174`
+/// owner ruled for such boxes. `// C#: MainV2.cs:4165-4181`
 const STORAGE_WRITE_DONE: &str = "Done MAV_ACTION_STORAGE_WRITE";
 
 /// What each of `ProcessCmdKey`'s keys does.
@@ -357,7 +357,7 @@ pub(crate) enum CmdKey {
 }
 
 /// The key `keystroke` is to `ProcessCmdKey`, if any.
-/// `// C#: MainV2.cs:4073-4200`
+/// `// C#: MainV2.cs:4080-4207`
 #[must_use]
 pub(crate) fn cmd_key(keystroke: &Keystroke) -> Option<CmdKey> {
     let modifiers = &keystroke.modifiers;
@@ -395,7 +395,7 @@ pub(crate) fn cmd_key(keystroke: &Keystroke) -> Option<CmdKey> {
 impl MissionPlanner {
     /// `ProcessCmdKey`: whether the key was one of its, and taken. The flight screen's own come
     /// first, as its control's `ProcessCmdKey` runs before the form's.
-    /// `// C#: MainV2.cs:4067-4208; GCSViews/FlightData.cs:865-943`
+    /// `// C#: MainV2.cs:4074-4215; GCSViews/FlightData.cs:867-945`
     pub(crate) fn process_cmd_key(
         &mut self,
         keystroke: &Keystroke,
@@ -433,7 +433,7 @@ impl MissionPlanner {
             // The owner's (2026-10-04): the EXPERIMENTAL tab, where the C# opens the temp form.
             CmdKey::Temp => self.choose_screen(Screen::Experimental),
             // `new SerialOutputNMEA().Show()` and `new SpectrogramUI().Show()`: the Advanced
-            // page's NMEA and Spectrogram buttons' own. `// C#: MainV2.cs:4124-4130, 4138-4145`
+            // page's NMEA and Spectrogram buttons' own. `// C#: MainV2.cs:4131-4137, 4145-4152`
             CmdKey::NmeaOut => {
                 self.open_advanced_tool("BUT_outputnmea", window, cx);
             }
@@ -441,21 +441,21 @@ impl MissionPlanner {
                 self.open_advanced_tool("BUT_spect", window, cx);
             }
             // `new GMAPCache().ShowUserControl()`, over `CacheLocator.Location`, the map's cache.
-            // `// C#: MainV2.cs:4132-4136`
+            // `// C#: MainV2.cs:4139-4143`
             CmdKey::MapCache => self
                 .key_forms
                 .map_cache
                 .show(&mp_tiles::TileCache::default_root()),
             // `new PropagationSettings().Show()`; what its constructor throws, on the status line.
-            // `// C#: MainV2.cs:4147-4152`
+            // `// C#: MainV2.cs:4154-4159`
             CmdKey::Propagation => {
                 if let Err(why) = self.key_forms.propagation.show(&mut self.persisted) {
                     self.file_status = Some(why);
                 }
             }
-            // `new Camera().test(MainV2.comPort)`. `// C#: MainV2.cs:4154-4159`
+            // `new Camera().test(MainV2.comPort)`. `// C#: MainV2.cs:4161-4166`
             CmdKey::CameraTest => self.key_forms.camera.press(&mut self.telemetry),
-            // `new DevopsUI().ShowUserControl()`. `// C#: MainV2.cs:4195-4200`
+            // `new DevopsUI().ShowUserControl()`. `// C#: MainV2.cs:4202-4207`
             CmdKey::Devops => self.key_forms.devops.show(),
         }
         true
@@ -464,7 +464,7 @@ impl MissionPlanner {
     /// `FlightData.ProcessCmdKey`'s playback keys: Space toggles a loaded log's play and pause,
     /// and is taken; the keypad's - and + step `LogPlayBackSpeed` and leave the key untaken, as
     /// the C# returns false after them.
-    /// `// C#: GCSViews/FlightData.cs:918-943`
+    /// `// C#: GCSViews/FlightData.cs:920-945`
     fn run_playback_key(&mut self, key: PlaybackKey, cx: &mut Context<Self>) -> bool {
         let playback = &mut self.fly_data.playback;
         match key {
@@ -502,7 +502,7 @@ impl MissionPlanner {
 
     /// F5: `comPort.getParamList()`, then `MyView.ShowScreen(MyView.current.Name)`. With no
     /// vehicle there is nothing to fetch; the screen is shown again either way.
-    /// `// C#: MainV2.cs:4093-4098`
+    /// `// C#: MainV2.cs:4100-4105`
     fn refresh_param_list(&mut self) {
         if self.telemetry.view().vehicle.is_some() {
             self.telemetry.download_parameters();
@@ -514,7 +514,7 @@ impl MissionPlanner {
     /// Ctrl+T, `comPort.Open(false)`: the box's port opened past `Connect`'s checks - no
     /// question about a moving model, no disconnect - the transport asking what its `Open` asks,
     /// and the parameters not fetched. Already open, nothing: `Open` returns at once.
-    /// `// C#: MainV2.cs:4146-4157; ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:668-671`
+    /// `// C#: MainV2.cs:4153-4164; ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:670-673`
     fn override_connect(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let view = self.telemetry.view();
         if view.connected && !view.target.starts_with("file:") {
@@ -525,7 +525,7 @@ impl MissionPlanner {
 
     /// Ctrl+Y: `PREFLIGHT_STORAGE` 1 to the vehicle, then "Done MAV_ACTION_STORAGE_WRITE" - the
     /// C# shows it whatever the answer, and "Invalid command" when `doCommand` throws.
-    /// `// C#: MainV2.cs:4158-4174`
+    /// `// C#: MainV2.cs:4165-4181`
     fn storage_write(&mut self) {
         let report = crate::telemetry::Report {
             timed_out: Some(crate::raw_params::INVALID_COMMAND.to_owned()),

@@ -25,7 +25,7 @@ click map@0.60x0.40
 expect mission.items 3
 # Row 3 made current from a known row: the pointer resting on the marker its click just made is
 # MainMap_OnMarkerEnter on Windows, which reports it, and puts the grid on row 3 already
-# (FlightPlanner.cs:8068-8098) - where X11 sends no motion for a still pointer - and a click on
+# (FlightPlanner.cs:8065-8095) - where X11 sends no motion for a still pointer - and a click on
 # the current row clears it. Row 2 first, from either.
 click plan-row-2
 expect mission.selected 2

@@ -165,7 +165,7 @@ const EXCLUDED: &[Excluded] = &[
         // key passed to `values.insert` (lib.rs:355) is dropped, not stored.
         max_per_frame: 2,
         why: "the parameter table is keyed by name, as Mission Planner's is \
-              (C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:5770 builds a string per \
+              (C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:5733 builds a string per \
               PARAM_VALUE). A parameter arrives when one is read or set, not as telemetry.",
     },
     Excluded {
@@ -186,7 +186,7 @@ const EXCLUDED: &[Excluded] = &[
         // than that across both passes is still growing it when measured.
         max_per_frame: 2,
         why: "the message log holds the vehicle's own words as owned text, as Mission Planner \
-              does (C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:5380-5386 adds a string \
+              does (C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:5360-5366 adds a string \
               to cs.messages per STATUSTEXT).",
     },
 ];

@@ -35,7 +35,7 @@
 //! read of `/dev/input/js*` (`// C#: ExtLibs/ArduPilot/Joystick/JoystickLinux.cs:81`, `:101`) - and
 //! then throws the latency away twice: a loop that samples that state every 50 ms
 //! (`// C#: ExtLibs/ArduPilot/Joystick/JoystickBase.cs:1036`) and a send loop that wakes every
-//! 40 ms and sends if 50 ms have passed (`// C#: MainV2.cs:2249`, `:2356`, `:2446`). The channel
+//! 40 ms and sends if 50 ms have passed (`// C#: MainV2.cs:2256`, `:2356`, `:2446`). The channel
 //! arithmetic is the C#'s, in [`Mapping`]; what changed is the plumbing between the device and
 //! the sink. The button functions `mainloop` checks on each pass are checked here as each read
 //! lands (`// C#: ExtLibs/ArduPilot/Joystick/JoystickBase.cs:1129-1131`): the button axes move
@@ -103,9 +103,9 @@ use web_time::{Duration, Instant};
 /// The longest the sticks go without being sent while overrides are on.
 ///
 /// Mission Planner's joystick send rate: `float rate = 50; // 1000 / 50 = 20 hz`
-/// (`// C#: MainV2.cs:2249`), gated by `lastjoystick.AddMilliseconds(rate) < DateTime.Now`
-/// (`// C#: MainV2.cs:2356`). In Mission Planner it is the *only* send, and because the loop around
-/// it sleeps 40 ms (`// C#: MainV2.cs:2446`) the frames actually go out about every 80 ms. Here it
+/// (`// C#: MainV2.cs:2256`), gated by `lastjoystick.AddMilliseconds(rate) < DateTime.Now`
+/// (`// C#: MainV2.cs:2363`). In Mission Planner it is the *only* send, and because the loop around
+/// it sleeps 40 ms (`// C#: MainV2.cs:2453`) the frames actually go out about every 80 ms. Here it
 /// is the ceiling: a moving stick is sent as it moves, and this is how long a held one waits to be
 /// said again.
 pub const RESEND: Duration = Duration::from_millis(50);
@@ -113,8 +113,8 @@ pub const RESEND: Duration = Duration::from_millis(50);
 /// The shortest gap between two sends while overrides are on: a rate floor, 50 frames a second.
 ///
 /// Mission Planner's floor is 50 ms, because its periodic send is its only send
-/// (`// C#: MainV2.cs:2356`), and it also skips a send while the port has 50 bytes queued
-/// (`// C#: MainV2.cs:2391`). Sending on change has no floor of its own: a gamepad reports at
+/// (`// C#: MainV2.cs:2363`), and it also skips a send while the port has 50 bytes queued
+/// (`// C#: MainV2.cs:2398`). Sending on change has no floor of its own: a gamepad reports at
 /// 250-1000 Hz, and a stick being stirred would put a frame on the link for every report - a few
 /// hundred `RC_CHANNELS_OVERRIDE`s a second, more than a 57600-baud radio carries at all, crowding
 /// out the heartbeats and commands sharing it.
@@ -176,7 +176,7 @@ pub struct Frame {
     /// With Manual Control ticked, what to send instead: a `MANUAL_CONTROL`. `None` for a release,
     /// which is always an `RC_CHANNELS_OVERRIDE`, as `clearRCOverride` sends one whichever the
     /// sticks were flying with.
-    /// `// C#: MainV2.cs:2274, 2407-2442; ExtLibs/ArduPilot/Joystick/JoystickBase.cs:294-364`
+    /// `// C#: MainV2.cs:2281, 2414-2449; ExtLibs/ArduPilot/Joystick/JoystickBase.cs:294-364`
     pub manual: Option<ManualControl>,
     /// When the read that produced the latest position returned, on the monotonic clock.
     ///

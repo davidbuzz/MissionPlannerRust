@@ -65,13 +65,13 @@ pub const FORCE_FAILED: &str = "Failed to connect and send the reboot command";
 pub enum Force {
     /// `Open`'s connect loop: a vehicle heard twice (four times when it is not component 1)
     /// before the deadline.
-    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:769-894`
+    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:771-896`
     Opening {
         /// `CONNECT_TIMEOUT_SECONDS` after the click.
         deadline: Instant,
     },
     /// `doReboot(true, false)`'s `getHeartBeat`: the heartbeat after `seen`, or 2.2 s.
-    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:2591-2605`
+    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:2588-2602`
     Heartbeat {
         /// The vehicle's heartbeats when it began.
         seen: u64,
@@ -122,7 +122,7 @@ impl ForceBootloader {
     /// opened or found open: while it is, the link opening or closing shows no screen again
     /// (`MissionPlanner::backstage_tick`, [`holds_setup`]) - `Open` is not `doConnect`, whose end
     /// shows the screen again, nor a disconnect.
-    /// `// C#: GCSViews/ConfigurationView/ConfigFirmware.cs:623; ConfigFirmwareManifest.cs:517; MainV2.cs:1115-1133, 1419-1425, 1740-1748; ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:668-700, 809-814`
+    /// `// C#: GCSViews/ConfigurationView/ConfigFirmware.cs:623; ConfigFirmwareManifest.cs:517; MainV2.cs:1117-1135, 1421-1427, 1742-1750; ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:670-702, 811-816`
     #[must_use]
     pub const fn forcing(&self) -> bool {
         self.state.is_some()
@@ -165,7 +165,7 @@ impl ForceBootloader {
     /// appear - and a network kind in the box is [`FORCE_FAILED`], as the C#'s start-up
     /// `SerialPort` named "TCP" fails to open. `Open` records nothing (`doConnect` makes the
     /// logs), and neither does this.
-    /// `// C#: GCSViews/ConfigurationView/ConfigFirmware.cs:619-639; ConfigFirmwareManifest.cs:513-533; MainV2.cs:726-727, 781-792, 1561-1570, 4352-4358; ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:668-700`
+    /// `// C#: GCSViews/ConfigurationView/ConfigFirmware.cs:619-639; ConfigFirmwareManifest.cs:513-533; MainV2.cs:728-729, 783-794, 1563-1572, 4359-4365; ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:670-702`
     pub fn click(
         &mut self,
         view: &TelemetryView,
@@ -198,7 +198,7 @@ impl ForceBootloader {
     /// Under way once the window has opened its link, or found it open: `Open`'s wait for the
     /// vehicle, or - the link already open, as `Open` then returns at once - `doReboot`'s wait
     /// for its next heartbeat.
-    /// `// C#: GCSViews/ConfigurationView/ConfigFirmware.cs:623-627; ConfigFirmwareManifest.cs:517-521; ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:668-671`
+    /// `// C#: GCSViews/ConfigurationView/ConfigFirmware.cs:623-627; ConfigFirmwareManifest.cs:517-521; ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:670-673`
     pub fn start(&mut self, already_open: bool, view: &TelemetryView, now: Instant) {
         self.state = Some(if already_open {
             Force::Heartbeat {
@@ -219,7 +219,7 @@ impl ForceBootloader {
     /// and the instruction's box, whether or not there was a vehicle, as the C# does not look at
     /// `doReboot`'s answer. `Open` finding nothing in time closes the link: [`FORCE_FAILED`] on
     /// the status line, and [`ForceEnd::Failed`] for the window to close its link.
-    /// `// C#: GCSViews/ConfigurationView/ConfigFirmware.cs:623-638; ConfigFirmwareManifest.cs:517-532; ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:791-796, 2591-2618, 2758-2763`
+    /// `// C#: GCSViews/ConfigurationView/ConfigFirmware.cs:623-638; ConfigFirmwareManifest.cs:517-532; ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:793-798, 2588-2615, 2755-2760`
     pub fn tick(
         &mut self,
         telemetry: &mut Telemetry,
@@ -328,7 +328,7 @@ impl MissionPlanner {
     /// [`ForceBootloader::click`] over the window's link and the port and baud boxes, taking the
     /// link it opens - with no parameter list and no mission asked for, as `Open(false)` asks for
     /// none (`loadwpsonconnect` is `doConnect`'s).
-    /// `// C#: GCSViews/ConfigurationView/ConfigFirmware.cs:619-639; ConfigFirmwareManifest.cs:513-533; ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:668-700`
+    /// `// C#: GCSViews/ConfigurationView/ConfigFirmware.cs:619-639; ConfigFirmwareManifest.cs:513-533; ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:670-702`
     pub(crate) fn force_bootloader_clicked(&mut self, page: Page) {
         let live = match page {
             Page::Manifest => self.install_firmware.live(),
@@ -362,7 +362,7 @@ impl MissionPlanner {
     /// window's link. `Open` failing closes the window's link, as `Open` closes the port at its
     /// deadline - which shows no screen again either, so SETUP's list and the legacy page object
     /// are kept, keyed to the link closed.
-    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:791-796`
+    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:793-798`
     pub(crate) fn force_bootloader_tick(&mut self, now: Instant) {
         for page in Page::ALL {
             let force = match page {

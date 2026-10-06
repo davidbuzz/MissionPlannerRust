@@ -1,7 +1,7 @@
 # Ctrl+P and the PLUGINS tab: the plugin manager (the owner's bug of 2026-10-04: Ctrl+P did
 # nothing).
 #
-# Mission Planner's Ctrl+P is MainV2.ProcessCmdKey's `new PluginUI().Show()` (MainV2.cs:4118-4122),
+# Mission Planner's Ctrl+P is MainV2.ProcessCmdKey's `new PluginUI().Show()` (MainV2.cs:4125-4129),
 # and the Drone ID plugin's first-run message tells the user to press it. Here, by the owner's word
 # (2026-10-04), the form is the PLUGINS tab, between LOGS and HELP, and Ctrl+P shows that tab. The
 # form (Plugin/PluginUI.cs) lists the plugins PluginLoader.Plugins holds - Init and Loaded both

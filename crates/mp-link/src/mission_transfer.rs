@@ -60,7 +60,7 @@
 //!
 //! The C# drives an upload from the ground: it sends item N and waits for a request for N+1,
 //! treating a request for anything else as a reason to send item N again
-//! (C#: MAVLinkInterface.cs:4318-4356). The MAVLink protocol has the vehicle drive, and so does
+//! (C#: MAVLinkInterface.cs:4307-4345). The MAVLink protocol has the vehicle drive, and so does
 //! this machine: it answers the item asked for. Against a well-behaved vehicle the wire is the
 //! same. Against a vehicle that re-asks, skips or jumps, the C# sends an item nobody asked for.
 //! The consequences, each pinned by a test in `tests/retries.rs`:
@@ -84,7 +84,7 @@
 
 //! # Write Fast
 //!
-//! `saveWPsFast` (C#: GCSViews/FlightPlanner.cs:6340-6582) is the planner's other upload: after
+//! `saveWPsFast` (C#: GCSViews/FlightPlanner.cs:6340-6579) is the planner's other upload: after
 //! `setWPTotal` it sends the items without waiting to be asked, pausing every tenth item until
 //! the vehicle's `MISSION_REQUEST` catches up - up to 1.1 s, after which it goes on from
 //! whatever the vehicle last asked for (`a = reqno`). A `MISSION_ACK` seen while it pauses ends
@@ -104,11 +104,11 @@ use crate::timeouts::{ProtocolTimeouts, Retry};
 
 /// How long `saveWPsFast` waits at each tenth item for the vehicle's request to catch up before
 /// going on from the last request: `start.AddSeconds(1.1) < DateTime.Now`.
-/// `// C#: GCSViews/FlightPlanner.cs:6444`
+/// `// C#: GCSViews/FlightPlanner.cs:6441`
 pub const FAST_CHECKPOINT_WAIT: Duration = Duration::from_millis(1100);
 
 /// Every tenth item, `saveWPsFast` pauses: `if (a % 10 == 0 && a != 0)`.
-/// `// C#: GCSViews/FlightPlanner.cs:6423`
+/// `// C#: GCSViews/FlightPlanner.cs:6420`
 pub const FAST_BURST: u16 = 10;
 
 /// `MAV_MISSION_ACCEPTED`.
@@ -171,7 +171,7 @@ pub enum TransferStep {
 
 impl std::fmt::Display for TransferStep {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        // C#: MAVLinkInterface.cs:3314, 3478, 3795, 4267.
+        // C#: MAVLinkInterface.cs:3310, 3473, 3788, 4258.
         f.write_str(match self {
             Self::RequestList => "getWPCount",
             Self::RequestItem => "getWP",
@@ -216,7 +216,7 @@ pub enum TransferFailure {
         mission_type: u8,
     },
     /// Write Fast's `MAV_MISSION_INVALID`, with its own misspelling and the checkpoint's item.
-    /// `// C#: GCSViews/FlightPlanner.cs:6474-6478`
+    /// `// C#: GCSViews/FlightPlanner.cs:6471-6475`
     #[error(
         "Upload failed, mission was rejected byt the Mav,\n item had a bad option wp# {seq} MAV_MISSION_INVALID"
     )]
@@ -225,7 +225,7 @@ pub enum TransferFailure {
         seq: u16,
     },
     /// Write Fast's other refusals: `"Upload wps failed " + reqno + " " + result`.
-    /// `// C#: GCSViews/FlightPlanner.cs:6484-6488`
+    /// `// C#: GCSViews/FlightPlanner.cs:6481-6485`
     #[error("Upload wps failed {seq} {}", result_name(.result))]
     FastRejected {
         /// The vehicle's last request, the C#'s `reqno`.
@@ -356,7 +356,7 @@ impl MissionTransfer {
     }
 
     /// Write Fast: `saveWPsFast`'s upload of `items`, the count first, then the items in bursts.
-    /// `// C#: GCSViews/FlightPlanner.cs:6340-6582`
+    /// `// C#: GCSViews/FlightPlanner.cs:6340-6579`
     #[must_use]
     pub fn upload_fast(target: VehicleId, items: Vec<MissionItem>, mission_type: u8) -> Self {
         let mut transfer = Self::new(
@@ -505,7 +505,7 @@ impl MissionTransfer {
         // crossed. Treating it as the next item shifts every later waypoint by one.
         //
         // The C# asks again for the one it still needs on *any* wrong item, at once
-        // (C#: MAVLinkInterface.cs:3530-3534). For an item we already hold that is an echo
+        // (C#: MAVLinkInterface.cs:3523-3527). For an item we already hold that is an echo
         // chamber: over a link that delivers each frame twice, every duplicate draws another
         // request, every request two more replies, and the traffic doubles per item - 2^n for an
         // n-item mission. So a stale item is dropped here, and only an item from the future - one
@@ -548,7 +548,7 @@ impl MissionTransfer {
                 waiting_since,
             };
             // `setWPTotal` returns on a request for 0 or 1; the loop then starts sending.
-            // `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:3800-3803`
+            // `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:3793-3796`
             if requested.is_none() && next == 0 {
                 return if seq <= 1 {
                     self.burst()
@@ -557,7 +557,7 @@ impl MissionTransfer {
                 };
             }
             // At a pause, `if (reqno == a) break;` - the vehicle has all of them; go on.
-            // `// C#: GCSViews/FlightPlanner.cs:6439-6443`
+            // `// C#: GCSViews/FlightPlanner.cs:6436-6440`
             if waiting_since.is_some() && seq == next {
                 return self.burst();
             }
@@ -574,7 +574,7 @@ impl MissionTransfer {
         if !resyncing && last_requested == Some(seq) {
             // Asked again for the item just sent: it was lost, or the request was duplicated.
             // Sending it again costs one of the item's retries, as the C#'s immediate resend does
-            // (C#: MAVLinkInterface.cs:4354, `start = DateTime.MinValue`), so a vehicle stuck
+            // (C#: MAVLinkInterface.cs:4343, `start = DateTime.MinValue`), so a vehicle stuck
             // asking for one item cannot hold the transfer open for ever.
             if self.retries >= self.timeouts.mission_item_send.retries {
                 self.state =
@@ -652,7 +652,7 @@ impl MissionTransfer {
 
     /// Write Fast's reading of a `MISSION_ACK`, as the pause loop reads `result`: `a` is the
     /// item the loop stands at (`next`), `reqno` the vehicle's last request.
-    /// `// C#: GCSViews/FlightPlanner.cs:6446-6489`
+    /// `// C#: GCSViews/FlightPlanner.cs:6443-6486`
     fn on_fast_ack(&mut self, result: u8, a: u16, reqno: u16) -> Action {
         let failure = match result {
             // `result` stays accepted; INVALID_SEQUENCE only sleeps 500 ms inside the pause.
@@ -698,7 +698,7 @@ impl MissionTransfer {
         }
         if next >= self.count() && requested.is_some() {
             // `MainV2.comPort.setWPACK()`: done, without waiting for the vehicle's ack.
-            // `// C#: GCSViews/FlightPlanner.cs:6567`
+            // `// C#: GCSViews/FlightPlanner.cs:6564`
             self.state = TransferState::Complete;
             return Action::SendAck;
         }
@@ -721,7 +721,7 @@ impl MissionTransfer {
             && now.saturating_duration_since(since) >= FAST_CHECKPOINT_WAIT
         {
             // "do next 10 starting at reqno": `a = reqno`.
-            // `// C#: GCSViews/FlightPlanner.cs:6444-6449`
+            // `// C#: GCSViews/FlightPlanner.cs:6441-6446`
             self.state = TransferState::UploadingFast {
                 next: requested.unwrap_or(0),
                 requested,
@@ -788,7 +788,7 @@ impl MissionTransfer {
                 last_requested: None,
             } => Action::SendCount(self.count()),
             // The item the vehicle last asked for, sent again unasked: the C#'s `setWP` retry
-            // (C#: MAVLinkInterface.cs:4254-4262).
+            // (C#: MAVLinkInterface.cs:4245-4253).
             TransferState::Uploading {
                 last_requested: Some(seq),
             } => self

@@ -22,7 +22,7 @@
 //! docs/perf.md: when there is something new to draw, and at least once a second.
 //!
 //! Mission Planner repaints its flight screen on a 10 Hz timer, `updateBindingSource`
-//! (`GCSViews/FlightData.cs:5421-5424`), and so did this planner, everywhere. Measured, a timer
+//! (`GCSViews/FlightData.cs:5535-5538`), and so did this planner, everywhere. Measured, a timer
 //! draws old data - at a vehicle's 4 Hz, 60% of its frames redrew what the frame before showed -
 //! and draws ten frames a second idle; drawing on new data drew no stale frame and brought a
 //! packet to its pixels in 16 ms rather than 49 at the median. **Not the C#'s**, by that choice.

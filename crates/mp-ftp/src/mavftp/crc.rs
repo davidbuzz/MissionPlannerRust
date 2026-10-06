@@ -20,7 +20,7 @@
 
 //! The CRC-32 Mission Planner and ArduPilot use to check a file that went over MAVFTP.
 //!
-//! C#: ExtLibs/ArduPilot/Mavlink/MAVFtp.cs:1002-1044 (`crc32_table`, `crc_crc32`). The table is
+//! C#: ExtLibs/ArduPilot/Mavlink/MAVFtp.cs:1041-1083 (`crc32_table`, `crc_crc32`). The table is
 //! the ordinary reflected CRC-32's (polynomial 0xEDB88320), but the function neither starts from
 //! all ones nor inverts at the end: it is the running register, and a caller that wants zlib's
 //! answer has to invert both ends itself. Mission Planner starts from zero
@@ -30,7 +30,7 @@
 /// The table, copied from the C# rather than computed, so that a transcription error would show
 /// as a failing test against the polynomial instead of a wrong answer from both.
 ///
-/// C#: MAVFtp.cs:1002-1033.
+/// C#: MAVFtp.cs:1041-1072.
 static CRC32_TABLE: [u32; 256] = [
     0x00000000, 0x77073096, 0xee0e612c, 0x990951ba, 0x076dc419, 0x706af48f, 0xe963a535, 0x9e6495a3,
     0x0edb8832, 0x79dcb8a4, 0xe0d5e91e, 0x97d2d988, 0x09b64c2b, 0x7eb17cbd, 0xe7b82d07, 0x90bf1d91,
@@ -68,7 +68,7 @@ static CRC32_TABLE: [u32; 256] = [
 
 /// Runs `buf` through the CRC register starting from `crc`.
 ///
-/// C#: MAVFtp.cs:1035-1044. `crc_crc32(0, file)` is what the vehicle's `kCmdCalcFileCRC32`
+/// C#: MAVFtp.cs:1074-1083. `crc_crc32(0, file)` is what the vehicle's `kCmdCalcFileCRC32`
 /// answers for the same bytes.
 #[must_use]
 pub fn crc_crc32(crc: u32, buf: &[u8]) -> u32 {

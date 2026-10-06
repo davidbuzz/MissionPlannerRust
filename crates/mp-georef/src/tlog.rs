@@ -24,7 +24,7 @@
 //! `mp_log::TlogReader` is a reader of its own design - it treats a timestamp as a hint and
 //! resynchronises a byte at a time - so it is not used: which packets the C# sees in a damaged log,
 //! and what time each carries, is `ReadPacket`'s business, ported here.
-//! `// C#: ExtLibs/Utilities/Extensions.cs:753-767, ExtLibs/Mavlink/MavlinkParse.cs:128-238`
+//! `// C#: ExtLibs/Utilities/Extensions.cs:746-760, ExtLibs/Mavlink/MavlinkParse.cs:132-246`
 
 use mp_mavlink::crc;
 use mp_mavlink::{Dialect, STX_V1, STX_V2};
@@ -38,7 +38,7 @@ const MAX_PACKET_LEN: usize = 255 + 12 + 13;
 /// `MAVLINK_CORE_HEADER_LEN` and the MAVLink 1 one. `// C#: ExtLibs/Mavlink/Mavlink.cs:12-13`
 const CORE_HEADER_LEN: usize = 9;
 const CORE_HEADER_V1_LEN: usize = 5;
-/// `MAVLINK_SIGNATURE_BLOCK_LEN`. `// C#: ExtLibs/Mavlink/Mavlink.cs:19`
+/// `MAVLINK_SIGNATURE_BLOCK_LEN`. `// C#: ExtLibs/Mavlink/Mavlink.cs:20`
 const SIGNATURE_LEN: usize = 13;
 
 /// One packet `ReadPacket` returned.
@@ -53,7 +53,7 @@ pub struct Packet {
 }
 
 /// Why reading stopped early: `ReadWithTimeout` found the file ending inside the start-byte scan,
-/// which `ReadPacket` does not catch (`MavlinkParse.cs:153-162`), so the exception leaves
+/// which `ReadPacket` does not catch (`MavlinkParse.cs:157-166`), so the exception leaves
 /// `GetMessageOfType` and whatever was reading it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
 #[error("End of data")]
@@ -66,7 +66,7 @@ pub struct EndOfData;
 ///
 /// [`EndOfData`] where the C# throws out of the enumeration; the packets before it are lost with
 /// it, as they are when the exception unwinds the C#'s `foreach`.
-/// `// C#: ExtLibs/Utilities/Extensions.cs:753-767`
+/// `// C#: ExtLibs/Utilities/Extensions.cs:746-760`
 pub fn messages_of_type(data: &[u8], ids: &[u32]) -> Result<Vec<Packet>, EndOfData> {
     let mut pos = 0usize;
     let mut out = Vec::new();
@@ -84,7 +84,7 @@ pub fn messages_of_type(data: &[u8], ids: &[u32]) -> Result<Vec<Packet>, EndOfDa
 /// `ReadPacket` with `hasTimestamp`: eight bytes of big-endian microseconds, then a scan of at
 /// most 281 bytes for a start byte, the header, the rest, and the checksum; `None` for a packet
 /// dropped (no start byte in reach, cut short by the end of the file, or a bad checksum).
-/// `// C#: ExtLibs/Mavlink/MavlinkParse.cs:128-238`
+/// `// C#: ExtLibs/Mavlink/MavlinkParse.cs:132-246`
 fn read_packet(data: &[u8], pos: &mut usize) -> Result<Option<Packet>, EndOfData> {
     // `BaseStream.Read(datearray, 0, 8)`: as many as are left, the rest zero, then reversed.
     let mut stamp = [0u8; 8];
@@ -171,7 +171,7 @@ fn read_packet(data: &[u8], pos: &mut usize) -> Result<Option<Packet>, EndOfData
     ]);
     // ...while the one computed runs from after the start byte to two bytes short of the end,
     // which for a signed frame takes in the checksum and most of the signature, so no signed
-    // frame passes (MavlinkParse.cs:219-229, MavlinkCRC.cs:18-37).
+    // frame passes (MavlinkParse.cs:225-235, MavlinkCRC.cs:18-37).
     let covered = buffer.get(1..buffer.len().saturating_sub(2)).unwrap_or(&[]);
     let computed = crc::accumulate(
         DIALECT.crc_extra(msgid).unwrap_or(0),

@@ -73,7 +73,7 @@ impl std::fmt::Display for PlottableField {
 /// The instance field is not guessable from the name: it is `I` on `MAG`, `IMU` on `VIBE`,
 /// `Instance` on `BAT`, `C` on the EKF cores, `chan` on `MAV` and `NodeId` on `CAND`. ArduPilot
 /// declares it properly, in `FMTU`: a `#` in the `UnitIds` string marks the field, positionally.
-/// `// C#: ExtLibs/Utilities/DFLogBuffer.cs:230-250`
+/// `// C#: ExtLibs/Utilities/DFLogBuffer.cs:229-249`
 #[must_use]
 pub(crate) fn instance_fields(data: &[u8]) -> std::collections::BTreeMap<String, String> {
     let mut by_type: std::collections::BTreeMap<i64, usize> = std::collections::BTreeMap::new();
@@ -310,7 +310,7 @@ pub struct UnitTable {
 
 impl UnitTable {
     /// The unit of one field, or the unitless default: the C#'s `GetUnit`.
-    /// `// C#: ExtLibs/Utilities/DFLogBuffer.cs:821-829`
+    /// `// C#: ExtLibs/Utilities/DFLogBuffer.cs:876-884`
     #[must_use]
     pub fn get(&self, message: &str, field: &str) -> FieldUnit {
         self.by_field
@@ -340,7 +340,7 @@ impl UnitTable {
 /// character - `c`/`C`/`e`/`E` are hundredths and `L` is a coordinate in 1e-7 degrees, all of
 /// which [`crate::dataflash::FieldType::decode`] has already divided out - gets a multiplier of 1
 /// whatever `MULT` says, as the C# does, or the value would be scaled twice.
-/// `// C#: ExtLibs/Utilities/DFLogBuffer.cs:230-292, 503-545`
+/// `// C#: ExtLibs/Utilities/DFLogBuffer.cs:229-291, 558-600`
 ///
 /// **Deliberate divergence.** In the C#, the loops that read `UNIT` and `MULT` are guarded by
 /// `if (Unit.Count > 0)` and `if (Mult.Count > 0)` over dictionaries nothing ever seeds, so the
@@ -400,7 +400,7 @@ pub fn units(data: &[u8]) -> UnitTable {
 
 /// The table `BuildUnitMultiList` makes from what `FMTU`, `UNIT` and `MULT` said last of each
 /// format and id, and the whole log's formats.
-/// `// C#: ExtLibs/Utilities/DFLogBuffer.cs:503-545`
+/// `// C#: ExtLibs/Utilities/DFLogBuffer.cs:558-600`
 pub(crate) fn unit_table(
     fmtu: &std::collections::BTreeMap<u8, (String, String)>,
     unit_labels: &std::collections::BTreeMap<char, String>,
@@ -856,7 +856,7 @@ mod tests {
     ///
     /// `c` is stored as hundredths and read back divided by 100, so a MULT of 0.01 on top of
     /// that would shrink every value a hundredfold. The C# forces these to 1 for the same
-    /// reason. C#: ExtLibs/Utilities/DFLogBuffer.cs:528-534
+    /// reason. C#: ExtLibs/Utilities/DFLogBuffer.cs:583-589
     #[test]
     fn a_format_the_decoder_already_scales_keeps_a_multiplier_of_one() {
         let table = units(&log_with_units());

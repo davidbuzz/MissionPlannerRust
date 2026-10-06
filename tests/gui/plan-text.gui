@@ -4,7 +4,7 @@
 # back to a default family), rotated, and every point of the path - the Bézier control points
 # too - added as a waypoint at Default Alt, laid at UTM(where the menu opened) + (x, -y) metres.
 # A size the Font constructor refuses is "Bad input options, please try again" with the
-# exception; a word for a number is float.Parse's. `GCSViews/FlightPlanner.cs:6839-6883`
+# exception; a word for a number is float.Parse's. `GCSViews/FlightPlanner.cs:6836-6880`
 #
 # An "I" has one contour of at least four points in any sans font; "II" has twice as many.
 #

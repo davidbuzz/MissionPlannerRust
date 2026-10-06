@@ -27,7 +27,7 @@
 //! the start, and the start is set as a side effect of *constructing* the first `GPS…` item whose
 //! line carries a valid GPS week and time (`DFLog.cs:151-206`). Which item that is depends on
 //! which items the buffer has constructed by then - and the buffer's own constructor constructs
-//! a good many (`DFLogBuffer.cs:207-331`). So this module indexes the log the way the buffer does,
+//! a good many (`DFLogBuffer.cs:206-330`). So this module indexes the log the way the buffer does,
 //! with `mp_log`'s `BinaryLog` for the binary framing and its `DfLog` for the format table and the
 //! GPS time, and constructs items in the buffer's order so the start time lands where the C#'s
 //! does.
@@ -39,7 +39,7 @@ use mp_log::netfmt;
 
 use crate::time::{DateTime, Kind, OutOfRange, TICKS_PER_MILLISECOND, UNIX_EPOCH_TICKS};
 
-/// The format message's type. `// C#: ExtLibs/Utilities/DFLogBuffer.cs:128`
+/// The format message's type. `// C#: ExtLibs/Utilities/DFLogBuffer.cs:127`
 const FMT_TYPE: usize = 128;
 
 /// One `DFLog.DFItem`: its fields as the text `items` gives, `None` where the C# holds `null`.
@@ -102,8 +102,8 @@ impl<'a> DfBuffer<'a> {
     /// # Errors
     ///
     /// Where the constructor throws: an item of an instanced type too short to hold the instance
-    /// column its units name (`DFLogBuffer.cs:258`, outside any `try`).
-    /// `// C#: ExtLibs/Utilities/DFLogBuffer.cs:52-332`
+    /// column its units name (`DFLogBuffer.cs:257`, outside any `try`).
+    /// `// C#: ExtLibs/Utilities/DFLogBuffer.cs:51-331`
     pub fn new(data: &'a [u8]) -> Result<Self, ShortInstanceItem> {
         let binary = data.first() == Some(&HEAD_BYTE1) && data.get(1) == Some(&HEAD_BYTE2);
         let mut buffer = Self {
@@ -125,7 +125,7 @@ impl<'a> DfBuffer<'a> {
         Ok(buffer)
     }
 
-    /// `setlinecount`'s binary half. `// C#: ExtLibs/Utilities/DFLogBuffer.cs:103-143`
+    /// `setlinecount`'s binary half. `// C#: ExtLibs/Utilities/DFLogBuffer.cs:102-142`
     fn index_binary(&mut self) {
         let length = self.data.len();
         let mut pos = 0usize;
@@ -156,7 +156,7 @@ impl<'a> DfBuffer<'a> {
 
     /// `setlinecount`'s text half: lines end at `\n`, the last unterminated one is never read,
     /// and a line is indexed under the type its name has once a format names it.
-    /// `// C#: ExtLibs/Utilities/DFLogBuffer.cs:144-201`
+    /// `// C#: ExtLibs/Utilities/DFLogBuffer.cs:143-200`
     fn index_text(&mut self) {
         self.line_starts.push(0);
         let mut count = 0usize;
@@ -211,10 +211,10 @@ impl<'a> DfBuffer<'a> {
     /// `FMTU`s, up to 2002 items of each type whose units name an instance column, and the
     /// `GPS`, `GPS2` and `GPSB` items up to the first with a 3D fix - for the one thing
     /// constructing an item can change here: the GPS start time.
-    /// `// C#: ExtLibs/Utilities/DFLogBuffer.cs:207-331`
+    /// `// C#: ExtLibs/Utilities/DFLogBuffer.cs:206-330`
     fn construct_as_setlinecount_does(&mut self) -> Result<(), ShortInstanceItem> {
         // `FMT[type] = (...)` for every complete FMT item, then `FMTLine` of it again
-        // (DFLogBuffer.cs:208-228). Reading a format line again reads the same format, so only
+        // (DFLogBuffer.cs:207-227). Reading a format line again reads the same format, so only
         // each type's name is kept.
         let mut fmt_names: Vec<(i32, String)> = Vec::new();
         for line in self.lines_of(&["FMT"]) {
@@ -246,7 +246,7 @@ impl<'a> DfBuffer<'a> {
             }
         }
         // `InstanceType[FmtType] = (UnitIds.IndexOf("#"), ...)` for every FMTU whose unit ids
-        // hold a `#`, in the order the dictionary keeps them (DFLogBuffer.cs:230-251).
+        // hold a `#`, in the order the dictionary keeps them (DFLogBuffer.cs:229-250).
         let mut instance_types: Vec<(i32, usize)> = Vec::new();
         for line in self.lines_of(&["FMTU"]) {
             let item = self.item(line);
@@ -269,7 +269,7 @@ impl<'a> DfBuffer<'a> {
             }
         }
         // Up to 2002 items of each such type, each read at its instance column, which throws if
-        // the item is too short (DFLogBuffer.cs:253-268).
+        // the item is too short (DFLogBuffer.cs:252-267).
         for (ty, hash) in instance_types {
             let Some(name) = fmt_names
                 .iter()
@@ -295,10 +295,10 @@ impl<'a> DfBuffer<'a> {
             }
         }
         // UNIT and MULT are read only when `Unit` and `Mult` already hold something, which at
-        // this point they never do (DFLogBuffer.cs:269-293); MSG and PARM are read as text for the
-        // firmware's name, which nothing here uses (DFLogBuffer.cs:295-308).
+        // this point they never do (DFLogBuffer.cs:268-292); MSG and PARM are read as text for the
+        // firmware's name, which nothing here uses (DFLogBuffer.cs:294-307).
         //
-        // "try get gps time" (DFLogBuffer.cs:312-328).
+        // "try get gps time" (DFLogBuffer.cs:311-327).
         let gps_types = ["GPS", "GPS2", "GPSB"];
         let mut gpsa = 0;
         for line in self.lines_of(&gps_types) {
@@ -325,7 +325,7 @@ impl<'a> DfBuffer<'a> {
     /// The lines `GetEnumeratorType(types)` visits: every indexed line of each type its instance
     /// map names that the format table knows, sorted when more than one type is asked for. Which
     /// of their items it then yields is [`yielded`]'s question.
-    /// `// C#: ExtLibs/Utilities/DFLogBuffer.cs:701-774`
+    /// `// C#: ExtLibs/Utilities/DFLogBuffer.cs:756-829`
     #[must_use]
     pub fn lines_of(&self, types: &[&str]) -> Vec<usize> {
         let mut lines = Vec::new();
@@ -349,7 +349,7 @@ impl<'a> DfBuffer<'a> {
 
     /// `this[(long)line]`: the line's item, constructed - which, for the first `GPS…` item with a
     /// valid GPS time, sets the start time.
-    /// `// C#: ExtLibs/Utilities/DFLogBuffer.cs:562-611, DFLog.cs:151-206`
+    /// `// C#: ExtLibs/Utilities/DFLogBuffer.cs:617-666, DFLog.cs:151-206`
     pub fn item(&mut self, line: usize) -> Item {
         let (start, end) = self.span(line);
         let item = if self.binary {
@@ -462,7 +462,7 @@ impl<'a> DfBuffer<'a> {
 /// ending in a digit the word before that last digit (`(\w+)([0-9]+)$`, so asking for `GPS2` also
 /// asks for `GPS`). A name asked for without `[n]` asks for every instance, which is every name
 /// `GeoRefImageBase` asks for, so the instance values themselves are not kept.
-/// `// C#: ExtLibs/Utilities/DFLogBuffer.cs:703-735`
+/// `// C#: ExtLibs/Utilities/DFLogBuffer.cs:758-790`
 fn instance_keys(types: &[&str]) -> Vec<String> {
     let is_word = |c: char| c.is_alphanumeric() || c == '_';
     let mut keys: Vec<String> = Vec::new();
@@ -490,7 +490,7 @@ fn instance_keys(types: &[&str]) -> Vec<String> {
 }
 
 /// Whether `GetEnumeratorType(types)` yields an item of `msgtype`: its type is one of the instance
-/// map's keys. `// C#: ExtLibs/Utilities/DFLogBuffer.cs:764-772`
+/// map's keys. `// C#: ExtLibs/Utilities/DFLogBuffer.cs:819-827`
 #[must_use]
 pub fn yielded(types: &[&str], msgtype: &str) -> bool {
     instance_keys(types).iter().any(|k| k == msgtype)

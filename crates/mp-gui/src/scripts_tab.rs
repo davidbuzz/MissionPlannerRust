@@ -19,7 +19,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
 //! The flight screen's Scripts tab: `tabScripts` of `FlightData`, ported from
-//! `GCSViews/FlightData.cs:786-812, 1012-1017, 1223-1233, 1630-1641, 4727-4776` and
+//! `GCSViews/FlightData.cs:788-814, 1014-1019, 1225-1235, 1632-1643, 4841-4890` and
 //! `FlightData.resx`, with `Script.cs` run by `mp_script`'s engine (PLAN.md §13.6 row 94, §12
 //! D20).
 //!
@@ -111,7 +111,7 @@ pub const ABORT_AT: (f32, f32, f32, f32) = (169.0, 80.0, 80.0, 23.0);
 pub const EDIT_AT: (f32, f32, f32, f32) = (255.0, 79.0, 80.0, 23.0);
 
 /// The labels' texts.
-/// `// C#: GCSViews/FlightData.resx; GCSViews/FlightData.cs:795, 1636, 4759`
+/// `// C#: GCSViews/FlightData.resx; GCSViews/FlightData.cs:797, 1638, 4873`
 pub const STATUS_NONE: &str = "Script Status: No Script Running";
 pub const STATUS_RUNNING: &str = "Script Status: Running";
 pub const STATUS_FINISHED: &str = "Script Status: Finished (or aborted)";
@@ -221,7 +221,7 @@ type LinkSlot = Arc<Mutex<Option<(mp_link::LinkSender, VehicleId)>>>;
 
 /// A change to `MAV.GuidedMode`: `setPositionTargetGlobalInt`'s - the position where it is not
 /// zero, the height always, the frame left - or a guided `setWP`'s, the whole item.
-/// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:4538-4545, 4109-4112, 4148-4151`
+/// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:4527-4534, 4100-4103, 4138-4141`
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct GuidedUpdate {
     /// `GuidedMode.x`, degrees x 1e7, when it changes.
@@ -237,7 +237,7 @@ pub struct GuidedUpdate {
 impl GuidedUpdate {
     /// `MAVlist[sysid, compid].GuidedMode.x = (int) (lat * 1e7)` and the rest, as
     /// `setPositionTargetGlobalInt` writes them for a position.
-    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:4538-4545`
+    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:4527-4534`
     #[allow(clippy::cast_possible_truncation)] // `(int)`, `(float)`
     fn position_target(position: &PositionTarget) -> Self {
         Self {
@@ -251,7 +251,7 @@ impl GuidedUpdate {
     /// `GuidedMode = (Locationwp) req` for the `MISSION_ITEM` a guided `setWP` sent: the float
     /// position into `Locationwp` and out into `GuidedMode`'s `mavlink_mission_item_int_t`, times
     /// 1e7 for a location command.
-    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:4109-4112; ExtLibs/Utilities/locationwp.cs:77-96, 153-178`
+    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:4100-4103; ExtLibs/Utilities/locationwp.cs:77-96, 153-178`
     #[allow(clippy::cast_possible_truncation)] // `(int)`
     fn guided_item(item: &WpItem) -> Self {
         let location = mp_mission::MissionItem {
@@ -583,7 +583,7 @@ impl ScriptHost for GuiScriptHost {
 /// decides before it sends - false for a name the vehicle has not listed, true for a value it
 /// already holds unless `force` - and otherwise its retries into the closed port and its
 /// timeout. `held` is that vehicle's value, compared exactly as the C# compares it.
-/// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:1640-1651, 1760-1766`
+/// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:1637-1648, 1757-1763`
 fn closed_port_set_param(held: Option<f64>, name: &str, value: f64, force: bool) -> Reply {
     match held {
         None => Reply::Bool(false),
@@ -594,7 +594,7 @@ fn closed_port_set_param(held: Option<f64>, name: &str, value: f64, force: bool)
 }
 
 /// `setWPAsync`'s `mavlink_mission_item_t`, `use_int` false.
-/// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:4030-4049`
+/// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:4020-4039`
 fn mission_item(target: VehicleId, item: &WpItem) -> MavMessage {
     MavMessage::MissionItem(WireMissionItem {
         param1: item.params[0],
@@ -616,7 +616,7 @@ fn mission_item(target: VehicleId, item: &WpItem) -> MavMessage {
 }
 
 /// `getWPAsync`'s `Locationwp` from the item the link read (see [`WpRead`]).
-/// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:3500-3547`
+/// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:3494-3540`
 const fn locationwp(read: &WpRead) -> Locationwp {
     let [p1, p2, p3, p4] = read.params;
     Locationwp {
@@ -866,7 +866,7 @@ impl ScriptsTab {
 
     /// `BUT_select_script_Click`: the dialog's answer, a path; an empty one is Cancel, which
     /// clears the selection as the C# does.
-    /// `// C#: GCSViews/FlightData.cs:1630-1641`
+    /// `// C#: GCSViews/FlightData.cs:1632-1643`
     pub fn select(&mut self, path: &str) {
         let path = path.trim();
         self.selected = (!path.is_empty()).then(|| PathBuf::from(path));
@@ -875,7 +875,7 @@ impl ScriptsTab {
     /// `BUT_run_script_Click`: nothing unless the file exists; else the run started, the status
     /// "Running", and the console opened when the output is redirected. `MainV2`'s speech
     /// starts from the user's "speechenable" and "speech_armed_only" in `settings`.
-    /// `// C#: GCSViews/FlightData.cs:786-812, 4727-4732; MainV2.cs:658, 1005-1006`
+    /// `// C#: GCSViews/FlightData.cs:788-814, 4841-4846; MainV2.cs:658, 1007-1008`
     pub fn run_pressed(&mut self, telemetry: &Telemetry, settings: &crate::settings::Persisted) {
         let speech = (
             crate::raw_params::get_boolean(settings.get("speechenable")),
@@ -938,7 +938,7 @@ impl ScriptsTab {
 
     /// `BUT_abort_script_Click`: the script stopped at its next wait, or in the one it is in -
     /// a `Sleep`, a `WaitFor`, a `MAV` member waiting on the link.
-    /// `// C#: GCSViews/FlightData.cs:1012-1017`
+    /// `// C#: GCSViews/FlightData.cs:1014-1019`
     pub fn abort_pressed(&mut self) {
         if let Some(run) = &self.run {
             run.abort();
@@ -947,7 +947,7 @@ impl ScriptsTab {
 
     /// `BUT_edit_selected_Click`: the file opened with the desktop's editor, `Process.Start`
     /// with `UseShellExecute`; the C# swallows every failure, this puts it on the status line.
-    /// `// C#: GCSViews/FlightData.cs:1223-1233`
+    /// `// C#: GCSViews/FlightData.cs:1225-1235`
     pub fn edit_pressed(&mut self) {
         let Some(path) = &self.selected else {
             return;
@@ -1042,7 +1042,7 @@ impl ScriptsTab {
 
     /// Once a frame: the run's output appended, the run's end noticed, and every request the
     /// script has made answered from the telemetry. Returns a line for the status line, if any.
-    /// `// C#: GCSViews/FlightData.cs:4757-4776 (scriptChecker_Tick)`
+    /// `// C#: GCSViews/FlightData.cs:4871-4890 (scriptChecker_Tick)`
     pub fn tick(
         &mut self,
         telemetry: &Telemetry,
@@ -1122,7 +1122,7 @@ impl ScriptsTab {
                 Request::Reboot { bootloader: false } => {
                     // `Telemetry::reboot`: `doCommand`'s two sends, not waited for, and the
                     // serial port looked at afterwards; false with the port closed, as
-                    // `doCommand` is. `// C#: MAVLinkInterface.cs:2553-2589, 2693-2694`
+                    // `doCommand` is. `// C#: MAVLinkInterface.cs:2550-2586, 2690-2691`
                     let _ = reply.send(Reply::Bool(telemetry.is_open() && telemetry.reboot()));
                     continue;
                 }
@@ -1330,7 +1330,7 @@ impl Waiting {
     /// does to `GuidedMode`. A request the link no longer knows - the link closed and gone - is
     /// the member's timeout, and so is one still under way on a link whose port has closed,
     /// which nothing will end now: the C#'s loop sends into the closed port (`generatePacket`
-    /// returns at once, `MAVLinkInterface.cs:1262-1265`), reads nothing (`readPacketAsync`'s
+    /// returns at once, `MAVLinkInterface.cs:1265-1268`), reads nothing (`readPacketAsync`'s
     /// empty read, `:4697`, `:4932`, `:4968-4969`) and throws its `TimeoutException` when its
     /// retries are spent - here at once.
     fn follow(&self, telemetry: &Telemetry) -> Option<(Reply, Option<GuidedUpdate>)> {
@@ -1358,7 +1358,7 @@ impl Waiting {
                 Reply::Bool(matches!(outcome, Some(RequestOutcome::Accepted { .. })))
             }
             (_, Some(RequestOutcome::TimedOut) | None) => timed_out(&member),
-            // `getWPAsync`: the item the vehicle sent. `// C#: MAVLinkInterface.cs:3500-3557`
+            // `getWPAsync`: the item the vehicle sent. `// C#: MAVLinkInterface.cs:3494-3550`
             (Self::GetWp { .. }, Some(RequestOutcome::Accepted { .. })) => request
                 .as_ref()
                 .and_then(mp_link::requests::Request::wp)
@@ -1367,7 +1367,7 @@ impl Waiting {
             // `setWPTotalAsync` returns once the vehicle asks for the first item or acks.
             (Self::SetWpTotal { .. }, Some(_)) => Reply::Done,
             // `setWPAsync`: the `MAV_MISSION_RESULT`, accepted when the vehicle asked for the
-            // next item; a guided item is `GuidedMode` either way. `// C#: MAVLinkInterface.cs:4108-4152`
+            // next item; a guided item is `GuidedMode` either way. `// C#: MAVLinkInterface.cs:4099-4142`
             (Self::SetWp { guided: update, .. }, Some(outcome)) => {
                 guided = *update;
                 match outcome {
@@ -1376,7 +1376,7 @@ impl Waiting {
                 }
             }
             // `setParamAsync`: false for a name not listed, true for a value already held.
-            // `// C#: MAVLinkInterface.cs:1640-1651`
+            // `// C#: MAVLinkInterface.cs:1637-1648`
             (_, Some(RequestOutcome::UnknownParameter | RequestOutcome::Rejected(_))) => {
                 Reply::Bool(false)
             }
@@ -1835,7 +1835,7 @@ mod tests {
     /// waits for that first request, so every item reaches the vehicle once - item 0 not sent a
     /// second time for the request `setWPTotal` took (ArduPilot's INVALID_SEQUENCE) - in the frame
     /// the script passed, `setWPACK`'s ack after them, and the facts say five were accepted.
-    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:2434-2450, 3753-4235`
+    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:2431-2447, 3746-4224`
     #[test]
     fn example4_writes_its_mission_to_the_vehicle_item_by_item() {
         use mp_mavlink_dialects::all::{MissionAck, MissionRequest};
@@ -1940,7 +1940,7 @@ mod tests {
     /// has not said it speaks `MISSION_INT` - and answered with the item, while an operator's
     /// Plan-screen Write is under way: the script's reads start no mission download and leave
     /// the Write where it is.
-    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:2622-2836, 3398-3565`
+    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:2619-2833, 3393-3558`
     #[test]
     fn commands_and_get_wp_go_through_the_link() {
         use mp_mavlink_dialects::all::MissionItem;
@@ -2029,7 +2029,7 @@ mod tests {
 
     /// `getWP(sysid, compid, index)` asks the vehicle the script names, and only its answer
     /// counts: the copter answering for another is read past, and the read times out.
-    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:3403-3407, 3485-3491`
+    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:3403-3407, 3480-3486`
     #[test]
     fn get_wp_asks_the_vehicle_the_script_names() {
         use mp_mavlink_dialects::all::MissionItem;
@@ -2098,7 +2098,7 @@ mod tests {
     /// The link stopping - the cable pulled - while a script waits in `setParam` ends the wait
     /// in its `TimeoutException`, at once; `doARM` afterwards is false, as `doCommand` is with
     /// the port closed, and the port is not open.
-    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:1262-1265, 1760-1766, 2693-2694`
+    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:1265-1268, 1757-1763, 2690-2691`
     #[test]
     fn a_link_that_stops_ends_the_scripts_wait() {
         use crate::telemetry::scripted::{Vehicle, param};
@@ -2147,7 +2147,7 @@ mod tests {
 
     /// The Abort button ends a script waiting on the link: the vehicle never answers its
     /// `getWP`, Abort is pressed, and the script stops there - nothing after it runs.
-    /// `// C#: GCSViews/FlightData.cs:1012-1017`
+    /// `// C#: GCSViews/FlightData.cs:1014-1019`
     #[test]
     fn abort_ends_a_script_waiting_on_the_link() {
         use crate::telemetry::scripted::Vehicle;
@@ -2188,7 +2188,7 @@ mod tests {
 
     /// `MAV` follows the window's link as it stands, not as it stood at Run: a script started
     /// before the vehicle was handed over finds it at its next call, and its command reaches it.
-    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:287-313`
+    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:289-315`
     #[test]
     fn mav_follows_the_link_as_it_stands() {
         use crate::telemetry::scripted::{Vehicle, ack};
@@ -2218,7 +2218,7 @@ mod tests {
     /// `setGuidedModeWP` on a copter: the position target sent, and the flight screen's
     /// `GuidedMode` given its position and height as `setPositionTargetGlobalInt` gives them,
     /// its frame left as it was.
-    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:4423-4461, 4538-4545`
+    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:4423-4461, 4527-4534`
     #[test]
     fn set_guided_mode_wp_moves_the_flight_screens_guided_mode() {
         use crate::telemetry::scripted::Vehicle;
@@ -2263,7 +2263,7 @@ mod tests {
     /// A guided `setWP` (current 2) sets the whole `GuidedMode` from the item, through
     /// `Locationwp`: the position times 1e7 for a location command, as it came for another; a
     /// position target keeps what it does not set.
-    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:4109-4112, 4538-4545; ExtLibs/Utilities/locationwp.cs:153-178`
+    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:4100-4103, 4527-4534; ExtLibs/Utilities/locationwp.cs:153-178`
     #[test]
     fn guided_updates_are_the_c_sharp_ones() {
         let item = WpItem {
@@ -2459,7 +2459,7 @@ mod tests {
     /// screen's `GuidedMode` to its item - a refusal too, as the C# sets it before it returns
     /// the result - and `setGuidedModeWP` on a plane goes that way: Guided (15) asked of it,
     /// then the item with current 2.
-    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:4098-4112, 4131-4151, 4441-4449`
+    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:4098-4112, 4122-4141, 4430-4438`
     #[test]
     fn a_guided_set_wp_moves_the_flight_screens_guided_mode() {
         use mp_mavlink_dialects::all::MissionAck;
@@ -2559,7 +2559,7 @@ mod tests {
     /// the named vehicle's parameters: false for one it has not listed, true for a value it
     /// holds already and not forced, and otherwise the timeout of its sends into the closed
     /// port.
-    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:1640-1651, 1760-1766`
+    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:1637-1648, 1757-1763`
     #[test]
     fn set_param_with_the_port_closed_decides_as_the_c_sharp_does() {
         use crate::telemetry::scripted::{VEHICLE, Vehicle, param};
@@ -2606,7 +2606,7 @@ mod tests {
 
     /// Run reads `MainV2`'s speech from the settings it is read from: "speechenable" and
     /// "speech_armed_only" as the user saved them, both off when absent.
-    /// `// C#: MainV2.cs:658, 1005-1006`
+    /// `// C#: MainV2.cs:658, 1007-1008`
     #[test]
     fn run_reads_the_speech_settings() {
         let path = mp_os::temp_dir().join(format!("mp-scripts-speech-{}.py", mp_os::process_id()));

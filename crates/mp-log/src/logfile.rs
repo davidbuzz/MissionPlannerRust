@@ -47,7 +47,7 @@
 //! mapping needs (`memmap2::Mmap::map` is `unsafe`: another process may change the file under
 //! it). The file is read into memory whole, once, and the index is about thirteen bytes a record
 //! beside it.
-//! `// C#: ExtLibs/Utilities/DFLogBuffer.cs:43-126, 206-330, 686-760`
+//! `// C#: ExtLibs/Utilities/DFLogBuffer.cs:42-125, 205-329, 741-815`
 
 use std::collections::BTreeMap;
 use std::path::Path;
@@ -131,7 +131,7 @@ impl LogFile {
     /// Decoded against the whole log's formats, as [`RecordIndex::decode`] and the C#'s indexer
     /// decode a row; see [`Self::messages`] for the one kind of log where that differs from the
     /// format the record was logged under.
-    /// `// C#: ExtLibs/Utilities/DFLogBuffer.cs:560-610`
+    /// `// C#: ExtLibs/Utilities/DFLogBuffer.cs:615-665`
     #[must_use]
     pub fn record(&self, row: usize) -> Option<LogMessage> {
         let offset = usize::try_from(self.index.offset(row)?).ok()?;
@@ -147,7 +147,7 @@ impl LogFile {
     /// differently: the C# gives every record of that type to either name and decodes them all
     /// with the last declaration, which misreads the ones logged under the first. `FMT` records
     /// are included when `FMT` is asked for.
-    /// `// C#: ExtLibs/Utilities/DFLogBuffer.cs:701-760`
+    /// `// C#: ExtLibs/Utilities/DFLogBuffer.cs:756-815`
     #[must_use]
     pub fn messages(&self, names: &[&str]) -> Messages<'_> {
         Messages {
@@ -158,7 +158,7 @@ impl LogFile {
 
     /// Which field carries each instanced message's instance number, by message name: what
     /// `plot::instance_fields` reads from the `FMTU`s.
-    /// `// C#: ExtLibs/Utilities/DFLogBuffer.cs:230-250`
+    /// `// C#: ExtLibs/Utilities/DFLogBuffer.cs:229-249`
     #[must_use]
     pub fn instance_fields(&self) -> BTreeMap<String, String> {
         instance_labels(self.index.instance_positions(), self.index.formats())

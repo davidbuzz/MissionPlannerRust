@@ -23,7 +23,7 @@
 //! `MirrorStreamWrite` true, so that a support engineer's ground station far away shares the
 //! vehicle's link.
 //!
-//! What the C# does with it (`ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:5463-5494`), for
+//! What the C# does with it (`ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:5443-5474`), for
 //! every packet it reads from the vehicle - each one it decodes (`:5449`), and each of a message
 //! it does not know (`:5017`): while the stream is open, write the packet's bytes to it; then,
 //! while the stream has bytes to read, read them and - when `MirrorStreamWrite` is set - write
@@ -181,7 +181,7 @@ impl Mirror {
 
     /// What to subscribe to the link's packets with: each packet the link reads from the
     /// vehicle - not one it writes - framed and handed to the mirror's thread, never waited for.
-    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:5017, 5449`
+    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:4993, 5429`
     pub fn handler(&self) -> impl FnMut(&Packet) + Send + 'static {
         let queue = self.queue.clone();
         let shared = Arc::clone(&self.shared);
@@ -298,7 +298,7 @@ fn frame(
 }
 
 /// The mirror's thread: `ProcessMirrorStream` for each packet the link hands it.
-/// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:5463-5494`
+/// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:5443-5474`
 fn run(
     mut stream: Box<dyn Transport>,
     mut reopen: Option<Reopen>,

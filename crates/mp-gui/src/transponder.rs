@@ -28,7 +28,7 @@
 //! the page: the modes and the button in bold, the faults, the flight ID and squawk unless they
 //! are being typed in, the position integrity and accuracy. Until a status has arrived every
 //! control but Connect is disabled, as the `.resx` starts them.
-//! `// C#: GCSViews/FlightData.cs:210-241, 4314-4318, 6182-6482, GCSViews/FlightData.Designer.cs:1609-1741`
+//! `// C#: GCSViews/FlightData.cs:211-242, 4428-4432, 6296-6596, GCSViews/FlightData.Designer.cs:1609-1741`
 //!
 //! `xpdr_status_pending`, which each status sets and each look at the page clears, is here the
 //! vehicle state's count of statuses (`Transponder::status_count`) and the count the page last
@@ -79,17 +79,17 @@ pub const CONNECTED: &str = "Transponder Connected!";
 pub const OFFLINE: &str = "Transponder Offline";
 
 /// Connect's message box when no status comes within three seconds.
-/// `// C#: GCSViews/FlightData.cs:6358`
+/// `// C#: GCSViews/FlightData.cs:6472`
 pub const NO_STATUS: &str = "Timeout: Status message not received.";
 
-/// Connect's message box when its command goes unanswered. `// C#: GCSViews/FlightData.cs:6363`
+/// Connect's message box when its command goes unanswered. `// C#: GCSViews/FlightData.cs:6477`
 pub const TIMEOUT: &str = "Timeout.";
 
-/// How long Connect waits for a status once its command is answered. `// C#: GCSViews/FlightData.cs:6353`
+/// How long Connect waits for a status once its command is answered. `// C#: GCSViews/FlightData.cs:6467`
 pub const STATUS_WAIT: Duration = Duration::from_secs(3);
 
 /// How often the main loop shows the transponder again without a new status.
-/// `// C#: GCSViews/FlightData.cs:4314`
+/// `// C#: GCSViews/FlightData.cs:4428`
 pub const UPDATE_EVERY: Duration = Duration::from_secs(5);
 
 /// `Squawk_nud.Maximum`, and its `Value` at start. `// C#: GCSViews/FlightData.Designer.cs:1655-1665`
@@ -102,7 +102,7 @@ pub const SQUAWK_START: u16 = 1200;
 pub const MODES: [&str; 4] = ["Mode A", "Mode C", "Mode S", "1090ES ADS-B OUT"];
 
 /// `fault_clb`'s items. The last is checked by `xpdr_airborne_status`, whatever it says.
-/// `// C#: GCSViews/FlightData.resx (fault_clb.Items), GCSViews/FlightData.cs:6434-6438`
+/// `// C#: GCSViews/FlightData.resx (fault_clb.Items), GCSViews/FlightData.cs:6548-6552`
 pub const FAULTS: [&str; 5] = [
     "Maint. Req.",
     "GPS Unavail.",
@@ -111,23 +111,23 @@ pub const FAULTS: [&str; 5] = [
     "On Ground",
 ];
 
-/// `NIC_table`. `// C#: GCSViews/FlightData.cs:210-224`
+/// `NIC_table`. `// C#: GCSViews/FlightData.cs:211-225`
 pub const NIC_TABLE: [&str; 12] = [
     "UNKNOWN", "<20.0NM", "<8.0NM", "<4.0NM", "<2.0NM", "<1.0NM", "<0.3NM", "<0.2NM", "<0.1NM",
     "<75m", "<25m", "<7.5m",
 ];
 
-/// `NACp_table`. `// C#: GCSViews/FlightData.cs:225-239`
+/// `NACp_table`. `// C#: GCSViews/FlightData.cs:226-240`
 pub const NACP_TABLE: [&str; 12] = [
     "UNKNOWN", "<10.0NM", "<4.0NM", "<2.0NM", "<1.0NM", "<0.5NM", "<0.3NM", "<0.1NM", "<0.05NM",
     "<30m", "<10m", "<3m",
 ];
 
-/// `UAVIONIX_ADSB_OUT_CONTROL_STATE`'s ident bit, which IDENT adds. `// C#: GCSViews/FlightData.cs:6188`
+/// `UAVIONIX_ADSB_OUT_CONTROL_STATE`'s ident bit, which IDENT adds. `// C#: GCSViews/FlightData.cs:6302`
 pub const IDENT_BIT: u8 = 8;
 
 /// The four mode checks as the state bits: Mode A 16, Mode C 32, Mode S 64, 1090ES 128.
-/// `// C#: GCSViews/FlightData.cs:6189-6192`
+/// `// C#: GCSViews/FlightData.cs:6303-6306`
 #[must_use]
 pub fn state_bits(modes: [bool; 4]) -> u8 {
     let mut bits = 0;
@@ -142,7 +142,7 @@ pub fn state_bits(modes: [bool; 4]) -> u8 {
 /// `uAvionixADSBControl(int.MaxValue, squawk, state, 0, ASCII(flight_id), 0)`: the barometric
 /// altitude unknown, no emergency, no X-bit, and the flight ID's ASCII bytes cut or padded with
 /// zeros to eight, as `StructureToByteArray` fits an array to its field.
-/// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:6854-6864, ExtLibs/Mavlink/MavlinkUtil.cs:270-297`
+/// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:6818-6828, ExtLibs/Mavlink/MavlinkUtil.cs:270-297`
 #[must_use]
 pub fn control(squawk: u16, state: u8, flight_id: &str) -> MavMessage {
     let mut id = [0u8; 8];
@@ -165,7 +165,7 @@ pub fn control(squawk: u16, state: u8, flight_id: &str) -> MavMessage {
 }
 
 /// `doCommand(SET_MESSAGE_INTERVAL, UAVIONIX_ADSB_OUT_STATUS, 1000000, ...)`: a status a second.
-/// `// C#: GCSViews/FlightData.cs:6352, 6403`
+/// `// C#: GCSViews/FlightData.cs:6466, 6517`
 #[must_use]
 pub fn set_message_interval(target: VehicleId) -> MavMessage {
     let command = u16::try_from(MavCmd::MAV_CMD_SET_MESSAGE_INTERVAL.0).unwrap_or(u16::MAX);
@@ -186,7 +186,7 @@ pub fn set_message_interval(target: VehicleId) -> MavMessage {
 
 /// `Squawk_nud_ValueChanged`'s digits: a squawk is four octal digits, so a 9 is a 7 and an 8
 /// carries into the next digit, up to 7777.
-/// `// C#: GCSViews/FlightData.cs:6220-6258`
+/// `// C#: GCSViews/FlightData.cs:6334-6372`
 #[must_use]
 pub fn fix_squawk(value: u16) -> u16 {
     let mut ones = value % 10;
@@ -266,7 +266,7 @@ impl Button {
 }
 
 /// Which of STBY, ON and ALT the modes are, for the bold one: none, or the one they match.
-/// `// C#: GCSViews/FlightData.cs:6419-6431`
+/// `// C#: GCSViews/FlightData.cs:6533-6545`
 #[must_use]
 pub fn bold_for(modes: [bool; 4]) -> Option<Button> {
     match modes {
@@ -319,7 +319,7 @@ pub struct Transponder {
     /// `transponderUpdate`: when the page was last brought up to date.
     last_update: Option<Instant>,
     /// The vehicle's status count when `updateTransponder` last ran with the port open, where the
-    /// C# clears `xpdr_status_pending`. `// C#: GCSViews/FlightData.cs:6481`
+    /// C# clears `xpdr_status_pending`. `// C#: GCSViews/FlightData.cs:6595`
     handled: u32,
     /// Connect's wait, while it lasts.
     pub connecting: Option<Connecting>,
@@ -361,7 +361,7 @@ impl Transponder {
     }
 
     /// STBY, ON, ALT or IDENT pressed: the modes set, the right button in bold, and what goes.
-    /// `// C#: GCSViews/FlightData.cs:6182-6197, 6273-6338`
+    /// `// C#: GCSViews/FlightData.cs:6296-6311, 6387-6452`
     pub fn press(&mut self, button: Button) -> MavMessage {
         let modes = match button {
             Button::Stby => [false; 4],
@@ -388,7 +388,7 @@ impl Transponder {
     }
 
     /// The wheel over the squawk box, or its up and down buttons: one `Increment` a notch,
-    /// within the box's range. `// C#: GCSViews/FlightData.cs:6340-6346`
+    /// within the box's range. `// C#: GCSViews/FlightData.cs:6454-6460`
     pub fn step_squawk(&mut self, up: bool) -> Option<MavMessage> {
         let value = if up {
             self.squawk.saturating_add(1)
@@ -416,7 +416,7 @@ impl Transponder {
     }
 
     /// `FlightID_tb_TextChanged`: the box is `CharacterCasing.Upper` and cut to eight
-    /// characters, and every change is sent. `// C#: GCSViews/FlightData.cs:6199-6218, GCSViews/FlightData.Designer.cs:1671`
+    /// characters, and every change is sent. `// C#: GCSViews/FlightData.cs:6313-6332, GCSViews/FlightData.Designer.cs:1671`
     pub fn flight_id_changed(&mut self) -> MavMessage {
         let text: String = self
             .flight_id
@@ -431,7 +431,7 @@ impl Transponder {
 
     /// `updateTransponder`: the page from the vehicle's last status, when a port is open. Returns
     /// the subscription the first status makes the C# send.
-    /// `// C#: GCSViews/FlightData.cs:6368-6482`
+    /// `// C#: GCSViews/FlightData.cs:6482-6596`
     pub fn update(
         &mut self,
         status: Option<&Status>,
@@ -444,7 +444,7 @@ impl Transponder {
             return false;
         }
         let pending = self.pending(status);
-        // C#: GCSViews/FlightData.cs:6481, `xpdr_status_pending = false;` once the page has
+        // C#: GCSViews/FlightData.cs:6595, `xpdr_status_pending = false;` once the page has
         // looked, whichever way it went.
         if let Some(status) = status {
             self.handled = status.status_count;
@@ -510,7 +510,7 @@ impl Transponder {
 
     /// `cs.xpdr_status_pending`: a status has arrived since the page last looked - the vehicle's
     /// count of them moved on from the one it looked at, repeated status or not.
-    /// `// C#: ExtLibs/ArduPilot/CurrentState.cs:4053; GCSViews/FlightData.cs:6373, 6481`
+    /// `// C#: ExtLibs/ArduPilot/CurrentState.cs:4056; GCSViews/FlightData.cs:6487, 6595`
     #[must_use]
     pub fn pending(&self, status: Option<&Status>) -> bool {
         status.is_some_and(|status| status.status_count != self.handled)
@@ -519,7 +519,7 @@ impl Transponder {
     /// Whether the main loop would show the transponder again now: a status pending, or five
     /// seconds since it last looked - the first five from the first time it is asked, as
     /// `transponderUpdate` starts when the main loop does.
-    /// `// C#: GCSViews/FlightData.cs:4314-4318`
+    /// `// C#: GCSViews/FlightData.cs:4428-4432`
     pub fn due(&mut self, status: Option<&Status>, now: Instant) -> bool {
         let last = *self.last_update.get_or_insert(now);
         self.pending(status) || now.duration_since(last) >= UPDATE_EVERY
@@ -1052,7 +1052,7 @@ mod tests {
     /// page connects and subscribes; the same status again is still a status, and the page stays
     /// connected; then none comes, and the next five-second look finds nothing pending - lost -
     /// and the one after that asks to connect again.
-    /// `// C#: GCSViews/FlightData.cs:4314-4318, 6368-6482; ExtLibs/ArduPilot/CurrentState.cs:4027-4053`
+    /// `// C#: GCSViews/FlightData.cs:4428-4432, 6482-6596; ExtLibs/ArduPilot/CurrentState.cs:4030-4056`
     #[test]
     fn a_status_that_repeats_stays_connected_and_one_that_stops_is_lost() {
         use crate::telemetry::scripted::{Vehicle, until};

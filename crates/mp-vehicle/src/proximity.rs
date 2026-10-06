@@ -38,10 +38,10 @@
 //!   the C# stamps it with the wall clock; a reader expires the list against the time it passes;
 //! * `DataAvailable`, `GetClosest` and `GetWarnings` are not ported: `GetClosest` and `GetWarnings`
 //!   have no callers in the C# tree, and `DataAvailable`'s one reader guards a block whose only
-//!   line is commented out (`GCSViews/FlightData.cs:3756-3759`).
+//!   line is commented out (`GCSViews/FlightData.cs:3870-3873`).
 //!
 //! The subscription is the C#'s exactly: `SubscribeToPacketType(..., sysid, compid)` hands it the
-//! messages of its own system and component only (`MAVLinkInterface.cs:5528-5553`), which is the
+//! messages of its own system and component only (`MAVLinkInterface.cs:5508-5533`), which is the
 //! [`crate::VehicleState`] they are applied to here.
 
 use mp_mavlink_dialects::all::{DistanceSensor, ObstacleDistance};
@@ -52,10 +52,10 @@ use crate::clock::DateTime;
 pub const CAPACITY: usize = 128;
 
 /// `MAV_SENSOR_ORIENTATION.MAV_SENSOR_ROTATION_CUSTOM`: what an `OBSTACLE_DISTANCE` entry's
-/// orientation is. `// C#: ExtLibs/Mavlink/Mavlink.cs:4033`
+/// orientation is. `// C#: ExtLibs/Mavlink/Mavlink.cs:4382`
 pub const ROTATION_CUSTOM: u8 = 100;
 
-/// `MAV_FRAME.GLOBAL`. `// C#: ExtLibs/Mavlink/Mavlink.cs:2954`
+/// `MAV_FRAME.GLOBAL`. `// C#: ExtLibs/Mavlink/Mavlink.cs:3020`
 const FRAME_GLOBAL: u8 = 0;
 
 /// How long a `DISTANCE_SENSOR` reading is kept, seconds. `// C#: ExtLibs/ArduPilot/Proximity.cs:64`

@@ -43,11 +43,11 @@ use std::collections::HashMap;
 use crate::convert::{BinaryLog, HEAD_BYTE1, HEAD_BYTE2, ModeName};
 use crate::netfmt;
 
-/// The format message's type. `// C#: ExtLibs/Utilities/DFLogBuffer.cs:128`
+/// The format message's type. `// C#: ExtLibs/Utilities/DFLogBuffer.cs:127`
 const FMT_TYPE: usize = 128;
 
 /// How many `MSG` and `PARM` lines are converted to text to find the firmware, one past the limit
-/// because the count is tested after the line is read. `// C#: DFLogBuffer.cs:295-308`
+/// because the count is tested after the line is read. `// C#: DFLogBuffer.cs:294-307`
 const FIRMWARE_LINES: usize = 100_000;
 
 /// One format, as `DFLog.FMTLine` reads it out of the text of an `FMT` line.
@@ -307,7 +307,7 @@ impl DfItem {
     }
 }
 
-/// `SplitLog`'s refusal of a count of 0 or less. `// C#: ExtLibs/Utilities/DFLogBuffer.cs:499`
+/// `SplitLog`'s refusal of a count of 0 or less. `// C#: ExtLibs/Utilities/DFLogBuffer.cs:554`
 pub const INVALID_PIECES: &str = "Invalid pieces parameters";
 
 /// `Dictionary`'s `KeyNotFoundException` on .NET Framework, which Mission Planner runs on: what
@@ -322,7 +322,7 @@ pub const KEY_NOT_FOUND: &str = "The given key was not present in the dictionary
 /// # Errors
 ///
 /// The log unreadable, [`DfLogBuffer::split_log`]'s, or a piece that could not be written.
-/// `// C#: temp.cs:731-732; ExtLibs/Utilities/DFLogBuffer.cs:417-501`
+/// `// C#: temp.cs:731-732; ExtLibs/Utilities/DFLogBuffer.cs:472-556`
 pub fn split_file(path: &std::path::Path, pieces: i32) -> Result<usize, String> {
     let data = mp_os::fs::read(path).map_err(|error| error.to_string())?;
     let buffer = DfLogBuffer::new(&data, &crate::convert::flight_mode_name);
@@ -344,7 +344,7 @@ pub fn split_file(path: &std::path::Path, pieces: i32) -> Result<usize, String> 
 }
 
 /// `DFLogBuffer`: a log as numbered lines of text.
-/// `// C#: ExtLibs/Utilities/DFLogBuffer.cs:18-846`
+/// `// C#: ExtLibs/Utilities/DFLogBuffer.cs:17-901`
 pub struct DfLogBuffer<'a> {
     data: &'a [u8],
     binary: bool,
@@ -372,7 +372,7 @@ impl std::fmt::Debug for DfLogBuffer<'_> {
 
 impl<'a> DfLogBuffer<'a> {
     /// Indexes a log and reads its format records, as the constructor and `setlinecount` do.
-    /// `// C#: ExtLibs/Utilities/DFLogBuffer.cs:52-332`
+    /// `// C#: ExtLibs/Utilities/DFLogBuffer.cs:51-331`
     #[must_use]
     pub fn new(data: &'a [u8], mode_name: ModeName<'a>) -> Self {
         let binary = data.first() == Some(&HEAD_BYTE1) && data.get(1) == Some(&HEAD_BYTE2);
@@ -396,7 +396,7 @@ impl<'a> DfLogBuffer<'a> {
         buffer
     }
 
-    /// `setlinecount`'s binary half. `// C#: ExtLibs/Utilities/DFLogBuffer.cs:103-143`
+    /// `setlinecount`'s binary half. `// C#: ExtLibs/Utilities/DFLogBuffer.cs:102-142`
     fn index_binary(&mut self) {
         let length = self.data.len();
         let mut pos = 0usize;
@@ -420,7 +420,7 @@ impl<'a> DfLogBuffer<'a> {
         }
     }
 
-    /// `setlinecount`'s text half. `// C#: ExtLibs/Utilities/DFLogBuffer.cs:144-201`
+    /// `setlinecount`'s text half. `// C#: ExtLibs/Utilities/DFLogBuffer.cs:143-200`
     fn index_text(&mut self) {
         self.line_starts.push(0);
         for (at, &byte) in self.data.iter().enumerate() {
@@ -449,7 +449,7 @@ impl<'a> DfLogBuffer<'a> {
     }
 
     /// The rest of `setlinecount`: the `FMT` and `FMTU` tables, and the `MSG` and `PARM` lines read
-    /// as text for the firmware. `// C#: ExtLibs/Utilities/DFLogBuffer.cs:207-331`
+    /// as text for the firmware. `// C#: ExtLibs/Utilities/DFLogBuffer.cs:206-330`
     fn read_tables(&mut self) {
         for item in self.items_of(&["FMT"]) {
             let (line, item) = item;
@@ -517,7 +517,7 @@ impl<'a> DfLogBuffer<'a> {
     ///
     /// `pieces` of 0 or less, the C#'s "Invalid pieces parameters"; a log with no `FMT`, `FMTU`,
     /// `UNIT` or `MULT` format, where `logformat[name]` throws.
-    /// `// C#: ExtLibs/Utilities/DFLogBuffer.cs:417-501`
+    /// `// C#: ExtLibs/Utilities/DFLogBuffer.cs:472-556`
     pub fn split_log(&self, pieces: i32) -> Result<Vec<Vec<u8>>, String> {
         /// `new byte[1024 * 256]`.
         const READ: usize = 1024 * 256;
@@ -579,7 +579,7 @@ impl<'a> DfLogBuffer<'a> {
     }
 
     /// `SeenMessageTypes`: the name of every type the log has a message of and a format for, in
-    /// the order of their type numbers. `// C#: ExtLibs/Utilities/DFLogBuffer.cs:805-819`
+    /// the order of their type numbers. `// C#: ExtLibs/Utilities/DFLogBuffer.cs:860-874`
     #[must_use]
     pub fn seen_message_types(&self) -> Vec<String> {
         let mut seen: Vec<(u8, String)> = self
@@ -600,7 +600,7 @@ impl<'a> DfLogBuffer<'a> {
 
     /// `GetEnumeratorType`: every line of the named types, in line order, as items - read now, in
     /// the order the C#'s lazy enumeration reads them. Each comes with its line number.
-    /// `// C#: ExtLibs/Utilities/DFLogBuffer.cs:701-774`
+    /// `// C#: ExtLibs/Utilities/DFLogBuffer.cs:756-829`
     pub fn items_of(&mut self, types: &[&str]) -> Vec<(usize, DfItem)> {
         let mut lines = Vec::new();
         for name in types {
@@ -656,7 +656,7 @@ impl<'a> DfLogBuffer<'a> {
 
     /// `this[int]`: line `index` as text. A binary line is the first message that decodes from the
     /// line's offset on, `"\r\n"` ended; a text line keeps its newline.
-    /// `// C#: ExtLibs/Utilities/DFLogBuffer.cs:613-662`
+    /// `// C#: ExtLibs/Utilities/DFLogBuffer.cs:668-717`
     pub fn line(&mut self, index: usize) -> String {
         let (start, end) = self.span(index);
         if self.binary {
@@ -670,7 +670,7 @@ impl<'a> DfLogBuffer<'a> {
     }
 
     /// `this[long]`: line `index` as an item. A binary line is read no further than the next.
-    /// `// C#: ExtLibs/Utilities/DFLogBuffer.cs:562-611`
+    /// `// C#: ExtLibs/Utilities/DFLogBuffer.cs:617-666`
     fn item(&mut self, index: usize) -> DfItem {
         let (start, end) = self.span(index);
         if self.binary {
@@ -693,7 +693,7 @@ impl<'a> DfLogBuffer<'a> {
 
     /// `getInstanceIndex`: which field of a line of this type is its instance number - one past
     /// the `#` in its `FMTU` units, so `0` when there is none - or `-1` when the log gives no
-    /// units for the type. `// C#: ExtLibs/Utilities/DFLogBuffer.cs:831-845`
+    /// units for the type. `// C#: ExtLibs/Utilities/DFLogBuffer.cs:886-900`
     #[must_use]
     pub fn instance_index(&self, type_name: &str) -> i32 {
         let Some(label) = self.dflog.label(type_name) else {

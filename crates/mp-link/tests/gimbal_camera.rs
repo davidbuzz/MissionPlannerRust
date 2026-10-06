@@ -218,6 +218,7 @@ fn a_heartbeat_makes_a_camera_and_a_gimbal_manager_that_discover_two_seconds_on(
             name: [0; 32],
             uri,
             encoding: 1,
+            camera_device_id: 0,
         }),
     );
     let deadline = Instant::now() + Duration::from_secs(5);

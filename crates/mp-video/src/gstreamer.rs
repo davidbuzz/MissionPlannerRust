@@ -51,23 +51,23 @@ use wasm_thread::JoinHandle;
 use crate::{Feed, Frame, VideoError, convert, multipart};
 
 /// Set GStreamer Source's pipeline when `gstreamer_url` is not set.
-/// `// C#: GCSViews/FlightData.cs:4815-4817`
+/// `// C#: GCSViews/FlightData.cs:4929-4931`
 pub const DEFAULT_PIPELINE: &str = "videotestsrc ! video/x-raw, width=1280, height=720, framerate=30/1 ! videoconvert ! video/x-raw,format=BGRA ! appsink name=outsink";
 
 /// Set GStreamer Source's question: `InputBox.Show("GStreamer url", ...)`.
-/// `// C#: GCSViews/FlightData.cs:4819-4821`
+/// `// C#: GCSViews/FlightData.cs:4933-4935`
 pub const PIPELINE_TITLE: &str = "GStreamer url";
 
 /// What that question says.
-/// `// C#: GCSViews/FlightData.cs:4820`
+/// `// C#: GCSViews/FlightData.cs:4934`
 pub const PIPELINE_TEXT: &str = "Enter the source pipeline\nEnsure the final payload is ! videoconvert ! video/x-raw,format=BGRA ! appsink name=outsink";
 
 /// HereLink Video's address when `herelinkip` is not set.
-/// `// C#: GCSViews/FlightData.cs:3157`
+/// `// C#: GCSViews/FlightData.cs:3170`
 pub const HERELINK_IP: &str = "192.168.43.1";
 
 /// HereLink Video's question: `InputBox.Show("herelink ip", "Enter herelink ip address", ...)`.
-/// `// C#: GCSViews/FlightData.cs:3162`
+/// `// C#: GCSViews/FlightData.cs:3175`
 pub const HERELINK_TITLE: &str = "herelink ip";
 
 /// What that question says.
@@ -84,7 +84,7 @@ pub const LAUNCHER: &str = "gst-launch-1.0";
 const BOUNDARY: &str = "mpframe";
 
 /// HereLink Video's pipeline: the air unit's RTSP stream at `ip`, decoded to BGRx.
-/// `// C#: GCSViews/FlightData.cs:3166-3168`
+/// `// C#: GCSViews/FlightData.cs:3179-3181`
 #[must_use]
 pub fn herelink_pipeline(ip: &str) -> String {
     format!(

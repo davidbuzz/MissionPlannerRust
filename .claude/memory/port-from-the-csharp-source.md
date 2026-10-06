@@ -1,6 +1,6 @@
 ---
 name: port-from-the-csharp-source
-description: The C# tree - a clone of https://github.com/ArduPilot/MissionPlanner (efb0801) that MP_SRC names, outside the repository - is the spec; read the .cs file before implementing
+description: The C# tree - a clone of https://github.com/ArduPilot/MissionPlanner (5dbb2b0; efb0801 until 2026-10-06) that MP_SRC names, outside the repository - is the spec; read the .cs file before implementing
 metadata:
   node_type: memory
   type: project
@@ -10,7 +10,7 @@ metadata:
 
 **This project is a reimplementation of Mission Planner's C# code, and that code is on this
 machine.** Buzz keeps a full read-only clone of https://github.com/ArduPilot/MissionPlanner (commit
-efb0801) outside the codebase, and the environment variable `MP_SRC` names it: set for cargo in
+5dbb2b0, moved from efb0801 on 2026-10-06) outside the codebase, and the environment variable `MP_SRC` names it: set for cargo in
 `~/.cargo/config.toml`'s `[env]` on this machine, exported by the chain scripts for the tools
 (`MP_SRC=$(grep MP_SRC ~/.cargo/config.toml | cut -d'"' -f2)` in a shell). Nothing in the
 repository says where the clone is - Buzz, 2026-10-03: the clone's directory is not part of the

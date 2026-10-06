@@ -59,7 +59,7 @@ const PULSE_CEILING: f32 = 2200.0;
 /// `RC_CHANNELS_RAW` alone fills the first eight and leaves the rest at zero, as the C#'s
 /// `ch9in`-`ch16in` stay at their initial zero; its channels are taken as sent except `UINT16_MAX`,
 /// which is also the marker `mp_vehicle` leaves in a slot nothing has written, and reads as zero.
-/// `// C#: ExtLibs/ArduPilot/CurrentState.cs:3474-3526`
+/// `// C#: ExtLibs/ArduPilot/CurrentState.cs:3477-3529`
 #[must_use]
 pub fn ch_in(rc: &RcChannels) -> [f32; CHANNELS] {
     std::array::from_fn(|index| {

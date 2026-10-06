@@ -1,5 +1,5 @@
 # Ctrl+W: Mission Planner's Propagation Settings, MainV2.ProcessCmdKey's `new
-# PropagationSettings().Show()` (MainV2.cs:4147-4152; Controls/PropagationSettings.cs; crates/
+# PropagationSettings().Show()` (MainV2.cs:4154-4159; Controls/PropagationSettings.cs; crates/
 # mp-gui/src/cmd_keys/propagation_settings.rs).
 #
 # The claim: over a config.xml holding Propagation_Termap True and Propagation_Range 12.5, the

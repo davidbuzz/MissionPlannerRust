@@ -58,7 +58,7 @@ use mp_vehicle::health::Severity as Health;
 pub const TAKEOFF_ALTITUDE: f32 = 10.0;
 
 /// `Settings.Instance["takeoff_alt", "5"]`: TakeOff's box offers the height last given, or this.
-/// `// C#: GCSViews/FlightData.cs:5294`
+/// `// C#: GCSViews/FlightData.cs:5408`
 pub const TAKEOFF_ALT_DEFAULT: &str = "5";
 
 /// Width shared by the arm and force arm buttons.
@@ -136,7 +136,7 @@ pub fn actions_panel(
         // The map menu's TakeOff (`takeOffToolStripMenuItem`), which this application's map has
         // no menu for: live while the link is open, as the handler asks only `BaseStream.IsOpen`,
         // armed or not - it does not arm.
-        // `// C#: GCSViews/FlightData.cs:5290-5315; FlightData.resx:5443-5445`
+        // `// C#: GCSViews/FlightData.cs:5404-5429; FlightData.resx:5443-5445`
         .child(action(
             "takeoff",
             "TakeOff",
@@ -686,11 +686,11 @@ const fn health_colour(health: Health) -> u32 {
 /// `CurrentState.multiplieralt`: 1 unless Mission Planner's `altunits` setting is feet. This
 /// application shows metres throughout, so it is 1 - kept as a name so that each division the C#
 /// makes by it is visible where the C# makes it.
-/// `// C#: ExtLibs/ArduPilot/CurrentState.cs:37, MainV2.cs:4272-4292`
+/// `// C#: ExtLibs/ArduPilot/CurrentState.cs:37, MainV2.cs:4279-4299`
 pub const MULTIPLIER_ALT: f32 = 1.0;
 
 /// `CurrentState.multiplierdist`, for the same reason.
-/// `// C#: ExtLibs/ArduPilot/CurrentState.cs:27, MainV2.cs:4249-4270`
+/// `// C#: ExtLibs/ArduPilot/CurrentState.cs:27, MainV2.cs:4256-4277`
 pub const MULTIPLIER_DIST: f32 = 1.0;
 
 /// The texts the C#'s message boxes show, from `Strings.resx`.
@@ -796,7 +796,7 @@ pub enum Route {
     },
     /// `setWP` for one item: a `MISSION_ITEM` or `MISSION_ITEM_INT` until the vehicle
     /// acknowledges it or asks for the next - Change Alt, ArduPlane's guided target.
-    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:3975-4380`
+    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:3965-4369`
     SetWp {
         /// The vehicle.
         target: VehicleId,
@@ -983,56 +983,56 @@ pub const ALT_FRAMES: [(&str, u8); 3] = [
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Prompt {
     /// `CustomMessageBox.Show("Are you sure you want to do " + CMB_action.Text + " ?", "Action",
-    /// YesNo)`. `// C#: GCSViews/FlightData.cs:1774-1776`
+    /// YesNo)`. `// C#: GCSViews/FlightData.cs:1776-1778`
     ConfirmAction(usize),
-    /// `Common.MessageShowAgain("Resume Mission", ...)`. `// C#: GCSViews/FlightData.cs:1483-1487`
+    /// `Common.MessageShowAgain("Resume Mission", ...)`. `// C#: GCSViews/FlightData.cs:1485-1489`
     ResumeWarning,
     /// `InputBox.Show("Resume at", "Resume mission at waypoint#", ref lastwp)`.
-    /// `// C#: GCSViews/FlightData.cs:1497`
+    /// `// C#: GCSViews/FlightData.cs:1499`
     ResumeAt,
-    /// `InputBox.Show("Enter Fly To Coords", ...)`. `// C#: GCSViews/FlightData.cs:5941`
+    /// `InputBox.Show("Enter Fly To Coords", ...)`. `// C#: GCSViews/FlightData.cs:6055`
     FlyToCoords,
     /// `AltInputBox.Show("Enter Alt", "Enter Guided Mode Alt", ref alt, ref frame)`, with the
-    /// frame chosen so far. `// C#: GCSViews/FlightData.cs:2918`
+    /// frame chosen so far. `// C#: GCSViews/FlightData.cs:2931`
     FlyToHereAlt {
         /// The `MAV_FRAME` selected in the box.
         frame: u8,
     },
     /// TakeOff's `InputBox.Show("Enter Alt", "Enter Takeoff Alt", ref alt)`.
-    /// `// C#: GCSViews/FlightData.cs:5296`
+    /// `// C#: GCSViews/FlightData.cs:5410`
     TakeOff,
     /// `InputBox.Show("POI", "Enter ID", ref output)`. `// C#: Utilities/POI.cs:73`
     PoiId,
-    /// `InputBox.Show("Enter POI Coords", ...)`. `// C#: GCSViews/FlightData.cs:6014`
+    /// `InputBox.Show("Enter POI Coords", ...)`. `// C#: GCSViews/FlightData.cs:6128`
     PoiCoords,
     /// Load Log's `OpenFileDialog`, which this application has no platform dialog for: the path
     /// is typed, into a box that starts in the dialog's `InitialDirectory`, `tlogdir`, and the
-    /// words are the dialog's first filter. `// C#: GCSViews/FlightData.cs:1276-1302`
+    /// words are the dialog's first filter. `// C#: GCSViews/FlightData.cs:1278-1304`
     LoadLog,
     /// One of the DataFlash Logs page's conversions: its `OpenFileDialog`, typed as Load Log's
     /// is, titled with the button and worded with the dialog's first filter.
-    /// `// C#: GCSViews/FlightData.cs:1084-1089, 1137-1151, 1313-1317, Log/MatLabForms.cs:45-59`
+    /// `// C#: GCSViews/FlightData.cs:1086-1091, 1139-1153, 1315-1319, Log/MatLabForms.cs:45-59`
     Convert(Conversion),
-    /// `InputBox.Show("Jump to Tag", "Tag Id:", ref tag_str)`. `// C#: GCSViews/FlightData.cs:6504-6509`
+    /// `InputBox.Show("Jump to Tag", "Tag Id:", ref tag_str)`. `// C#: GCSViews/FlightData.cs:6618-6623`
     JumpToTag,
     /// `InputBox.Show("Hud Header", "Please enter your item prefix", ref prefix)`, for a User
-    /// Items box just checked. `// C#: GCSViews/FlightData.cs:2445-2455`
+    /// Items box just checked. `// C#: GCSViews/FlightData.cs:2455-2465`
     HudHeader,
     /// Set Home Here's `CustomMessageBox.Show("This will reset ...", "Are you sure?", OKCancel)`.
-    /// `// C#: GCSViews/FlightData.cs:4866-4869`
+    /// `// C#: GCSViews/FlightData.cs:4980-4983`
     SetHome,
     /// Message's `InputBox.Show("Enter Message", "Enter Message to be logged", ref txt)`.
-    /// `// C#: GCSViews/FlightData.cs:1264`
+    /// `// C#: GCSViews/FlightData.cs:1266`
     SendMessage,
     /// Record Hud to AVI's `CustomMessageBox.Show("Output avi will be saved to the log folder")`,
     /// no caption; the recording starts once it is answered. The C#'s box has OK alone; Cancel
-    /// here records nothing. `// C#: GCSViews/FlightData.cs:4657`
+    /// here records nothing. `// C#: GCSViews/FlightData.cs:4771`
     AviNotice,
     /// Point Camera Here's `InputBox.Show("Enter Alt", "Enter Target Alt (Relative to home)",
-    /// ref alt)`. `// C#: GCSViews/FlightData.cs:4519-4522`
+    /// ref alt)`. `// C#: GCSViews/FlightData.cs:4633-4636`
     PointCameraAlt,
     /// Point Camera Coords' `InputBox.Show("Enter Coords", ..., ref location)`.
-    /// `// C#: GCSViews/FlightData.cs:4481`
+    /// `// C#: GCSViews/FlightData.cs:4595`
     PointCameraCoords,
     /// The POI menu's Save File: `POISave`'s `SaveFileDialog`, typed as Load Log's is, titled
     /// with the entry and worded with the dialog's filter. `// C#: Utilities/POI.cs:143-154`
@@ -1042,28 +1042,28 @@ pub enum Prompt {
     /// `openScriptDialog`: the Scripts tab's Select Script.
     SelectScript,
     /// Set View Count's first question, `InputBox.Show("Columns", "Enter number of columns to
-    /// have.", ref cols)`. `// C#: GCSViews/FlightData.cs:5088`
+    /// have.", ref cols)`. `// C#: GCSViews/FlightData.cs:5202`
     ViewColumns,
     /// Its second, `InputBox.Show("Rows", "Enter number of rows to have.", ref rows)`.
-    /// `// C#: GCSViews/FlightData.cs:5090`
+    /// `// C#: GCSViews/FlightData.cs:5204`
     ViewRows,
     /// Battery Cell Voltage's `InputBox.Show("Battery Cell Count", "Cell Count", ref
-    /// CellCount)`. `// C#: GCSViews/FlightData.cs:6127`
+    /// CellCount)`. `// C#: GCSViews/FlightData.cs:6241`
     CellCount,
     /// The speed dial's double click: `InputBox.Show("Enter Max Speed", "Enter Max Speed", ref
-    /// max)`. `// C#: GCSViews/FlightData.cs:3140-3143`
+    /// max)`. `// C#: GCSViews/FlightData.cs:3153-3156`
     GaugeMax,
     /// The RAW Sensor window's Save CSV: `BUT_savecsv_Click`'s `SaveFileDialog`, which has no
     /// filter and no title of its own, `DefaultExt = ".csv"`. `// C#: Controls/RAW_Sensor.cs:278-298`
     RawSensorCsv,
     /// Set MJPEG source's `InputBox.Show("Mjpeg url", "Enter the url to the mjpeg source url",
-    /// ref url)`. `// C#: GCSViews/FlightData.cs:4898`
+    /// ref url)`. `// C#: GCSViews/FlightData.cs:5012`
     MjpegUrl,
     /// Set GStreamer Source's `InputBox.Show("GStreamer url", "Enter the source pipeline\n...",
-    /// ref url)`. `// C#: GCSViews/FlightData.cs:4819-4821`
+    /// ref url)`. `// C#: GCSViews/FlightData.cs:4933-4935`
     GStreamerUrl,
     /// HereLink Video's `InputBox.Show("herelink ip", "Enter herelink ip address", ref ipaddr)`.
-    /// `// C#: GCSViews/FlightData.cs:3162`
+    /// `// C#: GCSViews/FlightData.cs:3175`
     HereLinkIp,
 }
 
@@ -1140,7 +1140,7 @@ impl Prompt {
             Self::ViewColumns => "Enter number of columns to have.".to_owned(),
             Self::ViewRows => "Enter number of rows to have.".to_owned(),
             // `openScriptDialog`, an `OpenFileDialog` for scripts: the path, typed.
-            // `// C#: GCSViews/FlightData.cs:1630-1641`
+            // `// C#: GCSViews/FlightData.cs:1632-1643`
             Self::SelectScript => "Python script (*.py)".to_owned(),
             Self::CellCount => "Cell Count".to_owned(),
             Self::GaugeMax => "Enter Max Speed".to_owned(),
@@ -1199,7 +1199,7 @@ impl Prompt {
 
 /// What `CMB_setwp` lists: "0 (Home)", then 1 up to the largest of the mission-size parameters
 /// and the number of mission items held - inclusive, as the C#'s `z <= max` loop is.
-/// `// C#: GCSViews/FlightData.cs:2542-2582`
+/// `// C#: GCSViews/FlightData.cs:2552-2592`
 #[must_use]
 pub fn setwp_items(parameters: &[(String, f64)], mission_items: usize) -> Vec<String> {
     let mut max: i64 = 0;
@@ -1222,7 +1222,7 @@ pub fn setwp_items(parameters: &[(String, f64)], mission_items: usize) -> Vec<St
 // --- CMB_action -----------------------------------------------------------------------------------
 
 /// What `CMB_action` lists: the names of `FlightData.actions`, in its order.
-/// `// C#: GCSViews/FlightData.cs:183-206, 351`
+/// `// C#: GCSViews/FlightData.cs:183-207, 353`
 pub const ACTIONS: [&str; 19] = [
     "Loiter_Unlim",
     "Return_To_Launch",
@@ -1247,7 +1247,7 @@ pub const ACTIONS: [&str; 19] = [
 
 /// Whether Do Action asks "Are you sure" first. Five entries are handled before the question
 /// and are sent straight away.
-/// `// C#: GCSViews/FlightData.cs:1697-1772`
+/// `// C#: GCSViews/FlightData.cs:1699-1774`
 #[must_use]
 pub fn needs_confirmation(action: &str) -> bool {
     !matches!(
@@ -1264,7 +1264,7 @@ pub fn needs_confirmation(action: &str) -> bool {
 /// can reach: `MAV_CMD` values as the C# enum names them, without the `MAV_CMD_` and `NAV_`
 /// prefixes. `ADSB_OUT_IDENT` and `DO_START_ADSB_OUT_IDENT` are not in that enum - it has
 /// `DO_ADSB_OUT_IDENT` - so neither parses, and the C# reports the command failed.
-/// `// C#: ExtLibs/Mavlink/Mavlink.cs:827 (enum MAV_CMD)`
+/// `// C#: ExtLibs/Mavlink/Mavlink.cs:823 (enum MAV_CMD)`
 #[must_use]
 pub fn csharp_mav_cmd(name: &str) -> Option<u16> {
     Some(match name {
@@ -1326,14 +1326,14 @@ pub(crate) fn action_context(target: VehicleId, view: &TelemetryView) -> ActionC
 /// Each branch is the C#'s, in its order. `Trigger_Camera`'s fallback - a `DIGICAM_CONTROL`
 /// message when the vehicle refuses the command - needs the refusal first, so it travels with
 /// the press's [`action_report`] and goes when the refusal arrives.
-/// `// C#: GCSViews/FlightData.cs:1680-1878`
+/// `// C#: GCSViews/FlightData.cs:1682-1888`
 pub fn action_messages(action: &str, context: &ActionContext) -> Sends {
     let target = context.target;
     let long = |command_id: u16, p1: f32, p2: f32, p3: f32| {
         commands::command_long(target, command_id, [p1, p2, p3, 0.0, 0.0, 0.0, 0.0])
     };
     let messages = match action {
-        // "p1 and p2 must be 1 to initate SD card format" `// C#: FlightData.cs:1697-1710`
+        // "p1 and p2 must be 1 to initate SD card format" `// C#: FlightData.cs:1699-1712`
         "Format_SD_Card" => vec![commands::command_int(
             target,
             commands::CMD_STORAGE_FORMAT,
@@ -1343,13 +1343,13 @@ pub fn action_messages(action: &str, context: &ActionContext) -> Sends {
             0,
             0.0,
         )],
-        // `setDigicamControl(true)`. `// C#: MAVLinkInterface.cs:4558-4570`
+        // `setDigicamControl(true)`. `// C#: MAVLinkInterface.cs:4547-4559`
         "Trigger_Camera" => vec![commands::command_long(
             target,
             commands::CMD_DO_DIGICAM_CONTROL,
             [0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0],
         )],
-        // `SCRIPTING_CMD.STOP_AND_RESTART` is 3, `STOP` is 2. `// C#: Mavlink.cs:1514-1525`
+        // `SCRIPTING_CMD.STOP_AND_RESTART` is 3, `STOP` is 2. `// C#: Mavlink.cs:1538-1549`
         "Scripting_cmd_stop_and_restart" | "Scripting_cmd_stop" => {
             let op = if action == "Scripting_cmd_stop" {
                 2.0
@@ -1369,13 +1369,13 @@ pub fn action_messages(action: &str, context: &ActionContext) -> Sends {
         "System_Time" => vec![commands::system_time(context.now_unix_usec)],
         "Terminate_Flight" => vec![long(commands::CMD_DO_FLIGHTTERMINATION, 1.0, 0.0, 0.0)],
         // `doReboot()`: `doCommand` sends `PREFLIGHT_REBOOT_SHUTDOWN` twice and does not wait.
-        // `// C#: MAVLinkInterface.cs:2553-2563, 2758-2763`
+        // `// C#: MAVLinkInterface.cs:2550-2560, 2755-2760`
         "Preflight_Reboot_Shutdown" => vec![commands::reboot(target), commands::reboot(target)],
-        // `doHighLatency(onoff)`. `// C#: MAVLinkInterface.cs:2524-2532`
+        // `doHighLatency(onoff)`. `// C#: MAVLinkInterface.cs:2521-2529`
         "HighLatency_Enable" => vec![long(commands::CMD_CONTROL_HIGH_LATENCY, 1.0, 0.0, 0.0)],
         "HighLatency_Disable" => vec![long(commands::CMD_CONTROL_HIGH_LATENCY, 0.0, 0.0, 0.0)],
         // `setMode(mode, SAFETY_ARMED)`: `DO_SET_MODE` with base 128, then `SET_MODE` twice.
-        // `// C#: FlightData.cs:1819-1830, MAVLinkInterface.cs:4631-4641`
+        // `// C#: FlightData.cs:1829-1840, MAVLinkInterface.cs:4631-4641`
         "Toggle_Safety_Switch" => {
             if target.sysid == 0 {
                 return Err(Refusal::quiet("Not toggling safety on sysid 0"));
@@ -1392,7 +1392,7 @@ pub fn action_messages(action: &str, context: &ActionContext) -> Sends {
         "Engine_Start" => vec![long(commands::CMD_DO_ENGINE_CONTROL, 1.0, 0.0, 0.0)],
         "Engine_Stop" => vec![long(commands::CMD_DO_ENGINE_CONTROL, 0.0, 0.0, 0.0)],
         // The generic path: `param1 = 0, param2 = 0, param3 = 1`, adjusted for two entries, and the
-        // command found by name. `// C#: FlightData.cs:1781-1869`
+        // command found by name. `// C#: FlightData.cs:1783-1879`
         _ => {
             let (mut p1, mut p2, mut p3) = (0.0, 0.0, 1.0);
             if action == "Preflight_Calibration" {
@@ -1424,7 +1424,7 @@ pub fn action_messages(action: &str, context: &ActionContext) -> Sends {
 /// `setDigicamControl`, which sends `DIGICAM_CONTROL` when the command is refused. The rest are
 /// not waited for at all - `doReboot`, `setMode`, `sendPacket` - or are `doCommandInt`, which the
 /// link has no request for (see [`route`]); they have nothing to say.
-/// `// C#: GCSViews/FlightData.cs:1697-1878, ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:4557-4569`
+/// `// C#: GCSViews/FlightData.cs:1699-1888, ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:4546-4558`
 #[must_use]
 pub fn action_report(action: &str, target: VehicleId) -> Report {
     let failed = error_box(strings::COMMAND_FAILED);
@@ -1503,7 +1503,7 @@ pub fn set_mode_messages(
 /// which the C# leaves to the application's last-chance handler, said here - and the messages of
 /// `setMode("GUIDED")` that go before the take-off (none for a vehicle whose family has no
 /// Guided, as `translateMode` refuses it).
-/// `// C#: GCSViews/FlightData.cs:5299-5305`
+/// `// C#: GCSViews/FlightData.cs:5413-5419`
 pub fn takeoff_plan(
     text: &str,
     target: VehicleId,
@@ -1533,7 +1533,7 @@ pub struct GuidedContext<'a> {
 /// until Fly To Here Alt sets it. The next Fly To Coords on a copter then reads that frame and
 /// sends its height as above sea level rather than above home. The frame is recorded here for
 /// every vehicle, as the ArduPlane path records it.
-/// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:4423-4461, 4538-4545`
+/// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:4423-4461, 4527-4534`
 pub fn set_guided_mode_wp(
     guided: &mut GuidedMode,
     context: &GuidedContext<'_>,
@@ -1606,7 +1606,7 @@ pub enum Coords {
 /// `PointLatLngAlt` does; a latitude keeps about half a metre of resolution that way. Any other
 /// count of parts is `Strings.InvalidField`. A part that is not a number throws in the C# and
 /// reaches no handler at all; here it is the same `InvalidField`.
-/// `// C#: GCSViews/FlightData.cs:5938-6008`
+/// `// C#: GCSViews/FlightData.cs:6052-6122`
 pub fn parse_coords(text: &str) -> Result<Coords, Refusal> {
     let parts: Vec<&str> = text.split(';').collect();
     let number = |part: &str| {
@@ -1631,7 +1631,7 @@ pub fn parse_coords(text: &str) -> Result<Coords, Refusal> {
 
 /// The frame Fly To Coords sends in: `GuidedMode`'s once anything has been sent in Guided, else
 /// the remembered `guided_alt_frame`, else relative.
-/// `// C#: GCSViews/FlightData.cs:5943-5951`
+/// `// C#: GCSViews/FlightData.cs:6057-6065`
 #[must_use]
 pub fn fly_to_coords_frame(guided: &GuidedMode, remembered: Option<u8>) -> u8 {
     if *guided == GuidedMode::default() {
@@ -1643,7 +1643,7 @@ pub fn fly_to_coords_frame(guided: &GuidedMode, remembered: Option<u8>) -> u8 {
 
 /// The height Fly To Here Alt offers: 10 on a copter and 100 otherwise, in the display unit,
 /// unless one was entered before.
-/// `// C#: GCSViews/FlightData.cs:2901-2916`
+/// `// C#: GCSViews/FlightData.cs:2914-2929`
 #[must_use]
 pub fn fly_to_here_alt_default(copter: bool, remembered: Option<&str>) -> String {
     if let Some(alt) = remembered {
@@ -1659,7 +1659,7 @@ pub fn fly_to_here_alt_default(copter: bool, remembered: Option<&str>) -> String
 /// last said, in metres above sea level. Until the vehicle has reported home it is 0, as
 /// `_homelocation` starts as an empty `PointLatLngAlt`; with no vehicle it is the placeholder
 /// state's, the same 0.
-/// `// C#: ExtLibs/ArduPilot/CurrentState.cs:40, 1568-1582; ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:5701-5707`
+/// `// C#: ExtLibs/ArduPilot/CurrentState.cs:40, 1568-1582; ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:5674-5680`
 #[must_use]
 pub fn home_alt(state: Option<&mp_vehicle::VehicleState>) -> f64 {
     state.map_or(0.0, |state| state.home_altitude.0)
@@ -1669,7 +1669,7 @@ pub fn home_alt(state: Option<&mp_vehicle::VehicleState>) -> f64 {
 /// ([`home_alt`]) if it is not - which makes every altitude shown a height above sea level
 /// instead of above home. With home not yet reported that is minus zero, which the next click
 /// reads as not set, as the C#'s `altoffsethome != 0` does: nothing changes until home is known.
-/// `// C#: GCSViews/FlightData.cs:1236-1247`
+/// `// C#: GCSViews/FlightData.cs:1238-1249`
 #[must_use]
 pub fn toggle_home_alt(offset: f32, home_altitude: f64) -> f32 {
     if offset == 0.0 {
@@ -1683,7 +1683,7 @@ pub fn toggle_home_alt(offset: f32, home_altitude: f64) -> f32 {
 
 /// `cs.altoffsethome` of the vehicle shown: the state's field, which Set Home Alt writes through
 /// the link and every altitude shown reads; 0 with no vehicle.
-/// `// C#: ExtLibs/ArduPilot/CurrentState.cs:381-383; GCSViews/FlightData.cs:1236-1247`
+/// `// C#: ExtLibs/ArduPilot/CurrentState.cs:381-383; GCSViews/FlightData.cs:1238-1249`
 #[must_use]
 pub fn alt_offset_home(view: &TelemetryView) -> f32 {
     view.state
@@ -1702,7 +1702,7 @@ pub fn displayed_altitude(relative: f64, offset: f32) -> f64 {
 
 /// Change Alt: `int newalt = (int) modifyandSetAlt.Value;` - the box's decimal place dropped,
 /// toward zero - then `setNewWPAlt(new Locationwp {alt = newalt / CurrentState.multiplieralt})`.
-/// `// C#: GCSViews/FlightData.cs:4399-4410`
+/// `// C#: GCSViews/FlightData.cs:4513-4524`
 pub fn change_alt_sends(target: VehicleId, box_value: f64) -> Sends {
     #[allow(clippy::cast_possible_truncation)]
     let whole = box_value as i32;
@@ -1712,7 +1712,7 @@ pub fn change_alt_sends(target: VehicleId, box_value: f64) -> Sends {
 }
 
 /// Change Speed: `(float) modifyandSetSpeed.Value`, not divided by `multiplierspeed`.
-/// `// C#: GCSViews/FlightData.cs:4426-4438`
+/// `// C#: GCSViews/FlightData.cs:4540-4552`
 pub fn change_speed_sends(target: VehicleId, box_value: f64) -> Sends {
     #[allow(clippy::cast_possible_truncation)] // the C#'s `(float)`
     let speed = box_value as f32;
@@ -1726,7 +1726,7 @@ pub fn change_speed_sends(target: VehicleId, box_value: f64) -> Sends {
 /// `setParam` with a list writes the first name the vehicle has. A parameter already holding the
 /// value is not written again. A vehicle with neither - every copter - gets nothing, and the C#
 /// says nothing.
-/// `// C#: GCSViews/FlightData.cs:4412-4424, ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:1609-1650`
+/// `// C#: GCSViews/FlightData.cs:4526-4538, ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:1606-1647`
 pub fn loiter_rad_messages(
     target: VehicleId,
     parameters: &[(String, f64)],
@@ -1754,18 +1754,18 @@ pub fn loiter_rad_messages(
 // --- Resume Mission -------------------------------------------------------------------------------
 
 /// `MAV_CMD.LAST`: the end of the navigation commands.
-/// `// C#: ExtLibs/Mavlink/Mavlink.cs:921`
+/// `// C#: ExtLibs/Mavlink/Mavlink.cs:924`
 const MAV_CMD_LAST: u16 = 95;
 
 /// `MAV_CMD.DO_LAST`: the end of the "do" commands.
-/// `// C#: ExtLibs/Mavlink/Mavlink.cs:1087`
+/// `// C#: ExtLibs/Mavlink/Mavlink.cs:1091`
 const MAV_CMD_DO_LAST: u16 = 240;
 
 /// The mission Resume Mission uploads: every item from the resume point on, and before it only
 /// home, takeoffs and the "do" commands - the navigation it skips, it skips, but a camera trigger
 /// or speed change on the way still applies. Numbered from zero, `current` 0 and `autocontinue` 1,
 /// as `setWP(loc, wpno, frame)` sends them.
-/// `// C#: GCSViews/FlightData.cs:1508-1541`
+/// `// C#: GCSViews/FlightData.cs:1510-1543`
 #[must_use]
 pub fn resume_items(items: &[MissionItem], resume_at: u16) -> Vec<MissionItem> {
     items
@@ -1855,7 +1855,7 @@ pub struct ResumeInput<'a> {
 
 /// A call inside Resume Mission that the C# blocks on until the vehicle answers or its retries
 /// run out, and so a request the next step waits for.
-/// `// C#: GCSViews/FlightData.cs:1553, 1574, 1589-1594`
+/// `// C#: GCSViews/FlightData.cs:1555, 1576, 1589-1594`
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Blocking {
     /// `setWPCurrent(..., 1)`.
@@ -1867,7 +1867,7 @@ enum Blocking {
 }
 
 /// How long the C# sleeps between attempts in each of Resume Mission's waiting loops.
-/// `// C#: GCSViews/FlightData.cs:1558, 1573, 1592, 1611`
+/// `// C#: GCSViews/FlightData.cs:1560, 1575, 1594, 1613`
 const RESUME_RETRY: Duration = Duration::from_secs(1);
 
 /// How long a finished transfer must be old news before it is taken as this step's.
@@ -1889,7 +1889,7 @@ const TRANSFER_START: Duration = Duration::from_secs(10);
 /// retries run out; here they are the link's retrying requests, and the sequence waits for the
 /// one it made before it moves on, with the second between attempts counted from when it ended,
 /// as the C#'s `Thread.Sleep(1000)` follows the call's return.
-/// `// C#: GCSViews/FlightData.cs:1481-1627`
+/// `// C#: GCSViews/FlightData.cs:1483-1629`
 #[derive(Debug, Clone)]
 pub struct Resume {
     /// The waypoint to resume at.
@@ -2020,7 +2020,7 @@ impl Resume {
     /// it. A timeout throws in the C#, and the outer `catch` shows `Strings.CommandFailed`; a
     /// refused take-off is `doCommand` returning false, which shows the same. `doARM`'s answer is
     /// not looked at, so a refused arm is asked again a second later.
-    /// `// C#: GCSViews/FlightData.cs:1553, 1574, 1589-1594, 1624-1627`
+    /// `// C#: GCSViews/FlightData.cs:1555, 1576, 1589-1594, 1626-1629`
     fn answered(&mut self, input: &ResumeInput<'_>) -> Option<Vec<ResumeStep>> {
         let blocking = self.blocked_on?;
         match input.request {
@@ -2274,7 +2274,7 @@ pub enum TakeoffPress {
 
 /// The first TakeOff of a session asks, offering `Settings.Instance["takeoff_alt", "5"]`; every
 /// later one takes off at the answer the first was given (the owner's ruling, PLAN.md section 12
-/// D24: the C# asks at every press, `FlightData.cs:5294`).
+/// D24: the C# asks at every press, `FlightData.cs:5408`).
 #[must_use]
 pub fn takeoff_press(session: Option<&str>, saved: Option<&str>) -> TakeoffPress {
     match session {
@@ -2318,7 +2318,7 @@ pub struct Actions {
     /// The take-off altitude the operator gave this session, asked for no second time: TakeOff
     /// puts "Enter Takeoff Alt" once while the application runs and every later TakeOff - on
     /// this vehicle or another - takes off with that answer (the owner's ruling, PLAN.md section
-    /// 12 D24, 2026-10-03; the C# asks every time, `FlightData.cs:5294-5297`). The answer is
+    /// 12 D24, 2026-10-03; the C# asks every time, `FlightData.cs:5408-5411`). The answer is
     /// still saved as `takeoff_alt` for the next session's box, as the C# saves it.
     pub takeoff_alt_session: Option<String>,
     /// How many take-offs have been sent: a fact.
@@ -2329,7 +2329,7 @@ pub struct Actions {
     /// See `guided_alt_setting`.
     pub guided_frame_setting: Option<u8>,
     /// `cs.lastautowp`: the last waypoint flown to in Auto, -1 before there is one.
-    /// `// C#: ExtLibs/ArduPilot/CurrentState.cs:119, 3422`
+    /// `// C#: ExtLibs/ArduPilot/CurrentState.cs:119, 3425`
     pub last_auto_wp: i32,
     /// A Resume Mission in progress, or the last one.
     pub resume: Option<Resume>,
@@ -2346,7 +2346,7 @@ impl Default for Actions {
     fn default() -> Self {
         Self {
             // `CMB_setwp.Items.AddRange(resources.GetString("CMB_setwp.Items"))` and
-            // `SelectedIndex = 0`. `// C#: GCSViews/FlightData.Designer.cs:924-931, FlightData.cs:360`
+            // `SelectedIndex = 0`. `// C#: GCSViews/FlightData.Designer.cs:924-931, FlightData.cs:362`
             setwp_items: vec!["0 (Home)".to_owned()],
             setwp_selected: 0,
             setwp_open: false,
@@ -2871,7 +2871,7 @@ fn actions_tab(
         ))
         // `BUT_RAWSensor`: `new RAW_Sensor().Show()`, the window in `raw_sensor.rs`; enabled
         // whatever the link, the form itself saying "Please connect first".
-        // `// C#: GCSViews/FlightData.cs:1464-1469`
+        // `// C#: GCSViews/FlightData.cs:1466-1471`
         .child(cell(
             3,
             2,
@@ -3046,7 +3046,7 @@ fn actions_tab(
 impl Prompt {
     /// For a dialog standing for an `OpenFileDialog`, the C#'s `Filter`: what the browser's
     /// picker takes in a page (page_files.rs). None for any other.
-    /// `// C#: GCSViews/FlightData.cs:1086, 1139, 1295, 1315; GCSViews/FlightData.resx (openScriptDialog.Filter); Log/MatLabForms.cs:47; Utilities/POI.cs:175`
+    /// `// C#: GCSViews/FlightData.cs:1088, 1141, 1297, 1317; GCSViews/FlightData.resx (openScriptDialog.Filter); Log/MatLabForms.cs:47; Utilities/POI.cs:175`
     #[must_use]
     pub const fn opens_file(self) -> Option<&'static str> {
         match self {
@@ -3077,7 +3077,7 @@ impl Prompt {
 
 /// What a key does to a question with no box: Enter is the dialog's accept button and Escape its
 /// cancel button, as on the C#'s message boxes, and nothing else is anything.
-/// `// C#: ExtLibs/Controls/CustomMessageBox.cs:305, 317, ExtLibs/Controls/InputBox.cs:151-152`
+/// `// C#: ExtLibs/Controls/CustomMessageBox.cs:317, 329, ExtLibs/Controls/InputBox.cs:151-152`
 #[must_use]
 pub fn answer_key(event: &KeyDownEvent) -> KeyOutcome {
     match event.keystroke.key.as_str() {
@@ -3359,7 +3359,7 @@ impl Page {
     /// Every page, in the order the Designer adds them to the control - which is the order of the
     /// headers. With no `tabcontrolactions` setting saved, `loadTabControlActions` returns before
     /// touching the pages, so a first run shows all fourteen in this order.
-    /// `// C#: GCSViews/FlightData.Designer.cs:595-608, GCSViews/FlightData.cs:733-738`
+    /// `// C#: GCSViews/FlightData.Designer.cs:595-608, GCSViews/FlightData.cs:735-740`
     pub const ALL: [Self; 14] = [
         Self::Quick,
         Self::Actions,
@@ -3402,7 +3402,7 @@ impl Page {
     /// The header's words: the page's `Text` in `FlightData.resx`, in the configured culture
     /// (`crate::i18n`) as `ComponentResourceManager` applies the culture's `.resx`. Both Actions
     /// pages are "Actions" in English, and so both are here.
-    /// `// C#: GCSViews/FlightData.resx:580, 1384, 1441, 1555, 1606, 2531, 3014, 3044, 3692, 3890, 4124, 4424, 4925, 5171; MainV2.cs:4214-4243`
+    /// `// C#: GCSViews/FlightData.resx:580, 1384, 1441, 1555, 1606, 2531, 3014, 3044, 3692, 3890, 4124, 4424, 4925, 5171; MainV2.cs:4221-4250`
     #[must_use]
     pub fn text(self) -> &'static str {
         match self {
@@ -3469,7 +3469,7 @@ impl Page {
                 "Galt, Gheading and Gvspeed, the altitude, heading and vertical speed dials, are \
                  not ported."
             }
-            // `// C#: GCSViews/FlightData.cs:6045-6072`, painted from `cs.GetItemList`.
+            // `// C#: GCSViews/FlightData.cs:6159-6186`, painted from `cs.GetItemList`.
             Self::Status => "tabStatus, every CurrentState field by name, is not ported.",
             // `// C#: GCSViews/FlightData.Designer.cs:1754, 1762-1789`
             Self::Servo => "servoOptions1-12 and relayOptions1-16 are not ported.",
@@ -3480,14 +3480,14 @@ impl Page {
                 "The script console is drawn under the buttons, not in a form of its own; MAV, \
                  MainV2, the screens, Ports and Joystick are not handed to scripts."
             }
-            // `// C#: GCSViews/FlightData.Designer.cs:2091, 2098-2103, GCSViews/FlightData.cs:6678-6700`
+            // `// C#: GCSViews/FlightData.Designer.cs:2091, 2098-2103, GCSViews/FlightData.cs:6792-6814`
             Self::Payload => {
                 "Video Control, the gimbal's video in a window of its own, is not ported."
             }
             // `// C#: GCSViews/FlightData.Designer.cs:2208`
             Self::TLogs => "Tlog > Kml or Graph is headless-planner kml, on the command line.",
             // The conversions' and Geo Reference Images' file dialogs are boxes.
-            // `// C#: GCSViews/FlightData.cs:1084-1089, 1137-1151, 1313-1317; GeoRef/georefimage.cs:87-138`
+            // `// C#: GCSViews/FlightData.cs:1086-1091, 1139-1153, 1315-1319; GeoRef/georefimage.cs:87-138`
             Self::LogBrowse => "A log is named by typing it, from the log directory.",
         })
     }
@@ -3566,7 +3566,7 @@ pub const DEFAULT_PAGE: Page = Page::ALL[0];
 
 /// Which page is showing, which pages the strip has, and which header the strip starts from.
 ///
-/// `Multiline` is off by default (`// C#: GCSViews/FlightData.cs:429`), so the headers are one
+/// `Multiline` is off by default (`// C#: GCSViews/FlightData.cs:431`), so the headers are one
 /// row and the ones that do not fit are reached with the two arrows a `TabControl` puts at the
 /// end of the row, each moving the row along by one header. MultiLine, on the strip's menu, lets
 /// the headers wrap onto as many rows as they need instead, with no arrows.
@@ -3615,7 +3615,7 @@ impl Pages {
 
     /// `tabControlactions.SelectedIndex = index`: the page at that place in the strip; past the
     /// last page, nothing changes.
-    /// `// C#: GCSViews/FlightData.cs:865-916`
+    /// `// C#: GCSViews/FlightData.cs:867-918`
     pub fn select_index(&mut self, index: usize) {
         if let Some(page) = self.shown.get(index).copied() {
             self.selected = page;
@@ -3665,7 +3665,7 @@ impl Pages {
     }
 
     /// `saveTabControlActions`: the pages the strip has, as the setting; what to save.
-    /// `// C#: GCSViews/FlightData.cs:4747-4757`
+    /// `// C#: GCSViews/FlightData.cs:4861-4871`
     pub fn save_tab_control_actions(&mut self) -> String {
         let names = page_names(&self.shown);
         self.setting = Some(names.clone());
@@ -3682,7 +3682,7 @@ impl Pages {
     /// runs before it first shows the flight screen - whose `Activate` then applies the saved
     /// setting (`updateDisplayView`): so a page the setting does not name goes again, and shows
     /// once it is ticked in Customize. With no setting the strip is left as it is, the page in it.
-    /// `// C#: Plugins/OpenDroneID2/OpenDroneID_Plugin.cs:42-58; MainV2.cs:3195, 3213-3216; GCSViews/FlightData.cs:433-551, 733-791`
+    /// `// C#: Plugins/OpenDroneID2/OpenDroneID_Plugin.cs:42-58; MainV2.cs:3202, 3220-3223; GCSViews/FlightData.cs:435-553, 735-793`
     pub fn add_plugin_page(&mut self, page: Page, index: usize) {
         if self.added.contains(&page) {
             return;
@@ -3698,7 +3698,7 @@ impl Pages {
     /// `loadTabControlActions` at start: the saved setting's pages, in its order, the page
     /// showing kept when the strip still has it. An empty setting changes nothing, as the C#
     /// returns before touching the pages.
-    /// `// C#: GCSViews/FlightData.cs:733-791`
+    /// `// C#: GCSViews/FlightData.cs:735-793`
     pub fn load_tab_control_actions(&mut self, setting: &str) {
         let selected = self.selected;
         let originals = self.originals();
@@ -3727,7 +3727,7 @@ impl Pages {
     }
 
     /// MultiLine: `tabControlactions.Multiline` turned over.
-    /// `// C#: GCSViews/FlightData.cs:6498-6502`
+    /// `// C#: GCSViews/FlightData.cs:6612-6616`
     pub fn toggle_multiline(&mut self) {
         self.multiline = !self.multiline;
     }
@@ -3735,7 +3735,7 @@ impl Pages {
     /// Customize's list: every page `TabListOriginal` holds - all are displayed by the default
     /// display configuration - checked where the setting names it. With no setting yet, the
     /// pages the strip has are saved as it first, as `saveTabControlActions` saves them.
-    /// `// C#: GCSViews/FlightData.cs:2584-2615, 4747-4757, ExtLibs/Utilities/DisplayView.cs:146-159`
+    /// `// C#: GCSViews/FlightData.cs:2594-2625, 4861-4871, ExtLibs/Utilities/DisplayView.cs:146-159`
     pub fn customize_list(&mut self) -> Vec<(Page, bool)> {
         let setting = self
             .setting
@@ -3752,7 +3752,7 @@ impl Pages {
     /// strip rebuilt from the setting in its order, unless the setting is empty, when
     /// `loadTabControlActions` returns before touching the pages. A rebuilt strip shows its first
     /// page, as a `TabControl` cleared and filled again selects the first added.
-    /// `// C#: GCSViews/FlightData.cs:2617-2627, 733-791`
+    /// `// C#: GCSViews/FlightData.cs:2627-2637, 735-793`
     pub fn customize(&mut self, list: &[(Page, bool)]) {
         let checked: Vec<Page> = list
             .iter()
@@ -3771,7 +3771,7 @@ impl Pages {
                 shown.push(*page);
             }
         }
-        // `updateDisplayView`: at least one page - Quick. `// C#: GCSViews/FlightData.cs:775-780`
+        // `updateDisplayView`: at least one page - Quick. `// C#: GCSViews/FlightData.cs:777-782`
         let first = *shown.first().unwrap_or(&Page::Quick);
         if shown.is_empty() {
             shown.push(first);
@@ -4047,7 +4047,7 @@ impl MissionPlanner {
 
     /// The same, every message sent once and none waited for: `doCommand` with `requireack`
     /// false, as `setMountControl` and `setMountConfigure` send.
-    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:2717-2723`
+    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:2714-2720`
     pub(crate) fn fly_send_once(&mut self, sends: Sends) {
         let view = self.telemetry.view();
         let sends = match self.telemetry.send_handle() {
@@ -4127,7 +4127,7 @@ impl MissionPlanner {
     }
 
     /// `CMB_setwp_Click`: the list rebuilt from the totals and `MAV.wps.Count`, and opened.
-    /// `// C#: GCSViews/FlightData.cs:2542-2582`
+    /// `// C#: GCSViews/FlightData.cs:2552-2592`
     fn fly_setwp_list_click(&mut self) {
         let view = self.telemetry.view();
         self.fly_actions
@@ -4139,7 +4139,7 @@ impl MissionPlanner {
 
     /// Set WP: `setWPCurrent(sysid, compid, (ushort) CMB_setwp.SelectedIndex)`, and
     /// `Strings.CommandFailed` from its `catch` when every retry goes unanswered.
-    /// `// C#: GCSViews/FlightData.cs:1658-1672`
+    /// `// C#: GCSViews/FlightData.cs:1660-1674`
     fn fly_set_wp(&mut self) {
         let seq = u16::try_from(self.fly_actions.setwp_selected).unwrap_or(u16::MAX);
         let report = Report::on_timeout(error_box(strings::COMMAND_FAILED));
@@ -4149,7 +4149,7 @@ impl MissionPlanner {
     }
 
     /// Restart Mission: `setWPCurrent(sysid, compid, 0)`, with the same `catch`.
-    /// `// C#: GCSViews/FlightData.cs:1881-1895`
+    /// `// C#: GCSViews/FlightData.cs:1891-1905`
     fn fly_restart_mission(&mut self) {
         let report = Report::on_timeout(error_box(strings::COMMAND_FAILED));
         self.fly_press(&report, |_, target, _| {
@@ -4161,7 +4161,7 @@ impl MissionPlanner {
     ///
     /// Sent once: `setNewWPAlt` is `setWP`, which waits for `MISSION_ACK`, and the link has no
     /// single-item request to do that with (see [`route`]).
-    /// `// C#: GCSViews/FlightData.cs:4399-4410`
+    /// `// C#: GCSViews/FlightData.cs:4513-4524`
     fn fly_change_alt(&mut self) {
         self.fly_press(&Report::default(), |actions, target, _| {
             change_alt_sends(target, actions.alt.commit())
@@ -4170,7 +4170,7 @@ impl MissionPlanner {
 
     /// Change Speed: `DO_CHANGE_SPEED` with the box's number, undivided; its answer not looked
     /// at, and `Strings.ErrorCommunicating` from its `catch`.
-    /// `// C#: GCSViews/FlightData.cs:4426-4438`
+    /// `// C#: GCSViews/FlightData.cs:4540-4552`
     fn fly_change_speed(&mut self) {
         let report = Report::on_timeout(error_box(strings::ERROR_COMMUNICATING));
         self.fly_press(&report, |actions, target, _| {
@@ -4180,7 +4180,7 @@ impl MissionPlanner {
 
     /// Set Loiter Rad: the first of `LOITER_RAD` and `WP_LOITER_RAD` the vehicle has, and
     /// `Strings.ErrorCommunicating` from the `catch`.
-    /// `// C#: GCSViews/FlightData.cs:4412-4424`
+    /// `// C#: GCSViews/FlightData.cs:4526-4538`
     fn fly_set_loiter_rad(&mut self) {
         let report = Report::on_timeout(error_box(strings::ERROR_COMMUNICATING));
         self.fly_press(&report, |actions, target, view| {
@@ -4191,7 +4191,7 @@ impl MissionPlanner {
 
     /// Abort Landing: `doAbortLand`, only with the link open; its answer not looked at, and
     /// `Strings.CommandFailed` from its `catch`.
-    /// `// C#: GCSViews/FlightData.cs:1019-1032`
+    /// `// C#: GCSViews/FlightData.cs:1021-1034`
     fn fly_abort_land(&mut self) {
         let report = Report::on_timeout(error_box(strings::COMMAND_FAILED));
         self.fly_press(&report, |_, target, view| {
@@ -4204,10 +4204,10 @@ impl MissionPlanner {
     }
 
     /// Set Home Alt: altitudes shown above sea level, or back to above home.
-    /// `// C#: GCSViews/FlightData.cs:1236-1247`
+    /// `// C#: GCSViews/FlightData.cs:1238-1249`
     fn fly_home_alt(&mut self) {
         let view = self.telemetry.view();
-        // C#: GCSViews/FlightData.cs:1245, `MainV2.comPort.MAV.cs.HomeAlt`.
+        // C#: GCSViews/FlightData.cs:1247, `MainV2.comPort.MAV.cs.HomeAlt`.
         let home = home_alt(view.state.as_deref());
         // `MainV2.comPort.MAV.cs.altoffsethome`: the vehicle state's own field, which the link
         // sets on its next pass.
@@ -4222,7 +4222,7 @@ impl MissionPlanner {
 
     /// Do Action: straight away for the five entries the C# handles before asking, and after
     /// "Are you sure" for the rest.
-    /// `// C#: GCSViews/FlightData.cs:1680-1878`
+    /// `// C#: GCSViews/FlightData.cs:1682-1888`
     fn fly_do_action(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         self.fly_actions.action_open = false;
         let index = self.fly_actions.action_selected;
@@ -4249,7 +4249,7 @@ impl MissionPlanner {
     }
 
     /// Fly To Here Alt: the box opened with the height and frame it last had.
-    /// `// C#: GCSViews/FlightData.cs:2899-2918`
+    /// `// C#: GCSViews/FlightData.cs:2912-2931`
     fn fly_ask_guided_alt(&mut self) {
         let copter = family(&self.telemetry.view()) == Some(VehicleFamily::Copter);
         let alt = fly_to_here_alt_default(copter, self.fly_actions.guided_alt_setting.as_deref());
@@ -4313,7 +4313,7 @@ impl MissionPlanner {
             }
             // Like Fly To Coords, the answer is read whether or not the box was cancelled.
             Prompt::PoiCoords => self.poi_at_coords(if accepted { &text } else { "" }, window, cx),
-            // `openScriptDialog`: OK selects, Cancel clears. `// C#: GCSViews/FlightData.cs:1630-1641`
+            // `openScriptDialog`: OK selects, Cancel clears. `// C#: GCSViews/FlightData.cs:1632-1643`
             Prompt::SelectScript => {
                 self.fly_data
                     .scripts
@@ -4336,7 +4336,7 @@ impl MissionPlanner {
             }
             Prompt::HudHeader => {
                 let pending = self.fly_data.hud_settings.pending.take();
-                // Cancel leaves the box unchecked. `// C#: GCSViews/FlightData.cs:2451-2455`
+                // Cancel leaves the box unchecked. `// C#: GCSViews/FlightData.cs:2461-2465`
                 if accepted && let Some(name) = pending {
                     self.fly_data.hud_settings.add_item(&name, &text);
                 }
@@ -4441,7 +4441,7 @@ impl MissionPlanner {
     }
 
     /// Resume Mission, once the waypoint is given: `int.Parse`, then the sequence.
-    /// `// C#: GCSViews/FlightData.cs:1497-1621`
+    /// `// C#: GCSViews/FlightData.cs:1499-1623`
     fn fly_resume_at(&mut self, text: &str) {
         let view = self.telemetry.view();
         let Some(resume_at) = text
@@ -4487,7 +4487,7 @@ impl MissionPlanner {
 
     /// Fly To Coords: `lat;long;alt` or `lat;long`, flown to in Guided. Everything it sends goes
     /// once: `setMode` and `setGuidedModeWP` do not wait (see [`route`]).
-    /// `// C#: GCSViews/FlightData.cs:5938-6008`
+    /// `// C#: GCSViews/FlightData.cs:6052-6122`
     fn fly_to_coords(&mut self, text: &str) {
         let coords = parse_coords(text);
         self.fly_press(&Report::default(), |actions, target, view| {
@@ -4525,7 +4525,7 @@ impl MissionPlanner {
     /// "Command Failed". One press, in the C#'s order: `setMode`'s messages go straight onto the
     /// wire and the take-off is the link's request, sent on its next pass, so the vehicle hears
     /// Guided first. ArduCopter takes off only in Guided, which is why the C# sets it.
-    /// `// C#: GCSViews/FlightData.cs:5290-5315`
+    /// `// C#: GCSViews/FlightData.cs:5404-5429`
     /// TakeOff pressed, on the Actions grid or the map's menu: the question once a session, the
     /// remembered answer after ([`takeoff_press`]).
     fn fly_takeoff_pressed(&mut self, window: &mut Window, cx: &mut Context<Self>) {
@@ -4561,7 +4561,7 @@ impl MissionPlanner {
 
     /// Fly To Here Alt, once answered: the height and frame the next Fly To Here uses, and - if
     /// the vehicle is already in Guided - the current target moved to that height.
-    /// `// C#: GCSViews/FlightData.cs:2920-2943`
+    /// `// C#: GCSViews/FlightData.cs:2933-2956`
     fn fly_to_here_alt(&mut self, text: &str, frame: u8) {
         self.fly_actions.guided_alt_setting = Some(text.to_owned());
         self.fly_actions.guided_frame_setting = Some(frame);
@@ -4604,7 +4604,7 @@ impl MissionPlanner {
 
     /// Fly To Here once Fly To Here Alt has set a height: the C#'s `goHereToolStripMenuItem_Click`,
     /// which flies to the clicked point at `GuidedMode.z` in `GuidedMode.frame`.
-    /// `// C#: GCSViews/FlightData.cs:3082-3120`
+    /// `// C#: GCSViews/FlightData.cs:3095-3133`
     pub(crate) fn fly_to_here_guided(&mut self, position: mp_units::LatLon) {
         self.fly_press(&Report::default(), |actions, target, view| {
             if position.latitude() == 0.0 || position.longitude() == 0.0 {
@@ -4788,27 +4788,27 @@ pub struct FlightData {
     /// Whether the `Vibration` window is showing.
     pub vibration_open: bool,
     /// `CameraOverlap`: the map menu's Camera Overlap, `CheckOnClick`.
-    /// `// C#: GCSViews/FlightData.cs:66, 4457-4471`
+    /// `// C#: GCSViews/FlightData.cs:66, 4571-4585`
     pub camera_overlap: bool,
     /// `photosoverlay`'s markers and `kmlpolygons`' overlap count, as the map loop keeps them.
     pub photos: crate::camera_photos::PhotoLayer,
     /// `MouseDownStart`: where the flight map was last pressed, and where that was in the window.
-    /// `// C#: GCSViews/FlightData.cs:2956-2959`
+    /// `// C#: GCSViews/FlightData.cs:2969-2972`
     pub mouse_down_start: Option<(mp_units::LatLon, (f32, f32))>,
     /// `CurrentPOIMarker`: the POI under the pointer when the map's menu opened, which Delete
     /// removes - found then, not when Delete is chosen, as the map may have moved under the
-    /// point since (it follows the vehicle). `// C#: GCSViews/FlightData.cs:5014-5019`
+    /// point since (it follows the vehicle). `// C#: GCSViews/FlightData.cs:5128-5133`
     pub current_poi: Option<usize>,
     /// Where the HUD was laid out, for its click zones.
     pub hud_bounds: Rc<Cell<Option<Bounds<Pixels>>>>,
     /// `hud1.bgimage`: the camera's latest frame, which the HUD draws under everything, set
     /// once a frame from the Planner page's capture (`MissionPlanner::video_tick`).
-    /// `// C#: GCSViews/FlightData.cs:1897-1900`
+    /// `// C#: GCSViews/FlightData.cs:1907-1910`
     pub camera: Option<std::sync::Arc<gpui::RenderImage>>,
     /// The DataFlash Logs page's conversions.
     pub conversions: Conversions,
     /// `aviwriter` and `vidrec`: Record Hud to AVI's writer, its file and its frame clock.
-    /// `// C#: GCSViews/FlightData.cs:65, 3378`
+    /// `// C#: GCSViews/FlightData.cs:65, 3492`
     pub avi: Option<AviRecording>,
     /// The last recording's file size once closed, for the facts.
     pub avi_size: u64,
@@ -4817,7 +4817,7 @@ pub struct FlightData {
     /// What the HUD's menu has set.
     pub hud_settings: HudSettings,
     /// Whether Swap With Map has put the HUD where the map was: the C#'s `HudSwap`.
-    /// `// C#: GCSViews/FlightData.cs:5139-5159`
+    /// `// C#: GCSViews/FlightData.cs:5253-5273`
     pub swapped: bool,
     /// The strip's or the quick views' context menu, where the right button came up.
     pub menu: Option<(MenuKind, (f32, f32))>,
@@ -4848,7 +4848,7 @@ pub struct FlightData {
     /// `// C#: ExtLibs/Utilities/CaptureMJPEG.cs:13-51`
     pub mjpeg: Option<mp_video::mjpeg::CaptureMjpeg>,
     /// The map menu's Gimbal Video: `gimbalVideoControl` and where it and the map are.
-    /// `// C#: GCSViews/FlightData.cs:6534-6712`
+    /// `// C#: GCSViews/FlightData.cs:6648-6826`
     pub gimbal_video: crate::gimbal_video::GimbalVideo,
     /// `GStreamerUI.DownloadGStreamer`, while the runtime is being fetched.
     pub gst_download: Option<GstDownload>,
@@ -4903,7 +4903,7 @@ pub type LookFor<'a> = &'a dyn Fn() -> Option<std::path::PathBuf>;
 /// Set MJPEG source, answered: on OK the URL saved as `mjpeg_url` and the capture started over
 /// on it; on Cancel only stopped. The C#'s `CaptureMJPEG.Stop()` then `runAsync()`. Returns the
 /// status line's words, if any.
-/// `// C#: GCSViews/FlightData.cs:4898-4911`
+/// `// C#: GCSViews/FlightData.cs:5012-5025`
 pub fn mjpeg_source(
     data: &mut FlightData,
     persisted: &mut crate::settings::Persisted,
@@ -4926,7 +4926,7 @@ pub fn mjpeg_source(
 
 /// Set GStreamer Source, answered: on OK the pipeline saved as `gstreamer_url` and played
 /// ([`gstreamer_play`]); on Cancel `hudGStreamer.Stop()`.
-/// `// C#: GCSViews/FlightData.cs:4819-4849`
+/// `// C#: GCSViews/FlightData.cs:4933-4963`
 pub fn gstreamer_source(
     data: &mut FlightData,
     persisted: &mut crate::settings::Persisted,
@@ -4946,7 +4946,7 @@ pub fn gstreamer_source(
 /// HereLink Video, answered. The C# does not look at the answer, so Cancel plays the address
 /// the box started with. The address saved as `herelinkip`, then the air unit's RTSP stream
 /// played ([`gstreamer_play`]).
-/// `// C#: GCSViews/FlightData.cs:3155-3183`
+/// `// C#: GCSViews/FlightData.cs:3168-3196`
 pub fn herelink_video(
     data: &mut FlightData,
     persisted: &mut crate::settings::Persisted,
@@ -4968,7 +4968,7 @@ pub fn herelink_video(
     )
 }
 
-/// `herelinkip`, or the C#'s first address. `// C#: GCSViews/FlightData.cs:3157-3160`
+/// `herelinkip`, or the C#'s first address. `// C#: GCSViews/FlightData.cs:3170-3173`
 #[must_use]
 pub fn herelink_ip(persisted: &crate::settings::Persisted) -> String {
     persisted
@@ -4982,7 +4982,7 @@ pub fn herelink_ip(persisted: &crate::settings::Persisted) -> String {
 /// ([`gst_download_tick`]), else `hudGStreamer.Start(url)`. A refusal is said on the status
 /// line, where the C# shows a message box (the owner's rule: no dialog for what the window can
 /// show).
-/// `// C#: GCSViews/FlightData.cs:3170-3182, 4825-4844`
+/// `// C#: GCSViews/FlightData.cs:3183-3195, 4939-4958`
 fn gstreamer_play(
     data: &mut FlightData,
     persisted: &mut crate::settings::Persisted,
@@ -5014,7 +5014,7 @@ fn gstreamer_play(
 const NO_RUNTIME: &str = "it is not on the PATH; install the GStreamer runtime";
 
 /// `hudGStreamer.Start(url)`, its refusal for the status line.
-/// `// C#: GCSViews/FlightData.cs:4837-4844`
+/// `// C#: GCSViews/FlightData.cs:4951-4958`
 fn gstreamer_start(data: &mut FlightData, gst_launch: &str, pipeline: &str) -> Option<String> {
     data.gstreamer
         .start(std::path::Path::new(gst_launch), pipeline)
@@ -5074,7 +5074,7 @@ fn gstreamer_download(data: &mut FlightData, pipeline: &str) -> Option<String> {
 /// Once a frame: the runtime's download said on the status line, and once it ends the runtime
 /// looked for again and the pipeline started if it is there - or nothing, as the C# returns
 /// when `GstLaunchExists` is still false.
-/// `// C#: Utilities/GStreamerUI.cs:22; GCSViews/FlightData.cs:3172-3182, 4827-4835`
+/// `// C#: Utilities/GStreamerUI.cs:22; GCSViews/FlightData.cs:3185-3195, 4941-4949`
 pub fn gst_download_tick(
     data: &mut FlightData,
     persisted: &mut crate::settings::Persisted,
@@ -5152,7 +5152,7 @@ impl FlightData {
     /// The latest frame of the HUD menu's sources: GStreamer's, else MJPEG's. The C#'s sources
     /// all set `hud1.bgimage`, the last frame to arrive showing; two at once flicker between
     /// their pictures there, and here one is shown, in that order before the Planner page's
-    /// camera. `// C#: MainV2.cs:3421-3486`
+    /// camera. `// C#: MainV2.cs:3428-3493`
     #[must_use]
     pub fn hud_video_latest(&self) -> Option<std::sync::Arc<mp_video::Frame>> {
         self.gstreamer.latest().or_else(|| {
@@ -5414,7 +5414,7 @@ impl FlightData {
 /// Opens a `.tlog` to play: `LoadLogFile`'s `logplaybackfile`, here a replay link paced by the
 /// file's own timestamps, with the controls the Telemetry Logs page drives. Nothing is recorded
 /// and no heartbeat is sent: the C# plays a log with its port closed.
-/// `// C#: GCSViews/FlightData.cs:669-701`
+/// `// C#: GCSViews/FlightData.cs:671-703`
 pub fn replay(
     path: &str,
 ) -> Result<
@@ -5446,7 +5446,7 @@ pub fn port_open(view: &TelemetryView) -> bool {
 }
 
 /// `Settings.Instance.LogDir`, where Load Log's dialog opens: the directory flights are recorded
-/// into, as the recorder finds it. `// C#: GCSViews/FlightData.cs:1274, ExtLibs/Utilities/Settings.cs:127-140`
+/// into, as the recorder finds it. `// C#: GCSViews/FlightData.cs:1276, ExtLibs/Utilities/Settings.cs:127-140`
 pub(crate) fn log_directory() -> Option<std::path::PathBuf> {
     std::env::var_os("MP_LOG_DIR")
         .map(std::path::PathBuf::from)
@@ -5490,7 +5490,7 @@ pub struct Playback {
     control: Option<Arc<mp_transport::replay::Playback>>,
     /// `LBL_logfn.Text`.
     file_name: String,
-    /// `tlogdir`: where Load Log's dialog opens. `// C#: GCSViews/FlightData.cs:1274`
+    /// `tlogdir`: where Load Log's dialog opens. `// C#: GCSViews/FlightData.cs:1276`
     directory: Option<std::path::PathBuf>,
     /// `LogPlayBackSpeed`.
     speed: f64,
@@ -5524,7 +5524,7 @@ impl Default for Playback {
 
 impl Playback {
     /// `LoadLogFile`: the log's name on the page, the track bar back to 0, playing.
-    /// `// C#: GCSViews/FlightData.cs:669-701`
+    /// `// C#: GCSViews/FlightData.cs:671-703`
     pub fn load(&mut self, path: &str, control: Arc<mp_transport::replay::Playback>) {
         let path = std::path::Path::new(path);
         self.directory = path.parent().map(std::path::Path::to_path_buf);
@@ -5545,7 +5545,7 @@ impl Playback {
     }
 
     /// Load Log with a port open: the name is shown, and the C#'s main loop closes the file at
-    /// once, so nothing plays. `// C#: GCSViews/FlightData.cs:3439-3453`
+    /// once, so nothing plays. `// C#: GCSViews/FlightData.cs:3553-3567`
     pub fn load_name_only(&mut self, path: &str) {
         self.file_name = std::path::Path::new(path)
             .file_name()
@@ -5562,14 +5562,14 @@ impl Playback {
     }
 
     /// `BUT_playlog.Text`, as `updatePlayPauseButton` sets it: "Pause" while playing, "Play"
-    /// otherwise. `// C#: GCSViews/FlightData.cs:5630-5660`
+    /// otherwise. `// C#: GCSViews/FlightData.cs:5744-5774`
     #[must_use]
     pub fn button(&self) -> &'static str {
         if self.playing() { "Pause" } else { "Play" }
     }
 
     /// `BUT_playlog_Click`: `logreadmode` toggled. With no log loaded the main loop turns it
-    /// straight back off, so nothing happens. `// C#: GCSViews/FlightData.cs:556-594`
+    /// straight back off, so nothing happens. `// C#: GCSViews/FlightData.cs:558-596`
     pub fn toggle(&self) {
         if let Some(control) = &self.control {
             control.set_paused(!control.is_paused());
@@ -5577,7 +5577,7 @@ impl Playback {
     }
 
     /// `BUT_speed1_Click`: the button's tag as the speed, said on the label.
-    /// `// C#: GCSViews/FlightData.cs:1674-1678`
+    /// `// C#: GCSViews/FlightData.cs:1676-1680`
     pub fn set_speed(&mut self, speed: f64) {
         self.speed = speed;
         if let Some(control) = &self.control {
@@ -5596,7 +5596,7 @@ impl Playback {
     /// else halved or doubled; then `updateLogPlayPosition` - the track bar, the percentage and
     /// the speed said again, which it does only with a log loaded (it throws on the missing file,
     /// or on an empty one's 0 / 0, before the labels).
-    /// `// C#: GCSViews/FlightData.cs:925-941, 5544-5571`
+    /// `// C#: GCSViews/FlightData.cs:927-943, 5658-5685`
     pub fn step_speed(&mut self, faster: bool) {
         let speed = match (faster, self.speed > 1.0) {
             (false, true) => self.speed - 1.0,
@@ -5621,7 +5621,7 @@ impl Playback {
     }
 
     /// `tracklog_Scroll`: the file moved to the value's percentage of its length, and the percent
-    /// label said again. `// C#: GCSViews/FlightData.cs:5361-5378`
+    /// label said again. `// C#: GCSViews/FlightData.cs:5475-5492`
     pub fn scroll(&mut self, value: u8) {
         self.tracklog = value.min(100);
         if let Some(control) = &self.control {
@@ -5666,7 +5666,7 @@ impl Playback {
 
     /// Once a frame while a log plays: `updateLogPlayPosition`, which the main loop runs every
     /// 300 ms - the track bar at the file's position, the percentage, the speed.
-    /// `// C#: GCSViews/FlightData.cs:3462-3470, 5543-5577`
+    /// `// C#: GCSViews/FlightData.cs:3576-3584, 5657-5691`
     pub fn tick(&mut self) {
         let Some(control) = self.control.clone() else {
             return;
@@ -5684,7 +5684,7 @@ impl Playback {
         self.percent_label = percent(&control);
         self.speed_label = format!("x {}", mp_params::param_file::invariant_double(self.speed));
         // The end of the file: the main loop sets `logreadmode` false, so a scroll back finds it
-        // stopped and Play starts it again. `// C#: GCSViews/FlightData.cs:3556-3563`
+        // stopped and Play starts it again. `// C#: GCSViews/FlightData.cs:3670-3677`
         if at_end {
             control.set_paused(true);
         }
@@ -5746,7 +5746,7 @@ pub fn playback_page(playback: &Playback, cx: &mut Context<MissionPlanner>) -> A
             true,
             cx.listener(|this, _event: &(), window, cx| {
                 // `LBL_logfn.Text = ""` and the log playing closed, then the dialog.
-                // `// C#: GCSViews/FlightData.cs:1276-1291`
+                // `// C#: GCSViews/FlightData.cs:1278-1293`
                 this.fly_data.playback.file_name.clear();
                 this.fly_data.playback.close();
                 let start = this
@@ -5968,7 +5968,7 @@ pub fn dataflash_page(data: &FlightData, cx: &mut Context<MissionPlanner>) -> An
                 true,
                 // `new LogBrowse().Show()`: the log browser, which is the LOGS tab's Review a Log
                 // page here.
-                // `// C#: GCSViews/FlightData.cs:1380-1385`
+                // `// C#: GCSViews/FlightData.cs:1382-1387`
                 cx.listener(|this, _event: &(), _window, cx| {
                     this.screen = crate::Screen::Logs;
                     this.logs_page = crate::logs_tab::LogsPage::Review;
@@ -5995,7 +5995,7 @@ pub fn dataflash_page(data: &FlightData, cx: &mut Context<MissionPlanner>) -> An
         ));
     }
     // `new Georefimage().Show()`: the Geo Reference Images form, over the screen.
-    // `// C#: GCSViews/FlightData.cs:5933-5936`
+    // `// C#: GCSViews/FlightData.cs:6047-6050`
     grid = grid.child(cell(
         0,
         2,
@@ -6026,7 +6026,7 @@ pub fn dataflash_page(data: &FlightData, cx: &mut Context<MissionPlanner>) -> An
 
 /// One of the DataFlash Logs page's conversion buttons. Each asks for a log and writes what the
 /// C#'s button writes, where it writes it.
-/// `// C#: GCSViews/FlightData.cs:1082-1098, 1135-1202, 1311-1378, 1387-1390`
+/// `// C#: GCSViews/FlightData.cs:1084-1100, 1137-1204, 1313-1380, 1389-1392`
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Conversion {
     /// `but_bintolog`: `BinaryLog.ConvertBin` to `<name>.log` beside the log.
@@ -6095,7 +6095,7 @@ impl Conversion {
     }
 
     /// The first description of the dialog's `Filter`, which the prompt says as Load Log's does.
-    /// `// C#: GCSViews/FlightData.cs:1086, 1139, 1315, Log/MatLabForms.cs:47`
+    /// `// C#: GCSViews/FlightData.cs:1088, 1141, 1317, Log/MatLabForms.cs:47`
     #[must_use]
     pub const fn filter(self) -> &'static str {
         match self {
@@ -6109,7 +6109,7 @@ impl Conversion {
     /// loaded - for Create KML + gpx and Auto Analysis, and the log directory for Create Matlab
     /// File. Convert .Bin to .Log sets no `InitialDirectory`, so the system's dialog opens where
     /// it was last; here that is the log directory too.
-    /// `// C#: GCSViews/FlightData.cs:1145, 1316, Log/MatLabForms.cs:53`
+    /// `// C#: GCSViews/FlightData.cs:1147, 1318, Log/MatLabForms.cs:53`
     #[must_use]
     pub fn directory(
         self,
@@ -6155,7 +6155,7 @@ fn sized(paths: Vec<std::path::PathBuf>) -> Converted {
 /// What the C#'s message box says: "Error processing file..." from Create KML + gpx's `catch`,
 /// "Error converting file" from Create Matlab File's, and Auto Analysis's boxes. Convert .Bin to
 /// .Log has no `catch`, and its failure is said as it is.
-/// `// C#: GCSViews/FlightData.cs:1091-1097, 1151-1198, 1319-1377, Log/MatLabForms.cs:59-72`
+/// `// C#: GCSViews/FlightData.cs:1093-1099, 1153-1200, 1321-1379, Log/MatLabForms.cs:59-72`
 pub fn convert(kind: Conversion, log: &std::path::Path) -> Result<Converted, String> {
     let modes = &mp_log::convert::flight_mode_name;
     match kind {
@@ -6189,7 +6189,7 @@ pub fn convert(kind: Conversion, log: &std::path::Path) -> Result<Converted, Str
 pub type Outcome = (Conversion, std::path::PathBuf, Result<Converted, String>);
 
 /// Record Hud to AVI, running: the writer on its file, the start for the writer's frame clock
-/// and the 40 ms clock of the frames (`vidrec`). `// C#: GCSViews/FlightData.cs:65, 3378, 3420-3431`
+/// and the 40 ms clock of the frames (`vidrec`). `// C#: GCSViews/FlightData.cs:65, 3492, 3534-3545`
 #[derive(Debug)]
 pub struct AviRecording {
     /// `aviwriter`.
@@ -6252,7 +6252,7 @@ impl Conversions {
     }
 
     /// Once a frame: the outcome of a conversion that has just finished, once. An Auto Analysis
-    /// report opens its window. `// C#: GCSViews/FlightData.cs:1348-1354`
+    /// report opens its window. `// C#: GCSViews/FlightData.cs:1350-1356`
     pub fn poll(&mut self) -> Option<Outcome> {
         let (kind, log, receiver) = self.running.as_ref()?;
         let result = match receiver.try_recv() {
@@ -6336,7 +6336,7 @@ pub fn conversion_status(outcome: &Outcome) -> String {
 }
 
 /// `Controls.LogAnalyzer`: "LogAnalyzer", its text box holding the report, shown with `Show()`.
-/// `// C#: GCSViews/FlightData.cs:1348-1354, Controls/LogAnalyzer.Designer.cs:31-52`
+/// `// C#: GCSViews/FlightData.cs:1350-1356, Controls/LogAnalyzer.Designer.cs:31-52`
 fn log_analyzer_window(report: &str, cx: &mut Context<MissionPlanner>) -> AnyElement {
     let mut lines = div().flex().flex_col();
     for line in report.lines() {
@@ -6397,7 +6397,7 @@ impl HudWindow {
 /// Where a click on the HUD opens a window: the rectangle `doPaint` sets where it draws "EKF"
 /// or "Vibe" - at the text, 40 wide and twice the font high - grown up and left by the five
 /// pixels of the box `OnMouseClick` tests against it. `(left, top, width, height)` in the HUD.
-/// `// C#: ExtLibs/Controls/HUD.cs:1203-1231, 3156-3158, 3212-3215`
+/// `// C#: ExtLibs/Controls/HUD.cs:1203-1231, 3158-3160, 3214-3217`
 #[must_use]
 pub fn hud_zone(scene: &crate::hud::Scene, window: HudWindow) -> Option<(f32, f32, f32, f32)> {
     let (element, text) = match window {
@@ -6422,7 +6422,7 @@ pub fn hud_zone(scene: &crate::hud::Scene, window: HudWindow) -> Option<(f32, f3
             _ => None,
         })
         // With the pictures showing there is no label: the picture's own rectangle, padded as
-        // the C# pads its click zones. `// C#: ExtLibs/Controls/HUD.cs:3150-3301`
+        // the C# pads its click zones. `// C#: ExtLibs/Controls/HUD.cs:3152-3303`
         .or_else(|| {
             scene
                 .zone(element)
@@ -6466,7 +6466,7 @@ pub fn hud_panel(
         .border_1()
         .border_color(rgb(theme::BORDER));
     // `SwapHud1AndMap` puts `hud1` in `MainH.Panel2`, which it fills; otherwise it is the top of
-    // the column. `// C#: GCSViews/FlightData.cs:5139-5159`
+    // the column. `// C#: GCSViews/FlightData.cs:5253-5273`
     // 260 high, giving way to the page under it down to 140 (the owner's Mac, 2026-10-05).
     let hud = if data.swapped {
         hud.flex_1().min_h(px(0.0))
@@ -6528,7 +6528,7 @@ pub fn hud_panel(
                 .child(div().size_full())
                 .on_click(cx.listener(move |this, _event, _window, cx| {
                     // `hud1_ekfclick` and `hud1_vibeclick`: the form shown.
-                    // `// C#: GCSViews/FlightData.cs:3293-3323`
+                    // `// C#: GCSViews/FlightData.cs:3306-3437`
                     match which {
                         HudWindow::Ekf => this.fly_data.ekf_open = true,
                         HudWindow::Vibration => this.fly_data.vibration_open = true,
@@ -6937,7 +6937,7 @@ pub const HUD_MENU: [HudRow; 8] = [
         control: "setAspectRatioToolStripMenuItem",
         text: "Set Aspect Ratio",
         id: "fly-hud-aspect",
-        // `// C#: GCSViews/FlightData.cs:4783-4787, ExtLibs/Controls/HUD.cs:3739-3765`
+        // `// C#: GCSViews/FlightData.cs:4897-4901, ExtLibs/Controls/HUD.cs:3741-3767`
         does: Err(
             "the C# makes the HUD 4:3 - or 16:9, once toggled - from its width, and this \
              screen's HUD is 260 pixels high; the C#'s 4:3 would change the column's layout",
@@ -6971,14 +6971,14 @@ pub const HUD_MENU: [HudRow; 8] = [
         control: "setBatteryCellCountToolStripMenuItem",
         text: "Battery Cell Voltage",
         id: "fly-hud-batterycells",
-        // `// C#: GCSViews/FlightData.cs:6115-6140, ExtLibs/Controls/HUD.cs:2896-2906`
+        // `// C#: GCSViews/FlightData.cs:6229-6254, ExtLibs/Controls/HUD.cs:2898-2908`
         does: Ok(HudAction::BatteryCells),
     },
     HudRow {
         control: "showIconsToolStripMenuItem",
         text: "Show icons",
         id: "fly-hud-showicons",
-        // `// C#: GCSViews/FlightData.cs:6484-6496, ExtLibs/Controls/HUD.cs:2867-3293`
+        // `// C#: GCSViews/FlightData.cs:6598-6610, ExtLibs/Controls/HUD.cs:2869-3295`
         does: Ok(HudAction::ShowIcons),
     },
 ];
@@ -6990,49 +6990,49 @@ pub const HUD_VIDEO_MENU: [HudRow; 7] = [
         control: "recordHudToAVIToolStripMenuItem",
         text: "Record Hud to AVI",
         id: "fly-hud-recordavi",
-        // `// C#: GCSViews/FlightData.cs:4653-4672`
+        // `// C#: GCSViews/FlightData.cs:4767-4786`
         does: Ok(HudAction::RecordAvi),
     },
     HudRow {
         control: "stopRecordToolStripMenuItem",
         text: "Stop Record",
         id: "fly-hud-stoprecord",
-        // `// C#: GCSViews/FlightData.cs:5121-5137`
+        // `// C#: GCSViews/FlightData.cs:5235-5251`
         does: Ok(HudAction::StopRecord),
     },
     HudRow {
         control: "setMJPEGSourceToolStripMenuItem",
         text: "Set MJPEG source",
         id: "fly-hud-mjpeg",
-        // `// C#: GCSViews/FlightData.cs:4892-4912`
+        // `// C#: GCSViews/FlightData.cs:5006-5026`
         does: Ok(HudAction::MjpegSource),
     },
     HudRow {
         control: "startCameraToolStripMenuItem",
         text: "Start Camera",
         id: "fly-hud-startcamera",
-        // `// C#: GCSViews/FlightData.cs:5100-5119`
+        // `// C#: GCSViews/FlightData.cs:5214-5233`
         does: Err(NO_CAMERA),
     },
     HudRow {
         control: "setGStreamerSourceToolStripMenuItem",
         text: "Set GStreamer Source",
         id: "fly-hud-gstreamer",
-        // `// C#: GCSViews/FlightData.cs:4813-4850`
+        // `// C#: GCSViews/FlightData.cs:4927-4964`
         does: Ok(HudAction::GStreamerSource),
     },
     HudRow {
         control: "hereLinkVideoToolStripMenuItem",
         text: "HereLink Video",
         id: "fly-hud-herelink",
-        // `// C#: GCSViews/FlightData.cs:3155-3183`
+        // `// C#: GCSViews/FlightData.cs:3168-3196`
         does: Ok(HudAction::HereLinkVideo),
     },
     HudRow {
         control: "gStreamerStopToolStripMenuItem",
         text: "GStreamer Stop",
         id: "fly-hud-gstreamerstop",
-        // `// C#: GCSViews/FlightData.cs:3150-3153`
+        // `// C#: GCSViews/FlightData.cs:3163-3166`
         does: Ok(HudAction::GStreamerStop),
     },
 ];
@@ -7047,10 +7047,10 @@ pub struct HudMenu {
 }
 
 /// `groundColor1` and `groundColor2` as Ground Color sets them when it is checked: brown.
-/// `// C#: GCSViews/FlightData.cs:3124-3129`
+/// `// C#: GCSViews/FlightData.cs:3137-3142`
 pub const GROUND_BROWN: (u32, u32) = (0x93_4e_01, 0x3c_21_04);
 
-/// The same when it is not: green. `// C#: GCSViews/FlightData.cs:3130-3135`
+/// The same when it is not: green. `// C#: GCSViews/FlightData.cs:3143-3148`
 pub const GROUND_GREEN: (u32, u32) = (0x9b_b8_24, 0x41_4f_07);
 
 /// What the HUD's menu has set on `hud1`.
@@ -7073,26 +7073,26 @@ pub struct HudSettings {
     pub pending: Option<String>,
     /// `hud1.displayicons`: pictures for the battery, GPS, vibration, EKF and pre-arm readouts
     /// instead of text. Read from `HUD_showicons` when the flight screen loads.
-    /// `// C#: GCSViews/FlightData.cs:427`
+    /// `// C#: GCSViews/FlightData.cs:429`
     pub icons: bool,
     /// `hud1.displayCellVoltage` with `hud1.batterycellcount`: the count while the line is on.
     pub cells: Option<i32>,
     /// `recordHudToAVIToolStripMenuItem.Text` as the handlers set it: "Recording" while one
     /// runs, "Start Recording" after a stop, the Designer's words before either.
-    /// `// C#: GCSViews/FlightData.cs:4667, 5123`
+    /// `// C#: GCSViews/FlightData.cs:4781, 5237`
     pub avi_entry: Option<&'static str>,
 }
 
 impl HudSettings {
     /// Show icons: `myhud.displayicons = !myhud.displayicons`, and the flag saved as
-    /// `HUD_showicons` in Mission Planner's config.xml. `// C#: GCSViews/FlightData.cs:6484-6496`
+    /// `HUD_showicons` in Mission Planner's config.xml. `// C#: GCSViews/FlightData.cs:6598-6610`
     pub fn toggle_icons(&mut self, persisted: &mut crate::settings::Persisted) {
         self.icons = !self.icons;
         persisted.set("HUD_showicons", if self.icons { "True" } else { "False" });
     }
 
     /// `Settings.Instance.GetBoolean("HUD_showicons", false)`, at the flight screen's load.
-    /// `// C#: GCSViews/FlightData.cs:427`
+    /// `// C#: GCSViews/FlightData.cs:429`
     pub fn load_icons(&mut self, persisted: &crate::settings::Persisted) {
         self.icons = persisted
             .get("HUD_showicons")
@@ -7100,7 +7100,7 @@ impl HudSettings {
     }
 
     /// The Show icons entry's text: "Show text" while the pictures show.
-    /// `// C#: GCSViews/FlightData.cs:6488-6495`
+    /// `// C#: GCSViews/FlightData.cs:6602-6609`
     #[must_use]
     pub const fn icons_entry_text(&self) -> &'static str {
         if self.icons {
@@ -7110,14 +7110,14 @@ impl HudSettings {
         }
     }
 
-    /// Russian Hud: `hud1.Russian = !hud1.Russian`. `// C#: GCSViews/FlightData.cs:4735-4739`
+    /// Russian Hud: `hud1.Russian = !hud1.Russian`. `// C#: GCSViews/FlightData.cs:4849-4853`
     pub fn toggle_russian(&mut self) {
         self.russian = !self.russian;
     }
 
     /// Ground Color: the entry is `CheckOnClick`, so a click checks or unchecks it, and the
     /// handler then paints the ground brown or green by what it now is.
-    /// `// C#: GCSViews/FlightData.Designer.cs:551, GCSViews/FlightData.cs:3122-3139`
+    /// `// C#: GCSViews/FlightData.Designer.cs:551, GCSViews/FlightData.cs:3135-3152`
     pub fn toggle_ground(&mut self) {
         self.ground = Some(!self.ground.unwrap_or(false));
     }
@@ -7138,7 +7138,7 @@ impl HudSettings {
     /// A box of "Display This" clicked: `chk_box_hud_UserItem_CheckedChanged`. A checked box is
     /// unchecked and its item comes off the HUD. An unchecked one asks for its header, starting
     /// at the box's text and ": " - returned for the question, whose answer is [`Self::add_item`].
-    /// `// C#: GCSViews/FlightData.cs:2436-2472`
+    /// `// C#: GCSViews/FlightData.cs:2446-2482`
     pub fn click_item(&mut self, name: &str) -> Option<String> {
         if self.shows(name) {
             self.items.retain(|(shown, _)| shown != name);
@@ -7149,7 +7149,7 @@ impl HudSettings {
     }
 
     /// `addHudUserItem`: `hud1.CustomItems[name] = cust`, the header replaced where the item is
-    /// already there. `// C#: GCSViews/FlightData.cs:948-955`
+    /// already there. `// C#: GCSViews/FlightData.cs:950-957`
     pub fn add_item(&mut self, name: &str, header: &str) {
         match self.items.iter_mut().find(|(shown, _)| shown == name) {
             Some(item) => header.clone_into(&mut item.1),
@@ -7167,7 +7167,7 @@ impl HudSettings {
     ) {
         inputs.russian = self.russian;
         inputs.display_icons = self.icons;
-        // `hud1.displayCellVoltage` and `hud1.batterycellcount`, which HUD.cs:2896-2923 draws.
+        // `hud1.displayCellVoltage` and `hud1.batterycellcount`, which HUD.cs:2898-2925 draws.
         inputs.display_cell_voltage = self.cells.is_some();
         inputs.battery_cell_count = self.cells.unwrap_or(0);
         inputs.custom_items = self
@@ -7185,7 +7185,7 @@ impl HudSettings {
 /// `CurrentState.StringCompareTo`, the order "Display This" lists its boxes in: character by
 /// character ignoring case, a run of digits against a run of digits as numbers, and the shorter
 /// first when one runs out.
-/// `// C#: ExtLibs/ArduPilot/CurrentState.cs:4409-4459`
+/// `// C#: ExtLibs/ArduPilot/CurrentState.cs:4412-4462`
 #[must_use]
 pub fn string_compare_to(a: &str, b: &str) -> std::cmp::Ordering {
     use std::cmp::Ordering;
@@ -7224,7 +7224,7 @@ pub fn string_compare_to(a: &str, b: &str) -> std::cmp::Ordering {
 /// What "Display This" offers: every numeric `CurrentState` property this application holds -
 /// the quick view's chooser's, less the `bool`s, which `IsNumber` refuses here where the quick
 /// view's form turns them into 0 and 1 - in `StringCompareTo`'s order.
-/// `// C#: GCSViews/FlightData.cs:3203-3236, ExtLibs/Utilities/Extensions.cs:681-705`
+/// `// C#: GCSViews/FlightData.cs:3216-3249, ExtLibs/Utilities/Extensions.cs:674-698`
 #[must_use]
 pub fn hud_item_choices() -> Vec<&'static str> {
     let mut names: Vec<&'static str> = crate::quick::choices()
@@ -7457,7 +7457,7 @@ fn hud_menu(
 /// fit in four fifths of the window, each as wide as the longest text and 15 more, filled top to
 /// bottom; the ones on the HUD checked and green. A box checked asks for its header; one
 /// unchecked takes its item off. The form sizes itself to its boxes, up to the window.
-/// `// C#: GCSViews/FlightData.cs:3185-3271`
+/// `// C#: GCSViews/FlightData.cs:3198-3284`
 fn hud_items_chooser(
     settings: &HudSettings,
     window: &Window,
@@ -7613,11 +7613,11 @@ pub fn overlays(
 // --- Jump To Tag ----------------------------------------------------------------------------------
 
 /// The message box Jump To Tag shows for a tag that is not one, before asking again.
-/// `// C#: GCSViews/FlightData.cs:6512-6516`
+/// `// C#: GCSViews/FlightData.cs:6626-6630`
 pub const INVALID_TAG: &str = "Invalid Tag. Must be a number from 0 to 65535";
 
 /// `UInt16.TryParse` of the tag: an unsigned 16-bit number, with white space around it and a sign
-/// allowed, as `NumberStyles.Integer` allows them. `// C#: GCSViews/FlightData.cs:6512`
+/// allowed, as `NumberStyles.Integer` allows them. `// C#: GCSViews/FlightData.cs:6626`
 #[must_use]
 pub fn parse_tag(text: &str) -> Option<u16> {
     let text = text.trim();
@@ -7629,7 +7629,7 @@ pub fn parse_tag(text: &str) -> Option<u16> {
 }
 
 /// `doCommand(MAV_CMD.DO_JUMP_TAG, tag, 0, 0, 0, 0, 0, 0)` to the vehicle flown.
-/// `// C#: GCSViews/FlightData.cs:6521`
+/// `// C#: GCSViews/FlightData.cs:6635`
 #[must_use]
 pub fn jump_to_tag_message(target: VehicleId, tag: u16) -> MavMessage {
     let command = u16::try_from(MavCmd::MAV_CMD_DO_JUMP_TAG.0).unwrap_or(u16::MAX);
@@ -7643,25 +7643,25 @@ pub fn jump_to_tag_message(target: VehicleId, tag: u16) -> MavMessage {
 // --- The map menu's camera and home entries, and the grid's Message and Set Mount ---------------
 
 /// Set Home Here's and Set EKF Origin Here's message box where the terrain has no height for the
-/// point. `// C#: GCSViews/FlightData.cs:4798, 4861`
+/// point. `// C#: GCSViews/FlightData.cs:4912, 4975`
 pub const NO_SRTM: &str = "No SRTM data for this area";
 
-/// Point Camera Here's message box with no link. `// C#: GCSViews/FlightData.cs:4513-4517`
+/// Point Camera Here's message box with no link. `// C#: GCSViews/FlightData.cs:4627-4631`
 pub const PLEASE_CONNECT: &str = "Please Connect First";
 
 /// Point Camera Here's message box before the map has been pressed - not `Strings.BadCoords`,
-/// which reads "Lng". `// C#: GCSViews/FlightData.cs:4530-4534`
+/// which reads "Lng". `// C#: GCSViews/FlightData.cs:4644-4648`
 pub const BAD_LAT_LONG: &str = "Bad Lat/Long";
 
 /// Battery Cell Voltage's message box for a count that is not a whole number - the C#'s words.
-/// `// C#: GCSViews/FlightData.cs:6130-6134`
+/// `// C#: GCSViews/FlightData.cs:6244-6248`
 pub const BAD_RADIUS: &str = "Bad Radius";
 
-/// `send_text`'s severity for Message: 5, `MAV_SEVERITY_NOTICE`. `// C#: GCSViews/FlightData.cs:1266`
+/// `send_text`'s severity for Message: 5, `MAV_SEVERITY_NOTICE`. `// C#: GCSViews/FlightData.cs:1268`
 pub const MESSAGE_SEVERITY: u8 = 5;
 
 /// `MouseDownStart`, as degrees: where the flight map was last pressed, or `(0, 0)` -
-/// `PointLatLng`'s default - before any press. `// C#: GCSViews/FlightData.cs:58, 2956-2959`
+/// `PointLatLng`'s default - before any press. `// C#: GCSViews/FlightData.cs:58, 2969-2972`
 #[must_use]
 pub fn mouse_down_point(data: &FlightData) -> (f64, f64) {
     data.mouse_down_start
@@ -7676,7 +7676,7 @@ pub fn get_home_position(target: VehicleId) -> MavMessage {
 }
 
 /// Set Home Here's terrain check: the height at the point, from a tile or the sea; anything else
-/// is [`NO_SRTM`]. `// C#: GCSViews/FlightData.cs:4858-4863`
+/// is [`NO_SRTM`]. `// C#: GCSViews/FlightData.cs:4972-4977`
 pub fn set_home_height(answer: crate::srtm::AltResponse) -> Result<f64, Refusal> {
     match answer.current_type {
         crate::srtm::TileType::Valid | crate::srtm::TileType::Ocean => Ok(answer.alt),
@@ -7691,7 +7691,7 @@ pub fn set_home_height(answer: crate::srtm::AltResponse) -> Result<f64, Refusal>
 /// Each waits as the C# waits, through [`route`]: `doCommandInt` for its `COMMAND_ACK`, three
 /// more sends two seconds apart, and `getHomePositionAsync` for `HOME_POSITION`, asking again
 /// three times 700 ms apart. The home the vehicle then reports is what the map draws.
-/// `// C#: GCSViews/FlightData.cs:4852-4885`
+/// `// C#: GCSViews/FlightData.cs:4966-4999`
 #[must_use]
 pub fn set_home_messages(
     target: VehicleId,
@@ -7707,7 +7707,7 @@ pub fn set_home_messages(
 }
 
 /// Set EKF Origin Here: `SET_GPS_GLOBAL_ORIGIN` at the point with the terrain's height, which
-/// must come from a tile - the sea will not do here. `// C#: GCSViews/FlightData.cs:4789-4811`
+/// must come from a tile - the sea will not do here. `// C#: GCSViews/FlightData.cs:4903-4925`
 pub fn set_ekf_origin_sends(
     target: VehicleId,
     (latitude, longitude): (f64, f64),
@@ -7756,7 +7756,7 @@ pub fn dotnet_int(text: &str) -> Option<i32> {
 
 /// `string.IsNumber()`: `decimal.TryParse` with `NumberStyles.Number` - white space around it,
 /// a sign before or after, thousands separators and one decimal point, and at least one digit.
-/// `// C#: ExtLibs/Utilities/Extensions.cs:670-674`
+/// `// C#: ExtLibs/Utilities/Extensions.cs:663-667`
 #[must_use]
 pub fn is_number(text: &str) -> bool {
     let text = text.trim();
@@ -7776,7 +7776,7 @@ pub fn is_number(text: &str) -> bool {
 /// Point Camera Here, once its height is given: `DO_SET_ROI` at the point last pressed, the
 /// height above home in the relative frame. A height that is not a number is "Bad Alt", and a
 /// point with a zero latitude or longitude - the map not pressed yet - is "Bad Lat/Long".
-/// `// C#: GCSViews/FlightData.cs:4524-4541`
+/// `// C#: GCSViews/FlightData.cs:4638-4655`
 pub fn point_camera_here_sends(target: VehicleId, (lat, lng): (f64, f64), text: &str) -> Sends {
     let Some(alt) = dotnet_float(text) else {
         return Err(Refusal::error(strings::BAD_ALT));
@@ -7798,7 +7798,7 @@ pub fn point_camera_here_sends(target: VehicleId, (lat, lng): (f64, f64), text: 
 /// tile - both in `doCommandInt`'s default frame, `GLOBAL`. Each part is a `float`, as Fly To
 /// Coords reads them, and anything else is `Strings.InvalidField`; a part that is not a number
 /// throws in the C#, which has no `catch` here, and is the same `InvalidField` here.
-/// `// C#: GCSViews/FlightData.cs:4478-4509`
+/// `// C#: GCSViews/FlightData.cs:4592-4623`
 pub fn point_camera_coords_sends(
     target: VehicleId,
     text: &str,
@@ -7836,7 +7836,7 @@ pub fn point_camera_coords_sends(
 
 /// `send_text(5, txt)`: a `STATUSTEXT` the vehicle writes to its log, the text's ASCII bytes cut
 /// or padded with zeros to fifty, as `StructureToByteArray` fits an array to its field.
-/// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:6493-6498, ExtLibs/Mavlink/MavlinkUtil.cs:270-297`
+/// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:6454-6459, ExtLibs/Mavlink/MavlinkUtil.cs:270-297`
 #[must_use]
 pub fn statustext(severity: u8, text: &str) -> MavMessage {
     let mut bytes = [0u8; 50];
@@ -7858,7 +7858,7 @@ pub fn statustext(severity: u8, text: &str) -> MavMessage {
 ///
 /// The C# binds it once, when the screen loads, from the documentation for the firmware it has
 /// then; this reads the documentation each time, so a file fetched for the vehicle since is used.
-/// `// C#: GCSViews/FlightData.cs:2718-2729`
+/// `// C#: GCSViews/FlightData.cs:2728-2739`
 #[must_use]
 pub fn mount_modes(
     lookup: fn(&str) -> Option<&'static mp_params::ParamMeta>,
@@ -7880,7 +7880,7 @@ pub fn mount_modes(
 /// `DO_MOUNT_CONTROL` with the mode in its seventh parameter where it does not - "copter 3.3
 /// acks with an error, but is ok". Both wait for their answer. With nothing chosen, the C#'s
 /// `(int) CMB_mountmode.SelectedValue` throws into its `catch`: `Strings.ErrorNoResponse`.
-/// `// C#: GCSViews/FlightData.cs:1392-1415`
+/// `// C#: GCSViews/FlightData.cs:1394-1417`
 pub fn mount_mode_sends(
     target: VehicleId,
     parameters: &[(String, f64)],
@@ -7933,7 +7933,7 @@ fn gauge_needles(
 
 /// The Gauges page: `Gspeed` where `tabPage1_Resize` puts it on a page this size, and a double
 /// click on it asking for its maximum.
-/// `// C#: GCSViews/FlightData.cs:3140-3148, 5217-5278`
+/// `// C#: GCSViews/FlightData.cs:3153-3161, 5331-5392`
 fn gauges_page(
     data: &FlightData,
     state: Option<&mp_vehicle::VehicleState>,
@@ -7975,7 +7975,7 @@ fn gauges_page(
                     .size_full(),
                 )
                 // `DoubleClick`, which Windows raises on the second press. The box starts at 60
-                // whatever the maximum is. `// C#: GCSViews/FlightData.cs:3142`
+                // whatever the maximum is. `// C#: GCSViews/FlightData.cs:3155`
                 .on_mouse_down(
                     gpui::MouseButton::Left,
                     cx.listener(|this, event: &gpui::MouseDownEvent, window, cx| {
@@ -8007,7 +8007,7 @@ pub enum MenuKind {
     Quick,
     /// `contextMenuStripMap`, on the map: Fly To Here and the twelve after it, three with
     /// drop-downs. The entries act where the map was pressed to open it, `MouseDownStart`.
-    /// `// C#: GCSViews/FlightData.Designer.cs:2518-2531; GCSViews/FlightData.cs:2956-2959`
+    /// `// C#: GCSViews/FlightData.Designer.cs:2518-2531; GCSViews/FlightData.cs:2969-2972`
     Map,
 }
 
@@ -8055,7 +8055,7 @@ pub enum MenuEntry {
     /// `takeOffToolStripMenuItem`.
     TakeOff,
     /// `onOffCameraOverlapToolStripMenuItem`, `CheckOnClick`: the photo footprints' overlap
-    /// count on the map or off it. `// C#: GCSViews/FlightData.cs:4457-4471`
+    /// count on the map or off it. `// C#: GCSViews/FlightData.cs:4571-4585`
     CameraOverlap,
     /// `jumpToTagToolStripMenuItem`.
     JumpToTag,
@@ -8206,7 +8206,7 @@ impl MenuKind {
 
 /// `setQuickViewRowsCols`'s numbers: each `Math.Max(1, int.Parse(text))`. `int.Parse` throws on
 /// a number `IsNumber` allowed but is not whole - "2.5" - and nothing is set; the message is
-/// .NET's. `// C#: GCSViews/FlightData.cs:4925-4933`
+/// .NET's. `// C#: GCSViews/FlightData.cs:5039-5047`
 pub fn view_count(cols: &str, rows: &str) -> Result<(i32, i32), &'static str> {
     const FORMAT: &str = "Input string was not in a correct format.";
     let cols = dotnet_int(cols).ok_or(FORMAT)?;
@@ -8218,7 +8218,7 @@ pub fn view_count(cols: &str, rows: &str) -> Result<(i32, i32), &'static str> {
 
 impl MissionPlanner {
     /// A conversion's button: its dialog, as a question whose box starts in the folder the
-    /// dialog opens in, as Load Log's does. `// C#: GCSViews/FlightData.cs:1084-1089, 1137-1151,
+    /// dialog opens in, as Load Log's does. `// C#: GCSViews/FlightData.cs:1086-1091, 1139-1153,
     /// 1313-1317, Log/MatLabForms.cs:45-59`
     fn fly_ask_convert(&mut self, kind: Conversion, window: &mut Window, cx: &mut Context<Self>) {
         let logdir = log_directory();
@@ -8236,7 +8236,7 @@ impl MissionPlanner {
 
     /// A conversion, once its log is named: started on a thread of its own. A name that is empty
     /// or only the folder is the dialog closed without a file, which does nothing.
-    /// `// C#: GCSViews/FlightData.cs:1091, 1151, 1319, Log/MatLabForms.cs:59`
+    /// `// C#: GCSViews/FlightData.cs:1093, 1153, 1321, Log/MatLabForms.cs:59`
     fn fly_convert(&mut self, kind: Conversion, text: &str) {
         let path = text.trim();
         if path.is_empty() || std::path::Path::new(path).os_is_dir() {
@@ -8254,7 +8254,7 @@ impl MissionPlanner {
     /// Jump To Tag, once a tag is given: `DO_JUMP_TAG` through `doCommand`, which waits for its
     /// answer, and `Strings.CommandFailed` when the vehicle refuses or never answers. A tag that
     /// is not a number from 0 to 65535 is said, and the question asked again, as the C#'s handler
-    /// calls itself. `// C#: GCSViews/FlightData.cs:6504-6531`
+    /// calls itself. `// C#: GCSViews/FlightData.cs:6618-6645`
     fn fly_jump_to_tag(&mut self, text: &str, window: &mut Window, cx: &mut Context<Self>) {
         let Some(tag) = parse_tag(text) else {
             self.file_status = Some(INVALID_TAG.to_owned());
@@ -8271,7 +8271,7 @@ impl MissionPlanner {
     /// A row of the HUD's menu clicked. Video shows its drop-down, as a click on an entry with
     /// one opens it; the others do what the C#'s handler does, and the menu closes, as a
     /// `ToolStripMenuItem`'s click closes it.
-    /// `// C#: GCSViews/FlightData.cs:3185, 4735-4739, 5161-5164, 3122-3139`
+    /// `// C#: GCSViews/FlightData.cs:3198, 4849-4853, 5275-5278, 3135-3152`
     fn fly_hud_menu(&mut self, action: HudAction) -> bool {
         match action {
             HudAction::Video => {
@@ -8284,7 +8284,7 @@ impl MissionPlanner {
             HudAction::GroundColor => self.fly_data.hud_settings.toggle_ground(),
             HudAction::ShowIcons => self.fly_data.hud_settings.toggle_icons(&mut self.persisted),
             // On, a click turns the line off; off, it asks the count, starting at 4 each time.
-            // `// C#: GCSViews/FlightData.cs:6115-6128`
+            // `// C#: GCSViews/FlightData.cs:6229-6242`
             HudAction::BatteryCells => {
                 if self.fly_data.hud_settings.cells.take().is_none() {
                     self.fly_actions.ask(Prompt::CellCount, "4");
@@ -8293,7 +8293,7 @@ impl MissionPlanner {
                 }
             }
             // The saved answer, or the C#'s first.
-            // `// C#: GCSViews/FlightData.cs:4894-4896, 4815-4817, 3157-3160`
+            // `// C#: GCSViews/FlightData.cs:5008-5010, 4929-4931, 3170-3173`
             HudAction::MjpegSource => {
                 let url = self
                     .persisted
@@ -8314,10 +8314,10 @@ impl MissionPlanner {
                 let ip = herelink_ip(&self.persisted);
                 return self.fly_hud_ask(Prompt::HereLinkIp, &ip);
             }
-            // `hudGStreamer.Stop()`. `// C#: GCSViews/FlightData.cs:3150-3153`
+            // `hudGStreamer.Stop()`. `// C#: GCSViews/FlightData.cs:3163-3166`
             HudAction::GStreamerStop => self.fly_data.gstreamer.stop(),
             // Any recording stopped first, then the notice; the file opens on its OK.
-            // `// C#: GCSViews/FlightData.cs:4653-4672`
+            // `// C#: GCSViews/FlightData.cs:4767-4786`
             HudAction::RecordAvi => {
                 self.fly_stop_record();
                 return self.fly_hud_ask(Prompt::AviNotice, "");
@@ -8332,7 +8332,7 @@ impl MissionPlanner {
     /// Record Hud to AVI, its notice answered: the log folder made, a new writer on
     /// `<log folder>/<yyyy-MM-dd HH-mm-ss>.avi`, the entry reading "Recording". A folder that
     /// cannot be written is the C#'s Error box, here the status line.
-    /// `// C#: GCSViews/FlightData.cs:4659-4671`
+    /// `// C#: GCSViews/FlightData.cs:4773-4785`
     fn fly_start_avi(&mut self) {
         let directory = crate::telemetry::Telemetry::recording_directory();
         let name = chrono::Local::now().format("%Y-%m-%d %H-%M-%S").to_string();
@@ -8357,7 +8357,7 @@ impl MissionPlanner {
 
     /// Stop Record: the entry reads "Start Recording" whether or not one ran, and the file is
     /// closed with its index; a close that fails is the C#'s Error box, here the status line.
-    /// `// C#: GCSViews/FlightData.cs:5121-5137`
+    /// `// C#: GCSViews/FlightData.cs:5235-5251`
     fn fly_stop_record(&mut self) {
         self.fly_data.hud_settings.avi_entry = Some("Start Recording");
         if let Some(mut recording) = self.fly_data.avi.take() {
@@ -8371,7 +8371,7 @@ impl MissionPlanner {
     /// The recording's clock, 25 frames a second: the display as it is drawn now, rasterised and
     /// encoded, in as a frame, and the headers written again so a file cut short plays. A frame
     /// that will not write is "Failed to write avi", the C#'s log line, on the status line.
-    /// `// C#: GCSViews/FlightData.cs:3420-3436`
+    /// `// C#: GCSViews/FlightData.cs:3534-3550`
     fn fly_avi_tick(&mut self) {
         let now = Instant::now();
         let due = self
@@ -8478,7 +8478,7 @@ impl MissionPlanner {
 
     /// Load Log, once a path is given: the link given over to playing it - or, with a port
     /// open, only its name shown, as the C#'s main loop closes the file straight away.
-    /// `// C#: GCSViews/FlightData.cs:669-701, 1276-1302, 3439-3453`
+    /// `// C#: GCSViews/FlightData.cs:671-703, 1278-1304, 3553-3567`
     fn fly_load_log(&mut self, path: &str) {
         let path = path.trim();
         if path.is_empty() {
@@ -8501,7 +8501,7 @@ impl MissionPlanner {
 
     /// Add Poi: `POI.POIAdd(MouseDownStart)` - the ID asked for, then the point added where the
     /// map was last pressed. Before any press the C#'s `MouseDownStart` is null and `POIAdd`
-    /// returns at once. `// C#: GCSViews/FlightData.cs:1007-1010, Utilities/POI.cs:70-82`
+    /// returns at once. `// C#: GCSViews/FlightData.cs:1009-1012, Utilities/POI.cs:70-82`
     fn poi_add(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let Some((at, _)) = self.fly_data.mouse_down_start else {
             return;
@@ -8514,7 +8514,7 @@ impl MissionPlanner {
     /// Delete: `POI.POIDelete` on the marker the map was pressed on, if it was pressed on one.
     /// The C# deletes the marker under the pointer when its menu opens; the menu here is under
     /// the grid, so it is the marker under the last press.
-    /// `// C#: GCSViews/FlightData.cs:2632-2638, Utilities/POI.cs:84-100`
+    /// `// C#: GCSViews/FlightData.cs:2642-2648, Utilities/POI.cs:84-100`
     fn poi_delete(&mut self) {
         if let Some(index) = self.fly_data.current_poi.take() {
             self.fly_data.pois.delete(index);
@@ -8523,7 +8523,7 @@ impl MissionPlanner {
 
     /// The POI drawn under `press`, a window point: `CurrentPOIMarker`, as the pointer entering a
     /// marker sets it. Found when the map's menu opens.
-    /// `// C#: GCSViews/FlightData.cs:5014-5019; Utilities/POI.cs:87-102`
+    /// `// C#: GCSViews/FlightData.cs:5128-5133; Utilities/POI.cs:87-102`
     pub(crate) fn poi_under_press(&self, press: (f32, f32)) -> Option<usize> {
         let map = self.map.borrow();
         let drawn: Vec<Option<(f32, f32)>> = self
@@ -8537,7 +8537,7 @@ impl MissionPlanner {
     }
 
     /// Coords, once answered: the typed point, then its ID asked for as Add Poi asks.
-    /// `// C#: GCSViews/FlightData.cs:6011-6038`
+    /// `// C#: GCSViews/FlightData.cs:6125-6152`
     fn poi_at_coords(&mut self, text: &str, window: &mut Window, cx: &mut Context<Self>) {
         match crate::poi::parse_coords(text) {
             Ok(point) => {
@@ -8555,7 +8555,7 @@ impl MissionPlanner {
 // --- Transponder page and the gimbal ---------------------------------------------------------
 
 impl MissionPlanner {
-    /// Message: nothing without a link, else the question. `// C#: GCSViews/FlightData.cs:1255-1264`
+    /// Message: nothing without a link, else the question. `// C#: GCSViews/FlightData.cs:1257-1266`
     fn fly_ask_message(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         if !port_open(&self.telemetry.view()) {
             return;
@@ -8565,7 +8565,7 @@ impl MissionPlanner {
     }
 
     /// Set Mount: the chosen mode as `MNT_MODE` or `DO_MOUNT_CONTROL`, `Strings.ErrorNoResponse`
-    /// from the `catch`. `// C#: GCSViews/FlightData.cs:1392-1415`
+    /// from the `catch`. `// C#: GCSViews/FlightData.cs:1394-1417`
     fn fly_set_mount(&mut self) {
         self.fly_actions.mount_open = false;
         let chosen = mount_modes(crate::metadata::lookup)
@@ -8579,7 +8579,7 @@ impl MissionPlanner {
 
     /// Clear Track: the route flown so far taken off the map, which records it again from the
     /// vehicle's next position. The C# also empties `MAV.camerapoints`, which nothing here holds.
-    /// `// C#: GCSViews/FlightData.cs:1101-1107`
+    /// `// C#: GCSViews/FlightData.cs:1103-1109`
     fn fly_clear_track(&mut self) {
         let mut map = self.map.borrow_mut();
         self.fly_data.track_cleared = Some(map.path_len());
@@ -8587,7 +8587,7 @@ impl MissionPlanner {
     }
 
     /// Point Camera Here: "Please Connect First" without a link, else the height asked for,
-    /// starting at 0. `// C#: GCSViews/FlightData.cs:4511-4522`
+    /// starting at 0. `// C#: GCSViews/FlightData.cs:4625-4636`
     fn fly_ask_point_camera_here(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         if !port_open(&self.telemetry.view()) {
             self.file_status = Some(error_box(PLEASE_CONNECT));
@@ -8599,7 +8599,7 @@ impl MissionPlanner {
 
     /// Trigger Camera NOW: `setDigicamControl(true)`, as Do Action's `Trigger_Camera` sends it -
     /// `DO_DIGICAM_CONTROL`, and `DIGICAM_CONTROL` if the vehicle refuses it - with
-    /// `Strings.CommandFailed` from the `catch`. `// C#: GCSViews/FlightData.cs:5381-5391`
+    /// `Strings.CommandFailed` from the `catch`. `// C#: GCSViews/FlightData.cs:5495-5505`
     fn fly_trigger_camera(&mut self) {
         let report = self
             .telemetry
@@ -8621,7 +8621,7 @@ impl MissionPlanner {
 
     /// Set EKF Origin Here: nothing without a link; the terrain's height at the point last
     /// pressed, or [`NO_SRTM`]; then `SET_GPS_GLOBAL_ORIGIN`, sent once.
-    /// `// C#: GCSViews/FlightData.cs:4789-4811`
+    /// `// C#: GCSViews/FlightData.cs:4903-4925`
     fn fly_set_ekf_origin(&mut self) {
         if !port_open(&self.telemetry.view()) {
             return;
@@ -8635,7 +8635,7 @@ impl MissionPlanner {
 
     /// Set Home Here: nothing without a link; the terrain's height at the point last pressed,
     /// from a tile or the sea, or [`NO_SRTM`]; then "Are you sure?".
-    /// `// C#: GCSViews/FlightData.cs:4852-4870`
+    /// `// C#: GCSViews/FlightData.cs:4966-4984`
     fn fly_ask_set_home(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         if !port_open(&self.telemetry.view()) {
             return;
@@ -8728,7 +8728,7 @@ impl MissionPlanner {
         }
         match entry {
             // `goHereToolStripMenuItem_Click`: the guided move to where the menu was opened.
-            // `// C#: GCSViews/FlightData.cs:3082-3113`
+            // `// C#: GCSViews/FlightData.cs:3095-3126`
             MenuEntry::GoHere => {
                 if let Some((at, _)) = self.fly_data.mouse_down_start {
                     self.fly_here(at);
@@ -8760,7 +8760,7 @@ impl MissionPlanner {
             MenuEntry::TriggerCamera => self.fly_trigger_camera(),
             // `flightPlannerToolStripMenuItem_Click`: `MainV2.View.ShowScreen("FlightPlanner")`,
             // the FLIGHT PLAN tab here.
-            // `// C#: GCSViews/FlightData.cs:2862-2897`
+            // `// C#: GCSViews/FlightData.cs:2875-2910`
             MenuEntry::FlightPlanner => self.choose_screen(crate::Screen::Plan),
             // The two with drop-downs and no handler of their own: the pointer opens the
             // drop-down, a click does nothing.
@@ -8769,12 +8769,12 @@ impl MissionPlanner {
             MenuEntry::SetHomeHere1 => self.fly_ask_set_home(window, cx),
             // `takeOffToolStripMenuItem_Click`: the Actions grid's TakeOff button, which this
             // application has as well.
-            // `// C#: GCSViews/FlightData.cs:5290-5315`
+            // `// C#: GCSViews/FlightData.cs:5404-5429`
             MenuEntry::TakeOff => self.fly_takeoff_pressed(window, cx),
             // `onOffCameraOverlapToolStripMenuItem_Click`: `CheckOnClick` has turned the box, and
             // `CameraOverlap` follows it; unchecked, every photo marker comes off the overlay -
             // the next map update puts them back - and the count goes with the next update.
-            // `// C#: GCSViews/FlightData.cs:4457-4471`
+            // `// C#: GCSViews/FlightData.cs:4571-4585`
             MenuEntry::CameraOverlap => {
                 self.fly_data.camera_overlap = !self.fly_data.camera_overlap;
                 if !self.fly_data.camera_overlap {
@@ -8794,7 +8794,7 @@ impl MissionPlanner {
                 self.fly_data.customizing = Some(self.fly_pages.customize_list());
             }
             // The columns asked first, from the setting or 2; the rows after, from it or 3.
-            // `// C#: GCSViews/FlightData.cs:5078-5099`
+            // `// C#: GCSViews/FlightData.cs:5192-5213`
             MenuEntry::SetViewCount => {
                 let cols = self
                     .fly_data
@@ -8809,7 +8809,7 @@ impl MissionPlanner {
     }
 
     /// Customize's form closed: the checked pages are the strip's.
-    /// `// C#: GCSViews/FlightData.cs:2617-2627`
+    /// `// C#: GCSViews/FlightData.cs:2627-2637`
     fn fly_customize_close(&mut self) {
         if let Some(list) = self.fly_data.customizing.take() {
             self.fly_pages.customize(&list);
@@ -8825,7 +8825,7 @@ impl MissionPlanner {
     /// which resizes the quick views' grid and keeps the numbers as the settings it writes
     /// (`crate::quick::QuickViews::set_rows_cols`). A number `IsNumber` allows that `int.Parse`
     /// refuses throws in the C#; here it is the error box.
-    /// `// C#: GCSViews/FlightData.cs:5092-5096, 4914-5060`
+    /// `// C#: GCSViews/FlightData.cs:5206-5210, 5028-5174`
     fn fly_view_count(&mut self, cols: &str, rows: &str) {
         if !(is_number(rows) && is_number(cols)) {
             return;
@@ -8864,7 +8864,7 @@ impl MissionPlanner {
     /// Connect to Transponder: the status asked for through `doCommand`, which waits for its
     /// answer - "Timeout." where none comes - and then up to three seconds for a status. Without
     /// a vehicle `doCommand` returns at once and the three seconds start.
-    /// `// C#: GCSViews/FlightData.cs:6348-6365`
+    /// `// C#: GCSViews/FlightData.cs:6462-6479`
     pub(crate) fn fly_xpdr_connect(&mut self) {
         let now = Instant::now();
         let requests = if self.telemetry.send_handle().is_some() {
@@ -8883,7 +8883,7 @@ impl MissionPlanner {
     }
 
     /// Once a frame: Connect's wait, and the main loop's `updateTransponder` - on a status the
-    /// page has not shown, or every five seconds. `// C#: GCSViews/FlightData.cs:4314-4318, 6352-6358`
+    /// page has not shown, or every five seconds. `// C#: GCSViews/FlightData.cs:4428-4432, 6466-6472`
     fn fly_xpdr_tick(&mut self, view: &TelemetryView, window: &Window) {
         let now = Instant::now();
         let status = view.state.as_deref().map(|state| state.transponder);
@@ -8912,7 +8912,7 @@ impl MissionPlanner {
             }
             if let Some(since) = connecting.waiting_since {
                 // A status since the page last looked, not "one has ever arrived": the count the
-                // C#'s xpdr_status_pending flag stands for. `// C#: GCSViews/FlightData.cs:6461-6481`
+                // C#'s xpdr_status_pending flag stands for. `// C#: GCSViews/FlightData.cs:6575-6595`
                 let arrived = self.fly_data.transponder.pending(status.as_ref());
                 if arrived {
                     self.fly_data.transponder.connecting = None;
@@ -9176,7 +9176,7 @@ fn context_menu(
 
 /// Customize's form: a `CheckedListBox` of every page's name, `CheckOnClick`, filling a form of
 /// its own that applies the list when it is closed - drawn here over the window, as
-/// `ShowDialog` shows it. `// C#: GCSViews/FlightData.cs:2584-2627`
+/// `ShowDialog` shows it. `// C#: GCSViews/FlightData.cs:2594-2637`
 fn customize_form(
     list: &[(Page, bool)],
     window: &Window,
@@ -9802,7 +9802,7 @@ mod tests {
     /// offset is minus zero, which the next click reads as not set; after it, minus the home
     /// altitude it reported - not the GPS's altitude less its height above home, which here says
     /// otherwise - and every altitude shown is above sea level; again, and it is back to zero.
-    /// `// C#: GCSViews/FlightData.cs:1236-1247; ExtLibs/ArduPilot/CurrentState.cs:40, 1568-1582`
+    /// `// C#: GCSViews/FlightData.cs:1238-1249; ExtLibs/ArduPilot/CurrentState.cs:40, 1568-1582`
     #[test]
     fn set_home_alt_takes_the_home_the_vehicle_reported() {
         use crate::telemetry::scripted::{Vehicle, until};
@@ -9913,7 +9913,7 @@ mod tests {
     /// only when home is set - on its first fix, or on arming - so a link that joins a SITL whose
     /// home is already set hears none until it asks, as Mission Planner's does: until then
     /// `HomeAlt` is 0. Run with `--ignored` while SITL is up; it only asks.
-    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:3343-3386, 5701-5707`
+    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:3343-3386, 5674-5680`
     #[test]
     #[ignore = "needs SITL on tcp:127.0.0.1:5763"]
     fn sitl_reports_the_home_set_home_alt_takes() {
@@ -10219,7 +10219,7 @@ mod tests {
 
     /// `setWPCurrent`, `doARM` and `doCommand` block the C#: nothing more is sent while the link
     /// is still retrying the call, and the second before the next attempt starts when it ends.
-    /// `// C#: GCSViews/FlightData.cs:1553-1597`
+    /// `// C#: GCSViews/FlightData.cs:1555-1599`
     #[test]
     fn resume_waits_inside_each_call_it_blocks_on() {
         let mut vehicle = Vehicle::new();
@@ -10260,7 +10260,7 @@ mod tests {
     }
 
     /// Every retry unanswered throws in the C#, and the outer `catch` says `CommandFailed`.
-    /// `// C#: GCSViews/FlightData.cs:1624-1627`
+    /// `// C#: GCSViews/FlightData.cs:1626-1629`
     #[test]
     fn resume_fails_when_a_call_it_blocks_on_times_out() {
         let mut vehicle = Vehicle::new();
@@ -10446,7 +10446,7 @@ mod tests {
     /// the first take-off's 10 m, and Auto is never asked for. A vehicle that takes every
     /// take-off is flown into Auto by the same sequence: the sequence is the C#'s, the refusal
     /// the firmware's.
-    /// `// C#: GCSViews/FlightData.cs:1587-1621`
+    /// `// C#: GCSViews/FlightData.cs:1589-1623`
     #[test]
     fn resume_on_arducopter_ends_in_the_csharps_command_failed() {
         for millis in [300, 600, 900, 1200, 1500, 1900, 2500] {
@@ -10548,7 +10548,7 @@ mod tests {
     /// TakeOff's answer: `float.Parse` of it, and Guided's messages to go before the take-off -
     /// none for a vehicle whose family has no Guided; a word that is not a number is the
     /// `FormatException`'s message. Its box is the C#'s.
-    /// `// C#: GCSViews/FlightData.cs:5294-5305`
+    /// `// C#: GCSViews/FlightData.cs:5408-5419`
     #[test]
     fn takeoff_parses_its_height_and_puts_the_vehicle_in_guided_first() {
         let t = target();
@@ -10718,7 +10718,7 @@ mod tests {
 
     /// Do Action's message boxes, per entry: the generic path's refusal names the command,
     /// `Trigger_Camera` falls back to `DIGICAM_CONTROL`, and what is not waited on says nothing.
-    /// `// C#: GCSViews/FlightData.cs:1697-1878`
+    /// `// C#: GCSViews/FlightData.cs:1699-1888`
     #[test]
     fn do_action_says_what_the_csharp_says_when_refused_or_unanswered() {
         let generic = action_report("Battery_Reset", target());
@@ -12431,7 +12431,7 @@ mod tests {
     }
 
     /// Battery Cell Voltage: with a count, the HUD is told to draw the cell line for it; off, it
-    /// is told not to. The line itself is `hud.rs`'s (HUD.cs:2896-2923), from those inputs.
+    /// is told not to. The line itself is `hud.rs`'s (HUD.cs:2898-2925), from those inputs.
     #[test]
     fn the_cell_count_reaches_the_hud_as_its_own_inputs() {
         let mut settings = HudSettings::default();

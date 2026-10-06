@@ -3,7 +3,7 @@
 **Status:** v1, 2026-09-23; audited and re-prioritised 2026-09-24 (§5.2 re-baselined, §13.6 added,
 the gpui sourcing in §2.3, §3 and §12 D2 brought up to date, the roadmap's standing noted under §10,
 R17 added). Supersedes `DELIVERABLES.md` (kept as the deliverable catalogue; this document is the plan).
-**Upstream pin:** ArduPilot Mission Planner `efb080190de0bf091f9aab982c8848a124de7588` (2026-09-17).
+**Upstream pin:** ArduPilot Mission Planner `5dbb2b048485688da6427a532d426df2c045f566` (2026-10-03), moved on 2026-10-06 at the owner's word from `efb080190de0bf091f9aab982c8848a124de7588` (2026-09-17); a file's `Ported from <path> @ <commit>` header names the commit its port was made from.
 **The upstream sources are READ-ONLY:** the clone of https://github.com/ArduPilot/MissionPlanner (the C# original) that `MP_SRC` names, and zed's, are read and never edited; neither is part of this repository.
 
 Everything in this document that is a number was measured on this box in this session, or is marked
@@ -570,7 +570,7 @@ evidence, sha256, omissions, notes
 ### 6.4 The per-file agent contract — five artifacts or the unit does not advance
 
 1. **The port**, headed
-      `//! Ported from <path> @ efb0801… (GPL-3.0-only)` under the licence header every `.rs` opens with (`xtask::licence::HEADER`; NOTICE is the §5(a) change notice), with
+      `//! Ported from <path> @ <commit> (GPL-3.0-only)` - the pin's commit when the port is made (`xtask::upstream::COMMIT`; efb0801 until 2026-10-06) - under the licence header every `.rs` opens with (`xtask::licence::HEADER`; NOTICE is the §5(a) change notice), with
    `// C#: <path>:<line>` on non-obvious transliterations.
    *(GPLv3 §5(a) obligation is real and cannot be inherited: grepping every non-vendored logic
    directory for "GNU General Public"/"GPL" returns **exactly one file** — `AP_GeodesicGrid.cs`. The

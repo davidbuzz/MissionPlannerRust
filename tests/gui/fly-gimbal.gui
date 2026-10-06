@@ -6,8 +6,8 @@
 # MAVLink-targeting mode, not waited for. Reset Position puts the bars at zero, sets the mount to
 # MAVLink targeting with no stabilisation (DO_MOUNT_CONFIGURE), and sends the zeros. Video Control
 # pops the gimbal's video out. SITL has no mount; the commands go all the same.
-# `GCSViews/FlightData.cs:1471-1478, 2946-2950, GCSViews/FlightData.Designer.cs:2088-2191,
-# ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:4572-4605`
+# `GCSViews/FlightData.cs:1473-1480, 2959-2963, GCSViews/FlightData.Designer.cs:2088-2191,
+# ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:4561-4594`
 #
 # Needs SITL (a copter): tools/gui-test.sh tests/gui/fly-gimbal.gui -- tcp:127.0.0.1:5760
 

@@ -64,7 +64,7 @@ pub struct ModeChange {
 /// The guess decides which table names a flight mode: mode 4 is Guided on a copter and Acro on a
 /// plane. `BinaryLog` makes it from every `MSG` and `PARM` line `DFLogBuffer` converts to text
 /// when a log is opened, and the last line that says anything wins.
-/// `// C#: ExtLibs/Utilities/BinaryLog.cs:178-203; ExtLibs/Utilities/DFLogBuffer.cs:295-309`
+/// `// C#: ExtLibs/Utilities/BinaryLog.cs:178-203; ExtLibs/Utilities/DFLogBuffer.cs:294-308`
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Firmware {
     /// `ArduCopter2`.
@@ -98,7 +98,7 @@ pub struct Overlays {
 /// How many `MSG` and `PARM` lines the firmware guess reads before it stops.
 ///
 /// `limitcount` is checked after the line is converted, so one more than this is read.
-/// `// C#: ExtLibs/Utilities/DFLogBuffer.cs:295-309`
+/// `// C#: ExtLibs/Utilities/DFLogBuffer.cs:294-308`
 pub(crate) const FIRMWARE_LINES: usize = 100_000;
 
 /// The firmware one `MSG` or `PARM` record's line names, if it names one.

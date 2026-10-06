@@ -165,7 +165,7 @@ const SCRIPT: &[Act] = &[
     Act::Click("tab-plan"),
     // Zoom To Vehicle, on the planning map's zoom icon: the map on the copter, in to 17 - the
     // planning map starts out at zoom 3, as the C#'s does.
-    // `// C#: GCSViews/FlightPlanner.cs:232, 8369-8380`
+    // `// C#: GCSViews/FlightPlanner.cs:232, 8366-8377`
     Act::Click("plan-zoomicon"),
     Act::Click("menu-zoomToVehicle"),
     Act::Pause(TICKS),
@@ -183,7 +183,7 @@ const SCRIPT: &[Act] = &[
     // makes the map's clicks the polygon's corners; four of them, in a square to the left of the
     // mission's; then Auto WP > Survey (Grid) over it, and Accept, which adds the grid's rows
     // after the four waypoints and closes the dialog.
-    // `// C#: GCSViews/FlightPlanner.cs:1731-1758, 6755-6760; Grid/GridUI.cs:1604`
+    // `// C#: GCSViews/FlightPlanner.cs:1731-1758, 6752-6757; Grid/GridUI.cs:1604`
     Act::RightClick(Spot::Survey),
     Act::Click("menu-polygon"),
     Act::Click("menu-addPolygonPoint2"),

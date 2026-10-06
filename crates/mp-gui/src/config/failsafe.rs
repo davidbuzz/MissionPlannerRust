@@ -789,7 +789,7 @@ pub fn mode_text(state: &VehicleState) -> String {
 }
 
 /// `ch1in` to `ch8in`: `RC_CHANNELS` as sent, zero before one has arrived.
-/// `// C#: ExtLibs/ArduPilot/CurrentState.cs:3495-3509`
+/// `// C#: ExtLibs/ArduPilot/CurrentState.cs:3498-3512`
 #[must_use]
 pub fn radio_in(state: &VehicleState, channel: usize) -> i64 {
     if !state.rc.reported {
@@ -803,7 +803,7 @@ pub fn radio_in(state: &VehicleState, channel: usize) -> i64 {
 }
 
 /// `ch1out` to `ch8out`: `SERVO_OUTPUT_RAW` port 0.
-/// `// C#: ExtLibs/ArduPilot/CurrentState.cs:3638-3647`
+/// `// C#: ExtLibs/ArduPilot/CurrentState.cs:3641-3650`
 #[must_use]
 pub fn servo_out(state: &VehicleState, channel: usize) -> i64 {
     state

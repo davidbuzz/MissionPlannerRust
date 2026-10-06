@@ -68,7 +68,7 @@ const BUTTON_HEIGHT: f32 = 30.0;
 const PAGE_WIDTH: f32 = 760.0;
 
 /// `MAV_PROTOCOL_CAPABILITY_FTP`.
-/// `// C#: ExtLibs/Mavlink/Mavlink.cs:7076`
+/// `// C#: ExtLibs/Mavlink/Mavlink.cs:7887`
 const CAPABILITY_FTP: u32 = 32;
 
 /// `MAV_TYPE_HELICOPTER`, `isHeli`'s `aptype`.
@@ -581,7 +581,7 @@ pub fn build(list: List, vehicle: &Vehicle) -> Built {
 /// done. The download's end, not `gotAllParams`: a feature switched on makes the vehicle report
 /// more parameters than are held (AVD_ENABLE 1 took a copter from 1,408 to 1,419), which is not
 /// a reload in the C# either - the page stays until the screen is shown again.
-/// `// C#: MainV2.cs:1419-1425, 1684, 1740-1748; Controls/ConnectionControl.cs:143`
+/// `// C#: MainV2.cs:1421-1427, 1686, 1742-1750; Controls/ConnectionControl.cs:143`
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Key {
     connected: bool,
@@ -711,7 +711,7 @@ impl Backstage {
     /// in. `held` is the link moving under a page whose change `MainV2` does not show the screen
     /// again for - Force Bootloader on either Install Firmware page, whose
     /// `MainV2.comPort.Open(false)` is not `doConnect` - and keys the list to it instead.
-    /// `// C#: ExtLibs/Controls/MainSwitcher.cs:112-138; GCSViews/ConfigurationView/ConfigParamLoading.cs:44-48; GCSViews/ConfigurationView/ConfigFirmwareManifest.cs:517; ConfigFirmware.cs:623; MainV2.cs:1419-1425, 1740-1748`
+    /// `// C#: ExtLibs/Controls/MainSwitcher.cs:112-138; GCSViews/ConfigurationView/ConfigParamLoading.cs:44-48; GCSViews/ConfigurationView/ConfigFirmwareManifest.cs:517; ConfigFirmware.cs:623; MainV2.cs:1421-1427, 1742-1750`
     pub fn stale(&mut self, key: Key, showing: bool, got_all_params: bool, held: bool) -> bool {
         let Some(loaded) = self.loaded else {
             return false;
@@ -904,7 +904,7 @@ impl MissionPlanner {
     /// the screen showing - the same one included, as it is not persistent - and makes it anew,
     /// so its list is closed here, its page deactivated, and built again at the next tick with
     /// the display view as it is now.
-    /// `// C#: ExtLibs/Controls/MainSwitcher.cs:112-153; MainV2.cs:1357-1362, 3179-3180`
+    /// `// C#: ExtLibs/Controls/MainSwitcher.cs:112-153; MainV2.cs:1359-1364, 3186-3187`
     pub(crate) fn show_screen_again(&mut self, screen: crate::Screen) {
         for list in List::ALL {
             if screen_of(list) == screen
@@ -1025,7 +1025,7 @@ impl MissionPlanner {
                 );
             }
             // Every time, as `ActivatePage` calls it.
-            // C#: GCSViews/ConfigurationView/ConfigPlanner.cs:55-256
+            // C#: GCSViews/ConfigurationView/ConfigPlanner.cs:55-257
             Some("ConfigPlanner") => self.planner_activate(),
             // ---- Mandatory Hardware pages ----
             // C#: GCSViews/ConfigurationView/ConfigAccelerometerCalibration.cs:27-31
@@ -1082,7 +1082,7 @@ impl MissionPlanner {
             // ---- Standard / Advanced Params, MAVFtp, Heli Setup (row 71) ----
             // Every time, as `ActivatePage` calls it (`config/software_pages2.rs`); `MavFTPUI`
             // loads once per screen, as it is not `IActivate`.
-            // C#: GCSViews/ConfigurationView/ConfigFriendlyParams.cs:253-260; Controls/MavFTPUI.cs:665-668;
+            // C#: GCSViews/ConfigurationView/ConfigFriendlyParams.cs:253-260; Controls/MavFTPUI.cs:694-697;
             // GCSViews/ConfigurationView/ConfigTradHeli4.cs:28-172
             Some(
                 class @ ("ConfigFriendlyParams"
@@ -2408,7 +2408,7 @@ mod tests {
     /// and shows no screen again - where without it the same change shows the screen again. The
     /// link closing once Force Bootloader is done shows it again, as the C#'s heartbeat loop does
     /// for a port gone; leaving the screen closes it whatever.
-    /// `// C#: GCSViews/ConfigurationView/ConfigFirmwareManifest.cs:517; MainV2.cs:1419-1425, 1740-1748, 2973-2997`
+    /// `// C#: GCSViews/ConfigurationView/ConfigFirmwareManifest.cs:517; MainV2.cs:1421-1427, 1742-1750, 2980-3004`
     #[test]
     fn force_bootloaders_link_shows_no_screen_again_while_it_holds_it() {
         let mut view = TelemetryView::disconnected("serial:/dev/ttyACM0:115200");
@@ -2462,7 +2462,7 @@ mod tests {
     /// The key a list is built for moves when the link opens, when the vehicle changes and when
     /// the connect-time download ends (`doConnect` shows the screen again after `getParamList`),
     /// and not when a parameter arrives, changes, or the vehicle raises its count afterwards.
-    /// `// C#: MainV2.cs:1684, 1740-1748`
+    /// `// C#: MainV2.cs:1686, 1742-1750`
     #[test]
     fn the_key_moves_when_the_download_ends() {
         let mut view = TelemetryView::disconnected("tcp:127.0.0.1:5760");

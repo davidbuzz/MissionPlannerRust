@@ -35,7 +35,7 @@
 //! and `MP_UPDATE_DIR` is the harness's door - the directory the update is written to, in place
 //! of the program's own, and with it the updater is named rather than started.
 //! `// C#: GCSViews/Help.cs; GCSViews/Help.Designer.cs; GCSViews/Help.resx; Utilities/Update.cs;
-//! MainV2.cs:821, 3661-3671, 4030-4044; Program.cs:187-203, 614-626`
+//! MainV2.cs:823, 3668-3678, 4037-4051; Program.cs:189-205, 616-628`
 
 // This module is internal to the binary; `pub` here documents intent rather than exporting API.
 #![allow(unreachable_pub)]
@@ -83,9 +83,9 @@ pub const CHANGE_LOG_TEXT: &str = "Change Log";
 /// `// C#: GCSViews/Help.cs:62`
 pub const CHANGE_LOG_URL: &str =
     "https://firmware.ardupilot.org/Tools/MissionPlanner/upgrade/ChangeLog.txt";
-/// `CHK_showconsole`'s setting. `// C#: GCSViews/Help.cs:20, 52; MainV2.cs:821`
+/// `CHK_showconsole`'s setting. `// C#: GCSViews/Help.cs:20, 52; MainV2.cs:823`
 pub const SHOW_CONSOLE_KEY: &str = "showconsole";
-/// The settings the once-a-day check keeps and reads. `// C#: MainV2.cs:3661-3669`
+/// The settings the once-a-day check keeps and reads. `// C#: MainV2.cs:3668-3676`
 pub const UPDATE_CHECK_KEY: &str = "update_check";
 pub const BETA_UPDATES_KEY: &str = "beta_updates";
 /// The harness's door: the directory the update is written to in place of the program's.
@@ -260,7 +260,7 @@ fn setting_is_true(persisted: &Persisted, key: &str) -> bool {
 
 /// `Program.CleanupFiles` and `updateCheckMain`: every `<updater>*.new` beside the program
 /// copied over the updater and deleted - the updater cannot replace itself.
-/// `// C#: Program.cs:614-626; Utilities/Update.cs:74-84`
+/// `// C#: Program.cs:616-628; Utilities/Update.cs:74-84`
 pub fn cleanup_updater_files(install_dir: &Path) {
     let Ok(entries) = mp_os::fs::read_dir(install_dir) else {
         return;
@@ -354,7 +354,7 @@ impl Help {
     /// `Update.CheckForUpdate(NotifyNoUpdate)` on a thread of its own: nothing without a
     /// version URL; else the channel's `version.txt` against the program's, and then the
     /// question, or "No update available." when asked to say so.
-    /// `// C#: Utilities/Update.cs:118-178; GCSViews/Help.cs:33-48; MainV2.cs:4030-4044`
+    /// `// C#: Utilities/Update.cs:118-178; GCSViews/Help.cs:33-48; MainV2.cs:4037-4051`
     pub fn check_for_update(
         &mut self,
         which: Which,
@@ -487,7 +487,7 @@ impl Help {
 
     /// `MainV2`'s check at startup: once a day on the stable channel, the day kept as
     /// `update_check`; on a day already checked, the beta channel when `beta_updates` is set.
-    /// `// C#: MainV2.cs:3661-3671`
+    /// `// C#: MainV2.cs:3668-3678`
     pub fn startup_check(&mut self, persisted: &mut Persisted) {
         let today = crate::settings::short_date_today();
         if persisted.get(UPDATE_CHECK_KEY) != Some(today.as_str()) {
@@ -547,7 +547,7 @@ impl Help {
     /// `CheckForUpdate`'s finding: the question with "BETA " before it for the beta channel, "No
     /// update available." when asked, or the failure, which the C# logs ("Update check failed")
     /// or boxes (the Help page's Error box) and the status line says.
-    /// `// C#: Utilities/Update.cs:180-203; GCSViews/Help.cs:44-47; MainV2.cs:4040-4043`
+    /// `// C#: Utilities/Update.cs:180-203; GCSViews/Help.cs:44-47; MainV2.cs:4047-4050`
     fn checked(&mut self, outcome: Result<Check, String>) -> Option<String> {
         match outcome {
             Ok(Check::UpdateFound { changelog_url }) => {
@@ -671,7 +671,7 @@ fn channel_pair<T>() -> (std::sync::mpsc::Sender<T>, Receiver<T>) {
 }
 
 /// `/update` and `/updatebeta`: `DoUpdate` without a window - its progress on the console, the
-/// updater started and the exit code the shell sees. `// C#: Program.cs:192-203`
+/// updater started and the exit code the shell sees. `// C#: Program.cs:194-205`
 pub fn update_from_command_line(beta: bool) -> i32 {
     let persisted = Persisted::load();
     let which = if beta { Which::Beta } else { Which::Stable };

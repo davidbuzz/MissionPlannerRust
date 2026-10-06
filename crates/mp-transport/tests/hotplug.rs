@@ -21,9 +21,9 @@
 //! Surprise unplug and reconnect.
 //!
 //! Mission Planner learns that a port has gone from the exception its next read throws, which
-//! ends the read loop (`ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:4762-4767`); it reconnects
+//! ends the read loop (`ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:4751-4756`); it reconnects
 //! by opening a new port under the same name; and a device path that is not there fails before
-//! the driver is asked, with "No such device" (`ExtLibs/Comms/CommsSerialPort.cs:502-504`). These
+//! the driver is asked, with "No such device" (`ExtLibs/Comms/CommsSerialPort.cs:472-474`). These
 //! tests pin the same three things here: on the mock, on a real serial port over a pseudo-terminal
 //! whose master side is pulled away, and on TCP.
 
@@ -123,7 +123,7 @@ fn opening_a_serial_path_that_does_not_exist_fails_naming_the_path() {
         Err(OpenError::Io { context, source }) => {
             assert!(context.contains(path), "{context}");
             assert_eq!(source.kind(), io::ErrorKind::NotFound);
-            // C#: ExtLibs/Comms/CommsSerialPort.cs:504
+            // C#: ExtLibs/Comms/CommsSerialPort.cs:474
             assert_eq!(source.to_string(), "No such device");
         }
         Err(other) => panic!("expected an I/O error naming the path, got {other}"),

@@ -121,7 +121,7 @@ pub trait ScriptHost {
     /// `MAVlist[sysid, compid].cs.<field>`: a named vehicle's `CurrentState`, as
     /// `setGuidedModeWP(sysid, compid, ...)` reads its `mode` and `firmware`. This default is
     /// [`ScriptHost::cs_field`], for a host with one vehicle.
-    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:4434, 4441`
+    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:4423, 4430`
     fn cs_field_of(&self, _target: (u8, u8), name: &str) -> Option<CsValue> {
         self.cs_field(name)
     }
@@ -141,7 +141,7 @@ pub trait ScriptHost {
 
     /// `MAV.sysid`, `MAV.compid` - here also `sysidcurrent`, `compidcurrent` - the vehicle the
     /// link is talking to, (0, 0) before one is heard.
-    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:287-313`
+    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:289-315`
     fn link_target(&self) -> (u8, u8) {
         (0, 0)
     }
@@ -156,7 +156,7 @@ pub trait ScriptHost {
     /// has not listed, true without sending for a value it already holds unless `force`, else
     /// `PARAM_SET` until the vehicle echoes it, three more times 700 ms apart, and then the
     /// `TimeoutException`.
-    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:1622-1770`
+    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:1619-1767`
     fn set_param(
         &mut self,
         _target: (u8, u8),
@@ -170,7 +170,7 @@ pub trait ScriptHost {
     /// `MAV.doCommand(...)`: `COMMAND_LONG` and, when `require_ack`, its `COMMAND_ACK` waited
     /// for - accepted true, any other result false, nothing heard the `TimeoutException`; a
     /// reboot and the rest the C# does not wait for are true at once. False with no port.
-    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:2674-2836`
+    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:2671-2833`
     fn command(
         &mut self,
         _target: (u8, u8),
@@ -185,7 +185,7 @@ pub trait ScriptHost {
     /// the bootloader) through `doCommand`, which does not wait for it, and param1 1 again if
     /// that was refused. A host on a serial port also reopens the port afterwards if the reboot
     /// took it away, as the C# does (`:2573-2583`); this default has no port to reopen.
-    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:2553-2589`
+    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:2550-2586`
     fn reboot(&mut self, bootloader: bool) -> Result<bool, Timeout> {
         let target = self.link_target();
         let param1 = if bootloader { 3.0 } else { 1.0 };
@@ -208,7 +208,7 @@ pub trait ScriptHost {
 
     /// `MAV.setWPTotal(total, type)`: `MISSION_COUNT`, and the vehicle's first request for an
     /// item (0 or 1) waited for, three more times 700 ms apart, then the `TimeoutException`.
-    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:3753-3880`
+    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:3746-3870`
     fn set_wp_total(
         &mut self,
         _target: (u8, u8),
@@ -222,13 +222,13 @@ pub trait ScriptHost {
     /// `MISSION_ITEM` until the vehicle acknowledges it - its `MAV_MISSION_RESULT` - or asks for
     /// the item after it - `MAV_MISSION_ACCEPTED` - ten more times 450 ms apart, then the
     /// `TimeoutException`.
-    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:3975-4235`
+    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:3965-4224`
     fn set_wp(&mut self, _target: (u8, u8), _item: &WpItem) -> Result<u8, Timeout> {
         Err(Timeout::on("setWP"))
     }
 
     /// `MAV.setWPACK(type)`: a `MISSION_ACK` of `MAV_MISSION_ACCEPTED`, not waited on.
-    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:2434-2450`
+    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:2431-2447`
     fn set_wp_ack(&mut self, _target: (u8, u8), _mission_type: u8) {}
 
     /// `MAV.setWPCurrent(sysid, compid, index)`: `MISSION_SET_CURRENT` until a
@@ -240,7 +240,7 @@ pub trait ScriptHost {
 
     /// `MAV.getWP(index, type)`: the item as the vehicle holds it, or the `TimeoutException`
     /// after five more asks 2.5 s apart.
-    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:3398-3564`
+    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:3393-3557`
     fn get_wp(
         &mut self,
         _target: (u8, u8),
@@ -253,7 +253,7 @@ pub trait ScriptHost {
     /// `setPositionTargetGlobalInt` as `setGuidedModeWP` calls it for everything but ArduPlane:
     /// a `SET_POSITION_TARGET_GLOBAL_INT` with only the position enabled, sent and not waited
     /// on. Whether it was queued.
-    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:4450-4454, 4500-4555`
+    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:4439-4443, 4500-4555`
     fn set_position_target(&mut self, _target: (u8, u8), _position: &PositionTarget) -> bool {
         false
     }
@@ -274,7 +274,7 @@ pub trait ScriptHost {
     /// `MainV2.speechEnable` and `MainV2.speech_armed_only` as a script starts: the user's
     /// "speechenable" and "speech_armed_only" settings, which `MainV2` reads them from, off
     /// when absent - as they are for this default, a host with no settings.
-    /// `// C#: MainV2.cs:458-468, 658, 1005-1006; Utilities/Speech.cs:15`
+    /// `// C#: MainV2.cs:458-468, 658, 1007-1008; Utilities/Speech.cs:15`
     fn speech_settings(&self) -> (bool, bool) {
         (false, false)
     }
@@ -298,7 +298,7 @@ impl Timeout {
 
 /// `mavlink_mission_item_t` as `setWPAsync` fills it from a `Locationwp` with `use_int`
 /// false: the position as floats, the rest as the script gave it.
-/// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:4030-4049`
+/// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:4020-4039`
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct WpItem {
     /// `seq`, the index the script asked for.
@@ -325,7 +325,7 @@ pub struct WpItem {
 
 /// `MissionPlanner.Utilities.Locationwp`'s fields, as `getWP` fills them from the item the
 /// vehicle sent.
-/// `// C#: ExtLibs/Utilities/locationwp.cs:199-210; ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:3500-3547`
+/// `// C#: ExtLibs/Utilities/locationwp.cs:199-210; ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:3494-3540`
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
 pub struct Locationwp {
     /// `id`, the `MAV_CMD`.
@@ -350,7 +350,7 @@ pub struct Locationwp {
 
 /// Where `setGuidedModeWP` sends a vehicle that is not a plane: the `Locationwp`'s own frame,
 /// latitude, longitude and altitude.
-/// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:4450-4454`
+/// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:4439-4443`
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct PositionTarget {
     /// `(MAV_FRAME)gotohere.frame`.

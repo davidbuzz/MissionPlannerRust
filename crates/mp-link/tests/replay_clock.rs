@@ -22,7 +22,7 @@
 //! row 39).
 //!
 //! `readlogPacketMavlink` stamps the sender's `cs.datetime` with the record's timestamp, cut to
-//! whole milliseconds (`MAVLinkInterface.cs:6539-6558, 6649`), and `testdata/currentstate/
+//! whole milliseconds (`MAVLinkInterface.cs:6500-6519, 6613`), and `testdata/currentstate/
 //! autotest.csv` holds what `CurrentState` computed under mono when `autotest.tlog` was played
 //! through `MAVLinkInterface` - vehicle 1:1's `datetime` in ticks among it, at the file position
 //! after each packet that changed a field. Here the same file goes through [`ReplayTransport`] and

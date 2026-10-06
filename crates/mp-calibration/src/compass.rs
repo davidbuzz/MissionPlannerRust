@@ -33,16 +33,16 @@ use mp_vehicle::VehicleId;
 use super::command;
 
 /// `MAV_CMD_FIXED_MAG_CAL_YAW`.
-/// `// C#: ExtLibs/Mavlink/Mavlink.cs:1405`
+/// `// C#: ExtLibs/Mavlink/Mavlink.cs:1429`
 pub const CMD_FIXED_MAG_CAL_YAW: u16 = 42_006;
 /// `MAV_CMD_DO_START_MAG_CAL`.
-/// `// C#: ExtLibs/Mavlink/Mavlink.cs:1411`
+/// `// C#: ExtLibs/Mavlink/Mavlink.cs:1435`
 pub const CMD_DO_START_MAG_CAL: u16 = 42_424;
 /// `MAV_CMD_DO_ACCEPT_MAG_CAL`.
-/// `// C#: ExtLibs/Mavlink/Mavlink.cs:1414`
+/// `// C#: ExtLibs/Mavlink/Mavlink.cs:1438`
 pub const CMD_DO_ACCEPT_MAG_CAL: u16 = 42_425;
 /// `MAV_CMD_DO_CANCEL_MAG_CAL`.
-/// `// C#: ExtLibs/Mavlink/Mavlink.cs:1417`
+/// `// C#: ExtLibs/Mavlink/Mavlink.cs:1441`
 pub const CMD_DO_CANCEL_MAG_CAL: u16 = 42_426;
 
 /// Start: an onboard calibration of every compass, `0, 1, 1, 0, 0, 0, 0`.
@@ -99,7 +99,7 @@ pub fn fixed_mag_cal_yaw(target: VehicleId, yaw_degrees: f32) -> MavMessage {
 
 /// A `MAG_CAL_STATUS` as `((MAVLink.MAG_CAL_STATUS)value).ToString()` writes it: the enum's name,
 /// or the number for a value the C#'s enum does not name (ArduPilot's `FAILED_OFFSETS` and later).
-/// `// C#: ExtLibs/Mavlink/Mavlink.cs:5995-6006; GCSViews/ConfigurationView/ConfigHWCompass2.cs:418`
+/// `// C#: ExtLibs/Mavlink/Mavlink.cs:6500-6511; GCSViews/ConfigurationView/ConfigHWCompass2.cs:418`
 #[must_use]
 pub fn mag_cal_status_name(value: u8) -> String {
     match value {

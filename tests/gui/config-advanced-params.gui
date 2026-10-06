@@ -6,8 +6,8 @@
 # only while the view's isAdvancedMode is on (BackstageView.cs:285; MainV2.cs:601). Neither preset
 # turns displayAdvancedParams on; a Custom view read from custom.displayview does
 # (DisplayView.cs:442-455; here beside config.xml). A saved displayview comes back at start-up with
-# the page forced off (MainV2.cs:916-925), so after Advanced is chosen and saved, the page is back
-# only once Custom is chosen again on the Planner page (ConfigPlanner.cs:1018-1033) and the CONFIG
+# the page forced off (MainV2.cs:918-927), so after Advanced is chosen and saved, the page is back
+# only once Custom is chosen again on the Planner page (ConfigPlanner.cs:1019-1034) and the CONFIG
 # screen made anew (MainSwitcher.cs:112-153). Showing it binds a control per parameter documented
 # @User: Advanced or not at all: BARO_FLTR_RNG, which has no @User, is a RangeControl; its arrow
 # records a value, and Write Params writes it (ConfigFriendlyParams.cs:179-205). The write is proved

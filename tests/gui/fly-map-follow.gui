@@ -2,7 +2,7 @@
 # ticked by default): the button at the map's top right ticks and unticks it. While it is ticked
 # the vehicle is kept in the view's centre at the zoom the pilot has - mapview.rs's tests hold the
 # rules - and a zoom does not untick it (the owner's bug, 2026-10-05).
-# `GCSViews/FlightData.Designer.cs:2856-2864, GCSViews/FlightData.cs:1929-1933, 4242-4247`
+# `GCSViews/FlightData.Designer.cs:2856-2864, GCSViews/FlightData.cs:1939-1943, 4356-4361`
 
 screen fly
 window 1600x1200

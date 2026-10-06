@@ -4,7 +4,7 @@
 # for Guided when the vehicle is not in it - DO_SET_MODE, then SET_MODE twice - and sends
 # SET_POSITION_TARGET_GLOBAL_INT with the C#'s mask, 0xFDF8, in the relative frame. SITL accepts
 # Guided while disarmed and ignores the target on the ground, so nothing moves.
-# `GCSViews/FlightData.cs:5938-6008, ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:4423-4551`
+# `GCSViews/FlightData.cs:6052-6122, ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:4423-4551`
 #
 # Needs SITL (a copter): tools/gui-test.sh tests/gui/fly-flytocoords.gui -- tcp:127.0.0.1:5760
 

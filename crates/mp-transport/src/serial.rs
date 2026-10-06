@@ -185,7 +185,7 @@ impl std::fmt::Debug for SerialTransport {
 impl SerialTransport {
     /// Opens a port at the given baud rate.
     pub fn open(path: &str, baud: u32) -> Result<Self, OpenError> {
-        // C#: ExtLibs/Comms/CommsSerialPort.cs:502-504 - a device path that is not there fails
+        // C#: ExtLibs/Comms/CommsSerialPort.cs:472-474 - a device path that is not there fails
         // before the driver is asked, with the message Mission Planner shows. An unplugged board's
         // by-id link is gone or dangling, and both land here.
         if path.starts_with('/') && !std::path::Path::new(path).os_exists() {

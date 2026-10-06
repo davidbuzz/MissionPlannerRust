@@ -3,7 +3,7 @@
 # The claim: clicking the waypoint list rebuilds it from the mission held (CMB_setwp_Click - "0
 # (Home)" then 1 up to the item count, inclusive), and Set WP puts the chosen index on the wire
 # (BUT_setwp_Click -> setWPCurrent). SITL answers with MISSION_CURRENT, so vehicle.mission_current
-# proves the message arrived. `GCSViews/FlightData.cs:1658-1672, 2542-2582`
+# proves the message arrived. `GCSViews/FlightData.cs:1660-1674, 2552-2592`
 #
 # Needs SITL: tools/gui-test.sh tests/gui/fly-setwp.gui -- tcp:127.0.0.1:5760
 # The setup writes a five-item mission to SITL through its second port, 5762, before the window

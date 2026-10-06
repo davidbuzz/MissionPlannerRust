@@ -2,7 +2,7 @@
 #
 # SoftwareConfig adds ConfigAteryx as "Ateryx Pids" - with Flight Modes and Ateryx Zero Sensors -
 # only when the link is open and the firmware is Ateryx (SoftwareConfig.cs:231-237), which is what
-# a heartbeat from a MAV_AUTOPILOT_GENERIC fixed wing makes it (MAVLinkInterface.cs:6797-6805). The
+# a heartbeat from a MAV_AUTOPILOT_GENERIC fixed wing makes it (MAVLinkInterface.cs:6761-6769). The
 # SITL these scripts run against is an ArduPilot copter, so the page cannot be opened here: the
 # claim this script checks is the list's condition - connected, with every parameter in, CONFIG
 # lists the copter's tuning pages and not ConfigAteryx, and the page is not shown.

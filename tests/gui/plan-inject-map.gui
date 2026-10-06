@@ -1,4 +1,4 @@
-# Inject Custom Map: the planning screen's BUT_InjectCustomMap, GCSViews/FlightPlanner.cs:8416-8527
+# Inject Custom Map: the planning screen's BUT_InjectCustomMap, GCSViews/FlightPlanner.cs:8413-8524
 # over ExtLibs/Maps/Custom.cs, ported in crates/mp-gui/src/inject_map.rs with the Custom provider
 # in mp-tiles.
 #

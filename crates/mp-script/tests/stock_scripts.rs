@@ -210,7 +210,7 @@ fn the_dotnet_dependence_of_the_corpus_is_recorded_per_script() {
         ("System.Activator.CreateInstance", "reflection over loaded assemblies"),
         ("clr.References", "the list of loaded .NET assemblies"),
         // example10's third subscription: not a member of the C#'s MAVLINK_MSG_ID either
-        // (ExtLibs/Mavlink/Mavlink.cs:423-776), and never reached - its first subscription is
+        // (ExtLibs/Mavlink/Mavlink.cs:430-787), and never reached - its first subscription is
         // IronPython's TypeError.
         (
             "MAVLink.MAVLINK_MSG_ID.STATUSTEXT_LONG",

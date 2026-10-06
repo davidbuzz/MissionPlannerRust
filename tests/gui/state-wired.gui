@@ -2,12 +2,12 @@
 # them (PLAN.md 13.4 row 39).
 #
 # The link stamps each packet's cs.datetime as it reads it (ExtLibs/ArduPilot/Mavlink/
-# MAVLinkInterface.cs:4721), so on a live link the clock is never more than a packet behind the
+# MAVLinkInterface.cs:4710), so on a live link the clock is never more than a packet behind the
 # wall clock. MainV2's start-up sets CurrentState.rate*backup from the CMB_rate* keys, which every
 # vehicle's rates start from, and KIndexstatic from `kindex` when `kindexdate` is today
-# (MainV2.cs:981-991, 3940-3962); the Planner page's rate combos set the shown vehicle's cs.rateX
-# (GCSViews/ConfigurationView/ConfigPlanner.cs:573-640), which the link's stream requests read
-# (ExtLibs/ArduPilot/CurrentState.cs:4632-4663). GeoFenceDist measures from MAV.fencepoints, the
+# (MainV2.cs:983-993, 3947-3969); the Planner page's rate combos set the shown vehicle's cs.rateX
+# (GCSViews/ConfigurationView/ConfigPlanner.cs:574-641), which the link's stream requests read
+# (ExtLibs/ArduPilot/CurrentState.cs:4635-4666). GeoFenceDist measures from MAV.fencepoints, the
 # fence as the traffic on the link has shown it (CurrentState.cs:1617-1753,
 # MAVLinkInterface.cs:5625-5698): 99999 until a fence has passed, then a distance. SITL cannot
 # fly, so time in air and the distance travelled are asserted where they are on the ground: 0.

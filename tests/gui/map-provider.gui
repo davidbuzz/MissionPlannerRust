@@ -3,7 +3,7 @@
 tiles offline
 #
 # Mission Planner shows GoogleSatelliteMap when its config.xml names no map
-# (GCSViews/FlightPlanner.cs:7282). A real config.xml on the machine running this would otherwise
+# (GCSViews/FlightPlanner.cs:7279). A real config.xml on the machine running this would otherwise
 # decide - it names the map the C# last showed, and this application takes it - so the data
 # directory is pointed somewhere empty: no config.xml, no tile cache, and so no link either.
 env XDG_DATA_HOME $WORK/data

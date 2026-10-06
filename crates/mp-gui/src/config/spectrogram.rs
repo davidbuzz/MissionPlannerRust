@@ -84,7 +84,7 @@
 //!   graph's few hundred pixels shows the same;
 //! * the colours of the controls are this application's.
 //!
-//! The Ctrl+L key of the main window opens this form too (`MainV2.cs:4138-4144`); that key is the
+//! The Ctrl+L key of the main window opens this form too (`MainV2.cs:4145-4151`); that key is the
 //! main window's, not ported here. Of `ImageSharpExtensions` (`SpectrogramUI.cs:152-178`),
 //! `ToBitmap` hands the image to ZedGraph, which a texture does here, and `ToImageSharpImage` has
 //! no callers (`ledger/dead-functions.csv`): not ported.
@@ -437,7 +437,7 @@ type Transformed = (Image, Vec<(f64, Vec<f64>)>, f64);
 /// `N` samples, `N / divisor` apart, transformed and drawn as a column of an image `count` wide
 /// and `height` high, its first time kept with its spectrum. Also the average of the windows'
 /// spans the message path estimates its rate from.
-/// `// C#: ExtLibs/Utilities/Spectrogram.cs:132-164, 201-240; ExtLibs/Utilities/Extensions.cs:204-237`
+/// `// C#: ExtLibs/Utilities/Spectrogram.cs:132-164, 201-240; ExtLibs/Utilities/Extensions.cs:205-238`
 #[allow(clippy::too_many_arguments)]
 fn transform(
     total: usize,

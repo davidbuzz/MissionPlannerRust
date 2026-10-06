@@ -146,7 +146,7 @@ pub const CALIBRATION_RATE: i32 = 10;
 /// `MainV2.comPort.MAV.cs`'s stream rates: the shown vehicle's own, which the calibration reads
 /// `oldrc` from and puts `RC_CHANNELS` back to once it is saved. With no vehicle, `MAV` is the
 /// placeholder state, made with the saved defaults as every `CurrentState` is.
-/// `// C#: GCSViews/ConfigurationView/ConfigRadioInput.cs:209, 393-395; ExtLibs/ArduPilot/CurrentState.cs:4393-4397`
+/// `// C#: GCSViews/ConfigurationView/ConfigRadioInput.cs:209, 393-395; ExtLibs/ArduPilot/CurrentState.cs:4396-4400`
 #[must_use]
 pub fn vehicle_rates(view: &TelemetryView) -> StreamRates {
     view.state
@@ -1183,7 +1183,7 @@ impl RadioInput {
                 Task::Rates(rates) => telemetry.set_stream_rates(rates),
                 Task::Stream(hz) => {
                     // Nothing for a rate of -1, and the rate as a byte otherwise.
-                    // C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:3061-3070, 3256
+                    // C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:3061-3070, 3252
                     if let Some((sender, id)) = telemetry.send_handle()
                         && let Some(request) = request_datastream(id, DATA_STREAM_RC_CHANNELS, hz)
                     {
@@ -1236,7 +1236,7 @@ impl RadioInput {
     ) {
         // `setParam`: true for an echo and for a value already held, false for a name the vehicle
         // has not listed, and a `TimeoutException` when every retry goes unanswered.
-        // `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:1640-1651, 1748-1766`
+        // `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:1637-1648, 1745-1763`
         let (returned, word) = match ended {
             Ended::Outcome(RequestOutcome::Accepted { value: echoed }) => {
                 let echoed = echoed.map_or(value, |echoed| echoed.as_f64());

@@ -21,7 +21,7 @@
 //! The decoded telemetry model.
 //!
 //! [`VehicleState::apply`] is the port of `CurrentState.Parent_OnPacketReceived`
-//! (`ExtLibs/ArduPilot/CurrentState.cs:2278-4305`), the switch where Mission Planner copies each
+//! (`ExtLibs/ArduPilot/CurrentState.cs:2278-4308`), the switch where Mission Planner copies each
 //! message into its properties. What became of every public `CurrentState` property - held here,
 //! derivable from what is held, not yet ported, or deliberately not carried over - is the table in
 //! [`crate::coverage`].
@@ -68,7 +68,7 @@ pub struct Attitude {
 /// The HUD's target bugs come from here - the green marks on the heading tape and the two
 /// scrollers - and so does the cross-track bar. Stored as the wire sends them, in the units the
 /// C# keeps: bearings in degrees, distance in metres, errors in metres and metres per second.
-/// `// C#: ExtLibs/ArduPilot/CurrentState.cs:3442-3456`
+/// `// C#: ExtLibs/ArduPilot/CurrentState.cs:3445-3459`
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
 pub struct Nav {
     /// Desired roll, degrees.
@@ -127,7 +127,7 @@ impl VehicleState {
     /// C# divides the wire's `aspd_error` by 100 before this sum, which turns a 5 m/s error into
     /// 0.05 and pins its target bug to the current speed; the wire's field is in m/s
     /// (`common.xml`), so it is used as sent.
-    /// `// C#: ExtLibs/ArduPilot/CurrentState.cs:1130, 3454`
+    /// `// C#: ExtLibs/ArduPilot/CurrentState.cs:1130, 3457`
     #[must_use]
     pub fn target_airspeed(&self) -> f64 {
         self.air_speed.0 + f64::from(self.nav.airspeed_error)
@@ -447,11 +447,11 @@ pub struct VehicleState {
     /// What the navigation controller is aiming for.
     pub nav: Nav,
     /// The mission item the vehicle is flying to, from `MISSION_CURRENT`.
-    /// `// C#: ExtLibs/ArduPilot/CurrentState.cs:3413-3420`
+    /// `// C#: ExtLibs/ArduPilot/CurrentState.cs:3416-3423`
     pub mission_current: u16,
     /// The last non-zero mission item the vehicle was flying to in Auto, which Resume Mission
     /// restarts from. `None` is the C#'s -1.
-    /// `// C#: ExtLibs/ArduPilot/CurrentState.cs:3422`
+    /// `// C#: ExtLibs/ArduPilot/CurrentState.cs:3425`
     pub last_auto_wp: Option<u16>,
     /// Sensor health, as reported in `SYS_STATUS`.
     pub sensors: crate::sensors::Sensors,
@@ -558,7 +558,7 @@ pub struct VehicleState {
     pub datetime: DateTime,
     /// `altoffsethome`, metres: what [`VehicleState::alt`] subtracts. The flight screen's "Home
     /// Alt" button toggles it between 0 and minus the home altitude, which makes the displayed
-    /// altitude above sea level (`FlightData.cs:1236-1247`); the vertical speed is worked out
+    /// altitude above sea level (`FlightData.cs:1238-1249`); the vertical speed is worked out
     /// from the offset altitude, as in the C#.
     /// `// C#: ExtLibs/ArduPilot/CurrentState.cs:378-383`
     pub alt_offset_home: f32,
@@ -574,14 +574,14 @@ pub struct VehicleState {
     pub(crate) vertical_speed_backing: f32,
     /// `distTraveled`, metres: the distance flown while armed on a 3D fix, a straight line a
     /// second. See [`VehicleState::update_current_settings`].
-    /// `// C#: ExtLibs/ArduPilot/CurrentState.cs:1186-1187, 4606-4619`
+    /// `// C#: ExtLibs/ArduPilot/CurrentState.cs:1186-1187, 4609-4622`
     pub dist_traveled: f32,
     /// `timeInAir`, seconds: the seconds armed with the throttle over 12% or the ground speed
     /// over 3 m/s.
-    /// `// C#: ExtLibs/ArduPilot/CurrentState.cs:1191-1192, 4621-4626`
+    /// `// C#: ExtLibs/ArduPilot/CurrentState.cs:1191-1192, 4624-4629`
     pub time_in_air: f32,
     /// `timeSinceArmInAir`, seconds: the same count, restarted at 0 each time the vehicle arms.
-    /// `// C#: ExtLibs/ArduPilot/CurrentState.cs:1189, 2878-2882, 4621-4626`
+    /// `// C#: ExtLibs/ArduPilot/CurrentState.cs:1189, 2878-2882, 4624-4629`
     pub time_since_arm_in_air: f32,
     /// `lastpos`: the position at the last second counted; `None` for the C#'s (0, 0).
     pub(crate) last_pos: Option<LatLon>,
@@ -595,13 +595,13 @@ pub struct VehicleState {
     pub base: LatLngAlt,
     /// The stream rates Mission Planner asks this vehicle for, starting from
     /// [`StreamRates::backups`] when it is first seen.
-    /// `// C#: ExtLibs/ArduPilot/CurrentState.cs:2002-2007, 4393-4397`
+    /// `// C#: ExtLibs/ArduPilot/CurrentState.cs:2002-2007, 4396-4400`
     pub rates: StreamRates,
     /// `GimbalPoint`: where the camera is pointed, projected onto the terrain; `None` until the
     /// flight screen has projected it. The C# projects it on each map update when the mount
     /// parameters say it is stabilised, with `GimbalPoint.ProjectPoint` - terrain heights, the
     /// mount's parameters and angles - and sets it when that finds a point
-    /// (`FlightData.cs:3964-3995`); that projection is the flight screen's to port, and writes
+    /// (`FlightData.cs:4078-4109`); that projection is the flight screen's to port, and writes
     /// here.
     /// `// C#: ExtLibs/ArduPilot/CurrentState.cs:2022`
     pub gimbal_point: Option<LatLngAlt>,
@@ -616,7 +616,7 @@ pub struct VehicleState {
     /// the vehicle reboots. **Divergence:** measured against [`VehicleState::datetime`] where the
     /// C# uses `DateTime.Now` - the same on a live link, and the recorded time in a replay, where
     /// the C#'s figure is how fast the file is being read.
-    /// `// C#: ExtLibs/ArduPilot/CurrentState.cs:2156, 3699-3713`
+    /// `// C#: ExtLibs/ArduPilot/CurrentState.cs:2156, 3702-3716`
     pub speedup: f32,
     /// `imutime`: the IMU clock at the last reading counted, seconds.
     pub(crate) imu_time: f64,
@@ -628,12 +628,12 @@ pub struct VehicleState {
     pub hil_channels: [i32; 8],
     /// `customfield0` to `customfield19`: `NAMED_VALUE_FLOAT` values, each in the field its name
     /// was given; [`VehicleState::custom_field_name`] says which name that is.
-    /// `// C#: ExtLibs/ArduPilot/CurrentState.cs:239-258, 3913-4012`
+    /// `// C#: ExtLibs/ArduPilot/CurrentState.cs:239-258, 3916-4015`
     pub custom_fields: [f32; crate::statics::CUSTOM_FIELDS],
     /// `lowairspeed`, as each `VFR_HUD` sets it: armed, in the air since arming, with the airspeed
     /// sensor enabled and healthy, and below the minimum airspeed parameter, which the owner of
     /// the parameters gives [`VehicleState::set_airspeed_min_params`].
-    /// `// C#: ExtLibs/ArduPilot/CurrentState.cs:505, 3858-3888`
+    /// `// C#: ExtLibs/ArduPilot/CurrentState.cs:505, 3861-3891`
     pub low_airspeed: bool,
     /// The minimum airspeed parameter as last given by [`VehicleState::set_airspeed_min_params`].
     pub(crate) airspeed_min_param: Option<f32>,
@@ -655,7 +655,7 @@ pub struct VehicleState {
     /// Heartbeats applied to this state - `HEARTBEAT`s and `HIGH_LATENCY2`s, the two
     /// `getHeartBeat` returns on - so a caller can wait for the next one as `getHeartBeat` does:
     /// the firmware page's `doReboot(true, false)` waits for a heartbeat before its reboot.
-    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:1153-1203, 2591-2603`
+    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:1155-1205, 2588-2600`
     pub heartbeats: u64,
 
     /// When the newest frame applied to this state arrived at the link: the start of a
@@ -666,11 +666,11 @@ pub struct VehicleState {
     pub packet_in: Option<web_time::Instant>,
 }
 
-/// `MAV_MODE_FLAG_SAFETY_ARMED`. `// C#: ExtLibs/Mavlink/Mavlink.cs:6557`
+/// `MAV_MODE_FLAG_SAFETY_ARMED`. `// C#: ExtLibs/Mavlink/Mavlink.cs:7368`
 const MODE_FLAG_SAFETY_ARMED: u8 = 128;
-/// `MAV_MODE_FLAG_CUSTOM_MODE_ENABLED`. `// C#: ExtLibs/Mavlink/Mavlink.cs:6536`
+/// `MAV_MODE_FLAG_CUSTOM_MODE_ENABLED`. `// C#: ExtLibs/Mavlink/Mavlink.cs:7347`
 const MODE_FLAG_CUSTOM_MODE_ENABLED: u8 = 1;
-/// `MAV_SENSOR_ROTATION_PITCH_270`: facing down. `// C#: ExtLibs/Mavlink/Mavlink.cs:3985`
+/// `MAV_SENSOR_ROTATION_PITCH_270`: facing down. `// C#: ExtLibs/Mavlink/Mavlink.cs:4334`
 const SENSOR_ROTATION_PITCH_270: u8 = 25;
 
 /// `(0, 0)` is how the C# holds "no position"; anything else that is a real place is one.
@@ -689,7 +689,7 @@ fn radians(degrees: f32) -> Radians {
 impl VehicleState {
     /// Creates empty state for a vehicle, with the saved stream rates as the C#'s constructor
     /// takes them through `ResetInternals`.
-    /// `// C#: ExtLibs/ArduPilot/CurrentState.cs:223-227, 4393-4397`
+    /// `// C#: ExtLibs/ArduPilot/CurrentState.cs:223-227, 4396-4400`
     #[must_use]
     pub fn new(sysid: u8, compid: u8) -> Self {
         Self {
@@ -751,7 +751,7 @@ impl VehicleState {
                 true
             }
             MavMessage::GpsStatus(m) => {
-                // C#: ExtLibs/ArduPilot/CurrentState.cs:3381
+                // C#: ExtLibs/ArduPilot/CurrentState.cs:3384
                 self.gps.satellites_visible = m.satellites_visible;
                 true
             }
@@ -798,7 +798,7 @@ impl VehicleState {
             }
             MavMessage::MissionCurrent(m) => {
                 self.mission_current = m.seq;
-                // C#: ExtLibs/ArduPilot/CurrentState.cs:3422, `mode.ToLower() == "auto"`.
+                // C#: ExtLibs/ArduPilot/CurrentState.cs:3425, `mode.ToLower() == "auto"`.
                 let auto = crate::modes::flight_mode_name(self.vehicle_type, self.custom_mode)
                     .is_some_and(|mode| mode.eq_ignore_ascii_case("auto"));
                 if auto && m.seq != 0 {
@@ -809,7 +809,7 @@ impl VehicleState {
             // All sixteen channels ArduPilot maps to functions. RC_CHANNELS carries eighteen;
             // the last two are beyond what the firmware reads, and offering limits on channels
             // nothing looks at would be a calibration screen inviting a pointless setting.
-            // C#: ExtLibs/ArduPilot/CurrentState.cs:3500-3516
+            // C#: ExtLibs/ArduPilot/CurrentState.cs:3503-3519
             MavMessage::RcChannels(m) => {
                 self.rc.values = [
                     m.chan1_raw,
@@ -875,7 +875,7 @@ impl VehicleState {
             }
             MavMessage::HomePosition(m) => {
                 // Handled by MAVLinkInterface rather than CurrentState in the C#.
-                // C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:5701-5707
+                // C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:5674-5680
                 self.home = position_or_none(
                     f64::from(m.latitude) / 1.0e7,
                     f64::from(m.longitude) / 1.0e7,
@@ -884,7 +884,7 @@ impl VehicleState {
                 true
             }
             MavMessage::Radio(m) => {
-                // C#: ExtLibs/ArduPilot/CurrentState.cs:3389-3395
+                // C#: ExtLibs/ArduPilot/CurrentState.cs:3392-3398
                 self.radio = Radio {
                     rssi: m.rssi,
                     remrssi: m.remrssi,
@@ -897,7 +897,7 @@ impl VehicleState {
                 true
             }
             MavMessage::RadioStatus(m) => {
-                // C#: ExtLibs/ArduPilot/CurrentState.cs:3403-3409
+                // C#: ExtLibs/ArduPilot/CurrentState.cs:3406-3412
                 self.radio = Radio {
                     rssi: m.rssi,
                     remrssi: m.remrssi,
@@ -955,7 +955,7 @@ impl VehicleState {
                 true
             }
             MavMessage::Airspeed(m) => {
-                // C#: ExtLibs/ArduPilot/CurrentState.cs:4209-4213, the first sensor only.
+                // C#: ExtLibs/ArduPilot/CurrentState.cs:4212-4216, the first sensor only.
                 if m.id != 0 {
                     return false;
                 }
@@ -1047,7 +1047,7 @@ impl VehicleState {
         }
     }
 
-    /// `GPS_RAW_INT`. `// C#: ExtLibs/ArduPilot/CurrentState.cs:3289-3340`
+    /// `GPS_RAW_INT`. `// C#: ExtLibs/ArduPilot/CurrentState.cs:3289-3343`
     ///
     /// The four accuracies and the yaw are MAVLink 2 extensions, which the C# sets to -1 for a
     /// MAVLink 1 frame. The decoded message does not say which version carried it, and a
@@ -1098,7 +1098,7 @@ impl VehicleState {
         if self.ground_speed.0 > 0.5 && m.cog != u16::MAX {
             self.gps.course = f32::from(m.cog) * 1.0e-2;
         }
-        // C#: CurrentState.cs:3322-3326
+        // C#: CurrentState.cs:3325-3329
         self.gps.h_acc = u32_f32(m.h_acc) / 1000.0;
         self.gps.v_acc = u32_f32(m.v_acc) / 1000.0;
         self.gps.vel_acc = u32_f32(m.vel_acc) / 1000.0;
@@ -1107,9 +1107,9 @@ impl VehicleState {
     }
 
     /// `GPS2_RAW`, every field taken as it arrives.
-    /// `// C#: ExtLibs/ArduPilot/CurrentState.cs:3341-3376`
+    /// `// C#: ExtLibs/ArduPilot/CurrentState.cs:3344-3379`
     fn apply_gps2_raw(&mut self, m: &Gps2Raw) {
-        // C#: CurrentState.cs:3346-3356
+        // C#: CurrentState.cs:3349-3359
         self.gps2.position = position_or_none(f64::from(m.lat) * 1.0e-7, f64::from(m.lon) * 1.0e-7);
         self.gps2.altitude_msl = i32_f32(m.alt) / 1000.0;
         self.gps2.fix_type = m.fix_type;
@@ -1117,7 +1117,7 @@ impl VehicleState {
         self.gps2.satellites_visible = m.satellites_visible;
         self.gps2.ground_speed = f32::from(m.vel) * 1.0e-2;
         self.gps2.course = f32::from(m.cog) * 1.0e-2;
-        // C#: CurrentState.cs:3360-3364, MAVLink 2 extensions; see `apply_gps_raw_int`.
+        // C#: CurrentState.cs:3363-3367, MAVLink 2 extensions; see `apply_gps_raw_int`.
         self.gps2.h_acc = u32_f32(m.h_acc) / 1000.0;
         self.gps2.v_acc = u32_f32(m.v_acc) / 1000.0;
         self.gps2.vel_acc = u32_f32(m.vel_acc) / 1000.0;
@@ -1125,23 +1125,23 @@ impl VehicleState {
         self.gps2.yaw = f32::from(m.yaw) / 100.0;
     }
 
-    /// `VFR_HUD`. `// C#: ExtLibs/ArduPilot/CurrentState.cs:3841-3889`
+    /// `VFR_HUD`. `// C#: ExtLibs/ArduPilot/CurrentState.cs:3844-3892`
     fn apply_vfr_hud(&mut self, m: &VfrHud) {
-        // C#: CurrentState.cs:3846-3848
+        // C#: CurrentState.cs:3849-3851
         self.ground_speed = MetresPerSecond(f64::from(m.groundspeed));
         self.air_speed = MetresPerSecond(f64::from(m.airspeed));
         #[allow(clippy::cast_possible_truncation, clippy::cast_possible_wrap)] // a percentage
         let throttle = m.throttle as i16;
         self.throttle_percent = throttle;
-        // C#: CurrentState.cs:3850-3852, a positive throttle is negated while the motors are
+        // C#: CurrentState.cs:3853-3855, a positive throttle is negated while the motors are
         // reversed.
         if self.sensors.reverse_motor() && self.throttle_percent > 0 {
             self.throttle_percent = -self.throttle_percent;
         }
-        // C#: CurrentState.cs:3855-3856, and from now on the `alt` setter leaves it alone.
+        // C#: CurrentState.cs:3858-3859, and from now on the `alt` setter leaves it alone.
         self.climb_rate = MetresPerSecond(f64::from(m.climb));
         self.got_vfr = true;
-        // C#: CurrentState.cs:3858-3888
+        // C#: CurrentState.cs:3861-3891
         self.check_low_airspeed(m.airspeed);
     }
 
@@ -1241,7 +1241,7 @@ impl VehicleState {
         }
     }
 
-    /// `SERVO_OUTPUT_RAW`. `// C#: ExtLibs/ArduPilot/CurrentState.cs:3634-3678`
+    /// `SERVO_OUTPUT_RAW`. `// C#: ExtLibs/ArduPilot/CurrentState.cs:3637-3681`
     fn apply_servo_output_raw(&mut self, m: &ServoOutputRaw) -> bool {
         let first = match m.port {
             0 => 0,

@@ -4,7 +4,7 @@
 # tabs decide whether it shows: FlightData's Activate applies them after the plugins are loaded.
 # Here they name it, so the strip has it, between Actions and Messages where the setting puts it,
 # and its page shows the form; and on FLIGHT PLAN no plugin form is over anything.
-# (Plugins/OpenDroneID2/OpenDroneID_Plugin.cs:42-58; GCSViews/FlightData.cs:733-791)
+# (Plugins/OpenDroneID2/OpenDroneID_Plugin.cs:42-58; GCSViews/FlightData.cs:735-793)
 # The built-in plugins: the runner leaves them out unless a script asks for them. The config's
 # empty `DisabledPlugins` turns Open Drone ID on, off until a user does (the owner, 2026-10-05).
 env MP_BUILTIN_PLUGINS 1

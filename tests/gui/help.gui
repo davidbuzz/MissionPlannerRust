@@ -3,7 +3,7 @@
 #
 # The claim: MainV2's HELP tab shows the help text with Check for Updates, Check for BETA Updates,
 # Show Console Window (restart) and the Change Log link (Help.resx); at startup, on a day already
-# checked with beta_updates on, MainV2 checks the beta channel (MainV2.cs:3661-3671), whose
+# checked with beta_updates on, MainV2 checks the beta channel (MainV2.cs:3668-3678), whose
 # 2.0.0.0 is above the program's 1.0.0.0, so "BETA Update Found" asks "Update Now" with the
 # ChangeLog (Update.cs:181-199) - No puts it away; Show Console Window writes showconsole
 # (Help.cs:50-53); Check for Updates against the stable channel at the program's own version says

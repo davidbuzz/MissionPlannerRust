@@ -2,16 +2,16 @@
 #
 # BUT_Homealt_Click sets cs.altoffsethome to minus cs.HomeAlt when it is zero and back to zero
 # when it is not; cs.alt, which the HUD and the quick view show, is `_alt - altoffsethome`. It
-# sends nothing. `GCSViews/FlightData.cs:1236-1247, ExtLibs/ArduPilot/CurrentState.cs:325-328`
+# sends nothing. `GCSViews/FlightData.cs:1238-1249, ExtLibs/ArduPilot/CurrentState.cs:325-328`
 #
 # cs.HomeAlt is HomeLocation.Alt, which only HOME_POSITION sets, and is 0 until then
-# (CurrentState.cs:40, 1568-1582; MAVLinkInterface.cs:5701-5707). SITL sends HOME_POSITION of
+# (CurrentState.cs:40, 1568-1582; MAVLinkInterface.cs:5674-5680). SITL sends HOME_POSITION of
 # its own accord only when home is set - its first fix, or arming - so a run that joins a SITL
 # whose home is already set hears none: Set Home Alt would then set minus zero, which reads as
 # not set, and nothing would change (proven in fly.rs's
 # set_home_alt_takes_the_home_the_vehicle_reported). So the test first asks for home as Mission
 # Planner does without moving it: Set Home Here answered Cancel still calls getHomePositionAsync
-# (FlightData.cs:4852-4885), which needs a terrain tile at the point, so the data directory here
+# (FlightData.cs:4966-4999), which needs a terrain tile at the point, so the data directory here
 # is a scratch one holding a flat tile at 584 m for SITL's field, as fly-sethome.gui does.
 # SITL's field is 584 m above sea level, so HomeAlt, and every altitude shown on the ground with
 # Set Home Alt on, is above 500; off, the altitude shown is the height above home, near 0.

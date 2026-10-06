@@ -30,7 +30,7 @@
 //!
 //! The download is skipped under `MP_OFFLINE`, as the map's and the terrain's are; what is on
 //! disk is unpacked and read all the same.
-//! `// C#: ExtLibs/ArduPilot/LogMetaData.cs:19-166; MainV2.cs:3299, 3868-3872`
+//! `// C#: ExtLibs/ArduPilot/LogMetaData.cs:19-166; MainV2.cs:3306, 3875-3879`
 
 // This module is internal to the binary; `pub` here documents intent rather than exporting API.
 #![allow(unreachable_pub)]
@@ -266,7 +266,7 @@ static SHARED: OnceLock<MetaData> = OnceLock::new();
 
 /// `ThreadPool.QueueUserWorkItem(BGLogMessagesMetaData)`: the download, the unpacking and the
 /// reading on a thread of their own, the dictionary shared once read.
-/// `// C#: MainV2.cs:3299, 3868-3872`
+/// `// C#: MainV2.cs:3306, 3875-3879`
 pub fn start() {
     let Some(data_directory) = mp_settings::data_directory() else {
         return;

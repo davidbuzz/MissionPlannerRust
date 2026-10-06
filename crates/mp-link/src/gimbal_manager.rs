@@ -32,8 +32,8 @@
 //! `GIMBAL_DEVICE_ATTITUDE_STATUS` per gimbal device, and under index 0 the one of the lowest
 //! device id heard. The link thread does the making and the discovering (`lib.rs`); this is the
 //! state and the commands.
-//! `// C#: ExtLibs/ArduPilot/Mavlink/GimbalManagerProtocol.cs:1-357,
-//! ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:563-586, ExtLibs/ArduPilot/CurrentState.cs:4655`
+//! `// C#: ExtLibs/ArduPilot/Mavlink/GimbalManagerProtocol.cs:1-361,
+//! ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:565-588, ExtLibs/ArduPilot/CurrentState.cs:4658`
 //!
 //! Each command answers `None` where the C#'s returns `Task.FromResult(false)` without sending:
 //! when the manager has not said it can. The capability checks read index 0 whatever gimbal the

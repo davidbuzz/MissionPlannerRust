@@ -2,10 +2,10 @@
 #
 # Activate runs setWPParams, which reads WP Radius from WP_RADIUS, WPNAV_RADIUS (cm) or, from 4.7,
 # WP_RADIUS_M, written {0:N2}, and Loiter Radius from LOITER_RADIUS or WP_LOITER_RAD - disabling it
-# when the vehicle has neither, as a copter does (GCSViews/FlightPlanner.cs:6695-6750). Write's
+# when the vehicle has neither, as a copter does (GCSViews/FlightPlanner.cs:6692-6747). Write's
 # saveWPs, once the mission is on the vehicle, sets the radius into all three names - "use brute
 # force, for all three possible params" - and Loiter Radius into LOITER_RAD or WP_LOITER_RAD
-# (:6296-6317). setParam passes over a name the vehicle does not have (MAVLinkInterface.cs:1640),
+# (:6296-6317). setParam passes over a name the vehicle does not have (MAVLinkInterface.cs:1637),
 # so on this copter only WP_RADIUS_M is set. plan.params is what each set did, from the vehicle's
 # own echo through the link's retrying set_param.
 #

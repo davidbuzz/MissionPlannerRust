@@ -5,9 +5,9 @@
 # loiter the loiter radius unless its command carries its own (ExtLibs/Maps/WPOverlay.cs:141-238),
 # and GMapMarkerRect.OnRender draws it at the map's scale (ExtLibs/Maps/GMapMarkerRect.cs:54-98).
 # The pointer on a waypoint turns its circle red and puts the grid on its row
-# (MainMap_OnMarkerEnter, FlightPlanner.cs:8068-8098), and its marker shows "Alt:" on hover
+# (MainMap_OnMarkerEnter, FlightPlanner.cs:8065-8095), and its marker shows "Alt:" on hover
 # (WPOverlay.cs:393-398). The flight screen builds its overlay with no radii
-# (FlightData.cs:3830-3843).
+# (FlightData.cs:3944-3957).
 #
 # Self-contained: its own data directory, holding a home, so the map has somewhere to be.
 

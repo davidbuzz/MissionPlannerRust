@@ -111,7 +111,7 @@ impl MissionItem {
     ///
     /// So the set is not a range. It is Mission Planner's: `Locationwp.isLocationCommand` asks
     /// whether the `MAV_CMD` member carries `[hasLocation()]` in the generated `Mavlink.cs`, and
-    /// the link scales by 1e7 exactly when it does (`MAVLinkInterface.cs:4014-4023, 3545-3552`).
+    /// the link scales by 1e7 exactly when it does (`MAVLinkInterface.cs:4004-4013, 3538-3545`).
     /// These are those 45 members; a test holds the list to `Mavlink.cs` when the C# tree is
     /// present.
     /// `// C#: ExtLibs/Utilities/locationwp.cs:39-56`

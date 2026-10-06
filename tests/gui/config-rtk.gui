@@ -55,7 +55,7 @@ expect config.rtk.lights base=Red,gps=Red,glonass=Red,beidou=Red,galileo=Red
 expect config.rtk.bars 0
 
 # Connect: CommsNTRIP.Open's question, the saved URL in it. Its OK keeps the URL as InputBox
-# keeps every titled answer, URL-encoded (Program.cs:564-566; InputBox.cs:73-84, 178-184).
+# keeps every titled answer, URL-encoded (Program.cs:566-568; InputBox.cs:73-84, 178-184).
 expect config.InputBoxremotehostEnterurleghttpuserpasshostportmount none
 click rtk-BUT_connect
 expect config.rtk.prompt remote host

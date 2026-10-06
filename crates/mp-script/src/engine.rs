@@ -26,7 +26,7 @@
 //! console polls; `runScript` executes the file in that scope and shows "Error running script"
 //! with the exception when it throws (`Script.cs:19-70, 107-123`). `FlightData` runs it on a
 //! thread named "Script Thread (new)" and its Abort button aborts that thread
-//! (`GCSViews/FlightData.cs:786-812, 1012-1017, 4727-4732`).
+//! (`GCSViews/FlightData.cs:788-814, 1014-1019, 4841-4846`).
 //!
 //! Here:
 //!
@@ -75,7 +75,7 @@ use crate::api::{
     CsValue, PositionTarget, ScriptApi, ScriptHost, Timeout, WAIT_FOR_POLL_MS, WpItem,
 };
 
-/// The thread's name, `FlightData.cs:790`.
+/// The thread's name, `FlightData.cs:792`.
 pub const THREAD_NAME: &str = "Script Thread (new)";
 
 /// How long one slice of a `Sleep` is, so an abort is seen within it.
@@ -769,7 +769,7 @@ pub fn run_blocking(
 
 /// A script on its own thread, as the Scripts tab runs one: its output as it comes, whether it
 /// is still running, its Abort button, and how it ended.
-/// `// C#: GCSViews/FlightData.cs:786-812, 1012-1017, 4727-4732, 4757-4776`
+/// `// C#: GCSViews/FlightData.cs:788-814, 1014-1019, 4841-4846, 4871-4890`
 #[derive(Debug)]
 pub struct ScriptRun {
     output: Arc<Mutex<String>>,
@@ -1389,7 +1389,7 @@ mod tests {
     /// count, `setWP`'s `MISSION_ITEM` in the frame passed (not the item's own), its answer a
     /// `MAV_MISSION_RESULT`, `setWPACK`, `getWP` into a `Locationwp`, and `setWPCurrent` with its
     /// three arguments - one argument is IronPython's TypeError.
-    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:2434-2501, 3398-3564, 3753-4235`
+    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:2431-2498, 3393-3557, 3746-4224`
     #[test]
     fn the_mission_members_reach_the_host() {
         let (host, result, printed) = run(
@@ -1463,7 +1463,7 @@ mod tests {
     /// The command members: `doCommand` the seven params as floats, `doARM` 400 with 1 or 0 and
     /// the magic force numbers, `doReboot` 246 with 1 (3 into the bootloader), `setParam` the
     /// (name, value, force) overload.
-    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:1622-1626, 2553-2718`
+    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:1619-1623, 2550-2715`
     #[test]
     fn the_command_members_reach_the_host() {
         let (host, result, printed) = run(
@@ -1499,7 +1499,7 @@ mod tests {
     /// `setGuidedModeWP`: nothing for an item with a zero latitude, longitude or altitude;
     /// GUIDED asked for unless the vehicle is in it; a copter the position target in the item's
     /// own frame, a plane `setWP` with current 2.
-    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:4416-4460`
+    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:4405-4449`
     #[test]
     fn set_guided_mode_wp_is_the_c_sharp_one() {
         let script = concat!(
@@ -1645,7 +1645,7 @@ mod tests {
 
     /// Speech starts as the user's settings have it: "speechenable" on speaks from the first
     /// line, and "speech_armed_only" keeps it quiet while the vehicle is disarmed.
-    /// `// C#: MainV2.cs:469-481, 658, 1005-1006`
+    /// `// C#: MainV2.cs:469-481, 658, 1007-1008`
     #[test]
     fn speech_starts_from_the_users_settings() {
         let script = concat!(
@@ -1703,7 +1703,7 @@ mod tests {
 
     /// Each member takes its current overload on a named vehicle as well as the [Obsolete] one
     /// on the vehicle flown, and `setParam` its list of names, each tried until one is set.
-    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:1602-1631, 2433-2450, 2621-2685,
+    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:1599-1628, 2430-2447, 2618-2682,
     /// 3397-3407, 3974-3988, 4417-4461`
     #[test]
     fn the_members_take_their_overloads_on_a_named_vehicle() {

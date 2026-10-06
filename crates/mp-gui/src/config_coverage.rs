@@ -25,7 +25,7 @@
 //! at 100 %". The panels are the `Config*.cs` user controls in `GCSViews/ConfigurationView/`, and
 //! two screens list them down their left-hand side: `GCSViews/InitialSetup.cs`, which `MainV2`'s
 //! SETUP button opens, and `GCSViews/SoftwareConfig.cs`, which its CONFIG button opens (C#:
-//! `MainV2.cs:3179`, `MainV2.cs:3180`, `MainV2.Designer.cs:150`, `MainV2.Designer.cs:158`). Each
+//! `MainV2.cs:3186`, `MainV2.cs:3187`, `MainV2.Designer.cs:150`, `MainV2.Designer.cs:158`). Each
 //! screen builds its list in its `Load` handler with one `AddBackstageViewPage(typeof(...), title,
 //! ...)` per page, most of them behind a vehicle check, and the order of those calls is the order
 //! of the list.
@@ -1054,7 +1054,7 @@ pub const PANELS: &[Panel] = &[
             config(250, "Planner", CONNECTED),
             config(257, "Planner", DISCONNECTED),
         ],
-        // C#: GCSViews/ConfigurationView/ConfigPlanner.cs:26-1192 - every control at its .resx
+        // C#: GCSViews/ConfigurationView/ConfigPlanner.cs:26-1193 - every control at its .resx
         // place, bound to the Settings key its handler writes.
         Partial(
             at("crates/mp-gui/src/config/planner.rs", "fn planner_page"),
@@ -1157,7 +1157,7 @@ pub const OTHER_PAGES: &[Panel] = &[
         Some(16),
         &[config(215, "MAVFtp", "any reporting MAVLink FTP")],
         // ---- Standard / Advanced Params, MAVFtp, Heli Setup (row 71) ----
-        // C#: Controls/MavFTPUI.cs:17-711 over the link's MAVFTP client: PopulateTreeView's two
+        // C#: Controls/MavFTPUI.cs:17-740 over the link's MAVFTP client: PopulateTreeView's two
         // roots, NodeMouseClick from a node's text, its plus or minus, its row and the right
         // button, the list's double click, column sort, header drag and dividers, the splitter,
         // the context menu's seven items (and the menu key), Upload of several files, drag and

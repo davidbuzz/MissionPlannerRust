@@ -66,12 +66,12 @@ use crate::timeouts::ProtocolTimeouts;
 
 /// How many `PARAM_REQUEST_READ` go out per recovery round.
 ///
-/// C#: MAVLinkInterface.cs:2187 (`if (queued >= 10) break;`).
+/// C#: MAVLinkInterface.cs:2184 (`if (queued >= 10) break;`).
 pub const PARAM_RETRY_BURST: usize = 10;
 
 /// `param_index` of a reply to a read by name: "not telling you where this sits in the list".
 ///
-/// C#: MAVLinkInterface.cs:2077-2078 (`if (par.param_index != 65535)`).
+/// C#: MAVLinkInterface.cs:2074-2075 (`if (par.param_index != 65535)`).
 const INDEX_NOT_IN_LIST: u16 = u16::MAX;
 
 /// Where a download is.
@@ -220,7 +220,7 @@ impl ParamDownload {
             .collect()
     }
 
-    /// The operator's Cancel. C#: MAVLinkInterface.cs:2104-2112, "User Canceled".
+    /// The operator's Cancel. C#: MAVLinkInterface.cs:2101-2109, "User Canceled".
     pub fn cancel(&mut self) {
         if !self.is_finished() {
             self.state = ParamDownloadState::Cancelled;
@@ -232,7 +232,7 @@ impl ParamDownload {
         self.reported.unwrap_or(1)
     }
 
-    /// A `PARAM_VALUE` from this vehicle arrived. C#: MAVLinkInterface.cs:2013-2093.
+    /// A `PARAM_VALUE` from this vehicle arrived. C#: MAVLinkInterface.cs:2010-2090.
     pub fn on_param_value(&mut self, index: u16, count: u16, now: Instant) {
         if self.is_finished() {
             return;
@@ -268,7 +268,7 @@ impl ParamDownload {
         }
     }
 
-    /// Called every pass of the link loop. C#: MAVLinkInterface.cs:2114-2208.
+    /// Called every pass of the link loop. C#: MAVLinkInterface.cs:2111-2205.
     pub fn on_tick(&mut self, now: Instant) -> ParamAction {
         if self.is_finished() {
             return ParamAction::Nothing;

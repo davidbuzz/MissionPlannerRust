@@ -4,7 +4,7 @@
 # binds the pin and type combos (ConfigHWAirspeed.cs:18-63); "Enable" writes ARSPD_ENABLE twice -
 # the page's handler first (:65-84), then the MavlinkCheckBox's own write, which finds the value
 # already held (Controls/MavlinkCheckBox.cs:106-143; ExtLibs/ArduPilot/Mavlink/
-# MAVLinkInterface.cs:1647-1651). Each change is proved by the vehicle's echo, and put back.
+# MAVLinkInterface.cs:1644-1648). Each change is proved by the vehicle's echo, and put back.
 #
 # SITL's copter lists ARSPD_ENABLE 0 and, with the sensor off, none of ARSPD_USE, ARSPD_PIN or
 # ARSPD_TYPE: "Use Airspeed" is hidden and both combos stay disabled, as in the C#, so the combos'

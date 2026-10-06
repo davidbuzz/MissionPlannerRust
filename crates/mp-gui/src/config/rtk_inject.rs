@@ -3967,7 +3967,7 @@ impl RtkInject {
 
     /// A question answered: OK with its text, which `InputBox` keeps in `persisted` as it keeps
     /// every titled answer before the handler looks at it, or Cancel, which keeps nothing.
-    /// `// C#: Program.cs:564-566; ExtLibs/Controls/InputBox.cs:73-84, 178-184`
+    /// `// C#: Program.cs:566-568; ExtLibs/Controls/InputBox.cs:73-84, 178-184`
     pub fn answer(&mut self, ok: bool, persisted: &mut Persisted, cs_base: LatLngAlt) {
         let Some(prompt) = self.prompt.take() else {
             return;
@@ -7020,7 +7020,7 @@ mod tests {
 
     /// Every question the page asks keeps its OK's answer under `InputBox`'s key for it: the
     /// caption and question with all but letters and digits taken out. The facts publish each.
-    /// `// C#: Program.cs:564-566; ExtLibs/Controls/InputBox.cs:73-84, 178-184`
+    /// `// C#: Program.cs:566-568; ExtLibs/Controls/InputBox.cs:73-84, 178-184`
     #[test]
     fn each_question_keeps_its_ok_answer_under_the_input_box_key() {
         let questions = [

@@ -1447,7 +1447,7 @@ fn an_upload_asked_for_each_item_twice_in_either_form_completes() {
 /// The vehicle asks for items out of order. Each is answered with the item asked for.
 ///
 /// DIVERGENCE: the C#'s `setWP` waits for a request for exactly the next item and answers any
-/// other request by sending *its* item again (C#: MAVLinkInterface.cs:4318-4356), so a vehicle
+/// other request by sending *its* item again (C#: MAVLinkInterface.cs:4307-4345), so a vehicle
 /// asking for item 2 while the C# is on item 0 is sent item 0. The MAVLink protocol has the
 /// vehicle drive; this port answers what was asked. Against ArduPilot, which asks in order, the
 /// wire is the same.
@@ -1478,7 +1478,7 @@ fn an_upload_asked_out_of_order_sends_what_was_asked() {
 /// The vehicle skips an item and then says `ACCEPTED`. A clean failure naming the item.
 ///
 /// DIVERGENCE: the C# is waiting for a request for item 2 when the request for 3 arrives, and
-/// sends item 1 again for it (C#: MAVLinkInterface.cs:4318-4356), until its ten retries run out
+/// sends item 1 again for it (C#: MAVLinkInterface.cs:4307-4345), until its ten retries run out
 /// and it throws "Timeout on read - setWP" (:4267) - a failure too, but five seconds later and
 /// blaming the link. A vehicle that accepts a mission it was never sent all of is not holding
 /// the mission on screen; it fails here at once, with the item.
@@ -1921,7 +1921,7 @@ fn a_download_whose_count_never_arrives_asks_seven_times_then_times_out() {
 /// Every item arrives twice. Each is asked for once, and the mission is right.
 ///
 /// DIVERGENCE: the C#'s `getWP` answers any item it did not ask for with another request, at
-/// once (C#: MAVLinkInterface.cs:3530-3534). For a duplicate of an item already held that is an
+/// once (C#: MAVLinkInterface.cs:3523-3527). For a duplicate of an item already held that is an
 /// echo chamber: the extra request draws two more replies, one of them another duplicate, and the
 /// requests double per item - 2^n for an n-item mission over a link that repeats frames. A stale
 /// item is dropped here; only an item nobody asked for gets the C#'s immediate request (next test).

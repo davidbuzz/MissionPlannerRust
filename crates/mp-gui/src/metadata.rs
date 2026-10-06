@@ -281,7 +281,7 @@ impl Fetch {
     /// vehicle's unversioned file. Mission Planner fetches the unversioned files for every
     /// vehicle at startup and the versioned ones for every versioned vehicle when a banner
     /// arrives; here only the connected vehicle's, which is the one that is read.
-    /// `// C#: ExtLibs/Utilities/ParameterMetaDataRepositoryAPMpdef.cs:38-41, 52-90; MainV2.cs:1721`
+    /// `// C#: ExtLibs/Utilities/ParameterMetaDataRepositoryAPMpdef.cs:38-41, 52-90; MainV2.cs:1723`
     pub fn advance(&mut self, banner: Option<&str>, mav_type: u8) {
         if let Some(receiver) = &self.receiver {
             match receiver.try_recv() {
@@ -373,7 +373,7 @@ fn fetch(
 
 /// The banner in a run of messages: the first `STATUSTEXT` that names a vehicle.
 ///
-/// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:1822-1830`
+/// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:1819-1827`
 #[must_use]
 pub fn banner_in<'a>(messages: impl IntoIterator<Item = &'a str>) -> Option<&'a str> {
     messages.into_iter().find(|text| {

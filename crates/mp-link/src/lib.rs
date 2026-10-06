@@ -178,7 +178,7 @@ const COMPASSMOT_HELD: usize = 512;
 const IDLE_POLL: Duration = Duration::from_millis(1);
 
 /// The parameters the low-airspeed warning reads, `AIRSPEED_MIN` first.
-/// `// C#: ExtLibs/ArduPilot/CurrentState.cs:3863-3871`
+/// `// C#: ExtLibs/ArduPilot/CurrentState.cs:3866-3874`
 const AIRSPEED_MIN_PARAMS: [&str; 2] = ["AIRSPEED_MIN", "ARSPD_FBW_MIN"];
 
 /// The default snapshot cadence, [`LinkConfig::publish_interval`]: shorter than a frame of
@@ -193,7 +193,7 @@ pub const DEFAULT_PUBLISH_INTERVAL: Duration = Duration::from_millis(5);
 /// connected - a vehicle or SITL rebooting, a TCP peer resetting, a serial device vanishing - and
 /// is opened again, aggressively, with nothing asked. Mission Planner's own main link does not do
 /// this: `MainV2`'s serial reader idles on a closed `BaseStream` and the connect button shows
-/// the loss (`MainV2.cs:2456-2490`); only its mirror, NMEA, CoT and moving-base `TcpSerial`
+/// the loss (`MainV2.cs:2463-2497`); only its mirror, NMEA, CoT and moving-base `TcpSerial`
 /// streams reconnect (`CommsTCPSerial.cs:86-87, 330-355`, `autoReconnect`, five seconds
 /// between tries, the settings' host and port asked for again with `reconnectnoprompt`).
 pub type Reopen = Box<dyn FnMut() -> Result<Box<dyn Transport>, mp_transport::OpenError> + Send>;
@@ -377,7 +377,7 @@ struct Shared {
     frames_received: AtomicU64,
     /// `inject_seq_no`, the GPS injection's sequence number, one per link: shared with every
     /// [`LinkSender`], which is what injects.
-    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:3891`
+    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:3881`
     inject_seq: Arc<AtomicU32>,
     /// `cs.Base` set from outside the link - the RTK page's base station - waiting for the link
     /// thread to write it into the vehicle's state.
@@ -481,7 +481,7 @@ impl LinkSender {
     }
 
     /// `Mavlink2Signed`: signed packets read since the start of the current second.
-    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:418`
+    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:420`
     #[must_use]
     pub fn signed_packets(&self) -> u32 {
         self.signing
@@ -776,14 +776,14 @@ impl Link {
 
     /// Sets one geofence point with the legacy `FENCE_POINT` message and reads it back with
     /// `FENCE_FETCH_POINT`: `setFencePoint`. See [`requests::FencePointSet`].
-    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:6415-6439`
+    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:6376-6400`
     pub fn set_fence_point(&self, target: VehicleId, point: requests::FencePointSet) -> RequestId {
         self.queue_request(target, RequestKind::SetFencePoint(point))
     }
 
     /// Reads one geofence point with `FENCE_FETCH_POINT`: `getFencePoint`. What came back is
     /// [`Request::fence_point`] once the request is accepted.
-    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:5908-5967`
+    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:5871-5929`
     pub fn get_fence_point(&self, target: VehicleId, idx: u8) -> RequestId {
         self.queue_request(target, RequestKind::GetFencePoint { idx })
     }
@@ -793,7 +793,7 @@ impl Link {
     /// now, as the C# reads them when it is called - and `MISSION_REQUEST` otherwise. What came
     /// back is [`Request::wp`] once the request is accepted. No mission transfer is started or
     /// touched. See [`requests::WpRead`].
-    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:3398-3565`
+    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:3393-3558`
     pub fn get_wp(&self, target: VehicleId, seq: u16, mission_type: u8) -> RequestId {
         let use_int = self.vehicle(target).is_some_and(|handle| {
             handle.load().autopilot_info.capabilities & requests::CAPABILITY_MISSION_INT != 0
@@ -811,7 +811,7 @@ impl Link {
     /// Tells the vehicle how many items one of its lists is about to get, and waits for it to ask
     /// for the first: `setWPTotal`. No mission transfer is started or touched; the items are
     /// sent one at a time with [`Link::set_wp`]. See [`RequestKind::SetWpTotal`].
-    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:3753-3882`
+    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:3746-3872`
     pub fn set_wp_total(&self, target: VehicleId, total: u16, mission_type: u8) -> RequestId {
         self.queue_request(
             target,
@@ -861,7 +861,7 @@ impl Link {
 
     /// Write Fast: starts `saveWPsFast`'s upload of a mission, the items sent in bursts without
     /// waiting to be asked for each.
-    /// `// C#: GCSViews/FlightPlanner.cs:6340-6582`
+    /// `// C#: GCSViews/FlightPlanner.cs:6340-6579`
     pub fn upload_mission_fast(&self, target: VehicleId, items: Vec<MissionItem>) -> bool {
         self.queue_transfer(MissionTransfer::upload_fast(
             target,
@@ -967,14 +967,14 @@ impl Link {
     /// Sets a vehicle's stream rates, [`mp_vehicle::VehicleState::rates`], as the Planner page's
     /// rate combos set `MainV2.comPort.MAV.cs.rateX`; the link's next stream requests ask for
     /// them. Applied by the link thread on its next pass and carried by the next snapshot.
-    /// `// C#: GCSViews/ConfigurationView/ConfigPlanner.cs:573-640`
+    /// `// C#: GCSViews/ConfigurationView/ConfigPlanner.cs:574-641`
     pub fn set_stream_rates(&self, target: VehicleId, rates: StreamRates) {
         self.write_state(target, StateWrite::StreamRates(rates));
     }
 
     /// Sets a vehicle's [`mp_vehicle::VehicleState::alt_offset_home`], as the flight screen's
     /// Set Home Alt sets `MainV2.comPort.MAV.cs.altoffsethome`. Applied by the link thread on its
-    /// next pass and carried by the next snapshot. `// C#: GCSViews/FlightData.cs:1236-1247`
+    /// next pass and carried by the next snapshot. `// C#: GCSViews/FlightData.cs:1238-1249`
     pub fn set_alt_offset_home(&self, target: VehicleId, offset: f32) {
         self.write_state(target, StateWrite::AltOffsetHome(offset));
     }
@@ -1460,7 +1460,7 @@ fn drain_outbound(
 /// write, `SaveToTlog`, then `OnPacketSent`, which the C# raises once the write has not thrown.
 /// A frame for a vehicle being signed to is signed first, so what is written, recorded and told
 /// is the signed frame, as the C#'s is (see [`signing`]).
-/// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:1384-1461`
+/// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:1381-1458`
 fn send_frame(
     shared: &Shared,
     transport: &mut dyn Transport,
@@ -1613,7 +1613,7 @@ fn run_link(
                 stats.bytes_read += n as u64;
                 // Each packet is stamped with when it was sent before it is applied: now on a
                 // live link, the recording's clock in a replay, whose reads never cross a record.
-                // C#: MAVLinkInterface.cs:4721, 6649
+                // C#: MAVLinkInterface.cs:4710, 6613
                 let sent_at = match transport.read_time() {
                     ReadTime::Live => DateTime::now(),
                     ReadTime::Recorded(stamp) => stamp
@@ -1622,7 +1622,7 @@ fn run_link(
                 };
                 let arrived = Instant::now();
                 // `logreadmode`: a log's packets are not checked for their signatures. A new
-                // second starts `Mavlink2Signed` again. C#: MAVLinkInterface.cs:4938-4963, 5061
+                // second starts `Mavlink2Signed` again. C#: MAVLinkInterface.cs:4912-4937, 5037
                 let logreadmode = matches!(transport.read_time(), ReadTime::Recorded(_));
                 if let Ok(mut held) = shared.signing.os_lock() {
                     held.new_second(signing::utc_second());
@@ -1632,7 +1632,7 @@ fn run_link(
                         shared.frames_received.fetch_add(1, Ordering::Relaxed);
                         // A signed packet that passes neither its vehicle's key nor any in the
                         // store is dropped here, before it is recorded or seen by anything.
-                        // C#: MAVLinkInterface.cs:5059-5089
+                        // C#: MAVLinkInterface.cs:5035-5065
                         if frame.is_signed()
                             && !logreadmode
                             && !shared
@@ -1649,7 +1649,7 @@ fn run_link(
                         }
                         if let Some(msg) = MavMessage::decode(frame.msgid, frame.payload) {
                             // `OnPacketReceived`, for whoever listens: the MAVLink Inspector.
-                            // C#: MAVLinkInterface.cs:5367-5369
+                            // C#: MAVLinkInterface.cs:5347-5349
                             if shared.packets.any() {
                                 shared.packets.notify(&inspector::Packet::received(
                                     frame, msg, sent_at, arrived,
@@ -1673,7 +1673,7 @@ fn run_link(
                                 .or_insert_with(|| current_settings::Clocks::new(arrived))
                                 .heard(&msg);
                             // `MAVDetected` on a component's first heartbeat, and the camera and
-                            // gimbal managers told of every packet. C#: MAVLinkInterface.cs:5308-5323
+                            // gimbal managers told of every packet. C#: MAVLinkInterface.cs:5288-5303
                             if matches!(msg, MavMessage::Heartbeat(_) | MavMessage::HighLatency2(_))
                                 && detected.insert(id)
                             {
@@ -1956,7 +1956,7 @@ fn run_link(
                                 // `CAMERA_FEEDBACK`: the shot onto the vehicle's list, and
                                 // `timesincelastshot` worked out from the list as the flight
                                 // screen's map loop works it out - here as the shot arrives.
-                                // C#: MAVLinkInterface.cs:5736-5745; GCSViews/FlightData.cs:4021-4038
+                                // C#: MAVLinkInterface.cs:5704-5713; GCSViews/FlightData.cs:4135-4152
                                 MavMessage::CameraFeedback(point) => {
                                     if let Ok(mut held) = shared.camera_points.os_lock() {
                                         held.observe(id, point);
@@ -2101,8 +2101,8 @@ fn run_link(
                                         // The low-airspeed warning reads these from the
                                         // vehicle's `MAV.param`, which every PARAM_VALUE
                                         // updates as it passes.
-                                        // C#: MAVLinkInterface.cs:5766-5796;
-                                        // CurrentState.cs:3858-3880
+                                        // C#: MAVLinkInterface.cs:5729-5759;
+                                        // CurrentState.cs:3861-3883
                                         if airspeed && let Some(state) = registry.working_mut(id) {
                                             let [min, fbw_min] = AIRSPEED_MIN_PARAMS.map(|name| {
                                                 table.get(name).map(ParamValue::as_f64)
@@ -2142,7 +2142,7 @@ fn run_link(
         // `UpdateCurrentSettings` on every vehicle listed, after each read, at most every 50 ms
         // each; and inside it, the telemetry streams asked for at each vehicle's own rates -
         // never while a recording is played, which the C# plays with its port closed. See
-        // `current_settings`. C#: MainV2.cs:3058-3069; CurrentState.cs:4580-4663
+        // `current_settings`. C#: MainV2.cs:3065-3076; CurrentState.cs:4583-4666
         let now = Instant::now();
         let recording = matches!(transport.read_time(), ReadTime::Recorded(_));
         let port_open = transport.is_open() && !recording;
@@ -2166,7 +2166,7 @@ fn run_link(
                 let Some(request) = current_settings::request_datastream(*id, stream, hz) else {
                     continue;
                 };
-                // `getDatastream` sends each one twice. C#: MAVLinkInterface.cs:3262-3263
+                // `getDatastream` sends each one twice. C#: MAVLinkInterface.cs:3258-3259
                 for _ in 0..2 {
                     send_message(
                         shared,
@@ -2180,7 +2180,7 @@ fn run_link(
                 }
             }
             // `MAV.Camera?.RequestMessageIntervals(ratestatus)` and
-            // `MAV.GimbalManager?.Discover()`. C#: CurrentState.cs:4654-4655
+            // `MAV.GimbalManager?.Discover()`. C#: CurrentState.cs:4657-4658
             protocols::on_streams(shared, *id, rates.status, &mut protocol_sends);
         }
 
@@ -2441,7 +2441,7 @@ fn run_link(
             // component on its first packet in MAVList's hidden list and moves it to the visible
             // one on its first heartbeat (MAVList.cs:29, 107-110, `MAVDetected`), and nothing is
             // asked of a vehicle before that - OpenBg waits for two heartbeats before the
-            // connection counts as made (MAVLinkInterface.cs:816). A parameter list requested
+            // connection counts as made (MAVLinkInterface.cs:818). A parameter list requested
             // before the heartbeat was decoded by the wrong rule, the autopilot being unknown
             // (CI's SITL run, 2026-10-03: BATT_CAPACITY read as 1,162,756,096).
             expose_handles(shared, &registry, detected.iter());
@@ -2594,7 +2594,7 @@ fn expose_handles<'a>(
 /// A `MISSION_REQUEST_INT` files nothing, as in the C#: its `setWPAsync` for an `_INT` item - the
 /// one this link's transfers send - has no branch for that message. Against a vehicle that asks
 /// with it, only the last item - acknowledged - is filed, until the list is read back.
-/// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:3801-3830, 3832-3861, 4273-4309,
+/// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:3801-3830, 3824-3852, 4273-4309,
 /// 4310-4346`
 fn file_list_upload(shared: &Arc<Shared>, id: VehicleId, gcs: VehicleId, msg: &MavMessage) {
     // (the item asked for, whether a request may file, to whom it is addressed, the list)
@@ -2671,7 +2671,7 @@ fn clear_list(shared: &Shared, id: VehicleId, mission_type: u8) {
 ///
 /// The C# writes the totals into `MAV.param`, the vehicle being flown; this writes them into the
 /// table of the vehicle asked, which is that one whenever a script asks.
-/// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:3811-3828, 3842-3859`
+/// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:3803-3820, 3833-3850`
 fn wp_total_answered(shared: &Shared, id: VehicleId, total: u16, mission_type: u8) {
     if mission_type == MISSION_TYPE_MISSION
         && let Ok(mut tables) = shared.params.os_lock()
@@ -2719,7 +2719,7 @@ fn set_wp_filed(request: &Request, finish: mission_points::Finish) -> Option<Fil
 
 /// `wps[req.seq]`, `fencepoints[req.seq]` or `rallypoints[req.seq]` `= (Locationwp) req`, for a
 /// set-WP's item.
-/// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:4113-4127, 4146-4160, 4196-4206`
+/// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:4104-4118, 4146-4160, 4196-4206`
 fn file_set_wp(shared: &Shared, id: VehicleId, filed: Option<Filed>) {
     match filed {
         Some(Filed::Fence(seq, item)) => {

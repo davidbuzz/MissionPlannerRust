@@ -19,7 +19,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
 //! Ctrl+J's DevOps window: `Controls/DevopsUI.cs`, which `MainV2.ProcessCmdKey` opens with
-//! `new DevopsUI().ShowUserControl()` (`MainV2.cs:4195-4200`) - the control in a form of its own
+//! `new DevopsUI().ShowUserControl()` (`MainV2.cs:4202-4207`) - the control in a form of its own
 //! size, 604 x 265, captioned with its `Text`, which nothing sets. It reads a device's registers
 //! over MAVLink: `DEVICE_OP_READ`, and `DEVICE_OP_WRITE` for its test.
 //!
@@ -31,7 +31,7 @@
 //!
 //! What it does:
 //!
-//! * Do It (`but_doit_Click`, `DevopsUI.cs:20-32`): `device_op` with the boxes' numbers, SPI when
+//! * Do It (`but_doit_Click`, `DevopsUI.cs:21-33`): `device_op` with the boxes' numbers, SPI when
 //!   the bus type reads "SPI" and I2C otherwise; the bytes read, in hex, two digits each, as a
 //!   line - or "No Response - " and the result;
 //! * the bus type changed (`dom_bustype_SelectedItemChanged`, `:34-50`): SPI enables the name and
@@ -56,7 +56,7 @@
 //!   opens a fresh one in its place, and closing it abandons an answer still awaited;
 //! * the colours are this application's.
 //!
-//! `// C#: Controls/DevopsUI.cs:1-64; Controls/DevopsUI.Designer.cs:29-298`
+//! `// C#: Controls/DevopsUI.cs:1-65; Controls/DevopsUI.Designer.cs:29-298`
 
 // This module is internal to the binary; `pub` here documents intent rather than exporting API.
 #![allow(unreachable_pub)]
@@ -121,22 +121,22 @@ const OUTPUT_AT: (f32, f32, f32, f32) = (3.0, 67.0, 465.0, 144.0);
 const TEST_AT: (f32, f32, f32, f32) = (513.0, 76.0, 75.0, 23.0);
 pub const TEST: &str = "test";
 
-/// `device_op`'s wait: a second from sending. `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:1101-1105`
+/// `device_op`'s wait: a second from sending. `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:1103-1107`
 pub const WAIT: Duration = Duration::from_secs(1);
 
 /// `MAVLink.DEVICE_OP_BUSTYPE`. `// C#: ExtLibs/Mavlink/Mavlink.cs (DEVICE_OP_BUSTYPE)`
 pub const I2C_BUS: u8 = 0;
 pub const SPI_BUS: u8 = 1;
 
-/// `busname`'s length. `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:1075, 1093`
+/// `busname`'s length. `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:1077, 1095`
 const BUSNAME_LENGTH: usize = 40;
 
 /// What `Aggregate` throws over no bytes: test's read that brought none.
-/// `// C#: Controls/DevopsUI.cs:61`
+/// `// C#: Controls/DevopsUI.cs:62`
 pub const NO_ELEMENTS: &str = "Sequence contains no elements";
 
 /// test's write and read: to sysid 1 compid 1, bus 0, address 0, register 0xff, two bytes, and
-/// the two written. `// C#: Controls/DevopsUI.cs:56-58`
+/// the two written. `// C#: Controls/DevopsUI.cs:57-59`
 const TEST_TARGET: (u8, u8) = (1, 1);
 const TEST_REGISTER: u8 = 0xff;
 const TEST_COUNT: u8 = 2;
@@ -284,7 +284,7 @@ pub struct DeviceOp {
 }
 
 /// `name.MakeBytesSize(40)`: the UTF-8 bytes, cut or padded with zeros to 40.
-/// `// C#: ExtLibs/Utilities/Extensions.cs:519-527`
+/// `// C#: ExtLibs/Utilities/Extensions.cs:520-528`
 #[must_use]
 pub fn busname(name: &str) -> [u8; BUSNAME_LENGTH] {
     let mut bytes = [0u8; BUSNAME_LENGTH];
@@ -296,7 +296,7 @@ pub fn busname(name: &str) -> [u8; BUSNAME_LENGTH] {
 
 /// The message `device_op` sends: a write when there are bytes to write - `count` being how
 /// many, the bytes padded to 128 - else a read.
-/// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:1066-1099`
+/// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:1068-1101`
 #[must_use]
 pub fn message(op: &DeviceOp, request_id: u32) -> MavMessage {
     match &op.write {
@@ -335,7 +335,7 @@ pub fn message(op: &DeviceOp, request_id: u32) -> MavMessage {
 }
 
 /// `buffer.Select(a => a.ToString("X2")).Aggregate((a, b) => a + b)`.
-/// `// C#: Controls/DevopsUI.cs:29, 61`
+/// `// C#: Controls/DevopsUI.cs:30, 62`
 #[must_use]
 pub fn hex(bytes: &[u8]) -> String {
     bytes.iter().map(|byte| format!("{byte:02X}")).collect()
@@ -451,7 +451,7 @@ pub struct Form {
 
 impl Form {
     /// `new DevopsUI()`: the Designer's values, every box enabled.
-    /// `// C#: Controls/DevopsUI.cs:15-18; Controls/DevopsUI.Designer.cs:29-273`
+    /// `// C#: Controls/DevopsUI.cs:15-19; Controls/DevopsUI.Designer.cs:29-273`
     #[must_use]
     pub fn new() -> Self {
         let mut spi_name = TextField::new("");
@@ -517,7 +517,7 @@ impl Form {
 
     /// `dom_bustype_SelectedItemChanged`: SPI enables the name and disables the bus and the
     /// address; anything else the other way round.
-    /// `// C#: Controls/DevopsUI.cs:34-50`
+    /// `// C#: Controls/DevopsUI.cs:35-51`
     fn bustype_changed(&mut self) {
         let spi = self.bustype.text == SPI;
         self.spi_enabled = spi;
@@ -553,7 +553,7 @@ impl Form {
     }
 
     /// Do It's arguments, read from the boxes.
-    /// `// C#: Controls/DevopsUI.cs:22-26`
+    /// `// C#: Controls/DevopsUI.cs:23-27`
     fn do_it(&mut self) -> DeviceOp {
         self.leave();
         DeviceOp {
@@ -574,7 +574,7 @@ impl Form {
     }
 
     /// test's two, the name read from its box.
-    /// `// C#: Controls/DevopsUI.cs:56-58`
+    /// `// C#: Controls/DevopsUI.cs:57-59`
     fn test(&self, write: bool) -> DeviceOp {
         DeviceOp {
             sysid: TEST_TARGET.0,
@@ -609,7 +609,7 @@ pub struct Devops {
     pub window: Option<Form>,
     /// How many times it has been opened.
     pub opened: usize,
-    /// `request_id`, numbering each `device_op`. `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:997`
+    /// `request_id`, numbering each `device_op`. `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:999`
     request_id: u32,
     /// The operation under way.
     op: Option<Op>,
@@ -644,7 +644,7 @@ impl Devops {
         self.op = Some(start(telemetry, op, request_id, step));
     }
 
-    /// Do It. `// C#: Controls/DevopsUI.cs:20-32`
+    /// Do It. `// C#: Controls/DevopsUI.cs:21-33`
     pub fn press_do_it(&mut self, telemetry: &Telemetry) {
         if self.op.is_some() {
             return;
@@ -655,7 +655,7 @@ impl Devops {
         self.begin_op(telemetry, &op, Step::DoIt);
     }
 
-    /// test: the write first. `// C#: Controls/DevopsUI.cs:52-62`
+    /// test: the write first. `// C#: Controls/DevopsUI.cs:53-63`
     pub fn press_test(&mut self, telemetry: &Telemetry) {
         if self.op.is_some() {
             return;
@@ -672,7 +672,7 @@ impl Devops {
     /// Once a frame: the operation's answer, or its second gone by with none (nothing read,
     /// result 0), and what follows - Do It's line, test's read, test's line; what test throws
     /// when its read brought nothing is returned for the status line.
-    /// `// C#: Controls/DevopsUI.cs:28-31, 58-61; ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:1101-1110`
+    /// `// C#: Controls/DevopsUI.cs:29-32, 59-62; ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:1103-1112`
     pub fn tick(&mut self, telemetry: &Telemetry, now: Instant) -> Option<String> {
         let op = self.op.as_ref()?;
         let answer = op.answer.os_lock().ok().and_then(|held| held.clone());

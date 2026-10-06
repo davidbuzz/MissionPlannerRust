@@ -67,7 +67,7 @@ use web_time::{Duration, SystemTime};
 ///
 /// `srtm`'s `HttpClient` sends `Settings.Instance.UserAgent` (srtm.cs:98-99), which Mission
 /// Planner sets at startup to its product name, version and operating system - the same string it
-/// gives GMap.NET for the map tiles (`Program.cs:373-375`). So this is `mp-tiles`' `USER_AGENT`,
+/// gives GMap.NET for the map tiles (`Program.cs:375-377`). So this is `mp-tiles`' `USER_AGENT`,
 /// and a test holds the two together.
 pub const USER_AGENT: &str = concat!(
     "MissionPlannerRust/",
@@ -76,14 +76,14 @@ pub const USER_AGENT: &str = concat!(
 );
 
 /// The terrain cache: `Settings.GetDataDirectory()` + `srtm`.
-/// `// C#: MainV2.cs:737`
+/// `// C#: MainV2.cs:739`
 #[must_use]
 pub fn srtm_directory_in(folders: &mp_settings::Folders) -> PathBuf {
     folders.data_directory().join("srtm")
 }
 
 /// The terrain cache for this process, if there is a home directory to derive it from.
-/// `// C#: MainV2.cs:737`
+/// `// C#: MainV2.cs:739`
 #[must_use]
 pub fn srtm_directory() -> Option<PathBuf> {
     mp_settings::Folders::from_environment().map(|folders| srtm_directory_in(&folders))
@@ -91,7 +91,7 @@ pub fn srtm_directory() -> Option<PathBuf> {
 
 /// The files older than this are what `MainV2` deletes from the terrain cache at startup:
 /// 2026-03-01T00:00:00Z, the fix for a bad SRTM3 set the server once served.
-/// `// C#: MainV2.cs:745-747`
+/// `// C#: MainV2.cs:747-749`
 pub const STALE_BEFORE_UNIX_SECONDS: u64 = 1_772_323_200;
 
 /// `MainV2`'s startup sweep of the terrain cache: every file directly in it that is empty, or
@@ -102,7 +102,7 @@ pub const STALE_BEFORE_UNIX_SECONDS: u64 = 1_772_323_200;
 /// (`get3secfile` skips any tile file that is not empty, srtm.cs:583-588). As in the C#, the first
 /// thing that goes wrong - a directory that is not there, a file that cannot be deleted - ends the
 /// sweep quietly.
-/// `// C#: MainV2.cs:739-750`
+/// `// C#: MainV2.cs:741-752`
 pub fn clean_cache_directory(dir: &Path) {
     let stale = SystemTime::UNIX_EPOCH + Duration::from_secs(STALE_BEFORE_UNIX_SECONDS);
     let sweep = || -> std::io::Result<()> {

@@ -317,7 +317,7 @@ fn usage() {
 const TERRAIN_WAIT: Duration = Duration::from_secs(330);
 
 /// `headless-planner terrain <lat> <lng>`: `srtm.getAltitude` at a point, over the terrain cache Mission Planner
-/// keeps (`MainV2.cs:737`), swept as `MainV2` sweeps it at startup (`MainV2.cs:739-750`).
+/// keeps (`MainV2.cs:739`), swept as `MainV2` sweeps it at startup (`MainV2.cs:741-752`).
 fn terrain(lat: f64, lng: f64) -> std::process::ExitCode {
     let Some(dir) = mp_terrain::srtm_directory() else {
         eprintln!("no home directory to find the terrain cache under");
@@ -529,7 +529,7 @@ fn await_state(
 /// Planner page's rate combos are changed, which nothing here does. Nothing `fly` waits on needs
 /// more: the GPS fix and position come at 2 Hz and the mode in the heartbeat.
 /// `LinkConfig::stream_rate_hz` only switches the requests on; the rates are the state's.
-/// `// C#: ExtLibs/ArduPilot/CurrentState.cs:201-206, 2002-2007, 4632-4663; MainV2.cs:980-991`
+/// `// C#: ExtLibs/ArduPilot/CurrentState.cs:201-206, 2002-2007, 4635-4666; MainV2.cs:982-993`
 fn fly_config(record_path: Option<&str>) -> LinkConfig {
     LinkConfig {
         record_path: record_path.map(Into::into),
@@ -679,7 +679,7 @@ fn fly(url: &str, record_path: Option<&str>) -> std::process::ExitCode {
         );
         println!("leg: bearing {bearing}, {metres} m");
         // Sent and not waited for, as `setGuidedModeWP` sends its position target.
-        // `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:4449-4454`
+        // `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:4438-4443`
         link.send(&commands::goto_position(
             id,
             target.latitude(),
@@ -762,7 +762,7 @@ fn run_command(link: &Link, message: &MavMessage) -> Option<RequestOutcome> {
             "  {name}: {}",
             mp_link::messages::command_result_name(result)
         ),
-        // `doCommand`'s `TimeoutException`. `// C#: MAVLinkInterface.cs:2797`
+        // `doCommand`'s `TimeoutException`. `// C#: MAVLinkInterface.cs:2794`
         Some(RequestOutcome::TimedOut) | None => {
             eprintln!("  {name}: Timeout on read - doCommand");
         }
@@ -966,7 +966,7 @@ fn set_param(url: &str, name: &str, value: f32) -> std::process::ExitCode {
             );
             std::process::ExitCode::FAILURE
         }
-        // `setParam`'s `TimeoutException`. `// C#: MAVLinkInterface.cs:1765`
+        // `setParam`'s `TimeoutException`. `// C#: MAVLinkInterface.cs:1762`
         Written::NoEcho => {
             eprintln!("Timeout on read - setParam {name}");
             std::process::ExitCode::FAILURE
@@ -2265,7 +2265,7 @@ mod retries {
     /// `headless-planner param set` on a vehicle whose list was never downloaded: `RTL_ALT` is read first,
     /// since `setParam` sends only a listed name; the first `PARAM_SET` is lost, the link sends it
     /// again, and the vehicle's echo of the second is what `headless-planner` reports it holds.
-    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:1640-1644, 1748-1770`
+    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:1637-1641, 1745-1767`
     #[test]
     fn a_parameter_is_read_then_written_and_a_lost_set_is_sent_again() {
         let (vehicle_side, gcs_side) = Loopback::pair();
@@ -2305,7 +2305,7 @@ mod retries {
     /// state's `cs.rateX`, `CurrentState`'s 4 Hz attitude and 2 Hz the rest - in
     /// `UpdateCurrentSettings`' order, each twice as `getDatastream` sends it, and at nothing
     /// faster.
-    /// `// C#: ExtLibs/ArduPilot/CurrentState.cs:201-206, 4632-4663; ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:3247-3264`
+    /// `// C#: ExtLibs/ArduPilot/CurrentState.cs:201-206, 4635-4666; ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:3247-3264`
     #[test]
     fn fly_asks_for_the_streams_at_mission_planners_rates() {
         use std::sync::atomic::AtomicUsize;
@@ -2371,7 +2371,7 @@ mod retries {
 
     /// `headless-planner fly`'s arm, whose first `COMMAND_LONG` is lost: sent again with its confirmation
     /// counted up, and accepted.
-    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:2783-2834`
+    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:2780-2831`
     #[test]
     fn a_command_whose_first_send_is_lost_is_sent_again_and_accepted() {
         let (vehicle_side, gcs_side) = Loopback::pair();

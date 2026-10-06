@@ -916,7 +916,7 @@ pub fn servo_count(parameters: &[(String, f64)]) -> usize {
 
 /// `ch1out` to `ch32out`: `SERVO_OUTPUT_RAW` port 0 for the first sixteen, port 1 for the rest,
 /// zero before one has arrived.
-/// `// C#: ExtLibs/ArduPilot/CurrentState.cs:3634-3678`
+/// `// C#: ExtLibs/ArduPilot/CurrentState.cs:3637-3681`
 #[must_use]
 pub fn servo_out(view: &TelemetryView, servo: usize) -> i64 {
     view.state.as_deref().map_or(0, |state| {

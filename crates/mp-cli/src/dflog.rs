@@ -34,7 +34,7 @@
 //!   XML beside it (or to `out`), and prints Mission Planner's report of it.
 //!
 //! Flight modes are named as the application names them, from the firmware the log names.
-//! `// C#: GCSViews/FlightData.cs:1082-1098, 1135-1197, 1311-1385, 1387-1390`
+//! `// C#: GCSViews/FlightData.cs:1084-1100, 1137-1199, 1313-1387, 1389-1392`
 
 #![allow(clippy::print_stdout, clippy::print_stderr)]
 

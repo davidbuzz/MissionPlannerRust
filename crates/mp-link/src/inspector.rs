@@ -23,7 +23,7 @@
 //!
 //! * [`Packet`] and [`Link::on_packet`](crate::Link::on_packet): `MAVLinkInterface`'s
 //!   `OnPacketReceived`, raised for each packet read once the C# has handled it
-//!   (`ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:5367-5369`), and `OnPacketSent`, raised for
+//!   (`ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:5347-5349`), and `OnPacketSent`, raised for
 //!   each packet written (`:1456-1461`, `:1506-1511`). One handler hears both, [`Packet::sent`]
 //!   saying which; it runs on the link thread, as the C#'s runs on its reader's, and ends when
 //!   its [`PacketSubscription`] is dropped - the C#'s `-=`.
@@ -56,7 +56,7 @@ use crate::Shared;
 
 /// One packet, as `MAVLinkMessage` carries it to an `OnPacketReceived` or `OnPacketSent`
 /// handler.
-/// `// C#: ExtLibs/Mavlink/MAVLinkMessage.cs:24-143`
+/// `// C#: ExtLibs/Mavlink/MAVLinkMessage.cs:25-172`
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Packet {
     /// `sysid`.
@@ -70,7 +70,7 @@ pub struct Packet {
     /// `Length`: the whole frame's bytes, header, checksum and signature included.
     pub length: usize,
     /// `rxtime`: `DateTime.UtcNow` when it was read or written, or its recorded time when a
-    /// `.tlog` is played (`MAVLinkInterface.cs:4972, 6647`; `MAVLinkMessage.cs:150-152`).
+    /// `.tlog` is played (`MAVLinkInterface.cs:4948, 6611`; `MAVLinkMessage.cs:179-181`).
     pub rxtime: DateTime,
     /// When it passed, on this machine's clock: what `PacketInspector.Add`'s `DateTime.Now`
     /// measures a rate against.
@@ -97,7 +97,7 @@ impl Packet {
 
     /// A frame the link wrote, read back as `new MAVLinkMessage(packet)` reads it, stamped
     /// `DateTime.UtcNow`; `None` for bytes that are not one whole frame of a known message.
-    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:1460; ExtLibs/Mavlink/MAVLinkMessage.cs:150-152`
+    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:1457; ExtLibs/Mavlink/MAVLinkMessage.cs:179-181`
     #[must_use]
     pub fn written(bytes: &[u8], rxtime: DateTime, at: Instant) -> Option<Self> {
         let (frame, _) = mp_mavlink::parse(bytes, &DIALECT).ok()?;

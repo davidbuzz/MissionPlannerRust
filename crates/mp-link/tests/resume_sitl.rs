@@ -23,7 +23,7 @@
 //! `tests/gui/fly-resumemis.gui` fails at the take-off: the copter, armed in Guided, answers
 //! `MAV_CMD_NAV_TAKEOFF` with FAILED, while the same take-off asked for on its own is accepted
 //! (`commands_sitl.rs`). So the sequence before it is suspect, and these replay it as
-//! `FlightData.cs:1481-1640` and `fly.rs`'s `ResumeMission` do - upload the trimmed mission, set
+//! `FlightData.cs:1483-1642` and `fly.rs`'s `ResumeMission` do - upload the trimmed mission, set
 //! the current item to 1, read the mission back, Guided, arm, take off - leaving out one step at a
 //! time. Ignored by default: they need SITL on tcp:127.0.0.1:5760 and must run one at a time
 //! (`--test-threads=1`), since one vehicle cannot fly two of them.
@@ -130,7 +130,7 @@ fn script_mission() -> Vec<MissionItem> {
 }
 
 /// `fly.rs`'s `resume_items`: from the resume point on, and before it only home, take-offs and
-/// the "do" commands. `// C#: GCSViews/FlightData.cs:1508-1541`
+/// the "do" commands. `// C#: GCSViews/FlightData.cs:1510-1543`
 fn trimmed(items: &[MissionItem], resume_at: u16) -> Vec<MissionItem> {
     items
         .iter()
@@ -174,7 +174,7 @@ fn wait(
 }
 
 /// Guided until in it, arm until armed, a second between asks, as the C#'s two loops.
-/// `// C#: GCSViews/FlightData.cs:1555-1584`
+/// `// C#: GCSViews/FlightData.cs:1557-1586`
 fn guided_and_armed(link: &Link, id: VehicleId) {
     let handle = link.vehicle(id).expect("the vehicle's state");
     let deadline = Instant::now() + Duration::from_secs(30);
@@ -307,7 +307,7 @@ fn the_resume_sequence_without_the_upload_takes_off() {
 /// (`Mode::do_user_takeoff_U_m`: "can't takeoff again!"), and a climb to 8 m takes more than a
 /// second, so the repeat is refused. The tests above send the take-off once, and it was
 /// accepted every time; this sends it as the C# does.
-/// `// C#: GCSViews/FlightData.cs:1587-1605`
+/// `// C#: GCSViews/FlightData.cs:1589-1607`
 #[test]
 #[ignore = "requires ArduPilot SITL listening on tcp:127.0.0.1:5760"]
 fn the_csharps_repeated_takeoff_is_refused_once_the_vehicle_is_climbing() {

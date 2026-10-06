@@ -139,7 +139,7 @@ const REBOOT_TITLE: &str = "Reboot";
 /// this message when it returns true - so a reboot that went out is reported as failed, every
 /// time. That is a bug in the C#, not a behaviour: the text asks for a manual reboot of hardware
 /// that is already rebooting. Here it is shown only when nothing could be sent.
-/// `// C#: GCSViews/ConfigurationView/ConfigHWCompass2.cs:166-169; ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:2553-2586`
+/// `// C#: GCSViews/ConfigurationView/ConfigHWCompass2.cs:166-169; ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:2550-2583`
 pub const REBOOT_FAILED: &str = "Reboot failed. please manually reboot the hardware.";
 
 /// `but_reboot_Click`'s question.
@@ -156,7 +156,7 @@ pub const START_FAILED: &str =
     "Failed to start MAG CAL, check the autopilot is still responding.\n";
 
 /// `doCommand`'s `TimeoutException`, as `ex.ToString()` begins.
-/// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:2797`
+/// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:2794`
 pub const COMMAND_TIMEOUT: &str = "System.TimeoutException: Timeout on read - doCommand";
 
 /// Large Vehicle MagCal's `InputBox`: title and prompt.
@@ -1120,7 +1120,7 @@ pub enum Answer {
 impl Answer {
     /// A finished request's outcome in the C#'s terms. A request the link has let go is taken as
     /// having thrown.
-    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:1640-1651, 1765, 2797, 2822-2833`
+    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:1637-1648, 1762, 2794, 2819-2830`
     #[must_use]
     pub const fn of(progress: Progress) -> Option<Self> {
         match progress {
@@ -1286,7 +1286,7 @@ pub struct Ended {
 // ---------------------------------------------------------------------------------------------
 
 /// `MAV_PROTOCOL_CAPABILITY_COMPASS_CALIBRATION`.
-/// `// C#: ExtLibs/Mavlink/Mavlink.cs:7097`
+/// `// C#: ExtLibs/Mavlink/Mavlink.cs:7908`
 const CAPABILITY_COMPASS_CALIBRATION: u32 = 4096;
 
 /// `THRESHOLD_OFS_RED` and `THRESHOLD_OFS_YELLOW`.
@@ -2786,7 +2786,7 @@ impl<H: Copy> Compass<H> {
             }
             // A `false` goes unremarked; a throw leaves the handler. In `prd_DoWork` that is the
             // exception the window shows. `// C#: MagCalib.cs:398-435;
-            // ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:1757-1762;
+            // ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:1754-1759;
             // ExtLibs/Controls/ProgressReporterDialogue.cs:120-133, 215-223`
             Step::Write { param, work, .. } => {
                 self.last_write = Some(Ended {

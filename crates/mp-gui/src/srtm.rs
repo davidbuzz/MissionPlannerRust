@@ -27,7 +27,7 @@
 //! running as the C#'s does, so a tile that is not on disk answers `Invalid` until it has been
 //! fetched - unless the map is cache-only, when it is never fetched. One lookup for the process,
 //! made on first use after MainV2's start-up sweep of the folder.
-//! `// C#: MainV2.cs:737-750; ExtLibs/Utilities/srtm.cs:116, 385`
+//! `// C#: MainV2.cs:739-752; ExtLibs/Utilities/srtm.cs:116, 385`
 
 // This module is internal to the binary; `pub` here documents intent rather than exporting API.
 #![allow(unreachable_pub)]
@@ -110,7 +110,7 @@ fn lookup() -> Option<&'static mp_terrain::Srtm> {
 /// sets from the Planner page's Map Access Mode (`mapCache`) at start-up and whenever the page
 /// changes it, and which `srtm.getAltitude` reads at every lookup to decide whether a missing
 /// tile is queued for download.
-/// `// C#: Program.cs:321-325; GCSViews/ConfigurationView/ConfigPlanner.cs:1161-1167; ExtLibs/Utilities/srtm.cs:385`
+/// `// C#: Program.cs:323-327; GCSViews/ConfigurationView/ConfigPlanner.cs:1162-1168; ExtLibs/Utilities/srtm.cs:385`
 static CACHE_ONLY: AtomicBool = AtomicBool::new(false);
 
 /// Sets the map's access mode as the terrain lookup sees it: `true` for `CacheOnly`, when a tile

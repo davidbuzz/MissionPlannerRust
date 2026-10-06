@@ -8,11 +8,11 @@
 # first property offered - NONE, 0, the default message, ten seconds (WarningsManager.cs:63-76,
 # CustomWarning.cs:47-52). Its field, comparison and number chosen - satcount GT 5 - the rule
 # holds on SITL, whose GPS sees more than five, and its message "WARNING: satcount is <n>" is
-# raised and shown on the HUD as messageHigh (CustomWarning.cs:153-225, MainV2.cs:1037). A second
+# raised and shown on the HUD as messageHigh (CustomWarning.cs:153-225, MainV2.cs:1039). A second
 # rule, alt LT 100, ticked "QuickPanel Coloring" - its message emptied and disabled, its repeat 0
 # and disabled, its colour enabled (WarningControl.cs:301-331) - and given Red, colours the quick
 # view bound to alt, quickView1, red with its number white, as SITL sits on the ground
-# (MainV2.cs:4786-4818). A child added under the first rule has its row under it, further in, its
+# (MainV2.cs:4793-4825). A child added under the first rule has its row under it, further in, its
 # message hidden; its "-" splices it out again (WarningsManager.cs:35-56, WarningControl.cs:
 # 257-299). Save writes warnings.xml into the data directory, read back with its two rules
 # (WarningEngine.cs:45-59). The close box leaves the rules, still checked.

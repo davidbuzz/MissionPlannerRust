@@ -127,7 +127,7 @@ pub const DONE: &str = "Initial Parameters succesfully updated.\nCheck parameter
 MOT_THST_HOVER\n\tSet PSC_ACCZ_I/PSC_D_ACC_I to 2*MOT_THST_HOVER\n\nHappy flying!";
 
 /// `Program.handleException`'s box for `ConvertToDouble`'s exception, which nothing catches.
-/// `// C#: ExtLibs/Utilities/Extensions.cs:599-614; Program.cs:791-793`
+/// `// C#: ExtLibs/Utilities/Extensions.cs:600-615; Program.cs:793-795`
 pub const BAD_NUMBER: &str =
     "An error has occurred\nSystem.Exception: Bad Type System.String\n\nReport this Error???";
 

@@ -3,8 +3,8 @@
 # verticalspeed, DistToHome - and described by GetNameandUnit: the property's [DisplayText] with
 # its unit. A double click on one opens "Display This", the properties to choose from, and
 # checking one binds the view to it and closes the chooser.
-# `GCSViews/FlightData.Designer.cs:615-735, GCSViews/FlightData.cs:2474-2506, 4549-4650,
-# ExtLibs/Controls/QuickView.cs, ExtLibs/ArduPilot/CurrentState.cs:4526-4552`
+# `GCSViews/FlightData.Designer.cs:615-735, GCSViews/FlightData.cs:2484-2516, 4663-4764,
+# ExtLibs/Controls/QuickView.cs, ExtLibs/ArduPilot/CurrentState.cs:4529-4555`
 #
 # Plays the recorded copter flight, so it needs no vehicle. Run from the repository root:
 #   tools/gui-test.sh tests/gui/fly-quick.gui -- file:testdata/mavlink/autotest.tlog

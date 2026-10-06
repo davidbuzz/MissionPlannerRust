@@ -113,7 +113,7 @@ impl Settings {
     /// matches it, so a provider this application does not have is simply not taken). This
     /// file's own choices win once made, and with neither the map is Mission Planner's default,
     /// which `main.rs` applies where the provider is chosen.
-    /// `// C#: ExtLibs/Utilities/Settings.cs:88-125; GCSViews/FlightPlanner.cs:7247-7254`
+    /// `// C#: ExtLibs/Utilities/Settings.cs:88-125; GCSViews/FlightPlanner.cs:7244-7251`
     #[must_use]
     pub fn with_mission_planner_defaults(mut self, config: Option<&mp_settings::Config>) -> Self {
         let Some(config) = config else {
@@ -221,7 +221,7 @@ impl Settings {
     }
 }
 
-/// Where `SaveConfig` was called from. `// C#: MainV2.cs:1107, 1314, 1322, 1846, 2171`
+/// Where `SaveConfig` was called from. `// C#: MainV2.cs:1109, 1316, 1324, 1853, 2178`
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SaveEvent {
     /// The end of `MainV2`'s constructor, "to test we have write access" - and, here, after the
@@ -273,7 +273,7 @@ pub const PUBLISHED: [&str; 59] = [
     "quickView4",
     "quickView5",
     "quickView6",
-    // Set View Count's grid. C#: GCSViews/FlightData.cs:4921-4922
+    // Set View Count's grid. C#: GCSViews/FlightData.cs:5035-5036
     "quickViewRows",
     "quickViewCols",
     "MapType",
@@ -307,7 +307,7 @@ pub const PUBLISHED: [&str; 59] = [
     // User Params' Modify, and the Planner page's questions beyond Notification and Battery
     // Level above.
     // C#: GCSViews/ConfigurationView/ConfigUserDefined.cs:56;
-    // ConfigPlanner.cs:680, 822, 829, 889, 897, 904, 912, 1121
+    // ConfigPlanner.cs:681, 823, 830, 890, 898, 905, 913, 1122
     "InputBoxParamsEnterParamNames",
     "InputBoxMinAltWhataltitudedoyouwanttowarnatrelativetohome",
     "InputBoxArmWhatdoyouwantittosay",
@@ -324,8 +324,8 @@ pub const PUBLISHED: [&str; 59] = [
     // Spin Arm and Spin Min, Large Vehicle MagCal, the transports' questions (on CONNECT and on
     // RTK/GPS Inject) and the base position's name, and the planning screen's Insert WP and
     // Loiter Time.
-    // C#: Controls/fftui.cs:46; Controls/MavFTPUI.cs:518, 693; ConfigMotorTest.cs:354, 382;
-    // ConfigHWCompass2.cs:479; Program.cs:564-566; ExtLibs/Comms/CommsTCPSerial.cs:125-128,
+    // C#: Controls/fftui.cs:46; Controls/MavFTPUI.cs:547, 722; ConfigMotorTest.cs:354, 382;
+    // ConfigHWCompass2.cs:479; Program.cs:566-568; ExtLibs/Comms/CommsTCPSerial.cs:125-128,
     // CommsUdpSerial.cs:114, CommsUDPSerialConnect.cs:142-145, CommsWebSocket.cs:105,
     // CommsNTRIP.cs:108;
     // ConfigSerialInjectGPS.cs:1269; GCSViews/FlightPlanner.cs:4073, 4779
@@ -346,19 +346,19 @@ pub const PUBLISHED: [&str; 59] = [
 ];
 
 /// `CMB_baudrate`'s ninth item, which `MainV2` selects before anything is loaded.
-/// `// C#: MainV2.cs:771-775; Controls/ConnectionControl.resx (cmb_Baud.Items8)`
+/// `// C#: MainV2.cs:773-777; Controls/ConnectionControl.resx (cmb_Baud.Items8)`
 const DEFAULT_BAUD: &str = "115200";
 
 /// The key a quick view's choice is saved under: its `Name`, `quickView<n>` - `quickView1` to
 /// `quickView6` from the Designer, and on from 7 for the views Set View Count adds.
-/// `// C#: GCSViews/FlightData.cs:465, 2482, 4964`
+/// `// C#: GCSViews/FlightData.cs:467, 2492, 5078`
 fn quick_view_key(name: usize) -> String {
     format!("quickView{name}")
 }
 
 /// `FlightData.Activate` restores the views named `quickView1` to `quickView29`: its loop runs
 /// `f` from 1 while `f < 30`, so a thirtieth view's choice is saved and never read back.
-/// `// C#: GCSViews/FlightData.cs:462`
+/// `// C#: GCSViews/FlightData.cs:464`
 const QUICK_VIEWS_RESTORED: std::ops::Range<usize> = 1..30;
 
 /// Mission Planner's `config.xml`, as `Settings.Instance` holds it.
@@ -407,7 +407,7 @@ impl Persisted {
     /// cannot be read is an empty dictionary too, and is remembered as such: the C# copies it to
     /// `config.xml<time>.failed` and saves over it, but this parser is not the C#'s, and a file
     /// Mission Planner reads that this one refuses is not to be replaced by an empty one.
-    /// `// C#: ExtLibs/Utilities/Settings.cs:22-36, 427-505; MainV2.cs:782-808`
+    /// `// C#: ExtLibs/Utilities/Settings.cs:22-36, 427-505; MainV2.cs:784-810`
     #[must_use]
     pub fn at(path: Option<PathBuf>) -> Self {
         let (config, unreadable) = match path.as_deref().map(read_config) {
@@ -462,7 +462,7 @@ impl Persisted {
     }
 
     /// `CMB_baudrate_TextChanged`'s number, kept for the port and written by the next save.
-    /// `// C#: MainV2.cs:4333-4350, 2219-2237`
+    /// `// C#: MainV2.cs:4340-4357, 2226-2244`
     pub fn set_baud(&mut self, baud: &str) {
         baud.clone_into(&mut self.baud);
     }
@@ -522,7 +522,7 @@ impl Persisted {
     /// `int.Parse` throws in the C# on a saved count that is not a whole number, or on
     /// `quickViewCols` missing beside `quickViewRows`; here the grid is left as the Designer
     /// makes it and the views are restored into that.
-    /// `// C#: GCSViews/FlightData.cs:457-494, 4914-4923`
+    /// `// C#: GCSViews/FlightData.cs:459-496, 5028-5037`
     pub fn restore_quick_views(&mut self, views: &mut QuickViews) {
         if let Some(rows) = self.config.get("quickViewRows") {
             let rows = rows.to_owned();
@@ -553,7 +553,7 @@ impl Persisted {
     /// the view's name; and `setQuickViewRowsCols`'s `quickViewRows` and `quickViewCols`. Called
     /// every frame; a choice not yet written, or a grid that differs from the one last seen, was
     /// made since.
-    /// `// C#: GCSViews/FlightData.cs:2475-2482, 4921-4922`
+    /// `// C#: GCSViews/FlightData.cs:2485-2492, 5035-5036`
     pub fn observe_quick_views(&mut self, views: &QuickViews) {
         let chosen = views.chosen();
         for (name, field) in chosen.iter().skip(self.quick_written.min(chosen.len())) {
@@ -589,7 +589,7 @@ impl Persisted {
     /// `FlightData.Deactivate`: where the flight map is and its zoom, as `maplast_lat`,
     /// `maplast_lng` and `maplast_zoom`, for the next start. A map that has not been shown yet
     /// has no position, and the keys are left as they were.
-    /// `// C#: GCSViews/FlightData.cs:662-664`
+    /// `// C#: GCSViews/FlightData.cs:664-666`
     pub fn flight_data_deactivated(&mut self, position_and_zoom: Option<(LatLon, f64)>) {
         if let Some((at, zoom)) = position_and_zoom {
             self.config.set("maplast_lat", at.latitude().to_string());
@@ -605,7 +605,7 @@ impl Persisted {
     /// under `Zoomlevel.Minimum`, 1 - what a missing or unreadable one reads as - throws at
     /// `Zoomlevel.Value` into the `catch`, after the position is set, so the place stands at the
     /// zoom the map had: the start-up's 3.
-    /// `// C#: GCSViews/FlightData.cs:524-548; FlightData.Designer.cs:2703-2715; ExtLibs/Utilities/Settings.cs:234-253`
+    /// `// C#: GCSViews/FlightData.cs:526-550; FlightData.Designer.cs:2703-2715; ExtLibs/Utilities/Settings.cs:234-253`
     #[must_use]
     pub fn flight_map_start(&self) -> Option<(LatLon, f64)> {
         self.get("maplast_lat").filter(|s| !s.is_empty())?;
@@ -646,8 +646,8 @@ impl Persisted {
     /// link's own baud rate is then the box's. A TCP link's `Open` saves its host and port, and a
     /// UDP link's its port, through `CommsBase.Settings`, which writes to the dictionary. A log
     /// played back and a TCP listener are not ports the box has, and change nothing.
-    /// `// C#: MainV2.cs:1962-1984, 1841-1847; ExtLibs/Comms/CommsTCPSerial.cs:138-143;
-    /// ExtLibs/Comms/CommsUdpSerial.cs:116-118; Program.cs:661-667`
+    /// `// C#: MainV2.cs:1969-1991, 1848-1854; ExtLibs/Comms/CommsTCPSerial.cs:138-143;
+    /// ExtLibs/Comms/CommsUdpSerial.cs:116-118; Program.cs:663-669`
     pub fn link_opened(&mut self, url: &str) {
         let Ok(link) = url.parse::<mp_transport::LinkUrl>() else {
             return;
@@ -685,7 +685,7 @@ impl Persisted {
     }
 
     /// `CMB_serialport_SelectedIndexChanged`: the port chosen, and the baud box restored.
-    /// `// C#: MainV2.cs:1962-1984`
+    /// `// C#: MainV2.cs:1969-1991`
     fn select_port_inner(&mut self, port: &str) {
         port.clone_into(&mut self.comport);
         if let Some(saved) = self.config.get(&format!("{}_BAUD", port.replace(' ', "_"))) {
@@ -696,7 +696,7 @@ impl Persisted {
     /// `MainV2.SaveConfig`: the connection box's port and baud rate put back, then the whole file
     /// written. (`APMFirmware`, the vehicle's firmware, is put back with them in the C#; this
     /// application holds no `cs.firmware` to write, so the file keeps what it has.)
-    /// `// C#: MainV2.cs:2219-2237; ExtLibs/Utilities/Settings.cs:88-92, 111-125, 507-550`
+    /// `// C#: MainV2.cs:2226-2244; ExtLibs/Utilities/Settings.cs:88-92, 111-125, 507-550`
     pub fn save_config(&mut self, event: SaveEvent) -> Result<(), String> {
         self.config.set("comport", self.comport.clone());
         self.config
@@ -791,7 +791,7 @@ fn to_upper(text: &str) -> String {
 /// `DateTime.Now.ToShortDateString()`, which `BGGetKIndex` compares `kindexdate` with and writes
 /// it as. **Divergence:** the C#'s is the current culture's short date; this is always en-US's,
 /// `M/d/yyyy`, what an English Mission Planner writes.
-/// `// C#: MainV2.cs:3945, 3955`
+/// `// C#: MainV2.cs:3952, 3962`
 #[must_use]
 pub fn short_date_today() -> String {
     chrono::Local::now().format("%-m/%-d/%Y").to_string()
@@ -839,7 +839,7 @@ pub fn parse_kindex(text: &str) -> Option<i32> {
 /// request is: the bulletin fetched and read, and `KIndex_KIndex` given the K-index, or -1 when
 /// the fetch or the reading fails - which sets `CurrentState.KIndexstatic` at once and leaves
 /// `kindex` for [`Persisted::kindex_downloaded`] to write.
-/// `// C#: ExtLibs/Utilities/KIndex.cs:23-71; MainV2.cs:3952-3953, 3977-3981`
+/// `// C#: ExtLibs/Utilities/KIndex.cs:23-71; MainV2.cs:3959-3960, 3984-3988`
 pub fn download_kindex(fetch: impl mp_firmware::manifest::Fetch + Send + 'static) {
     let spawned = wasm_thread::Builder::new()
         .name("kindex".to_owned())
@@ -863,7 +863,7 @@ pub fn download_kindex(fetch: impl mp_firmware::manifest::Fetch + Send + 'static
 impl Persisted {
     /// The telemetry rates' saved defaults as `MainV2`'s start-up sets `CurrentState.rate*backup`:
     /// each `CMB_rate*` key the Planner page wrote, `GetInt32` of it, and the static's own value
-    /// for a key that is not there. `// C#: MainV2.cs:981-991`
+    /// for a key that is not there. `// C#: MainV2.cs:983-993`
     #[must_use]
     pub fn rate_backups(&self) -> StreamRates {
         self.rate_backups_over(StreamRates::backups())
@@ -887,7 +887,7 @@ impl Persisted {
     }
 
     /// The names `MainV2`'s start-up gives the custom fields: `customfield0` to `customfield19`,
-    /// each in capitals, in that order. `// C#: MainV2.cs:993-1000`
+    /// each in capitals, in that order. `// C#: MainV2.cs:995-1002`
     #[must_use]
     pub fn custom_field_names(&self) -> Vec<(usize, String)> {
         (0..mp_vehicle::statics::CUSTOM_FIELDS)
@@ -901,7 +901,7 @@ impl Persisted {
     /// `BGGetKIndex`, which `MainV2`'s start-up queues: when `kindexdate` is `today`,
     /// `KIndex_KIndex` of the saved `kindex` - set, and written back - and false; otherwise
     /// `kindexdate` becomes `today` and true, for the caller to [`download_kindex`].
-    /// `// C#: MainV2.cs:3306, 3940-3962, 3977-3981`
+    /// `// C#: MainV2.cs:3313, 3947-3969, 3984-3988`
     pub fn kindex_at_start(&mut self, today: &str) -> bool {
         if self.get("kindexdate") == Some(today) {
             let kindex = get_int32(self.get("kindex"));
@@ -914,7 +914,7 @@ impl Persisted {
     }
 
     /// `KIndex_KIndex`'s `Settings.Instance["kindex"] = ...` for a download that has finished
-    /// since the last frame. `// C#: MainV2.cs:3977-3981`
+    /// since the last frame. `// C#: MainV2.cs:3984-3988`
     pub fn kindex_downloaded(&mut self) {
         let downloaded = KINDEX_DOWNLOADED
             .os_lock()
@@ -1695,7 +1695,7 @@ mod tests {
 
     #[test]
     fn the_rate_defaults_are_the_planner_keys_that_are_there() {
-        // C#: MainV2.cs:981-991
+        // C#: MainV2.cs:983-993
         let base = StreamRates {
             attitude: 4,
             position: 2,
@@ -1722,7 +1722,7 @@ mod tests {
 
     #[test]
     fn the_custom_fields_are_named_in_capitals_from_their_keys() {
-        // C#: MainV2.cs:993-1000
+        // C#: MainV2.cs:995-1002
         let mut persisted = Persisted::at(None);
         persisted.set("customfield0", "rpm1");
         persisted.set("customfield19", "Stra\u{df}e");
@@ -1770,7 +1770,7 @@ mod tests {
     /// The only test in this binary that touches the K-index.
     #[test]
     fn the_k_index_is_todays_saved_one_or_downloaded() {
-        // C#: MainV2.cs:3940-3962, 3977-3981
+        // C#: MainV2.cs:3947-3969, 3984-3988
         struct Bulletin(Result<Vec<u8>, String>);
         impl mp_firmware::manifest::Fetch for Bulletin {
             fn get(&self, url: &str) -> Result<Vec<u8>, String> {
@@ -1824,7 +1824,7 @@ mod tests {
 
     /// `FlightData.Activate`: the flight map opens where `Deactivate` left it, at zoom 3 when the
     /// latitude rounds to zero, and nowhere with the key empty or unreadable.
-    /// `// C#: GCSViews/FlightData.cs:524-548, 662-664`
+    /// `// C#: GCSViews/FlightData.cs:526-550, 664-666`
     #[test]
     fn the_flight_map_starts_where_it_was_last_left() {
         let scratch = Scratch::new("maplast");

@@ -38,7 +38,7 @@
 //!   control flows into the cell the number would have taken;
 //! * an answer with no names in it leaves `Options` empty and throws from `Aggregate` before the
 //!   setting is saved - an `InvalidOperationException`, which `Program.handleException` drops
-//!   (`Program.cs:765-770`) - so the page keeps its rows until it is next activated, and Modify
+//!   (`Program.cs:767-772`) - so the page keeps its rows until it is next activated, and Modify
 //!   then throws before its `InputBox` opens, as the C#'s does, until the screen is loaded again;
 //! * the setting is joined with `Aggregate((a, b) => a.Trim() + "," + b.Trim())`, which leaves a
 //!   lone name untrimmed; the names themselves are not trimmed, so " RC7_OPTION" is not found.
@@ -383,7 +383,7 @@ impl<H: Copy> UserParams<H> {
 
     /// Modify clicked: the `InputBox`, holding the names one to a line. With no names,
     /// `Aggregate` throws first, and the exception is dropped.
-    /// `// C#: GCSViews/ConfigurationView/ConfigUserDefined.cs:53-56; Program.cs:765-770`
+    /// `// C#: GCSViews/ConfigurationView/ConfigUserDefined.cs:53-56; Program.cs:767-772`
     pub fn modify(&mut self) {
         self.dropdown = None;
         let Some((first, rest)) = self.options.split_first() else {

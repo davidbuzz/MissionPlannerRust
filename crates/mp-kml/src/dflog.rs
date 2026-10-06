@@ -23,7 +23,7 @@
 //! beside it a `.gpx` track, the mission and rally points as waypoint files, the parameters as a
 //! `.param` file and the raw GNSS observations as RINEX.
 //!
-//! `but_dflogtokml_Click` (`GCSViews/FlightData.cs:1135-1197`) feeds every line of the log to
+//! `but_dflogtokml_Click` (`GCSViews/FlightData.cs:1137-1199`) feeds every line of the log to
 //! `LogOutput.processLine` - a `.bin` through `DFLogBuffer` ([`mp_log::dflogbuffer`]), a `.log`
 //! line by line - and then calls `writeKML(<log>.kml)`. Everything is decided by the text of the
 //! lines, split on `,` and `:`, and by the formats read from the `FMT` lines among them, so this
@@ -48,7 +48,7 @@
 //! indenting `XmlWriter` do. The `.kmz` goes to the log's directory with its file name in lower
 //! case; the C# lower-cases the whole path (`LogOutput.cs:1105`), which on Windows is the same
 //! place and on Linux fails for any directory with a capital in it.
-//! `// C#: ExtLibs/Utilities/LogOutput.cs; GCSViews/FlightData.cs:1135-1197`
+//! `// C#: ExtLibs/Utilities/LogOutput.cs; GCSViews/FlightData.cs:1137-1199`
 
 use std::collections::HashMap;
 use std::fmt::Write as _;
@@ -73,7 +73,7 @@ const PLANE_MODEL_NAME: &str = "block_plane_0.dae";
 const SEGMENTS: usize = 200;
 
 /// `(int)MAVLink.MAV_CMD.LAST`: the highest command number that is a place.
-/// `// C#: ExtLibs/Mavlink/Mavlink.cs:921`
+/// `// C#: ExtLibs/Mavlink/Mavlink.cs:924`
 const MAV_CMD_LAST: i32 = 95;
 
 /// `DateTime.MinValue` in Unix milliseconds: what a `GPS` line with no time gives.
@@ -1317,7 +1317,7 @@ pub enum DflogKmlError {
 
 /// Every line of a log as `but_dflogtokml_Click` feeds them to `processLine`: a `.bin` (by its
 /// name) through `DFLogBuffer`, anything else as text, `StreamReader.ReadLine` by
-/// `StreamReader.ReadLine`. `// C#: GCSViews/FlightData.cs:1154-1186`
+/// `StreamReader.ReadLine`. `// C#: GCSViews/FlightData.cs:1156-1188`
 pub fn process_log(log: &Path, data: &[u8], mode_name: ModeName<'_>, output: &mut LogOutput) {
     if log.to_string_lossy().to_lowercase().ends_with(".bin") {
         let mut buffer = DfLogBuffer::new(data, mode_name);
@@ -1370,7 +1370,7 @@ fn dos_now(zone: Zone<'_>) -> zip::DosTime {
 ///
 /// The log cannot be read or a file cannot be written; or [`DflogKmlError::Mission`] when the
 /// C# would throw out of `writeKML`, after the side files.
-/// `// C#: GCSViews/FlightData.cs:1135-1197; ExtLibs/Utilities/LogOutput.cs:776-1163`
+/// `// C#: GCSViews/FlightData.cs:1137-1199; ExtLibs/Utilities/LogOutput.cs:776-1163`
 pub fn dflog_to_kml(
     log: &Path,
     mode_name: ModeName<'_>,

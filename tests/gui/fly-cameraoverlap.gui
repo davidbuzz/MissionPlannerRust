@@ -1,5 +1,5 @@
 # Camera Overlap and the photo markers: the flight map's menu entry, CheckOnClick, over the
-# CAMERA_FEEDBACK shots the link keeps (MAV.camerapoints) - GCSViews/FlightData.cs:4001-4082 and
+# CAMERA_FEEDBACK shots the link keeps (MAV.camerapoints) - GCSViews/FlightData.cs:4115-4196 and
 # 4457-4471, ExtLibs/Maps/GMapMarkerPhoto.cs and GMapMarkerOverlapCount.cs, ported in
 # crates/mp-gui/src/camera_photos.rs, mapview.rs and fly.rs over mp-link's camera_points.rs and
 # mp-georef's ImageProjection.calc.

@@ -2,13 +2,13 @@
 # machine's GStreamer runtime into the HUD's background.
 #
 # The claim: Set GStreamer Source asks "GStreamer url", "Enter the source pipeline ...", starting
-# at the C#'s test pipeline when gstreamer_url is not saved (FlightData.cs:4813-4821). OK saves
+# at the C#'s test pipeline when gstreamer_url is not saved (FlightData.cs:4927-4935). OK saves
 # the pipeline as gstreamer_url, finds the runtime (LookForGstreamer, GStreamer.cs:1417-1485) and
 # plays it (hudGStreamer.Start, GStreamer.cs:1183-1349): here gst-launch-1.0 runs the pipeline
 # with its `appsink name=outsink` turned into PNG frames on its output, and each frame is the
-# HUD's picture as MainV2's OnNewImage makes it (MainV2.cs:3421-3440). `videotestsrc` with no
+# HUD's picture as MainV2's OnNewImage makes it (MainV2.cs:3428-3447). `videotestsrc` with no
 # caps settles on 320 x 240. GStreamer Stop ends it and the picture goes (GStreamer.cs:1491-1495,
-# 1341-1343). Asked again, the box holds the saved pipeline; Cancel stops (FlightData.cs:4846-4849).
+# 1341-1343). Asked again, the box holds the saved pipeline; Cancel stops (FlightData.cs:4960-4963).
 #
 # Needs the GStreamer runtime (gst-launch-1.0 on the PATH, with the base and good plugins); no
 # vehicle. The unit tests in crates/mp-video/src/gstreamer.rs run the same pipeline headless.

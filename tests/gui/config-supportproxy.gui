@@ -1,6 +1,6 @@
 # SETUP's Advanced page's Support Proxy, ported from Controls/SerialSupportProxy.cs
 # (`new SerialSupportProxy().Show()`, GCSViews/ConfigurationView/ConfigAdvanced.cs:124-127), and
-# the link's mirror it starts (MAVLinkInterface.cs:5463-5494, crates/mp-link/src/mirror.rs).
+# the link's mirror it starts (MAVLinkInterface.cs:5443-5474, crates/mp-link/src/mirror.rs).
 #
 # The claims: with nothing kept, the window opens with UDP ticked, support.ardupilot.org and 1,
 # the number having the keyboard with its text selected, so the Support ID typed replaces it

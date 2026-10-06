@@ -104,7 +104,7 @@ impl VehicleRegistry {
     ///
     /// A vehicle seen for the first time starts counting seconds from this frame's time, as the
     /// C#'s `lastsecondcounter` starts at `DateTime.Now` when the state is made.
-    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:4721, 6649;
+    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:4710, 6613;
     /// ExtLibs/ArduPilot/CurrentState.cs:128`
     pub fn apply_at(
         &mut self,
@@ -159,7 +159,7 @@ impl VehicleRegistry {
     }
 
     /// `UpdateCurrentSettings` on every vehicle, as the C# does after each read from the link
-    /// (`MainV2.cs:3058-3069`) and after each packet of a log (`Log/MavlinkLog.cs:141-144`); see
+    /// (`MainV2.cs:3065-3076`) and after each packet of a log (`Log/MavlinkLog.cs:141-144`); see
     /// [`VehicleState::update_current_settings`] for `link_closed`.
     pub fn update_current_settings(&mut self, link_closed: bool) {
         for publisher in self.vehicles.values_mut() {

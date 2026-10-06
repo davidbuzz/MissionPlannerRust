@@ -473,7 +473,7 @@ pub enum Outcome {
 /// `GetEnumeratorType(types)`'s wanted instances: each name, and for a name ending in a digit
 /// the name without it and the instance one less (`ACC1` asks for `ACC` instance 0 as well).
 /// An empty instance is every instance.
-/// `// C#: ExtLibs/Utilities/DFLogBuffer.cs:700-733`
+/// `// C#: ExtLibs/Utilities/DFLogBuffer.cs:755-788`
 #[must_use]
 pub fn wanted(types: &[&str]) -> BTreeMap<String, Vec<String>> {
     let mut instances: BTreeMap<String, Vec<String>> = BTreeMap::new();
@@ -512,7 +512,7 @@ fn value_text(value: &Value) -> String {
 
 /// The records `GetEnumeratorType(types)` gives, in log order, each with its `instance`: the
 /// value of the field its `FMTU` marks, or `""` for a message with none.
-/// `// C#: ExtLibs/Utilities/DFLogBuffer.cs:700-770; ExtLibs/Utilities/DFLog.cs:53-77`
+/// `// C#: ExtLibs/Utilities/DFLogBuffer.cs:755-825; ExtLibs/Utilities/DFLog.cs:53-77`
 pub fn records(log: &LogFile, types: &[&str]) -> Vec<(LogMessage, String)> {
     let wanted = wanted(types);
     let labels = log.instance_fields();

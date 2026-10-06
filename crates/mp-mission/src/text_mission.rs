@@ -107,7 +107,7 @@ pub fn path_points(segments: &[Segment]) -> Vec<(f64, f64)> {
 /// order. GDI+'s rotation is about the origin, clockwise on the screen for a positive angle
 /// (`x' = x cos - y sin`, `y' = x sin + y cos` with y down); the path's y is then negated, so
 /// text reads upright with north up.
-/// `// C#: GCSViews/FlightPlanner.cs:6857-6871`
+/// `// C#: GCSViews/FlightPlanner.cs:6854-6868`
 #[must_use]
 pub fn place(
     points: &[(f64, f64)],

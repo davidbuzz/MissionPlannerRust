@@ -4,7 +4,7 @@
 # The Log Downloader's Log_Load asks the vehicle for its list - or, with no vehicle, says "Please
 # connect your drone" in its output. Download Selected Logs with nothing checked says to check
 # some; Download All Logs with nothing listed asks for the list again. The form's close box
-# closes it. `GCSViews/FlightData.cs:1204-1209, 1380-1385, Log/LogDownloadMavLink.cs:51-89,
+# closes it. `GCSViews/FlightData.cs:1206-1211, 1382-1387, Log/LogDownloadMavLink.cs:51-89,
 # 158-197, 428-448, Log/LogStrings.resx`
 #
 # Needs no link: tools/gui-test.sh tests/gui/fly-dataflash.gui

@@ -22,7 +22,7 @@
 //! conversion on the flight screen's DataFlash Logs page.
 //!
 //! `but_bintolog_Click` runs `BinaryLog.ConvertBin` on each file it is given and writes the text
-//! beside it, `<name>.log` (`GCSViews/FlightData.cs:1082-1098`). "Create KML + gpx", "Create
+//! beside it, `<name>.log` (`GCSViews/FlightData.cs:1084-1100`). "Create KML + gpx", "Create
 //! Matlab file" and the log browser read the same messages through `DFLogBuffer`, which is this
 //! reader driven by an index (see [`crate::dflogbuffer`]). So this is a port of `BinaryLog.cs` as
 //! it is, quirks included, and not the tidier [`crate::dataflash`] reader:
@@ -40,7 +40,7 @@
 //! The text is one line per message, fields joined by `", "`, each ended by `"\r\n"` on every
 //! platform, numbers formatted as .NET Framework formats them ([`crate::netfmt`]). A flight mode
 //! (`M`) is named through `BinaryLog.onFlightMode`, which the application wires to the firmware's
-//! mode table (`MainV2.cs:3394-3418`); it is the `mode_name` argument here, asked only once the log
+//! mode table (`MainV2.cs:3401-3425`); it is the `mode_name` argument here, asked only once the log
 //! has named its firmware, and a mode it does not name is written as its number.
 //!
 //! `tests/convert.rs` holds [`convert_bin`] to Mission Planner's own output, byte for byte, on both
@@ -77,7 +77,7 @@ pub fn no_mode_names(_: Firmware, _: u8) -> Option<String> {
 /// (`FLTMODE1`, `FLTMODE1`, `MODE1` in `ParameterMetaDataBackup.xml`, which `mp-vehicle`'s table
 /// is generated from), a plane has `16: INITIALISING` after them, and a tracker has a fixed list.
 /// This is what the DataFlash Logs page passes as `mode_name`.
-/// `// C#: MainV2.cs:3394-3418; ExtLibs/ArduPilot/Common.cs:88-183`
+/// `// C#: MainV2.cs:3401-3425; ExtLibs/ArduPilot/Common.cs:88-183`
 #[must_use]
 pub fn flight_mode_name(firmware: Firmware, mode: u8) -> Option<String> {
     use mp_vehicle::VehicleFamily;
@@ -654,7 +654,7 @@ fn read_body(data: &[u8], pos: &mut usize, count: usize) -> Vec<u8> {
 ///
 /// `mode_name` names a flight mode for the firmware the log has named so far - the application's
 /// `BinaryLog.onFlightMode` - and [`no_mode_names`] leaves every mode a number.
-/// `// C#: ExtLibs/Utilities/BinaryLog.cs:89-119; GCSViews/FlightData.cs:1082-1098`
+/// `// C#: ExtLibs/Utilities/BinaryLog.cs:89-119; GCSViews/FlightData.cs:1084-1100`
 #[must_use]
 pub fn convert_bin(data: &[u8], mode_name: ModeName<'_>) -> Vec<u8> {
     let mut log = BinaryLog::new();
@@ -671,7 +671,7 @@ pub fn convert_bin(data: &[u8], mode_name: ModeName<'_>) -> Vec<u8> {
 }
 
 /// Where "Convert .Bin to .Log" writes a log's text: beside it, its extension replaced by `.log`.
-/// `// C#: GCSViews/FlightData.cs:1093-1094`
+/// `// C#: GCSViews/FlightData.cs:1095-1096`
 #[must_use]
 pub fn log_path_for(bin: &Path) -> PathBuf {
     bin.with_extension("log")
@@ -683,7 +683,7 @@ pub fn log_path_for(bin: &Path) -> PathBuf {
 /// # Errors
 ///
 /// The file cannot be read or the text cannot be written.
-/// `// C#: GCSViews/FlightData.cs:1082-1098`
+/// `// C#: GCSViews/FlightData.cs:1084-1100`
 pub fn convert_bin_file(
     input: &Path,
     output: &Path,

@@ -31,7 +31,7 @@
 //! Windows runner reads `\r\n` as one byte and adds one for each line.
 //!
 //! `read_binary` is not ported: Mission Planner always converts a `.bin` first, so the runner is
-//! never given one (`GCSViews/FlightData.cs:1319-1336`).
+//! never given one (`GCSViews/FlightData.cs:1321-1338`).
 //! `// LogAnalyzer/py2exe/DataflashLog.py; VehicleType.py`
 
 use std::collections::HashMap;

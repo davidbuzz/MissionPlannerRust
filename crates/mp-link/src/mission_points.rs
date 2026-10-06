@@ -21,7 +21,7 @@
 //! `MAVState.wps` and `MAVState.rallypoints`: each vehicle's mission and rally points as the
 //! traffic on the link has shown them - "a snapshot of what is loaded on the ap atm. - derived
 //! from the stream" (`MAVState.cs:310-315`). The flight screen draws the first as its mission
-//! overlay and the second as its rally markers (`FlightData.cs:3810-3843, 3898-3905`), and counts
+//! overlay and the second as its rally markers (`FlightData.cs:3924-3957, 4012-4019`), and counts
 //! the first for its Set WP list (`:2571-2576`).
 //!
 //! Filled as `fencepoints` is (see [`crate::fence_points`]), from the same three places:
@@ -30,7 +30,7 @@
 //!   vehicle's list on a `MISSION_COUNT` naming it, files every `MISSION_ITEM` and
 //!   `MISSION_ITEM_INT` that is not a guided target (`current` 2, which is `GuidedMode`'s) under
 //!   the list its `mission_type` names, and turns the old protocol's `RALLY_POINT` into an item of
-//!   the rally list (`MAVLinkInterface.cs:5625-5698, 5718-5731`). A download - this link's or
+//!   the rally list (`MAVLinkInterface.cs:5625-5698, 5691-5699`). A download - this link's or
 //!   another ground station's - fills a list that way, and so does a recording;
 //! * this link's own uploads: `setWPTotalAsync` clears the list when the vehicle asks for the
 //!   first item, and `setWPAsync` files each item it sent once the vehicle asks for the next with
@@ -172,7 +172,7 @@ impl MissionPoints {
     /// A message addressed to this ground station (`gcs_sysid`) is about its sender; any other is
     /// about the vehicle it is addressed to, which is how a recording's own uploads land on the
     /// vehicle.
-    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:5625-5698, 5718-5731`
+    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:5625-5698, 5691-5699`
     pub fn observe(&mut self, sysid: u8, compid: u8, gcs_sysid: u8, message: &MavMessage) {
         let about = |target_system: u8, target_component: u8| {
             if target_system == gcs_sysid {
@@ -182,11 +182,11 @@ impl MissionPoints {
             }
         };
         match message {
-            // C#: MAVLinkInterface.cs:5627-5644, the list the count names started again.
+            // C#: MAVLinkInterface.cs:5615-5627, the list the count names started again.
             MavMessage::MissionCount(m) => {
                 self.clear(about(m.target_system, m.target_component), m.mission_type);
             }
-            // C#: MAVLinkInterface.cs:5645-5670, `(Locationwp) wp` from the float item; a guided
+            // C#: MAVLinkInterface.cs:5628-5648, `(Locationwp) wp` from the float item; a guided
             // target (current 2) is `GuidedMode`'s, not a list's.
             MavMessage::MissionItem(m) if m.current != 2 => {
                 self.store(
@@ -196,7 +196,7 @@ impl MissionPoints {
                     from_float(m),
                 );
             }
-            // C#: MAVLinkInterface.cs:5671-5698, filed as it came.
+            // C#: MAVLinkInterface.cs:5649-5671, filed as it came.
             MavMessage::MissionItemInt(m) if m.current != 2 => {
                 self.store(
                     about(m.target_system, m.target_component),
@@ -205,7 +205,7 @@ impl MissionPoints {
                     from_int(m),
                 );
             }
-            // C#: MAVLinkInterface.cs:5718-5731, the old protocol's point as a RALLY_POINT item in
+            // C#: MAVLinkInterface.cs:5691-5699, the old protocol's point as a RALLY_POINT item in
             // GLOBAL_RELATIVE_ALT under its index, its break altitude, land direction and flags
             // not carried.
             MavMessage::RallyPoint(m) => {
@@ -237,7 +237,7 @@ impl MissionPoints {
 
 /// An item this link uploaded, as `setWPAsync` files it: `(Locationwp) req` of the
 /// `mavlink_mission_item_int_t` it sent, read out again.
-/// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:4293-4300, 4331-4339`
+/// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:4293-4300, 4320-4328`
 #[must_use]
 pub fn uploaded(item: &MissionItem) -> MissionItem {
     let wire = item.to_wire();
@@ -276,7 +276,7 @@ pub enum Finish {
 /// `MISSION_ITEM_INT` that is neither a guided target (current 2) nor an altitude change (current
 /// 3): the list it goes to, its sequence number and `(Locationwp) req`. `None` for anything else,
 /// the fence included, which [`crate::fence_points::set_wp_item`] files.
-/// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:4113-4127, 4146-4160, 4196-4206,
+/// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:4104-4118, 4146-4160, 4196-4206,
 /// 4285-4300, 4323-4339`
 #[must_use]
 pub fn set_wp_item(message: &MavMessage, finish: Finish) -> Option<(u8, u16, MissionItem)> {

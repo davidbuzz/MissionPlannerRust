@@ -200,7 +200,7 @@ impl std::fmt::Display for Version {
 
 /// The versioned vehicle name for a `MAV_TYPE`, if that vehicle has versioned documentation.
 ///
-/// `// C#: MainV2.cs:1721` feeds every versioned vehicle at once; the file that is then read is
+/// `// C#: MainV2.cs:1723` feeds every versioned vehicle at once; the file that is then read is
 /// the one for the connected vehicle's firmware, which `Firmwares` maps from `MAV_TYPE`.
 #[must_use]
 pub const fn versioned_vehicle(mav_type: u8) -> Option<&'static str> {

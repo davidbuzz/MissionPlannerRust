@@ -25,7 +25,7 @@
 //! "Two seconds on" is from the heartbeat. The C# waits first for its `Open` to finish
 //! (`_openComplete`), which a link here has no equivalent of: it has no connect sequence that
 //! holds the port.
-//! `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:500-586, ExtLibs/ArduPilot/CurrentState.cs:4654-4655`
+//! `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:500-586, ExtLibs/ArduPilot/CurrentState.cs:4657-4658`
 
 use mp_os::Lock as _;
 use web_time::{Duration, Instant};
@@ -146,7 +146,7 @@ pub(crate) fn information_pending(shared: &Shared, id: VehicleId) -> bool {
 /// Each pass: the components whose two seconds are up started - the camera's `StartID` and its
 /// information asked for, the gimbal manager's `Discover` - and each camera whose information
 /// request has its answer given the rest of `RequestCameraInformationAsync`. What goes out
-/// unwaited is put in `send`. `// C#: MAVLinkInterface.cs:510-531, 571-583; CameraProtocol.cs:224-262`
+/// unwaited is put in `send`. `// C#: MAVLinkInterface.cs:512-533, 573-585; CameraProtocol.cs:224-262`
 pub(crate) fn tick(shared: &Shared, now: Instant, starts: &mut Starts, send: &mut Vec<MavMessage>) {
     let mut due = Vec::new();
     starts.retain(|(id, at)| {
@@ -214,7 +214,7 @@ pub(crate) fn tick(shared: &Shared, now: Instant, starts: &mut Starts, send: &mu
 /// Inside `UpdateCurrentSettings`' stream request: `MAV.Camera?.RequestMessageIntervals(
 /// cs.ratestatus)` - its intervals and its information asked for again - and
 /// `MAV.GimbalManager?.Discover()`, for the vehicle the streams were asked of.
-/// `// C#: ExtLibs/ArduPilot/CurrentState.cs:4654-4655; CameraProtocol.cs:305-369`
+/// `// C#: ExtLibs/ArduPilot/CurrentState.cs:4657-4658; CameraProtocol.cs:305-369`
 pub(crate) fn on_streams(
     shared: &Shared,
     id: VehicleId,

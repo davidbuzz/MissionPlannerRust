@@ -66,7 +66,7 @@ use fluent_bundle::concurrent::FluentBundle;
 use fluent_bundle::{FluentArgs, FluentResource};
 use unic_langid::LanguageIdentifier;
 
-/// The config.xml key the culture is read from. `// C#: L10N.cs:19-25; MainV2.cs:697-700`
+/// The config.xml key the culture is read from. `// C#: L10N.cs:19-25; MainV2.cs:699-702`
 pub const SETTING: &str = "language";
 
 /// The culture the base `.resx` files are written in, and the end of every chain.
@@ -163,7 +163,7 @@ pub fn posix_culture(locale: &str) -> String {
 /// `L10N.GetConfigLang`: the culture config.xml's `language` names, or the system's UI culture
 /// when it names none. An empty value is none: `MainV2` changes the language only for a value
 /// that is not empty, and the screens are in the UI culture.
-/// `// C#: L10N.cs:19-25; MainV2.cs:697-700`
+/// `// C#: L10N.cs:19-25; MainV2.cs:699-702`
 #[must_use]
 pub fn configured(language: Option<&str>) -> String {
     // The C# takes the system's UI culture when `language` is empty (`L10N.cs:19-25`); the
@@ -411,7 +411,7 @@ static CURRENT: OnceLock<Catalog> = OnceLock::new();
 /// Sets the application's culture from config.xml's `language`, once, at start-up, before the
 /// first screen asks for a word. `L10N`'s static constructor, and `MainV2`'s `changelanguage` at
 /// start-up. A second call changes nothing and returns `false`.
-/// `// C#: L10N.cs:12-25; MainV2.cs:697-700`
+/// `// C#: L10N.cs:12-25; MainV2.cs:699-702`
 pub fn init(language: Option<&str>) -> bool {
     let mut set = false;
     let _ = CURRENT.get_or_init(|| {

@@ -218,7 +218,7 @@ impl Default for MarkerDetails {
 
 /// `GMapMarkerBase`'s statics, which `MainV2` reads from the settings and the Planner page's
 /// check boxes set: the bearing lines' length and which of them are drawn.
-/// `// C#: ExtLibs/Maps/GMapMarkerBase.cs:12-17; MainV2.cs:3855-3860`
+/// `// C#: ExtLibs/Maps/GMapMarkerBase.cs:12-17; MainV2.cs:3862-3867`
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct MarkerSettings {
     /// `GMapMarkerBase_length`: 500 pixels.
@@ -249,11 +249,11 @@ impl Default for MarkerSettings {
 }
 
 /// How often Auto Pan looks: `mapupdate.AddSeconds(3) < DateTime.Now`.
-/// `// C#: GCSViews/FlightData.cs:4243`
+/// `// C#: GCSViews/FlightData.cs:4357`
 const AUTO_PAN_EVERY: Duration = Duration::from_secs(3);
 /// How far the vehicle may be from the view's centre, in degrees of latitude or longitude, before
 /// Auto Pan moves it: `Math.Abs(currentloc.Lat - gMapControl1.Position.Lat) > 0.0001`.
-/// `// C#: GCSViews/FlightData.cs:5581-5582`
+/// `// C#: GCSViews/FlightData.cs:5695-5696`
 const AUTO_PAN_MOVED: f64 = 0.0001;
 
 /// A synthetic flight track and the state needed to draw it.
@@ -377,7 +377,7 @@ pub struct MapViewport {
     /// When Auto Pan last looked: Mission Planner's `mapupdate`, three seconds apart.
     panned_at: Option<Instant>,
     /// Where the map starts, from the settings' `maplast_lat`, `maplast_lng` and `maplast_zoom`
-    /// (`FlightData.cs:524-548`): a place and a zoom, made a camera on the first paint, when the
+    /// (`FlightData.cs:526-550`): a place and a zoom, made a camera on the first paint, when the
     /// viewport's width is known. `None` once used or when the settings had none.
     start: Option<(WebMercator, f64)>,
     /// Where the last drag was, in screen pixels.
@@ -631,11 +631,11 @@ impl MapViewport {
     /// longitude of 0, as `FlightData` adds a route point only `if (cs.lat != 0 && cs.lng != 0)`:
     /// a GPS reports 0, 0 until its fix, and the route would otherwise run from the Gulf of
     /// Guinea to the vehicle (the owner saw it on 2026-09-26, the SITL started at Brisbane).
-    /// `// C#: GCSViews/FlightData.cs:3793-3797`
+    /// `// C#: GCSViews/FlightData.cs:3907-3911`
     pub fn observe(&mut self, position: LatLon, heading: Bearing) {
         // No marker at 0,0 either: `addMAVMarker` returns on one, and a marker there anchors
         // the fit to the Gulf of Guinea and zooms the map out to half the world (the owner's
-        // report, 2026-10-03). `// C#: GCSViews/FlightData.cs:962-968`
+        // report, 2026-10-03). `// C#: GCSViews/FlightData.cs:964-970`
         if !is_fixed(position) {
             return;
         }
@@ -646,7 +646,7 @@ impl MapViewport {
 
     /// The shown vehicle has no position worth drawing - none, or one at 0,0 - so its marker
     /// comes off the map, as `addMAVMarker` adds none for it; the flown route stays.
-    /// `// C#: GCSViews/FlightData.cs:962-968`
+    /// `// C#: GCSViews/FlightData.cs:964-970`
     pub fn vehicle_unfixed(&mut self) {
         self.vehicle = None;
     }
@@ -685,7 +685,7 @@ impl MapViewport {
     /// Set every frame, because the two screens that share this map draw different homes: the
     /// planner's is the Home Location boxes (`writeKML`'s `home`), the flight screen's the
     /// vehicle's `cs.HomeLocation` - see `plan::planner_map_home` and `plan::flight_map_home`.
-    /// `// C#: GCSViews/FlightPlanner.cs:1400-1415; GCSViews/FlightData.cs:3808-3845`
+    /// `// C#: GCSViews/FlightPlanner.cs:1400-1415; GCSViews/FlightData.cs:3922-3959`
     pub fn set_home(&mut self, home: Option<LatLon>) {
         // `writeKML` rebuilds every marker, and a new marker is not under the pointer until the
         // pointer moves: a home that moved is no longer the one hovered.
@@ -709,7 +709,7 @@ impl MapViewport {
     ///
     /// Set every frame, as home is, because the two screens that share this map build it with
     /// different radii: the planner's are its WP Radius and Loiter Radius boxes, the flight
-    /// screen's are zero (`FlightData.cs:3830-3843`).
+    /// screen's are zero (`FlightData.cs:3944-3957`).
     pub fn set_overlay(&mut self, overlay: Option<Overlay>) {
         self.overlay_mode = overlay;
     }
@@ -729,7 +729,7 @@ impl MapViewport {
     /// Puts the geofence's return location on the map, or takes it away: the red marker that the
     /// Geo-Fence drop-down's Set Return Location, Load from File and Download leave on
     /// `geofenceoverlay`.
-    /// `// C#: GCSViews/FlightPlanner.cs:6663-6670, 4368-4381, 881-889`
+    /// `// C#: GCSViews/FlightPlanner.cs:6660-6667, 4368-4381, 881-889`
     pub fn set_fence_return(&mut self, position: Option<LatLon>) {
         self.fence_return = position
             .filter(|position| is_fixed(*position))
@@ -738,7 +738,7 @@ impl MapViewport {
 
     /// Whether the flown route is drawn: on the flight screen, whose `route` it is, and not the
     /// planner's map, which has none (`FlightPlanner.cs` draws no track).
-    /// `// C#: GCSViews/FlightData.cs:3771-3797`
+    /// `// C#: GCSViews/FlightData.cs:3885-3911`
     #[must_use]
     pub fn draws_flown_route(&self) -> bool {
         !self.overlay_mode.is_some_and(|overlay| overlay.planner)
@@ -748,7 +748,7 @@ impl MapViewport {
     /// vehicle's next position. (The C# also empties `MAV.camerapoints`, which this map does not
     /// hold.) The flight screen's Actions grid has no Clear Track button yet; this is what it
     /// will call.
-    /// `// C#: GCSViews/FlightData.cs:1101-1107`
+    /// `// C#: GCSViews/FlightData.cs:1103-1109`
     #[allow(dead_code)] // the flight screen's Actions grid has no Clear Track button to call it yet
     pub fn clear_track(&mut self) {
         self.path.clear();
@@ -890,7 +890,7 @@ impl MapViewport {
     }
 
     /// `CHK_autopan.Checked`: ticked, the next update looks at once.
-    /// `// C#: GCSViews/FlightData.cs:1929-1933`
+    /// `// C#: GCSViews/FlightData.cs:1939-1943`
     pub fn set_auto_pan(&mut self, on: bool) {
         self.auto_pan = on;
         self.panned_at = None;
@@ -903,7 +903,7 @@ impl MapViewport {
     ///   or longitude from the view's centre (`updateMapPosition`).
     ///
     /// Only the flight screen calls this: Mission Planner's planning map has no Auto Pan.
-    /// `// C#: GCSViews/FlightData.cs:4242-4253, 5573-5596`
+    /// `// C#: GCSViews/FlightData.cs:4356-4367, 5687-5710`
     pub fn auto_pan(&mut self, now: Instant) {
         let Some(at) = self
             .vehicle
@@ -956,7 +956,7 @@ impl MapViewport {
     /// chosen - the vehicle, once heard, is still followed, as `CHK_autopan` (checked by
     /// default) pans to it - so it does not become a camera. A zoom that is not a number is
     /// the default's.
-    /// `// C#: GCSViews/FlightData.cs:524-548, 4242-4253; FlightData.Designer.cs:2859`
+    /// `// C#: GCSViews/FlightData.cs:526-550, 4356-4367; FlightData.Designer.cs:2859`
     pub fn start_at(&mut self, at: LatLon, zoom: f64) {
         let zoom = if zoom.is_finite() {
             zoom.clamp(1.0, 18.0)
@@ -967,7 +967,7 @@ impl MapViewport {
     }
 
     /// `gMapControl1.Position` and `gMapControl1.Zoom`, for `maplast_*` when the screen is left.
-    /// `// C#: GCSViews/FlightData.cs:662-664`
+    /// `// C#: GCSViews/FlightData.cs:664-666`
     #[must_use]
     pub fn position_and_zoom(&self) -> Option<(LatLon, f64)> {
         Some((self.centre()?, self.zoom_level()?))
@@ -975,7 +975,7 @@ impl MapViewport {
 
     /// The view with nothing to frame and none chosen, for a viewport `w` by `h`: the start
     /// position at its zoom, else (0, 0) at zoom 3, where Mission Planner's map is at start
-    /// (`GCSViews/FlightData.cs:524-534`). The world is 1.0 wide; at zoom `z` it is
+    /// (`GCSViews/FlightData.cs:526-536`). The world is 1.0 wide; at zoom `z` it is
     /// 256 * 2^z pixels, so the viewport spans `w / (256 * 2^z)` of it - what `gmap_zoom`
     /// reads back as `z`.
     fn idle_view(&self, w: f32, h: f32) -> (f64, f64, f64, f64) {
@@ -1072,7 +1072,7 @@ impl MapViewport {
     }
 
     /// `MainMap.ZoomAndCenterMarkers("WPOverlay")`: Zoom to Mission.
-    /// `// C#: GCSViews/FlightPlanner.cs:8383-8386`
+    /// `// C#: GCSViews/FlightPlanner.cs:8380-8383`
     pub fn zoom_and_centre_markers(&mut self) -> bool {
         let points = self.overlay_positions();
         self.zoom_to_fit(&points)
@@ -1662,17 +1662,17 @@ pub const RECT_LIGHT_BLUE: u32 = 0xad_d8_e6;
 /// `Color.Green`, a spline waypoint's rect.
 pub const RECT_GREEN: u32 = 0x00_80_00;
 /// `Color.Red`, the pen `MainMap_OnMarkerEnter` gives the rect under the pointer.
-/// `// C#: GCSViews/FlightPlanner.cs:8072-8074`
+/// `// C#: GCSViews/FlightPlanner.cs:8069-8071`
 pub const RECT_RED: u32 = 0xff_00_00;
 /// `Color.Blue`, the Guided Mode marker's rect.
-/// `// C#: GCSViews/FlightData.cs:4218-4220`
+/// `// C#: GCSViews/FlightData.cs:4332-4334`
 pub const RECT_BLUE: u32 = 0x00_00_ff;
 
 /// The flight screen's Guided Mode marker: `FlightPlanner.addpolygonmarker(this, "Guided Mode",
 /// ...)` onto `routes` while the vehicle is in Guided and has been sent somewhere - a green
 /// `GMarkerGoogle` whose tooltip always shows, and a `GMapMarkerRect` of the saved WP radius in
 /// blue.
-/// `// C#: GCSViews/FlightData.cs:4214-4221; GCSViews/FlightPlanner.cs:1635-1700`
+/// `// C#: GCSViews/FlightData.cs:4328-4335; GCSViews/FlightPlanner.cs:1635-1700`
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct GuidedMarker {
     /// The marker's tag: "Guided Mode", or "Tracker Home" for the planner's tracker marker,
@@ -1848,7 +1848,7 @@ pub struct OverlayMarker {
 /// a red marker with a rect of no radius. Item 0, which the flight screen's list starts with, is
 /// home, and home has its own marker (`mission_items.RemoveAt(0)`). The fence and rally commands
 /// `CreateOverlay` also knows are drawn by their own overlays here.
-/// `// C#: ExtLibs/Maps/WPOverlay.cs:52-250, 385-439; GCSViews/FlightData.cs:3826-3829`
+/// `// C#: ExtLibs/Maps/WPOverlay.cs:52-250, 385-439; GCSViews/FlightData.cs:3940-3943`
 #[must_use]
 pub fn overlay_markers(items: &[MissionItem]) -> Vec<OverlayMarker> {
     use cmd::{
@@ -2058,7 +2058,7 @@ pub fn point_list(
 /// What the screen showing the map hands `WPOverlay.CreateOverlay`, and whether its
 /// `OnMarkerEnter` turns a hovered rect red and selects its row - the planning screen's does; the
 /// flight screen's only notes the marker.
-/// `// C#: GCSViews/FlightPlanner.cs:1431-1434, 8068-8129; GCSViews/FlightData.cs:3060-3063`
+/// `// C#: GCSViews/FlightPlanner.cs:1431-1434, 8065-8126; GCSViews/FlightData.cs:3073-3076`
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Overlay {
     /// `wpradius`, metres.
@@ -2072,7 +2072,7 @@ pub struct Overlay {
 impl Overlay {
     /// The flight screen's: `CreateOverlay(homeplla, mission_items, 0, 0, ...)`, so no waypoint
     /// has a circle and a loiter has one only where its command carries its own radius.
-    /// `// C#: GCSViews/FlightData.cs:3830-3843`
+    /// `// C#: GCSViews/FlightData.cs:3944-3957`
     pub const FLIGHT: Self = Self {
         wp_radius: 0.0,
         loiter_radius: 0.0,
@@ -2439,7 +2439,7 @@ impl MapViewport {
 
 /// Whether a position is one worth drawing: a latitude and a longitude that are not 0, which is
 /// what a GPS reports before its fix and what an unset mission item or home holds. Mission
-/// Planner draws nothing at such a position - no route point (`FlightData.cs:3794`), no vehicle
+/// Planner draws nothing at such a position - no route point (`FlightData.cs:3908`), no vehicle
 /// marker (`:962-968`), no waypoint, loiter or landing marker and no leg to it
 /// (`WPOverlay.cs:134, 183, 231`), no home (`WPOverlay.cs:44`) - and here every layer applies the
 /// same test, and the fit with it, so nothing at 0,0 can be drawn, run a line to, or zoom the map
@@ -3263,7 +3263,7 @@ fn paint_live(map: &mut MapViewport, bounds: Bounds<Pixels>, window: &mut Window
     // A view the user chose wins over the automatic fit; that is what makes panning stick.
     // With nothing to frame and no view chosen, the map is where Mission Planner's is at start:
     // GMap's default position (0, 0), and zoom 3 - the "no zoom in" the C# picks when the saved
-    // position rounds to 0 (`GCSViews/FlightData.cs:524-534`). A map without a position could
+    // position rounds to 0 (`GCSViews/FlightData.cs:526-536`). A map without a position could
     // not turn a press into a place, and a script that pressed it recorded nothing
     // (fly-poi.gui, plan-add-below.gui, 2026-09-25).
     let fitted = map.camera.map_or_else(
@@ -3646,7 +3646,7 @@ fn paint_live(map: &mut MapViewport, bounds: Bounds<Pixels>, window: &mut Window
     // `photosoverlay`: each `GMapMarkerPhoto` as its camera icon - red for a shot sooner than
     // CAM_MIN_INTERVAL after the one before, green otherwise - and its crimson footprint for the
     // last four shots and the one under the pointer, with the tooltip of that one.
-    // `// C#: ExtLibs/Maps/GMapMarkerPhoto.cs:65-77; GCSViews/FlightData.cs:4043-4062`
+    // `// C#: ExtLibs/Maps/GMapMarkerPhoto.cs:65-77; GCSViews/FlightData.cs:4157-4176`
     for (index, photo) in map.photos.iter().enumerate() {
         let at = to_screen(photo.at);
         paint_camera_icon(
@@ -3699,7 +3699,7 @@ fn paint_live(map: &mut MapViewport, bounds: Bounds<Pixels>, window: &mut Window
 
     // The geofence's return location: a red pin, `GMarkerGoogleType.red`, whose "GeoFence Return"
     // is a tooltip the C# shows on hover.
-    // `// C#: GCSViews/FlightPlanner.cs:6663-6670`
+    // `// C#: GCSViews/FlightPlanner.cs:6660-6667`
     if let Some(position) = map.fence_return {
         paint_pin(window, cx, to_screen(position), PIN_RED, None);
     }
@@ -3724,7 +3724,7 @@ fn paint_live(map: &mut MapViewport, bounds: Bounds<Pixels>, window: &mut Window
 
     // The flight screen's Guided Mode marker on `routes`, above the mission: a green
     // `GMarkerGoogle` with `ToolTipMode.Always`. Its rect is among the circles above.
-    // `// C#: GCSViews/FlightData.cs:4214-4221; GCSViews/FlightPlanner.cs:1664-1690`
+    // `// C#: GCSViews/FlightData.cs:4328-4335; GCSViews/FlightPlanner.cs:1664-1690`
     if let Some(guided) = map.guided {
         let at = to_screen(guided.position.to_web_mercator());
         paint_pin(window, cx, at, PIN_GREEN, None);
@@ -3733,7 +3733,7 @@ fn paint_live(map: &mut MapViewport, bounds: Bounds<Pixels>, window: &mut Window
         map.tooltips_drawn.push(text);
     }
     // The planner's "Tracker Home", the same `addpolygonmarker` on `routesoverlay`, planner only.
-    // `// C#: GCSViews/FlightPlanner.cs:6910-6916`
+    // `// C#: GCSViews/FlightPlanner.cs:6907-6913`
     if let Some(tracker) = map.tracker
         && map
             .overlay_mode
@@ -4396,7 +4396,7 @@ mod tests {
     /// size - the current view, so a wheel or a press starts from it - and reads the same place
     /// and zoom back for the next `Deactivate`. It is not a chosen view: the map still follows
     /// the vehicle, as `CHK_autopan` does, so a vehicle heard afterwards is framed.
-    /// `// C#: GCSViews/FlightData.cs:524-548, 662-664, 4242-4253`
+    /// `// C#: GCSViews/FlightData.cs:526-550, 664-666, 4356-4367`
     #[test]
     fn the_start_position_is_the_idle_view_and_the_map_still_follows() {
         let mut map = MapViewport::new(0, 0);
@@ -4488,7 +4488,7 @@ mod tests {
 
     /// A drag holds the view it starts from, and does not untick Auto Pan: as in Mission Planner,
     /// the next look (three seconds on) brings the vehicle back to the centre.
-    /// `// C#: GCSViews/FlightData.cs:4242-4247`
+    /// `// C#: GCSViews/FlightData.cs:4356-4361`
     #[test]
     fn a_drag_does_not_untick_auto_pan_and_the_next_look_brings_the_vehicle_back() {
         let mut map = viewport();
@@ -4527,7 +4527,7 @@ mod tests {
 
     /// While Auto Pan is ticked the vehicle is centred at the zoom the view has: the owner's bug of
     /// 2026-10-05 was a "following" that zoomed out to the whole path.
-    /// `// C#: GCSViews/FlightData.cs:5573-5596`
+    /// `// C#: GCSViews/FlightData.cs:5687-5710`
     #[test]
     fn auto_pan_centres_the_vehicle_and_keeps_the_zoom() {
         let mut map = viewport();
@@ -4587,7 +4587,7 @@ mod tests {
     }
 
     /// A vehicle within 0.0001 degrees of the centre leaves the view alone.
-    /// `// C#: GCSViews/FlightData.cs:5581-5582`
+    /// `// C#: GCSViews/FlightData.cs:5695-5696`
     #[test]
     fn a_vehicle_near_the_centre_leaves_the_view_alone() {
         let mut map = viewport();
@@ -4618,7 +4618,7 @@ mod tests {
     }
 
     /// The first fix, with the map at the default zoom 3, is centred and zoomed to 17, Auto Pan or
-    /// not. `// C#: GCSViews/FlightData.cs:4249-4253`
+    /// not. `// C#: GCSViews/FlightData.cs:4363-4367`
     #[test]
     fn the_first_fix_at_the_default_zoom_goes_to_zoom_17() {
         let mut map = viewport();
@@ -5096,7 +5096,7 @@ mod tests {
     }
 
     /// Clear Track empties the flown route and keeps the vehicle; the route starts again from its
-    /// next position. `// C#: GCSViews/FlightData.cs:1101-1107`
+    /// next position. `// C#: GCSViews/FlightData.cs:1103-1109`
     #[test]
     fn clear_track_empties_the_flown_path_and_recording_starts_again() {
         let mut map = viewport();
@@ -5122,7 +5122,7 @@ mod tests {
     /// flown route, as `FlightData`'s `cs.lat != 0 && cs.lng != 0` keeps it out, and no marker
     /// either, as `addMAVMarker` adds none at 0,0 (the owner's report of 2026-10-03: a marker
     /// there anchored the fit to half the world); a marker already placed stays where the fix was.
-    /// `// C#: GCSViews/FlightData.cs:962-968, 3793-3797`
+    /// `// C#: GCSViews/FlightData.cs:964-970, 3907-3911`
     #[test]
     fn a_position_at_zero_is_no_point_of_the_flown_route() {
         let mut map = viewport();

@@ -335,7 +335,7 @@ fn fifty_vehicles_through_one_link_are_routed_apart() {
     // `UpdateCurrentSettings` runs for every vehicle in `MAVlist` - every system and component
     // that has sent a heartbeat, gimbals and companions included - and asks each for its seven
     // streams, each request twice as `getDatastream` sends it (ExtLibs/ArduPilot/CurrentState.cs:
-    // 4632-4663; MainV2.cs:3058-3069; MAVLinkInterface.cs:3262-3263).
+    // 4632-4663; MainV2.cs:3065-3076; MAVLinkInterface.cs:3258-3259).
     let mut asked: BTreeMap<(u8, u8), usize> = BTreeMap::new();
     wait_for("every component asked for its streams", || {
         for (sysid, compid, message) in swarm.collect(Duration::from_millis(5)) {

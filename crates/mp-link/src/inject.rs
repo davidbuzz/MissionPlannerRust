@@ -34,21 +34,21 @@
 //!   Type" box unticked): 110-byte pieces, as many as the data needs, none empty, each addressed
 //!   to the vehicle.
 //!
-//! `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:3891-3972`
+//! `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:3881-3962`
 
 use mp_mavlink_dialects::all::{GpsInjectData, GpsRtcmData, MavMessage};
 use mp_vehicle::VehicleId;
 
 /// `msglen` of the new message: the bytes one `GPS_RTCM_DATA` carries.
-/// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:3904`
+/// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:3894`
 pub const RTCM_FRAGMENT: usize = 180;
 
 /// The most fragments a message is cut into, and so the longest message sent: `msglen * 4`.
-/// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:3906-3916`
+/// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:3896-3906`
 pub const RTCM_FRAGMENTS: usize = 4;
 
 /// `msglen` of the old message: the bytes one `GPS_INJECT_DATA` carries.
-/// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:3954`
+/// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:3944`
 pub const INJECT_CHUNK: usize = 110;
 
 /// The messages `InjectGpsData(sysid, compid, data, length, rtcm_message)` sends for `data`, and
@@ -68,22 +68,22 @@ pub fn gps_inject_messages(
     let length = data.len();
     let mut out = Vec::new();
     if rtcm_message {
-        // C#: MAVLinkInterface.cs:3906-3910 - "Message too large", and nothing sent.
+        // C#: MAVLinkInterface.cs:3896-3900 - "Message too large", and nothing sent.
         if length > RTCM_FRAGMENT * RTCM_FRAGMENTS {
             return out;
         }
-        // C#: MAVLinkInterface.cs:3913 - both arms of the conditional are `length / msglen + 1`:
+        // C#: MAVLinkInterface.cs:3903 - both arms of the conditional are `length / msglen + 1`:
         // a message that fills its fragments exactly gets an empty one after them.
         let packets = (length / RTCM_FRAGMENT + 1).min(RTCM_FRAGMENTS);
         for a in 0..packets {
-            // C#: MAVLinkInterface.cs:3922-3932
+            // C#: MAVLinkInterface.cs:3912-3922
             let mut flags: u8 = u8::from(packets > 1);
             #[allow(clippy::cast_possible_truncation)] // masked to two bits, then five
             {
                 flags = flags.wrapping_add(((a & 0x3) << 1) as u8);
                 flags = flags.wrapping_add(((*seq & 0x1f) << 3) as u8);
             }
-            // C#: MAVLinkInterface.cs:3935-3944 - an empty 180-byte buffer, what is left copied in.
+            // C#: MAVLinkInterface.cs:3925-3934 - an empty 180-byte buffer, what is left copied in.
             let start = a * RTCM_FRAGMENT;
             let copy = length.saturating_sub(start).min(RTCM_FRAGMENT);
             let mut fragment = [0u8; RTCM_FRAGMENT];
@@ -99,10 +99,10 @@ pub fn gps_inject_messages(
                 data: fragment,
             }));
         }
-        // C#: MAVLinkInterface.cs:3949
+        // C#: MAVLinkInterface.cs:3939
         *seq = seq.wrapping_add(1);
     } else {
-        // C#: MAVLinkInterface.cs:3956 - no empty piece after a whole number of them.
+        // C#: MAVLinkInterface.cs:3946 - no empty piece after a whole number of them.
         let pieces = length.div_ceil(INJECT_CHUNK);
         for a in 0..pieces {
             let start = a * INJECT_CHUNK;
@@ -139,7 +139,7 @@ mod tests {
 
     /// A message shorter than a fragment: one `GPS_RTCM_DATA`, not fragmented, fragment 0, the
     /// sequence number in the top five bits; the rest of the 180 bytes zero.
-    /// `// C#: MAVLinkInterface.cs:3913-3946` by hand: length 25, nopackets = 25/180 + 1 = 1,
+    /// `// C#: MAVLinkInterface.cs:3903-3936` by hand: length 25, nopackets = 25/180 + 1 = 1,
     /// flags = 0 + (0 << 1) + (5 << 3) = 40.
     #[test]
     fn a_short_message_is_one_fragment() {
@@ -201,7 +201,7 @@ mod tests {
     /// The old message: 110-byte pieces addressed to the vehicle, none empty, the sequence number
     /// untouched. 250 bytes: 250 % 110 != 0, so 250/110 + 1 = 3 pieces of 110, 110 and 30;
     /// 220 bytes: 2 pieces.
-    /// `// C#: MAVLinkInterface.cs:3953-3970`
+    /// `// C#: MAVLinkInterface.cs:3943-3960`
     #[test]
     fn the_old_message_is_cut_into_addressed_pieces() {
         let data: Vec<u8> = (0..250u32).map(|n| n as u8).collect();

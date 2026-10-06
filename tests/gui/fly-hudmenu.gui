@@ -11,7 +11,7 @@
 # have scripts of their own),
 # and a click on one says why on the status line. A press anywhere else closes the menu and goes
 # no further.
-# `GCSViews/FlightData.Designer.cs:346, 458-566, GCSViews/FlightData.cs:2436-2472, 3122-3139,
+# `GCSViews/FlightData.Designer.cs:346, 458-566, GCSViews/FlightData.cs:2446-2482, 3135-3152,
 # 3185-3271, 4735-4739, 5139-5164, ExtLibs/Controls/HUD.cs:2029-2036`
 #
 # Needs SITL, so the HUD draws a vehicle and a user item has a value:

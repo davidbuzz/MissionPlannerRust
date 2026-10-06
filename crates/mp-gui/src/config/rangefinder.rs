@@ -37,7 +37,7 @@
 //! `pictureBox3` shows `Resources.sonar`, zoomed ([`crate::pictures`]).
 //!
 //! When the handler's `setParam` times out, its `TimeoutException` - the handler has no `try` -
-//! reaches `Program.handleException` (`Program.cs:717-800`), whose "Send Error" box is the
+//! reaches `Program.handleException` (`Program.cs:719-802`), whose "Send Error" box is the
 //! unhandled-exception box; a write the combo's own `setParam` fails shows "Set RNGFND_TYPE
 //! Failed!". Both are link failures, and go on the status line: the owner's ruling of 2026-09-25
 //! (see `extra_setup::link_error`). The page shows no box of its own.
@@ -86,7 +86,7 @@ pub const TIMER_INTERVAL: Duration = Duration::from_millis(200);
 const DESIGNER_READING: &str = "0.0";
 
 /// `Program.handleException`'s box for an exception nothing caught.
-/// `// C#: Program.cs:791-793`
+/// `// C#: Program.cs:793-795`
 #[must_use]
 pub fn unhandled(param: &str) -> Message {
     Message {
@@ -334,7 +334,7 @@ impl RangeFinder {
         }
         // The combo's "Set RNGFND_TYPE Failed!" and `Program.handleException`'s box go on the
         // status line, the owner's ruling of 2026-09-25.
-        // C#: GCSViews/ConfigurationView/ConfigHWRangeFinder.cs:47-58; Program.cs:717-800
+        // C#: GCSViews/ConfigurationView/ConfigHWRangeFinder.cs:47-58; Program.cs:719-802
         let mut failures = Vec::new();
         self.queue
             .advance_split(telemetry, &mut self.messages, &mut failures);

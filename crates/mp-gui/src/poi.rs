@@ -26,7 +26,7 @@
 //! (`GMapMarkerPOI`, a `GMarkerGoogle` red dot). The map's context menu adds one where the map was
 //! pressed (Add Poi), adds one at typed coordinates (Coords), and deletes the one under the
 //! pointer (Delete).
-//! `// C#: Utilities/POI.cs, ExtLibs/Maps/GMapMarkerPOI.cs, GCSViews/FlightData.cs:1007-1010,
+//! `// C#: Utilities/POI.cs, ExtLibs/Maps/GMapMarkerPOI.cs, GCSViews/FlightData.cs:1009-1012,
 //! 2632-2638, 6011-6038`
 //!
 //! Save File and Load File, the menu's other two entries, ask for a file with the system's file
@@ -49,7 +49,7 @@ pub const FILE_NAME: &str = "poi.txt";
 pub const ID_TITLE: &str = "POI";
 /// See [`ID_TITLE`].
 pub const ID_TEXT: &str = "Enter ID";
-/// `InputBox.Show("Enter POI Coords", ...)`. `// C#: GCSViews/FlightData.cs:6014`
+/// `InputBox.Show("Enter POI Coords", ...)`. `// C#: GCSViews/FlightData.cs:6128`
 pub const COORDS_TITLE: &str = "Enter POI Coords";
 /// See [`COORDS_TITLE`].
 pub const COORDS_TEXT: &str = "Please enter the coords 'lat;long;alt' or 'lat;long'";
@@ -270,7 +270,7 @@ pub fn parse(text: &str) -> Vec<Poi> {
 /// are a single's, widened. Anything else is `Strings.InvalidField`. With no altitude the C#
 /// asks the terrain database at the point last pressed; with no terrain data that is
 /// `altresponce.Invalid`, whose altitude is 0, and this application has no terrain data.
-/// `// C#: GCSViews/FlightData.cs:6011-6038, ExtLibs/Utilities/srtm.cs:32`
+/// `// C#: GCSViews/FlightData.cs:6125-6152, ExtLibs/Utilities/srtm.cs:32`
 pub fn parse_coords(text: &str) -> Result<(f64, f64, f64), &'static str> {
     let parts: Vec<&str> = text.split(';').collect();
     let number = |part: &str| {

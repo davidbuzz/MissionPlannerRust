@@ -5,7 +5,7 @@
 # keeps them, at least one each, and resizes the grid (tests/gui/fly-quick-viewcount.gui).
 # Undock drops the page out into a window of its own, which one window has nowhere to put: it is
 # dimmed and says so.
-# `GCSViews/FlightData.cs:4920-4935, 5078-5099, 6142-6173, GCSViews/FlightData.Designer.cs:647-660`
+# `GCSViews/FlightData.cs:5034-5049, 5192-5213, 6256-6287, GCSViews/FlightData.Designer.cs:647-660`
 #
 # Self-contained, no link: tools/gui-test.sh tests/gui/fly-quickmenu.gui
 

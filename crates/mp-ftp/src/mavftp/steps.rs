@@ -33,7 +33,7 @@
 //!   command is running now.
 //! * An ACK is taken only if it answers this command's opcode with the sequence number after the
 //!   request's, compared as `payload.seq_number + 1 != ftphead.seq_number` in `int` arithmetic
-//!   (e.g. MAVFtp.cs:664). At sequence number 65535 the request's `+ 1` is 65536 and the reply's
+//!   (e.g. MAVFtp.cs:703). At sequence number 65535 the request's `+ 1` is 65536 and the reply's
 //!   wrapped 0 can never match it, so every 65,536th command times out; that is kept too.
 
 use web_time::Instant;
@@ -81,7 +81,7 @@ impl Ctx<'_> {
 
 /// Whether an ACK answers `request`: its opcode, and the sequence number one past the request's.
 ///
-/// C#: e.g. MAVFtp.cs:664, `payload.opcode != ftphead.req_opcode || payload.seq_number + 1 !=
+/// C#: e.g. MAVFtp.cs:703, `payload.opcode != ftphead.req_opcode || payload.seq_number + 1 !=
 /// ftphead.seq_number` - `int` arithmetic, so 65535 + 1 is 65536 and never matches.
 fn answers(request: &Header, reply: &Header) -> bool {
     request.opcode == reply.req_opcode
@@ -247,7 +247,7 @@ impl Simple {
             let error = ErrorCode(head.data_byte(0));
             if error == ErrorCode::FAIL_ERRNO {
                 if self.rules.exists_completes && Errno(head.data_byte(1)) == Errno::EEXIST {
-                    // C#: MAVFtp.cs:1082-1083. Complete, and then the exception below is thrown
+                    // C#: MAVFtp.cs:1121-1122. Complete, and then the exception below is thrown
                     // anyway: a directory that already exists is an error after all.
                     self.retry.complete = true;
                 }
@@ -284,7 +284,7 @@ impl Simple {
 
     /// After the nested `kCmdResetSessions()` returns: `timeout.RetriesCurrent = 0` for the
     /// commands that have it. Not if the reset threw, because the exception leaves the handler
-    /// before that line (and `PacketReceived` swallows it, MAVLinkInterface.cs:5543-5550).
+    /// before that line (and `PacketReceived` swallows it, MAVLinkInterface.cs:5523-5530).
     fn after_reset(&mut self, threw: bool) {
         if self.rules.no_sessions == OnNoSessions::ResetAndRetry && !threw {
             self.retry.retries_current = 0;
@@ -361,7 +361,7 @@ fn rules_for(opcode: Opcode, t: &super::FtpTimeouts) -> (Rules, Patience) {
 
 /// `kCmdListDirectory`, with or without times.
 ///
-/// C#: MAVFtp.cs:1264-1446.
+/// C#: MAVFtp.cs:1303-1485.
 #[derive(Debug, Clone)]
 pub(crate) struct List {
     request: Header,
@@ -383,7 +383,7 @@ impl List {
         ctx: &mut Ctx<'_>,
         now: Instant,
     ) -> Self {
-        // C#: MAVFtp.cs:1269-1270, `if (dir.Length > 1) dir = dir.TrimEnd('/');`. Length in
+        // C#: MAVFtp.cs:1308-1309, `if (dir.Length > 1) dir = dir.TrimEnd('/');`. Length in
         // UTF-16 units, but only "/" itself is short enough to matter.
         let dir = if dir.chars().count() > 1 {
             dir.trim_end_matches('/')
@@ -401,7 +401,7 @@ impl List {
             ..Header::default()
         };
         request.set_data(dir.as_bytes());
-        // C#: MAVFtp.cs:1285.
+        // C#: MAVFtp.cs:1324.
         ctx.progress(format!("{dir} Listing"), 0);
         Self {
             request,
@@ -438,7 +438,7 @@ impl List {
         }
         if head.opcode == Opcode::NAK {
             let error = ErrorCode(head.data_byte(0));
-            // C#: MAVFtp.cs:1306-1317. Only the very first reply can mean "unknown opcode"; a NAK
+            // C#: MAVFtp.cs:1345-1356. Only the very first reply can mean "unknown opcode"; a NAK
             // part way through a listing is a real error.
             if self.with_time
                 && head.req_opcode == Opcode::LIST_DIRECTORY_WITH_TIME
@@ -459,7 +459,7 @@ impl List {
                     path: self.dir.clone(),
                 });
             }
-            // C#: MAVFtp.cs:1339-1340. The listing's normal end: the offset past the last entry.
+            // C#: MAVFtp.cs:1378-1379. The listing's normal end: the offset past the last entry.
             if error == ErrorCode::EOF {
                 self.retry.complete = true;
                 return Status::Finished;
@@ -472,7 +472,7 @@ impl List {
         if parse_entries(head, &self.dir, self.with_time, &mut self.answer).is_err() {
             return Status::Running;
         }
-        // C#: MAVFtp.cs:1413-1415, "0 records". Complete - and then the next request goes out
+        // C#: MAVFtp.cs:1452-1454, "0 records". Complete - and then the next request goes out
         // below anyway, as it does in the C#.
         if self.answer.is_empty() {
             self.retry.complete = true;
@@ -480,7 +480,7 @@ impl List {
         let count = self.answer.len();
         let count_i32 = i32::try_from(count).unwrap_or(i32::MAX);
         ctx.progress(format!("{} {count}", self.dir), count_i32 % 100);
-        // C#: MAVFtp.cs:1419-1424. The next offset is how many entries have arrived, skips
+        // C#: MAVFtp.cs:1458-1463. The next offset is how many entries have arrived, skips
         // included.
         self.request.offset = u32::try_from(count).unwrap_or(u32::MAX);
         self.request.seq_number = ctx.next_seq();
@@ -512,7 +512,7 @@ impl List {
 
 /// `kCmdBurstReadFile`: the vehicle streams the file, and holes are asked for one read at a time.
 ///
-/// C#: MAVFtp.cs:694-870.
+/// C#: MAVFtp.cs:733-909.
 ///
 /// # How it decides the file is whole
 ///
@@ -564,7 +564,7 @@ impl Burst {
             ..Header::default()
         };
         ctx.progress(file.to_owned(), 0);
-        // C#: MAVFtp.cs:713, `new MemoryStream(size)`, which throws for a negative size.
+        // C#: MAVFtp.cs:752, `new MemoryStream(size)`, which throws for a negative size.
         if size < 0 {
             return Err(FtpError::NegativeSize(size));
         }
@@ -607,7 +607,7 @@ impl Burst {
 
     /// Switches to `kCmdReadFile` for the first hole and asks for it.
     ///
-    /// C#: MAVFtp.cs:760-769 and :829-839.
+    /// C#: MAVFtp.cs:799-808 and :829-839.
     fn read_missing(&mut self, missing: u32, reply_seq: u16, ctx: &mut Ctx<'_>) {
         self.request.opcode = Opcode::READ_FILE;
         self.request.offset = missing;
@@ -623,7 +623,7 @@ impl Burst {
             return Status::Running;
         }
         if head.opcode == Opcode::NAK {
-            // C#: MAVFtp.cs:729-772.
+            // C#: MAVFtp.cs:768-811.
             *ctx.seq_no = head.seq_number.wrapping_add(1);
             let error = ErrorCode(head.data_byte(0));
             if error == ErrorCode::FAIL_ERRNO {
@@ -644,7 +644,7 @@ impl Burst {
             }
             return Status::Running;
         }
-        // C#: MAVFtp.cs:776-780. Many replies answer one request, so the sequence number is not
+        // C#: MAVFtp.cs:815-819. Many replies answer one request, so the sequence number is not
         // checked here.
         if self.request.opcode != head.req_opcode || head.opcode != Opcode::ACK {
             return Status::Running;
@@ -652,7 +652,7 @@ impl Burst {
         let offset = i64::from(head.offset);
         let len = i64::from(head.size);
         let size = self.size;
-        // C#: MAVFtp.cs:781-784, reject bad packets.
+        // C#: MAVFtp.cs:820-823, reject bad packets.
         if offset > size
             || len > size
             || offset + len > size
@@ -660,7 +660,7 @@ impl Burst {
         {
             return Status::Running;
         }
-        // C#: MAVFtp.cs:785-789, a short chunk is the end of the file.
+        // C#: MAVFtp.cs:824-828, a short chunk is the end of the file.
         if head.size < self.readsize {
             self.size = offset + len;
         }
@@ -683,7 +683,7 @@ impl Burst {
         simplify_chunk_list(&mut self.chunks);
         let current = self.received();
 
-        // C#: MAVFtp.cs:808-809. A size past the 239 data bytes makes `Write` throw here, after
+        // C#: MAVFtp.cs:847-848. A size past the 239 data bytes makes `Write` throw here, after
         // the chunk was recorded; PacketReceived swallows it.
         let Some(data) = head.data.get(..usize::from(head.size)) else {
             return Status::Running;
@@ -701,7 +701,7 @@ impl Burst {
         self.retry.arm(now);
 
         *ctx.seq_no = head.seq_number.wrapping_add(1);
-        // C#: MAVFtp.cs:813-816, "dont move backwards".
+        // C#: MAVFtp.cs:852-855, "dont move backwards".
         self.request.offset = end.max(self.request.offset);
         self.request.seq_number = *ctx.seq_no;
         if head.size > 0 {
@@ -711,14 +711,14 @@ impl Burst {
             self.retry.complete = true;
             return Status::Finished;
         }
-        // C#: MAVFtp.cs:826-840. The end is in sight with holes behind it, or already reading
+        // C#: MAVFtp.cs:865-879. The end is in sight with holes behind it, or already reading
         // holes: ask for the next one.
         if offset + len >= self.size || self.request.opcode == Opcode::READ_FILE {
             let missing = find_missing(&self.chunks);
             self.read_missing(missing, head.seq_number, ctx);
             return Status::Running;
         }
-        // C#: MAVFtp.cs:843-848. The vehicle has sent the burst it was asked for; ask for the next.
+        // C#: MAVFtp.cs:882-887. The vehicle has sent the burst it was asked for; ask for the next.
         if head.burst_complete == 1 {
             ctx.send(&self.request);
         }
@@ -743,7 +743,7 @@ impl Burst {
 
 /// `SimplifyChunkList`: join chunks that touch or overlap.
 ///
-/// C#: MAVFtp.cs:872-893, index for index. Joining takes the *next* chunk's end, even when the
+/// C#: MAVFtp.cs:911-932, index for index. Joining takes the *next* chunk's end, even when the
 /// next chunk ends inside this one - so a chunk read again after a merge can shorten the extent
 /// that covers it. The data is still in the buffer; the file then looks short, the read asks for
 /// what it thinks is missing, and the vehicle's answer (or its end of file) puts it right.
@@ -772,7 +772,7 @@ pub(crate) fn simplify_chunk_list(chunks: &mut Vec<(u32, u32)>) {
 
 /// `FindMissing`: where the first hole starts, or `u32::MAX` if the chunks run unbroken from zero.
 ///
-/// C#: MAVFtp.cs:895-912. Unbroken from zero is not the same as whole - a file missing only its
+/// C#: MAVFtp.cs:934-951. Unbroken from zero is not the same as whole - a file missing only its
 /// tail has no hole by this measure - so the callers check the size first.
 pub(crate) fn find_missing(chunks: &[(u32, u32)]) -> u32 {
     let mut current = 0u32;
@@ -788,7 +788,7 @@ pub(crate) fn find_missing(chunks: &[(u32, u32)]) -> u32 {
 
 /// `kCmdReadFile`: one request, one chunk, in order.
 ///
-/// C#: MAVFtp.cs:1547-1659. What Mission Planner's plain Download and its serial-port names use
+/// C#: MAVFtp.cs:1586-1698. What Mission Planner's plain Download and its serial-port names use
 /// (Controls/MavFTPUI.cs:353, GCSViews/ConfigurationView/ConfigSerial.cs:105).
 #[derive(Debug, Clone)]
 pub(crate) struct Read {
@@ -820,7 +820,7 @@ impl Read {
             ..Header::default()
         };
         ctx.progress(file.to_owned(), 0);
-        // C#: MAVFtp.cs:1562, `new MemoryStream(size)`.
+        // C#: MAVFtp.cs:1601, `new MemoryStream(size)`.
         if size < 0 {
             return Err(FtpError::NegativeSize(size));
         }
@@ -858,7 +858,7 @@ impl Read {
             return Status::Running;
         }
         if head.opcode == Opcode::NAK {
-            // C#: MAVFtp.cs:1576-1603.
+            // C#: MAVFtp.cs:1615-1642.
             let error = ErrorCode(head.data_byte(0));
             if error == ErrorCode::FAIL_ERRNO {
                 self.retry.retries = 0;
@@ -877,7 +877,7 @@ impl Read {
         if !answers(&self.request, head) || head.opcode != Opcode::ACK {
             return Status::Running;
         }
-        // C#: MAVFtp.cs:1612-1617, "we have lost data - use retry after timeout".
+        // C#: MAVFtp.cs:1651-1656, "we have lost data - use retry after timeout".
         if self.position != u64::from(head.offset) {
             self.retry.retries_current = 0;
             return Status::Running;
@@ -899,7 +899,7 @@ impl Read {
             slot.copy_from_slice(data);
         }
         self.position = u64::try_from(stop).unwrap_or(u64::MAX);
-        // C#: MAVFtp.cs:1625, the percentage of the request's offset, before it moves on.
+        // C#: MAVFtp.cs:1664, the percentage of the request's offset, before it moves on.
         ctx.progress(
             self.file.clone(),
             percent(i64::from(self.request.offset), self.size),
@@ -933,7 +933,7 @@ impl Read {
 
 /// `kCmdWriteFile(Stream, ...)`: the upload half of `UploadFile`.
 ///
-/// C#: MAVFtp.cs:2213-2361. The first chunk goes alone; each ACK that answers the latest send
+/// C#: MAVFtp.cs:2252-2400. The first chunk goes alone; each ACK that answers the latest send
 /// releases the next five chunks not yet acknowledged, lowest offset first; ACKs for anything
 /// else only cross their chunk off. The upload is done when the latest send's ACK is for the
 /// last chunk - which does not check that every earlier chunk was acknowledged. Mission Planner's
@@ -967,7 +967,7 @@ impl Write {
             session: 0,
             ..Header::default()
         };
-        // C#: MAVFtp.cs:2234-2236.
+        // C#: MAVFtp.cs:2273-2275.
         let step = usize::from(RW_SIZE);
         let unacknowledged = (0..data.len())
             .step_by(step)
@@ -1008,11 +1008,11 @@ impl Write {
     }
 
     fn begin(&mut self, ctx: &mut Ctx<'_>, now: Instant) -> Status {
-        // C#: MAVFtp.cs:2230-2231, an empty file writes nothing and returns false.
+        // C#: MAVFtp.cs:2269-2270, an empty file writes nothing and returns false.
         if self.data.is_empty() {
             return Status::Finished;
         }
-        // C#: MAVFtp.cs:2335-2339, fill the first buffer.
+        // C#: MAVFtp.cs:2374-2378, fill the first buffer.
         self.read_chunk(0);
         if !self.retry.begin() {
             return Status::Finished;
@@ -1028,7 +1028,7 @@ impl Write {
             return Status::Running;
         }
         if head.opcode == Opcode::NAK {
-            // C#: MAVFtp.cs:2259-2284.
+            // C#: MAVFtp.cs:2298-2323.
             let error = ErrorCode(head.data_byte(0));
             if error == ErrorCode::FAIL_ERRNO {
                 self.retry.retries = 0;
@@ -1043,20 +1043,20 @@ impl Write {
         if self.request.opcode != head.req_opcode || head.opcode != Opcode::ACK {
             return Status::Running;
         }
-        // C#: MAVFtp.cs:2296, `sendlist.Remove((int)ftphead.offset)`; the cast wraps.
+        // C#: MAVFtp.cs:2335, `sendlist.Remove((int)ftphead.offset)`; the cast wraps.
         let key = i64::from(i32::from_ne_bytes(head.offset.to_ne_bytes()));
         self.unacknowledged.remove(&key);
-        // C#: MAVFtp.cs:2298-2300, not the answer to the latest send.
+        // C#: MAVFtp.cs:2337-2339, not the answer to the latest send.
         if u32::from(self.request.seq_number) + 1 != u32::from(head.seq_number) {
             return Status::Running;
         }
-        // C#: MAVFtp.cs:2302-2307, "confirm this is an ack for the last chunk".
+        // C#: MAVFtp.cs:2341-2346, "confirm this is an ack for the last chunk".
         let size = i64::try_from(self.data.len()).unwrap_or(i64::MAX);
         if size - i64::from(head.offset) <= i64::from(RW_SIZE) {
             self.retry.complete = true;
             return Status::Finished;
         }
-        // C#: MAVFtp.cs:2309-2330, "batch 5 at a time".
+        // C#: MAVFtp.cs:2348-2369, "batch 5 at a time".
         let batch: Vec<i64> = self.unacknowledged.iter().take(5).copied().collect();
         for key in batch {
             let Ok(offset) = usize::try_from(key) else {
@@ -1191,7 +1191,7 @@ impl Step {
                 ex: step.ex.take(),
             },
             Self::List(step) => {
-                // C#: MAVFtp.cs:1441.
+                // C#: MAVFtp.cs:1480.
                 ctx.progress(format!("{} Ready", step.dir), 100);
                 StepResult::List {
                     answer: std::mem::take(&mut step.answer),
@@ -1201,7 +1201,7 @@ impl Step {
                 }
             }
             Self::Burst(step) => {
-                // C#: MAVFtp.cs:864.
+                // C#: MAVFtp.cs:903.
                 ctx.progress(step.file.clone(), 100);
                 StepResult::Burst(BurstResult {
                     answer: std::mem::take(&mut step.answer),
@@ -1210,7 +1210,7 @@ impl Step {
                 })
             }
             Self::Read(step) => {
-                // C#: MAVFtp.cs:1651.
+                // C#: MAVFtp.cs:1690.
                 ctx.progress(step.file.clone(), 100);
                 StepResult::Read {
                     answer: std::mem::take(&mut step.answer),
@@ -1219,7 +1219,7 @@ impl Step {
                 }
             }
             Self::Write(step) => {
-                // C#: MAVFtp.cs:2355; an empty file returned before it (:2230-2231).
+                // C#: MAVFtp.cs:2394; an empty file returned before it (:2230-2231).
                 if !step.data.is_empty() {
                     ctx.progress(step.friendly.clone(), 100);
                 }

@@ -52,7 +52,7 @@
 //! exception closes the connection; `MP_HTTP_PORT` is the harness's door - another port, or
 //! `off`. The C#'s `SYS_STATUS` key carries the `META_LINKQUALITY` object - it assigns both from
 //! one expression - and so does this.
-//! `// C#: Utilities/httpserver.cs; MainV2.cs:3224-3236, 2108`
+//! `// C#: Utilities/httpserver.cs; MainV2.cs:3231-3243, 2115`
 
 // This module is internal to the binary; `pub` here documents intent rather than exporting API.
 #![allow(unreachable_pub)]
@@ -1816,6 +1816,9 @@ mod tests {
                 errors_count3: 0,
                 errors_count4: 0,
                 battery_remaining: -1,
+                onboard_control_sensors_present_extended: 0,
+                onboard_control_sensors_enabled_extended: 0,
+                onboard_control_sensors_health_extended: 0,
             }),
         );
         let json = last.json(11110, 194, 1.5, 7);

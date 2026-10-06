@@ -116,11 +116,11 @@ pub struct TelemetryView {
     /// The vehicle's mission as the link's traffic has shown it - `MAV.wps`: a download's items
     /// as they arrive, an upload's as the vehicle takes them, a script's `setWP`s - which the
     /// flight screen draws when no plan is being edited, and counts for its Set WP list.
-    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVState.cs:313; GCSViews/FlightData.cs:2571-2576, 3810-3843`
+    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVState.cs:313; GCSViews/FlightData.cs:2581-2586, 3924-3957`
     pub wps: Vec<MissionItem>,
     /// The vehicle's rally points likewise - `MAV.rallypoints` - which the flight screen draws
     /// when the plan has none of its own.
-    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVState.cs:315; GCSViews/FlightData.cs:3898-3905`
+    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVState.cs:315; GCSViews/FlightData.cs:4012-4019`
     pub rally_points: Vec<MissionItem>,
     /// Recent `STATUSTEXT` and `COMMAND_ACK` lines, newest last.
     pub messages: Vec<LogMessage>,
@@ -238,7 +238,7 @@ pub struct Report {
     pub accepted: Option<String>,
     /// Sent when the vehicle says no: `setDigicamControl` falls back to `DIGICAM_CONTROL` when
     /// its command is refused.
-    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:4557-4569`
+    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:4546-4558`
     pub fallback: Option<MavMessage>,
 }
 
@@ -271,7 +271,7 @@ impl Report {
             RequestOutcome::Rejected(_) | RequestOutcome::UnknownParameter => {
                 self.refused.as_deref()
             }
-            // `setParam` returns true for a value already held (C#: MAVLinkInterface.cs:1647-1651),
+            // `setParam` returns true for a value already held (C#: MAVLinkInterface.cs:1644-1648),
             // and `doCommand` true for the commands it does not wait on.
             RequestOutcome::Accepted { .. } | RequestOutcome::Sent | RequestOutcome::Unchanged => {
                 self.accepted.as_deref()
@@ -360,32 +360,32 @@ pub struct Telemetry {
 
 /// `doReboot(false, true)` on a serial port: "Direct USB will disconnect after a reboot, wait and
 /// see if we should re-connect".
-/// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:2573-2583`
+/// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:2570-2580`
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Reopen {
     /// `Thread.Sleep(500)` running out at this instant, then `if (!BaseStream.IsOpen)`.
     Check(Instant),
     /// The port was gone: `Open(true)`, whose `OpenBg` lets a serial port settle for a second
     /// ("allow settings to settle - previous dtr") before it opens it at this instant.
-    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:668-700, 711-723, 747`
+    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:670-702, 713-725, 749`
     Open(Instant),
 }
 
 /// How long `doReboot` sleeps after a plain reboot on a serial port before it looks at the port.
-/// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:2578`
+/// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:2575`
 pub const REBOOT_REOPEN_WAIT: Duration = Duration::from_millis(500);
 
 /// `OpenBg`'s "SerialPort Sleep 1" before it opens a serial port.
-/// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:717-722`
+/// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:719-724`
 pub const SERIAL_SETTLE: Duration = Duration::from_secs(1);
 
 /// `Strings.ConnectingMavlink`: the title of `Open`'s progress box, on the status line here.
-/// `// C#: ExtLibs/Strings/Strings.resx:303-305; ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:676`
+/// `// C#: ExtLibs/Strings/Strings.resx:303-305; ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:678`
 pub const CONNECTING_MAVLINK: &str = "Connecting Mavlink";
 
 /// `Strings.ConnectFailed`: `OpenBg`'s error for its progress box, on the status line here (the
 /// owner's ruling: a failure goes on the status line, never in a box).
-/// `// C#: ExtLibs/Strings/Strings.resx:300-302; ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:960-961`
+/// `// C#: ExtLibs/Strings/Strings.resx:300-302; ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:962-963`
 pub const CONNECT_FAILED: &str = "Connect Failed";
 
 /// What [`Telemetry::reopen_after_reboot`] did this frame.
@@ -423,7 +423,7 @@ impl Telemetry {
 
     /// Where flights are recorded, and the HUD's AVI goes: `MP_LOG_DIR` when set, else
     /// [`Self::log_directory`]. `Settings.Instance.LogDir`, as `recordHudToAVIToolStripMenuItem`
-    /// reads it. `// C#: GCSViews/FlightData.cs:4663-4665`
+    /// reads it. `// C#: GCSViews/FlightData.cs:4777-4779`
     #[must_use]
     pub(crate) fn recording_directory() -> std::path::PathBuf {
         std::env::var_os("MP_LOG_DIR").map_or_else(Self::log_directory, std::path::PathBuf::from)
@@ -911,7 +911,7 @@ impl Telemetry {
     /// `setRallyPoint` on the vehicle being flown: `RALLY_POINT`, read back with
     /// `RALLY_FETCH_POINT`, the link's retries between. `None` with no vehicle; the outcome is read
     /// with [`Telemetry::request`].
-    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:6441-6476`
+    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:6402-6437`
     pub fn set_rally_point(&self, point: mp_link::requests::RallyPointSet) -> Option<RequestId> {
         let (link, id) = self.target()?;
         Some(link.set_rally_point(id, point))
@@ -946,7 +946,7 @@ impl Telemetry {
     /// `setFencePoint` on the vehicle being flown: `FENCE_POINT`, read back with
     /// `FENCE_FETCH_POINT`, the link's retries between. `None` with no vehicle; the outcome is read
     /// with [`Telemetry::request`].
-    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:6415-6439`
+    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:6376-6400`
     pub fn set_fence_point(&self, point: mp_link::requests::FencePointSet) -> Option<RequestId> {
         let (link, id) = self.target()?;
         Some(link.set_fence_point(id, point))
@@ -954,7 +954,7 @@ impl Telemetry {
 
     /// `getFencePoint` on the vehicle being flown: `FENCE_FETCH_POINT` for point `idx`. `None`
     /// with no vehicle; the point is the request's [`mp_link::requests::Request::fence_point`].
-    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:5908-5967`
+    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:5871-5929`
     pub fn get_fence_point(&self, idx: u8) -> Option<RequestId> {
         let (link, id) = self.target()?;
         Some(link.get_fence_point(id, idx))
@@ -963,7 +963,7 @@ impl Telemetry {
     /// `getWP(sysid, compid, index, type)` on `target`: that one item of that list read on its
     /// own, the link's retries between; no mission transfer is started or touched. `None`
     /// without a link; the item is the request's [`mp_link::requests::Request::wp`].
-    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:3398-3565`
+    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:3393-3558`
     pub fn get_wp(&self, target: VehicleId, index: u16, mission_type: u8) -> Option<RequestId> {
         Some(self.link.as_ref()?.get_wp(target, index, mission_type))
     }
@@ -971,7 +971,7 @@ impl Telemetry {
     /// `setWPTotal(sysid, compid, total, type)` on `target`: `MISSION_COUNT` until the vehicle
     /// asks for the first item, the link's retries between. `None` without a link; the outcome
     /// is read with [`Telemetry::request`].
-    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:3753-3882`
+    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:3746-3872`
     pub fn set_wp_total(
         &self,
         target: VehicleId,
@@ -1153,7 +1153,7 @@ impl Telemetry {
     /// `setWP` for one item: the `MISSION_ITEM` or `MISSION_ITEM_INT` given, until the vehicle
     /// acknowledges it or asks for the next, sent again ten more times 450 ms apart, and
     /// `report` said when it ends. `None` for a message that is not an item, or without a link.
-    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:3975-4380`
+    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:3965-4369`
     pub fn set_wp(
         &mut self,
         target: VehicleId,
@@ -1292,7 +1292,7 @@ impl Telemetry {
     /// Arms or disarms, with the vehicle's pre-arm checks applied: `doARM`, which waits ten
     /// seconds a try for the acknowledgement "as may need an imu calib". A refusal is said as
     /// `BUT_ARM_Click`'s message box begins, a timeout as its `catch` says it.
-    /// `// C#: GCSViews/FlightData.cs:1034-1079, ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:2632-2657`
+    /// `// C#: GCSViews/FlightData.cs:1036-1081, ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:2632-2657`
     pub fn arm(&mut self, arm: bool) {
         let Some(id) = self.target_id() else {
             return;
@@ -1312,7 +1312,7 @@ impl Telemetry {
     /// "for advanced accel offsets, and blocks execution", so the C#'s `if` always takes the
     /// true branch and the vehicle's own `COMMAND_LONG` asking for the first position is the
     /// answer.
-    /// `// C#: GCSViews/ConfigurationView/ConfigAccelerometerCalibration.cs:68-80, ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:2734-2739`
+    /// `// C#: GCSViews/ConfigurationView/ConfigAccelerometerCalibration.cs:68-80, ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:2731-2736`
     pub fn start_accelerometer_calibration(&self) {
         if let Some((link, id)) = self.target() {
             link.clear_accel_calibration();
@@ -1406,7 +1406,7 @@ impl Telemetry {
     /// `SendAck`: a `COMMAND_ACK` for `MAV_CMD_PREFLIGHT_CALIBRATION`, result 0, sent twice, which
     /// ends a running `compassmot` - to nobody in particular, as the C#'s packet has its target
     /// fields at their defaults. Whether both went; false without a vehicle.
-    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:2956-2966`
+    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:2953-2963`
     pub fn send_calibration_ack(&self) -> bool {
         let Some((link, _)) = self.target() else {
             return false;
@@ -1548,7 +1548,7 @@ impl Telemetry {
     /// `getParamList`: the parameters fetched over MAVFTP first (`@PARAM/param.pck?withdefaults=1`)
     /// and over the `PARAM_REQUEST_LIST` stream when that will not do - the parameter screen's
     /// button, and the fetch on connecting.
-    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:1781-1799`
+    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:1778-1796`
     pub fn download_parameters(&self) {
         if let Some((link, id)) = self.target() {
             link.fetch_params(id);
@@ -1575,14 +1575,14 @@ impl Telemetry {
     /// answer. So it goes through the link's `doCommand` ([`Link::command`], acknowledgement
     /// required), which makes the same two sends and ends the request `Sent`. As the answer is
     /// always true, `doReboot`'s fallback second `doCommand` never runs.
-    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:2553-2589, 2717, 2758-2763`
+    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:2550-2586, 2714, 2755-2760`
     ///
     /// Whether there was a vehicle to send it to: `doReboot`'s return.
     ///
     /// On a serial port the C# then sleeps half a second and reopens the port if the reboot
     /// took it away; that is [`Telemetry::reopen_after_reboot`], driven by the window's frames
     /// rather than a sleep on the thread that draws them.
-    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:2573-2583`
+    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:2570-2580`
     pub fn reboot(&self) -> bool {
         let Some((link, id)) = self.target() else {
             return false;
@@ -1636,7 +1636,7 @@ impl Telemetry {
     /// writing the file `MainV2` opened, and `OpenBg`'s second second ("SerialPort Sleep 2",
     /// after the open, before any traffic) is not slept: the link writes as soon as it opens,
     /// as it does on the connect button.
-    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:2573-2583, 668-700, 711-760, 949-963`
+    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:2570-2580, 670-702, 713-762, 951-965`
     pub fn reopen_after_reboot(
         &mut self,
         now: Instant,
@@ -1793,7 +1793,7 @@ impl Telemetry {
     /// Lands where the vehicle is.
     ///
     /// A `doCommand` waited on as the take-off is, with a timeout said the same way.
-    /// `// C#: GCSViews/FlightData.cs:5305-5313`
+    /// `// C#: GCSViews/FlightData.cs:5419-5427`
     pub fn land(&mut self) {
         let Some(id) = self.target_id() else {
             return;
@@ -1808,7 +1808,7 @@ impl Telemetry {
     ///
     /// Sent and not waited for: `setGuidedModeWP` puts `SET_POSITION_TARGET_GLOBAL_INT` on the
     /// wire with `generatePacket` and returns.
-    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:4449-4454, 4500-4554`
+    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:4438-4443, 4500-4554`
     pub fn goto(&self, position: LatLon, altitude_metres: f32) {
         if let Some((link, id)) = self.target() {
             link.send(&commands::goto_position(
@@ -1843,7 +1843,7 @@ impl Telemetry {
     /// fetched from it. Sent and not waited for: the C#'s `doCommand` passes `requireack` false.
     /// Without the version request ArduPilot never sends `AUTOPILOT_VERSION`, its capabilities
     /// stay 0 and the MAVFtp page never lists (found by `config-mavftp.gui`, 2026-09-25).
-    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:928-931, 1822-1830, 1856-1857`
+    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:928-931, 1819-1827, 1856-1857`
     pub fn tick(&mut self) {
         let Some(link) = &self.link else {
             return;
@@ -1876,7 +1876,7 @@ impl Telemetry {
 
     /// Set Home Alt's write: the shown vehicle's `cs.altoffsethome`, which the link applies on
     /// its next pass. Nothing without a vehicle, where the C# writes the placeholder state no
-    /// screen shows. `// C#: GCSViews/FlightData.cs:1236-1247`
+    /// screen shows. `// C#: GCSViews/FlightData.cs:1238-1249`
     pub fn set_alt_offset_home(&self, offset: f32) {
         if let Some((link, id)) = self.target() {
             link.set_alt_offset_home(id, offset);
@@ -1888,7 +1888,7 @@ impl Telemetry {
     /// saved defaults, `CurrentState.rate*backup`, and the shown vehicle's `cs.rateX` - so the
     /// link's stream requests ask for them from then on. The first hand-over only takes note:
     /// the page starts from the saved defaults, which every vehicle starts from.
-    /// `// C#: GCSViews/ConfigurationView/ConfigPlanner.cs:573-640`
+    /// `// C#: GCSViews/ConfigurationView/ConfigPlanner.cs:574-641`
     pub fn hand_over_rates(&mut self, rates: StreamRates) {
         let first = self.rates_handed.is_none();
         if self.rates_handed.replace(rates) == Some(rates) || first {
@@ -2052,7 +2052,7 @@ impl Telemetry {
     /// `requestDatastream(MAV_DATA_STREAM.RAW_SENSORS, hz)`: the RAW Sensor window asking for
     /// the raw sensor stream at a rate now - twice, as `getDatastream` sends every request; the
     /// link asks again at the vehicle's rates on its own clock. Nothing without a vehicle.
-    /// `// C#: Controls/RAW_Sensor.cs:257, 272-273; ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:3262-3263`
+    /// `// C#: Controls/RAW_Sensor.cs:257, 272-273; ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:3258-3259`
     pub fn request_raw_sensors(&self, hz: i32) {
         let Some((link, id)) = self.target() else {
             return;
@@ -2472,7 +2472,7 @@ mod tests {
     /// with param1 = 1 and, for a reboot, writes it again at once and returns without waiting.
     /// Two frames on the wire, both at confirmation 0, the request ended `Sent`, and nothing
     /// more however long the vehicle stays quiet.
-    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:2553-2567, 2717, 2758-2763`
+    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:2550-2564, 2714, 2755-2760`
     #[test]
     fn a_reboot_is_sent_twice_and_not_waited_for() {
         let (telemetry, mut vehicle) = Vehicle::connect(fast());
@@ -2503,7 +2503,7 @@ mod tests {
     /// A board on a serial port drops the port as it reboots: half a second on, the port is
     /// found gone and, after `OpenBg`'s second, opened again - here onto a second copter - and
     /// the screens run over the new link.
-    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:2573-2583, 717-722`
+    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:2570-2580, 719-724`
     #[test]
     fn a_serial_port_the_reboot_took_away_is_opened_again() {
         let (mut telemetry, vehicle) = Vehicle::connect_as(fast(), SERIAL);
@@ -2554,7 +2554,7 @@ mod tests {
 
     /// The port still open half a second on: `doReboot` does nothing more, and nothing is
     /// looked at again.
-    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:2579-2582`
+    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:2576-2579`
     #[test]
     fn a_serial_port_still_open_after_the_reboot_is_left_alone() {
         let (mut telemetry, _vehicle) = Vehicle::connect_as(fast(), SERIAL);
@@ -2572,7 +2572,7 @@ mod tests {
 
     /// A port that will not open again is `Strings.ConnectFailed` for the status line, and the
     /// screens are left disconnected with the reason, as a failed connect leaves them.
-    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:949-963`
+    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:951-965`
     #[test]
     fn a_serial_port_that_will_not_reopen_is_connect_failed_on_the_status_line() {
         let (mut telemetry, vehicle) = Vehicle::connect_as(fast(), SERIAL);
@@ -2604,7 +2604,7 @@ mod tests {
 
     /// Only a serial port is looked at again: a network link that stops after a reboot is not
     /// reopened.
-    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:2576`
+    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:2573`
     #[test]
     fn a_network_link_is_not_reopened_after_a_reboot() {
         let (mut telemetry, vehicle) = Vehicle::connect_as(fast(), "tcp:127.0.0.1:5760");
@@ -2631,7 +2631,7 @@ mod tests {
     /// answered - so the link sends it again with its confirmation counted up, the vehicle
     /// accepts that one, and the press has nothing to say: `doCommand`'s retry, on the screen's
     /// own path.
-    /// `// C#: GCSViews/FlightData.cs:4426-4438, ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:2783-2834`
+    /// `// C#: GCSViews/FlightData.cs:4540-4552, ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:2780-2831`
     #[test]
     fn a_command_whose_first_send_is_lost_is_sent_again_and_accepted() {
         let (mut telemetry, mut vehicle) = Vehicle::connect(fast());
@@ -2732,7 +2732,7 @@ mod tests {
 
     /// Set WP to a vehicle that never answers: `MISSION_SET_CURRENT` six times, two seconds
     /// apart in the C#, then its `catch` - said on the status line, once.
-    /// `// C#: GCSViews/FlightData.cs:1658-1672, ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:2472-2491`
+    /// `// C#: GCSViews/FlightData.cs:1660-1674, ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:2469-2488`
     #[test]
     fn every_retry_unanswered_is_said_as_the_csharps_catch_says_it() {
         let (mut telemetry, mut vehicle) = Vehicle::connect(fast());
@@ -2757,7 +2757,7 @@ mod tests {
 
     /// Trigger Camera refused: `setDigicamControl` falls back to `DIGICAM_CONTROL`, and the
     /// press says nothing more.
-    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:4557-4569`
+    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:4546-4558`
     #[test]
     fn a_refused_camera_trigger_falls_back_to_digicam_control() {
         let (mut telemetry, mut vehicle) = Vehicle::connect(fast());
@@ -2814,7 +2814,7 @@ mod tests {
     }
 
     /// Arm refused: `BUT_ARM_Click`'s message box begins "Arm failed."; the status line says it.
-    /// `// C#: GCSViews/FlightData.cs:1057-1066`
+    /// `// C#: GCSViews/FlightData.cs:1059-1068`
     #[test]
     fn a_refused_arm_says_so() {
         let (mut telemetry, mut vehicle) = Vehicle::connect(fast());
@@ -2918,7 +2918,7 @@ mod tests {
     fn flights_are_recorded_where_mission_planner_looks_for_them() {
         // With no `logdirectory` in config.xml. The real file on the machine running this can
         // name one - the C#'s Planner page writes the key when a pilot picks a folder
-        // (`ConfigPlanner.cs:792`) - and that one wins, as the next test proves.
+        // (`ConfigPlanner.cs:793`) - and that one wins, as the next test proves.
         let directory = Telemetry::log_directory_from(None);
         let Some(expected) = mp_settings::default_log_directory() else {
             // No home directory: the fallback, which must still not be the working directory.
@@ -2984,7 +2984,7 @@ mod state_wiring {
     const FENCE: u8 = 1;
 
     /// Set Home Alt writes `cs.altoffsethome` on the vehicle's state, and every altitude shown
-    /// reads it from there. `// C#: GCSViews/FlightData.cs:1236-1247`
+    /// reads it from there. `// C#: GCSViews/FlightData.cs:1238-1249`
     #[test]
     fn set_home_alt_writes_the_vehicles_own_offset() {
         let (telemetry, _vehicle) = Vehicle::connect(ProtocolTimeouts::default());
@@ -3001,7 +3001,7 @@ mod state_wiring {
 
     /// The Planner page's rates reach the saved defaults and the shown vehicle's `cs.rateX` when
     /// a combo changes them, and not before.
-    /// `// C#: GCSViews/ConfigurationView/ConfigPlanner.cs:573-640`
+    /// `// C#: GCSViews/ConfigurationView/ConfigPlanner.cs:574-641`
     #[test]
     fn the_planner_rates_reach_the_vehicle_and_the_saved_defaults() {
         let saved = StreamRates::backups();

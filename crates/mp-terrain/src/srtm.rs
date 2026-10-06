@@ -399,7 +399,7 @@ impl Srtm {
     /// A lookup over `datadirectory` that downloads from `terrain.ardupilot.org`, with its
     /// download thread running.
     ///
-    /// Mission Planner's `datadirectory` is [`crate::srtm_directory`] (MainV2.cs:737).
+    /// Mission Planner's `datadirectory` is [`crate::srtm_directory`] (MainV2.cs:739).
     #[must_use]
     pub fn new(datadirectory: impl Into<PathBuf>) -> Self {
         Self::with_http(datadirectory, Arc::new(UreqHttp::new()))
@@ -458,7 +458,7 @@ impl Srtm {
     }
 
     /// Whether the map is offline: GMap.NET's `AccessMode.CacheOnly`, which Mission Planner sets
-    /// from the "mapCache" setting (Program.cs:323, ConfigPlanner.cs:1166). A missing tile is
+    /// from the "mapCache" setting (Program.cs:325, ConfigPlanner.cs:1167). A missing tile is
     /// then never queued.
     /// `// C#: ExtLibs/Utilities/srtm.cs:385`
     pub fn set_cache_only(&self, cache_only: bool) {

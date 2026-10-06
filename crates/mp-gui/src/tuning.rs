@@ -30,7 +30,7 @@
 //! to tessellate, but ten seconds at 10 Hz is a hundred samples over 180 columns, and a bar each
 //! is a row of dots. The line goes through the same min/max reduction, so it cannot hide a
 //! one-sample spike either.
-//! `// C#: GCSViews/FlightData.cs:1940-2020`
+//! `// C#: GCSViews/FlightData.cs:1950-2030`
 
 // This module is internal to the binary; `pub` here documents intent rather than exporting API.
 #![allow(unreachable_pub)]
@@ -94,7 +94,7 @@ pub struct Tuning {
     ///
     /// Off until asked for, as in the C#: `splitContainer1.Panel1` holds the chart and starts
     /// collapsed, and `CB_tuning` is what uncollapses it.
-    /// `// C#: GCSViews/FlightData.cs:1902-1918`
+    /// `// C#: GCSViews/FlightData.cs:1912-1928`
     visible: bool,
 }
 
@@ -231,7 +231,7 @@ fn lines(series: &[Series], range: Range, from: f64, to: f64) -> Vec<crate::plot
 /// The tuning panel.
 pub fn panel_for(tuning: &Tuning, cx: &mut Context<MissionPlanner>) -> AnyElement {
     // Hidden until asked for, so a screen that already scrolls does not carry a plot nobody is
-    // watching. `// C#: GCSViews/FlightData.cs:1902-1918`
+    // watching. `// C#: GCSViews/FlightData.cs:1912-1928`
     if !tuning.is_visible() {
         return panel(
             "tuning",

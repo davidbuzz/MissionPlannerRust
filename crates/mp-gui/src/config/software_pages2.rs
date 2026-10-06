@@ -146,7 +146,7 @@ impl MissionPlanner {
                 );
                 list.push(jobs);
             }
-            // C#: Controls/MavFTPUI.cs:29-71, 665-668
+            // C#: Controls/MavFTPUI.cs:29-71, 694-697
             mavftp::CLASS => pages.mavftp.activate(view.vehicle, key),
             // C#: GCSViews/ConfigurationView/ConfigTradHeli4.cs:28-172
             trad_heli::CLASS => {

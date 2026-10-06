@@ -188,7 +188,7 @@ fn get(link: &Link, id: VehicleId, remote: &str, local: Option<&Path>) -> Result
         return Err(format!("the vehicle did not open {remote}"));
     };
     if !ended {
-        // The C# hands back what arrived, holes and all (MAVFtp.cs:862-869); writing that as the
+        // The C# hands back what arrived, holes and all (MAVFtp.cs:901-908); writing that as the
         // file would be a file that looks whole and is not.
         return Err(format!(
             "the read of {remote} gave up after its retries with {} bytes; nothing written",
@@ -254,7 +254,7 @@ fn put(link: &Link, id: VehicleId, remote: &str, data: Vec<u8>) -> Result<String
     Ok(format!("{remote}: {len} bytes, CRC 0x{crc:X}\n"))
 }
 
-/// `headless-planner ftp rm`: `kCmdRemoveFile`; false is the page's "Failed to delete file" (MavFTPUI.cs:470).
+/// `headless-planner ftp rm`: `kCmdRemoveFile`; false is the page's "Failed to delete file" (MavFTPUI.cs:493).
 fn rm(link: &Link, id: VehicleId, path: &str) -> Result<String, String> {
     match request(
         link,
@@ -269,7 +269,7 @@ fn rm(link: &Link, id: VehicleId, path: &str) -> Result<String, String> {
 }
 
 /// `headless-planner ftp crc`: `kCmdCalcFileCRC32`, as the page shows it: the name, ": 0x", the CRC in
-/// hexadecimal (MavFTPUI.cs:571). Unanswered, the C#'s CRC is `UInt32.MaxValue` (MAVFtp.cs:929),
+/// hexadecimal (MavFTPUI.cs:600). Unanswered, the C#'s CRC is `UInt32.MaxValue` (MAVFtp.cs:968),
 /// which is printed too, and the command fails.
 fn crc(link: &Link, id: VehicleId, path: &str) -> Result<String, String> {
     let FtpOutcome::Crc32 { crc, answered } = request(
@@ -531,7 +531,7 @@ mod tests {
         // `thread_info` (ArduPilot libraries/AP_HAL/Util.h:162), and an empty @SYS file fails to
         // open with ENOENT (AP_Filesystem_Sys.cpp:185-186), which the vehicle sends as
         // kErrFileNotFound. That is the C#'s FileNotFoundException, reported when the open's
-        // two-second wait runs out (MAVFtp.cs:608, 646-652); Mission Planner under mono says the
+        // two-second wait runs out (MAVFtp.cs:647, 685-691); Mission Planner under mono says the
         // same of this SITL (tools/csharp-reference/MpFtp.cs, `sitl`). A board with threads gives bytes.
         let started = Instant::now();
         match get(
@@ -552,7 +552,7 @@ mod tests {
         }
 
         // The parameter file as Mission Planner reads it: a burst of 110-byte reads
-        // (MAVLinkInterface.cs:1877, without the "?withdefaults=1" it adds). It starts with the
+        // (MAVLinkInterface.cs:1874, without the "?withdefaults=1" it adds). It starts with the
         // pack's magic, 0x671B little-endian.
         let param = read_all(&link, id, "@PARAM/param.pck", 110);
         println!("param.pck at 110 bytes a read: {} bytes", param.len());

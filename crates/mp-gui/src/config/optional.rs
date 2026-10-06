@@ -80,7 +80,7 @@ pub const INVALID_NUMBER: &str = "Invalid number entered\n";
 
 /// What `setParam`'s `TimeoutException` says of itself, `ex.ToString()`'s first line: the stack
 /// trace after it is the .NET runtime's, and is not reproduced.
-/// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:1765`
+/// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:1762`
 #[must_use]
 pub fn timeout_text(param: &str) -> String {
     format!("System.TimeoutException: Timeout on read - setParam {param}")
@@ -640,7 +640,7 @@ impl InputBox {
 
 /// The key `InputBox` keeps a question's answers under: `"InputBox" + title.CleanString() +
 /// promptText.CleanString()`, `CleanString` keeping the letters and digits.
-/// `// C#: ExtLibs/Controls/InputBox.cs:75, 183; ExtLibs/Utilities/Extensions.cs:494-497`
+/// `// C#: ExtLibs/Controls/InputBox.cs:75, 183; ExtLibs/Utilities/Extensions.cs:495-498`
 #[must_use]
 pub fn answers_key(title: &str, prompt: &str) -> String {
     // `Char.IsLetterOrDigit`; Rust's `is_alphanumeric` also takes letter-numbers and marks some

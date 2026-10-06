@@ -1,5 +1,5 @@
 # Ctrl+G and Ctrl+L: MainV2.ProcessCmdKey's `new SerialOutputNMEA().Show()` and `new
-# SpectrogramUI().Show()` (MainV2.cs:4124-4130, 4138-4145) - the windows CONFIG > Advanced's NMEA
+# SpectrogramUI().Show()` (MainV2.cs:4131-4137, 4145-4152) - the windows CONFIG > Advanced's NMEA
 # and Spectrogram buttons open (ConfigAdvanced.cs:47-50, 119-122; config-nmea.gui and
 # config-spectrogram.gui test them there), opened here by the key over any screen
 # (crates/mp-gui/src/cmd_keys.rs).

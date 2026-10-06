@@ -48,11 +48,11 @@ pub struct Sensors {
 /// Taken from the dialect rather than written out. It was the literal `0x4000` until the
 /// `CurrentState` coverage work - `XY_POSITION_CONTROL`, the neighbouring bit - so the HUD's
 /// safety state followed the position controller rather than the switch.
-/// `// C#: ExtLibs/ArduPilot/CurrentState.cs:4845-4847; ExtLibs/Mavlink/Mavlink.cs:2900`
+/// `// C#: ExtLibs/ArduPilot/CurrentState.cs:4848-4850; ExtLibs/Mavlink/Mavlink.cs:2951`
 const MOTOR_OUTPUTS: u32 = MavSysStatusSensor::MAV_SYS_STATUS_SENSOR_MOTOR_OUTPUTS.0;
-/// `MAV_SYS_STATUS_TERRAIN`. `// C#: ExtLibs/Mavlink/Mavlink.cs:2921`
+/// `MAV_SYS_STATUS_TERRAIN`. `// C#: ExtLibs/Mavlink/Mavlink.cs:2972`
 const TERRAIN: u32 = MavSysStatusSensor::MAV_SYS_STATUS_TERRAIN.0;
-/// `MAV_SYS_STATUS_REVERSE_MOTOR`. `// C#: ExtLibs/Mavlink/Mavlink.cs:2924`
+/// `MAV_SYS_STATUS_REVERSE_MOTOR`. `// C#: ExtLibs/Mavlink/Mavlink.cs:2975`
 const REVERSE_MOTOR: u32 = MavSysStatusSensor::MAV_SYS_STATUS_REVERSE_MOTOR.0;
 
 impl Sensors {
@@ -83,7 +83,7 @@ impl Sensors {
 
     /// Whether the vehicle says its motors are reversed - present, enabled and healthy - which
     /// makes the C# show a positive throttle as negative.
-    /// `// C#: ExtLibs/ArduPilot/CurrentState.cs:3850`
+    /// `// C#: ExtLibs/ArduPilot/CurrentState.cs:3853`
     #[must_use]
     pub const fn reverse_motor(&self) -> bool {
         self.present & self.enabled & self.health & REVERSE_MOTOR != 0
@@ -182,7 +182,7 @@ mod tests {
     /// code, a regenerated dialect and the C# cannot drift apart unnoticed.
     #[test]
     fn the_motor_outputs_bit_is_the_one_the_definitions_name() {
-        // C#: ExtLibs/Mavlink/Mavlink.cs:2900, MOTOR_OUTPUTS=32768
+        // C#: ExtLibs/Mavlink/Mavlink.cs:2951, MOTOR_OUTPUTS=32768
         assert_eq!(DIALECT_MOTOR_OUTPUTS, 32_768);
         assert_eq!(sensor_name(DIALECT_MOTOR_OUTPUTS), Some("MOTOR_OUTPUTS"));
         let only = |bit| Sensors {
@@ -212,7 +212,7 @@ mod tests {
 
     #[test]
     fn terrain_and_reversed_motors_need_all_three_masks() {
-        // C#: ExtLibs/Mavlink/Mavlink.cs:2921, 2924
+        // C#: ExtLibs/Mavlink/Mavlink.cs:2972, 2975
         assert_eq!(TERRAIN, 4_194_304);
         assert_eq!(REVERSE_MOTOR, 8_388_608);
         for (bit, name) in [(TERRAIN, "TERRAIN"), (REVERSE_MOTOR, "REVERSE_MOTOR")] {

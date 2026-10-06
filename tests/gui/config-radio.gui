@@ -17,7 +17,7 @@
 #   vehicle's own cs.raterc when the calibration started (ConfigRadioInput.cs:209, 388-395) -
 #   once it is saved, the minimum and maximum the loop folds in, the trims, and the summary. The
 #   saved default for raterc is set to 3 in a config.xml of the test's own (CMB_raterc, which
-#   MainV2.cs:987-988 makes ratercbackup and every vehicle starts from), so the rate put back is
+#   MainV2.cs:989-990 makes ratercbackup and every vehicle starts from), so the rate put back is
 #   told apart from the page's 2 and 10 and from anything of the link's.
 #   SITL's RC inputs are static - ch1-8 read 1500 1500 1000 1500 1800 1000 1000 1800 and nothing
 #   is reported above 8 (ArduPilot's AP_RCProtocol_UDP::set_default_pwm_input_values) - so no

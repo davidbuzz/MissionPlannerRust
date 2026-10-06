@@ -39,7 +39,7 @@ use std::sync::{Mutex, PoisonError};
 use mp_plugins::host::{self, ControlKind, MessageButtons};
 use mp_plugins::{Guest, control};
 
-/// `MAV_ODID_ID_TYPE`. `// C#: ExtLibs/Mavlink/Mavlink.cs:5181-5200`
+/// `MAV_ODID_ID_TYPE`. `// C#: ExtLibs/Mavlink/Mavlink.cs:5590-5609`
 const ID_TYPES: &[&str] = &[
     "NONE",
     "SERIAL_NUMBER",
@@ -48,7 +48,7 @@ const ID_TYPES: &[&str] = &[
     "SPECIFIC_SESSION_ID",
 ];
 
-/// `MAV_ODID_UA_TYPE`. `// C#: ExtLibs/Mavlink/Mavlink.cs:5202-5236`
+/// `MAV_ODID_UA_TYPE`. `// C#: ExtLibs/Mavlink/Mavlink.cs:5611-5645`
 const UA_TYPES: &[&str] = &[
     "NONE",
     "AEROPLANE",
@@ -68,10 +68,10 @@ const UA_TYPES: &[&str] = &[
     "OTHER",
 ];
 
-/// `MAV_ODID_DESC_TYPE`. `// C#: ExtLibs/Mavlink/Mavlink.cs:5460-5468`
+/// `MAV_ODID_DESC_TYPE`. `// C#: ExtLibs/Mavlink/Mavlink.cs:5869-5877`
 const DESC_TYPES: &[&str] = &["TEXT", "EMERGENCY", "EXTENDED_STATUS"];
 
-/// `MAV_ODID_OPERATOR_ID_TYPE`. `// C#: ExtLibs/Mavlink/Mavlink.cs:5550-5554`
+/// `MAV_ODID_OPERATOR_ID_TYPE`. `// C#: ExtLibs/Mavlink/Mavlink.cs:5959-5963`
 const OPERATOR_ID_TYPES: &[&str] = &["CAA"];
 
 const OPEN_DRONE_ID_BASIC_ID: u32 = 12900;

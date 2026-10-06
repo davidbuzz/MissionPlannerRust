@@ -34,7 +34,7 @@
 //! does not write the manifest to disk, so it downloads it again - about 1.8 MB - in every process
 //! that needs it, and a failed download leaves nothing to fall back on. On this machine
 //! `~/.local/share/Mission Planner` holds no manifest, and its `config.xml` holds only
-//! `fw_check`, the date `MainV2.BGFirmwareCheck` last warmed that static (`MainV2.cs:3923-3938`).
+//! `fw_check`, the date `MainV2.BGFirmwareCheck` last warmed that static (`MainV2.cs:3930-3945`).
 //! [`get_list`] is that rule: an `Option<Manifest>` the caller keeps for as long as its process
 //! lives, filled once.
 //!
@@ -82,7 +82,7 @@ use crate::detect::DeviceInfo;
 pub const MANIFEST_URL: &str = "https://firmware.ardupilot.org/manifest.json.gz";
 
 /// The mirror the Install Firmware page and `MainV2`'s daily check ask first.
-/// `// C#: GCSViews/ConfigurationView/ConfigFirmwareManifest.cs:67; MainV2.cs:3929`
+/// `// C#: GCSViews/ConfigurationView/ConfigFirmwareManifest.cs:67; MainV2.cs:3936`
 pub const MIRROR_URL: &str = "https://firmware.oborne.me/manifest.json.gz";
 
 /// CubePilot's peripheral manifest, appended after every successful `GetList`. Not gzipped.
@@ -101,7 +101,7 @@ pub const PAGE_SOURCES: [&str; 2] = [MIRROR_URL, MANIFEST_URL];
 pub const OVERRIDE_ENV: &str = "MP_FIRMWARE_MANIFEST";
 
 /// How we identify ourselves. Mission Planner sends its product name, version and operating
-/// system (`Settings.Instance.UserAgent`, set at `Program.cs:373-374`); this sends ours.
+/// system (`Settings.Instance.UserAgent`, set at `Program.cs:375-376`); this sends ours.
 /// `// C#: ExtLibs/ArduPilot/APFirmware.cs:116-117`
 pub const USER_AGENT: &str = concat!(
     "MissionPlannerRust/",

@@ -25,19 +25,19 @@
 //! Three views, `DisplayNames`: Basic and Advanced are presets (`DisplayView.cs:276-436`); Custom
 //! is the file `custom.displayview`, JSON or XML, read over a view as the constructor makes it,
 //! and the Advanced preset when the file is not there or not readable (`:442-455`). The Planner
-//! page's Layout box picks one (`ConfigPlanner.cs:1018-1033`), and every change is saved in
+//! page's Layout box picks one (`ConfigPlanner.cs:1019-1034`), and every change is saved in
 //! `config.xml` as `displayview`, the view as indented JSON (`MainV2.cs:357-366`).
 //!
 //! At start-up the view is Custom when the file exists and Advanced otherwise (`MainV2.cs:351-353`);
 //! a true `advancedview` from an old config makes it Advanced and is removed; then a saved
 //! `displayview` replaces it - a string that does not read is a view as the constructor makes it -
 //! with Standard Params and Advanced Params forced off and the Full Parameter List on
-//! (`MainV2.cs:898-930`). So Standard and Advanced Params appear only when a Custom view that
+//! (`MainV2.cs:900-932`). So Standard and Advanced Params appear only when a Custom view that
 //! turns them on is chosen in the session.
 //!
 //! The lists read the view when they are built, which is when their screen is shown
 //! (`MainSwitcher.ShowScreen` makes a SETUP or CONFIG screen anew each time,
-//! `MainV2.cs:3179-3180`; `ExtLibs/Controls/MainSwitcher.cs:112-153`): a change shows in a list
+//! `MainV2.cs:3186-3187`; `ExtLibs/Controls/MainSwitcher.cs:112-153`): a change shows in a list
 //! when its screen is shown again - its tab clicked, the one showing included. `LayoutChanged`
 //! sets `BackstageView.Advanced` at once (`MainV2.cs:597-601`), so a list's advanced pages follow
 //! the view when it is next drawn.
@@ -218,7 +218,7 @@ pub const NAME_AT: usize = 4;
 pub const CUSTOM_FILE: &str = "custom.displayview";
 
 /// The `config.xml` key the view is saved under.
-/// `// C#: MainV2.cs:363; GCSViews/ConfigurationView/ConfigPlanner.cs:1032`
+/// `// C#: MainV2.cs:363; GCSViews/ConfigurationView/ConfigPlanner.cs:1033`
 pub const SETTING: &str = "displayview";
 
 /// A `DisplayView`: its name and its switches, in [`PROPERTIES`]' order.
@@ -280,7 +280,7 @@ impl DisplayView {
     }
 
     /// A preset by its name, as the Layout box's handler makes it.
-    /// `// C#: GCSViews/ConfigurationView/ConfigPlanner.cs:1018-1031`
+    /// `// C#: GCSViews/ConfigurationView/ConfigPlanner.cs:1019-1032`
     #[must_use]
     pub fn named(name: DisplayName, custom: Option<&Path>) -> Self {
         match name {
@@ -396,7 +396,7 @@ impl DisplayView {
     /// `ConvertToString`: `ToJSON()`, Json.NET's indented JSON - two spaces, the properties in
     /// the class's order, the name as its number, lines ended with `Environment.NewLine`, which is
     /// `\n` on this platform as under Mono.
-    /// `// C#: ExtLibs/Utilities/DisplayView.cs:255-265; ExtLibs/Utilities/Extensions.cs:412-429`
+    /// `// C#: ExtLibs/Utilities/DisplayView.cs:255-265; ExtLibs/Utilities/Extensions.cs:413-430`
     #[must_use]
     pub fn convert_to_string(&self) -> String {
         let mut lines: Vec<String> = PROPERTIES
@@ -444,7 +444,7 @@ pub fn custom_path(settings: &Persisted) -> Option<PathBuf> {
 
 /// `MainV2`'s start-up: the static's view, the old `advancedview`, then the saved `displayview`
 /// with the parameter pages forced as the C# forces them.
-/// `// C#: MainV2.cs:351-353, 898-933`
+/// `// C#: MainV2.cs:351-353, 900-935`
 pub fn start(settings: &mut Persisted) {
     let custom = custom_path(settings);
     let first = if custom.as_deref().is_some_and(Path::is_file) {

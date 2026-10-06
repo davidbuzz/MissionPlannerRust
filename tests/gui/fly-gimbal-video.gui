@@ -1,7 +1,7 @@
 # The flight map menu's Gimbal Video: Full Sized, Mini and Pop Out, and the control's Close.
 #
 # The claim: the first of them makes GimbalVideoControl and adds Mini map (checked), Swap with map
-# and Close to its menu (FlightData.cs:6539-6587). Full Sized puts the video in the map's panel
+# and Close to its menu (FlightData.cs:6653-6701). Full Sized puts the video in the map's panel
 # with the map the mini map at the bottom right, 30% of the panel each way (6624-6649, 6611-6619).
 # The control's Video Stream opens VideoStreamSelector; Connect plays the pipeline typed in its box
 # through GStreamer, each frame the control's picture (GimbalVideoControl.cs:311-333, 211-290,

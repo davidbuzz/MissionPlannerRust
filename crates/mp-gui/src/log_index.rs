@@ -52,7 +52,7 @@ use crate::ui::theme;
 const SMALLEST_TLOG: u64 = 1024 * 4;
 /// "abandon last 100 bytes". `// C#: LogIndex.cs:179-180`
 const ABANDONED: usize = 100;
-/// `getHeartBeat` gives up after this many packets. `// C#: MAVLinkInterface.cs:1199`
+/// `getHeartBeat` gives up after this many packets. `// C#: MAVLinkInterface.cs:1201`
 const HEARTBEAT_READS: usize = 200;
 /// The state is brought up to date this often, in packets. `// C#: LogIndex.cs:191`
 const UPDATE_EVERY: usize = 200;
@@ -310,7 +310,7 @@ struct Packet {
 /// Every record of a telemetry log, in order, each with the time the C#'s reader gives it: the
 /// eight bytes after the frame before it, read as a stamp unless they start a frame themselves -
 /// so a frame found past lines of text, as MAVProxy's logs open, has the stamp the text had.
-/// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:6527-6560`
+/// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:6488-6521`
 fn packets(data: &[u8]) -> Vec<Packet> {
     let mut reader = mp_log::TlogReader::new(data);
     let mut out = Vec::new();

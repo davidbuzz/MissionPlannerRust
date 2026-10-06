@@ -19,7 +19,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
 //! The C# original's source tree, which the generators, the ledger and the tests read: a clone of
-//! <https://github.com/ArduPilot/MissionPlanner> at commit `efb0801`, named by the environment
+//! <https://github.com/ArduPilot/MissionPlanner> at commit `5dbb2b0`, named by the environment
 //! variable `MP_SRC`. The clone is no part of this repository, and nothing in it says where the
 //! clone is: a machine without `MP_SRC` skips what needs the tree, or is told what to set.
 
@@ -29,7 +29,7 @@ use std::path::PathBuf;
 pub const URL: &str = "https://github.com/ArduPilot/MissionPlanner";
 
 /// The commit the ledger and the ports cite.
-pub const COMMIT: &str = "efb0801";
+pub const COMMIT: &str = "5dbb2b0";
 
 /// The environment variable that names the clone.
 pub const ENV: &str = "MP_SRC";

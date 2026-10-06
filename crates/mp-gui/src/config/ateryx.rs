@@ -20,7 +20,7 @@
 
 //! Ateryx Pids: `GCSViews/ConfigurationView/ConfigAteryx.cs`, the page CONFIG's list adds when
 //! the vehicle is an Ateryx - a heartbeat from a `MAV_AUTOPILOT_GENERIC` fixed wing
-//! (`ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:6797-6805`) - with the link open
+//! (`ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:6761-6769`) - with the link open
 //! (`GCSViews/SoftwareConfig.cs:231-237`), beside Flight Modes and Ateryx Zero Sensors.
 //!
 //! What it shows, as `ConfigAteryx.resx` places it in a 975 x 587 page: thirteen group boxes of
@@ -91,7 +91,7 @@ pub const PAGE_SIZE: (f32, f32) = (975.0, 587.0);
 /// Every box's `Size`. `// C#: GCSViews/ConfigurationView/ConfigAteryx.resx (*.Size)`
 pub const BOX_SIZE: (f32, f32) = (104.0, 22.0);
 
-/// `MAV_CMD_PREFLIGHT_STORAGE`. `// C#: ExtLibs/Mavlink/Mavlink.cs:1099`
+/// `MAV_CMD_PREFLIGHT_STORAGE`. `// C#: ExtLibs/Mavlink/Mavlink.cs:1103`
 pub const PREFLIGHT_STORAGE: u16 = 245;
 
 /// What the flash buttons say while the vehicle flies.

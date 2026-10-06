@@ -38,7 +38,7 @@
 //!   `File.Move` throws there; whatever fails, the log is left and the next sorted.
 //!
 //! The C# sorts with `Parallel.ForEach`; here one log after another, in the order given.
-//! `// C#: ExtLibs/Utilities/LogSort.cs:1-311`
+//! `// C#: ExtLibs/Utilities/LogSort.cs:1-321`
 
 use std::path::{Path, PathBuf};
 
@@ -49,24 +49,24 @@ use crate::TlogReader;
 use crate::convert::flight_mode_name;
 use crate::dflogbuffer::DfLogBuffer;
 
-/// A log this size or smaller is "most likely invalid". `// C#: LogSort.cs:47`
+/// A log this size or smaller is "most likely invalid". `// C#: LogSort.cs:57`
 const SMALL_LOG: u64 = 1024;
 /// The folders `SortLogs` makes.
 const SMALL: &str = "SMALL";
 const SITL: &str = "SITL";
 const BAD: &str = "BAD";
-/// How many heartbeats it reads before it stops. `// C#: LogSort.cs:210`
+/// How many heartbeats it reads before it stops. `// C#: LogSort.cs:220`
 const HEARTBEATS: usize = 100;
-/// How many `MSG` lines it reads. `// C#: LogSort.cs:81`
+/// How many `MSG` lines it reads. `// C#: LogSort.cs:91`
 const MSG_LINES: usize = 100;
-/// `MAV_COMP_ID_MISSIONPLANNER`: "no gcs packets". `// C#: LogSort.cs:191-193`
+/// `MAV_COMP_ID_MISSIONPLANNER`: "no gcs packets". `// C#: LogSort.cs:201-203`
 const GCS_COMPONENT: u8 = 190;
 /// `MAV_TYPE`s.
 const GENERIC: u8 = 0;
 const ANTENNA_TRACKER: u8 = 5;
 const GCS: u8 = 6;
 const GROUND_ROVER: u8 = 10;
-/// The messages that mark a simulator. `// C#: LogSort.cs:195`
+/// The messages that mark a simulator. `// C#: LogSort.cs:205`
 const SIMSTATE: u32 = 164;
 const HIL_CONTROLS: u32 = 91;
 const HEARTBEAT: u32 = 0;
@@ -84,7 +84,7 @@ pub fn type_name(mav_type: u8) -> String {
 
 /// `SortLogs(logs, masterdestdir)`: each log sorted under `master`, or - with none - under the
 /// first log's own folder, which the C#'s first log sets for all of them.
-/// `// C#: LogSort.cs:17-292`
+/// `// C#: LogSort.cs:27-302`
 pub fn sort_logs(logs: &[PathBuf], master: Option<&Path>) {
     let master = master.map(Path::to_path_buf).or_else(|| {
         logs.first()
@@ -100,7 +100,7 @@ pub fn sort_logs(logs: &[PathBuf], master: Option<&Path>) {
     }
 }
 
-/// One log. `// C#: LogSort.cs:25-290`
+/// One log. `// C#: LogSort.cs:35-300`
 fn sort_log(log: &Path, master: &Path) -> std::io::Result<()> {
     let length = mp_os::fs::metadata(log)?.len();
     // "delete 0 size files"
@@ -122,7 +122,7 @@ fn sort_log(log: &Path, master: &Path) -> std::io::Result<()> {
     }
 }
 
-/// `master/[SITL/]<type>/<sysid>/[<serial>/]`. `// C#: LogSort.cs:124-133, 148-156, 265-279`
+/// `master/[SITL/]<type>/<sysid>/[<serial>/]`. `// C#: LogSort.cs:134-143, 158-166, 275-289`
 fn destination(master: &Path, sitl: bool, mav_type: u8, sysid: i64, serial: i64) -> PathBuf {
     let mut destination = master.to_path_buf();
     if sitl {
@@ -139,7 +139,7 @@ fn destination(master: &Path, sitl: bool, mav_type: u8, sysid: i64, serial: i64)
 
 /// A dataflash log: its `SYSID_THISMAV` and `BRD_SERIAL_NUM` parameters, its type from its `MSG`
 /// lines (see the module's notes), and `SIM` messages marking a simulator.
-/// `// C#: LogSort.cs:73-168`
+/// `// C#: LogSort.cs:83-178`
 fn sort_dataflash(log: &Path, master: &Path) -> std::io::Result<()> {
     let data = mp_os::fs::read(log)?;
     let mut buffer = DfLogBuffer::new(&data, &flight_mode_name);
@@ -180,7 +180,7 @@ fn sort_dataflash(log: &Path, master: &Path) -> std::io::Result<()> {
     Ok(())
 }
 
-/// What a pass over a telemetry log keeps. `// C#: LogSort.cs:66-71, 183`
+/// What a pass over a telemetry log keeps. `// C#: LogSort.cs:76-81, 193`
 #[derive(Debug, Default)]
 struct Pass {
     sitl: bool,
@@ -193,7 +193,7 @@ struct Pass {
 }
 
 impl Pass {
-    /// One packet; false once it has read enough. `// C#: LogSort.cs:190-227`
+    /// One packet; false once it has read enough. `// C#: LogSort.cs:200-237`
     fn packet(&mut self, sysid: u8, compid: u8, msgid: u32, payload: &[u8]) -> bool {
         if self.heartbeats.len() > HEARTBEATS {
             return false;
@@ -239,7 +239,7 @@ impl Pass {
 
 /// A telemetry log, or a raw stream without timestamps (`.rlog`): its packets read until a
 /// hundred heartbeats; none is `BAD`; several vehicles, the last heartbeat that is neither an
-/// antenna tracker nor a ground station chosen. `// C#: LogSort.cs:174-285`
+/// antenna tracker nor a ground station chosen. `// C#: LogSort.cs:184-295`
 fn sort_mavlink(log: &Path, master: &Path, timestamps: bool) -> std::io::Result<()> {
     let data = mp_os::fs::read(log)?;
     let mut pass = Pass::default();
@@ -357,7 +357,7 @@ pub fn resort_all(log_directory: &Path) -> std::io::Result<usize> {
 /// `MoveFileUsingMask`: every file in the log's folder whose name starts with the log's own, its
 /// extension dropped - as Windows matches the mask, in any case - moved into `destination`, but
 /// one already there. A name already taken there stops it, as `File.Move` throws.
-/// `// C#: LogSort.cs:294-310`
+/// `// C#: LogSort.cs:304-320`
 fn move_using_mask(log: &Path, destination: &Path) -> std::io::Result<()> {
     let folder = log.parent().unwrap_or_else(|| Path::new("."));
     let stem = log

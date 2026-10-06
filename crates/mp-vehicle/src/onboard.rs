@@ -53,7 +53,7 @@ pub struct Imu {
 }
 
 /// One ESC's telemetry, from the four `ESC_TELEMETRY_*` messages (`esc1_volt` and on).
-/// `// C#: ExtLibs/ArduPilot/CurrentState.cs:3528-3632`
+/// `// C#: ExtLibs/ArduPilot/CurrentState.cs:3531-3635`
 #[derive(Debug, Clone, Copy, Default, PartialEq)]
 pub struct Esc {
     /// Volts (`voltage / 100`).
@@ -69,7 +69,7 @@ pub struct Esc {
 /// The last `PID_TUNING` report (`pidff` to `pidSRateLanding`).
 ///
 /// One axis at a time, except the slew rates, which are kept per axis as the C# keeps them.
-/// `// C#: ExtLibs/ArduPilot/CurrentState.cs:3782-3821`
+/// `// C#: ExtLibs/ArduPilot/CurrentState.cs:3785-3824`
 #[derive(Debug, Clone, Copy, Default, PartialEq)]
 pub struct PidTuning {
     /// Which axis the rest is about: `PID_TUNING_AXIS`.
@@ -158,7 +158,7 @@ pub struct Efi {
 }
 
 /// A uAvionix ADS-B transponder's own status, from `UAVIONIX_ADSB_OUT_STATUS` (`xpdr_*`).
-/// `// C#: ExtLibs/ArduPilot/CurrentState.cs:4027-4055`
+/// `// C#: ExtLibs/ArduPilot/CurrentState.cs:4030-4058`
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 #[allow(clippy::struct_excessive_bools)] // the C#'s flags, one field each
 pub struct Transponder {
@@ -197,22 +197,22 @@ pub struct Transponder {
     /// No status message received from the transponder.
     pub status_unavailable: bool,
     /// A status has arrived. The C# clears this once its display has shown it
-    /// (`GCSViews/FlightData.cs:6481`); a snapshot reader keeps that note itself.
+    /// (`GCSViews/FlightData.cs:6595`); a snapshot reader keeps that note itself.
     pub status_pending: bool,
     /// How many statuses have arrived, wrapping: `xpdr_status_pending` as a snapshot reader can
     /// clear it. The C# sets the flag on every status and the Transponder page clears it each
-    /// time it looks (`GCSViews/FlightData.cs:6373, 6481`), so a transponder still reporting is
+    /// time it looks (`GCSViews/FlightData.cs:6487, 6595`), so a transponder still reporting is
     /// told from one that has stopped even when its status repeats unchanged; a reader here, which
     /// cannot write the flag back, keeps the count it last looked at, and a status is pending
     /// while this differs from it.
-    /// `// C#: ExtLibs/ArduPilot/CurrentState.cs:2267, 4053`
+    /// `// C#: ExtLibs/ArduPilot/CurrentState.cs:2267, 4056`
     pub status_count: u32,
     /// Callsign or flight id, as sent.
     pub flight_id: [u8; 8],
 }
 
 /// The second attitude and heading estimate, from `AHRS2` (`ahrs2_*`).
-/// `// C#: ExtLibs/ArduPilot/CurrentState.cs:4193-4203`
+/// `// C#: ExtLibs/ArduPilot/CurrentState.cs:4196-4206`
 #[derive(Debug, Clone, Copy, Default, PartialEq)]
 pub struct Ahrs2 {
     /// Roll, degrees.
@@ -230,7 +230,7 @@ pub struct Ahrs2 {
 }
 
 /// The flight controller's processor, from `MCU_STATUS` for the first one (`mcu*`).
-/// `// C#: ExtLibs/ArduPilot/CurrentState.cs:4175-4185`
+/// `// C#: ExtLibs/ArduPilot/CurrentState.cs:4178-4188`
 #[derive(Debug, Clone, Copy, Default, PartialEq)]
 pub struct Mcu {
     /// Temperature, degrees Celsius.
@@ -322,7 +322,7 @@ pub struct Board {
     pub brk_level: f32,
 }
 
-/// `MAV_POWER_STATUS_USB_CONNECTED`. `// C#: ExtLibs/Mavlink/Mavlink.cs:3798`
+/// `MAV_POWER_STATUS_USB_CONNECTED`. `// C#: ExtLibs/Mavlink/Mavlink.cs:4147`
 const POWER_USB_CONNECTED: u32 = 4;
 
 impl Default for Board {
@@ -330,7 +330,7 @@ impl Default for Board {
         Self {
             board_voltage: 0.0,
             servo_voltage: 0.0,
-            // C#: ExtLibs/ArduPilot/CurrentState.cs:4404
+            // C#: ExtLibs/ArduPilot/CurrentState.cs:4407
             voltage_flags: POWER_USB_CONNECTED,
             hw_voltage: 0.0,
             i2c_errors: 0,
@@ -340,7 +340,7 @@ impl Default for Board {
     }
 }
 
-/// `HIGHRES_IMU.fields_updated` bits the C# reads. `// C#: ExtLibs/ArduPilot/CurrentState.cs:4058-4071`
+/// `HIGHRES_IMU.fields_updated` bits the C# reads. `// C#: ExtLibs/ArduPilot/CurrentState.cs:4061-4074`
 const HIGHRES_XACC: u16 = 0x01;
 const HIGHRES_XGYRO: u16 = 0x08;
 const HIGHRES_XMAG: u16 = 0x40;
@@ -349,7 +349,7 @@ const HIGHRES_PRESSURE_ALT: u16 = 0x800;
 const HIGHRES_TEMPERATURE: u16 = 0x1000;
 
 /// `MAV_FRAME_GLOBAL_RELATIVE_ALT` and `MAV_FRAME_GLOBAL_INT`, the two frames the C# reads a
-/// position target in. `// C#: ExtLibs/Mavlink/Mavlink.cs:2963, 2970`
+/// position target in. `// C#: ExtLibs/Mavlink/Mavlink.cs:3029, 3035`
 const FRAME_GLOBAL_RELATIVE_ALT: u8 = 3;
 const FRAME_GLOBAL_INT: u8 = 5;
 
@@ -363,14 +363,14 @@ impl VehicleState {
     pub(crate) fn apply_onboard(&mut self, message: &MavMessage) -> Option<bool> {
         match message {
             MavMessage::RawImu(m) => {
-                // C#: ExtLibs/ArduPilot/CurrentState.cs:3685-3697
+                // C#: ExtLibs/ArduPilot/CurrentState.cs:3688-3700
                 self.imu[0] = Imu {
                     accel: [m.xacc, m.yacc, m.zacc].map(f32::from),
                     gyro: [m.xgyro, m.ygyro, m.zgyro].map(f32::from),
                     mag: [m.xmag, m.ymag, m.zmag].map(f32::from),
                     temperature: f32::from(m.temperature) / 100.0,
                 };
-                // C#: ExtLibs/ArduPilot/CurrentState.cs:3699-3713
+                // C#: ExtLibs/ArduPilot/CurrentState.cs:3702-3716
                 self.update_speedup(m.time_usec);
             }
             MavMessage::RcChannelsScaled(m) => {
@@ -398,7 +398,7 @@ impl VehicleState {
                 *ch4 = hil_control(m.yaw_rudder);
             }
             MavMessage::NamedValueFloat(m) => {
-                // C#: ExtLibs/ArduPilot/CurrentState.cs:3913-4012. With every field named, the
+                // C#: ExtLibs/ArduPilot/CurrentState.cs:3916-4015. With every field named, the
                 // value goes nowhere.
                 let Some(field) = Self::custom_field_for(&m.name)
                     .and_then(|index| self.custom_fields.get_mut(index))
@@ -408,7 +408,7 @@ impl VehicleState {
                 *field = m.value;
             }
             MavMessage::ScaledImu(m) => {
-                // C#: ExtLibs/ArduPilot/CurrentState.cs:3723-3735
+                // C#: ExtLibs/ArduPilot/CurrentState.cs:3726-3738
                 self.imu[0] = scaled_imu(
                     [m.xacc, m.yacc, m.zacc],
                     [m.xgyro, m.ygyro, m.zgyro],
@@ -417,7 +417,7 @@ impl VehicleState {
                 );
             }
             MavMessage::ScaledImu2(m) => {
-                // C#: ExtLibs/ArduPilot/CurrentState.cs:3739-3759
+                // C#: ExtLibs/ArduPilot/CurrentState.cs:3742-3762
                 self.imu[1] = scaled_imu(
                     [m.xacc, m.yacc, m.zacc],
                     [m.xgyro, m.ygyro, m.zgyro],
@@ -426,7 +426,7 @@ impl VehicleState {
                 );
             }
             MavMessage::ScaledImu3(m) => {
-                // C#: ExtLibs/ArduPilot/CurrentState.cs:3761-3780
+                // C#: ExtLibs/ArduPilot/CurrentState.cs:3764-3783
                 self.imu[2] = scaled_imu(
                     [m.xacc, m.yacc, m.zacc],
                     [m.xgyro, m.ygyro, m.zgyro],
@@ -448,7 +448,7 @@ impl VehicleState {
                 self.apply_esc(12, m.voltage, m.current, m.rpm, m.temperature);
             }
             MavMessage::PidTuning(m) => {
-                // C#: ExtLibs/ArduPilot/CurrentState.cs:3788-3817
+                // C#: ExtLibs/ArduPilot/CurrentState.cs:3791-3820
                 let pid = &mut self.pid;
                 pid.ff = m.ff;
                 pid.p = m.p;
@@ -470,7 +470,7 @@ impl VehicleState {
                 }
             }
             MavMessage::HygrometerSensor(m) => {
-                // C#: ExtLibs/ArduPilot/CurrentState.cs:3828-3837, the first two sensors.
+                // C#: ExtLibs/ArduPilot/CurrentState.cs:3831-3840, the first two sensors.
                 let Some(hygrometer) = self.hygrometers.get_mut(usize::from(m.id)) else {
                     return Some(false);
                 };
@@ -493,7 +493,7 @@ impl VehicleState {
             MavMessage::EfiStatus(m) => return Some(self.apply_efi(m)),
             MavMessage::UavionixAdsbOutStatus(m) => self.apply_transponder(m),
             MavMessage::Ahrs2(m) => {
-                // C#: ExtLibs/ArduPilot/CurrentState.cs:4197-4202, `(float)MathHelper.rad2deg`.
+                // C#: ExtLibs/ArduPilot/CurrentState.cs:4200-4205, `(float)MathHelper.rad2deg`.
                 let rad2deg = cast_f32(180.0 / std::f64::consts::PI);
                 self.ahrs2 = Ahrs2 {
                     roll: m.roll * rad2deg,
@@ -505,7 +505,7 @@ impl VehicleState {
                 };
             }
             MavMessage::McuStatus(m) => {
-                // C#: ExtLibs/ArduPilot/CurrentState.cs:4178-4184, the first processor.
+                // C#: ExtLibs/ArduPilot/CurrentState.cs:4181-4187, the first processor.
                 if m.id != 0 {
                     return Some(false);
                 }
@@ -558,7 +558,7 @@ impl VehicleState {
                 self.board.i2c_errors = u16::from(m.i2cerr);
             }
             MavMessage::Meminfo(m) => {
-                // C#: ExtLibs/ArduPilot/CurrentState.cs:3895-3899
+                // C#: ExtLibs/ArduPilot/CurrentState.cs:3898-3902
                 self.board.free_memory = if m.freemem32 > 0 {
                     u32_f32(m.freemem32)
                 } else {
@@ -576,12 +576,12 @@ impl VehicleState {
                 self.airspeed_ratio = m.ratio;
             }
             MavMessage::AoaSsa(m) => {
-                // C#: ExtLibs/ArduPilot/CurrentState.cs:3908-3909
+                // C#: ExtLibs/ArduPilot/CurrentState.cs:3911-3912
                 self.aoa = m.aoa;
                 self.ssa = m.ssa;
             }
             MavMessage::Rpm(m) => {
-                // C#: ExtLibs/ArduPilot/CurrentState.cs:3467-3468
+                // C#: ExtLibs/ArduPilot/CurrentState.cs:3470-3471
                 self.rpm = [m.rpm1, m.rpm2];
             }
             MavMessage::SystemTime(m) => {
@@ -606,7 +606,7 @@ impl VehicleState {
     }
 
     /// `HIGHRES_IMU`, by sensor id, only the fields its mask says were updated.
-    /// `// C#: ExtLibs/ArduPilot/CurrentState.cs:4056-4173`
+    /// `// C#: ExtLibs/ArduPilot/CurrentState.cs:4059-4176`
     fn apply_highres_imu(&mut self, m: &HighresImu) -> bool {
         let Some(imu) = self.imu.get_mut(usize::from(m.id)) else {
             return false;
@@ -635,7 +635,7 @@ impl VehicleState {
     }
 
     /// Four ESCs from one `ESC_TELEMETRY_*` message, starting at `first`.
-    /// `// C#: ExtLibs/ArduPilot/CurrentState.cs:3532-3550` and the three cases after it.
+    /// `// C#: ExtLibs/ArduPilot/CurrentState.cs:3535-3553` and the three cases after it.
     fn apply_esc(
         &mut self,
         first: usize,
@@ -682,7 +682,7 @@ impl VehicleState {
         true
     }
 
-    /// `UAVIONIX_ADSB_OUT_STATUS`. `// C#: ExtLibs/ArduPilot/CurrentState.cs:4031-4053`
+    /// `UAVIONIX_ADSB_OUT_STATUS`. `// C#: ExtLibs/ArduPilot/CurrentState.cs:4034-4056`
     fn apply_transponder(&mut self, m: &UavionixAdsbOutStatus) {
         let state = |bit: u8| m.state & bit != 0;
         let fault = |bit: u8| m.fault & bit != 0;
@@ -705,7 +705,7 @@ impl VehicleState {
             gps_no_fix: fault(16),
             status_unavailable: fault(8),
             status_pending: true,
-            // C#: ExtLibs/ArduPilot/CurrentState.cs:4053, `xpdr_status_pending = true;` on
+            // C#: ExtLibs/ArduPilot/CurrentState.cs:4056, `xpdr_status_pending = true;` on
             // every status: one more.
             status_count: self.transponder.status_count.wrapping_add(1),
             flight_id: m.flight_id,
@@ -714,7 +714,7 @@ impl VehicleState {
 
     /// `GIMBAL_DEVICE_ATTITUDE_STATUS`: the quaternion as pitch, roll and yaw in degrees, yaw
     /// from 0 to 360, with the C#'s `Quaternion.get_euler_*`.
-    /// `// C#: ExtLibs/ArduPilot/CurrentState.cs:4020-4024; ExtLibs/Utilities/Quaternion.cs:331-352`
+    /// `// C#: ExtLibs/ArduPilot/CurrentState.cs:4023-4027; ExtLibs/Utilities/Quaternion.cs:331-352`
     fn apply_gimbal_attitude(&mut self, m: &GimbalDeviceAttitudeStatus) {
         let [q1, q2, q3, q4] = m.q.map(f64::from);
         let roll = (2.0 * (q1 * q2 + q3 * q4)).atan2(1.0 - 2.0 * (q2 * q2 + q3 * q3));
@@ -836,7 +836,7 @@ mod tests {
 
     /// Every status counts one, repeated or not, as each sets `xpdr_status_pending`; the count
     /// is all that tells the second of two identical statuses from the first.
-    /// `// C#: ExtLibs/ArduPilot/CurrentState.cs:4027-4053`
+    /// `// C#: ExtLibs/ArduPilot/CurrentState.cs:4030-4056`
     #[test]
     fn every_transponder_status_counts_one_even_when_it_repeats() {
         let mut state = VehicleState::default();

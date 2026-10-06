@@ -268,7 +268,7 @@ fn each_packet_is_stamped_with_the_time_it_is_read() {
 
 /// A transport playing a recording reports the recording's clock, and every packet is stamped
 /// with it - as `readlogPacketMavlink` sets `cs.datetime = lastlogread` (:6649) - and nothing is
-/// asked of the vehicle, which the C# plays with its port closed (`CurrentState.cs:4633-4634`).
+/// asked of the vehicle, which the C# plays with its port closed (`CurrentState.cs:4636-4637`).
 #[test]
 fn a_recording_stamps_its_own_time_and_asks_for_no_streams() {
     /// A loopback that says it is a recording made at a fixed time.
@@ -322,10 +322,10 @@ fn a_recording_stamps_its_own_time_and_asks_for_no_streams() {
 
 // --- the once-a-second counts -----------------------------------------------------------------
 
-/// `UpdateCurrentSettings` runs after each read (`MainV2.cs:3058-3069`) and counts a second in
+/// `UpdateCurrentSettings` runs after each read (`MainV2.cs:3065-3076`) and counts a second in
 /// the air each time the clock's seconds field changes while armed with the throttle over 12%,
 /// and the straight line flown since the last counted second while armed on a 3D fix
-/// (`CurrentState.cs:4602-4626`). Disarmed, neither counts.
+/// (`CurrentState.cs:4605-4629`). Disarmed, neither counts.
 #[test]
 fn time_in_air_and_distance_count_each_second_while_armed() {
     let (link, mut peer) = link(false, ProtocolTimeouts::default());
@@ -386,7 +386,7 @@ fn time_in_air_and_distance_count_each_second_while_armed() {
 /// The telemetry streams are asked for at the vehicle's own rates - the saved defaults it started
 /// from, then whatever the Planner page set - in `UpdateCurrentSettings`' order, each twice as
 /// `getDatastream` sends it, and a rate of -1 not at all; once when the vehicle is first listed
-/// and again 38 seconds later (`CurrentState.cs:4632-4663`, here with the waits divided by 100).
+/// and again 38 seconds later (`CurrentState.cs:4635-4666`, here with the waits divided by 100).
 #[test]
 fn the_streams_are_asked_for_at_the_vehicles_own_rates() {
     let timeouts = ProtocolTimeouts::default().faster(100);
@@ -456,7 +456,7 @@ fn the_streams_are_asked_for_at_the_vehicles_own_rates() {
 }
 
 /// Every vehicle listed on the link is asked, each for itself, as the C# asks every `MAVState`
-/// in `MAVlist` (`MainV2.cs:3058-3069`); one that has sent no `HEARTBEAT` is not listed
+/// in `MAVlist` (`MainV2.cs:3065-3076`); one that has sent no `HEARTBEAT` is not listed
 /// (`MAVList.cs:25-30, 101-117`) and is not asked.
 #[test]
 fn every_listed_vehicle_is_asked_and_an_unlisted_one_is_not() {
@@ -484,7 +484,7 @@ fn every_listed_vehicle_is_asked_and_an_unlisted_one_is_not() {
 
 /// The low-airspeed warning reads `AIRSPEED_MIN`, or failing it `ARSPD_FBW_MIN`, from the
 /// vehicle's parameters, which every `PARAM_VALUE` updates as it passes (:5766-5796;
-/// `CurrentState.cs:3858-3888`). Three aircraft on one link, armed, in the air and slow, with a
+/// `CurrentState.cs:3861-3891`). Three aircraft on one link, armed, in the air and slow, with a
 /// healthy airspeed sensor: the one with both parameters is held to `AIRSPEED_MIN`, the one with
 /// only `ARSPD_FBW_MIN` to that, and the one with neither never warns.
 #[test]
@@ -514,6 +514,9 @@ fn the_airspeed_minimums_come_from_the_parameters() {
         errors_count3: 0,
         errors_count4: 0,
         battery_remaining: -1,
+        onboard_control_sensors_present_extended: 0,
+        onboard_control_sensors_enabled_extended: 0,
+        onboard_control_sensors_health_extended: 0,
     });
     // Armed with the throttle up until a second has been counted in the air, then slow.
     let deadline = Instant::now() + Duration::from_millis(2500);

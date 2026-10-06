@@ -199,7 +199,7 @@ fn a_bing_map_checks_its_version_then_asks_for_tiles_as_the_csharp_does() {
         "GET /tiles/a13.jpeg?g=15512&mkt=en&n=z HTTP/1.1"
     );
     // Both with the C#'s headers: its Accept, the provider's Referer (BingMapProvider.cs:22), and
-    // a User-Agent that names the application (Program.cs:373-375).
+    // a User-Agent that names the application (Program.cs:375-377).
     for request in &requests {
         assert_eq!(request.header("accept"), vec!["*/*"], "{request:?}");
         assert_eq!(

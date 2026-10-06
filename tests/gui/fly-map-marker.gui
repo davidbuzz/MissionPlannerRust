@@ -6,7 +6,7 @@
 # four motors and arms turned to cs.yaw, its sysid beside it, and from its point the heading line
 # (red), the course (black) and its Target - cs.nav_bearing - (orange), each GMapMarkerBase.length
 # long; a quad draws no nav-bearing line (GMapMarkerQuad.cs:132-149). With no settings written the
-# Planner page's GMapMarkerBase_Display* are all on (MainV2.cs:3855-3860). The heading is the
+# Planner page's GMapMarkerBase_Display* are all on (MainV2.cs:3862-3867). The heading is the
 # marker's Heading, cs.yaw, as degrees from 0 to 360.
 #
 # Needs SITL copter on tcp:127.0.0.1:5760. Run as

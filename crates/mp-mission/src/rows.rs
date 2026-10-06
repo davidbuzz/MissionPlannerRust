@@ -21,7 +21,7 @@
 //! Mission Planner's `Commands` grid, and the home that is kept apart from it.
 //!
 //! The C# keeps home out of the grid. `Commands` holds waypoint 1 onwards, its row headers read
-//! `(a + 1)` (`updateRowNumbers`, `GCSViews/FlightPlanner.cs:7316`), and home lives in the three
+//! `(a + 1)` (`updateRowNumbers`, `GCSViews/FlightPlanner.cs:7313`), and home lives in the three
 //! Home Location boxes, `TXT_homelat`, `TXT_homelng` and `TXT_homealt`. Every handler that
 //! writes a mission puts home back in front - to the vehicle (`saveWPs`, `:6196-6227`) and to a
 //! `.waypoints` file (`savewaypoints`, `:6108-6122`) - and every handler that reads one takes
@@ -73,7 +73,7 @@ impl Home {
 
     /// Whether this is a home at all: `Lat != 0 && Lng != 0`, the test `updateHomeText` puts to
     /// the vehicle's home and the planned one before taking either.
-    /// `// C#: GCSViews/FlightPlanner.cs:7198, 7208-7209`
+    /// `// C#: GCSViews/FlightPlanner.cs:7195, 7205-7206`
     #[must_use]
     pub fn is_set(&self) -> bool {
         self.lat != 0.0 && self.lng != 0.0
@@ -191,7 +191,7 @@ pub fn waypoint_positions(rows: &[MissionItem]) -> Vec<LatLon> {
 
 /// Numbers the grid's rows as its headers read, from 1: row `a` is waypoint `a + 1`, because home
 /// is 0.
-/// `// C#: GCSViews/FlightPlanner.cs:7307-7325`
+/// `// C#: GCSViews/FlightPlanner.cs:7304-7322`
 pub fn number_rows(rows: &mut [MissionItem]) {
     for (index, item) in rows.iter_mut().enumerate() {
         item.seq = u16::try_from(index + 1).unwrap_or(u16::MAX);

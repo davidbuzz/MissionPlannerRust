@@ -2073,7 +2073,7 @@ mod tests {
     /// The editor's one step, whose first `PARAM_SET` is lost: the link sends it again, the
     /// vehicle echoes the second, and the status line says what the vehicle now holds. The C#'s
     /// `setParam` retry, driven through the screen's own list of writes and the real link.
-    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:1748-1770`
+    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:1745-1767`
     #[test]
     fn a_write_whose_first_send_is_lost_is_sent_again_and_confirmed() {
         let (telemetry, mut vehicle) = Vehicle::connect(fast());
@@ -2245,7 +2245,7 @@ mod tests {
 
     /// Parameters on a vehicle whose list was never downloaded: each name is read before it is
     /// written - `setParam` sends only a name the vehicle has listed - and then written.
-    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:1640-1644`
+    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:1637-1641`
     #[test]
     fn a_parameter_not_yet_listed_is_read_then_written() {
         let (telemetry, mut vehicle) = Vehicle::connect(fast());

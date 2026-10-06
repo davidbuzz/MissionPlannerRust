@@ -64,7 +64,7 @@ pub const CLICK_SLOP: f32 = 3.0;
 /// as load-bearing as "does this click add a waypoint to the mission" ends up verified by looking
 /// at a screenshot.
 ///
-/// `// C#: GCSViews/FlightPlanner.cs:7736-7745`
+/// `// C#: GCSViews/FlightPlanner.cs:7733-7742`
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum MapRelease {
     /// Add a waypoint where the button came up.
@@ -345,7 +345,7 @@ pub struct Plan {
     verify_height: bool,
     /// `sethome`: set when the Lat box is entered, cleared by any change to the three boxes; while
     /// it is set, the next click on the map moves home there instead of adding a row.
-    /// `// C#: GCSViews/FlightPlanner.cs:136, 566-571, 7003, 7016-7041`
+    /// `// C#: GCSViews/FlightPlanner.cs:136, 566-571, 7000, 7013-7038`
     sethome: bool,
     /// The row being dragged on the map and where it was when the drag began: what the grid's Lat
     /// and Long cells hold until `setfromMap` writes the new position, and what Verify Height
@@ -487,7 +487,7 @@ pub enum WriteAnswer {
 }
 
 /// `MAV_CMD.LAST` in Mission Planner's dialect: the commands below it are the navigation ones.
-/// `// C#: ExtLibs/Mavlink/Mavlink.cs:921`
+/// `// C#: ExtLibs/Mavlink/Mavlink.cs:924`
 const MAV_CMD_LAST: u16 = 95;
 
 /// The grid checks both Write buttons run over row `index` before sending: every number column
@@ -604,7 +604,7 @@ fn c_sharp_int(value: f64) -> i32 {
 }
 
 /// What entering the Lat box says, the trailing space the C#'s own.
-/// `// C#: GCSViews/FlightPlanner.cs:7016-7022`
+/// `// C#: GCSViews/FlightPlanner.cs:7013-7019`
 pub const CLICK_TO_SET_HOME: &str = "Click on the Map to set Home ";
 
 /// The command set `readCMDXML` reads from `mavcmd.xml` for the firmware: `APM` for a plane,
@@ -781,7 +781,7 @@ impl PanelBox {
     /// through and otherwise keep a character only when `float.TryParse` takes it on its own,
     /// which is a digit; WP Radius lets a `.` through as well ("Allow floating values to be
     /// set") and Loiter Radius a `-`, for a loiter the other way round.
-    /// `// C#: GCSViews/FlightPlanner.cs:6984-6990, 7054-7064, 7075-7085`
+    /// `// C#: GCSViews/FlightPlanner.cs:6981-6987, 7051-7061, 7072-7082`
     #[must_use]
     pub fn accepts(self, character: char) -> bool {
         if character.is_ascii_digit() {
@@ -1019,7 +1019,7 @@ pub enum OnTimeout {
 pub struct ParamStep {
     /// The names to try, in order: the first the vehicle has takes the value, as
     /// `setParam(string[] paramnames, double value)` does.
-    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:1609-1620`
+    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:1606-1617`
     pub names: Vec<&'static str>,
     /// The value.
     pub value: f64,
@@ -1069,7 +1069,7 @@ pub enum WritesEnd {
 ///
 /// `setParamAsync` returns false without sending for a parameter the vehicle has not listed,
 /// true without sending for one that already holds the value, and throws `TimeoutException` when
-/// its retries go unanswered (`MAVLinkInterface.cs:1636-1765`); the link's `set_param` ends in
+/// its retries go unanswered (`MAVLinkInterface.cs:1633-1762`); the link's `set_param` ends in
 /// the same three ways (`mp_link::requests`), and this decides what each does to the row.
 #[derive(Debug, Clone)]
 pub struct ParamWrites {
@@ -1314,7 +1314,7 @@ impl RallyUpload {
         };
         // `byte count` counts up from 0; `(int)(plla.Lat * t7)`, `(short) plla.Alt`,
         // `(byte)(float)` of the count: the C#'s casts, which truncate.
-        // `// C#: GCSViews/FlightPlanner.cs:5938, 5947-5948; MAVLinkInterface.cs:6447-6451`
+        // `// C#: GCSViews/FlightPlanner.cs:5938, 5947-5948; MAVLinkInterface.cs:6408-6412`
         #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
         let set = mp_link::requests::RallyPointSet {
             idx: index as u8,
@@ -1402,7 +1402,7 @@ impl RallyUpload {
 
 /// `MAV_PROTOCOL_CAPABILITY_MISSION_FENCE` (16384): a vehicle that takes its fence as mission
 /// items - every ArduPilot 4.x, the SITL here (capabilities 0xfbef) among them.
-/// `// C#: ExtLibs/Mavlink/Mavlink.cs:7103`
+/// `// C#: ExtLibs/Mavlink/Mavlink.cs:7914`
 pub const CAPABILITY_MISSION_FENCE: u32 =
     mp_mavlink_dialects::all::MavProtocolCapability::MAV_PROTOCOL_CAPABILITY_MISSION_FENCE.0;
 /// Geo-Fence > Upload and Download on a vehicle without the fence parameters.
@@ -1431,10 +1431,10 @@ pub const NOTHING_TO_DOWNLOAD: &str = "Nothing to download";
 /// `// C#: GCSViews/FlightPlanner.cs:842-845, 874-878`
 pub const FENCE_POINT_FAILED: &str = "Failed to get fence point";
 /// `getFencePoint`'s `TimeoutException`, which `DoGeofencePointsUpload` does not catch and the
-/// progress reporter shows. `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:5942`
+/// progress reporter shows. `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:5905`
 pub const FENCE_POINT_TIMEOUT: &str = "Timeout on read - getFencePoint";
 /// `setFencePoint`'s exception once three sends have not read back the same.
-/// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:6438`
+/// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:6399`
 pub const FENCE_POINT_UNVERIFIED: &str = "Could not verify GeoFence Point";
 /// What the progress reporter shows for an exception its work threw, `ErrorMessage` unset as
 /// `DoGeofencePointsUpload` leaves it: "There was an unexpected error (" and the message.
@@ -1799,7 +1799,7 @@ impl FenceUpload {
     /// How the call in flight ended. `None` is one that could not be sent or whose request the
     /// link no longer has - the link gone, as after Disconnect - which stops a set as its timeout
     /// does: the C#'s `setParam` on a closed port finds the name (`Close` keeps `MAV.param`),
-    /// sends nothing and times out (`MAVLinkInterface.cs:1262-1264, 1765`). A parameter the list
+    /// sends nothing and times out (`MAVLinkInterface.cs:1265-1267, 1762`). A parameter the list
     /// does not hold is the link's `UnknownParameter`, passed over as `setParam`'s `false` is.
     pub fn answer(&mut self, outcome: Option<mp_link::requests::RequestOutcome>) {
         use mp_link::requests::RequestOutcome;
@@ -2143,7 +2143,7 @@ impl Plan {
     /// `TXT_homelat_TextChanged` and its two siblings: `sethome` cleared, then the planned home
     /// takes the box's number, or keeps what it had when the text does not parse. (Each also
     /// redraws the map, which the caller does.)
-    /// `// C#: GCSViews/FlightPlanner.cs:7001-7050`
+    /// `// C#: GCSViews/FlightPlanner.cs:6998-7047`
     fn home_text_changed(&mut self, which: HomeBox) {
         self.sethome = false;
         let Some(value) = mp_mission::rows::parse_number(self.home_text(which)) else {
@@ -2185,7 +2185,7 @@ impl Plan {
     /// take the vehicle's home if it has sent one, else the planned home if there is one, and
     /// are left as they are otherwise. Setting them runs their `TextChanged`, so a vehicle's home
     /// becomes the planned home too.
-    /// `// C#: GCSViews/FlightPlanner.cs:1344-1349, 7195-7218`
+    /// `// C#: GCSViews/FlightPlanner.cs:1344-1349, 7192-7215`
     pub fn update_home_text(&mut self, vehicle: Option<Home>) {
         let chosen = match vehicle {
             Some(home) if home.is_set() => home,
@@ -2285,7 +2285,7 @@ impl Plan {
 
     /// A key pressed in a panel box: its `KeyPress` first, which throws away a character the box
     /// does not take (`e.Handled = true`), then the box. A disabled Loiter Radius takes nothing.
-    /// `// C#: GCSViews/FlightPlanner.cs:6984-6990, 7054-7064, 7075-7085`
+    /// `// C#: GCSViews/FlightPlanner.cs:6981-6987, 7051-7061, 7072-7082`
     pub fn panel_key(
         &mut self,
         which: PanelBox,
@@ -2310,7 +2310,7 @@ impl Plan {
     /// Default Alt to "100", Loiter Radius to "45", and WP Radius, only when it is empty, to
     /// `startupWPradius`. (WP Radius's also redraws the waypoints' radius circles, which the
     /// map here reads from the box every frame - see [`map_overlay`].)
-    /// `// C#: GCSViews/FlightPlanner.cs:6992-6999, 7066-7073, 7087-7106`
+    /// `// C#: GCSViews/FlightPlanner.cs:6989-6996, 7063-7070, 7084-7103`
     pub fn panel_leave(&mut self, which: PanelBox) {
         if float_parses(self.panel_text(which)) {
             return;
@@ -2361,7 +2361,7 @@ impl Plan {
     /// later) - the last of them the vehicle has wins - each written `{0:N2}`; Loiter Radius from
     /// `LOITER_RADIUS`, or else `WP_LOITER_RAD`, and disabled when the vehicle has neither.
     /// Distances are metres here, so `multiplierdist` is 1.
-    /// `// C#: GCSViews/FlightPlanner.cs:6695-6750`
+    /// `// C#: GCSViews/FlightPlanner.cs:6692-6747`
     pub fn set_wp_params(&mut self, parameters: &[(String, f64)]) {
         let param = |name: &str| {
             parameters
@@ -2499,7 +2499,7 @@ impl Plan {
     }
 
     /// `chk_usemavftp_CheckedChanged`'s state; the caller saves `UseMissionMAVFTP`.
-    /// `// C#: GCSViews/FlightPlanner.cs:8403-8406`
+    /// `// C#: GCSViews/FlightPlanner.cs:8400-8403`
     pub fn set_use_mavftp(&mut self, on: bool) {
         self.use_mavftp = on;
     }
@@ -2622,7 +2622,7 @@ impl Plan {
     /// number, plus the ground where it now is, less the ground where it was, each ground height
     /// cut to whole metres, the sum cut again. A row let go where it was grabbed was never dragged
     /// (`isMouseDraging`), and nothing happens to it.
-    /// `// C#: GCSViews/FlightPlanner.cs:1119-1146, 7803-7810`
+    /// `// C#: GCSViews/FlightPlanner.cs:1119-1146, 7800-7807`
     pub fn end_drag(
         &mut self,
         seq: u16,
@@ -2662,7 +2662,7 @@ impl Plan {
     /// height there - the ASL box first, `ToString("0.00")`, then Lat and Long, each through its
     /// `TextChanged`. A point with no terrain puts 0 in the box, the `alt` of `srtm`'s Invalid
     /// answer: neither handler looks at the kind of answer.
-    /// `// C#: GCSViews/FlightPlanner.cs:745-755, 6625-6632`
+    /// `// C#: GCSViews/FlightPlanner.cs:745-755, 6622-6629`
     pub fn set_home_at(&mut self, position: LatLon) {
         let ground = self
             .terrain
@@ -2678,7 +2678,7 @@ impl Plan {
 
     /// `TXT_homelat_Enter`: the Lat box entered says "Click on the Map to set Home " unless it
     /// has already, and the next click on the map sets home.
-    /// `// C#: GCSViews/FlightPlanner.cs:7016-7022`
+    /// `// C#: GCSViews/FlightPlanner.cs:7013-7019`
     pub fn home_lat_enter(&mut self) -> Option<&'static str> {
         let said = (!self.sethome).then_some(CLICK_TO_SET_HOME);
         self.sethome = true;
@@ -2751,7 +2751,7 @@ impl Plan {
     }
 
     /// Geo-Fence > Set Return Location: the red marker, moved to where the menu was opened.
-    /// `// C#: GCSViews/FlightPlanner.cs:6663-6670`
+    /// `// C#: GCSViews/FlightPlanner.cs:6660-6667`
     pub fn set_fence_return(&mut self, position: LatLon) {
         self.fence_return = Some(position);
     }
@@ -3108,7 +3108,7 @@ impl Plan {
 
     /// Set Rally Point's marker: at the menu's position, `alt / CurrentState.multiplieralt` -
     /// metres here, so the altitude typed - kept by the marker as an `int`.
-    /// `// C#: GCSViews/FlightPlanner.cs:6646-6653; ExtLibs/Maps/GMapMarkerRallyPt.cs:33-37`
+    /// `// C#: GCSViews/FlightPlanner.cs:6643-6650; ExtLibs/Maps/GMapMarkerRallyPt.cs:33-37`
     pub fn add_rally_marker(&mut self, position: LatLon, altitude: i32) {
         self.rally.push(RallyPoint {
             position,
@@ -3850,7 +3850,7 @@ fn check_box(
 ///
 /// One row, as the `.resx` has it, wrapping only when the grid is too narrow for it (the owner,
 /// 2026-10-04: the grid's top third was wasted space).
-/// `// C#: GCSViews/FlightPlanner.resx (panelWaypoints); GCSViews/FlightPlanner.cs:234-239, 2157-2168, 8403-8406`
+/// `// C#: GCSViews/FlightPlanner.resx (panelWaypoints); GCSViews/FlightPlanner.cs:234-239, 2157-2168, 8400-8403`
 pub fn waypoint_strip(
     plan: &Plan,
     state: &StripState<'_>,
@@ -4005,7 +4005,7 @@ fn strip_checks(
     });
     // `chk_usemavftp`, "MAVFTP", at (589, 12): Read and Write go through `@MISSION/mission.dat`
     // while it is ticked, and the tick is kept as `UseMissionMAVFTP`.
-    // `// C#: GCSViews/FlightPlanner.cs:319, 8403-8406`
+    // `// C#: GCSViews/FlightPlanner.cs:319, 8400-8403`
     let mavftp = {
         let checked = plan.use_mavftp();
         check_box("plan-mavftp", "MAVFTP", checked, true)
@@ -4813,7 +4813,7 @@ pub fn actions_panel(
     // `lbl_status` at (4, 46) of `panel3`: "Status" until the map loads tiles, then
     // `MainMap_OnTileLoadStart`'s "Status: loading tiles..." and `OnTileLoadComplete`'s
     // "Status: loaded tiles".
-    // `// C#: GCSViews/FlightPlanner.resx (lbl_status); GCSViews/FlightPlanner.cs:8172, 8190`
+    // `// C#: GCSViews/FlightPlanner.resx (lbl_status); GCSViews/FlightPlanner.cs:8169, 8187`
     let status = crate::probe::measured("plan-status", div())
         .text_xs()
         .text_color(rgb(theme::DIM))
@@ -4890,7 +4890,7 @@ pub fn actions_panel(
     // `BUT_InjectCustomMap` at (3, 68) of `panel3`, 115 by 23, reading "Cancel" while a run is on,
     // and `progressBarInjectCustomMap` under it at (3, 97), 115 by 23, shown while it runs.
     // `// C#: GCSViews/FlightPlanner.resx (BUT_InjectCustomMap, progressBarInjectCustomMap);
-    // GCSViews/FlightPlanner.cs:8416-8527`
+    // GCSViews/FlightPlanner.cs:8413-8524`
     let inject = {
         let running = extras.inject.is_some();
         let mut row = div().flex().items_center().gap_2().child(action(
@@ -5067,7 +5067,7 @@ pub fn actions_panel(
 /// The vehicle's home, `cs.HomeLocation`, once it has sent `HOME_POSITION`.
 ///
 /// **The altitude is a stand-in.** The C# takes `home.altitude / 1000.0` from `HOME_POSITION`
-/// (`MAVLinkInterface.cs:5703-5707`), and `VehicleState` in this tree keeps only the message's
+/// (`MAVLinkInterface.cs:5676-5680`), and `VehicleState` in this tree keeps only the message's
 /// position. Until it keeps the altitude too, this takes the one ArduPilot's own
 /// `GLOBAL_POSITION_INT` implies - `alt` above sea level less `relative_alt` above home - which is
 /// the same number on an ArduPilot that has a home. Swap it for the state's home altitude when
@@ -5086,7 +5086,7 @@ pub fn vehicle_home(view: &TelemetryView) -> Option<Home> {
 /// The planned home `MainV2` starts with: `TXT_homelat`, `TXT_homelng` and `TXT_homealt` from
 /// Mission Planner's `config.xml`, where the planning screen saves its boxes, each `GetDouble` -
 /// 0 when absent or unreadable - and no home at all if the position is off the globe.
-/// `// C#: MainV2.cs:1012-1025; ExtLibs/Utilities/Settings.cs:245-254; GCSViews/FlightPlanner.cs:2576-2578`
+/// `// C#: MainV2.cs:1014-1027; ExtLibs/Utilities/Settings.cs:245-254; GCSViews/FlightPlanner.cs:2576-2578`
 #[must_use]
 pub fn planned_home_from_config(config: Option<&mp_settings::Config>) -> Home {
     let Some(config) = config else {
@@ -5152,7 +5152,7 @@ pub fn planner_map_home(plan: &Plan) -> Option<LatLon> {
 ///
 /// Where both are 0,0 the C# draws the marker there, off the coast of Africa; this map frames
 /// the home it is given, so it is given none.
-/// `// C#: GCSViews/FlightData.cs:3808-3845`
+/// `// C#: GCSViews/FlightData.cs:3922-3959`
 #[must_use]
 pub fn flight_map_home(
     vehicle: Option<LatLon>,
@@ -5223,7 +5223,7 @@ pub fn leave_panel_boxes(
 
 /// `TXT_homelat_Enter` for the Lat box having taken the keyboard since the last frame: the first
 /// time, "Click on the Map to set Home ", and the next click on the map moves home.
-/// `// C#: GCSViews/FlightPlanner.Designer.cs (TXT_homelat.Enter); GCSViews/FlightPlanner.cs:7016-7022`
+/// `// C#: GCSViews/FlightPlanner.Designer.cs (TXT_homelat.Enter); GCSViews/FlightPlanner.cs:7013-7019`
 pub fn track_home_focus(
     this: &mut MissionPlanner,
     window: &mut gpui::Window,
@@ -5282,7 +5282,7 @@ pub fn waypoint_grabbed(this: &mut MissionPlanner, seq: u16) {
 
 /// A grabbed row let go on the map: `callMeDrag(tag, lat, lng, -2)`, which with Verify Height
 /// keeps the row's height above the ground ([`Plan::end_drag`]).
-/// `// C#: GCSViews/FlightPlanner.cs:7803-7810, 739-777`
+/// `// C#: GCSViews/FlightPlanner.cs:7800-7807, 739-777`
 pub fn waypoint_dropped(this: &mut MissionPlanner, seq: u16) {
     let family = firmware_family(&this.telemetry.view());
     this.plan.end_drag(seq, this.altitude_frame, family);
@@ -5292,7 +5292,7 @@ pub fn waypoint_dropped(this: &mut MissionPlanner, seq: u16) {
 /// A click on the map that adds something: `AddWPToMap(lat, lng, 0)` - home moved there when the
 /// Lat box has asked for it, otherwise the altitude from Default Alt as `setfromMap` takes it for
 /// a waypoint, Verify Height and all, or "Your default alt is not valid", and nothing.
-/// `// C#: GCSViews/FlightPlanner.cs:558-600, 1164-1236, 7743`
+/// `// C#: GCSViews/FlightPlanner.cs:558-600, 1164-1236, 7740`
 pub fn map_click(
     this: &mut MissionPlanner,
     position: LatLon,
@@ -6361,7 +6361,7 @@ fn continue_write(
 
 /// The upload itself: `saveWPsFast` for Write Fast (no parameters follow it); for Write, the
 /// MAVFTP file while the box is ticked, else `mav_mission.upload` with the radii after it.
-/// `// C#: GCSViews/FlightPlanner.cs:6237-6256, 6293-6310, 6340-6582`
+/// `// C#: GCSViews/FlightPlanner.cs:6237-6256, 6293-6310, 6340-6579`
 fn send_mission(this: &mut MissionPlanner, fast: bool, items: Vec<MissionItem>) {
     if fast {
         // No parameters follow a fast write, but the home position is asked for when it ends.
@@ -7045,7 +7045,7 @@ pub const MAP_MENU: &[MenuEntry] = {
             // `rallyPointsToolStripMenuItem.Visible` also follows
             // `DisplayConfiguration.displayRallyPointsMenu` (`:1325`), which is not ported.
             &[
-                // `// C#: GCSViews/FlightPlanner.cs:6635-6661`
+                // `// C#: GCSViews/FlightPlanner.cs:6632-6658`
                 item(
                     "menu-setRallyPoint",
                     "setRallyPointToolStripMenuItem",
@@ -7113,7 +7113,7 @@ pub const MAP_MENU: &[MenuEntry] = {
                 // The Designer wires this Area to Polygon > Area's handler.
                 // `// C#: GCSViews/FlightPlanner.Designer.cs:1223`
                 item("menu-area1", "areaToolStripMenuItem1", "Area", Some(Area)),
-                // `// C#: GCSViews/FlightPlanner.cs:6839-6883`
+                // `// C#: GCSViews/FlightPlanner.cs:6836-6880`
                 item("menu-text", "textToolStripMenuItem", "Text", Some(Text)),
                 item(
                     "menu-createCircleSurvey",
@@ -7152,7 +7152,7 @@ pub const MAP_MENU: &[MenuEntry] = {
                     "Rotate Map",
                     None,
                 ),
-                // `// C#: GCSViews/FlightPlanner.cs:8345-8368`
+                // `// C#: GCSViews/FlightPlanner.cs:8342-8365`
                 item(
                     "menu-zoomTo",
                     "zoomToToolStripMenuItem",
@@ -7286,14 +7286,14 @@ pub const MAP_MENU: &[MenuEntry] = {
             "Enter UTM Coord",
             Some(EnterUtmCoord),
         ),
-        // `// C#: GCSViews/FlightPlanner.cs:6762-6778`
+        // `// C#: GCSViews/FlightPlanner.cs:6759-6775`
         item(
             "menu-switchDocking",
             "switchDockingToolStripMenuItem",
             "Switch Docking",
             Some(MenuAction::SwitchDocking),
         ),
-        // `// C#: GCSViews/FlightPlanner.cs:6625-6632`
+        // `// C#: GCSViews/FlightPlanner.cs:6622-6629`
         item(
             "menu-setHomeHere",
             "setHomeHereToolStripMenuItem",
@@ -8305,7 +8305,7 @@ pub const ZOOM_TO_LOADED: &str = "Zoom to the center or the loaded file?";
 /// `Strings.Bad_KML_File`, which both KML loaders put before the exception.
 pub const BAD_KML_FILE: &str = "Bad KML File :";
 /// `Strings.InvalidAlt`, what Set Rally Point says of an altitude `int.TryParse` refuses.
-/// `// C#: GCSViews/FlightPlanner.cs:6657; ExtLibs/Strings/Strings.resx:174-176`
+/// `// C#: GCSViews/FlightPlanner.cs:6654; ExtLibs/Strings/Strings.resx:174-176`
 pub const INVALID_ALT: &str = "Invalid Alt";
 /// What Save Rally to File says with no rally points.
 /// `// C#: GCSViews/FlightPlanner.cs:6022-6026`
@@ -8554,7 +8554,7 @@ pub struct MenuContext {
     /// `cs.firmware == Firmwares.ArduCopter2`, for a Default Alt of 0.
     pub copter: bool,
     /// What Tracker Home offers: `cs.TrackerLocation.Alt` when it is not 0, else `cs.HomeAlt`.
-    /// `// C#: GCSViews/FlightPlanner.cs:6972-6974`
+    /// `// C#: GCSViews/FlightPlanner.cs:6969-6971`
     pub tracker_alt: f64,
 }
 
@@ -8562,9 +8562,9 @@ impl MenuContext {
     /// Whether Takeoff asks for a pitch, from the vehicle's `MAV_TYPE` and parameters.
     ///
     /// `cs.firmware == Firmwares.ArduPlane` is the C#'s test, and `ArduPlane` is what it sets for
-    /// a fixed wing, a flapping wing and every VTOL type (`MAVLinkInterface.cs:6724-6735`). A
+    /// a fixed wing, a flapping wing and every VTOL type (`MAVLinkInterface.cs:6688-6699`). A
     /// quadplane whose `Q_OPTIONS` lacks bit 1 skips the question.
-    /// `// C#: GCSViews/FlightPlanner.cs:6797-6813`
+    /// `// C#: GCSViews/FlightPlanner.cs:6794-6810`
     #[must_use]
     pub fn asks_takeoff_pitch(mav_type: Option<u8>, parameters: &[(String, f64)]) -> bool {
         let plane = matches!(mav_type, Some(1 | 16 | 19..=25));
@@ -8814,7 +8814,7 @@ impl PlanMenus {
 
     /// Inject Custom Map's `FolderBrowserDialog`, as the planner's file dialogs are asked: the
     /// dialog's own caption, no words, the folder typed.
-    /// `// C#: GCSViews/FlightPlanner.cs:8428-8434`
+    /// `// C#: GCSViews/FlightPlanner.cs:8425-8431`
     pub fn ask_inject_folder(&mut self) {
         self.ask(Prompt::input(
             crate::inject_map::FOLDER_TITLE,
@@ -8889,7 +8889,7 @@ impl PlanMenus {
 
     /// Opens the polygon icon's menu where the button came up over the icon; the map's menu
     /// closes, as one `ContextMenuStrip` showing hides another.
-    /// `// C#: GCSViews/FlightPlanner.cs:7607-7618`
+    /// `// C#: GCSViews/FlightPlanner.cs:7604-7615`
     pub fn open_poly_menu(&mut self, at: (f32, f32)) {
         self.open = None;
         self.zoom_menu = None;
@@ -8960,7 +8960,7 @@ impl PlanMenus {
     }
 
     /// Text's string or size in: the next box.
-    /// `// C#: GCSViews/FlightPlanner.cs:6843-6846`
+    /// `// C#: GCSViews/FlightPlanner.cs:6840-6843`
     fn text_answer(&mut self, step: u8, position: LatLon, value: String) {
         if step == 0 {
             self.text_answers.0 = value;
@@ -8991,7 +8991,7 @@ impl PlanMenus {
     /// in the `1CamBam_Stick_3` font (or what fontconfig gives for it), rotated, every point of
     /// the path a waypoint at Default Alt through `AddWPToMap`. A size the `Font` constructor
     /// refuses (0 or less) is "Bad input options, please try again" with the exception.
-    /// `// C#: GCSViews/FlightPlanner.cs:6847-6882`
+    /// `// C#: GCSViews/FlightPlanner.cs:6844-6879`
     pub fn finish_text(
         &mut self,
         plan: &mut Plan,
@@ -9149,7 +9149,7 @@ impl PlanMenus {
 
     /// `TXT_homelat_Enter`'s `CustomMessageBox.Show(text)`, which gives the Lat box the keyboard
     /// back when it closes.
-    /// `// C#: GCSViews/FlightPlanner.cs:7016-7022`
+    /// `// C#: GCSViews/FlightPlanner.cs:7013-7019`
     pub fn say_home_hint(&mut self, text: &'static str) {
         self.prompt = Some(Prompt {
             title: "",
@@ -9175,7 +9175,7 @@ impl PlanMenus {
     }
 
     /// Opens the zoom icon's menu where the button came up over the icon.
-    /// `// C#: GCSViews/FlightPlanner.cs:7624-7628`
+    /// `// C#: GCSViews/FlightPlanner.cs:7621-7625`
     pub fn open_zoom_menu(&mut self, at: (f32, f32)) {
         self.open = None;
         self.zoom_menu = Some(at);
@@ -9377,7 +9377,7 @@ impl PlanMenus {
             },
             // `InputBox.Show("Location", "Enter your location", ref place)`, the place given as
             // Perth Airport.
-            // `// C#: GCSViews/FlightPlanner.cs:8345-8348`
+            // `// C#: GCSViews/FlightPlanner.cs:8342-8345`
             MenuAction::ZoomTo => self.ask(Prompt::input(
                 "Location",
                 "Enter your location",
@@ -9488,7 +9488,7 @@ impl PlanMenus {
                     PromptKind::UtmZone,
                 ));
             }
-            // `// C#: GCSViews/FlightPlanner.cs:6970-6982`
+            // `// C#: GCSViews/FlightPlanner.cs:6967-6979`
             MenuAction::TrackerHome => self.ask(Prompt::input(
                 "Tracker Alt",
                 "Enter tracker ASL alt",
@@ -9496,7 +9496,7 @@ impl PlanMenus {
                 PromptKind::TrackerAlt { position },
             )),
             // `InputBox.Show("Enter String", "Enter String (requires 1CamBam_Stick_3 font)", ...)`
-            // `// C#: GCSViews/FlightPlanner.cs:6839-6842`
+            // `// C#: GCSViews/FlightPlanner.cs:6836-6839`
             MenuAction::Text => self.ask(Prompt::input(
                 "Enter String",
                 "Enter String (requires 1CamBam_Stick_3 font)",
@@ -9534,7 +9534,7 @@ impl PlanMenus {
                 }),
             },
             // `InputBox.Show("Altitude", "Altitude", ref altstring)`, offering Default Alt.
-            // `// C#: GCSViews/FlightPlanner.cs:6637-6640`
+            // `// C#: GCSViews/FlightPlanner.cs:6634-6637`
             MenuAction::SetRallyPoint => self.ask(Prompt::input(
                 "Altitude",
                 "Altitude",
@@ -9778,12 +9778,12 @@ impl PlanMenus {
                 Some(altitude) => {
                     plan.append(mp_mission::commands::takeoff(altitude, 0.0, frame));
                 }
-                // `MessageBox.Show("Bad Alt")`. `// C#: GCSViews/FlightPlanner.cs:6792`
+                // `MessageBox.Show("Bad Alt")`. `// C#: GCSViews/FlightPlanner.cs:6789`
                 None => self.tell("", "Bad Alt"),
             },
             PromptKind::TakeoffPitch { altitude } => match integer() {
                 Some(pitch) => plan.append(mp_mission::commands::takeoff(altitude, pitch, frame)),
-                // `// C#: GCSViews/FlightPlanner.cs:6818`
+                // `// C#: GCSViews/FlightPlanner.cs:6815`
                 None => self.tell("", "Bad Takeoff pitch"),
             },
             PromptKind::ModifyAlt => {
@@ -9855,7 +9855,7 @@ impl PlanMenus {
             PromptKind::UtmNorthing => self.enter_utm(plan, &value, context),
             // `InputBox.Show("Tracker Alt", ..., ref alt)`: `double.Parse` of the answer, then
             // `cs.TrackerLocation = new PointLatLngAlt(MouseDownEnd) { Alt = alt }`.
-            // `// C#: GCSViews/FlightPlanner.cs:6975-6981; ExtLibs/Controls/InputBox.cs:29-35`
+            // `// C#: GCSViews/FlightPlanner.cs:6972-6978; ExtLibs/Controls/InputBox.cs:29-35`
             PromptKind::TrackerAlt { position } => match value.trim().parse::<f64>() {
                 Ok(alt) => mp_vehicle::VehicleState::set_tracker_location(mp_vehicle::LatLngAlt {
                     lat: position.latitude(),
@@ -9876,7 +9876,7 @@ impl PlanMenus {
             }
             // The three boxes are read whatever their buttons said (`InputBox.Show(..., ref text)`
             // with no result checked), so an answer and a cancel both go on to the next.
-            // `// C#: GCSViews/FlightPlanner.cs:6841-6846`
+            // `// C#: GCSViews/FlightPlanner.cs:6838-6843`
             PromptKind::TextString { position } => self.text_answer(0, position, value),
             PromptKind::TextSize { position } => self.text_answer(1, position, value),
             PromptKind::TextRotation { position } => {
@@ -9898,7 +9898,7 @@ impl PlanMenus {
             }
             PromptKind::DefinePolygon => self.tell("Area", area_text(0.0)),
             // `int.TryParse(altstring, out alt)`, or "Invalid Alt".
-            // `// C#: GCSViews/FlightPlanner.cs:6642-6658`
+            // `// C#: GCSViews/FlightPlanner.cs:6639-6655`
             PromptKind::RallyAltitude { position } => match mp_mission::dotnet::parse_i32(&value) {
                 Some(altitude) => plan.add_rally_marker(position, altitude),
                 None => self.tell(ERROR, INVALID_ALT),
@@ -10064,7 +10064,7 @@ fn record_poi_hit(this: &MissionPlanner, at: Option<(f32, f32)>, hit: Option<usi
 }
 
 /// `CurrentPOIMarker`: the POI marker under a window point, by the flight screen's own hit test.
-/// `// C#: GCSViews/FlightPlanner.cs:8113-8116`
+/// `// C#: GCSViews/FlightPlanner.cs:8110-8113`
 fn poi_under(this: &MissionPlanner, at: (f32, f32)) -> Option<usize> {
     let drawn: Vec<Option<(f32, f32)>> = {
         let map = this.map.borrow();
@@ -10080,7 +10080,7 @@ fn poi_under(this: &MissionPlanner, at: (f32, f32)) -> Option<usize> {
 
 /// `timer1_Tick`'s "Tracker Home" marker: `addpolygonmarker("Tracker Home", TrackerLocation,
 /// Color.Blue)` while the tracker's position is not home's and its longitude is not 0.
-/// `// C#: GCSViews/FlightPlanner.cs:6910-6916`
+/// `// C#: GCSViews/FlightPlanner.cs:6907-6913`
 fn tracker_marker(this: &MissionPlanner) -> Option<mapview::GuidedMarker> {
     let view = this.telemetry.view();
     let state = view.state.as_ref()?;
@@ -10117,10 +10117,10 @@ fn tracker_marker(this: &MissionPlanner) -> Option<mapview::GuidedMarker> {
 
 /// The zoom Zoom to Vehicle and Zoom to Home bring a wider view in to: `if (MainMap.Zoom < 17)
 /// MainMap.Zoom = 17`.
-/// `// C#: GCSViews/FlightPlanner.cs:8379-8380, 8398-8399`
+/// `// C#: GCSViews/FlightPlanner.cs:8376-8377, 8395-8396`
 pub const ZOOM_IN_TO: f64 = 17.0;
 /// The zoom Zoom To leaves a place it found at.
-/// `// C#: GCSViews/FlightPlanner.cs:8365`
+/// `// C#: GCSViews/FlightPlanner.cs:8362`
 pub const ZOOM_TO_PLACE: f64 = 15.0;
 /// `Zoomlevel.Increment`.
 /// `// C#: GCSViews/FlightPlanner.Designer.cs:811-815`
@@ -10141,7 +10141,7 @@ fn zoom_in_to_17(map: &mut MapViewport) {
 
 /// `zoomToVehicleToolStripMenuItem_Click`: the view centred on the vehicle and brought in to 17,
 /// or "Invalid Location" while its position is 0,0 - as it is before one has been heard.
-/// `// C#: GCSViews/FlightPlanner.cs:8370-8381`
+/// `// C#: GCSViews/FlightPlanner.cs:8367-8378`
 pub fn zoom_to_vehicle(map: &mut MapViewport, vehicle: Option<LatLon>) -> Result<(), &'static str> {
     let Some(at) = vehicle.filter(|at| at.latitude() != 0.0 || at.longitude() != 0.0) else {
         return Err("Invalid Location");
@@ -10155,7 +10155,7 @@ pub fn zoom_to_vehicle(map: &mut MapViewport, vehicle: Option<LatLon>) -> Result
 /// the planned home, and brought in to 17 whether either was there or not. The planned home is
 /// taken when its latitude is not zero: the C# tests `PlannedHomeLocation.Lat != 0` twice, and
 /// never the longitude.
-/// `// C#: GCSViews/FlightPlanner.cs:8388-8401`
+/// `// C#: GCSViews/FlightPlanner.cs:8385-8398`
 pub fn zoom_to_home(map: &mut MapViewport, vehicle_home: Option<LatLon>, planned: Home) {
     if let Some(home) =
         vehicle_home.filter(|home| home.latitude() != 0.0 && home.longitude() != 0.0)
@@ -10171,7 +10171,7 @@ pub fn zoom_to_home(map: &mut MapViewport, vehicle_home: Option<LatLon>, planned
 
 /// What `zoomToToolStripMenuItem_Click` says, captioned "GMap.NET", when the geocoder does not
 /// answer `G_GEO_SUCCESS`.
-/// `// C#: GCSViews/FlightPlanner.cs:8358-8362`
+/// `// C#: GCSViews/FlightPlanner.cs:8355-8359`
 #[must_use]
 pub fn zoom_to_message(place: &str, status: mapview::GeocoderStatus) -> String {
     format!("Google Maps Geocoder can't find: '{place}', reason: {status}")
@@ -10180,7 +10180,7 @@ pub fn zoom_to_message(place: &str, status: mapview::GeocoderStatus) -> String {
 /// The rest of `zoomToToolStripMenuItem_Click` once the geocoder has answered: the view centred
 /// on the first place found (`SetPositionByKeywords` moves it only when there is one) and zoomed
 /// to 15, or the message to show.
-/// `// C#: GCSViews/FlightPlanner.cs:8349-8367; ExtLibs/GMap.NET.WindowsForms/GMap.NET.WindowsForms/GMapControl.cs:2457-2477`
+/// `// C#: GCSViews/FlightPlanner.cs:8346-8364; ExtLibs/GMap.NET.WindowsForms/GMap.NET.WindowsForms/GMapControl.cs:2457-2477`
 pub fn zoom_to_answer(
     map: &mut MapViewport,
     place: &str,
@@ -10285,7 +10285,7 @@ pub fn track_value(y: f32, top: f32, height: f32) -> f32 {
 
 /// A press or a drag on the zoom bar: `TRK_zoom_Scroll`, `MainMap.Zoom = TRK_zoom.Value` - and
 /// the Zoom box, which shows the map's zoom, with it.
-/// `// C#: GCSViews/FlightPlanner.cs:6938-6952`
+/// `// C#: GCSViews/FlightPlanner.cs:6935-6949`
 fn zoom_track_press(this: &mut MissionPlanner, y: f32) {
     let Some((top, height)) = this.plan_menus.zoom_track.get() else {
         return;
@@ -10297,7 +10297,7 @@ fn zoom_track_press(this: &mut MissionPlanner, y: f32) {
 /// The zoom icon, `zoomicon`, on the planning map; a click opens `contextMenuStripZoom` where it
 /// was made. Its press is the icon's, not the map's, as `MainMap_MouseUp` returns once it has
 /// shown the menu.
-/// `// C#: GCSViews/FlightPlanner.cs:133, 4905-4911, 7624-7628`
+/// `// C#: GCSViews/FlightPlanner.cs:133, 4905-4911, 7621-7625`
 pub fn zoom_icon(cx: &mut Context<MissionPlanner>) -> AnyElement {
     crate::probe::measured("plan-zoomicon", div())
         .absolute()
@@ -10422,7 +10422,7 @@ pub const POLY_ICON: (f32, f32, f32) = (10.0, 100.0, 30.0);
 
 /// The polygon icon, `polyicon`, on the planning map: the left button coming up over it opens
 /// `contextMenuStripPoly` there; the right button clears the polygon and hides the map's menu.
-/// `// C#: GCSViews/FlightPlanner.cs:132, 4905-4906, 7607-7618`
+/// `// C#: GCSViews/FlightPlanner.cs:132, 4905-4906, 7604-7615`
 pub fn poly_icon(cx: &mut Context<MissionPlanner>) -> AnyElement {
     crate::probe::measured("plan-polyicon", div())
         .absolute()
@@ -10511,7 +10511,7 @@ fn paint_poly_glyph(bounds: gpui::Bounds<gpui::Pixels>, window: &mut gpui::Windo
 
 /// `contextMenuStripPoly`, open where the polygon icon was clicked: its entries, the two fence
 /// ones only while the geofence is being drawn (`ContextMenuStripPoly_Opening`).
-/// `// C#: GCSViews/FlightPlanner.cs:2697-2715, 7618`
+/// `// C#: GCSViews/FlightPlanner.cs:2697-2715, 7615`
 fn poly_menu(
     menus: &PlanMenus,
     fence_mode: bool,
@@ -10552,7 +10552,7 @@ fn poly_menu(
 /// rest, from 42 down to the bottom; the label is at 5 and the box at 25. Both show the map's
 /// zoom whenever it changes (`MainMap_OnMapZoomChanged`) - held here to their 0 to 24, where the
 /// C#'s refuse a zoom outside it and keep the last.
-/// `// C#: GCSViews/FlightPlanner.resx (label11, Zoomlevel, TRK_zoom); GCSViews/FlightPlanner.cs:4960-4968, 8012-8029`
+/// `// C#: GCSViews/FlightPlanner.resx (label11, Zoomlevel, TRK_zoom); GCSViews/FlightPlanner.cs:4960-4968, 8009-8026`
 pub fn zoom_column(
     zoom: Option<f64>,
     menus: &PlanMenus,
@@ -10560,7 +10560,7 @@ pub fn zoom_column(
 ) -> AnyElement {
     let value = zoom.map(|zoom| zoom.clamp(mapview::GMAP_MIN_ZOOM, mapview::GMAP_MAX_ZOOM));
     // `Zoomlevel_ValueChanged`: `MainMap.Zoom = Zoomlevel.Value`, the bar following.
-    // `// C#: GCSViews/FlightPlanner.cs:6954-6969`
+    // `// C#: GCSViews/FlightPlanner.cs:6951-6966`
     let arrow =
         |id: &'static str, label: &'static str, up: bool, cx: &mut Context<MissionPlanner>| {
             crate::probe::measured(id, div())
@@ -10730,7 +10730,7 @@ fn paint_zoom_track(
 /// Read every frame, as home is. The C# reads the boxes at each `writeKML` - every edit, and WP
 /// Radius's Leave - so its circles wait for the edit or the Leave where these follow the box as it
 /// is typed.
-/// `// C#: GCSViews/FlightPlanner.cs:1423-1440, 7087-7106`
+/// `// C#: GCSViews/FlightPlanner.cs:1423-1440, 7084-7103`
 #[must_use]
 pub fn map_overlay(plan: &Plan) -> Option<mapview::Overlay> {
     let read = |which: PanelBox, empty: &str| {
@@ -10749,7 +10749,7 @@ pub fn map_overlay(plan: &Plan) -> Option<mapview::Overlay> {
 /// planning screen `MainMap_OnMarkerEnter`, which puts the grid on the row of a rect the pointer
 /// has entered - the last, where it entered several; home's "H" is not a row. Returns whether the
 /// screen must be drawn again.
-/// `// C#: GCSViews/FlightPlanner.cs:8068-8098`
+/// `// C#: GCSViews/FlightPlanner.cs:8065-8095`
 pub fn map_hover(this: &mut MissionPlanner, planning: bool, pointer: Option<(f32, f32)>) -> bool {
     let change = this.map.borrow_mut().hover(pointer);
     if planning && let Some(seq) = entered_row(&change.entered) {
@@ -10760,7 +10760,7 @@ pub fn map_hover(this: &mut MissionPlanner, planning: bool, pointer: Option<(f32
 
 /// The row `MainMap_OnMarkerEnter` leaves the grid on after the rects just entered: each one
 /// whose inner marker's tag is a number moves it there, in turn, so the last such wins.
-/// `// C#: GCSViews/FlightPlanner.cs:8077-8083`
+/// `// C#: GCSViews/FlightPlanner.cs:8074-8080`
 #[must_use]
 pub fn entered_row(entered: &[mapview::MarkerTag]) -> Option<u16> {
     entered.iter().rev().find_map(|tag| match tag {
@@ -10779,7 +10779,7 @@ pub fn entered_row(entered: &[mapview::MarkerTag]) -> Option<u16> {
 ///
 /// The C# clears `routes` every five seconds and adds the marker back on each pass while in
 /// Guided, so out of Guided it can linger up to five seconds; here it goes with the mode.
-/// `// C#: GCSViews/FlightData.cs:3807, 4214-4221, 5518-5526; GCSViews/FlightPlanner.cs:1652-1690,
+/// `// C#: GCSViews/FlightData.cs:3921, 4328-4335, 5632-5640; GCSViews/FlightPlanner.cs:1652-1690,
 /// 2581; ExtLibs/Utilities/Settings.cs:234-243`
 #[must_use]
 pub fn guided_marker(
@@ -10878,7 +10878,7 @@ fn choose_entry(
         MenuAction::LoadWpFile => this.plan_menus.ask_mission_load(),
         // `if (CurrentPOIMarker == null) return; POI.POIDelete(CurrentPOIMarker)`: the marker the
         // menu opened over, found where the button came up.
-        // `// C#: GCSViews/FlightPlanner.cs:5014-5019, 8113-8116; Utilities/POI.cs:87-102`
+        // `// C#: GCSViews/FlightPlanner.cs:5014-5019, 8110-8113; Utilities/POI.cs:87-102`
         MenuAction::PoiDelete => {
             let at = this.plan_menus.open.take().map(|menu| menu.at);
             let hit = at.and_then(|at| poi_under(this, at));
@@ -10939,7 +10939,7 @@ fn choose_entry(
             this.plan_menus.zoom_menu = None;
             zoom_menu_entry(this, action);
         }
-        // `// C#: GCSViews/FlightPlanner.cs:6762-6778`
+        // `// C#: GCSViews/FlightPlanner.cs:6759-6775`
         MenuAction::SwitchDocking => {
             this.plan_menus.open = None;
             this.toggle_docking();
@@ -10965,7 +10965,7 @@ fn choose_entry(
                 PromptKind::PrefetchMaxZoom,
             ));
         }
-        // `// C#: GCSViews/FlightPlanner.cs:6755-6760`
+        // `// C#: GCSViews/FlightPlanner.cs:6752-6757`
         MenuAction::SurveyGrid => {
             this.plan_menus.open = None;
             crate::survey_ui::open(this, window, cx);
@@ -18260,7 +18260,7 @@ mod geofence_tests {
     }
 
     /// `MAV_PROTOCOL_CAPABILITY_MISSION_FENCE` is 16384, the dialect's and the C#'s
-    /// (`Mavlink.cs:7103`), and the SITL's 0xfbef has it; 16 is `PARAM_ENCODE_BYTEWISE`.
+    /// (`Mavlink.cs:7914`), and the SITL's 0xfbef has it; 16 is `PARAM_ENCODE_BYTEWISE`.
     #[test]
     fn the_mission_fence_bit_is_16384_and_the_sitl_has_it() {
         assert_eq!(CAPABILITY_MISSION_FENCE, 16384);

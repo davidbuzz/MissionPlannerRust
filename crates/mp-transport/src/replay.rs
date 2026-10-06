@@ -45,7 +45,7 @@ use crate::{OpenError, Transport};
 /// time, so every frame decoded from what one read returned was recorded at the time
 /// [`Transport::read_time`] then reports: the newest usable timestamp read so far, which the link
 /// stamps each packet's `datetime` with.
-/// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:6511-6650`
+/// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:6472-6614`
 #[derive(Debug)]
 pub struct ReplayTransport {
     data: Vec<u8>,
@@ -54,7 +54,7 @@ pub struct ReplayTransport {
     /// Where the record being read ends; a read at or past it starts the next record.
     record_end: usize,
     /// `lastlogread`: the newest usable timestamp read, in microseconds, `None` while the C#'s is
-    /// still `DateTime.MinValue`. `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:482, 6553-6557`
+    /// still `DateTime.MinValue`. `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:484, 6514-6518`
     last_log_read: Option<u64>,
     /// `file:<name> (<n> bytes)`, kept ready for [`Transport::description`]. The log is loaded
     /// whole and never changes, so neither does this.
@@ -128,7 +128,7 @@ impl ReplayTransport {
     /// before each record instead of after it. While paced the replay never reports itself
     /// closed: reaching the end is where the C# stops playing, not where it forgets the file,
     /// and the track bar can still take it back.
-    /// `// C#: GCSViews/FlightData.cs:3474-3528`
+    /// `// C#: GCSViews/FlightData.cs:3588-3642`
     #[must_use]
     pub fn paced(mut self) -> (Self, Arc<Playback>) {
         let control = Arc::new(Playback::new(self.data.len()));
@@ -213,7 +213,7 @@ impl Transport for ReplayTransport {
             }
         }
         // A new record: its timestamp, if usable, is the clock from here on.
-        // C#: MAVLinkInterface.cs:6535-6558
+        // C#: MAVLinkInterface.cs:6496-6519
         if self.pos >= self.record_end {
             let record = record_at(&self.data, self.pos);
             self.record_end = record.end;
@@ -255,7 +255,7 @@ impl Transport for ReplayTransport {
 
     /// The recording's clock, `lastlogread`, which the link stamps each packet with as
     /// `readlogPacketMavlink` stamps `cs.datetime`.
-    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:6649`
+    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:6613`
     fn read_time(&self) -> crate::ReadTime {
         crate::ReadTime::Recorded(self.last_log_read)
     }
@@ -309,14 +309,14 @@ impl Playback {
     }
 
     /// Whether records are going out: not paused, and not at the end - where the C#'s main loop
-    /// sets `logreadmode` false itself. `// C#: GCSViews/FlightData.cs:3556-3568`
+    /// sets `logreadmode` false itself. `// C#: GCSViews/FlightData.cs:3670-3682`
     #[must_use]
     pub fn is_playing(&self) -> bool {
         !self.is_paused() && self.position() < self.len
     }
 
     /// Sets the speed, recorded time over replayed time. The C# replaces a speed of 0 with 0.01
-    /// before dividing by it; so does this. `// C#: GCSViews/FlightData.cs:3497-3498`
+    /// before dividing by it; so does this. `// C#: GCSViews/FlightData.cs:3611-3612`
     pub fn set_speed(&self, speed: f64) {
         let speed = if speed == 0.0 { 0.01 } else { speed };
         self.speed.store(speed.to_bits(), Ordering::Release);
@@ -330,7 +330,7 @@ impl Playback {
 
     /// Moves to `fraction` of the way through the file, as `tracklog_Scroll` sets
     /// `BaseStream.Position = Length * (tracklog.Value / 100.0)`.
-    /// `// C#: GCSViews/FlightData.cs:5361-5378`
+    /// `// C#: GCSViews/FlightData.cs:5475-5492`
     pub fn seek_fraction(&self, fraction: f64) {
         // A file's length in bytes, times a fraction clamped to 0..1.
         #[allow(
@@ -410,7 +410,7 @@ const SIGNATURE_LEN: usize = 13;
 /// 9 999 999 hours. Then the frame: its start byte, scanned forward to if it is not the next
 /// byte, and a length from its header - the payload, the header, the start byte, two bytes of
 /// checksum, and thirteen of signature on a signed MAVLink 2 frame.
-/// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:6511-6650`
+/// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:6472-6614`
 fn records(data: &[u8]) -> Vec<Record> {
     let mut out = Vec::new();
     let mut pos = 0;
@@ -424,7 +424,7 @@ fn records(data: &[u8]) -> Vec<Record> {
 
 /// The record that starts at `start`, as [`records`] splits them: never empty, and running to
 /// the end of the data when its timestamp, start byte or length is cut off.
-/// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:6511-6650`
+/// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:6472-6614`
 fn record_at(data: &[u8], start: usize) -> Record {
     let mut pos = start;
     let mut stamp = None;
@@ -474,7 +474,7 @@ fn record_at(data: &[u8], start: usize) -> Record {
 /// The C#'s `act` is the milliseconds between the two, taken as 0 when it is over 9999 or
 /// negative; the sleep is `act / LogPlayBackSpeed`, at most 1000 ms. A record with no
 /// timestamp leaves `lastlogread` where it was, so it goes without waiting.
-/// `// C#: GCSViews/FlightData.cs:3474-3528`
+/// `// C#: GCSViews/FlightData.cs:3588-3642`
 fn wait_before(last: Option<u64>, stamp: Option<u64>, speed: f64) -> Duration {
     let (Some(last), Some(stamp)) = (last, stamp) else {
         return Duration::ZERO;
@@ -518,7 +518,7 @@ impl ReplayTransport {
                 .map_or(self.data.len(), |record| record.start);
             paced.last_stamp = None;
             paced.due = None;
-            // C#: GCSViews/FlightData.cs:5367
+            // C#: GCSViews/FlightData.cs:5481
             self.last_log_read = None;
             control.position.store(self.pos, Ordering::Release);
         }
@@ -818,7 +818,7 @@ mod tests {
         use crate::ReadTime::Recorded;
         // Two records, then one without a timestamp - a frame straight after a frame - then one
         // with an unbelievable timestamp: the last two leave the clock where the second set it,
-        // as `lastlogread` is set only by a usable stamp (MAVLinkInterface.cs:6545-6557).
+        // as `lastlogread` is set only by a usable stamp (MAVLinkInterface.cs:6506-6518).
         let mut data = tlog(&[(1_000, v1(9)), (1_100, v2(20, false))]);
         data.extend_from_slice(&v1(3));
         data.extend_from_slice(&(u64::MAX / 2).to_be_bytes());
@@ -880,7 +880,7 @@ mod tests {
             read_with_time(&mut replay, &mut buf),
             (20, Recorded(Some(1_000)))
         );
-        // `tracklog_Scroll` sets `lastlogread` to MinValue (FlightData.cs:5367); the record
+        // `tracklog_Scroll` sets `lastlogread` to MinValue (FlightData.cs:5481); the record
         // landed on sets it again.
         control.seek_fraction(0.5);
         assert_eq!(

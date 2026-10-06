@@ -55,7 +55,7 @@ macro_rules! message {
 
 #[test]
 fn the_imus_are_held_in_the_units_their_messages_use() {
-    // C#: ExtLibs/ArduPilot/CurrentState.cs:3685-3697, 3739-3780
+    // C#: ExtLibs/ArduPilot/CurrentState.cs:3688-3700, 3742-3783
     let mut state = VehicleState::default();
     state.apply(&message!(RawImu, |m| {
         m.xacc = 12;
@@ -85,7 +85,7 @@ fn the_imus_are_held_in_the_units_their_messages_use() {
 
 #[test]
 fn highres_imu_takes_only_what_its_mask_says_was_updated() {
-    // C#: ExtLibs/ArduPilot/CurrentState.cs:4056-4173
+    // C#: ExtLibs/ArduPilot/CurrentState.cs:4059-4176
     let mut state = VehicleState::default();
     state.apply(&message!(ScaledImu2, |m| m.xgyro = 5));
     state.apply(&message!(HighresImu, |m| {
@@ -124,7 +124,7 @@ fn highres_imu_takes_only_what_its_mask_says_was_updated() {
 
 #[test]
 fn esc_telemetry_lands_four_escs_at_a_time() {
-    // C#: ExtLibs/ArduPilot/CurrentState.cs:3528-3632
+    // C#: ExtLibs/ArduPilot/CurrentState.cs:3531-3635
     let mut state = VehicleState::default();
     state.apply(&message!(EscTelemetry1To4, |m| {
         m.voltage = [1610, 1605, 1600, 1595];
@@ -145,7 +145,7 @@ fn esc_telemetry_lands_four_escs_at_a_time() {
 
 #[test]
 fn pid_tuning_keeps_the_slew_rate_per_axis() {
-    // C#: ExtLibs/ArduPilot/CurrentState.cs:3788-3817
+    // C#: ExtLibs/ArduPilot/CurrentState.cs:3791-3820
     let mut state = VehicleState::default();
     state.apply(&message!(PidTuning, |m| {
         m.axis = 2;
@@ -190,7 +190,7 @@ fn pid_tuning_keeps_the_slew_rate_per_axis() {
 
 #[test]
 fn hygrometers_are_the_first_two_ids() {
-    // C#: ExtLibs/ArduPilot/CurrentState.cs:3828-3837
+    // C#: ExtLibs/ArduPilot/CurrentState.cs:3831-3840
     let mut state = VehicleState::default();
     state.apply(&message!(HygrometerSensor, |m| {
         m.id = 1;
@@ -260,7 +260,7 @@ fn the_generator_and_engine_are_copied_with_the_engines_unsupported_marker() {
 
 #[test]
 fn the_transponder_status_is_unpacked_bit_by_bit() {
-    // C#: ExtLibs/ArduPilot/CurrentState.cs:4031-4053
+    // C#: ExtLibs/ArduPilot/CurrentState.cs:4034-4056
     let mut state = VehicleState::default();
     state.apply(&message!(UavionixAdsbOutStatus, |m| {
         m.state = 128 | 32 | 1;
@@ -286,7 +286,7 @@ fn the_transponder_status_is_unpacked_bit_by_bit() {
 
 #[test]
 fn ahrs2_is_converted_to_degrees_in_single_precision() {
-    // C#: ExtLibs/ArduPilot/CurrentState.cs:4197-4202, `* (float)MathHelper.rad2deg`
+    // C#: ExtLibs/ArduPilot/CurrentState.cs:4200-4205, `* (float)MathHelper.rad2deg`
     let mut state = VehicleState::default();
     state.apply(&message!(Ahrs2, |m| {
         m.roll = 0.5;
@@ -307,7 +307,7 @@ fn ahrs2_is_converted_to_degrees_in_single_precision() {
 
 #[test]
 fn the_board_reports_power_in_millivolts_memory_and_bus_errors() {
-    // C#: ExtLibs/ArduPilot/CurrentState.cs:2827-2832, 2642-2643, 3895-3899, and the
+    // C#: ExtLibs/ArduPilot/CurrentState.cs:2827-2832, 2642-2643, 3898-3902, and the
     // USB_CONNECTED default from ResetInternals at 4404.
     let mut state = VehicleState::default();
     assert_eq!(
@@ -352,7 +352,7 @@ fn the_board_reports_power_in_millivolts_memory_and_bus_errors() {
 
 #[test]
 fn the_mcu_and_fence_and_small_reports_are_copied() {
-    // C#: ExtLibs/ArduPilot/CurrentState.cs:4178-4184, 2396-2398, 3064-3065, 2613, 3908-3909,
+    // C#: ExtLibs/ArduPilot/CurrentState.cs:4181-4187, 2396-2398, 3064-3065, 2613, 3911-3912,
     // 3467-3468, 2336-2338, 2572-2576
     let mut state = VehicleState::default();
     state.apply(&message!(McuStatus, |m| {
@@ -425,7 +425,7 @@ fn the_mcu_and_fence_and_small_reports_are_copied() {
 
 #[test]
 fn the_mount_points_where_mount_status_or_the_gimbal_quaternion_says() {
-    // C#: ExtLibs/ArduPilot/CurrentState.cs:2586-2588, 4020-4024; Quaternion.cs:331-352
+    // C#: ExtLibs/ArduPilot/CurrentState.cs:2586-2588, 4023-4027; Quaternion.cs:331-352
     let mut state = VehicleState::default();
     state.apply(&message!(MountStatus, |m| {
         m.pointing_a = -4500;

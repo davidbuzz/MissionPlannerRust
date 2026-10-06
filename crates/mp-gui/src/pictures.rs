@@ -1074,7 +1074,7 @@ mod tests {
 
     /// Every picture `HUD.cs` draws is an [`crate::hud::Icon`], carried as the `HUDT` resource
     /// it names: its file through `HUDT.Designer.cs` and `HUDT.resx`, byte for byte.
-    /// `// C#: ExtLibs/Controls/HUD.cs:2861-2893, 2931-3008, 3173-3295`
+    /// `// C#: ExtLibs/Controls/HUD.cs:2863-2895, 2933-3010, 3175-3297`
     #[test]
     fn the_huds_pictures_are_hudts() {
         let (Some(hud), Some(hudt), Some(hudt_resx)) = (

@@ -39,7 +39,7 @@
 //!
 //! Set View Count's `setQuickViewRowsCols` makes the grid any number of columns and rows: views
 //! whose cell falls outside are removed, and new ones, bound to nothing and showing 0, fill it up.
-//! `// C#: GCSViews/FlightData.cs:4914-5060`
+//! `// C#: GCSViews/FlightData.cs:5028-5174`
 //!
 //! # Units
 //!
@@ -136,7 +136,7 @@ const LINE: f32 = 1.2;
 
 /// A value a view can show, as the number the C# binds: a bool is 1 or 0
 /// (`BindingTypeToNumber`), everything else its number.
-/// `// C#: GCSViews/FlightData.cs:2511-2518`
+/// `// C#: GCSViews/FlightData.cs:2521-2528`
 pub trait Number {
     /// The number.
     fn number(self) -> f64;
@@ -641,7 +641,7 @@ const READERS: &[(&str, Reader)] = &[
     ("xpdr_gps_unavail", |s| s.transponder.gps_unavailable.number()),
     ("xpdr_gps_no_fix", |s| s.transponder.gps_no_fix.number()),
     ("xpdr_status_unavail", |s| s.transponder.status_unavailable.number()),
-    // The C# clears this flag each time the Transponder page looks (FlightData.cs:6481); the
+    // The C# clears this flag each time the Transponder page looks (FlightData.cs:6595); the
     // page's last look is not in the state, so this reads "a status has ever arrived".
     ("xpdr_status_pending", |s| s.transponder.status_pending.number()),
     ("ahrs2_roll", |s| s.ahrs2.roll.number()),
@@ -786,7 +786,7 @@ pub fn multiplier(name: &str) -> Option<Multiplier> {
 
 /// A property's SI value as its getter returns it: through `toDistDisplayUnit`,
 /// `toAltDisplayUnit` or `toSpeedDisplayUnit` where it has a multiplier, as it is otherwise.
-/// `// C#: ExtLibs/ArduPilot/CurrentState.cs:4360-4373`
+/// `// C#: ExtLibs/ArduPilot/CurrentState.cs:4363-4376`
 #[must_use]
 pub fn to_display(name: &str, value: f64, units: &DisplayUnits) -> f64 {
     match multiplier(name) {
@@ -808,10 +808,10 @@ pub fn display_value(name: &str, state: &VehicleState, units: &DisplayUnits) -> 
 /// it has none, with the first of `(dist)`, `(speed)` and `(alt)` it holds replaced by the unit.
 ///
 /// **Divergence:** the C# works a view's description out when the flight screen loads and when
-/// the view is bound anew (`FlightData.cs:476, 507, 2488`), so after the units change on the
+/// the view is bound anew (`FlightData.cs:478, 509, 2498`), so after the units change on the
 /// Planner page its views show the old unit's name over a number in the new unit until the next
 /// start. Here the description follows the units, so the name always says what the number is in.
-/// `// C#: ExtLibs/ArduPilot/CurrentState.cs:4526-4552, MainV2.cs:4247-4330`
+/// `// C#: ExtLibs/ArduPilot/CurrentState.cs:4529-4555, MainV2.cs:4254-4337`
 #[must_use]
 pub fn label(name: &str, units: &DisplayUnits) -> String {
     let desc = CURRENTSTATE
@@ -827,7 +827,7 @@ pub fn label(name: &str, units: &DisplayUnits) -> String {
 /// an English culture does not have, so the name itself. The list is sorted on that text with
 /// `string.CompareTo`, a culture comparison; this sorts ignoring case first and puts lower case
 /// first on a tie, which is how that comparison orders these names.
-/// `// C#: GCSViews/FlightData.cs:4549-4601, ExtLibs/ArduPilot/CurrentState.cs:4488-4524`
+/// `// C#: GCSViews/FlightData.cs:4663-4715, ExtLibs/ArduPilot/CurrentState.cs:4491-4527`
 #[must_use]
 pub fn choices() -> Vec<&'static str> {
     let mut names: Vec<&'static str> = CURRENTSTATE
@@ -897,7 +897,7 @@ struct View {
     backup: Option<u32>,
     /// `BackColor` as the warning engine's `QuickPanelColoring` set it, the number and the
     /// description then black or white on it; `None` for the theme's, which "NoColor" puts
-    /// back with the number's own colour (`MainV2.cs:4786-4818`).
+    /// back with the number's own colour (`MainV2.cs:4793-4825`).
     warning: Option<u32>,
 }
 
@@ -918,7 +918,7 @@ pub struct QuickViews {
     choosing: Option<usize>,
     /// `CurrentState`'s multipliers and unit names, as the Planner page last set them. Metres
     /// and metres per second until told otherwise: `MainV2` runs `ChangeUnits` before the
-    /// flight screen first shows. `// C#: MainV2.cs:836`
+    /// flight screen first shows. `// C#: MainV2.cs:838`
     units: DisplayUnits,
     /// Every choice made, in order - the view's name number and the property - for `settings.rs`
     /// to save under the view's name as the C#'s handler does.
@@ -962,7 +962,7 @@ impl Default for QuickViews {
 /// even if it is that one, and the list does not grow: the C#'s `Count() > 1` test, ported as it
 /// is. A full list is cleared first. The C#'s other clearing test, two `OrderBy` sequences compared
 /// with `==`, compares references and is never true.
-/// `// C#: GCSViews/FlightData.cs:4966-5019`
+/// `// C#: GCSViews/FlightData.cs:5080-5133`
 fn next_colour(used: &mut Vec<u32>, random: Random<'_>) -> u32 {
     if used.len() == COLOURS.len() {
         used.clear();
@@ -1049,7 +1049,7 @@ impl QuickViews {
     /// list does not hold, which only a hand-edited `warnings.xml` gives, and a `null` one colour
     /// nothing here: the C#'s `Color.FromName` takes any of .NET's known colours, and throws in
     /// `BackColor`'s setter - ending the engine's pass - for any other.
-    /// `// C#: MainV2.cs:4785-4824`
+    /// `// C#: MainV2.cs:4792-4831`
     pub fn warning_colour(&mut self, name: &str, color: Option<&str>) {
         let Some(view) = self
             .views
@@ -1134,7 +1134,7 @@ impl QuickViews {
     /// `quickView5`: the C# does this, and both then save to one key. Each added view double
     /// clicks to the chooser (unless `lockQuickView`, [`page`]) and has the same context menu;
     /// every column and every row gets an equal share, as the grid [`page`] draws does.
-    /// `// C#: GCSViews/FlightData.cs:4914-5060`
+    /// `// C#: GCSViews/FlightData.cs:5028-5174`
     ///
     /// # Errors
     ///
@@ -1196,7 +1196,7 @@ impl QuickViews {
     /// `chk_box_quickview_CheckedChanged`: a box checked binds the view to its property and
     /// closes the chooser. The box already checked is the view's own property; clicking it
     /// unchecks it, which does nothing, and the chooser stays.
-    /// `// C#: GCSViews/FlightData.cs:2474-2506`
+    /// `// C#: GCSViews/FlightData.cs:2484-2516`
     pub fn choose(&mut self, name: &str) {
         let Some(index) = self.choosing else {
             return;
@@ -1306,7 +1306,7 @@ impl QuickViews {
 
 /// The Quick page: `tableLayoutPanelQuick`'s views in its columns and rows, each column an equal
 /// share of the width and each row of the height (`ColumnStyles` and `RowStyles` in percent).
-/// `// C#: GCSViews/FlightData.cs:5036-5052`
+/// `// C#: GCSViews/FlightData.cs:5150-5166`
 pub fn page(
     views: &QuickViews,
     state: Option<&VehicleState>,
@@ -1333,7 +1333,7 @@ pub fn page(
     for (index, (column, row)) in cells.into_iter().enumerate() {
         let field = views.field(index).to_owned();
         // A view the warning engine coloured: its background, and the number and the
-        // description black or white on it. `// C#: MainV2.cs:4807-4815`
+        // description black or white on it. `// C#: MainV2.cs:4814-4822`
         let warning = views.warning(index);
         let (colour, desc_colour) = warning.map_or_else(
             || (views.colour(index).unwrap_or(theme::TEXT), theme::TEXT),
@@ -1372,7 +1372,7 @@ pub fn page(
                 )
                 // `DoubleClick`, which Windows raises on the second press; `quickView_DoubleClick`
                 // does nothing while `lockQuickView` is set.
-                // `// C#: GCSViews/FlightData.cs:4549-4552, 5026-5027`
+                // `// C#: GCSViews/FlightData.cs:4663-4666, 5140-5141`
                 .on_mouse_down(
                     gpui::MouseButton::Left,
                     cx.listener(move |this, event: &gpui::MouseDownEvent, _window, cx| {
@@ -1444,7 +1444,7 @@ fn paint_view(
 /// view's own checked and green, as `ShowDialog` shows it - over everything, and everything
 /// behind it inert. The columns are as wide as the longest text and 25 more, as many as fit in
 /// four fifths of the window, filled top to bottom and then left to right.
-/// `// C#: GCSViews/FlightData.cs:4549-4650`
+/// `// C#: GCSViews/FlightData.cs:4663-4764`
 pub fn chooser(
     views: &QuickViews,
     window: &Window,
@@ -1675,7 +1675,7 @@ mod tests {
     }
 
     /// In feet and knots each default view names its unit, and the ones with none keep theirs.
-    /// `// C#: ExtLibs/ArduPilot/CurrentState.cs:4526-4552`
+    /// `// C#: ExtLibs/ArduPilot/CurrentState.cs:4529-4555`
     #[test]
     fn a_description_names_the_users_unit() {
         let units = feet_and_knots();
@@ -1786,7 +1786,7 @@ mod tests {
 
     /// The views read the vehicle through the getters' multipliers: metres to feet, metres per
     /// second to knots, and a heading as it is. The facts are what the page paints.
-    /// `// C#: ExtLibs/ArduPilot/CurrentState.cs:327, 529, 1093, 1781, MainV2.cs:4262, 4317`
+    /// `// C#: ExtLibs/ArduPilot/CurrentState.cs:327, 529, 1093, 1781, MainV2.cs:4269, 4324`
     #[test]
     fn the_views_show_the_vehicle_in_the_users_units() {
         let mut state = VehicleState::default();
@@ -2142,7 +2142,7 @@ mod tests {
     /// with its number white on red and black on yellow; "NoColor" takes it off and the number
     /// has its own colour again; a property no view shows, a name the list does not hold and a
     /// `null` colour change nothing.
-    /// `// C#: MainV2.cs:4785-4824`
+    /// `// C#: MainV2.cs:4792-4831`
     #[test]
     fn the_warning_engine_colours_the_view_bound_to_its_property() {
         let mut views = QuickViews::default();

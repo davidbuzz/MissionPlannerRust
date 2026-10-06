@@ -3,7 +3,7 @@
 # go, and new ones - quickView7 on, bound to nothing and showing 0, each with a number colour of
 # the sixteen in colorsForDefaultQuickView - fill the free cells a row at a time. A new view
 # double clicks to the chooser like the Designer's six. Back to two by three, the added ones go.
-# `GCSViews/FlightData.cs:4914-5060, 5078-5096, 457-494`
+# `GCSViews/FlightData.cs:5028-5174, 5192-5210, 459-496`
 #
 # Self-contained, no link: tools/gui-test.sh tests/gui/fly-quick-viewcount.gui
 

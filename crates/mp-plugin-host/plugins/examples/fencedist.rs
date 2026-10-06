@@ -49,7 +49,7 @@ struct FenceDist;
 
 /// `ChunkByField` with the example's rule: a circle stands alone; vertices of one command group
 /// until the group holds `param1` of them. `// C#: plugins/example3-fencedist.cs:76-93;
-/// ExtLibs/Utilities/Extensions.cs:252-277`
+/// ExtLibs/Utilities/Extensions.cs:253-278`
 fn chunks(points: &[FencePoint]) -> Vec<Vec<FencePoint>> {
     let points: Vec<FencePoint> = points
         .iter()
@@ -130,7 +130,7 @@ fn inside(polygon: &[(f64, f64)], p: (f64, f64)) -> bool {
 
 /// `CloseLoop`: the first point again at the end, unless it is the last already. The C#'s items
 /// are `KeyValuePair`s keyed by their index, so the first equals the last only when they are one
-/// item. `// C#: ExtLibs/Utilities/Extensions.cs:841-850`
+/// item. `// C#: ExtLibs/Utilities/Extensions.cs:834-843`
 fn close_loop(points: &[FencePoint]) -> Vec<FencePoint> {
     let mut out = points.to_vec();
     if let (Some(first), true) = (points.first(), points.len() > 1) {

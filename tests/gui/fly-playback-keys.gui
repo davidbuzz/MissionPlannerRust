@@ -1,7 +1,7 @@
 # The flight screen's playback keys: FlightData.ProcessCmdKey's Space, which plays or pauses a
 # loaded log (BUT_playlog_Click), and the keypad's - and +, which take LogPlayBackSpeed one down or
 # up above 1 and halve or double it at 1 and under, then say it on lbl_playbackspeed
-# (updateLogPlayPosition) (GCSViews/FlightData.cs:918-943, 5544-5571; crates/mp-gui/src/
+# (updateLogPlayPosition) (GCSViews/FlightData.cs:920-945, 5658-5685; crates/mp-gui/src/
 # cmd_keys.rs, fly.rs Playback::step_speed). gpui names the keypad's keys apart on Linux, which
 # xdotool's KP_Subtract and KP_Add press.
 #

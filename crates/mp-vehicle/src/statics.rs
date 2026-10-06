@@ -73,11 +73,11 @@ fn lock<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
 ///
 /// Each vehicle has its own, starting from the saved defaults ([`StreamRates::backups`]) when it
 /// is first seen, as `ResetInternals` copies them. They are what the link's stream requests send
-/// every 30 seconds while the link is quiet (`CurrentState.cs:4630-4661`), what Planner's
-/// telemetry-rate combos show and set (`ConfigPlanner.cs:178-182, 576-624`), and what the compass
+/// every 30 seconds while the link is quiet (`CurrentState.cs:4633-4664`), what Planner's
+/// telemetry-rate combos show and set (`ConfigPlanner.cs:179-183, 577-625`), and what the compass
 /// and radio calibrations turn down and restore around themselves (`MagCalib.cs:437-444,
 /// 701-716`; `ConfigRadioInput.cs:209-217, 388-391`).
-/// `// C#: ExtLibs/ArduPilot/CurrentState.cs:2002-2007, 4393-4397`
+/// `// C#: ExtLibs/ArduPilot/CurrentState.cs:2002-2007, 4396-4400`
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct StreamRates {
     /// `rateattitude`: `EXTRA1` and `EXTRA2` - attitude, and the HUD's `VFR_HUD`.
@@ -124,7 +124,7 @@ impl StreamRates {
     }
 
     /// Replaces the saved defaults. The C# sets them from the `CMB_rate*` settings at start-up
-    /// (`MainV2.cs:981-991`) and when Planner's combos change (`ConfigPlanner.cs:580-621`);
+    /// (`MainV2.cs:983-993`) and when Planner's combos change (`ConfigPlanner.cs:581-622`);
     /// vehicles already seen keep their own rates.
     pub fn set_backups(rates: Self) {
         let values = [
@@ -149,7 +149,7 @@ impl VehicleState {
     }
 
     /// Sets the K-index. The C# sets it at start-up from the `kindex` setting and then from
-    /// `KIndex.GetKIndex`'s download, through `KIndex_KIndex` (`MainV2.cs:3940-3981`).
+    /// `KIndex.GetKIndex`'s download, through `KIndex_KIndex` (`MainV2.cs:3947-3988`).
     pub fn set_kindex(kindex: i32) {
         KINDEX.store(kindex, Ordering::Relaxed);
     }
@@ -163,7 +163,7 @@ impl VehicleState {
 
     /// Sets the planned home. The C# loads it at start-up from the `TXT_homelat`, `TXT_homelng`
     /// and `TXT_homealt` settings, and puts (0, 0, 0) back if the latitude or longitude is out of
-    /// range (`MainV2.cs:1012-1025`); the planner reads it for the mission's home, the grid and
+    /// range (`MainV2.cs:1014-1027`); the planner reads it for the mission's home, the grid and
     /// the flight screen's planned-home marker (`FlightPlanner.cs:386, 1075`; `FlightData.cs:
     /// 3819`).
     pub fn set_planned_home(home: LatLngAlt) {
@@ -172,7 +172,7 @@ impl VehicleState {
 
     /// Sets `TrackerLocation`, the antenna tracker's own position, which
     /// [`VehicleState::tracker_location`] prefers to home once its longitude is not 0. The C#
-    /// sets it from the planner's "Set tracker home" (`FlightPlanner.cs:760, 6977`) and from the
+    /// sets it from the planner's "Set tracker home" (`FlightPlanner.cs:760, 6974`) and from the
     /// tracker-home plugin's GPS (`ExtLibs/TrackerHome/TrackerHomeGPS.cs:73, 99, 112`).
     /// `// C#: ExtLibs/ArduPilot/CurrentState.cs:43, 1606-1615`
     pub fn set_tracker_location(location: LatLngAlt) {
@@ -202,7 +202,7 @@ impl VehicleState {
 
     /// The name custom field `index` carries, if it has one: `MAV_` and a `NAMED_VALUE_FLOAT`'s
     /// name in capitals, or whatever a setting gave it. What the C#'s field chooser, graph and
-    /// quick view show for `customfield<index>` (`CurrentState.cs:4488-4494, 4528-4534`).
+    /// quick view show for `customfield<index>` (`CurrentState.cs:4491-4497, 4531-4537`).
     #[must_use]
     pub fn custom_field_name(index: usize) -> Option<String> {
         lock(&CUSTOM_FIELD_NAMES)
@@ -214,7 +214,7 @@ impl VehicleState {
     /// Names custom field `index`, as `custom_field_names.Add` does; false, changing nothing,
     /// when the field already has a name or there is no such field (where `Add` throws). The C#
     /// adds the `customfield0` to `customfield19` settings at start-up, in capitals
-    /// (`MainV2.cs:993-1000`), and the tuning graph's saved selection (`FlightData.cs:283-296`);
+    /// (`MainV2.cs:995-1002`), and the tuning graph's saved selection (`FlightData.cs:285-298`);
     /// a `NAMED_VALUE_FLOAT` claims the first field still free.
     pub fn add_custom_field_name(index: usize, name: &str) -> bool {
         if index >= CUSTOM_FIELDS {
@@ -246,10 +246,10 @@ impl VehicleState {
     /// **Divergence**, for names that are not ASCII only: `ToUpper` is the current culture's
     /// (Turkish capitalises `i` differently) and Unicode's simple mapping stands in for it, and
     /// a multi-byte sequence cut short may give a different number of U+FFFD than .NET's decoder.
-    /// `// C#: ExtLibs/ArduPilot/CurrentState.cs:3915-3942`
+    /// `// C#: ExtLibs/ArduPilot/CurrentState.cs:3918-3945`
     pub(crate) fn custom_field_for(name: &[u8]) -> Option<usize> {
         let text = String::from_utf8_lossy(name);
-        // C#: CurrentState.cs:3921-3923
+        // C#: CurrentState.cs:3924-3926
         let text = text.split('\0').next().unwrap_or_default();
         let upper = |c: char| {
             let mut upper = c.to_uppercase();
@@ -260,11 +260,11 @@ impl VehicleState {
         };
         let wanted = || "MAV_".chars().chain(text.chars().map(upper));
         let mut names = lock(&CUSTOM_FIELD_NAMES);
-        // C#: CurrentState.cs:3927
+        // C#: CurrentState.cs:3930
         if let Some((field, _)) = names.iter().find(|(_, name)| name.chars().eq(wanted())) {
             return Some(*field);
         }
-        // C#: CurrentState.cs:3930-3941
+        // C#: CurrentState.cs:3933-3944
         let free =
             (0..CUSTOM_FIELDS).find(|index| names.iter().all(|(field, _)| field != index))?;
         names.push((free, wanted().collect()));
@@ -279,7 +279,7 @@ mod tests {
     /// The only test in this binary that touches the custom field names.
     #[test]
     fn a_name_is_read_as_the_csharp_decodes_and_capitalises_it() {
-        // C#: ExtLibs/ArduPilot/CurrentState.cs:3917-3925
+        // C#: ExtLibs/ArduPilot/CurrentState.cs:3920-3928
         let first = VehicleState::custom_field_for(b"stra\xc3\x9fe\0\0\0").unwrap();
         // .NET's simple case mapping has no capital for `ß`, so it stays.
         assert_eq!(

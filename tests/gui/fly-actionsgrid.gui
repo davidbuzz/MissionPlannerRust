@@ -11,7 +11,7 @@
 # The page is not held to fit its column: below the grid are the port's mode buttons, one per mode
 # the vehicle offers, which the owner kept over the C#'s CMB_modes drop-down (2026-09-26) - with a
 # 4.8 SITL's modes they run a row past it, and the page scrolls.
-# `GCSViews/FlightData.cs:1101-1107, 1255-1271, 1392-1415, 2718-2729, GCSViews/FlightData.Designer.cs:747-770`
+# `GCSViews/FlightData.cs:1103-1109, 1257-1273, 1394-1417, 2728-2739, GCSViews/FlightData.Designer.cs:747-770`
 #
 # Needs SITL (a copter): tools/gui-test.sh tests/gui/fly-actionsgrid.gui -- tcp:127.0.0.1:5760
 

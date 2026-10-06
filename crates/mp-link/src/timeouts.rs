@@ -61,61 +61,61 @@ impl Retry {
 pub struct ProtocolTimeouts {
     /// `PARAM_SET` until the vehicle echoes the parameter back.
     ///
-    /// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:1748 (`retrys = 3`), :1754 (700 ms).
+    /// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:1745 (`retrys = 3`), :1754 (700 ms).
     pub param_set: Retry,
     /// `PARAM_REQUEST_READ` until the parameter arrives.
     ///
-    /// C#: MAVLinkInterface.cs:2329 (`retrys = 3`), :2333 (700 ms).
+    /// C#: MAVLinkInterface.cs:2326 (`retrys = 3`), :2333 (700 ms).
     pub param_read: Retry,
     /// `COMMAND_LONG` until its `COMMAND_ACK`.
     ///
-    /// C#: MAVLinkInterface.cs:2729 (`retrys = 3`), :2731 (`timeout = 2000`).
+    /// C#: MAVLinkInterface.cs:2726 (`retrys = 3`), :2731 (`timeout = 2000`).
     pub command: Retry,
     /// `MAV_CMD_COMPONENT_ARM_DISARM`, which waits longer "as may need an imu calib".
     ///
-    /// C#: MAVLinkInterface.cs:2764-2768 (`timeout = 10000`, the retries left at 3).
+    /// C#: MAVLinkInterface.cs:2761-2765 (`timeout = 10000`, the retries left at 3).
     pub command_arm: Retry,
     /// `MAV_CMD_PREFLIGHT_CALIBRATION` and `MAV_CMD_FLASH_BOOTLOADER`: slow, and sent twice at most.
     ///
-    /// C#: MAVLinkInterface.cs:2748-2757 (`retrys = 1; timeout = 25000;` for both).
+    /// C#: MAVLinkInterface.cs:2745-2754 (`retrys = 1; timeout = 25000;` for both).
     pub command_slow: Retry,
     /// `MISSION_SET_CURRENT` until a `MISSION_CURRENT` arrives.
     ///
-    /// C#: MAVLinkInterface.cs:2472 (`retrys = 5`), :2476 (2000 ms).
+    /// C#: MAVLinkInterface.cs:2469 (`retrys = 5`), :2476 (2000 ms).
     pub set_current: Retry,
     /// `MISSION_REQUEST_LIST` until `MISSION_COUNT`: the first step of a download.
     ///
-    /// C#: MAVLinkInterface.cs:3297 (`retrys = 6`), :3301 (700 ms), `getWPCountAsync`.
+    /// C#: MAVLinkInterface.cs:3293 (`retrys = 6`), :3301 (700 ms), `getWPCountAsync`.
     pub mission_list: Retry,
     /// `MISSION_REQUEST_INT` until that item arrives.
     ///
-    /// C#: MAVLinkInterface.cs:3459 (`retrys = 5`), :3463 (2500 ms), `getWPAsync`.
+    /// C#: MAVLinkInterface.cs:3454 (`retrys = 5`), :3463 (2500 ms), `getWPAsync`.
     pub mission_item_request: Retry,
     /// `MISSION_COUNT` until the vehicle asks for the first item: the first step of an upload.
     ///
-    /// C#: MAVLinkInterface.cs:3779 (`retrys = 3`), :3783 (700 ms), `setWPTotalAsync`.
+    /// C#: MAVLinkInterface.cs:3772 (`retrys = 3`), :3783 (700 ms), `setWPTotalAsync`.
     pub mission_count: Retry,
     /// `MISSION_ITEM_INT` until the vehicle asks for the next one or acknowledges the upload.
     ///
-    /// C#: MAVLinkInterface.cs:4250 (`retrys = 10`), :4254 (450 ms), `setWPAsync`.
+    /// C#: MAVLinkInterface.cs:4241 (`retrys = 10`), :4254 (450 ms), `setWPAsync`.
     pub mission_item_send: Retry,
     /// After `MAV_MISSION_INVALID_SEQUENCE`, how long to wait for the vehicle to say which item
     /// it wants before telling it where to resume.
     ///
-    /// C#: MAVLinkInterface.cs:4380 (1500 ms), `getRequestedWPNoAsync`, called from
+    /// C#: MAVLinkInterface.cs:4369 (1500 ms), `getRequestedWPNoAsync`, called from
     /// ExtLibs/ArduPilot/mav_mission.cs:133.
     pub mission_resync: Duration,
     /// How long the parameter stream may be quiet before the download starts asking again.
     ///
-    /// C#: MAVLinkInterface.cs:2114 (4000 ms "between valid packets").
+    /// C#: MAVLinkInterface.cs:2111 (4000 ms "between valid packets").
     pub param_list_quiet: Duration,
     /// How often, once asking one by one, the next burst of `PARAM_REQUEST_READ` goes out.
     ///
-    /// C#: MAVLinkInterface.cs:2135 (`lastonebyone.AddMilliseconds(1000)`).
+    /// C#: MAVLinkInterface.cs:2132 (`lastonebyone.AddMilliseconds(1000)`).
     pub param_list_round: Duration,
     /// How many times the whole list is asked for again while less than three quarters arrived.
     ///
-    /// C#: MAVLinkInterface.cs:2117 (`retry < 2`).
+    /// C#: MAVLinkInterface.cs:2114 (`retry < 2`).
     pub param_list_full_retries: u8,
     /// Every MAVFTP command's `RetryTimeout`, from `MAVFtp.cs`; see [`mp_ftp::mavftp::retry`].
     pub ftp: mp_ftp::mavftp::FtpTimeouts,
@@ -123,19 +123,19 @@ pub struct ProtocolTimeouts {
     /// again: it sets `lastdata` thirty seconds ahead "to prevent flooding" and asks once it is
     /// eight seconds past that, whether or not the streams came.
     ///
-    /// C#: ExtLibs/ArduPilot/CurrentState.cs:4633 (`lastdata.AddSeconds(8)`), :4662
+    /// C#: ExtLibs/ArduPilot/CurrentState.cs:4636 (`lastdata.AddSeconds(8)`), :4662
     /// (`DateTime.Now.AddSeconds(30)`).
     pub stream_rerequest: Duration,
     /// `RALLY_FETCH_POINT` until the vehicle sends the point back, `getRallyPoint`.
     ///
-    /// C#: MAVLinkInterface.cs:6363 (`retrys = 3`), :6367 (700 ms).
+    /// C#: MAVLinkInterface.cs:6325 (`retrys = 3`), :6367 (700 ms).
     pub rally_fetch: Retry,
     /// `FENCE_FETCH_POINT` until the vehicle sends the point back, `getFencePoint`.
     ///
-    /// C#: MAVLinkInterface.cs:5926 (`retrys = 3`), :5930 (700 ms).
+    /// C#: MAVLinkInterface.cs:5889 (`retrys = 3`), :5930 (700 ms).
     pub fence_fetch: Retry,
     /// `getHomePositionAsync`: `GET_HOME_POSITION` until a `HOME_POSITION` arrives.
-    /// C#: MAVLinkInterface.cs:3362 (`retrys = 3`), :3366 (700 ms).
+    /// C#: MAVLinkInterface.cs:3357 (`retrys = 3`), :3366 (700 ms).
     pub home_position: Retry,
 }
 

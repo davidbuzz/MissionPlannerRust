@@ -5,7 +5,7 @@
 # no arrows. Customize lists every page by its Designer name, checked while the strip has it, and
 # when its form is closed the checked ones are the strip, in the Designer's order, showing the
 # first. For the session: the C# keeps both in its settings.
-# `GCSViews/FlightData.cs:733-791, 2584-2627, 6498-6502, GCSViews/FlightData.Designer.cs:327, 572-594`
+# `GCSViews/FlightData.cs:735-793, 2594-2637, 6612-6616, GCSViews/FlightData.Designer.cs:327, 572-594`
 #
 # Self-contained, no link: tools/gui-test.sh tests/gui/fly-tabmenu.gui
 

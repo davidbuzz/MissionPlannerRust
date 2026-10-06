@@ -41,11 +41,11 @@ use mp_vehicle::VehicleId;
 use crate::motor_layouts::{LAYOUT_VERSION, LAYOUTS, Layout};
 
 /// `MAV_CMD_DO_MOTOR_TEST`.
-/// `// C#: ExtLibs/Mavlink/Mavlink.cs:1041`
+/// `// C#: ExtLibs/Mavlink/Mavlink.cs:1046`
 pub const CMD_DO_MOTOR_TEST: u16 = 209;
 
 /// `MOTOR_TEST_THROTTLE_PERCENT`, the throttle type every `testMotor` sends.
-/// `// C#: ExtLibs/Mavlink/Mavlink.cs:4527-4532; GCSViews/ConfigurationView/ConfigMotorTest.cs:313`
+/// `// C#: ExtLibs/Mavlink/Mavlink.cs:4894-4899; GCSViews/ConfigurationView/ConfigMotorTest.cs:313`
 pub const MOTOR_TEST_THROTTLE_PERCENT: u8 = 0;
 
 /// `MAV_TYPE_QUADROTOR`.
@@ -102,7 +102,7 @@ impl MotorCommand {
     }
 
     /// The `COMMAND_LONG` `doCommand` puts on the wire for it, to `target`, confirmation 0.
-    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:2697-2710`
+    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:2694-2707`
     #[must_use]
     pub fn message(self, target: VehicleId) -> MavMessage {
         crate::command(target, CMD_DO_MOTOR_TEST, self.params())

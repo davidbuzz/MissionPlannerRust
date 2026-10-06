@@ -19,7 +19,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
 //! The Linux source: V4L2 through the `v4l` crate's ioctls. What DirectShow is to the C#
-//! (`WebCamService/Capture.cs:244-258`; `ConfigPlanner.cs:296-360`).
+//! (`WebCamService/Capture.cs:244-258`; `ConfigPlanner.cs:297-361`).
 
 use std::path::Path;
 use std::time::Duration;
@@ -76,7 +76,7 @@ impl Source for V4l2Source {
     /// format and discrete frame size, in the driver's order, as DirectShow gives a UVC camera's
     /// list. Only MJPEG and YUYV are listed - the two this crate decodes - and a stepwise size
     /// range (which a UVC camera does not have) is not. Each entry's rate is its fastest.
-    /// `// C#: GCSViews/ConfigurationView/ConfigPlanner.cs:338-350`
+    /// `// C#: GCSViews/ConfigurationView/ConfigPlanner.cs:339-351`
     fn modes(&self, device: &Device) -> Result<Vec<Mode>, VideoError> {
         let dev = v4l::Device::with_path(&device.path)
             .map_err(|why| VideoError::Device(why.to_string()))?;

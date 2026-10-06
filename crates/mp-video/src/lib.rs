@@ -136,7 +136,7 @@ impl fmt::Display for PixelFormat {
 }
 
 /// One entry of the Video Format list: `GCSBitmapInfo`.
-/// `// C#: GCSViews/ConfigurationView/ConfigPlanner.cs:968-989`
+/// `// C#: GCSViews/ConfigurationView/ConfigPlanner.cs:969-990`
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Mode {
     /// The pixel format.
@@ -166,7 +166,7 @@ impl Mode {
     /// Two divergences: the fourcc stands where DirectShow's analog video standard stood (V4L2
     /// has no counterpart for a webcam), and the rate is the one Start asks for rather than the
     /// C#'s `MaxFrameInterval`, which is the slowest the pin allows and not the rate it runs at.
-    /// `// C#: GCSViews/ConfigurationView/ConfigPlanner.cs:985-988, 347-348`
+    /// `// C#: GCSViews/ConfigurationView/ConfigPlanner.cs:986-989, 348-349`
     #[must_use]
     pub fn label(&self) -> String {
         format!(
@@ -266,7 +266,7 @@ pub trait Source: Send + Sync {
 /// A running capture: `MainV2.cam`. Frames are read and decoded on a thread of their own; the
 /// screen takes the latest each time it draws. Dropping it stops the thread, as `Dispose`
 /// stops the graph.
-/// `// C#: ExtLibs/WebCamService/Capture.cs:220-231; ConfigPlanner.cs:261-294`
+/// `// C#: ExtLibs/WebCamService/Capture.cs:220-231; ConfigPlanner.cs:262-295`
 pub struct Capture {
     latest: Arc<Mutex<Option<Arc<Frame>>>>,
     error: Arc<Mutex<Option<String>>>,

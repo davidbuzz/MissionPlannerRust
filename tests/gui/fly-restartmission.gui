@@ -2,7 +2,7 @@
 #
 # BUTrestartmission_Click is setWPCurrent(sysid, compid, 0). The mission is first moved on to item
 # 3 with Set WP, so a vehicle already at 0 cannot pass the test by standing still; SITL answers
-# each with MISSION_CURRENT. `GCSViews/FlightData.cs:1881-1895`
+# each with MISSION_CURRENT. `GCSViews/FlightData.cs:1891-1905`
 #
 # Needs SITL: tools/gui-test.sh tests/gui/fly-restartmission.gui -- tcp:127.0.0.1:5760
 # The setup writes a five-item mission to SITL through its second port, 5762.

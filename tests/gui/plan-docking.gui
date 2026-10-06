@@ -1,4 +1,4 @@
-# Switch Docking: `switchDockingToolStripMenuItem_Click` (GCSViews/FlightPlanner.cs:6762-6778)
+# Switch Docking: `switchDockingToolStripMenuItem_Click` (GCSViews/FlightPlanner.cs:6759-6775)
 # moves `panelAction` from the right of the map to the bottom and `panelWaypoints` from the bottom
 # to the right, half the window wide; the choice is kept as `FP_docking` and applied when the
 # screen loads (:3487-3490).

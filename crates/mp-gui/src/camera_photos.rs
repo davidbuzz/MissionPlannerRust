@@ -37,7 +37,7 @@
 //! again only when a shot, the toggle, the interval or the fields of view have changed, which
 //! draws the same thing. A shot whose position is not a place (a latitude past 90) is left out,
 //! where the C# would put a marker nowhere.
-//! `// C#: GCSViews/FlightData.cs:4001-4082, 4457-4471; ExtLibs/Maps/GMapMarkerPhoto.cs;
+//! `// C#: GCSViews/FlightData.cs:4115-4196, 4571-4585; ExtLibs/Maps/GMapMarkerPhoto.cs;
 //! ExtLibs/Maps/GMapMarkerOverlapCount.cs`
 
 // This module is internal to the binary; `pub` here documents intent rather than exporting API.
@@ -64,7 +64,7 @@ const CELLS_PER_DEGREE: f64 = 10_000.0;
 
 /// `Settings.Instance["camera_fovh"] != null`: both fields of view from the settings while the
 /// horizontal one is saved - `GetDouble`, which is 0 for a value that is not a number - else the
-/// statics. `// C#: GCSViews/FlightData.cs:4014-4019; ExtLibs/Utilities/Settings.cs:245-254`
+/// statics. `// C#: GCSViews/FlightData.cs:4128-4133; ExtLibs/Utilities/Settings.cs:245-254`
 pub fn fov(get: impl Fn(&str) -> Option<String>) -> (f64, f64) {
     let get_double = |key: &str| {
         get(key)
@@ -102,7 +102,7 @@ pub struct Photo {
 /// `new GMapMarkerPhoto(mark, timesincelastshot < min_interval)` for every shot in order, the
 /// last four with their footprints drawn. `timesincelastshot` is the shot's seconds less the one
 /// before's, the first's measured from `double.MinValue`.
-/// `// C#: GCSViews/FlightData.cs:4021-4038, 4043-4062; ExtLibs/Maps/GMapMarkerPhoto.cs:38-63`
+/// `// C#: GCSViews/FlightData.cs:4135-4152, 4157-4176; ExtLibs/Maps/GMapMarkerPhoto.cs:38-63`
 pub fn photo_markers(
     points: &[CameraFeedback],
     min_interval: f64,
@@ -299,7 +299,7 @@ impl PhotoLayer {
     /// The map loop's camera half: the markers for every shot, and with Camera Overlap on and a
     /// shot to count, the overlap count of the footprints whose roll is under 25. Built again
     /// only when what it is built from has changed.
-    /// `// C#: GCSViews/FlightData.cs:4001-4082`
+    /// `// C#: GCSViews/FlightData.cs:4115-4196`
     pub fn refresh(
         &mut self,
         points: &[CameraFeedback],
@@ -335,7 +335,7 @@ impl PhotoLayer {
 
     /// `onOffCameraOverlapToolStripMenuItem_Click` with the box unchecked: every photo marker
     /// removed, and put back by the next update, which finds none on the overlay.
-    /// `// C#: GCSViews/FlightData.cs:4457-4471`
+    /// `// C#: GCSViews/FlightData.cs:4571-4585`
     pub fn clear(&mut self) {
         self.photos.clear();
         self.coverage = None;

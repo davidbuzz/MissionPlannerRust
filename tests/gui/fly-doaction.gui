@@ -3,7 +3,7 @@
 # CMB_action lists FlightData.actions. Battery_Reset takes the generic path: the question, then
 # doCommand(BATTERY_RESET, 0xff, 100, 0, ...) - which SITL accepts. Answering No sends nothing.
 # System_Time is one of the five handled before the question and goes straight away.
-# `GCSViews/FlightData.cs:183-206, 1680-1878`
+# `GCSViews/FlightData.cs:183-207, 1682-1888`
 #
 # Needs SITL: tools/gui-test.sh tests/gui/fly-doaction.gui -- tcp:127.0.0.1:5760
 
@@ -32,7 +32,7 @@ expect fly.prompt none
 expect fly.sent nothing yet
 
 # Escape is the message box's No, its CancelButton: the question has no box to type in, and
-# still hears the key. `ExtLibs/Controls/CustomMessageBox.cs:317`
+# still hears the key. `ExtLibs/Controls/CustomMessageBox.cs:329`
 click fly-doaction
 expect fly.prompt ~ Are you sure you want to do Battery_Reset
 key Escape

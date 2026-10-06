@@ -1,7 +1,7 @@
 # Ctrl+F and the EXPERIMENTAL tab: Mission Planner's temp form (the owner's request of
 # 2026-10-04).
 #
-# Mission Planner's Ctrl+F is MainV2.ProcessCmdKey's `new temp().Show()` (MainV2.cs:4099-4105),
+# Mission Planner's Ctrl+F is MainV2.ProcessCmdKey's `new temp().Show()` (MainV2.cs:4106-4112),
 # the welcome text's "Control-F - Temp screen". Here, by the owner's word, it is the EXPERIMENTAL
 # tab between LOGS and PLUGINS, and Ctrl+F shows it: temp.cs's table of 63 buttons, each beside
 # what it does, as temp.Designer.cs and temp.resx lay them out (crates/mp-gui/src/experimental.rs).

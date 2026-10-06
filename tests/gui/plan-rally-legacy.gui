@@ -8,7 +8,7 @@
 # saveRallyPointsToolStripMenuItem_Click has one branch, the legacy protocol: setParam RALLY_TOTAL
 # to the markers' count, then setRallyPoint per marker - RALLY_POINT, read back with
 # RALLY_FETCH_POINT - and "Failed to save rally point" when a read-back times out (:5936-5957;
-# MAVLinkInterface.cs:6346-6476); the failure is requests::tests::a_rally_point_* and plan.rs's
+# MAVLinkInterface.cs:6308-6437); the failure is requests::tests::a_rally_point_* and plan.rs's
 # tests.
 #
 # clearRallyPointsToolStripMenuItem_Click sets RALLY_TOTAL to 0 and clears the markers and

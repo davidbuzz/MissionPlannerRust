@@ -26,7 +26,7 @@
 //! * whatever passes on the link, whoever asked for it - `processInfoFromStream` files every
 //!   fence `MISSION_ITEM` and `MISSION_ITEM_INT` it reads under the vehicle it is about, clears
 //!   that vehicle's fence on a fence `MISSION_COUNT`, and turns the old protocol's `FENCE_POINT`
-//!   into an item (`MAVLinkInterface.cs:5625-5694, 5745-5763`). A download - this link's or
+//!   into an item (`MAVLinkInterface.cs:5625-5694, 5713-5726`). A download - this link's or
 //!   another ground station's - fills it that way, and so does a recording, whose items this
 //!   link sent are read back like any other;
 //! * this link's own uploads: `setWPTotalAsync` clears it when the vehicle asks for the first
@@ -115,7 +115,7 @@ impl FencePoints {
     /// `processInfoFromStream`'s fence half, for one message from `sysid`/`compid`. A message
     /// addressed to this ground station (`gcs_sysid`) is about its sender; any other is about the
     /// vehicle it is addressed to, which is how a recording's own uploads land on the vehicle.
-    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:5625-5694, 5745-5763`
+    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:5625-5694, 5713-5726`
     pub fn observe(&mut self, sysid: u8, compid: u8, gcs_sysid: u8, message: &MavMessage) {
         let about = |target_system: u8, target_component: u8| {
             if target_system == gcs_sysid {
@@ -125,11 +125,11 @@ impl FencePoints {
             }
         };
         match message {
-            // C#: MAVLinkInterface.cs:5627-5644
+            // C#: MAVLinkInterface.cs:5615-5627
             MavMessage::MissionCount(m) if m.mission_type == FENCE => {
                 self.clear(about(m.target_system, m.target_component));
             }
-            // C#: MAVLinkInterface.cs:5645-5670, `(Locationwp) wp` from the float item.
+            // C#: MAVLinkInterface.cs:5628-5648, `(Locationwp) wp` from the float item.
             MavMessage::MissionItem(m) if m.mission_type == FENCE && m.current != 2 => {
                 let item = FenceItem {
                     command: m.command,
@@ -139,7 +139,7 @@ impl FencePoints {
                 };
                 self.store(about(m.target_system, m.target_component), m.seq, item);
             }
-            // C#: MAVLinkInterface.cs:5671-5698, filed as it came.
+            // C#: MAVLinkInterface.cs:5649-5671, filed as it came.
             MavMessage::MissionItemInt(m) if m.mission_type == FENCE && m.current != 2 => {
                 let item = FenceItem {
                     command: m.command,
@@ -149,7 +149,7 @@ impl FencePoints {
                 };
                 self.store(about(m.target_system, m.target_component), m.seq, item);
             }
-            // C#: MAVLinkInterface.cs:5747-5763, the old protocol's point as an item: the return
+            // C#: MAVLinkInterface.cs:5715-5726, the old protocol's point as an item: the return
             // point at index 0, an inclusion vertex after it, the count less one as `param1`.
             MavMessage::FencePoint(m) => {
                 let command = if m.idx == 0 {
@@ -176,7 +176,7 @@ impl FencePoints {
 
 /// An item this link uploaded, as `setWPAsync` files it: `(Locationwp) req` of the
 /// `mavlink_mission_item_int_t` it sent.
-/// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:4293-4299, 4331-4337`
+/// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:4283-4289, 4320-4326`
 #[must_use]
 pub fn uploaded(item: &MissionItem) -> FenceItem {
     let wire: WireItem = item.to_wire();
@@ -192,7 +192,7 @@ pub fn uploaded(item: &MissionItem) -> FenceItem {
 /// as `setWPAsync` files it in `fencepoints` once the vehicle has taken it: `(Locationwp) req`
 /// under its sequence number, for an item of the fence list that is neither a guided target
 /// (current 2) nor an altitude change (current 3). `None` for anything else.
-/// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:4113-4127, 4146-4160, 4285-4300, 4323-4338`
+/// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:4104-4118, 4146-4160, 4285-4300, 4323-4338`
 #[must_use]
 pub fn set_wp_item(message: &MavMessage) -> Option<(u16, FenceItem)> {
     match message {

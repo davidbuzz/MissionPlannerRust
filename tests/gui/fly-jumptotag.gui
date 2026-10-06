@@ -4,7 +4,7 @@
 # from 0 to 65535", and the question is asked again, as the C#'s handler calls itself. The C#'s
 # menu is on the map, and so is this application's since its map menu was ported (the row under
 # the Actions grid that held its entries before is gone).
-# `GCSViews/FlightData.cs:6504-6531, GCSViews/FlightData.Designer.cs:2518-2531, 2645-2649`
+# `GCSViews/FlightData.cs:6618-6645, GCSViews/FlightData.Designer.cs:2518-2531, 2645-2649`
 #
 # Needs SITL: tools/gui-test.sh tests/gui/fly-jumptotag.gui -- tcp:127.0.0.1:5760
 

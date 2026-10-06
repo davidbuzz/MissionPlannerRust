@@ -184,7 +184,7 @@ pub const SIMPLE_BUTTON: Place = (188.0, 249.0, 102.0, 21.0);
 
 /// `MAVLink.ACCELCAL_VEHICLE_POS`, the names `pos.ToString()` gives; any other value is its
 /// number.
-/// `// C#: ExtLibs/Mavlink/Mavlink.cs:782-809`
+/// `// C#: ExtLibs/Mavlink/Mavlink.cs:793-820`
 pub const POSITIONS: [(i64, &str); 8] = [
     (1, "LEVEL"),
     (2, "LEFT"),
@@ -448,7 +448,7 @@ impl AccelCalibration {
     /// which for param5 1 returns true as soon as it is sent. Then the page listens and the
     /// button reads "Click when Done"; with no vehicle `doCommand` is false, and the box says
     /// `Strings.CommandFailed`.
-    /// `// C#: GCSViews/ConfigurationView/ConfigAccelerometerCalibration.cs:39-89; ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:1213-1234, 2692-2739`
+    /// `// C#: GCSViews/ConfigurationView/ConfigAccelerometerCalibration.cs:39-89; ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:1213-1234, 2689-2736`
     pub fn click_accel(&mut self, telemetry: &Telemetry, view: &TelemetryView) {
         if !self.accel_enabled() {
             return;

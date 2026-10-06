@@ -77,9 +77,9 @@ pub(crate) fn command(target: VehicleId, command: u16, params: [f32; 7]) -> MavM
     })
 }
 
-/// `magic_force_arm_value`, `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:2634`.
+/// `magic_force_arm_value`, `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:2631`.
 pub const MAGIC_FORCE_ARM: f32 = 2989.0;
-/// `magic_force_disarm_value`, `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:2635`.
+/// `magic_force_disarm_value`, `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:2632`.
 pub const MAGIC_FORCE_DISARM: f32 = 21196.0;
 
 /// Arms or disarms the vehicle.
@@ -89,7 +89,7 @@ pub const MAGIC_FORCE_DISARM: f32 = 21196.0;
 /// has both as named constants, and ArduPilot looks for each one only on its own side; the
 /// wrong one is an ordinary command the vehicle checks and refuses. It exists because the
 /// protocol has it and ground crews occasionally need it; it is never the default.
-/// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:2634-2635, 2640-2644`
+/// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:2631-2632, 2637-2641`
 #[must_use]
 pub fn arm(target: VehicleId, arm: bool, force: bool) -> MavMessage {
     let force_magic = match (force, arm) {
@@ -313,7 +313,7 @@ pub fn reboot(target: VehicleId) -> MavMessage {
 /// page (`mp-gui`'s `config/firmware.rs`, `reboot_to_bootloader`) sends this and then
 /// [`reboot`] through [`Link::command`](crate::Link::command), which makes the two writes per
 /// command; a caller sending this once with `Link::send` sends a quarter of them.
-/// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:2553-2559, 2591-2614, 2758-2763`
+/// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:2550-2556, 2588-2611, 2755-2760`
 #[must_use]
 pub fn reboot_to_bootloader(target: VehicleId) -> MavMessage {
     command(
@@ -473,7 +473,7 @@ pub fn rc_override(target: VehicleId, channels: [u16; 18]) -> MavMessage {
 /// `MANUAL_CONTROL` as the joystick sends it with Manual Control ticked: the four axes, -1000 to
 /// 1000, no buttons, and `target` as the caller gives it - Mission Planner fills it with the
 /// vehicle's component id (`rc.target = comPort.MAV.compid`), and so does its port.
-/// `// C#: MainV2.cs:2409-2435`
+/// `// C#: MainV2.cs:2416-2442`
 #[must_use]
 pub fn manual_control(target: u8, x: i16, y: i16, z: i16, r: i16) -> MavMessage {
     MavMessage::ManualControl(mp_mavlink_dialects::all::ManualControl {
@@ -550,7 +550,7 @@ pub const CURRENT_CHANGE_ALT: u8 = 3;
 ///
 /// The public form of the builder every named command here uses, for the flight screen's
 /// `CMB_action` list, which sends whichever `MAV_CMD` its entry names.
-/// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:2695-2710` (`doCommandAsync`)
+/// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:2692-2707` (`doCommandAsync`)
 #[must_use]
 pub fn command_long(target: VehicleId, command_id: u16, params: [f32; 7]) -> MavMessage {
     command(target, command_id, params)
@@ -636,7 +636,7 @@ fn float_mission_item(
 /// `setNewWPAlt` sends a `MISSION_ITEM` with `current` = 3, sequence 0, frame
 /// `GLOBAL_RELATIVE_ALT`, and a location whose only non-zero field is the altitude. The C# waits
 /// 450 ms for a `MISSION_ACK` and re-sends up to ten times.
-/// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:4470-4481, 3975-4043`
+/// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:4470-4481, 3965-4033`
 #[must_use]
 pub fn change_alt(target: VehicleId, altitude_metres: f32) -> MavMessage {
     float_mission_item(
@@ -649,7 +649,7 @@ pub fn change_alt(target: VehicleId, altitude_metres: f32) -> MavMessage {
 
 /// A guided-mode target as `setGuidedModeWP` sends it to ArduPlane: a `MISSION_ITEM` with
 /// `current` = 2 in the frame the operator chose.
-/// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:4441-4448`
+/// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:4430-4437`
 #[must_use]
 pub fn guided_mission_item(
     target: VehicleId,
@@ -673,7 +673,7 @@ pub fn guided_mission_item(
 /// position bits - or only the altitude bit when there is no latitude and longitude. With a
 /// position that is `0xFDF8`. The frame is whichever the operator chose, not the `_INT` variant;
 /// ArduPilot treats the two alike for this message.
-/// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:4500-4551, 4450-4454`
+/// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:4500-4551, 4439-4443`
 #[must_use]
 pub fn guided_position_target(
     target: VehicleId,
@@ -723,7 +723,7 @@ pub fn guided_position_target(
 ///
 /// `MAV_CMD_DO_CHANGE_SPEED` with param1 0 (speed type) and the number in the box as param2.
 /// The C# does not divide it by `CurrentState.multiplierspeed` - it sends whatever the box holds.
-/// `// C#: GCSViews/FlightData.cs:4426-4438`
+/// `// C#: GCSViews/FlightData.cs:4540-4552`
 #[must_use]
 pub fn change_speed(target: VehicleId, speed: f32) -> MavMessage {
     command(
@@ -735,7 +735,7 @@ pub fn change_speed(target: VehicleId, speed: f32) -> MavMessage {
 
 /// Abandons a landing: Abort Landing, which is `doAbortLand`, `MAV_CMD_DO_GO_AROUND` with every
 /// parameter zero.
-/// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:2660-2663`
+/// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:2657-2660`
 #[must_use]
 pub fn go_around(target: VehicleId) -> MavMessage {
     command(target, CMD_DO_GO_AROUND, [0.0; 7])
@@ -759,7 +759,7 @@ pub fn set_home(target: VehicleId, latitude: f64, longitude: f64, altitude: f64)
 ///
 /// The altitude is `(int) alt.alt * 1000`: the cast binds first, so the height is truncated to a
 /// whole metre before it is made millimetres. `time_usec` is left at zero, as the C# leaves it.
-/// `// C#: GCSViews/FlightData.cs:4802-4810`
+/// `// C#: GCSViews/FlightData.cs:4916-4924`
 #[must_use]
 pub fn set_gps_global_origin(
     target_system: u8,
@@ -811,7 +811,7 @@ pub fn set_mode_with_base(target_system: u8, base_mode: u8, custom_mode: u32) ->
 
 /// The ground station's clock: Do Action's `System_Time`, a `SYSTEM_TIME` with `time_boot_ms`
 /// zero.
-/// `// C#: GCSViews/FlightData.cs:1755-1772`
+/// `// C#: GCSViews/FlightData.cs:1757-1774`
 #[must_use]
 pub fn system_time(time_unix_usec: u64) -> MavMessage {
     MavMessage::SystemTime(SystemTime {
@@ -832,7 +832,7 @@ mod tests {
     /// The values ArduPilot looks for to mean "ignore your own checks", one each way.
     ///
     /// Pinned here against Mission Planner's own constants - `magic_force_arm_value = 2989.0f`
-    /// and `magic_force_disarm_value = 21196.0f` in `MAVLinkInterface.cs:2634-2635` - because a
+    /// and `magic_force_disarm_value = 21196.0f` in `MAVLinkInterface.cs:2631-2632` - because a
     /// wrong number here does not fail loudly. Until 2026-09-24 the arm side sent the disarm
     /// value, so the Force Arm button was an ordinary arm the vehicle checked and refused: the
     /// operator was left pressing a button that did nothing at the moment they most needed it.
@@ -1074,7 +1074,7 @@ mod tests {
     }
 
     /// Set WP and Restart Mission: `mavlink_mission_set_current_t` with the target and the
-    /// index, nothing else. `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:2461-2468`
+    /// index, nothing else. `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:2458-2465`
     #[test]
     fn set_current_carries_the_index_and_the_vehicle() {
         let MavMessage::MissionSetCurrent(message) = mission_set_current(VehicleId::new(7, 42), 3)
@@ -1087,7 +1087,7 @@ mod tests {
     }
 
     /// Change Alt: a float `MISSION_ITEM`, sequence 0, `current` 3, frame 3, a waypoint whose
-    /// only non-zero field is the altitude. `// C#: MAVLinkInterface.cs:4476, 4027-4043`
+    /// only non-zero field is the altitude. `// C#: MAVLinkInterface.cs:4465, 4017-4033`
     #[test]
     fn change_alt_is_a_current_3_mission_item_in_the_relative_frame() {
         let MavMessage::MissionItem(item) = change_alt(target(), 25.0) else {

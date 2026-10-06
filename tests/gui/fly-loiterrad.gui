@@ -4,7 +4,7 @@
 # writes the first name the vehicle has and returns false, silently, when it has none. ArduCopter
 # has neither, so the product path on this SITL is the refusal - asserted only after the parameters
 # are downloaded, so the answer comes from the vehicle's own list rather than an empty one.
-# `GCSViews/FlightData.cs:4412-4424, ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:1609-1650`
+# `GCSViews/FlightData.cs:4526-4538, ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:1606-1647`
 #
 # Needs SITL (a copter): tools/gui-test.sh tests/gui/fly-loiterrad.gui -- tcp:127.0.0.1:5760
 

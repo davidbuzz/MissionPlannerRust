@@ -77,9 +77,9 @@ expect config.InputBoxFolderNameEnterfoldername mprtest
 expect config.mavftp.list ~ mprtest
 expect config.mavftp.item.mprtest.type Directory
 # After a listing Mission Planner's label ends on "Ready", "/ Ready" or "/ Listing", by timing,
-# and so does this. The handler sets "Ready" at once (MavFTPUI.cs:543-545) while the listing runs on
-# a thread of the pool (MavFTPUI.cs:240-244); its "<dir> Listing" (MAVFtp.cs:1285) reaches the label
-# through BeginInvoke, after "Ready", and its "<dir> Ready" (MAVFtp.cs:1441) only if 100 ms have
+# and so does this. The handler sets "Ready" at once (MavFTPUI.cs:572-574) while the listing runs on
+# a thread of the pool (MavFTPUI.cs:240-244); its "<dir> Listing" (MAVFtp.cs:1324) reaches the label
+# through BeginInvoke, after "Ready", and its "<dir> Ready" (MAVFtp.cs:1480) only if 100 ms have
 # passed since the last report the label took (MavFTPUI.cs:34-60) - which a SITL's quick listing
 # often has not: config-mavftp failed here three runs in four on a new SITL (2026-10-06) with the
 # label on "/ Listing" and the listing done. So the script asks that the work has ended.

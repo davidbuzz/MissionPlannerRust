@@ -19,7 +19,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
 //! The Windows source: Media Foundation's video capture devices, where the C# uses DirectShow's
-//! (`ExtLibs/WebCamService/Capture.cs:244-258, 276-523`; `ConfigPlanner.cs:296-360`).
+//! (`ExtLibs/WebCamService/Capture.cs:244-258, 276-523`; `ConfigPlanner.cs:297-361`).
 //!
 //! Both APIs sit on the same kernel streaming devices, so the lists match: a device is
 //! `MFEnumDeviceSources`' entry of the video capture type, named by its friendly name - the
@@ -339,7 +339,7 @@ impl Source for MediaFoundationSource {
 
     /// The device's stream capabilities, `GetStreamCaps(i)` for each `i`: its native media types
     /// in MJPEG and YUY2, one entry a format and size, at its fastest rate.
-    /// `// C#: GCSViews/ConfigurationView/ConfigPlanner.cs:338-350`
+    /// `// C#: GCSViews/ConfigurationView/ConfigPlanner.cs:339-351`
     fn modes(&self, device: &Device) -> Result<Vec<Mode>, VideoError> {
         let _com = Com::enter();
         let _platform = Platform::start()?;

@@ -4,7 +4,7 @@
 # multiplieralt})` - a float MISSION_ITEM, sequence 0, command 16, frame 3 (relative), current 3,
 # x and y zero. 25.9 in the box is 25 on the wire. SITL acknowledges it with MISSION_ACK, which the
 # link does not log outside a transfer, so the assertion is on what was sent.
-# `GCSViews/FlightData.cs:4399-4410, ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:4470-4481`
+# `GCSViews/FlightData.cs:4513-4524, ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:4470-4481`
 #
 # Needs SITL: tools/gui-test.sh tests/gui/fly-changealt.gui -- tcp:127.0.0.1:5760
 

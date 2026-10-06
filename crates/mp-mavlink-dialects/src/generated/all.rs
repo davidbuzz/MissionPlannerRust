@@ -22,7 +22,7 @@
 //!
 //! DO NOT EDIT. Regenerate with `cargo xtask codegen mavlink`.
 //!
-//! Source: https://github.com/ArduPilot/MissionPlanner/blob/efb0801/ExtLibs/Mavlink/message_definitions/all.xml
+//! Source: https://github.com/ArduPilot/MissionPlanner/blob/5dbb2b0/ExtLibs/Mavlink/message_definitions/all.xml
 //! Metadata (CRC_EXTRA, min_len, len) is verified against the shipping C# table by
 //! `cargo xtask verify-mavlink`.
 
@@ -53,7 +53,7 @@ pub static MESSAGES: &[MessageInfo] = &[
         name: "SYS_STATUS",
         crc_extra: 124,
         min_len: 31,
-        len: 31,
+        len: 43,
     },
     MessageInfo {
         id: 2,
@@ -1425,28 +1425,28 @@ pub static MESSAGES: &[MessageInfo] = &[
         name: "CAMERA_INFORMATION",
         crc_extra: 92,
         min_len: 235,
-        len: 236,
+        len: 237,
     },
     MessageInfo {
         id: 260,
         name: "CAMERA_SETTINGS",
         crc_extra: 146,
         min_len: 5,
-        len: 13,
+        len: 14,
     },
     MessageInfo {
         id: 261,
         name: "STORAGE_INFORMATION",
         crc_extra: 179,
         min_len: 27,
-        len: 60,
+        len: 61,
     },
     MessageInfo {
         id: 262,
         name: "CAMERA_CAPTURE_STATUS",
         crc_extra: 12,
         min_len: 18,
-        len: 22,
+        len: 23,
     },
     MessageInfo {
         id: 263,
@@ -1460,7 +1460,7 @@ pub static MESSAGES: &[MessageInfo] = &[
         name: "FLIGHT_INFORMATION",
         crc_extra: 49,
         min_len: 28,
-        len: 28,
+        len: 32,
     },
     MessageInfo {
         id: 265,
@@ -1495,35 +1495,35 @@ pub static MESSAGES: &[MessageInfo] = &[
         name: "VIDEO_STREAM_INFORMATION",
         crc_extra: 109,
         min_len: 213,
-        len: 214,
+        len: 215,
     },
     MessageInfo {
         id: 270,
         name: "VIDEO_STREAM_STATUS",
         crc_extra: 59,
         min_len: 19,
-        len: 19,
+        len: 20,
     },
     MessageInfo {
         id: 271,
         name: "CAMERA_FOV_STATUS",
         crc_extra: 22,
         min_len: 52,
-        len: 52,
+        len: 53,
     },
     MessageInfo {
         id: 275,
         name: "CAMERA_TRACKING_IMAGE_STATUS",
         crc_extra: 126,
         min_len: 31,
-        len: 31,
+        len: 32,
     },
     MessageInfo {
         id: 276,
         name: "CAMERA_TRACKING_GEO_STATUS",
         crc_extra: 18,
         min_len: 49,
-        len: 49,
+        len: 50,
     },
     MessageInfo {
         id: 277,
@@ -1558,7 +1558,7 @@ pub static MESSAGES: &[MessageInfo] = &[
         name: "GIMBAL_DEVICE_INFORMATION",
         crc_extra: 74,
         min_len: 144,
-        len: 145,
+        len: 149,
     },
     MessageInfo {
         id: 284,
@@ -1601,6 +1601,13 @@ pub static MESSAGES: &[MessageInfo] = &[
         crc_extra: 234,
         min_len: 12,
         len: 12,
+    },
+    MessageInfo {
+        id: 296,
+        name: "GLOBAL_POSITION_SENSOR",
+        crc_extra: 158,
+        min_len: 41,
+        len: 41,
     },
     MessageInfo {
         id: 299,
@@ -1729,6 +1736,13 @@ pub static MESSAGES: &[MessageInfo] = &[
         len: 252,
     },
     MessageInfo {
+        id: 360,
+        name: "ORBIT_EXECUTION_STATUS",
+        crc_extra: 11,
+        min_len: 25,
+        len: 25,
+    },
+    MessageInfo {
         id: 370,
         name: "SMART_BATTERY_INFO",
         crc_extra: 75,
@@ -1785,6 +1799,13 @@ pub static MESSAGES: &[MessageInfo] = &[
         len: 37,
     },
     MessageInfo {
+        id: 390,
+        name: "ONBOARD_COMPUTER_STATUS",
+        crc_extra: 156,
+        min_len: 238,
+        len: 240,
+    },
+    MessageInfo {
         id: 420,
         name: "RADIO_RC_CHANNELS",
         crc_extra: 20,
@@ -1818,6 +1839,13 @@ pub static MESSAGES: &[MessageInfo] = &[
         crc_extra: 169,
         min_len: 17,
         len: 17,
+    },
+    MessageInfo {
+        id: 513,
+        name: "RANGING_BEACON",
+        crc_extra: 99,
+        min_len: 45,
+        len: 45,
     },
     MessageInfo {
         id: 8002,
@@ -2531,6 +2559,159 @@ impl AccelcalVehiclePos {
     }
 }
 
+/// Actuator configuration, used to change a setting on an actuator. Component information metadata can be used to know which outputs support which commands.
+///
+/// MAVLink enum `ACTUATOR_CONFIGURATION`. Values are open: an unknown value from a newer autopilot
+/// is preserved rather than rejected.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub struct ActuatorConfiguration(pub u32);
+
+impl ActuatorConfiguration {
+    /// Do nothing.
+    pub const ACTUATOR_CONFIGURATION_NONE: Self = Self(0);
+    /// Command the actuator to beep now.
+    pub const ACTUATOR_CONFIGURATION_BEEP: Self = Self(1);
+    /// Permanently set the actuator (ESC) to 3D mode (reversible thrust).
+    pub const ACTUATOR_CONFIGURATION_3D_MODE_ON: Self = Self(2);
+    /// Permanently set the actuator (ESC) to non 3D mode (non-reversible thrust).
+    pub const ACTUATOR_CONFIGURATION_3D_MODE_OFF: Self = Self(3);
+    /// Permanently set the actuator (ESC) to spin direction 1 (which can be clockwise or counter-clockwise).
+    pub const ACTUATOR_CONFIGURATION_SPIN_DIRECTION1: Self = Self(4);
+    /// Permanently set the actuator (ESC) to spin direction 2 (opposite of direction 1).
+    pub const ACTUATOR_CONFIGURATION_SPIN_DIRECTION2: Self = Self(5);
+
+    /// The name of a value, or `None` if this dialect does not define it.
+    #[must_use]
+    pub const fn name(self) -> Option<&'static str> {
+        Some(match self.0 {
+            0 => "ACTUATOR_CONFIGURATION_NONE",
+            1 => "ACTUATOR_CONFIGURATION_BEEP",
+            2 => "ACTUATOR_CONFIGURATION_3D_MODE_ON",
+            3 => "ACTUATOR_CONFIGURATION_3D_MODE_OFF",
+            4 => "ACTUATOR_CONFIGURATION_SPIN_DIRECTION1",
+            5 => "ACTUATOR_CONFIGURATION_SPIN_DIRECTION2",
+            _ => return None,
+        })
+    }
+}
+
+/// Actuator output function. Values greater or equal to 1000 are autopilot-specific.
+///
+/// MAVLink enum `ACTUATOR_OUTPUT_FUNCTION`. Values are open: an unknown value from a newer autopilot
+/// is preserved rather than rejected.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub struct ActuatorOutputFunction(pub u32);
+
+impl ActuatorOutputFunction {
+    /// No function (disabled).
+    pub const ACTUATOR_OUTPUT_FUNCTION_NONE: Self = Self(0);
+    /// Motor 1
+    pub const ACTUATOR_OUTPUT_FUNCTION_MOTOR1: Self = Self(1);
+    /// Motor 2
+    pub const ACTUATOR_OUTPUT_FUNCTION_MOTOR2: Self = Self(2);
+    /// Motor 3
+    pub const ACTUATOR_OUTPUT_FUNCTION_MOTOR3: Self = Self(3);
+    /// Motor 4
+    pub const ACTUATOR_OUTPUT_FUNCTION_MOTOR4: Self = Self(4);
+    /// Motor 5
+    pub const ACTUATOR_OUTPUT_FUNCTION_MOTOR5: Self = Self(5);
+    /// Motor 6
+    pub const ACTUATOR_OUTPUT_FUNCTION_MOTOR6: Self = Self(6);
+    /// Motor 7
+    pub const ACTUATOR_OUTPUT_FUNCTION_MOTOR7: Self = Self(7);
+    /// Motor 8
+    pub const ACTUATOR_OUTPUT_FUNCTION_MOTOR8: Self = Self(8);
+    /// Motor 9
+    pub const ACTUATOR_OUTPUT_FUNCTION_MOTOR9: Self = Self(9);
+    /// Motor 10
+    pub const ACTUATOR_OUTPUT_FUNCTION_MOTOR10: Self = Self(10);
+    /// Motor 11
+    pub const ACTUATOR_OUTPUT_FUNCTION_MOTOR11: Self = Self(11);
+    /// Motor 12
+    pub const ACTUATOR_OUTPUT_FUNCTION_MOTOR12: Self = Self(12);
+    /// Motor 13
+    pub const ACTUATOR_OUTPUT_FUNCTION_MOTOR13: Self = Self(13);
+    /// Motor 14
+    pub const ACTUATOR_OUTPUT_FUNCTION_MOTOR14: Self = Self(14);
+    /// Motor 15
+    pub const ACTUATOR_OUTPUT_FUNCTION_MOTOR15: Self = Self(15);
+    /// Motor 16
+    pub const ACTUATOR_OUTPUT_FUNCTION_MOTOR16: Self = Self(16);
+    /// Servo 1
+    pub const ACTUATOR_OUTPUT_FUNCTION_SERVO1: Self = Self(33);
+    /// Servo 2
+    pub const ACTUATOR_OUTPUT_FUNCTION_SERVO2: Self = Self(34);
+    /// Servo 3
+    pub const ACTUATOR_OUTPUT_FUNCTION_SERVO3: Self = Self(35);
+    /// Servo 4
+    pub const ACTUATOR_OUTPUT_FUNCTION_SERVO4: Self = Self(36);
+    /// Servo 5
+    pub const ACTUATOR_OUTPUT_FUNCTION_SERVO5: Self = Self(37);
+    /// Servo 6
+    pub const ACTUATOR_OUTPUT_FUNCTION_SERVO6: Self = Self(38);
+    /// Servo 7
+    pub const ACTUATOR_OUTPUT_FUNCTION_SERVO7: Self = Self(39);
+    /// Servo 8
+    pub const ACTUATOR_OUTPUT_FUNCTION_SERVO8: Self = Self(40);
+    /// Servo 9
+    pub const ACTUATOR_OUTPUT_FUNCTION_SERVO9: Self = Self(41);
+    /// Servo 10
+    pub const ACTUATOR_OUTPUT_FUNCTION_SERVO10: Self = Self(42);
+    /// Servo 11
+    pub const ACTUATOR_OUTPUT_FUNCTION_SERVO11: Self = Self(43);
+    /// Servo 12
+    pub const ACTUATOR_OUTPUT_FUNCTION_SERVO12: Self = Self(44);
+    /// Servo 13
+    pub const ACTUATOR_OUTPUT_FUNCTION_SERVO13: Self = Self(45);
+    /// Servo 14
+    pub const ACTUATOR_OUTPUT_FUNCTION_SERVO14: Self = Self(46);
+    /// Servo 15
+    pub const ACTUATOR_OUTPUT_FUNCTION_SERVO15: Self = Self(47);
+    /// Servo 16
+    pub const ACTUATOR_OUTPUT_FUNCTION_SERVO16: Self = Self(48);
+
+    /// The name of a value, or `None` if this dialect does not define it.
+    #[must_use]
+    pub const fn name(self) -> Option<&'static str> {
+        Some(match self.0 {
+            0 => "ACTUATOR_OUTPUT_FUNCTION_NONE",
+            1 => "ACTUATOR_OUTPUT_FUNCTION_MOTOR1",
+            2 => "ACTUATOR_OUTPUT_FUNCTION_MOTOR2",
+            3 => "ACTUATOR_OUTPUT_FUNCTION_MOTOR3",
+            4 => "ACTUATOR_OUTPUT_FUNCTION_MOTOR4",
+            5 => "ACTUATOR_OUTPUT_FUNCTION_MOTOR5",
+            6 => "ACTUATOR_OUTPUT_FUNCTION_MOTOR6",
+            7 => "ACTUATOR_OUTPUT_FUNCTION_MOTOR7",
+            8 => "ACTUATOR_OUTPUT_FUNCTION_MOTOR8",
+            9 => "ACTUATOR_OUTPUT_FUNCTION_MOTOR9",
+            10 => "ACTUATOR_OUTPUT_FUNCTION_MOTOR10",
+            11 => "ACTUATOR_OUTPUT_FUNCTION_MOTOR11",
+            12 => "ACTUATOR_OUTPUT_FUNCTION_MOTOR12",
+            13 => "ACTUATOR_OUTPUT_FUNCTION_MOTOR13",
+            14 => "ACTUATOR_OUTPUT_FUNCTION_MOTOR14",
+            15 => "ACTUATOR_OUTPUT_FUNCTION_MOTOR15",
+            16 => "ACTUATOR_OUTPUT_FUNCTION_MOTOR16",
+            33 => "ACTUATOR_OUTPUT_FUNCTION_SERVO1",
+            34 => "ACTUATOR_OUTPUT_FUNCTION_SERVO2",
+            35 => "ACTUATOR_OUTPUT_FUNCTION_SERVO3",
+            36 => "ACTUATOR_OUTPUT_FUNCTION_SERVO4",
+            37 => "ACTUATOR_OUTPUT_FUNCTION_SERVO5",
+            38 => "ACTUATOR_OUTPUT_FUNCTION_SERVO6",
+            39 => "ACTUATOR_OUTPUT_FUNCTION_SERVO7",
+            40 => "ACTUATOR_OUTPUT_FUNCTION_SERVO8",
+            41 => "ACTUATOR_OUTPUT_FUNCTION_SERVO9",
+            42 => "ACTUATOR_OUTPUT_FUNCTION_SERVO10",
+            43 => "ACTUATOR_OUTPUT_FUNCTION_SERVO11",
+            44 => "ACTUATOR_OUTPUT_FUNCTION_SERVO12",
+            45 => "ACTUATOR_OUTPUT_FUNCTION_SERVO13",
+            46 => "ACTUATOR_OUTPUT_FUNCTION_SERVO14",
+            47 => "ACTUATOR_OUTPUT_FUNCTION_SERVO15",
+            48 => "ACTUATOR_OUTPUT_FUNCTION_SERVO16",
+            _ => return None,
+        })
+    }
+}
+
 /// Enumeration of the ADSB altimeter types
 ///
 /// MAVLink enum `ADSB_ALTITUDE_TYPE`. Values are open: an unknown value from a newer autopilot
@@ -2795,58 +2976,58 @@ pub struct AisNavStatus(pub u32);
 
 impl AisNavStatus {
     /// Under way using engine.
-    pub const UNDER_WAY: Self = Self(0);
-    /// `AIS_NAV_ANCHORED` = 1.
-    pub const AIS_NAV_ANCHORED: Self = Self(1);
-    /// `AIS_NAV_UN_COMMANDED` = 2.
-    pub const AIS_NAV_UN_COMMANDED: Self = Self(2);
-    /// `AIS_NAV_RESTRICTED_MANOEUVERABILITY` = 3.
-    pub const AIS_NAV_RESTRICTED_MANOEUVERABILITY: Self = Self(3);
-    /// `AIS_NAV_DRAUGHT_CONSTRAINED` = 4.
-    pub const AIS_NAV_DRAUGHT_CONSTRAINED: Self = Self(4);
-    /// `AIS_NAV_MOORED` = 5.
-    pub const AIS_NAV_MOORED: Self = Self(5);
-    /// `AIS_NAV_AGROUND` = 6.
-    pub const AIS_NAV_AGROUND: Self = Self(6);
-    /// `AIS_NAV_FISHING` = 7.
-    pub const AIS_NAV_FISHING: Self = Self(7);
-    /// `AIS_NAV_SAILING` = 8.
-    pub const AIS_NAV_SAILING: Self = Self(8);
-    /// `AIS_NAV_RESERVED_HSC` = 9.
-    pub const AIS_NAV_RESERVED_HSC: Self = Self(9);
-    /// `AIS_NAV_RESERVED_WIG` = 10.
-    pub const AIS_NAV_RESERVED_WIG: Self = Self(10);
-    /// `AIS_NAV_RESERVED_1` = 11.
-    pub const AIS_NAV_RESERVED_1: Self = Self(11);
-    /// `AIS_NAV_RESERVED_2` = 12.
-    pub const AIS_NAV_RESERVED_2: Self = Self(12);
-    /// `AIS_NAV_RESERVED_3` = 13.
-    pub const AIS_NAV_RESERVED_3: Self = Self(13);
+    pub const AIS_NAV_STATUS_UNDER_WAY: Self = Self(0);
+    /// `AIS_NAV_STATUS_ANCHORED` = 1.
+    pub const AIS_NAV_STATUS_ANCHORED: Self = Self(1);
+    /// `AIS_NAV_STATUS_UN_COMMANDED` = 2.
+    pub const AIS_NAV_STATUS_UN_COMMANDED: Self = Self(2);
+    /// `AIS_NAV_STATUS_RESTRICTED_MANOEUVERABILITY` = 3.
+    pub const AIS_NAV_STATUS_RESTRICTED_MANOEUVERABILITY: Self = Self(3);
+    /// `AIS_NAV_STATUS_DRAUGHT_CONSTRAINED` = 4.
+    pub const AIS_NAV_STATUS_DRAUGHT_CONSTRAINED: Self = Self(4);
+    /// `AIS_NAV_STATUS_MOORED` = 5.
+    pub const AIS_NAV_STATUS_MOORED: Self = Self(5);
+    /// `AIS_NAV_STATUS_AGROUND` = 6.
+    pub const AIS_NAV_STATUS_AGROUND: Self = Self(6);
+    /// `AIS_NAV_STATUS_FISHING` = 7.
+    pub const AIS_NAV_STATUS_FISHING: Self = Self(7);
+    /// `AIS_NAV_STATUS_SAILING` = 8.
+    pub const AIS_NAV_STATUS_SAILING: Self = Self(8);
+    /// `AIS_NAV_STATUS_RESERVED_HSC` = 9.
+    pub const AIS_NAV_STATUS_RESERVED_HSC: Self = Self(9);
+    /// `AIS_NAV_STATUS_RESERVED_WIG` = 10.
+    pub const AIS_NAV_STATUS_RESERVED_WIG: Self = Self(10);
+    /// `AIS_NAV_STATUS_RESERVED_1` = 11.
+    pub const AIS_NAV_STATUS_RESERVED_1: Self = Self(11);
+    /// `AIS_NAV_STATUS_RESERVED_2` = 12.
+    pub const AIS_NAV_STATUS_RESERVED_2: Self = Self(12);
+    /// `AIS_NAV_STATUS_RESERVED_3` = 13.
+    pub const AIS_NAV_STATUS_RESERVED_3: Self = Self(13);
     /// Search And Rescue Transponder.
-    pub const AIS_NAV_AIS_SART: Self = Self(14);
+    pub const AIS_NAV_STATUS_AIS_SART: Self = Self(14);
     /// Not available (default).
-    pub const AIS_NAV_UNKNOWN: Self = Self(15);
+    pub const AIS_NAV_STATUS_UNKNOWN: Self = Self(15);
 
     /// The name of a value, or `None` if this dialect does not define it.
     #[must_use]
     pub const fn name(self) -> Option<&'static str> {
         Some(match self.0 {
-            0 => "UNDER_WAY",
-            1 => "AIS_NAV_ANCHORED",
-            2 => "AIS_NAV_UN_COMMANDED",
-            3 => "AIS_NAV_RESTRICTED_MANOEUVERABILITY",
-            4 => "AIS_NAV_DRAUGHT_CONSTRAINED",
-            5 => "AIS_NAV_MOORED",
-            6 => "AIS_NAV_AGROUND",
-            7 => "AIS_NAV_FISHING",
-            8 => "AIS_NAV_SAILING",
-            9 => "AIS_NAV_RESERVED_HSC",
-            10 => "AIS_NAV_RESERVED_WIG",
-            11 => "AIS_NAV_RESERVED_1",
-            12 => "AIS_NAV_RESERVED_2",
-            13 => "AIS_NAV_RESERVED_3",
-            14 => "AIS_NAV_AIS_SART",
-            15 => "AIS_NAV_UNKNOWN",
+            0 => "AIS_NAV_STATUS_UNDER_WAY",
+            1 => "AIS_NAV_STATUS_ANCHORED",
+            2 => "AIS_NAV_STATUS_UN_COMMANDED",
+            3 => "AIS_NAV_STATUS_RESTRICTED_MANOEUVERABILITY",
+            4 => "AIS_NAV_STATUS_DRAUGHT_CONSTRAINED",
+            5 => "AIS_NAV_STATUS_MOORED",
+            6 => "AIS_NAV_STATUS_AGROUND",
+            7 => "AIS_NAV_STATUS_FISHING",
+            8 => "AIS_NAV_STATUS_SAILING",
+            9 => "AIS_NAV_STATUS_RESERVED_HSC",
+            10 => "AIS_NAV_STATUS_RESERVED_WIG",
+            11 => "AIS_NAV_STATUS_RESERVED_1",
+            12 => "AIS_NAV_STATUS_RESERVED_2",
+            13 => "AIS_NAV_STATUS_RESERVED_3",
+            14 => "AIS_NAV_STATUS_AIS_SART",
+            15 => "AIS_NAV_STATUS_UNKNOWN",
             _ => return None,
         })
     }
@@ -2986,8 +3167,8 @@ impl AisType {
     pub const AIS_TYPE_PASSENGER_HAZARDOUS_A: Self = Self(61);
     /// `AIS_TYPE_PASSENGER_HAZARDOUS_B` = 62.
     pub const AIS_TYPE_PASSENGER_HAZARDOUS_B: Self = Self(62);
-    /// `AIS_TYPE_AIS_TYPE_PASSENGER_HAZARDOUS_C` = 63.
-    pub const AIS_TYPE_AIS_TYPE_PASSENGER_HAZARDOUS_C: Self = Self(63);
+    /// `AIS_TYPE_PASSENGER_HAZARDOUS_C` = 63.
+    pub const AIS_TYPE_PASSENGER_HAZARDOUS_C: Self = Self(63);
     /// `AIS_TYPE_PASSENGER_HAZARDOUS_D` = 64.
     pub const AIS_TYPE_PASSENGER_HAZARDOUS_D: Self = Self(64);
     /// `AIS_TYPE_PASSENGER_RESERVED_1` = 65.
@@ -2996,8 +3177,8 @@ impl AisType {
     pub const AIS_TYPE_PASSENGER_RESERVED_2: Self = Self(66);
     /// `AIS_TYPE_PASSENGER_RESERVED_3` = 67.
     pub const AIS_TYPE_PASSENGER_RESERVED_3: Self = Self(67);
-    /// `AIS_TYPE_AIS_TYPE_PASSENGER_RESERVED_4` = 68.
-    pub const AIS_TYPE_AIS_TYPE_PASSENGER_RESERVED_4: Self = Self(68);
+    /// `AIS_TYPE_PASSENGER_RESERVED_4` = 68.
+    pub const AIS_TYPE_PASSENGER_RESERVED_4: Self = Self(68);
     /// `AIS_TYPE_PASSENGER_UNKNOWN` = 69.
     pub const AIS_TYPE_PASSENGER_UNKNOWN: Self = Self(69);
     /// `AIS_TYPE_CARGO` = 70.
@@ -3128,12 +3309,12 @@ impl AisType {
             60 => "AIS_TYPE_PASSENGER",
             61 => "AIS_TYPE_PASSENGER_HAZARDOUS_A",
             62 => "AIS_TYPE_PASSENGER_HAZARDOUS_B",
-            63 => "AIS_TYPE_AIS_TYPE_PASSENGER_HAZARDOUS_C",
+            63 => "AIS_TYPE_PASSENGER_HAZARDOUS_C",
             64 => "AIS_TYPE_PASSENGER_HAZARDOUS_D",
             65 => "AIS_TYPE_PASSENGER_RESERVED_1",
             66 => "AIS_TYPE_PASSENGER_RESERVED_2",
             67 => "AIS_TYPE_PASSENGER_RESERVED_3",
-            68 => "AIS_TYPE_AIS_TYPE_PASSENGER_RESERVED_4",
+            68 => "AIS_TYPE_PASSENGER_RESERVED_4",
             69 => "AIS_TYPE_PASSENGER_UNKNOWN",
             70 => "AIS_TYPE_CARGO",
             71 => "AIS_TYPE_CARGO_HAZARDOUS_A",
@@ -3357,6 +3538,8 @@ impl CameraCapFlags {
     pub const CAMERA_CAP_FLAGS_HAS_TRACKING_GEO_STATUS: Self = Self(2048);
     /// Camera supports absolute thermal range (request CAMERA_THERMAL_RANGE with MAV_CMD_REQUEST_MESSAGE).
     pub const CAMERA_CAP_FLAGS_HAS_THERMAL_RANGE: Self = Self(4096);
+    /// Camera supports Moving Target Indicators (MTI) on the camera view (using MAV_CMD_CAMERA_START_MTI).
+    pub const CAMERA_CAP_FLAGS_HAS_MTI: Self = Self(8192);
 
     /// The name of a value, or `None` if this dialect does not define it.
     #[must_use]
@@ -3375,6 +3558,7 @@ impl CameraCapFlags {
             1024 => "CAMERA_CAP_FLAGS_HAS_TRACKING_RECTANGLE",
             2048 => "CAMERA_CAP_FLAGS_HAS_TRACKING_GEO_STATUS",
             4096 => "CAMERA_CAP_FLAGS_HAS_THERMAL_RANGE",
+            8192 => "CAMERA_CAP_FLAGS_HAS_MTI",
             _ => return None,
         })
     }
@@ -3538,7 +3722,7 @@ impl CameraTrackingMode {
 
 /// Camera tracking status flags
 ///
-/// MAVLink enum `CAMERA_TRACKING_STATUS_FLAGS`. Values are open: an unknown value from a newer autopilot
+/// MAVLink enum `CAMERA_TRACKING_STATUS_FLAGS` (bitmask). Values are open: an unknown value from a newer autopilot
 /// is preserved rather than rejected.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct CameraTrackingStatusFlags(pub u32);
@@ -3550,6 +3734,10 @@ impl CameraTrackingStatusFlags {
     pub const CAMERA_TRACKING_STATUS_FLAGS_ACTIVE: Self = Self(1);
     /// Camera tracking in error state
     pub const CAMERA_TRACKING_STATUS_FLAGS_ERROR: Self = Self(2);
+    /// Camera Moving Target Indicators (MTI) are active
+    pub const CAMERA_TRACKING_STATUS_FLAGS_MTI: Self = Self(4);
+    /// Camera tracking target is obscured and is being predicted
+    pub const CAMERA_TRACKING_STATUS_FLAGS_COASTING: Self = Self(8);
 
     /// The name of a value, or `None` if this dialect does not define it.
     #[must_use]
@@ -3558,6 +3746,8 @@ impl CameraTrackingStatusFlags {
             0 => "CAMERA_TRACKING_STATUS_FLAGS_IDLE",
             1 => "CAMERA_TRACKING_STATUS_FLAGS_ACTIVE",
             2 => "CAMERA_TRACKING_STATUS_FLAGS_ERROR",
+            4 => "CAMERA_TRACKING_STATUS_FLAGS_MTI",
+            8 => "CAMERA_TRACKING_STATUS_FLAGS_COASTING",
             _ => return None,
         })
     }
@@ -3600,12 +3790,14 @@ pub struct CameraZoomType(pub u32);
 impl CameraZoomType {
     /// Zoom one step increment (-1 for wide, 1 for tele)
     pub const ZOOM_TYPE_STEP: Self = Self(0);
-    /// Continuous zoom up/down until stopped (-1 for wide, 1 for tele, 0 to stop zooming)
+    /// Continuous normalized zoom in/out rate until stopped. Range -1..1, negative: wide, positive: narrow/tele, 0 to stop zooming. Other values should be clipped to the range.
     pub const ZOOM_TYPE_CONTINUOUS: Self = Self(1);
     /// Zoom value as proportion of full camera range (a percentage value between 0.0 and 100.0)
     pub const ZOOM_TYPE_RANGE: Self = Self(2);
     /// Zoom value/variable focal length in millimetres. Note that there is no message to get the valid zoom range of the camera, so this can type can only be used for cameras where the zoom range is known (implying that this cannot reliably be used in a GCS for an arbitrary camera)
     pub const ZOOM_TYPE_FOCAL_LENGTH: Self = Self(3);
+    /// Zoom value as horizontal field of view in degrees.
+    pub const ZOOM_TYPE_HORIZONTAL_FOV: Self = Self(4);
 
     /// The name of a value, or `None` if this dialect does not define it.
     #[must_use]
@@ -3615,6 +3807,7 @@ impl CameraZoomType {
             1 => "ZOOM_TYPE_CONTINUOUS",
             2 => "ZOOM_TYPE_RANGE",
             3 => "ZOOM_TYPE_FOCAL_LENGTH",
+            4 => "ZOOM_TYPE_HORIZONTAL_FOV",
             _ => return None,
         })
     }
@@ -3642,6 +3835,36 @@ impl CanFilterOp {
             0 => "CAN_FILTER_REPLACE",
             1 => "CAN_FILTER_ADD",
             2 => "CAN_FILTER_REMOVE",
+            _ => return None,
+        })
+    }
+}
+
+/// Flags used to report computer status.
+///
+/// MAVLink enum `COMPUTER_STATUS_FLAGS` (bitmask). Values are open: an unknown value from a newer autopilot
+/// is preserved rather than rejected.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub struct ComputerStatusFlags(pub u32);
+
+impl ComputerStatusFlags {
+    /// Indicates if the system is experiencing voltage outside of acceptable range.
+    pub const COMPUTER_STATUS_FLAGS_UNDER_VOLTAGE: Self = Self(1);
+    /// Indicates if CPU throttling is active.
+    pub const COMPUTER_STATUS_FLAGS_CPU_THROTTLE: Self = Self(2);
+    /// Indicates if thermal throttling is active.
+    pub const COMPUTER_STATUS_FLAGS_THERMAL_THROTTLE: Self = Self(4);
+    /// Indicates if main disk is full.
+    pub const COMPUTER_STATUS_FLAGS_DISK_FULL: Self = Self(8);
+
+    /// The name of a value, or `None` if this dialect does not define it.
+    #[must_use]
+    pub const fn name(self) -> Option<&'static str> {
+        Some(match self.0 {
+            1 => "COMPUTER_STATUS_FLAGS_UNDER_VOLTAGE",
+            2 => "COMPUTER_STATUS_FLAGS_CPU_THROTTLE",
+            4 => "COMPUTER_STATUS_FLAGS_THERMAL_THROTTLE",
+            8 => "COMPUTER_STATUS_FLAGS_DISK_FULL",
             _ => return None,
         })
     }
@@ -3707,8 +3930,6 @@ impl CopterMode {
     pub const COPTER_MODE_AUTO_RTL: Self = Self(27);
     /// TURTLE
     pub const COPTER_MODE_TURTLE: Self = Self(28);
-    /// RATE_ACRO
-    pub const COPTER_MODE_RATE_ACRO: Self = Self(29);
 
     /// The name of a value, or `None` if this dialect does not define it.
     #[must_use]
@@ -3740,7 +3961,6 @@ impl CopterMode {
             26 => "COPTER_MODE_AUTOROTATE",
             27 => "COPTER_MODE_AUTO_RTL",
             28 => "COPTER_MODE_TURTLE",
-            29 => "COPTER_MODE_RATE_ACRO",
             _ => return None,
         })
     }
@@ -3865,13 +4085,13 @@ impl EkfStatusFlags {
 
 /// Engine control options
 ///
-/// MAVLink enum `ENGINE_CONTROL_OPTIONS`. Values are open: an unknown value from a newer autopilot
+/// MAVLink enum `ENGINE_CONTROL_OPTIONS` (bitmask). Values are open: an unknown value from a newer autopilot
 /// is preserved rather than rejected.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct EngineControlOptions(pub u32);
 
 impl EngineControlOptions {
-    /// Allow starting the engine once while disarmed
+    /// Allow starting the engine while disarmed (without changing the vehicle's armed state). This effectively arms just the ICE, without arming the vehicle to start other motors or propellers.
     pub const ENGINE_CONTROL_OPTIONS_ALLOW_START_WHILE_DISARMED: Self = Self(1);
 
     /// The name of a value, or `None` if this dialect does not define it.
@@ -3938,6 +4158,111 @@ impl EstimatorStatusFlags {
     }
 }
 
+/// List of possible failure type to inject.
+///
+/// MAVLink enum `FAILURE_TYPE`. Values are open: an unknown value from a newer autopilot
+/// is preserved rather than rejected.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub struct FailureType(pub u32);
+
+impl FailureType {
+    /// No failure injected, used to reset a previous failure.
+    pub const FAILURE_TYPE_OK: Self = Self(0);
+    /// Sets unit off, so completely non-responsive.
+    pub const FAILURE_TYPE_OFF: Self = Self(1);
+    /// Unit is stuck e.g. keeps reporting the same value.
+    pub const FAILURE_TYPE_STUCK: Self = Self(2);
+    /// Unit is reporting complete garbage.
+    pub const FAILURE_TYPE_GARBAGE: Self = Self(3);
+    /// Unit is consistently wrong.
+    pub const FAILURE_TYPE_WRONG: Self = Self(4);
+    /// Unit is slow, so e.g. reporting at slower than expected rate.
+    pub const FAILURE_TYPE_SLOW: Self = Self(5);
+    /// Data of unit is delayed in time.
+    pub const FAILURE_TYPE_DELAYED: Self = Self(6);
+    /// Unit is sometimes working, sometimes not.
+    pub const FAILURE_TYPE_INTERMITTENT: Self = Self(7);
+
+    /// The name of a value, or `None` if this dialect does not define it.
+    #[must_use]
+    pub const fn name(self) -> Option<&'static str> {
+        Some(match self.0 {
+            0 => "FAILURE_TYPE_OK",
+            1 => "FAILURE_TYPE_OFF",
+            2 => "FAILURE_TYPE_STUCK",
+            3 => "FAILURE_TYPE_GARBAGE",
+            4 => "FAILURE_TYPE_WRONG",
+            5 => "FAILURE_TYPE_SLOW",
+            6 => "FAILURE_TYPE_DELAYED",
+            7 => "FAILURE_TYPE_INTERMITTENT",
+            _ => return None,
+        })
+    }
+}
+
+/// List of possible units where failures can be injected.
+///
+/// MAVLink enum `FAILURE_UNIT`. Values are open: an unknown value from a newer autopilot
+/// is preserved rather than rejected.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub struct FailureUnit(pub u32);
+
+impl FailureUnit {
+    /// `FAILURE_UNIT_SENSOR_GYRO` = 0.
+    pub const FAILURE_UNIT_SENSOR_GYRO: Self = Self(0);
+    /// `FAILURE_UNIT_SENSOR_ACCEL` = 1.
+    pub const FAILURE_UNIT_SENSOR_ACCEL: Self = Self(1);
+    /// `FAILURE_UNIT_SENSOR_MAG` = 2.
+    pub const FAILURE_UNIT_SENSOR_MAG: Self = Self(2);
+    /// `FAILURE_UNIT_SENSOR_BARO` = 3.
+    pub const FAILURE_UNIT_SENSOR_BARO: Self = Self(3);
+    /// `FAILURE_UNIT_SENSOR_GPS` = 4.
+    pub const FAILURE_UNIT_SENSOR_GPS: Self = Self(4);
+    /// `FAILURE_UNIT_SENSOR_OPTICAL_FLOW` = 5.
+    pub const FAILURE_UNIT_SENSOR_OPTICAL_FLOW: Self = Self(5);
+    /// `FAILURE_UNIT_SENSOR_VIO` = 6.
+    pub const FAILURE_UNIT_SENSOR_VIO: Self = Self(6);
+    /// `FAILURE_UNIT_SENSOR_DISTANCE_SENSOR` = 7.
+    pub const FAILURE_UNIT_SENSOR_DISTANCE_SENSOR: Self = Self(7);
+    /// `FAILURE_UNIT_SENSOR_AIRSPEED` = 8.
+    pub const FAILURE_UNIT_SENSOR_AIRSPEED: Self = Self(8);
+    /// `FAILURE_UNIT_SYSTEM_BATTERY` = 100.
+    pub const FAILURE_UNIT_SYSTEM_BATTERY: Self = Self(100);
+    /// `FAILURE_UNIT_SYSTEM_MOTOR` = 101.
+    pub const FAILURE_UNIT_SYSTEM_MOTOR: Self = Self(101);
+    /// `FAILURE_UNIT_SYSTEM_SERVO` = 102.
+    pub const FAILURE_UNIT_SYSTEM_SERVO: Self = Self(102);
+    /// `FAILURE_UNIT_SYSTEM_AVOIDANCE` = 103.
+    pub const FAILURE_UNIT_SYSTEM_AVOIDANCE: Self = Self(103);
+    /// `FAILURE_UNIT_SYSTEM_RC_SIGNAL` = 104.
+    pub const FAILURE_UNIT_SYSTEM_RC_SIGNAL: Self = Self(104);
+    /// `FAILURE_UNIT_SYSTEM_MAVLINK_SIGNAL` = 105.
+    pub const FAILURE_UNIT_SYSTEM_MAVLINK_SIGNAL: Self = Self(105);
+
+    /// The name of a value, or `None` if this dialect does not define it.
+    #[must_use]
+    pub const fn name(self) -> Option<&'static str> {
+        Some(match self.0 {
+            0 => "FAILURE_UNIT_SENSOR_GYRO",
+            1 => "FAILURE_UNIT_SENSOR_ACCEL",
+            2 => "FAILURE_UNIT_SENSOR_MAG",
+            3 => "FAILURE_UNIT_SENSOR_BARO",
+            4 => "FAILURE_UNIT_SENSOR_GPS",
+            5 => "FAILURE_UNIT_SENSOR_OPTICAL_FLOW",
+            6 => "FAILURE_UNIT_SENSOR_VIO",
+            7 => "FAILURE_UNIT_SENSOR_DISTANCE_SENSOR",
+            8 => "FAILURE_UNIT_SENSOR_AIRSPEED",
+            100 => "FAILURE_UNIT_SYSTEM_BATTERY",
+            101 => "FAILURE_UNIT_SYSTEM_MOTOR",
+            102 => "FAILURE_UNIT_SYSTEM_SERVO",
+            103 => "FAILURE_UNIT_SYSTEM_AVOIDANCE",
+            104 => "FAILURE_UNIT_SYSTEM_RC_SIGNAL",
+            105 => "FAILURE_UNIT_SYSTEM_MAVLINK_SIGNAL",
+            _ => return None,
+        })
+    }
+}
+
 /// MAVLink enum `FENCE_BREACH`.
 ///
 /// MAVLink enum `FENCE_BREACH`. Values are open: an unknown value from a newer autopilot
@@ -3995,7 +4320,7 @@ impl FenceMitigate {
     }
 }
 
-/// Fence types to enable or disable as a bitmask. Used in MAV_CMD_DO_FENCE_ENABLE.
+/// Fence types to enable or disable when using MAV_CMD_DO_FENCE_ENABLE. Note that at least one of these flags must be set in MAV_CMD_DO_FENCE_ENABLE.param2. If none are set, the flight stack will ignore the field and enable/disable its default set of fences (usually all of them).
 ///
 /// MAVLink enum `FENCE_TYPE` (bitmask). Values are open: an unknown value from a newer autopilot
 /// is preserved rather than rejected.
@@ -4175,6 +4500,10 @@ impl GimbalDeviceCapFlags {
     pub const GIMBAL_DEVICE_CAP_FLAGS_SUPPORTS_YAW_IN_EARTH_FRAME: Self = Self(4096);
     /// Gimbal device supports radio control inputs as an alternative input for controlling the gimbal orientation.
     pub const GIMBAL_DEVICE_CAP_FLAGS_HAS_RC_INPUTS: Self = Self(8192);
+    /// Gimbal device supports to point to a local position.
+    pub const GIMBAL_DEVICE_CAP_FLAGS_CAN_POINT_LOCATION_LOCAL: Self = Self(65536);
+    /// Gimbal device supports to point to a global latitude, longitude, altitude position.
+    pub const GIMBAL_DEVICE_CAP_FLAGS_CAN_POINT_LOCATION_GLOBAL: Self = Self(131072);
 
     /// The name of a value, or `None` if this dialect does not define it.
     #[must_use]
@@ -4194,6 +4523,8 @@ impl GimbalDeviceCapFlags {
             2048 => "GIMBAL_DEVICE_CAP_FLAGS_SUPPORTS_INFINITE_YAW",
             4096 => "GIMBAL_DEVICE_CAP_FLAGS_SUPPORTS_YAW_IN_EARTH_FRAME",
             8192 => "GIMBAL_DEVICE_CAP_FLAGS_HAS_RC_INPUTS",
+            65536 => "GIMBAL_DEVICE_CAP_FLAGS_CAN_POINT_LOCATION_LOCAL",
+            131072 => "GIMBAL_DEVICE_CAP_FLAGS_CAN_POINT_LOCATION_GLOBAL",
             _ => return None,
         })
     }
@@ -4295,7 +4626,7 @@ impl GimbalDeviceFlags {
     }
 }
 
-/// Gimbal manager high level capability flags (bitmap). The first 16 bits are identical to the GIMBAL_DEVICE_CAP_FLAGS. However, the gimbal manager does not need to copy the flags from the gimbal but can also enhance the capabilities and thus add flags.
+/// Gimbal manager high level capability flags (bitmap). The flags are identical to the GIMBAL_DEVICE_CAP_FLAGS. However, the gimbal manager does not need to copy the flags from the gimbal but can also enhance the capabilities and thus add flags.
 ///
 /// MAVLink enum `GIMBAL_MANAGER_CAP_FLAGS` (bitmask). Values are open: an unknown value from a newer autopilot
 /// is preserved rather than rejected.
@@ -4331,9 +4662,9 @@ impl GimbalManagerCapFlags {
     pub const GIMBAL_MANAGER_CAP_FLAGS_SUPPORTS_YAW_IN_EARTH_FRAME: Self = Self(4096);
     /// Based on GIMBAL_DEVICE_CAP_FLAGS_HAS_RC_INPUTS.
     pub const GIMBAL_MANAGER_CAP_FLAGS_HAS_RC_INPUTS: Self = Self(8192);
-    /// Gimbal manager supports to point to a local position.
+    /// Based on GIMBAL_DEVICE_CAP_FLAGS_CAN_POINT_LOCATION_LOCAL.
     pub const GIMBAL_MANAGER_CAP_FLAGS_CAN_POINT_LOCATION_LOCAL: Self = Self(65536);
-    /// Gimbal manager supports to point to a global latitude, longitude, altitude position.
+    /// Based on GIMBAL_DEVICE_CAP_FLAGS_CAN_POINT_LOCATION_GLOBAL.
     pub const GIMBAL_MANAGER_CAP_FLAGS_CAN_POINT_LOCATION_GLOBAL: Self = Self(131072);
 
     /// The name of a value, or `None` if this dialect does not define it.
@@ -4404,6 +4735,69 @@ impl GimbalManagerFlags {
             128 => "GIMBAL_MANAGER_FLAGS_ACCEPTS_YAW_IN_EARTH_FRAME",
             256 => "GIMBAL_MANAGER_FLAGS_RC_EXCLUSIVE",
             512 => "GIMBAL_MANAGER_FLAGS_RC_MIXED",
+            _ => return None,
+        })
+    }
+}
+
+/// Status flags for GLOBAL_POSITION
+///
+/// MAVLink enum `GLOBAL_POSITION_FLAGS` (bitmask). Values are open: an unknown value from a newer autopilot
+/// is preserved rather than rejected.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub struct GlobalPositionFlags(pub u32);
+
+impl GlobalPositionFlags {
+    /// Unhealthy sensor/estimator.
+    pub const GLOBAL_POSITION_UNHEALTHY: Self = Self(1);
+    /// True if the data originates from or is consumed by the primary estimator.
+    pub const GLOBAL_POSITION_PRIMARY: Self = Self(2);
+
+    /// The name of a value, or `None` if this dialect does not define it.
+    #[must_use]
+    pub const fn name(self) -> Option<&'static str> {
+        Some(match self.0 {
+            1 => "GLOBAL_POSITION_UNHEALTHY",
+            2 => "GLOBAL_POSITION_PRIMARY",
+            _ => return None,
+        })
+    }
+}
+
+/// Source for GLOBAL_POSITION measurement or estimate.
+///
+/// MAVLink enum `GLOBAL_POSITION_SRC`. Values are open: an unknown value from a newer autopilot
+/// is preserved rather than rejected.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub struct GlobalPositionSrc(pub u32);
+
+impl GlobalPositionSrc {
+    /// Source is unknown or not one of the listed types.
+    pub const GLOBAL_POSITION_SRC_UNKNOWN: Self = Self(0);
+    /// Global Navigation Satellite System (e.g.: GPS, Galileo, Glonass, BeiDou).
+    pub const GLOBAL_POSITION_SRC_GNSS: Self = Self(1);
+    /// Vision system (e.g.: map matching).
+    pub const GLOBAL_POSITION_SRC_VISION: Self = Self(2);
+    /// A pseudo-satellite system using transceiver beacons to perform GNSS-like positioning.
+    pub const GLOBAL_POSITION_SRC_PSEUDOLITES: Self = Self(3);
+    /// Terrain referenced navigation.
+    pub const GLOBAL_POSITION_SRC_TERRAIN: Self = Self(4);
+    /// Magnetic positioning.
+    pub const GLOBAL_POSITION_SRC_MAGNETIC: Self = Self(5);
+    /// Estimated position based on various sensors (eg. a Kalman Filter).
+    pub const GLOBAL_POSITION_SRC_ESTIMATOR: Self = Self(6);
+
+    /// The name of a value, or `None` if this dialect does not define it.
+    #[must_use]
+    pub const fn name(self) -> Option<&'static str> {
+        Some(match self.0 {
+            0 => "GLOBAL_POSITION_SRC_UNKNOWN",
+            1 => "GLOBAL_POSITION_SRC_GNSS",
+            2 => "GLOBAL_POSITION_SRC_VISION",
+            3 => "GLOBAL_POSITION_SRC_PSEUDOLITES",
+            4 => "GLOBAL_POSITION_SRC_TERRAIN",
+            5 => "GLOBAL_POSITION_SRC_MAGNETIC",
+            6 => "GLOBAL_POSITION_SRC_ESTIMATOR",
             _ => return None,
         })
     }
@@ -5227,7 +5621,7 @@ impl GpsJammingState {
     /// The GPS receiver does not provide GPS signal jamming info.
     pub const GPS_JAMMING_STATE_UNKNOWN: Self = Self(0);
     /// The GPS receiver detected no signal jamming.
-    pub const GPS_JAMMING_STATE_OK: Self = Self(1);
+    pub const GPS_JAMMING_STATE_NOT_JAMMED: Self = Self(1);
     /// The GPS receiver detected and mitigated signal jamming.
     pub const GPS_JAMMING_STATE_MITIGATED: Self = Self(2);
     /// The GPS receiver detected signal jamming.
@@ -5238,7 +5632,7 @@ impl GpsJammingState {
     pub const fn name(self) -> Option<&'static str> {
         Some(match self.0 {
             0 => "GPS_JAMMING_STATE_UNKNOWN",
-            1 => "GPS_JAMMING_STATE_OK",
+            1 => "GPS_JAMMING_STATE_NOT_JAMMED",
             2 => "GPS_JAMMING_STATE_MITIGATED",
             3 => "GPS_JAMMING_STATE_DETECTED",
             _ => return None,
@@ -5287,7 +5681,7 @@ impl GpsSpoofingState {
     /// The GPS receiver does not provide GPS signal spoofing info.
     pub const GPS_SPOOFING_STATE_UNKNOWN: Self = Self(0);
     /// The GPS receiver detected no signal spoofing.
-    pub const GPS_SPOOFING_STATE_OK: Self = Self(1);
+    pub const GPS_SPOOFING_STATE_NOT_SPOOFED: Self = Self(1);
     /// The GPS receiver detected and mitigated signal spoofing.
     pub const GPS_SPOOFING_STATE_MITIGATED: Self = Self(2);
     /// The GPS receiver detected signal spoofing but still has a fix.
@@ -5298,7 +5692,7 @@ impl GpsSpoofingState {
     pub const fn name(self) -> Option<&'static str> {
         Some(match self.0 {
             0 => "GPS_SPOOFING_STATE_UNKNOWN",
-            1 => "GPS_SPOOFING_STATE_OK",
+            1 => "GPS_SPOOFING_STATE_NOT_SPOOFED",
             2 => "GPS_SPOOFING_STATE_MITIGATED",
             3 => "GPS_SPOOFING_STATE_DETECTED",
             _ => return None,
@@ -5357,6 +5751,8 @@ impl GripperActions {
     pub const GRIPPER_ACTION_RELEASE: Self = Self(0);
     /// Gripper grab onto cargo.
     pub const GRIPPER_ACTION_GRAB: Self = Self(1);
+    /// Gripper hold current grip state/position.
+    pub const GRIPPER_ACTION_HOLD: Self = Self(2);
 
     /// The name of a value, or `None` if this dialect does not define it.
     #[must_use]
@@ -5364,6 +5760,7 @@ impl GripperActions {
         Some(match self.0 {
             0 => "GRIPPER_ACTION_RELEASE",
             1 => "GRIPPER_ACTION_GRAB",
+            2 => "GRIPPER_ACTION_HOLD",
             _ => return None,
         })
     }
@@ -5426,7 +5823,7 @@ impl GsmModemType {
     }
 }
 
-/// MAVLink enum `HEADING_TYPE`.
+/// Heading setpoint types used in MAV_CMD_GUIDED_CHANGE_HEADING
 ///
 /// MAVLink enum `HEADING_TYPE`. Values are open: an unknown value from a newer autopilot
 /// is preserved rather than rejected.
@@ -5434,11 +5831,11 @@ impl GsmModemType {
 pub struct HeadingType(pub u32);
 
 impl HeadingType {
-    /// `HEADING_TYPE_COURSE_OVER_GROUND` = 0.
+    /// Course over ground.
     pub const HEADING_TYPE_COURSE_OVER_GROUND: Self = Self(0);
-    /// `HEADING_TYPE_HEADING` = 1.
+    /// Raw vehicle heading.
     pub const HEADING_TYPE_HEADING: Self = Self(1);
-    /// `HEADING_TYPE_DEFAULT` = 2.
+    /// Default heading.
     pub const HEADING_TYPE_DEFAULT: Self = Self(2);
 
     /// The name of a value, or `None` if this dialect does not define it.
@@ -5448,6 +5845,144 @@ impl HeadingType {
             0 => "HEADING_TYPE_COURSE_OVER_GROUND",
             1 => "HEADING_TYPE_HEADING",
             2 => "HEADING_TYPE_DEFAULT",
+            _ => return None,
+        })
+    }
+}
+
+/// Flags in the HIGHRES_IMU message indicate which fields have updated since the last message
+///
+/// MAVLink enum `HIGHRES_IMU_UPDATED_FLAGS` (bitmask). Values are open: an unknown value from a newer autopilot
+/// is preserved rather than rejected.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub struct HighresImuUpdatedFlags(pub u32);
+
+impl HighresImuUpdatedFlags {
+    /// The value in the xacc field has been updated
+    pub const HIGHRES_IMU_UPDATED_XACC: Self = Self(1);
+    /// The value in the yacc field has been updated
+    pub const HIGHRES_IMU_UPDATED_YACC: Self = Self(2);
+    /// The value in the zacc field has been updated since
+    pub const HIGHRES_IMU_UPDATED_ZACC: Self = Self(4);
+    /// The value in the xgyro field has been updated
+    pub const HIGHRES_IMU_UPDATED_XGYRO: Self = Self(8);
+    /// The value in the ygyro field has been updated
+    pub const HIGHRES_IMU_UPDATED_YGYRO: Self = Self(16);
+    /// The value in the zgyro field has been updated
+    pub const HIGHRES_IMU_UPDATED_ZGYRO: Self = Self(32);
+    /// The value in the xmag field has been updated
+    pub const HIGHRES_IMU_UPDATED_XMAG: Self = Self(64);
+    /// The value in the ymag field has been updated
+    pub const HIGHRES_IMU_UPDATED_YMAG: Self = Self(128);
+    /// The value in the zmag field has been updated
+    pub const HIGHRES_IMU_UPDATED_ZMAG: Self = Self(256);
+    /// The value in the abs_pressure field has been updated
+    pub const HIGHRES_IMU_UPDATED_ABS_PRESSURE: Self = Self(512);
+    /// The value in the diff_pressure field has been updated
+    pub const HIGHRES_IMU_UPDATED_DIFF_PRESSURE: Self = Self(1024);
+    /// The value in the pressure_alt field has been updated
+    pub const HIGHRES_IMU_UPDATED_PRESSURE_ALT: Self = Self(2048);
+    /// The value in the temperature field has been updated
+    pub const HIGHRES_IMU_UPDATED_TEMPERATURE: Self = Self(4096);
+
+    /// The name of a value, or `None` if this dialect does not define it.
+    #[must_use]
+    pub const fn name(self) -> Option<&'static str> {
+        Some(match self.0 {
+            1 => "HIGHRES_IMU_UPDATED_XACC",
+            2 => "HIGHRES_IMU_UPDATED_YACC",
+            4 => "HIGHRES_IMU_UPDATED_ZACC",
+            8 => "HIGHRES_IMU_UPDATED_XGYRO",
+            16 => "HIGHRES_IMU_UPDATED_YGYRO",
+            32 => "HIGHRES_IMU_UPDATED_ZGYRO",
+            64 => "HIGHRES_IMU_UPDATED_XMAG",
+            128 => "HIGHRES_IMU_UPDATED_YMAG",
+            256 => "HIGHRES_IMU_UPDATED_ZMAG",
+            512 => "HIGHRES_IMU_UPDATED_ABS_PRESSURE",
+            1024 => "HIGHRES_IMU_UPDATED_DIFF_PRESSURE",
+            2048 => "HIGHRES_IMU_UPDATED_PRESSURE_ALT",
+            4096 => "HIGHRES_IMU_UPDATED_TEMPERATURE",
+            _ => return None,
+        })
+    }
+}
+
+/// Flags used in HIL_ACTUATOR_CONTROLS message.
+///
+/// MAVLink enum `HIL_ACTUATOR_CONTROLS_FLAGS` (bitmask). Values are open: an unknown value from a newer autopilot
+/// is preserved rather than rejected.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub struct HilActuatorControlsFlags(pub u32);
+
+impl HilActuatorControlsFlags {
+    /// Simulation is using lockstep
+    pub const HIL_ACTUATOR_CONTROLS_FLAGS_LOCKSTEP: Self = Self(1);
+
+    /// The name of a value, or `None` if this dialect does not define it.
+    #[must_use]
+    pub const fn name(self) -> Option<&'static str> {
+        Some(match self.0 {
+            1 => "HIL_ACTUATOR_CONTROLS_FLAGS_LOCKSTEP",
+            _ => return None,
+        })
+    }
+}
+
+/// Flags in the HIL_SENSOR message indicate which fields have updated since the last message
+///
+/// MAVLink enum `HIL_SENSOR_UPDATED_FLAGS` (bitmask). Values are open: an unknown value from a newer autopilot
+/// is preserved rather than rejected.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub struct HilSensorUpdatedFlags(pub u32);
+
+impl HilSensorUpdatedFlags {
+    /// The value in the xacc field has been updated
+    pub const HIL_SENSOR_UPDATED_XACC: Self = Self(1);
+    /// The value in the yacc field has been updated
+    pub const HIL_SENSOR_UPDATED_YACC: Self = Self(2);
+    /// The value in the zacc field has been updated
+    pub const HIL_SENSOR_UPDATED_ZACC: Self = Self(4);
+    /// The value in the xgyro field has been updated
+    pub const HIL_SENSOR_UPDATED_XGYRO: Self = Self(8);
+    /// The value in the ygyro field has been updated
+    pub const HIL_SENSOR_UPDATED_YGYRO: Self = Self(16);
+    /// The value in the zgyro field has been updated
+    pub const HIL_SENSOR_UPDATED_ZGYRO: Self = Self(32);
+    /// The value in the xmag field has been updated
+    pub const HIL_SENSOR_UPDATED_XMAG: Self = Self(64);
+    /// The value in the ymag field has been updated
+    pub const HIL_SENSOR_UPDATED_YMAG: Self = Self(128);
+    /// The value in the zmag field has been updated
+    pub const HIL_SENSOR_UPDATED_ZMAG: Self = Self(256);
+    /// The value in the abs_pressure field has been updated
+    pub const HIL_SENSOR_UPDATED_ABS_PRESSURE: Self = Self(512);
+    /// The value in the diff_pressure field has been updated
+    pub const HIL_SENSOR_UPDATED_DIFF_PRESSURE: Self = Self(1024);
+    /// The value in the pressure_alt field has been updated
+    pub const HIL_SENSOR_UPDATED_PRESSURE_ALT: Self = Self(2048);
+    /// The value in the temperature field has been updated
+    pub const HIL_SENSOR_UPDATED_TEMPERATURE: Self = Self(4096);
+    /// Full reset of attitude/position/velocities/etc was performed in sim (Bit 31).
+    pub const HIL_SENSOR_UPDATED_RESET: Self = Self(2147483648);
+
+    /// The name of a value, or `None` if this dialect does not define it.
+    #[must_use]
+    pub const fn name(self) -> Option<&'static str> {
+        Some(match self.0 {
+            1 => "HIL_SENSOR_UPDATED_XACC",
+            2 => "HIL_SENSOR_UPDATED_YACC",
+            4 => "HIL_SENSOR_UPDATED_ZACC",
+            8 => "HIL_SENSOR_UPDATED_XGYRO",
+            16 => "HIL_SENSOR_UPDATED_YGYRO",
+            32 => "HIL_SENSOR_UPDATED_ZGYRO",
+            64 => "HIL_SENSOR_UPDATED_XMAG",
+            128 => "HIL_SENSOR_UPDATED_YMAG",
+            256 => "HIL_SENSOR_UPDATED_ZMAG",
+            512 => "HIL_SENSOR_UPDATED_ABS_PRESSURE",
+            1024 => "HIL_SENSOR_UPDATED_DIFF_PRESSURE",
+            2048 => "HIL_SENSOR_UPDATED_PRESSURE_ALT",
+            4096 => "HIL_SENSOR_UPDATED_TEMPERATURE",
+            2147483648 => "HIL_SENSOR_UPDATED_RESET",
             _ => return None,
         })
     }
@@ -5571,6 +6106,60 @@ impl IcarousTrackBandTypes {
             0 => "ICAROUS_TRACK_BAND_TYPE_NONE",
             1 => "ICAROUS_TRACK_BAND_TYPE_NEAR",
             2 => "ICAROUS_TRACK_BAND_TYPE_RECOVERY",
+            _ => return None,
+        })
+    }
+}
+
+/// Illuminator module error flags (bitmap, 0 means no error)
+///
+/// MAVLink enum `ILLUMINATOR_ERROR_FLAGS` (bitmask). Values are open: an unknown value from a newer autopilot
+/// is preserved rather than rejected.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub struct IlluminatorErrorFlags(pub u32);
+
+impl IlluminatorErrorFlags {
+    /// Illuminator thermal throttling error.
+    pub const ILLUMINATOR_ERROR_FLAGS_THERMAL_THROTTLING: Self = Self(1);
+    /// Illuminator over temperature shutdown error.
+    pub const ILLUMINATOR_ERROR_FLAGS_OVER_TEMPERATURE_SHUTDOWN: Self = Self(2);
+    /// Illuminator thermistor failure.
+    pub const ILLUMINATOR_ERROR_FLAGS_THERMISTOR_FAILURE: Self = Self(4);
+
+    /// The name of a value, or `None` if this dialect does not define it.
+    #[must_use]
+    pub const fn name(self) -> Option<&'static str> {
+        Some(match self.0 {
+            1 => "ILLUMINATOR_ERROR_FLAGS_THERMAL_THROTTLING",
+            2 => "ILLUMINATOR_ERROR_FLAGS_OVER_TEMPERATURE_SHUTDOWN",
+            4 => "ILLUMINATOR_ERROR_FLAGS_THERMISTOR_FAILURE",
+            _ => return None,
+        })
+    }
+}
+
+/// Modes of illuminator
+///
+/// MAVLink enum `ILLUMINATOR_MODE`. Values are open: an unknown value from a newer autopilot
+/// is preserved rather than rejected.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub struct IlluminatorMode(pub u32);
+
+impl IlluminatorMode {
+    /// Illuminator mode is not specified/unknown
+    pub const ILLUMINATOR_MODE_UNKNOWN: Self = Self(0);
+    /// Illuminator behavior is controlled by MAV_CMD_DO_ILLUMINATOR_CONFIGURE settings
+    pub const ILLUMINATOR_MODE_INTERNAL_CONTROL: Self = Self(1);
+    /// Illuminator behavior is controlled by external factors: e.g. an external hardware signal
+    pub const ILLUMINATOR_MODE_EXTERNAL_SYNC: Self = Self(2);
+
+    /// The name of a value, or `None` if this dialect does not define it.
+    #[must_use]
+    pub const fn name(self) -> Option<&'static str> {
+        Some(match self.0 {
+            0 => "ILLUMINATOR_MODE_UNKNOWN",
+            1 => "ILLUMINATOR_MODE_INTERNAL_CONTROL",
+            2 => "ILLUMINATOR_MODE_EXTERNAL_SYNC",
             _ => return None,
         })
     }
@@ -5716,10 +6305,16 @@ impl MagCalStatus {
     pub const MAG_CAL_SUCCESS: Self = Self(4);
     /// `MAG_CAL_FAILED` = 5.
     pub const MAG_CAL_FAILED: Self = Self(5);
-    /// `MAG_CAL_BAD_ORIENTATION` = 6.
-    pub const MAG_CAL_BAD_ORIENTATION: Self = Self(6);
-    /// `MAG_CAL_BAD_RADIUS` = 7.
-    pub const MAG_CAL_BAD_RADIUS: Self = Self(7);
+    /// Compass calibration failed: the vehicle orientation is outside the required tolerance.
+    pub const MAG_CAL_FAILED_ORIENTATION: Self = Self(6);
+    /// Compass calibration failed: the radius of the fitted sphere is unrealistically small or large.
+    pub const MAG_CAL_FAILED_RADIUS: Self = Self(7);
+    /// Compass calibration failed: offset magnitude too large.
+    pub const MAG_CAL_FAILED_OFFSETS: Self = Self(8);
+    /// Compass calibration failed: diagonal or off-diagonal scaling values out of valid range.
+    pub const MAG_CAL_FAILED_DIAG_SCALING: Self = Self(9);
+    /// Compass calibration failed: fitness (RMS residual) exceeds tolerance.
+    pub const MAG_CAL_FAILED_RESIDUALS_HIGH: Self = Self(10);
 
     /// The name of a value, or `None` if this dialect does not define it.
     #[must_use]
@@ -5731,8 +6326,11 @@ impl MagCalStatus {
             3 => "MAG_CAL_RUNNING_STEP_TWO",
             4 => "MAG_CAL_SUCCESS",
             5 => "MAG_CAL_FAILED",
-            6 => "MAG_CAL_BAD_ORIENTATION",
-            7 => "MAG_CAL_BAD_RADIUS",
+            6 => "MAG_CAL_FAILED_ORIENTATION",
+            7 => "MAG_CAL_FAILED_RADIUS",
+            8 => "MAG_CAL_FAILED_OFFSETS",
+            9 => "MAG_CAL_FAILED_DIAG_SCALING",
+            10 => "MAG_CAL_FAILED_RESIDUALS_HIGH",
             _ => return None,
         })
     }
@@ -5774,7 +6372,7 @@ impl MavlinkDataStreamType {
     }
 }
 
-/// MAVLink enum `MAV_ARM_AUTH_DENIED_REASON`.
+/// Reasons for denying an authorization request made with MAV_CMD_ARM_AUTHORIZATION_REQUEST. If the COMMAND_ACK result is MAV_RESULT_DENIED, this is used to set the reason in the result_param2 field.
 ///
 /// MAVLink enum `MAV_ARM_AUTH_DENIED_REASON`. Values are open: an unknown value from a newer autopilot
 /// is preserved rather than rejected.
@@ -6022,7 +6620,7 @@ impl MavBatteryFunction {
     /// Avionics battery
     pub const MAV_BATTERY_FUNCTION_AVIONICS: Self = Self(3);
     /// Payload battery
-    pub const MAV_BATTERY_TYPE_PAYLOAD: Self = Self(4);
+    pub const MAV_BATTERY_FUNCTION_PAYLOAD: Self = Self(4);
 
     /// The name of a value, or `None` if this dialect does not define it.
     #[must_use]
@@ -6032,7 +6630,7 @@ impl MavBatteryFunction {
             1 => "MAV_BATTERY_FUNCTION_ALL",
             2 => "MAV_BATTERY_FUNCTION_PROPULSION",
             3 => "MAV_BATTERY_FUNCTION_AVIONICS",
-            4 => "MAV_BATTERY_TYPE_PAYLOAD",
+            4 => "MAV_BATTERY_FUNCTION_PAYLOAD",
             _ => return None,
         })
     }
@@ -6158,6 +6756,12 @@ impl MavCmd {
     pub const MAV_CMD_DO_FOLLOW: Self = Self(32);
     /// Reposition the MAV after a follow target command has been sent
     pub const MAV_CMD_DO_FOLLOW_REPOSITION: Self = Self(33);
+    /// Start orbiting on the circumference of a circle defined by the parameters. Setting values to NaN/INT32_MAX (as appropriate) results in using defaults.
+    pub const MAV_CMD_DO_ORBIT: Self = Self(34);
+    /// Fly a figure eight path as defined by the parameters. Set parameters to NaN/INT32_MAX (as appropriate) to use system-default values. The command is intended for fixed wing vehicles (and VTOL hybrids flying in fixed-wing mode), allowing POI tracking for gimbals that don't support infinite rotation. This command only defines the flight path. Speed should be set independently (use e.g. MAV_CMD_DO_CHANGE_SPEED). Yaw and other degrees of freedom are not specified, and will be flight-stack specific (on vehicles where they can be controlled independent of the heading).
+    pub const MAV_CMD_DO_FIGURE_EIGHT: Self = Self(35);
+    /// Circular arc path waypoint. This defines the end/exit point and angle (param1) of an arc path from the previous waypoint. A position is required before this command to define the start of the arc (e.g. current position, a MAV_CMD_NAV_WAYPOINT, or a MAV_CMD_NAV_ARC_WAYPOINT). The resulting path is a circular arc in the NE frame, with the difference in height being defined by the difference in waypoint altitudes.
+    pub const MAV_CMD_NAV_ARC_WAYPOINT: Self = Self(36);
     /// Sets the region of interest (ROI) for a sensor set or the vehicle itself. This can then be used by the vehicle's control system to control the vehicle attitude and the attitude of various sensors such as cameras.
     pub const MAV_CMD_NAV_ROI: Self = Self(80);
     /// Control autonomous path planning on the MAV.
@@ -6192,11 +6796,11 @@ impl MavCmd {
     pub const MAV_CMD_DO_JUMP: Self = Self(177);
     /// Change speed and/or throttle set points. The value persists until it is overridden or there is a mode change
     pub const MAV_CMD_DO_CHANGE_SPEED: Self = Self(178);
-    /// Changes the home location either to the current location or a specified location.
+    /// Sets the home position to either to the current position or a specified position. The home position is the default position that the system will return to and land on. The position is set automatically by the system during the takeoff (and may also be set using this command). Note: the current home position may be emitted in a HOME_POSITION message on request (using MAV_CMD_REQUEST_MESSAGE with param1=242).
     pub const MAV_CMD_DO_SET_HOME: Self = Self(179);
     /// Set a system parameter. Caution! Use of this command requires knowledge of the numeric enumeration value of the parameter.
     pub const MAV_CMD_DO_SET_PARAMETER: Self = Self(180);
-    /// Set a relay to a condition.
+    /// Set a relay to a condition. The current value may optionally be reported using RELAY_STATUS.
     pub const MAV_CMD_DO_SET_RELAY: Self = Self(181);
     /// Cycle a relay on and off for a desired number of cycles with a desired period.
     pub const MAV_CMD_DO_REPEAT_RELAY: Self = Self(182);
@@ -6208,9 +6812,11 @@ impl MavCmd {
     pub const MAV_CMD_DO_FLIGHTTERMINATION: Self = Self(185);
     /// Change altitude set point.
     pub const MAV_CMD_DO_CHANGE_ALTITUDE: Self = Self(186);
+    /// Sets actuators (e.g. servos) to a desired value. The actuator numbers are mapped to specific outputs (e.g. on any MAIN or AUX PWM or UAVCAN) using a flight-stack specific mechanism (i.e. a parameter).
+    pub const MAV_CMD_DO_SET_ACTUATOR: Self = Self(187);
     /// Mission item to specify the start of a failsafe/landing return-path segment (the end of the segment is the next MAV_CMD_DO_LAND_START item). A vehicle that is using missions for landing (e.g. in a return mode) will join the mission on the closest path of the return-path segment (instead of MAV_CMD_DO_LAND_START or the nearest waypoint). The main use case is to minimize the failsafe flight path in corridor missions, where the inbound/outbound paths are constrained (by geofences) to the same particular path. The MAV_CMD_NAV_RETURN_PATH_START would be placed at the start of the return path. If a failsafe occurs on the outbound path the vehicle will move to the nearest point on the return path (which is parallel for this kind of mission), effectively turning round and following the shortest path to landing. If a failsafe occurs on the inbound path the vehicle is already on the return segment and will continue to landing. The Latitude/Longitude/Altitude are optional, and may be set to 0 if not needed. If specified, the item defines the waypoint at which the return segment starts. If sent using as a command, the vehicle will perform a mission landing (using the land segment if defined) or reject the command if mission landings are not supported, or no mission landing is defined. When used as a command any position information in the command is ignored.
     pub const MAV_CMD_DO_RETURN_PATH_START: Self = Self(188);
-    /// Mission command to perform a landing. This is used as a marker in a mission to tell the autopilot where a sequence of mission items that represents a landing starts. It may also be sent via a COMMAND_LONG to trigger a landing, in which case the nearest (geographically) landing sequence in the mission will be used. The Latitude/Longitude/Altitude is optional, and may be set to 0 if not needed. If specified then it will be used to help find the closest landing sequence.
+    /// Mission item to mark the start of a mission landing pattern, or a command to land with a mission landing pattern. When used in a mission, this is a marker for the start of a sequence of mission items that represent a landing pattern. It should be followed by a navigation item that defines the first waypoint of the landing sequence. The start marker positional params are used only for selecting what landing pattern to use if several are defined in the mission (the selected pattern will be the one with the marker position that is closest to the vehicle when a landing is commanded). If the marker item position has zero-values for latitude, longitude, and altitude, then landing pattern selection is instead based on the position of the first waypoint in the landing sequence. When sent as a command it triggers a landing using a mission landing pattern. The location parameters are not used in this case, and should be set to 0.
     pub const MAV_CMD_DO_LAND_START: Self = Self(189);
     /// Mission command to perform a landing from a rally point.
     pub const MAV_CMD_DO_RALLY_LAND: Self = Self(190);
@@ -6248,7 +6854,7 @@ impl MavCmd {
     pub const MAV_CMD_DO_FENCE_ENABLE: Self = Self(207);
     /// Mission item/command to release a parachute or enable/disable auto release.
     pub const MAV_CMD_DO_PARACHUTE: Self = Self(208);
-    /// Mission command to perform motor test.
+    /// Command to perform motor test.
     pub const MAV_CMD_DO_MOTOR_TEST: Self = Self(209);
     /// Change to/from inverted flight.
     pub const MAV_CMD_DO_INVERTED_FLIGHT: Self = Self(210);
@@ -6268,7 +6874,7 @@ impl MavCmd {
     pub const MAV_CMD_DO_GUIDED_LIMITS: Self = Self(222);
     /// Control vehicle engine. This is interpreted by the vehicles engine controller to change the target engine state. It is intended for vehicles with internal combustion engines
     pub const MAV_CMD_DO_ENGINE_CONTROL: Self = Self(223);
-    /// Set the mission item with sequence number seq as current item. This means that the MAV will continue to this mission item on the shortest path (not following the mission items in-between).
+    /// Set the mission item with sequence number seq as the current item and emit MISSION_CURRENT (whether or not the mission number changed). If a mission is currently being executed, the system will continue to this new mission item on the shortest path, skipping any intermediate mission items. Note that mission jump repeat counters are not reset unless param2 is set (see MAV_CMD_DO_JUMP param2). This command may trigger a mission state-machine change on some systems: for example from MISSION_STATE_NOT_STARTED or MISSION_STATE_PAUSED to MISSION_STATE_ACTIVE. If the system is in mission mode, on those systems this command might therefore start, restart or resume the mission. If the system is not in mission mode this command must not trigger a switch to mission mode. The mission may be "reset" using param2. Resetting sets jump counters to initial values (to reset counters without changing the current mission item set the param1 to `-1`). Resetting also explicitly changes a mission state of MISSION_STATE_COMPLETE to MISSION_STATE_PAUSED or MISSION_STATE_ACTIVE, potentially allowing it to resume when it is (next) in a mission mode. The command will ACK with MAV_RESULT_FAILED if the sequence number is out of range (including if there is no mission item).
     pub const MAV_CMD_DO_SET_MISSION_CURRENT: Self = Self(224);
     /// NOP - This command is only used to mark the upper limit of the DO commands in the enumeration
     pub const MAV_CMD_DO_LAST: Self = Self(240);
@@ -6286,14 +6892,26 @@ impl MavCmd {
     pub const MAV_CMD_OVERRIDE_GOTO: Self = Self(252);
     /// Mission command to set a Camera Auto Mount Pivoting Oblique Survey (Replaces CAM_TRIGG_DIST for this purpose). The camera is triggered each time this distance is exceeded, then the mount moves to the next position. Params 4~6 set-up the angle limits and number of positions for oblique survey, where mount-enabled vehicles automatically roll the camera between shots to emulate an oblique camera setup (providing an increased HFOV). This command can also be used to set the shutter integration time for the camera.
     pub const MAV_CMD_OBLIQUE_SURVEY: Self = Self(260);
+    /// Enable the specified standard MAVLink mode. If the specified mode is not supported, the vehicle should ACK with MAV_RESULT_FAILED. See https://mavlink.io/en/services/standard_modes.html
+    pub const MAV_CMD_DO_SET_STANDARD_MODE: Self = Self(262);
     /// start running a mission
     pub const MAV_CMD_MISSION_START: Self = Self(300);
+    /// Actuator testing command. This is similar to MAV_CMD_DO_MOTOR_TEST but operates on the level of output functions, i.e. it is possible to test Motor1 independent from which output it is configured on. Autopilots must NACK this command with MAV_RESULT_TEMPORARILY_REJECTED while armed.
+    pub const MAV_CMD_ACTUATOR_TEST: Self = Self(310);
+    /// Actuator configuration command.
+    pub const MAV_CMD_CONFIGURE_ACTUATOR: Self = Self(311);
     /// Arms / Disarms a component
     pub const MAV_CMD_COMPONENT_ARM_DISARM: Self = Self(400);
-    /// Instructs system to run pre-arm checks. This command should return MAV_RESULT_TEMPORARILY_REJECTED in the case the system is armed, otherwise MAV_RESULT_ACCEPTED. Note that the return value from executing this command does not indicate whether the vehicle is armable or not, just whether the system has successfully run/is currently running the checks. The result of the checks is reflected in the SYS_STATUS message.
+    /// Instructs a target system to run pre-arm checks. This allows preflight checks to be run on demand, which may be useful on systems that normally run them at low rate, or which do not trigger checks when the armable state might have changed. This command should return MAV_RESULT_ACCEPTED if it will run the checks. The results of the checks are usually then reported in SYS_STATUS messages (this is system-specific). The command should return MAV_RESULT_TEMPORARILY_REJECTED if the system is already armed.
     pub const MAV_CMD_RUN_PREARM_CHECKS: Self = Self(401);
-    /// Request the home position from the vehicle.
+    /// Turns illuminators ON/OFF. An illuminator is a light source that is used for lighting up dark areas external to the system: e.g. a torch or searchlight (as opposed to a light source for illuminating the system itself, e.g. an indicator light).
+    pub const MAV_CMD_ILLUMINATOR_ON_OFF: Self = Self(405);
+    /// Configures illuminator settings. An illuminator is a light source that is used for lighting up dark areas external to the system: e.g. a torch or searchlight (as opposed to a light source for illuminating the system itself, e.g. an indicator light).
+    pub const MAV_CMD_DO_ILLUMINATOR_CONFIGURE: Self = Self(406);
+    /// Request the home position from the vehicle. The vehicle will ACK the command and emit the HOME_POSITION message.
     pub const MAV_CMD_GET_HOME_POSITION: Self = Self(410);
+    /// Inject artificial failure for testing purposes. Note that autopilots should implement an additional protection before accepting this command such as a specific param setting.
+    pub const MAV_CMD_INJECT_FAILURE: Self = Self(420);
     /// Starts receiver pairing.
     pub const MAV_CMD_START_RX_PAIR: Self = Self(500);
     /// Request the interval between messages for a particular MAVLink message ID. The receiver should ACK the command and then emit its response in a MESSAGE_INTERVAL message.
@@ -6342,6 +6960,8 @@ impl MavCmd {
     pub const MAV_CMD_IMAGE_START_CAPTURE: Self = Self(2000);
     /// Stop image capture sequence. Param1 (id) may be used to specify the target camera: 0: all cameras, 1 to 6: autopilot-connected cameras, 7-255: MAVLink camera component ID. It is needed in order to target specific cameras connected to the autopilot, or specific sensors in a multi-sensor camera (neither of which have a distinct MAVLink component ID). It is also needed to specify the target camera in missions. When used in a mission, an autopilot should execute the MAV_CMD for a specified local camera (param1 = 1-6), or resend it as a command if it is intended for a MAVLink camera (param1 = 7 - 255), setting the command's target_component as the param1 value (and setting param1 in the command to zero). If the param1 is 0 the autopilot should do both. When sent in a command the target MAVLink address is set using target_component. If addressed specifically to an autopilot: param1 should be used in the same way as it is for missions (though command should NACK with MAV_RESULT_DENIED if a specified local camera does not exist). If addressed to a MAVLink camera, param1 can be used to address all cameras (0), or to separately address 1 to 7 individual sensors. Other values should be NACKed with MAV_RESULT_DENIED. If the command is broadcast (target_component is 0) then param 1 should be set to 0 (any other value should be NACKED with MAV_RESULT_DENIED). An autopilot would trigger any local cameras and forward the command to all channels.
     pub const MAV_CMD_IMAGE_STOP_CAPTURE: Self = Self(2001);
+    /// Re-request a CAMERA_IMAGE_CAPTURED message.
+    pub const MAV_CMD_REQUEST_CAMERA_IMAGE_CAPTURE: Self = Self(2002);
     /// Enable or disable on-board camera triggering system.
     pub const MAV_CMD_DO_TRIGGER_CONTROL: Self = Self(2003);
     /// If the camera supports point visual tracking (CAMERA_CAP_FLAGS_HAS_TRACKING_POINT is set), this command allows to initiate the tracking.
@@ -6374,17 +6994,19 @@ impl MavCmd {
     pub const MAV_CMD_PANORAMA_CREATE: Self = Self(2800);
     /// Request VTOL transition
     pub const MAV_CMD_DO_VTOL_TRANSITION: Self = Self(3000);
-    /// Request authorization to arm the vehicle to a external entity, the arm authorizer is responsible to request all data that is needs from the vehicle before authorize or deny the request. If approved the progress of command_ack message should be set with period of time that this authorization is valid in seconds or in case it was denied it should be set with one of the reasons in ARM_AUTH_DENIED_REASON.
+    /// Request authorization to arm the vehicle to a external entity, the arm authorizer is responsible to request all data that is needs from the vehicle before authorize or deny the request. If approved the COMMAND_ACK message progress field should be set with period of time that this authorization is valid in seconds. If the authorization is denied COMMAND_ACK.result_param2 should be set with one of the reasons in MAV_ARM_AUTH_DENIED_REASON.
     pub const MAV_CMD_ARM_AUTHORIZATION_REQUEST: Self = Self(3001);
     /// This command sets the submode to standard guided when vehicle is in guided mode. The vehicle holds position and altitude and the user can input the desired velocities along all three axes.
     pub const MAV_CMD_SET_GUIDED_SUBMODE_STANDARD: Self = Self(4000);
     /// This command sets submode circle when vehicle is in guided mode. Vehicle flies along a circle facing the center of the circle. The user can input the velocity along the circle and change the radius. If no input is given the vehicle will hold position.
     pub const MAV_CMD_SET_GUIDED_SUBMODE_CIRCLE: Self = Self(4001);
+    /// Delay mission state machine until gate has been reached.
+    pub const MAV_CMD_CONDITION_GATE: Self = Self(4501);
     /// Fence return point (there can only be one such point in a geofence definition). If rally points are supported they should be used instead.
     pub const MAV_CMD_NAV_FENCE_RETURN_POINT: Self = Self(5000);
-    /// Fence vertex for an inclusion polygon (the polygon must not be self-intersecting). The vehicle must stay within this area. Minimum of 3 vertices required.
+    /// Fence vertex for an inclusion polygon (the polygon must not be self-intersecting). The vehicle must stay within this area. Minimum of 3 vertices required. The vertices for a polygon must be sent sequentially, each with param1 set to the total number of vertices in the polygon.
     pub const MAV_CMD_NAV_FENCE_POLYGON_VERTEX_INCLUSION: Self = Self(5001);
-    /// Fence vertex for an exclusion polygon (the polygon must not be self-intersecting). The vehicle must stay outside this area. Minimum of 3 vertices required.
+    /// Fence vertex for an exclusion polygon (the polygon must not be self-intersecting). The vehicle must stay outside this area. Minimum of 3 vertices required. The vertices for a polygon must be sent sequentially, each with param1 set to the total number of vertices in the polygon.
     pub const MAV_CMD_NAV_FENCE_POLYGON_VERTEX_EXCLUSION: Self = Self(5002);
     /// Circular fence area. The vehicle must stay inside this area.
     pub const MAV_CMD_NAV_FENCE_CIRCLE_INCLUSION: Self = Self(5003);
@@ -6406,6 +7028,12 @@ impl MavCmd {
     pub const MAV_CMD_FIXED_MAG_CAL_YAW: Self = Self(42006);
     /// Command to operate winch.
     pub const MAV_CMD_DO_WINCH: Self = Self(42600);
+    /// Change flight speed at a given rate. This slews the vehicle at a controllable rate between it's previous speed and the new one.
+    pub const MAV_CMD_GUIDED_CHANGE_SPEED: Self = Self(43000);
+    /// Change target altitude at a given rate. This slews the vehicle at a controllable rate between it's previous altitude and the new one.
+    pub const MAV_CMD_GUIDED_CHANGE_ALTITUDE: Self = Self(43001);
+    /// Change to target direction at a given rate, overriding previous heading/s. This slews the vehicle at a controllable rate between its previous heading and the new one.
+    pub const MAV_CMD_GUIDED_CHANGE_HEADING: Self = Self(43002);
     /// Provide an external position estimate for use when dead-reckoning. This is meant to be used for occasional position resets that may be provided by a external system such as a remote pilot using landmarks over a video link.
     pub const MAV_CMD_EXTERNAL_POSITION_ESTIMATE: Self = Self(43003);
     /// User defined waypoint item. Ground Station will show the Vehicle as flying through this item.
@@ -6438,7 +7066,7 @@ impl MavCmd {
     pub const MAV_CMD_USER_4: Self = Self(31013);
     /// User defined command. Ground Station will not show the Vehicle as flying through this item. Example: MAV_CMD_DO_SET_PARAMETER item.
     pub const MAV_CMD_USER_5: Self = Self(31014);
-    /// Request forwarding of CAN packets from the given CAN bus to this interface. CAN Frames are sent using CAN_FRAME and CANFD_FRAME messages
+    /// Request forwarding of CAN packets from the given CAN bus to this component via this MAVLink channel. CAN Frames are sent using CAN_FRAME and CANFD_FRAME messages
     pub const MAV_CMD_CAN_FORWARD: Self = Self(32000);
     /// Set Loweheiser desired states
     pub const MAV_CMD_LOWEHEISER_SET_STATE: Self = Self(10151);
@@ -6498,30 +7126,24 @@ impl MavCmd {
     pub const MAV_CMD_NAV_SCRIPT_TIME: Self = Self(42702);
     /// Maintain an attitude for a specified time.
     pub const MAV_CMD_NAV_ATTITUDE_TIME: Self = Self(42703);
-    /// Change flight speed at a given rate. This slews the vehicle at a controllable rate between it's previous speed and the new one. (affects GUIDED only. Outside GUIDED, aircraft ignores these commands. Designed for onboard companion-computer command-and-control, not normally operator/GCS control.)
-    pub const MAV_CMD_GUIDED_CHANGE_SPEED: Self = Self(43000);
-    /// Change target altitude at a given rate. This slews the vehicle at a controllable rate between it's previous altitude and the new one. (affects GUIDED only. Outside GUIDED, aircraft ignores these commands. Designed for onboard companion-computer command-and-control, not normally operator/GCS control.)
-    pub const MAV_CMD_GUIDED_CHANGE_ALTITUDE: Self = Self(43001);
-    /// Change to target heading at a given rate, overriding previous heading/s. This slews the vehicle at a controllable rate between it's previous heading and the new one. (affects GUIDED only. Exiting GUIDED returns aircraft to normal behaviour defined elsewhere. Designed for onboard companion-computer command-and-control, not normally operator/GCS control.)
-    pub const MAV_CMD_GUIDED_CHANGE_HEADING: Self = Self(43002);
     /// Provide a value for height above ground level. This can be used for things like fixed wing and VTOL landing.
     pub const MAV_CMD_SET_HAGL: Self = Self(43005);
     /// Mission command to reset Maximum Power Point Tracker (MPPT)
     pub const MAV_CMD_RESET_MPPT: Self = Self(40001);
     /// Mission command to perform a power cycle on payload
     pub const MAV_CMD_PAYLOAD_CONTROL: Self = Self(40002);
-    /// Circular arc path waypoint. This defines the end/exit point and angle (param1) of an arc path from the previous waypoint. A position is required before this command to define the start of the arc (e.g. current position, a MAV_CMD_NAV_WAYPOINT, or a MAV_CMD_NAV_ARC_WAYPOINT). The resulting path is a circular arc in the NE frame, with the difference in height being defined by the difference in waypoint altitudes.
-    pub const MAV_CMD_NAV_ARC_WAYPOINT: Self = Self(36);
     /// Set system and component id. This allows moving of a system and all its components to a new system id, or moving a particular component to a new system/component id. Recipients must reject command addressed to broadcast system ID.
     pub const MAV_CMD_DO_SET_SYS_CMP_ID: Self = Self(610);
     /// Sets the GNSS coordinates of the vehicle local origin (0,0,0) position. Vehicle should emit GPS_GLOBAL_ORIGIN irrespective of whether the origin is changed. This enables transform between the local coordinate frame and the global (GNSS) coordinate frame, which may be necessary when (for example) indoor and outdoor settings are connected and the MAV should move from in- to outdoor. This command supersedes SET_GPS_GLOBAL_ORIGIN. Should be sent in a COMMAND_INT (Expected frame is MAV_FRAME_GLOBAL, and this should be assumed when sent in COMMAND_LONG).
     pub const MAV_CMD_DO_SET_GLOBAL_ORIGIN: Self = Self(611);
-    /// Set an external estimate of wind direction and speed. This might be used to provide an initial wind estimate to the estimator (EKF) in the case where the vehicle is wind dead-reckoning, extending the time when operating without GPS before before position drift builds to an unsafe level. For this use case the command might reasonably be sent every few minutes when operating at altitude, and the value is cleared if the estimator resets itself.
-    pub const MAV_CMD_EXTERNAL_WIND_ESTIMATE: Self = Self(43004);
-    /// Enable the specified standard MAVLink mode. If the mode is not supported the vehicle should ACK with MAV_RESULT_FAILED.
-    pub const MAV_CMD_DO_SET_STANDARD_MODE: Self = Self(262);
+    /// Enable Moving Target Indicators (MTI) on streamed video. Support for feature can be checked with CAMERA_CAP_FLAGS_HAS_MTI, and disabled with MAV_CMD_CAMERA_STOP_MTI.
+    pub const MAV_CMD_CAMERA_START_MTI: Self = Self(2020);
+    /// Disable Moving Target Indicators (MTI) on streamed video.
+    pub const MAV_CMD_CAMERA_STOP_MTI: Self = Self(2021);
     /// Circular fence area centered on home. The vehicle must stay inside this area. If home is moved, the fence moves.
     pub const MAV_CMD_NAV_FENCE_HOME_CIRCLE_INCLUSION: Self = Self(5005);
+    /// Set an external estimate of wind direction and speed. This might be used to provide an initial wind estimate to the estimator (EKF) in the case where the vehicle is wind dead-reckoning, extending the time when operating without GPS before before position drift builds to an unsafe level. For this use case the command might reasonably be sent every few minutes when operating at altitude, and the value is cleared if the estimator resets itself.
+    pub const MAV_CMD_EXTERNAL_WIND_ESTIMATE: Self = Self(43004);
     /// Command to a gimbal manager to control the gimbal tilt and pan angles. It is possible to set combinations of the values below. E.g. an angle as well as a desired angular rate can be used to get to this angle at a certain angular rate, or an angular rate only will result in continuous turning. NaN is to be used to signal unset. A gimbal device is never to react to this command.
     pub const MAV_CMD_STORM32_DO_GIMBAL_MANAGER_CONTROL_PITCHYAW: Self = Self(60002);
     /// Command to configure a gimbal manager. A gimbal device is never to react to this command. The selected profile is reported in the STORM32_GIMBAL_MANAGER_STATUS message.
@@ -6561,6 +7183,8 @@ impl MavCmd {
             31 => "MAV_CMD_NAV_LOITER_TO_ALT",
             32 => "MAV_CMD_DO_FOLLOW",
             33 => "MAV_CMD_DO_FOLLOW_REPOSITION",
+            34 => "MAV_CMD_DO_ORBIT",
+            35 => "MAV_CMD_DO_FIGURE_EIGHT",
             36 => "MAV_CMD_NAV_ARC_WAYPOINT",
             80 => "MAV_CMD_NAV_ROI",
             81 => "MAV_CMD_NAV_PATHPLANNING",
@@ -6588,6 +7212,7 @@ impl MavCmd {
             184 => "MAV_CMD_DO_REPEAT_SERVO",
             185 => "MAV_CMD_DO_FLIGHTTERMINATION",
             186 => "MAV_CMD_DO_CHANGE_ALTITUDE",
+            187 => "MAV_CMD_DO_SET_ACTUATOR",
             188 => "MAV_CMD_DO_RETURN_PATH_START",
             189 => "MAV_CMD_DO_LAND_START",
             190 => "MAV_CMD_DO_RALLY_LAND",
@@ -6633,9 +7258,14 @@ impl MavCmd {
             260 => "MAV_CMD_OBLIQUE_SURVEY",
             262 => "MAV_CMD_DO_SET_STANDARD_MODE",
             300 => "MAV_CMD_MISSION_START",
+            310 => "MAV_CMD_ACTUATOR_TEST",
+            311 => "MAV_CMD_CONFIGURE_ACTUATOR",
             400 => "MAV_CMD_COMPONENT_ARM_DISARM",
             401 => "MAV_CMD_RUN_PREARM_CHECKS",
+            405 => "MAV_CMD_ILLUMINATOR_ON_OFF",
+            406 => "MAV_CMD_DO_ILLUMINATOR_CONFIGURE",
             410 => "MAV_CMD_GET_HOME_POSITION",
+            420 => "MAV_CMD_INJECT_FAILURE",
             500 => "MAV_CMD_START_RX_PAIR",
             510 => "MAV_CMD_GET_MESSAGE_INTERVAL",
             511 => "MAV_CMD_SET_MESSAGE_INTERVAL",
@@ -6662,10 +7292,13 @@ impl MavCmd {
             1001 => "MAV_CMD_DO_GIMBAL_MANAGER_CONFIGURE",
             2000 => "MAV_CMD_IMAGE_START_CAPTURE",
             2001 => "MAV_CMD_IMAGE_STOP_CAPTURE",
+            2002 => "MAV_CMD_REQUEST_CAMERA_IMAGE_CAPTURE",
             2003 => "MAV_CMD_DO_TRIGGER_CONTROL",
             2004 => "MAV_CMD_CAMERA_TRACK_POINT",
             2005 => "MAV_CMD_CAMERA_TRACK_RECTANGLE",
             2010 => "MAV_CMD_CAMERA_STOP_TRACKING",
+            2020 => "MAV_CMD_CAMERA_START_MTI",
+            2021 => "MAV_CMD_CAMERA_STOP_MTI",
             2500 => "MAV_CMD_VIDEO_START_CAPTURE",
             2501 => "MAV_CMD_VIDEO_STOP_CAPTURE",
             2502 => "MAV_CMD_VIDEO_START_STREAMING",
@@ -6681,6 +7314,7 @@ impl MavCmd {
             3001 => "MAV_CMD_ARM_AUTHORIZATION_REQUEST",
             4000 => "MAV_CMD_SET_GUIDED_SUBMODE_STANDARD",
             4001 => "MAV_CMD_SET_GUIDED_SUBMODE_CIRCLE",
+            4501 => "MAV_CMD_CONDITION_GATE",
             5000 => "MAV_CMD_NAV_FENCE_RETURN_POINT",
             5001 => "MAV_CMD_NAV_FENCE_POLYGON_VERTEX_INCLUSION",
             5002 => "MAV_CMD_NAV_FENCE_POLYGON_VERTEX_EXCLUSION",
@@ -6778,7 +7412,12 @@ impl MavCmd {
                 None,
                 Some(("Yaw Angle", "deg")),
             ],
-            22 => [Some(("Pitch", "deg")), None, None, Some(("Yaw", "deg"))],
+            22 => [
+                Some(("Pitch", "deg")),
+                None,
+                Some(("Flags", "")),
+                Some(("Yaw", "deg")),
+            ],
             23 => [
                 Some(("Target", "")),
                 Some(("Offset", "m")),
@@ -6816,6 +7455,19 @@ impl MavCmd {
                 Some(("Camera Q3", "")),
                 Some(("Camera Q4", "")),
             ],
+            34 => [
+                Some(("Radius", "m")),
+                Some(("Velocity", "m/s")),
+                Some(("Yaw Behavior", "")),
+                Some(("Orbits", "rad")),
+            ],
+            35 => [
+                Some(("Major Radius", "m")),
+                Some(("Minor Radius", "m")),
+                None,
+                Some(("Orientation", "rad")),
+            ],
+            36 => [Some(("Arc Angle", "deg")), None, None, None],
             80 => [
                 Some(("ROI Mode", "")),
                 Some(("WP Index", "")),
@@ -6836,7 +7488,7 @@ impl MavCmd {
                 Some(("Yaw Angle", "deg")),
             ],
             85 => [
-                None,
+                Some(("Land Options", "")),
                 None,
                 Some(("Approach Altitude", "m")),
                 Some(("Yaw", "deg")),
@@ -6869,7 +7521,7 @@ impl MavCmd {
                 Some(("Speed Type", "")),
                 Some(("Speed", "m/s")),
                 Some(("Throttle", "%")),
-                Some(("Relative", "")),
+                None,
             ],
             179 => [Some(("Use Current", "")), None, None, None],
             180 => [Some(("Number", "")), Some(("Value", "")), None, None],
@@ -6889,6 +7541,12 @@ impl MavCmd {
             ],
             185 => [Some(("Terminate", "")), None, None, None],
             186 => [Some(("Altitude", "m")), Some(("Frame", "")), None, None],
+            187 => [
+                Some(("Actuator 1", "")),
+                Some(("Actuator 2", "")),
+                Some(("Actuator 3", "")),
+                Some(("Actuator 4", "")),
+            ],
             190 => [Some(("Altitude", "m")), Some(("Speed", "m/s")), None, None],
             191 => [Some(("Altitude", "m")), None, None, None],
             192 => [
@@ -6899,7 +7557,15 @@ impl MavCmd {
             ],
             193 => [Some(("Continue", "")), None, None, None],
             194 => [Some(("Reverse", "")), None, None, None],
-            198 => [Some(("System ID", "")), None, None, None],
+            195 => [Some(("Gimbal device ID", "")), None, None, None],
+            196 => [Some(("Gimbal device ID", "")), None, None, None],
+            197 => [Some(("Gimbal device ID", "")), None, None, None],
+            198 => [
+                Some(("System ID", "")),
+                Some(("Gimbal device ID", "")),
+                None,
+                None,
+            ],
             200 => [
                 Some(("ID", "")),
                 Some(("Transmission", "")),
@@ -6934,7 +7600,7 @@ impl MavCmd {
                 Some(("Distance", "m")),
                 Some(("Shutter", "ms")),
                 Some(("Trigger", "")),
-                None,
+                Some(("Target Camera ID", "")),
             ],
             207 => [Some(("Enable", "")), Some(("Types", "")), None, None],
             208 => [Some(("Action", "")), None, None, None],
@@ -6945,7 +7611,7 @@ impl MavCmd {
                 Some(("Timeout", "s")),
             ],
             210 => [Some(("Inverted", "")), None, None, None],
-            211 => [Some(("Instance", "")), Some(("Action", "")), None, None],
+            211 => [Some(("Gripper ID", "")), Some(("Action", "")), None, None],
             212 => [Some(("Enable", "")), Some(("Axis", "")), None, None],
             213 => [
                 Some(("Yaw", "deg")),
@@ -6956,7 +7622,7 @@ impl MavCmd {
             214 => [
                 Some(("Trigger Cycle", "ms")),
                 Some(("Shutter Integration", "ms")),
-                None,
+                Some(("Target Camera ID", "")),
                 None,
             ],
             220 => [
@@ -6983,7 +7649,12 @@ impl MavCmd {
                 Some(("Height Delay", "m")),
                 Some(("Options", "")),
             ],
-            224 => [Some(("Number", "")), None, None, None],
+            224 => [
+                Some(("Number", "")),
+                Some(("Reset Mission", "")),
+                None,
+                None,
+            ],
             241 => [
                 Some(("Gyro Temperature", "")),
                 Some(("Magnetometer", "")),
@@ -7003,7 +7674,12 @@ impl MavCmd {
                 Some(("Logging Rate", "Hz")),
                 None,
             ],
-            246 => [Some(("Autopilot", "")), Some(("Companion", "")), None, None],
+            246 => [
+                Some(("Autopilot", "")),
+                Some(("Companion", "")),
+                Some(("Component Action", "")),
+                Some(("Component ID", "")),
+            ],
             252 => [
                 Some(("Continue", "")),
                 Some(("Position", "")),
@@ -7016,14 +7692,30 @@ impl MavCmd {
                 Some(("Min Interval", "ms")),
                 Some(("Positions", "")),
             ],
+            262 => [Some(("Standard Mode", "")), None, None, None],
             300 => [
                 Some(("First Item", "")),
                 Some(("Last Item", "")),
                 None,
                 None,
             ],
+            310 => [Some(("Value", "")), Some(("Timeout", "s")), None, None],
+            311 => [Some(("Configuration", "")), None, None, None],
             400 => [Some(("Arm", "")), Some(("Force", "")), None, None],
-            500 => [Some(("Spektrum", "")), Some(("RC Type", "")), None, None],
+            405 => [Some(("Enable", "")), None, None, None],
+            406 => [
+                Some(("Mode", "")),
+                Some(("Brightness", "%")),
+                Some(("Strobe Period", "s")),
+                Some(("Strobe Duty", "%")),
+            ],
+            420 => [
+                Some(("Failure unit", "")),
+                Some(("Failure type", "")),
+                Some(("Instance", "")),
+                None,
+            ],
+            500 => [Some(("RC Type", "")), Some(("RC Sub Type", "")), None, None],
             510 => [Some(("Message ID", "")), None, None, None],
             511 => [
                 Some(("Message ID", "")),
@@ -7047,21 +7739,31 @@ impl MavCmd {
                 None,
                 None,
             ],
-            526 => [Some(("Storage ID", "")), Some(("Format", "")), None, None],
+            526 => [
+                Some(("Storage ID", "")),
+                Some(("Format", "")),
+                Some(("Reset Image Log", "")),
+                None,
+            ],
             527 => [Some(("Capture Status", "")), None, None, None],
             528 => [Some(("Flight Information", "")), None, None, None],
-            529 => [Some(("Reset", "")), None, None, None],
-            530 => [None, Some(("Camera Mode", "")), None, None],
+            529 => [
+                Some(("Reset", "")),
+                Some(("Target Camera ID", "")),
+                None,
+                None,
+            ],
+            530 => [Some(("id", "")), Some(("Camera Mode", "")), None, None],
             531 => [
                 Some(("Zoom Type", "")),
                 Some(("Zoom Value", "")),
-                None,
+                Some(("Target Camera ID", "")),
                 None,
             ],
             532 => [
                 Some(("Focus Type", "")),
                 Some(("Focus Value", "")),
-                None,
+                Some(("Target Camera ID", "")),
                 None,
             ],
             533 => [Some(("Storage ID", "")), Some(("Usage", "")), None, None],
@@ -7086,23 +7788,24 @@ impl MavCmd {
                 Some(("compid secondary control", "")),
             ],
             2000 => [
-                Some(("id", "")),
+                Some(("Target Camera ID", "")),
                 Some(("Interval", "s")),
                 Some(("Total Images", "")),
                 Some(("Sequence Number", "")),
             ],
-            2001 => [Some(("id", "")), None, None, None],
+            2001 => [Some(("Target Camera ID", "")), None, None, None],
+            2002 => [Some(("Number", "")), None, None, None],
             2003 => [
                 Some(("Enable", "")),
                 Some(("Reset", "")),
                 Some(("Pause", "")),
-                None,
+                Some(("Target Camera ID", "")),
             ],
             2004 => [
                 Some(("Point x", "")),
                 Some(("Point y", "")),
                 Some(("Radius", "")),
-                None,
+                Some(("Target Camera ID", "")),
             ],
             2005 => [
                 Some(("Top left corner x", "")),
@@ -7110,15 +7813,31 @@ impl MavCmd {
                 Some(("Bottom right corner x", "")),
                 Some(("Bottom right corner y", "")),
             ],
+            2010 => [Some(("Target Camera ID", "")), None, None, None],
             2500 => [
                 Some(("Stream ID", "")),
                 Some(("Status Frequency", "Hz")),
+                Some(("Target Camera ID", "")),
+                None,
+            ],
+            2501 => [
+                Some(("Stream ID", "")),
+                Some(("Target Camera ID", "")),
                 None,
                 None,
             ],
-            2501 => [Some(("Stream ID", "")), None, None, None],
-            2502 => [Some(("Stream ID", "")), None, None, None],
-            2503 => [Some(("Stream ID", "")), None, None, None],
+            2502 => [
+                Some(("Stream ID", "")),
+                Some(("Target Camera ID", "")),
+                None,
+                None,
+            ],
+            2503 => [
+                Some(("Stream ID", "")),
+                Some(("Target Camera ID", "")),
+                None,
+                None,
+            ],
             2504 => [Some(("Stream ID", "")), None, None, None],
             2505 => [Some(("Stream ID", "")), None, None, None],
             2510 => [Some(("Format", "")), None, None, None],
@@ -7138,6 +7857,12 @@ impl MavCmd {
             3000 => [Some(("State", "")), None, None, None],
             3001 => [Some(("System ID", "")), None, None, None],
             4001 => [Some(("Radius", "m")), None, None, None],
+            4501 => [
+                Some(("Geometry", "")),
+                Some(("UseAltitude", "")),
+                None,
+                None,
+            ],
             5001 => [
                 Some(("Vertex Count", "")),
                 Some(("Inclusion Group", "")),
@@ -7171,6 +7896,19 @@ impl MavCmd {
                 Some(("Action", "")),
                 Some(("Length", "m")),
                 Some(("Rate", "m/s")),
+            ],
+            43000 => [
+                Some(("speed type", "")),
+                Some(("speed target", "m/s")),
+                Some(("speed rate-of-change", "m/s/s")),
+                None,
+            ],
+            43001 => [None, None, Some(("alt rate-of-change", "m/s")), None],
+            43002 => [
+                Some(("Heading Type", "")),
+                Some(("Heading Target", "deg")),
+                Some(("Heading Rate of Change", "deg/s")),
+                None,
             ],
             43003 => [
                 Some(("transmission_time", "s")),
@@ -7248,30 +7986,24 @@ impl MavCmd {
                 Some(("pitch", "deg")),
                 Some(("yaw", "deg")),
             ],
-            43000 => [
-                Some(("speed type", "")),
-                Some(("speed target", "m/s")),
-                Some(("speed rate-of-change", "m/s/s")),
-                None,
-            ],
-            43001 => [None, None, Some(("alt rate-of-change", "m/s")), None],
-            43002 => [
-                Some(("heading type", "")),
-                Some(("heading target", "deg")),
-                Some(("heading rate-of-change", "m/s/s")),
-                None,
-            ],
             43005 => [
                 Some(("hagl", "m")),
                 Some(("accuracy", "m")),
                 Some(("timeout", "s")),
                 None,
             ],
-            36 => [Some(("Arc Angle", "deg")), None, None, None],
             610 => [
                 Some(("System ID", "")),
                 Some(("Component ID", "")),
                 Some(("Reboot", "")),
+                None,
+            ],
+            2020 => [Some(("Target Camera ID", "")), None, None, None],
+            2021 => [Some(("Target Camera ID", "")), None, None, None],
+            5005 => [
+                Some(("Radius", "m")),
+                Some(("Inclusion Group", "")),
+                None,
                 None,
             ],
             43004 => [
@@ -7279,13 +8011,6 @@ impl MavCmd {
                 Some(("Wind speed accuracy", "m/s")),
                 Some(("Direction", "deg")),
                 Some(("Direction accuracy", "deg")),
-            ],
-            262 => [Some(("Standard Mode", "")), None, None, None],
-            5005 => [
-                Some(("Radius", "m")),
-                Some(("Inclusion Group", "")),
-                None,
-                None,
             ],
             60002 => [
                 Some(("Pitch angle", "deg")),
@@ -7938,12 +8663,15 @@ pub struct MavDoRepositionFlags(pub u32);
 impl MavDoRepositionFlags {
     /// The aircraft should immediately transition into guided. This should not be set for follow me applications
     pub const MAV_DO_REPOSITION_FLAGS_CHANGE_MODE: Self = Self(1);
+    /// Yaw relative to the vehicle current heading (if not set, relative to North).
+    pub const MAV_DO_REPOSITION_FLAGS_RELATIVE_YAW: Self = Self(2);
 
     /// The name of a value, or `None` if this dialect does not define it.
     #[must_use]
     pub const fn name(self) -> Option<&'static str> {
         Some(match self.0 {
             1 => "MAV_DO_REPOSITION_FLAGS_CHANGE_MODE",
+            2 => "MAV_DO_REPOSITION_FLAGS_RELATIVE_YAW",
             _ => return None,
         })
     }
@@ -8073,6 +8801,129 @@ impl MavFrame {
             19 => "MAV_FRAME_RESERVED_19",
             20 => "MAV_FRAME_LOCAL_FRD",
             21 => "MAV_FRAME_LOCAL_FLU",
+            _ => return None,
+        })
+    }
+}
+
+/// MAV FTP error codes (may be used in FILE_TRANSFER_PROTOCOL). See https://mavlink.io/en/services/ftp.html.
+///
+/// MAVLink enum `MAV_FTP_ERR`. Values are open: an unknown value from a newer autopilot
+/// is preserved rather than rejected.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub struct MavFtpErr(pub u32);
+
+impl MavFtpErr {
+    /// None: No error
+    pub const MAV_FTP_ERR_NONE: Self = Self(0);
+    /// Fail: Unknown failure
+    pub const MAV_FTP_ERR_FAIL: Self = Self(1);
+    /// FailErrno: Command failed, Err number sent back in PayloadHeader.data\[1\]. This is a file-system error number understood by the server operating system.
+    pub const MAV_FTP_ERR_FAILERRNO: Self = Self(2);
+    /// InvalidDataSize: Payload size is invalid
+    pub const MAV_FTP_ERR_INVALIDDATASIZE: Self = Self(3);
+    /// InvalidSession: Session is not currently open
+    pub const MAV_FTP_ERR_INVALIDSESSION: Self = Self(4);
+    /// NoSessionsAvailable: All available sessions are already in use
+    pub const MAV_FTP_ERR_NOSESSIONSAVAILABLE: Self = Self(5);
+    /// EOF: Offset past end of file for ListDirectory and ReadFile commands
+    pub const MAV_FTP_ERR_EOF: Self = Self(6);
+    /// UnknownCommand: Unknown command / opcode
+    pub const MAV_FTP_ERR_UNKNOWNCOMMAND: Self = Self(7);
+    /// FileExists: File/directory already exists
+    pub const MAV_FTP_ERR_FILEEXISTS: Self = Self(8);
+    /// FileProtected: File/directory is write protected
+    pub const MAV_FTP_ERR_FILEPROTECTED: Self = Self(9);
+    /// FileNotFound: File/directory not found
+    pub const MAV_FTP_ERR_FILENOTFOUND: Self = Self(10);
+
+    /// The name of a value, or `None` if this dialect does not define it.
+    #[must_use]
+    pub const fn name(self) -> Option<&'static str> {
+        Some(match self.0 {
+            0 => "MAV_FTP_ERR_NONE",
+            1 => "MAV_FTP_ERR_FAIL",
+            2 => "MAV_FTP_ERR_FAILERRNO",
+            3 => "MAV_FTP_ERR_INVALIDDATASIZE",
+            4 => "MAV_FTP_ERR_INVALIDSESSION",
+            5 => "MAV_FTP_ERR_NOSESSIONSAVAILABLE",
+            6 => "MAV_FTP_ERR_EOF",
+            7 => "MAV_FTP_ERR_UNKNOWNCOMMAND",
+            8 => "MAV_FTP_ERR_FILEEXISTS",
+            9 => "MAV_FTP_ERR_FILEPROTECTED",
+            10 => "MAV_FTP_ERR_FILENOTFOUND",
+            _ => return None,
+        })
+    }
+}
+
+/// MAV FTP opcodes (may be used in FILE_TRANSFER_PROTOCOL). See https://mavlink.io/en/services/ftp.html.
+///
+/// MAVLink enum `MAV_FTP_OPCODE`. Values are open: an unknown value from a newer autopilot
+/// is preserved rather than rejected.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub struct MavFtpOpcode(pub u32);
+
+impl MavFtpOpcode {
+    /// None. Ignored, always ACKed
+    pub const MAV_FTP_OPCODE_NONE: Self = Self(0);
+    /// TerminateSession: Terminates open Read session
+    pub const MAV_FTP_OPCODE_TERMINATESESSION: Self = Self(1);
+    /// ResetSessions: Terminates all open read sessions
+    pub const MAV_FTP_OPCODE_RESETSESSION: Self = Self(2);
+    /// ListDirectory. List files and directories in path from offset
+    pub const MAV_FTP_OPCODE_LISTDIRECTORY: Self = Self(3);
+    /// OpenFileRO: Opens file at path for reading, returns session
+    pub const MAV_FTP_OPCODE_OPENFILERO: Self = Self(4);
+    /// ReadFile: Reads size bytes from offset in session
+    pub const MAV_FTP_OPCODE_READFILE: Self = Self(5);
+    /// CreateFile: Creates file at path for writing, returns session
+    pub const MAV_FTP_OPCODE_CREATEFILE: Self = Self(6);
+    /// WriteFile: Writes size bytes to offset in session
+    pub const MAV_FTP_OPCODE_WRITEFILE: Self = Self(7);
+    /// RemoveFile: Remove file at path
+    pub const MAV_FTP_OPCODE_REMOVEFILE: Self = Self(8);
+    /// CreateDirectory: Creates directory at path
+    pub const MAV_FTP_OPCODE_CREATEDIRECTORY: Self = Self(9);
+    /// RemoveDirectory: Removes directory at path. The directory must be empty.
+    pub const MAV_FTP_OPCODE_REMOVEDIRECTORY: Self = Self(10);
+    /// OpenFileWO: Opens file at path for writing, returns session
+    pub const MAV_FTP_OPCODE_OPENFILEWO: Self = Self(11);
+    /// TruncateFile: Truncate file at path to offset length
+    pub const MAV_FTP_OPCODE_TRUNCATEFILE: Self = Self(12);
+    /// Rename: Rename path1 to path2
+    pub const MAV_FTP_OPCODE_RENAME: Self = Self(13);
+    /// CalcFileCRC32: Calculate CRC32 for file at path
+    pub const MAV_FTP_OPCODE_CALCFILECRC: Self = Self(14);
+    /// BurstReadFile: Burst download session file
+    pub const MAV_FTP_OPCODE_BURSTREADFILE: Self = Self(15);
+    /// ACK: ACK response
+    pub const MAV_FTP_OPCODE_ACK: Self = Self(128);
+    /// NAK: NAK response
+    pub const MAV_FTP_OPCODE_NAK: Self = Self(129);
+
+    /// The name of a value, or `None` if this dialect does not define it.
+    #[must_use]
+    pub const fn name(self) -> Option<&'static str> {
+        Some(match self.0 {
+            0 => "MAV_FTP_OPCODE_NONE",
+            1 => "MAV_FTP_OPCODE_TERMINATESESSION",
+            2 => "MAV_FTP_OPCODE_RESETSESSION",
+            3 => "MAV_FTP_OPCODE_LISTDIRECTORY",
+            4 => "MAV_FTP_OPCODE_OPENFILERO",
+            5 => "MAV_FTP_OPCODE_READFILE",
+            6 => "MAV_FTP_OPCODE_CREATEFILE",
+            7 => "MAV_FTP_OPCODE_WRITEFILE",
+            8 => "MAV_FTP_OPCODE_REMOVEFILE",
+            9 => "MAV_FTP_OPCODE_CREATEDIRECTORY",
+            10 => "MAV_FTP_OPCODE_REMOVEDIRECTORY",
+            11 => "MAV_FTP_OPCODE_OPENFILEWO",
+            12 => "MAV_FTP_OPCODE_TRUNCATEFILE",
+            13 => "MAV_FTP_OPCODE_RENAME",
+            14 => "MAV_FTP_OPCODE_CALCFILECRC",
+            15 => "MAV_FTP_OPCODE_BURSTREADFILE",
+            128 => "MAV_FTP_OPCODE_ACK",
+            129 => "MAV_FTP_OPCODE_NAK",
             _ => return None,
         })
     }
@@ -8324,7 +9175,7 @@ impl MavMissionType {
     }
 }
 
-/// These defines are predefined OR-combined mode flags. There is no need to use values from this enum, but it simplifies the use of the mode flags. Note that manual input is enabled in all modes as a safety override.
+/// Predefined OR-combined MAV_MODE_FLAG values. These can simplify using the flags when setting modes. Note that manual input is enabled in all modes as a safety override.
 ///
 /// MAVLink enum `MAV_MODE`. Values are open: an unknown value from a newer autopilot
 /// is preserved rather than rejected.
@@ -8334,25 +9185,25 @@ pub struct MavMode(pub u32);
 impl MavMode {
     /// System is not ready to fly, booting, calibrating, etc. No flag is set.
     pub const MAV_MODE_PREFLIGHT: Self = Self(0);
-    /// System is allowed to be active, under assisted RC control.
+    /// System is allowed to be active, under assisted RC control (MAV_MODE_FLAG_SAFETY_ARMED, MAV_MODE_FLAG_STABILIZE_ENABLED)
     pub const MAV_MODE_STABILIZE_DISARMED: Self = Self(80);
-    /// System is allowed to be active, under assisted RC control.
+    /// System is allowed to be active, under assisted RC control (MAV_MODE_FLAG_SAFETY_ARMED, MAV_MODE_FLAG_MANUAL_INPUT_ENABLED, MAV_MODE_FLAG_STABILIZE_ENABLED)
     pub const MAV_MODE_STABILIZE_ARMED: Self = Self(208);
-    /// System is allowed to be active, under manual (RC) control, no stabilization
+    /// System is allowed to be active, under manual (RC) control, no stabilization (MAV_MODE_FLAG_MANUAL_INPUT_ENABLED)
     pub const MAV_MODE_MANUAL_DISARMED: Self = Self(64);
-    /// System is allowed to be active, under manual (RC) control, no stabilization
+    /// System is allowed to be active, under manual (RC) control, no stabilization (MAV_MODE_FLAG_SAFETY_ARMED, MAV_MODE_FLAG_MANUAL_INPUT_ENABLED)
     pub const MAV_MODE_MANUAL_ARMED: Self = Self(192);
-    /// System is allowed to be active, under autonomous control, manual setpoint
+    /// System is allowed to be active, under autonomous control, manual setpoint (MAV_MODE_FLAG_SAFETY_ARMED, MAV_MODE_FLAG_STABILIZE_ENABLED, MAV_MODE_FLAG_GUIDED_ENABLED)
     pub const MAV_MODE_GUIDED_DISARMED: Self = Self(88);
-    /// System is allowed to be active, under autonomous control, manual setpoint
+    /// System is allowed to be active, under autonomous control, manual setpoint (MAV_MODE_FLAG_SAFETY_ARMED, MAV_MODE_FLAG_MANUAL_INPUT_ENABLED, MAV_MODE_FLAG_STABILIZE_ENABLED, MAV_MODE_FLAG_GUIDED_ENABLED)
     pub const MAV_MODE_GUIDED_ARMED: Self = Self(216);
-    /// System is allowed to be active, under autonomous control and navigation (the trajectory is decided onboard and not pre-programmed by waypoints)
+    /// System is allowed to be active, under autonomous control and navigation (the trajectory is decided onboard and not pre-programmed by waypoints). (MAV_MODE_FLAG_SAFETY_ARMED, MAV_MODE_FLAG_STABILIZE_ENABLED, MAV_MODE_FLAG_GUIDED_ENABLED, MAV_MODE_FLAG_AUTO_ENABLED).
     pub const MAV_MODE_AUTO_DISARMED: Self = Self(92);
-    /// System is allowed to be active, under autonomous control and navigation (the trajectory is decided onboard and not pre-programmed by waypoints)
+    /// System is allowed to be active, under autonomous control and navigation (the trajectory is decided onboard and not pre-programmed by waypoints). (MAV_MODE_FLAG_SAFETY_ARMED, MAV_MODE_FLAG_MANUAL_INPUT_ENABLED, MAV_MODE_FLAG_STABILIZE_ENABLED, MAV_MODE_FLAG_GUIDED_ENABLED,MAV_MODE_FLAG_AUTO_ENABLED).
     pub const MAV_MODE_AUTO_ARMED: Self = Self(220);
-    /// UNDEFINED mode. This solely depends on the autopilot - use with caution, intended for developers only.
+    /// UNDEFINED mode. This solely depends on the autopilot - use with caution, intended for developers only. (MAV_MODE_FLAG_MANUAL_INPUT_ENABLED, MAV_MODE_FLAG_TEST_ENABLED).
     pub const MAV_MODE_TEST_DISARMED: Self = Self(66);
-    /// UNDEFINED mode. This solely depends on the autopilot - use with caution, intended for developers only.
+    /// UNDEFINED mode. This solely depends on the autopilot - use with caution, intended for developers only (MAV_MODE_FLAG_SAFETY_ARMED, MAV_MODE_FLAG_MANUAL_INPUT_ENABLED, MAV_MODE_FLAG_TEST_ENABLED)
     pub const MAV_MODE_TEST_ARMED: Self = Self(194);
 
     /// The name of a value, or `None` if this dialect does not define it.
@@ -8544,6 +9395,8 @@ impl MavMountMode {
     pub const MAV_MOUNT_MODE_SYSID_TARGET: Self = Self(5);
     /// Gimbal tracks home position
     pub const MAV_MOUNT_MODE_HOME_LOCATION: Self = Self(6);
+    /// Gimbal tracks next waypoint location with offset
+    pub const MAV_MOUNT_MODE_WPNEXT_OFFSET: Self = Self(7);
 
     /// The name of a value, or `None` if this dialect does not define it.
     #[must_use]
@@ -8556,6 +9409,7 @@ impl MavMountMode {
             4 => "MAV_MOUNT_MODE_GPS_POINT",
             5 => "MAV_MOUNT_MODE_SYSID_TARGET",
             6 => "MAV_MOUNT_MODE_HOME_LOCATION",
+            7 => "MAV_MOUNT_MODE_WPNEXT_OFFSET",
             _ => return None,
         })
     }
@@ -8725,7 +9579,7 @@ impl MavOdidClassEu {
 pub struct MavOdidDescType(pub u32);
 
 impl MavOdidDescType {
-    /// Free-form text description of the purpose of the flight.
+    /// Optional free-form text description of the purpose of the flight.
     pub const MAV_ODID_DESC_TYPE_TEXT: Self = Self(0);
     /// Optional additional clarification when status == MAV_ODID_STATUS_EMERGENCY.
     pub const MAV_ODID_DESC_TYPE_EMERGENCY: Self = Self(1);
@@ -8887,11 +9741,11 @@ impl MavOdidOperatorIdType {
 pub struct MavOdidOperatorLocationType(pub u32);
 
 impl MavOdidOperatorLocationType {
-    /// The location of the operator is the same as the take-off location.
+    /// The location/altitude of the operator is the same as the take-off location.
     pub const MAV_ODID_OPERATOR_LOCATION_TYPE_TAKEOFF: Self = Self(0);
-    /// The location of the operator is based on live GNSS data.
+    /// The location/altitude of the operator is dynamic. E.g. based on live GNSS data.
     pub const MAV_ODID_OPERATOR_LOCATION_TYPE_LIVE_GNSS: Self = Self(1);
-    /// The location of the operator is a fixed location.
+    /// The location/altitude of the operator are fixed values.
     pub const MAV_ODID_OPERATOR_LOCATION_TYPE_FIXED: Self = Self(2);
 
     /// The name of a value, or `None` if this dialect does not define it.
@@ -9503,7 +10357,7 @@ impl MavResult {
     pub const MAV_RESULT_ACCEPTED: Self = Self(0);
     /// Command is valid, but cannot be executed at this time. This is used to indicate a problem that should be fixed just by waiting (e.g. a state machine is busy, can't arm because have not got GPS lock, etc.). Retrying later should work.
     pub const MAV_RESULT_TEMPORARILY_REJECTED: Self = Self(1);
-    /// Command is invalid (is supported but has invalid parameters). Retrying same command and parameters will not work.
+    /// Command is invalid; it is supported but one or more parameter values are invalid (i.e. parameter reserved, value allowed by spec but not supported by flight stack, and so on). Retrying the same command and parameters will not work.
     pub const MAV_RESULT_DENIED: Self = Self(2);
     /// Command is not supported (unknown).
     pub const MAV_RESULT_UNSUPPORTED: Self = Self(3);
@@ -9752,7 +10606,7 @@ impl MavSeverity {
     }
 }
 
-/// Standard modes with a well understood meaning across flight stacks and vehicle types. For example, most flight stack have the concept of a "return" or "RTL" mode that takes a vehicle to safety, even though the precise mechanics of this mode may differ. Modes may be set using MAV_CMD_DO_SET_STANDARD_MODE.
+/// Standard modes with a well understood meaning across flight stacks and vehicle types. For example, most flight stack have the concept of a "return" or "RTL" mode that takes a vehicle to safety, even though the precise mechanics of this mode may differ. The modes supported by a flight stack can be queried using AVAILABLE_MODES and set using MAV_CMD_DO_SET_STANDARD_MODE. The current mode is streamed in CURRENT_MODE. See https://mavlink.io/en/services/standard_modes.html
 ///
 /// MAVLink enum `MAV_STANDARD_MODE`. Values are open: an unknown value from a newer autopilot
 /// is preserved rather than rejected.
@@ -9770,16 +10624,14 @@ impl MavStandardMode {
     pub const MAV_STANDARD_MODE_CRUISE: Self = Self(3);
     /// Altitude hold (manual). Altitude-controlled and stabilized manual mode. When sticks are released vehicles return to their level-flight orientation and hold their altitude. MC vehicles continue with existing momentum and may move with wind (or other external forces). FW vehicles continue with current heading, but may be moved off-track by wind. Hybrid MC/FW ("VTOL") vehicles behave according to their current configuration/mode (FW or MC). Other vehicle types must not support this mode (this may be revisited through the PR process).
     pub const MAV_STANDARD_MODE_ALTITUDE_HOLD: Self = Self(4);
-    /// Return home mode (auto). Automatic mode that returns vehicle to home via a safe flight path. It may also automatically land the vehicle (i.e. RTL). The precise flight path and landing behaviour depend on vehicle configuration and type.
-    pub const MAV_STANDARD_MODE_RETURN_HOME: Self = Self(5);
-    /// Safe recovery mode (auto). Automatic mode that takes vehicle to a predefined safe location via a safe flight path (rally point or mission defined landing) . It may also automatically land the vehicle. The precise return location, flight path, and landing behaviour depend on vehicle configuration and type.
-    pub const MAV_STANDARD_MODE_SAFE_RECOVERY: Self = Self(6);
+    /// Safe recovery mode (auto). Automatic mode that takes vehicle to a predefined safe location via a safe flight path, and may also automatically land the vehicle. This mode is more commonly referred to as RTL and/or or Smart RTL. The precise return location, flight path, and landing behaviour depend on vehicle configuration and type. For example, the vehicle might return to the home/launch location, a rally point, or the start of a mission landing, it might follow a direct path, mission path, or breadcrumb path, and land using a mission landing pattern or some other kind of descent.
+    pub const MAV_STANDARD_MODE_SAFE_RECOVERY: Self = Self(5);
     /// Mission mode (automatic). Automatic mode that executes MAVLink missions. Missions are executed from the current waypoint as soon as the mode is enabled.
-    pub const MAV_STANDARD_MODE_MISSION: Self = Self(7);
+    pub const MAV_STANDARD_MODE_MISSION: Self = Self(6);
     /// Land mode (auto). Automatic mode that lands the vehicle at the current location. The precise landing behaviour depends on vehicle configuration and type.
-    pub const MAV_STANDARD_MODE_LAND: Self = Self(8);
+    pub const MAV_STANDARD_MODE_LAND: Self = Self(7);
     /// Takeoff mode (auto). Automatic takeoff mode. The precise takeoff behaviour depends on vehicle configuration and type.
-    pub const MAV_STANDARD_MODE_TAKEOFF: Self = Self(9);
+    pub const MAV_STANDARD_MODE_TAKEOFF: Self = Self(8);
 
     /// The name of a value, or `None` if this dialect does not define it.
     #[must_use]
@@ -9790,11 +10642,10 @@ impl MavStandardMode {
             2 => "MAV_STANDARD_MODE_ORBIT",
             3 => "MAV_STANDARD_MODE_CRUISE",
             4 => "MAV_STANDARD_MODE_ALTITUDE_HOLD",
-            5 => "MAV_STANDARD_MODE_RETURN_HOME",
-            6 => "MAV_STANDARD_MODE_SAFE_RECOVERY",
-            7 => "MAV_STANDARD_MODE_MISSION",
-            8 => "MAV_STANDARD_MODE_LAND",
-            9 => "MAV_STANDARD_MODE_TAKEOFF",
+            5 => "MAV_STANDARD_MODE_SAFE_RECOVERY",
+            6 => "MAV_STANDARD_MODE_MISSION",
+            7 => "MAV_STANDARD_MODE_LAND",
+            8 => "MAV_STANDARD_MODE_TAKEOFF",
             _ => return None,
         })
     }
@@ -10104,6 +10955,8 @@ impl MavSysStatusSensor {
     pub const MAV_SYS_STATUS_OBSTACLE_AVOIDANCE: Self = Self(536870912);
     /// 0x40000000 propulsion (actuator, esc, motor or propellor)
     pub const MAV_SYS_STATUS_SENSOR_PROPULSION: Self = Self(1073741824);
+    /// 0x80000000 Extended bit-field are used for further sensor status bits (needs to be set in onboard_control_sensors_present only)
+    pub const MAV_SYS_STATUS_EXTENSION_USED: Self = Self(2147483648);
 
     /// The name of a value, or `None` if this dialect does not define it.
     #[must_use]
@@ -10140,6 +10993,31 @@ impl MavSysStatusSensor {
             268435456 => "MAV_SYS_STATUS_PREARM_CHECK",
             536870912 => "MAV_SYS_STATUS_OBSTACLE_AVOIDANCE",
             1073741824 => "MAV_SYS_STATUS_SENSOR_PROPULSION",
+            2147483648 => "MAV_SYS_STATUS_EXTENSION_USED",
+            _ => return None,
+        })
+    }
+}
+
+/// These encode the sensors whose status is sent as part of the SYS_STATUS message in the extended fields.
+///
+/// MAVLink enum `MAV_SYS_STATUS_SENSOR_EXTENDED` (bitmask). Values are open: an unknown value from a newer autopilot
+/// is preserved rather than rejected.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub struct MavSysStatusSensorExtended(pub u32);
+
+impl MavSysStatusSensorExtended {
+    /// 0x01 Recovery system (parachute, balloon, retracts etc)
+    pub const MAV_SYS_STATUS_RECOVERY_SYSTEM: Self = Self(1);
+    /// 0x02 Leak detection
+    pub const MAV_SYS_STATUS_SENSOR_LEAK: Self = Self(2);
+
+    /// The name of a value, or `None` if this dialect does not define it.
+    #[must_use]
+    pub const fn name(self) -> Option<&'static str> {
+        Some(match self.0 {
+            1 => "MAV_SYS_STATUS_RECOVERY_SYSTEM",
+            2 => "MAV_SYS_STATUS_SENSOR_LEAK",
             _ => return None,
         })
     }
@@ -10175,6 +11053,12 @@ impl MavTunnelPayloadType {
     pub const MAV_TUNNEL_PAYLOAD_TYPE_STORM32_RESERVED8: Self = Self(208);
     /// Registered for STorM32 gimbal controller.
     pub const MAV_TUNNEL_PAYLOAD_TYPE_STORM32_RESERVED9: Self = Self(209);
+    /// Registered for ModalAI remote OSD protocol.
+    pub const MAV_TUNNEL_PAYLOAD_TYPE_MODALAI_REMOTE_OSD: Self = Self(210);
+    /// Registered for ModalAI ESC UART passthru protocol.
+    pub const MAV_TUNNEL_PAYLOAD_TYPE_MODALAI_ESC_UART_PASSTHRU: Self = Self(211);
+    /// Registered for ModalAI vendor use.
+    pub const MAV_TUNNEL_PAYLOAD_TYPE_MODALAI_IO_UART_PASSTHRU: Self = Self(212);
 
     /// The name of a value, or `None` if this dialect does not define it.
     #[must_use]
@@ -10191,6 +11075,9 @@ impl MavTunnelPayloadType {
             207 => "MAV_TUNNEL_PAYLOAD_TYPE_STORM32_RESERVED7",
             208 => "MAV_TUNNEL_PAYLOAD_TYPE_STORM32_RESERVED8",
             209 => "MAV_TUNNEL_PAYLOAD_TYPE_STORM32_RESERVED9",
+            210 => "MAV_TUNNEL_PAYLOAD_TYPE_MODALAI_REMOTE_OSD",
+            211 => "MAV_TUNNEL_PAYLOAD_TYPE_MODALAI_ESC_UART_PASSTHRU",
+            212 => "MAV_TUNNEL_PAYLOAD_TYPE_MODALAI_IO_UART_PASSTHRU",
             _ => return None,
         })
     }
@@ -10595,6 +11482,27 @@ impl MotorTestThrottleType {
     }
 }
 
+/// MAVLink enum `NAV_TAKEOFF_FLAGS`.
+///
+/// MAVLink enum `NAV_TAKEOFF_FLAGS` (bitmask). Values are open: an unknown value from a newer autopilot
+/// is preserved rather than rejected.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub struct NavTakeoffFlags(pub u32);
+
+impl NavTakeoffFlags {
+    /// Accept the command even if the autopilot does not have control over its horizontal position (note that it might not have altitude control either).
+    pub const NAV_TAKEOFF_FLAGS_HORIZONTAL_POSITION_NOT_REQUIRED: Self = Self(1);
+
+    /// The name of a value, or `None` if this dialect does not define it.
+    #[must_use]
+    pub const fn name(self) -> Option<&'static str> {
+        Some(match self.0 {
+            1 => "NAV_TAKEOFF_FLAGS_HORIZONTAL_POSITION_NOT_REQUIRED",
+            _ => return None,
+        })
+    }
+}
+
 /// MAVLink enum `NAV_VTOL_LAND_OPTIONS`.
 ///
 /// MAVLink enum `NAV_VTOL_LAND_OPTIONS`. Values are open: an unknown value from a newer autopilot
@@ -10617,6 +11525,42 @@ impl NavVtolLandOptions {
             0 => "NAV_VTOL_LAND_OPTIONS_DEFAULT",
             1 => "NAV_VTOL_LAND_OPTIONS_FW_SPIRAL_APPROACH",
             2 => "NAV_VTOL_LAND_OPTIONS_FW_APPROACH",
+            _ => return None,
+        })
+    }
+}
+
+/// Yaw behaviour during orbit flight.
+///
+/// MAVLink enum `ORBIT_YAW_BEHAVIOUR`. Values are open: an unknown value from a newer autopilot
+/// is preserved rather than rejected.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub struct OrbitYawBehaviour(pub u32);
+
+impl OrbitYawBehaviour {
+    /// Vehicle front points to the center (default).
+    pub const ORBIT_YAW_BEHAVIOUR_HOLD_FRONT_TO_CIRCLE_CENTER: Self = Self(0);
+    /// Vehicle front holds heading when message received.
+    pub const ORBIT_YAW_BEHAVIOUR_HOLD_INITIAL_HEADING: Self = Self(1);
+    /// Yaw uncontrolled.
+    pub const ORBIT_YAW_BEHAVIOUR_UNCONTROLLED: Self = Self(2);
+    /// Vehicle front follows flight path (tangential to circle).
+    pub const ORBIT_YAW_BEHAVIOUR_HOLD_FRONT_TANGENT_TO_CIRCLE: Self = Self(3);
+    /// Yaw controlled by RC input.
+    pub const ORBIT_YAW_BEHAVIOUR_RC_CONTROLLED: Self = Self(4);
+    /// Vehicle uses current yaw behaviour (unchanged). The vehicle-default yaw behaviour is used if this value is specified when orbit is first commanded.
+    pub const ORBIT_YAW_BEHAVIOUR_UNCHANGED: Self = Self(5);
+
+    /// The name of a value, or `None` if this dialect does not define it.
+    #[must_use]
+    pub const fn name(self) -> Option<&'static str> {
+        Some(match self.0 {
+            0 => "ORBIT_YAW_BEHAVIOUR_HOLD_FRONT_TO_CIRCLE_CENTER",
+            1 => "ORBIT_YAW_BEHAVIOUR_HOLD_INITIAL_HEADING",
+            2 => "ORBIT_YAW_BEHAVIOUR_UNCONTROLLED",
+            3 => "ORBIT_YAW_BEHAVIOUR_HOLD_FRONT_TANGENT_TO_CIRCLE",
+            4 => "ORBIT_YAW_BEHAVIOUR_RC_CONTROLLED",
+            5 => "ORBIT_YAW_BEHAVIOUR_UNCHANGED",
             _ => return None,
         })
     }
@@ -10774,6 +11718,26 @@ impl PidTuningAxis {
     pub const PID_TUNING_STEER: Self = Self(5);
     /// `PID_TUNING_LANDING` = 6.
     pub const PID_TUNING_LANDING: Self = Self(6);
+    /// Left wheel rate.
+    pub const PID_TUNING_WHEEL_LEFT: Self = Self(7);
+    /// Right wheel rate.
+    pub const PID_TUNING_WHEEL_RIGHT: Self = Self(8);
+    /// Sailboat heel to mainsail.
+    pub const PID_TUNING_SAIL_HEEL: Self = Self(9);
+    /// Velocity north.
+    pub const PID_TUNING_VEL_NORTH: Self = Self(10);
+    /// Velocity east.
+    pub const PID_TUNING_VEL_EAST: Self = Self(11);
+    /// Velocity down.
+    pub const PID_TUNING_VEL_DOWN: Self = Self(12);
+    /// Position north.
+    pub const PID_TUNING_POS_NORTH: Self = Self(13);
+    /// Position east.
+    pub const PID_TUNING_POS_EAST: Self = Self(14);
+    /// Position down.
+    pub const PID_TUNING_POS_DOWN: Self = Self(15);
+    /// Yaw angle.
+    pub const PID_TUNING_YAW_ANGLE: Self = Self(16);
 
     /// The name of a value, or `None` if this dialect does not define it.
     #[must_use]
@@ -10785,6 +11749,16 @@ impl PidTuningAxis {
             4 => "PID_TUNING_ACCZ",
             5 => "PID_TUNING_STEER",
             6 => "PID_TUNING_LANDING",
+            7 => "PID_TUNING_WHEEL_LEFT",
+            8 => "PID_TUNING_WHEEL_RIGHT",
+            9 => "PID_TUNING_SAIL_HEEL",
+            10 => "PID_TUNING_VEL_NORTH",
+            11 => "PID_TUNING_VEL_EAST",
+            12 => "PID_TUNING_VEL_DOWN",
+            13 => "PID_TUNING_POS_NORTH",
+            14 => "PID_TUNING_POS_EAST",
+            15 => "PID_TUNING_POS_DOWN",
+            16 => "PID_TUNING_YAW_ANGLE",
             _ => return None,
         })
     }
@@ -10967,6 +11941,129 @@ impl PrecisionLandMode {
     }
 }
 
+/// Action for the accelerometer (param5) of MAV_CMD_PREFLIGHT_CALIBRATION.
+///
+/// MAVLink enum `PREFLIGHT_CALIBRATION_ACCELEROMETER`. Values are open: an unknown value from a newer autopilot
+/// is preserved rather than rejected.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub struct PreflightCalibrationAccelerometer(pub u32);
+
+impl PreflightCalibrationAccelerometer {
+    /// No action.
+    pub const PREFLIGHT_CALIBRATION_ACCELEROMETER_NONE: Self = Self(0);
+    /// Full 6-position accelerometer calibration.
+    pub const PREFLIGHT_CALIBRATION_ACCELEROMETER_FULL: Self = Self(1);
+    /// Board level (trim) calibration.
+    pub const PREFLIGHT_CALIBRATION_ACCELEROMETER_TRIM: Self = Self(2);
+    /// Accelerometer temperature calibration.
+    pub const PREFLIGHT_CALIBRATION_ACCELEROMETER_TEMPERATURE: Self = Self(3);
+    /// Simple accelerometer calibration.
+    pub const PREFLIGHT_CALIBRATION_ACCELEROMETER_SIMPLE: Self = Self(4);
+    /// Force-accept the existing accelerometer calibration as valid without re-running it. Useful after a parameter reload that cleared calibration validity flags.
+    pub const PREFLIGHT_CALIBRATION_ACCELEROMETER_FORCE_SAVE: Self = Self(76);
+
+    /// The name of a value, or `None` if this dialect does not define it.
+    #[must_use]
+    pub const fn name(self) -> Option<&'static str> {
+        Some(match self.0 {
+            0 => "PREFLIGHT_CALIBRATION_ACCELEROMETER_NONE",
+            1 => "PREFLIGHT_CALIBRATION_ACCELEROMETER_FULL",
+            2 => "PREFLIGHT_CALIBRATION_ACCELEROMETER_TRIM",
+            3 => "PREFLIGHT_CALIBRATION_ACCELEROMETER_TEMPERATURE",
+            4 => "PREFLIGHT_CALIBRATION_ACCELEROMETER_SIMPLE",
+            76 => "PREFLIGHT_CALIBRATION_ACCELEROMETER_FORCE_SAVE",
+            _ => return None,
+        })
+    }
+}
+
+/// Action for the magnetometer (param2) of MAV_CMD_PREFLIGHT_CALIBRATION.
+///
+/// MAVLink enum `PREFLIGHT_CALIBRATION_MAGNETOMETER`. Values are open: an unknown value from a newer autopilot
+/// is preserved rather than rejected.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub struct PreflightCalibrationMagnetometer(pub u32);
+
+impl PreflightCalibrationMagnetometer {
+    /// No action.
+    pub const PREFLIGHT_CALIBRATION_MAGNETOMETER_NONE: Self = Self(0);
+    /// Start magnetometer calibration.
+    pub const PREFLIGHT_CALIBRATION_MAGNETOMETER_START: Self = Self(1);
+    /// Force-accept the existing compass calibration as valid without re-running it. Useful after a parameter reload that cleared calibration validity flags.
+    pub const PREFLIGHT_CALIBRATION_MAGNETOMETER_FORCE_SAVE: Self = Self(76);
+
+    /// The name of a value, or `None` if this dialect does not define it.
+    #[must_use]
+    pub const fn name(self) -> Option<&'static str> {
+        Some(match self.0 {
+            0 => "PREFLIGHT_CALIBRATION_MAGNETOMETER_NONE",
+            1 => "PREFLIGHT_CALIBRATION_MAGNETOMETER_START",
+            76 => "PREFLIGHT_CALIBRATION_MAGNETOMETER_FORCE_SAVE",
+            _ => return None,
+        })
+    }
+}
+
+/// Actions for reading and writing plan information (mission, rally points, geofence) between persistent and volatile storage when using MAV_CMD_PREFLIGHT_STORAGE. (Commonly missions are loaded from persistent storage (flash/EEPROM) into volatile storage (RAM) on startup and written back when they are changed.)
+///
+/// MAVLink enum `PREFLIGHT_STORAGE_MISSION_ACTION`. Values are open: an unknown value from a newer autopilot
+/// is preserved rather than rejected.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub struct PreflightStorageMissionAction(pub u32);
+
+impl PreflightStorageMissionAction {
+    /// Read current mission data from persistent storage
+    pub const MISSION_READ_PERSISTENT: Self = Self(0);
+    /// Write current mission data to persistent storage
+    pub const MISSION_WRITE_PERSISTENT: Self = Self(1);
+    /// Erase all mission data stored on the vehicle (both persistent and volatile storage)
+    pub const MISSION_RESET_DEFAULT: Self = Self(2);
+
+    /// The name of a value, or `None` if this dialect does not define it.
+    #[must_use]
+    pub const fn name(self) -> Option<&'static str> {
+        Some(match self.0 {
+            0 => "MISSION_READ_PERSISTENT",
+            1 => "MISSION_WRITE_PERSISTENT",
+            2 => "MISSION_RESET_DEFAULT",
+            _ => return None,
+        })
+    }
+}
+
+/// Actions for reading/writing parameters between persistent and volatile storage when using MAV_CMD_PREFLIGHT_STORAGE. (Commonly parameters are loaded from persistent storage (flash/EEPROM) into volatile storage (RAM) on startup and written back when they are changed.)
+///
+/// MAVLink enum `PREFLIGHT_STORAGE_PARAMETER_ACTION`. Values are open: an unknown value from a newer autopilot
+/// is preserved rather than rejected.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub struct PreflightStorageParameterAction(pub u32);
+
+impl PreflightStorageParameterAction {
+    /// Read all parameters from persistent storage. Replaces values in volatile storage.
+    pub const PARAM_READ_PERSISTENT: Self = Self(0);
+    /// Write all parameter values to persistent storage (flash/EEPROM)
+    pub const PARAM_WRITE_PERSISTENT: Self = Self(1);
+    /// Reset parameters to default values (such as sensor calibration, safety settings, and so on). Note that a flight stack may choose not to reset some parameters at their own discretion (such as those that are locked or expected to persist for the vehicle lifetime).
+    pub const PARAM_RESET_FACTORY_DEFAULT: Self = Self(2);
+    /// Reset only sensor calibration parameters to factory defaults (or firmware default if not available)
+    pub const PARAM_RESET_SENSOR_DEFAULT: Self = Self(3);
+    /// Reset all parameters to default values.
+    pub const PARAM_RESET_ALL_DEFAULT: Self = Self(4);
+
+    /// The name of a value, or `None` if this dialect does not define it.
+    #[must_use]
+    pub const fn name(self) -> Option<&'static str> {
+        Some(match self.0 {
+            0 => "PARAM_READ_PERSISTENT",
+            1 => "PARAM_WRITE_PERSISTENT",
+            2 => "PARAM_RESET_FACTORY_DEFAULT",
+            3 => "PARAM_RESET_SENSOR_DEFAULT",
+            4 => "PARAM_RESET_ALL_DEFAULT",
+            _ => return None,
+        })
+    }
+}
+
 /// RADIO_RC_CHANNELS flags (bitmask).
 ///
 /// MAVLink enum `RADIO_RC_CHANNELS_FLAGS` (bitmask). Values are open: an unknown value from a newer autopilot
@@ -11021,7 +12118,79 @@ impl RallyFlags {
     }
 }
 
-/// RC type
+/// Altitude reference for RANGING_BEACON alt field.
+///
+/// MAVLink enum `RANGING_BEACON_ALT_TYPE`. Values are open: an unknown value from a newer autopilot
+/// is preserved rather than rejected.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub struct RangingBeaconAltType(pub u32);
+
+impl RangingBeaconAltType {
+    /// Altitude above WGS84 ellipsoid.
+    pub const RANGING_BEACON_ALT_TYPE_WGS84: Self = Self(0);
+    /// Altitude above Mean Sea Level (AMSL).
+    pub const RANGING_BEACON_ALT_TYPE_MSL: Self = Self(1);
+
+    /// The name of a value, or `None` if this dialect does not define it.
+    #[must_use]
+    pub const fn name(self) -> Option<&'static str> {
+        Some(match self.0 {
+            0 => "RANGING_BEACON_ALT_TYPE_WGS84",
+            1 => "RANGING_BEACON_ALT_TYPE_MSL",
+            _ => return None,
+        })
+    }
+}
+
+/// Status flags for a RANGING_BEACON.
+///
+/// MAVLink enum `RANGING_BEACON_STATUS_FLAG` (bitmask). Values are open: an unknown value from a newer autopilot
+/// is preserved rather than rejected.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub struct RangingBeaconStatusFlag(pub u32);
+
+impl RangingBeaconStatusFlag {
+    /// Station signal is poor. This might indicate channel fading, interference, or other signal quality issues.
+    pub const RANGING_BEACON_STATUS_FLAG_STATION_SIGNAL_POOR: Self = Self(1);
+
+    /// The name of a value, or `None` if this dialect does not define it.
+    #[must_use]
+    pub const fn name(self) -> Option<&'static str> {
+        Some(match self.0 {
+            1 => "RANGING_BEACON_STATUS_FLAG_STATION_SIGNAL_POOR",
+            _ => return None,
+        })
+    }
+}
+
+/// RC sub-type of types defined in RC_TYPE. Used in MAV_CMD_START_RX_PAIR. Ignored if value does not correspond to the set RC_TYPE.
+///
+/// MAVLink enum `RC_SUB_TYPE`. Values are open: an unknown value from a newer autopilot
+/// is preserved rather than rejected.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub struct RcSubType(pub u32);
+
+impl RcSubType {
+    /// Spektrum DSM2
+    pub const RC_SUB_TYPE_SPEKTRUM_DSM2: Self = Self(0);
+    /// Spektrum DSMX
+    pub const RC_SUB_TYPE_SPEKTRUM_DSMX: Self = Self(1);
+    /// Spektrum DSMX8
+    pub const RC_SUB_TYPE_SPEKTRUM_DSMX8: Self = Self(2);
+
+    /// The name of a value, or `None` if this dialect does not define it.
+    #[must_use]
+    pub const fn name(self) -> Option<&'static str> {
+        Some(match self.0 {
+            0 => "RC_SUB_TYPE_SPEKTRUM_DSM2",
+            1 => "RC_SUB_TYPE_SPEKTRUM_DSMX",
+            2 => "RC_SUB_TYPE_SPEKTRUM_DSMX8",
+            _ => return None,
+        })
+    }
+}
+
+/// RC type. Used in MAV_CMD_START_RX_PAIR.
 ///
 /// MAVLink enum `RC_TYPE`. Values are open: an unknown value from a newer autopilot
 /// is preserved rather than rejected.
@@ -11029,17 +12198,77 @@ impl RallyFlags {
 pub struct RcType(pub u32);
 
 impl RcType {
-    /// Spektrum DSM2
-    pub const RC_TYPE_SPEKTRUM_DSM2: Self = Self(0);
-    /// Spektrum DSMX
-    pub const RC_TYPE_SPEKTRUM_DSMX: Self = Self(1);
+    /// Spektrum
+    pub const RC_TYPE_SPEKTRUM: Self = Self(0);
+    /// CRSF
+    pub const RC_TYPE_CRSF: Self = Self(1);
 
     /// The name of a value, or `None` if this dialect does not define it.
     #[must_use]
     pub const fn name(self) -> Option<&'static str> {
         Some(match self.0 {
-            0 => "RC_TYPE_SPEKTRUM_DSM2",
-            1 => "RC_TYPE_SPEKTRUM_DSMX",
+            0 => "RC_TYPE_SPEKTRUM",
+            1 => "RC_TYPE_CRSF",
+            _ => return None,
+        })
+    }
+}
+
+/// Reboot/shutdown action for selected component in MAV_CMD_PREFLIGHT_REBOOT_SHUTDOWN.
+///
+/// MAVLink enum `REBOOT_SHUTDOWN_ACTION`. Values are open: an unknown value from a newer autopilot
+/// is preserved rather than rejected.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub struct RebootShutdownAction(pub u32);
+
+impl RebootShutdownAction {
+    /// Do nothing.
+    pub const REBOOT_SHUTDOWN_ACTION_NONE: Self = Self(0);
+    /// Reboot component.
+    pub const REBOOT_SHUTDOWN_ACTION_REBOOT: Self = Self(1);
+    /// Shutdown component.
+    pub const REBOOT_SHUTDOWN_ACTION_SHUTDOWN: Self = Self(2);
+    /// Reboot component and keep it in the bootloader until upgraded.
+    pub const REBOOT_SHUTDOWN_ACTION_REBOOT_TO_BOOTLOADER: Self = Self(3);
+    /// Power on component. Do nothing if component is already powered (ACK command with MAV_RESULT_ACCEPTED).
+    pub const REBOOT_SHUTDOWN_ACTION_POWER_ON: Self = Self(4);
+    /// Reboot component into a mass storage mode if supported.
+    pub const REBOOT_SHUTDOWN_ACTION_REBOOT_TO_MASS_STORAGE: Self = Self(5);
+
+    /// The name of a value, or `None` if this dialect does not define it.
+    #[must_use]
+    pub const fn name(self) -> Option<&'static str> {
+        Some(match self.0 {
+            0 => "REBOOT_SHUTDOWN_ACTION_NONE",
+            1 => "REBOOT_SHUTDOWN_ACTION_REBOOT",
+            2 => "REBOOT_SHUTDOWN_ACTION_SHUTDOWN",
+            3 => "REBOOT_SHUTDOWN_ACTION_REBOOT_TO_BOOTLOADER",
+            4 => "REBOOT_SHUTDOWN_ACTION_POWER_ON",
+            5 => "REBOOT_SHUTDOWN_ACTION_REBOOT_TO_MASS_STORAGE",
+            _ => return None,
+        })
+    }
+}
+
+/// Specifies the conditions under which the MAV_CMD_PREFLIGHT_REBOOT_SHUTDOWN command should be accepted.
+///
+/// MAVLink enum `REBOOT_SHUTDOWN_CONDITIONS`. Values are open: an unknown value from a newer autopilot
+/// is preserved rather than rejected.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub struct RebootShutdownConditions(pub u32);
+
+impl RebootShutdownConditions {
+    /// Reboot/Shutdown only if allowed by safety checks, such as being landed.
+    pub const REBOOT_SHUTDOWN_CONDITIONS_SAFETY_INTERLOCKED: Self = Self(0);
+    /// Force reboot/shutdown of the autopilot/component regardless of system state.
+    pub const REBOOT_SHUTDOWN_CONDITIONS_FORCE: Self = Self(20190226);
+
+    /// The name of a value, or `None` if this dialect does not define it.
+    #[must_use]
+    pub const fn name(self) -> Option<&'static str> {
+        Some(match self.0 {
+            0 => "REBOOT_SHUTDOWN_CONDITIONS_SAFETY_INTERLOCKED",
+            20190226 => "REBOOT_SHUTDOWN_CONDITIONS_FORCE",
             _ => return None,
         })
     }
@@ -11331,7 +12560,7 @@ pub struct SetFocusType(pub u32);
 impl SetFocusType {
     /// Focus one step increment (-1 for focusing in, 1 for focusing out towards infinity).
     pub const FOCUS_TYPE_STEP: Self = Self(0);
-    /// Continuous focus up/down until stopped (-1 for focusing in, 1 for focusing out towards infinity, 0 to stop focusing)
+    /// Continuous normalized focus in/out rate until stopped. Range -1..1, negative: in, positive: out towards infinity, 0 to stop focusing. Other values should be clipped to the range.
     pub const FOCUS_TYPE_CONTINUOUS: Self = Self(1);
     /// Focus value as proportion of full camera focus range (a value between 0.0 and 100.0)
     pub const FOCUS_TYPE_RANGE: Self = Self(2);
@@ -11467,7 +12696,7 @@ impl StorageType {
 
 /// Flags to indicate usage for a particular storage (see STORAGE_INFORMATION.storage_usage and MAV_CMD_SET_STORAGE_USAGE).
 ///
-/// MAVLink enum `STORAGE_USAGE_FLAG`. Values are open: an unknown value from a newer autopilot
+/// MAVLink enum `STORAGE_USAGE_FLAG` (bitmask). Values are open: an unknown value from a newer autopilot
 /// is preserved rather than rejected.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct StorageUsageFlag(pub u32);
@@ -12396,6 +13625,8 @@ impl VideoStreamType {
     pub const VIDEO_STREAM_TYPE_TCP_MPEG: Self = Self(2);
     /// Stream is MPEG TS (URI gives the port number)
     pub const VIDEO_STREAM_TYPE_MPEG_TS: Self = Self(3);
+    /// Stream is WHEP (WebRTC-HTTP Egress Protocol)
+    pub const VIDEO_STREAM_TYPE_WHEP: Self = Self(4);
 
     /// The name of a value, or `None` if this dialect does not define it.
     #[must_use]
@@ -12405,6 +13636,7 @@ impl VideoStreamType {
             1 => "VIDEO_STREAM_TYPE_RTPUDP",
             2 => "VIDEO_STREAM_TYPE_TCP_MPEG",
             3 => "VIDEO_STREAM_TYPE_MPEG_TS",
+            4 => "VIDEO_STREAM_TYPE_WHEP",
             _ => return None,
         })
     }
@@ -12469,6 +13701,8 @@ impl WinchActions {
     pub const WINCH_LOAD_LINE: Self = Self(7);
     /// Spool out the entire length of the line. Only action and instance command parameters are used, others are ignored.
     pub const WINCH_ABANDON_LINE: Self = Self(8);
+    /// Spools out just enough to present the hook to the user to load the payload. Only action and instance command parameters are used, others are ignored
+    pub const WINCH_LOAD_PAYLOAD: Self = Self(9);
 
     /// The name of a value, or `None` if this dialect does not define it.
     #[must_use]
@@ -12483,6 +13717,7 @@ impl WinchActions {
             6 => "WINCH_RETRACT",
             7 => "WINCH_LOAD_LINE",
             8 => "WINCH_ABANDON_LINE",
+            9 => "WINCH_LOAD_PAYLOAD",
             _ => return None,
         })
     }
@@ -12571,7 +13806,7 @@ impl Heartbeat {
     ];
 }
 
-/// The general system state. If the system is following the MAVLink standard, the system state is mainly defined by three orthogonal states/modes: The system mode, which is either LOCKED (motors shut down and locked), MANUAL (system under RC control), GUIDED (system with autonomous position control, position setpoint controlled manually) or AUTO (system guided by path/waypoint planner). The NAV_MODE defined the current flight state: LIFTOFF (often an open-loop maneuver), LANDING, WAYPOINTS or VECTOR. This represents the internal navigation state machine. The system status shows whether the system is currently active or not and if an emergency occurred. During the CRITICAL and EMERGENCY states the MAV is still considered to be active, but should start emergency procedures autonomously. After a failure occurred it should first move from active to critical to allow manual intervention and then move to emergency after a certain timeout.
+/// Sensor and subsystem status information. Provides a compact representation of sensor/subsystem status and a few other basic statistics.
 ///
 /// MAVLink message 1 (`SYS_STATUS`), from `common.xml`.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -12587,9 +13822,9 @@ pub struct SysStatus {
     pub onboard_control_sensors_health: u32,
     /// Maximum usage in percent of the mainloop time. Values: \[0-1000\] - should always be below 1000
     pub load: u16,
-    /// Battery voltage, UINT16_MAX: Voltage not sent by autopilot
+    /// Battery voltage, UINT16_MAX: Voltage not sent by autopilot. Value is ambiguous on multi-battery systems. BATTERY_STATUS is a recommended alternative.
     pub voltage_battery: u16,
-    /// Battery current, -1: Current not sent by autopilot
+    /// Battery current, -1: Current not sent by autopilot. Value may overflow/rollover for very high currents (> 327.67A). Value is ambiguous on multi-battery systems. BATTERY_STATUS is a recommended alternative.
     pub current_battery: i16,
     /// Communication drop rate, (UART, I2C, SPI, CAN), dropped packets on all links (packets that were corrupted on reception on the MAV)
     pub drop_rate_comm: u16,
@@ -12603,8 +13838,20 @@ pub struct SysStatus {
     pub errors_count3: u16,
     /// Autopilot-specific errors
     pub errors_count4: u16,
-    /// Battery energy remaining, -1: Battery remaining energy not sent by autopilot
+    /// Battery energy remaining, -1: Battery remaining energy not sent by autopilot. Value is ambiguous on multi-battery systems. BATTERY_STATUS is a recommended alternative.
     pub battery_remaining: i8,
+    /// Bitmap showing which onboard controllers and sensors are present. Value of 0: not present. Value of 1: present.
+    /// Values from [`MavSysStatusSensorExtended`].
+    /// MAVLink2 extension field: zero when absent.
+    pub onboard_control_sensors_present_extended: u32,
+    /// Bitmap showing which onboard controllers and sensors are enabled: Value of 0: not enabled. Value of 1: enabled.
+    /// Values from [`MavSysStatusSensorExtended`].
+    /// MAVLink2 extension field: zero when absent.
+    pub onboard_control_sensors_enabled_extended: u32,
+    /// Bitmap showing which onboard controllers and sensors have an error (or are operational). Value of 0: error. Value of 1: healthy.
+    /// Values from [`MavSysStatusSensorExtended`].
+    /// MAVLink2 extension field: zero when absent.
+    pub onboard_control_sensors_health_extended: u32,
 }
 
 impl Message for SysStatus {
@@ -12612,7 +13859,7 @@ impl Message for SysStatus {
     const NAME: &'static str = "SYS_STATUS";
     const CRC_EXTRA: u8 = 124;
     const MIN_LEN: usize = 31;
-    const LEN: usize = 31;
+    const LEN: usize = 43;
 
     fn decode(payload: &[u8]) -> Self {
         Self {
@@ -12629,6 +13876,9 @@ impl Message for SysStatus {
             errors_count3: get_u16(payload, 26),
             errors_count4: get_u16(payload, 28),
             battery_remaining: get_i8(payload, 30),
+            onboard_control_sensors_present_extended: get_u32(payload, 31),
+            onboard_control_sensors_enabled_extended: get_u32(payload, 35),
+            onboard_control_sensors_health_extended: get_u32(payload, 39),
         }
     }
 
@@ -12646,6 +13896,21 @@ impl Message for SysStatus {
         put_bytes(out, 26, &self.errors_count3.to_le_bytes());
         put_bytes(out, 28, &self.errors_count4.to_le_bytes());
         put_bytes(out, 30, &self.battery_remaining.to_le_bytes());
+        put_bytes(
+            out,
+            31,
+            &self.onboard_control_sensors_present_extended.to_le_bytes(),
+        );
+        put_bytes(
+            out,
+            35,
+            &self.onboard_control_sensors_enabled_extended.to_le_bytes(),
+        );
+        put_bytes(
+            out,
+            39,
+            &self.onboard_control_sensors_health_extended.to_le_bytes(),
+        );
         Self::LEN
     }
 }
@@ -12701,6 +13966,18 @@ impl SysStatus {
                 "battery_remaining",
                 FieldValue::Signed(self.battery_remaining.into()),
             ),
+            (
+                "onboard_control_sensors_present_extended",
+                FieldValue::Unsigned(self.onboard_control_sensors_present_extended.into()),
+            ),
+            (
+                "onboard_control_sensors_enabled_extended",
+                FieldValue::Unsigned(self.onboard_control_sensors_enabled_extended.into()),
+            ),
+            (
+                "onboard_control_sensors_health_extended",
+                FieldValue::Unsigned(self.onboard_control_sensors_health_extended.into()),
+            ),
         ]
     }
 
@@ -12719,10 +13996,23 @@ impl SysStatus {
         FieldInfo::new("errors_count3", "uint16_t", 0, ""),
         FieldInfo::new("errors_count4", "uint16_t", 0, ""),
         FieldInfo::new("battery_remaining", "int8_t", 0, "%"),
+        FieldInfo::new(
+            "onboard_control_sensors_present_extended",
+            "uint32_t",
+            0,
+            "",
+        ),
+        FieldInfo::new(
+            "onboard_control_sensors_enabled_extended",
+            "uint32_t",
+            0,
+            "",
+        ),
+        FieldInfo::new("onboard_control_sensors_health_extended", "uint32_t", 0, ""),
     ];
 }
 
-/// The system time is the time of the master clock, typically the computer clock of the main onboard computer.
+/// The system time is the time of the sender's master clock. This can be emitted by flight controllers, onboard computers, or other components in the MAVLink network. Components that are using a less reliable time source, such as a battery-backed real time clock, can choose to match their system clock to that of a system that indicates a more recent time. This allows more broadly accurate date stamping of logs, and so on. If precise time synchronization is needed then use TIMESYNC instead.
 ///
 /// MAVLink message 2 (`SYSTEM_TIME`), from `common.xml`.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -12908,7 +14198,7 @@ impl ChangeOperatorControl {
     pub const FIELD_INFO: &'static [FieldInfo] = &[
         FieldInfo::new("target_system", "uint8_t", 0, ""),
         FieldInfo::new("control_request", "uint8_t", 0, ""),
-        FieldInfo::new("version", "uint8_t", 0, "rad"),
+        FieldInfo::new("version", "uint8_t", 0, ""),
         FieldInfo::new("passkey", "char", 25, ""),
     ];
 }
@@ -14329,7 +15619,7 @@ impl GlobalPositionInt {
     ];
 }
 
-/// The scaled values of the RC channels received: (-100%) -10000, (0%) 0, (100%) 10000. Channels that are inactive should be set to UINT16_MAX.
+/// The scaled values of the RC channels received: (-100%) -10000, (0%) 0, (100%) 10000. Channels that are inactive should be set to INT16_MAX.
 ///
 /// MAVLink message 34 (`RC_CHANNELS_SCALED`), from `common.xml`.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -14354,7 +15644,7 @@ pub struct RcChannelsScaled {
     pub chan8_scaled: i16,
     /// Servo output port (set of 8 outputs = 1 port). Flight stacks running on Pixhawk should use: 0 = MAIN, 1 = AUX.
     pub port: u8,
-    /// Receive signal strength indicator in device-dependent units/scale. Values: \[0-254\], 255: invalid/unknown.
+    /// Receive signal strength indicator in device-dependent units/scale. Values: \[0-254\], UINT8_MAX: invalid/unknown.
     pub rssi: u8,
 }
 
@@ -14883,7 +16173,7 @@ pub struct MissionItem {
     pub frame: u8,
     /// false:0, true:1
     pub current: u8,
-    /// Autocontinue to next waypoint
+    /// Autocontinue to next waypoint. 0: false, 1: true. Set false to pause mission after the item completes.
     pub autocontinue: u8,
     /// Mission type.
     /// Values from [`MavMissionType`].
@@ -15065,7 +16355,7 @@ impl MissionRequest {
     ];
 }
 
-/// Set the mission item with sequence number seq as current item. This means that the MAV will continue to this mission item on the shortest path (not following the mission items in-between).
+/// Set the mission item with sequence number seq as the current item and emit MISSION_CURRENT (whether or not the mission number changed). If a mission is currently being executed, the system will continue to this new mission item on the shortest path, skipping any intermediate mission items. Note that mission jump repeat counters are not reset (see MAV_CMD_DO_JUMP param2). This message may trigger a mission state-machine change on some systems: for example from MISSION_STATE_NOT_STARTED or MISSION_STATE_PAUSED to MISSION_STATE_ACTIVE. If the system is in mission mode, on those systems this command might therefore start, restart or resume the mission. If the system is not in mission mode this message must not trigger a switch to mission mode.
 ///
 /// MAVLink message 41 (`MISSION_SET_CURRENT`), from `common.xml`.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -15126,7 +16416,7 @@ impl MissionSetCurrent {
     ];
 }
 
-/// Message that announces the sequence number of the current active mission item. The MAV will fly towards this mission item.
+/// Message that announces the sequence number of the current target mission item (that the system will fly towards/execute when the mission is running). This message should be streamed all the time (nominally at 1Hz). This message should be emitted following a call to MAV_CMD_DO_SET_MISSION_CURRENT or MISSION_SET_CURRENT.
 ///
 /// MAVLink message 42 (`MISSION_CURRENT`), from `common.xml`.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -16632,7 +17922,8 @@ pub struct RequestDataStream {
     pub target_system: u8,
     /// The target requested to send the message stream.
     pub target_component: u8,
-    /// The ID of the requested data stream
+    /// The ID of the requested data stream.
+    /// Values from [`MavDataStream`].
     pub req_stream_id: u8,
     /// 1 to start sending, 0 to stop sending.
     pub start_stop: u8,
@@ -16707,7 +17998,8 @@ impl RequestDataStream {
 pub struct DataStream {
     /// The message rate
     pub message_rate: u16,
-    /// The ID of the requested data stream
+    /// The ID of the requested data stream.
+    /// Values from [`MavDataStream`].
     pub stream_id: u8,
     /// 1 stream is enabled, 0 stream is stopped.
     pub on_off: u8,
@@ -17110,7 +18402,7 @@ pub struct MissionItemInt {
     pub frame: u8,
     /// false:0, true:1
     pub current: u8,
-    /// Autocontinue to next waypoint
+    /// Autocontinue to next waypoint. 0: false, 1: true. Set false to pause mission after the item completes.
     pub autocontinue: u8,
     /// Mission type.
     /// Values from [`MavMissionType`].
@@ -17419,7 +18711,7 @@ impl CommandInt {
     ];
 }
 
-/// Send a command with up to seven parameters to the MAV. The command microservice is documented at https://mavlink.io/en/services/command.html
+/// Send a command with up to seven parameters to the MAV. COMMAND_INT is generally preferred when sending MAV_CMD commands that include positional information; it offers higher precision and allows the MAV_FRAME to be specified (which may otherwise be ambiguous, particularly for altitude). The command microservice is documented at https://mavlink.io/en/services/command.html
 ///
 /// MAVLink message 76 (`COMMAND_LONG`), from `common.xml`.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -17720,7 +19012,7 @@ pub struct SetAttitudeTarget {
     pub body_pitch_rate: f32,
     /// Body yaw rate
     pub body_yaw_rate: f32,
-    /// Collective thrust, normalized to 0 .. 1 (-1 .. 1 for vehicles capable of reverse trust)
+    /// Collective thrust, normalized to 0 .. 1 (-1 .. 1 for vehicles capable of reverse thrust)
     pub thrust: f32,
     /// System ID
     pub target_system: u8,
@@ -17835,7 +19127,7 @@ pub struct AttitudeTarget {
     pub body_pitch_rate: f32,
     /// Body yaw rate
     pub body_yaw_rate: f32,
-    /// Collective thrust, normalized to 0 .. 1 (-1 .. 1 for vehicles capable of reverse trust)
+    /// Collective thrust, normalized to 0 .. 1 (-1 .. 1 for vehicles capable of reverse thrust)
     pub thrust: f32,
     /// Bitmap to indicate which dimensions should be ignored by the vehicle.
     /// Values from [`AttitudeTargetTypemask`].
@@ -18684,7 +19976,7 @@ impl HilState {
     ];
 }
 
-/// Sent from autopilot to simulation. Hardware in the loop control outputs
+/// Sent from autopilot to simulation. Hardware in the loop control outputs. Alternative to HIL_ACTUATOR_CONTROLS.
 ///
 /// MAVLink message 91 (`HIL_CONTROLS`), from `common.xml`.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -18915,14 +20207,15 @@ impl HilRcInputsRaw {
     ];
 }
 
-/// Sent from autopilot to simulation. Hardware in the loop control outputs (replacement for HIL_CONTROLS)
+/// Sent from autopilot to simulation. Hardware in the loop control outputs. Alternative to HIL_CONTROLS.
 ///
 /// MAVLink message 93 (`HIL_ACTUATOR_CONTROLS`), from `common.xml`.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct HilActuatorControls {
     /// Timestamp (UNIX Epoch time or time since system boot). The receiving end can infer timestamp format (since 1.1.1970 or since system boot) by checking for the magnitude of the number.
     pub time_usec: u64,
-    /// Flags as bitfield, 1: indicate simulation using lockstep.
+    /// Flags bitmask.
+    /// Values from [`HilActuatorControlsFlags`].
     pub flags: u64,
     /// Control outputs -1 .. 1. Channel assignment depends on the simulated hardware.
     pub controls: [f32; 16],
@@ -19499,7 +20792,8 @@ pub struct HighresImu {
     pub pressure_alt: f32,
     /// Temperature
     pub temperature: f32,
-    /// Bitmap for fields that have updated since last message, bit 0 = xacc, bit 12: temperature
+    /// Bitmap for fields that have updated since last message
+    /// Values from [`HighresImuUpdatedFlags`].
     pub fields_updated: u16,
     /// Id. Ids are numbered from 0 and map to IMUs numbered from 1 (e.g. IMU1 will have a message with id=0)
     /// MAVLink2 extension field: zero when absent.
@@ -19763,7 +21057,8 @@ pub struct HilSensor {
     pub pressure_alt: f32,
     /// Temperature
     pub temperature: f32,
-    /// Bitmap for fields that have updated since last message, bit 0 = xacc, bit 12: temperature, bit 31: full reset of attitude/position/velocities/etc was performed in sim.
+    /// Bitmap for fields that have updated since last message
+    /// Values from [`HilSensorUpdatedFlags`].
     pub fields_updated: u32,
     /// Sensor ID (zero indexed). Used for multiple sensor inputs
     /// MAVLink2 extension field: zero when absent.
@@ -19901,9 +21196,9 @@ pub struct SimState {
     pub ygyro: f32,
     /// Angular speed around Z axis
     pub zgyro: f32,
-    /// Latitude
+    /// Latitude (lower precision). Both this and the lat_int field should be set.
     pub lat: f32,
-    /// Longitude
+    /// Longitude (lower precision). Both this and the lon_int field should be set.
     pub lon: f32,
     /// Altitude
     pub alt: f32,
@@ -20025,9 +21320,9 @@ impl SimState {
         FieldInfo::new("q2", "float", 0, ""),
         FieldInfo::new("q3", "float", 0, ""),
         FieldInfo::new("q4", "float", 0, ""),
-        FieldInfo::new("roll", "float", 0, ""),
-        FieldInfo::new("pitch", "float", 0, ""),
-        FieldInfo::new("yaw", "float", 0, ""),
+        FieldInfo::new("roll", "float", 0, "rad"),
+        FieldInfo::new("pitch", "float", 0, "rad"),
+        FieldInfo::new("yaw", "float", 0, "rad"),
         FieldInfo::new("xacc", "float", 0, "m/s/s"),
         FieldInfo::new("yacc", "float", 0, "m/s/s"),
         FieldInfo::new("zacc", "float", 0, "m/s/s"),
@@ -20056,15 +21351,15 @@ pub struct RadioStatus {
     pub rxerrors: u16,
     /// Count of error corrected radio packets (since boot).
     pub fixed: u16,
-    /// Local (message sender) received signal strength indication in device-dependent units/scale. Values: \[0-254\], 255: invalid/unknown.
+    /// Local (message sender) received signal strength indication in device-dependent units/scale. Values: \[0-254\], UINT8_MAX: invalid/unknown.
     pub rssi: u8,
-    /// Remote (message receiver) signal strength indication in device-dependent units/scale. Values: \[0-254\], 255: invalid/unknown.
+    /// Remote (message receiver) signal strength indication in device-dependent units/scale. Values: \[0-254\], UINT8_MAX: invalid/unknown.
     pub remrssi: u8,
     /// Remaining free transmitter buffer space.
     pub txbuf: u8,
-    /// Local background noise level. These are device dependent RSSI values (scale as approx 2x dB on SiK radios). Values: \[0-254\], 255: invalid/unknown.
+    /// Local background noise level. These are device dependent RSSI values (scale as approx 2x dB on SiK radios). Values: \[0-254\], UINT8_MAX: invalid/unknown.
     pub noise: u8,
-    /// Remote background noise level. These are device dependent RSSI values (scale as approx 2x dB on SiK radios). Values: \[0-254\], 255: invalid/unknown.
+    /// Remote background noise level. These are device dependent RSSI values (scale as approx 2x dB on SiK radios). Values: \[0-254\], UINT8_MAX: invalid/unknown.
     pub remnoise: u8,
 }
 
@@ -20137,7 +21432,7 @@ pub struct FileTransferProtocol {
     pub target_system: u8,
     /// Component ID (0 for broadcast)
     pub target_component: u8,
-    /// Variable length payload. The length is defined by the remaining message length when subtracting the header and other fields. The entire content of this block is opaque unless you understand any the encoding message_type. The particular encoding used can be extension specific and might not always be documented as part of the mavlink specification.
+    /// Variable length payload. The length is defined by the remaining message length when subtracting the header and other fields. The content/format of this block is defined in https://mavlink.io/en/services/ftp.html.
     pub payload: [u8; 251],
 }
 
@@ -20201,14 +21496,14 @@ impl FileTransferProtocol {
     ];
 }
 
-/// Time synchronization message.
+/// Time synchronization message. The message is used for both timesync requests and responses. The request is sent with `ts1=syncing component timestamp` and `tc1=0`, and may be broadcast or targeted to a specific system/component. The response is sent with `ts1=syncing component timestamp` (mirror back unchanged), and `tc1=responding component timestamp`, with the `target_system` and `target_component` set to ids of the original request. Systems can determine if they are receiving a request or response based on the value of `tc`. If the response has `target_system==target_component==0` the remote system has not been updated to use the component IDs and cannot reliably timesync; the requester may report an error. Timestamps are UNIX Epoch time or time since system boot in nanoseconds (the timestamp format can be inferred by checking for the magnitude of the number; generally it doesn't matter as only the offset is used). The message sequence is repeated numerous times with results being filtered/averaged to estimate the offset. See also: https://mavlink.io/en/services/timesync.html.
 ///
 /// MAVLink message 111 (`TIMESYNC`), from `common.xml`.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Timesync {
-    /// Time sync timestamp 1
+    /// Time sync timestamp 1. Syncing: 0. Responding: Timestamp of responding component.
     pub tc1: i64,
-    /// Time sync timestamp 2
+    /// Time sync timestamp 2. Timestamp of syncing component (mirrored in response).
     pub ts1: i64,
 }
 
@@ -20245,8 +21540,8 @@ impl Timesync {
 
     /// Every field's XML type and units, in wire order, as `fields` names them.
     pub const FIELD_INFO: &'static [FieldInfo] = &[
-        FieldInfo::new("tc1", "int64_t", 0, ""),
-        FieldInfo::new("ts1", "int64_t", 0, ""),
+        FieldInfo::new("tc1", "int64_t", 0, "ns"),
+        FieldInfo::new("ts1", "int64_t", 0, "ns"),
     ];
 }
 
@@ -20811,7 +22106,7 @@ impl ScaledImu2 {
     ];
 }
 
-/// Request a list of available logs. On some systems calling this may stop on-board logging until LOG_REQUEST_END is called. If there are no log files available this request shall be answered with one LOG_ENTRY message with id = 0 and num_logs = 0.
+/// Request a list of available logs. On some systems calling this may stop on-board logging until LOG_REQUEST_END is called. If there are no log files available this request shall be answered with one LOG_ENTRY message with id = 0 and num_logs = 0. LOG_ENTRY messages can start with id 1 or 0. The ground station needs to be able to process either.
 ///
 /// MAVLink message 117 (`LOG_REQUEST_LIST`), from `common.xml`.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -21284,9 +22579,9 @@ pub struct Gps2Raw {
     pub alt: i32,
     /// Age of DGPS info
     pub dgps_age: u32,
-    /// GPS HDOP horizontal dilution of position (unitless). If unknown, set to: UINT16_MAX
+    /// GPS HDOP horizontal dilution of position (unitless * 100). If unknown, set to: UINT16_MAX
     pub eph: u16,
-    /// GPS VDOP vertical dilution of position (unitless). If unknown, set to: UINT16_MAX
+    /// GPS VDOP vertical dilution of position (unitless * 100). If unknown, set to: UINT16_MAX
     pub epv: u16,
     /// GPS ground speed. If unknown, set to: UINT16_MAX
     pub vel: u16,
@@ -21295,7 +22590,7 @@ pub struct Gps2Raw {
     /// GPS fix type.
     /// Values from [`GpsFixType`].
     pub fix_type: u8,
-    /// Number of satellites visible. If unknown, set to 255
+    /// Number of satellites visible. If unknown, set to UINT8_MAX
     pub satellites_visible: u8,
     /// Number of DGPS satellites
     pub dgps_numch: u8,
@@ -23334,7 +24629,7 @@ pub struct BatteryStatus {
     pub temperature: i16,
     /// Battery voltage of cells 1 to 10 (see voltages_ext for cells 11-14). Cells in this field above the valid cell count for this battery should have the UINT16_MAX value. If individual cell voltages are unknown or not measured for this battery, then the overall battery voltage should be filled in cell 0, with all others set to UINT16_MAX. If the voltage of the battery is greater than (UINT16_MAX - 1), then cell 0 should be set to (UINT16_MAX - 1), and cell 1 to the remaining voltage. This can be extended to multiple cells if the total voltage is greater than 2 * (UINT16_MAX - 1).
     pub voltages: [u16; 10],
-    /// Battery current, -1: autopilot does not measure the current
+    /// Battery current, -1: autopilot does not measure the current. Value may overflow/rollover for very high currents (> 327.67A)
     pub current_battery: i16,
     /// Battery ID
     pub id: u8,
@@ -25020,7 +26315,7 @@ pub struct Radio {
     pub rssi: u8,
     /// Remote signal strength.
     pub remrssi: u8,
-    /// How full the tx buffer is.
+    /// Remaining free transmitter buffer space.
     pub txbuf: u8,
     /// Background noise level.
     pub noise: u8,
@@ -28663,28 +29958,28 @@ impl EstimatorStatus {
     ];
 }
 
-/// Wind covariance estimate from vehicle.
+/// Wind estimate from vehicle. Note that despite the name, this message does not actually contain any covariances but instead variability and accuracy fields in terms of standard deviation (1-STD).
 ///
 /// MAVLink message 231 (`WIND_COV`), from `common.xml`.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct WindCov {
     /// Timestamp (UNIX Epoch time or time since system boot). The receiving end can infer timestamp format (since 1.1.1970 or since system boot) by checking for the magnitude of the number.
     pub time_usec: u64,
-    /// Wind in X (NED) direction
+    /// Wind in North (NED) direction (NAN if unknown)
     pub wind_x: f32,
-    /// Wind in Y (NED) direction
+    /// Wind in East (NED) direction (NAN if unknown)
     pub wind_y: f32,
-    /// Wind in Z (NED) direction
+    /// Wind in down (NED) direction (NAN if unknown)
     pub wind_z: f32,
-    /// Variability of the wind in XY. RMS of a 1 Hz lowpassed wind estimate.
+    /// Variability of wind in XY, 1-STD estimated from a 1 Hz lowpassed wind estimate (NAN if unknown)
     pub var_horiz: f32,
-    /// Variability of the wind in Z. RMS of a 1 Hz lowpassed wind estimate.
+    /// Variability of wind in Z, 1-STD estimated from a 1 Hz lowpassed wind estimate (NAN if unknown)
     pub var_vert: f32,
-    /// Altitude (MSL) that this measurement was taken at
+    /// Altitude (MSL) that this measurement was taken at (NAN if unknown)
     pub wind_alt: f32,
-    /// Horizontal speed 1-STD accuracy
+    /// Horizontal speed 1-STD accuracy (0 if unknown)
     pub horiz_accuracy: f32,
-    /// Vertical speed 1-STD accuracy
+    /// Vertical speed 1-STD accuracy (0 if unknown)
     pub vert_accuracy: f32,
 }
 
@@ -28755,8 +30050,8 @@ impl WindCov {
         FieldInfo::new("var_horiz", "float", 0, "m/s"),
         FieldInfo::new("var_vert", "float", 0, "m/s"),
         FieldInfo::new("wind_alt", "float", 0, "m"),
-        FieldInfo::new("horiz_accuracy", "float", 0, "m"),
-        FieldInfo::new("vert_accuracy", "float", 0, "m"),
+        FieldInfo::new("horiz_accuracy", "float", 0, "m/s"),
+        FieldInfo::new("vert_accuracy", "float", 0, "m/s"),
     ];
 }
 
@@ -29598,7 +30893,7 @@ impl HomePosition {
     ];
 }
 
-/// The position the system will return to and land on. The position is set automatically by the system during the takeoff in case it was not explicitly set by the operator before or after. The global and local positions encode the position in the respective coordinate frames, while the q parameter encodes the orientation of the surface. Under normal conditions it describes the heading and terrain slope, which can be used by the aircraft to adjust the approach. The approach 3D vector describes the point to which the system should fly in normal flight mode and then perform a landing sequence along the vector.
+/// Sets the home position. The home position is the default position that the system will return to and land on. The position is set automatically by the system during the takeoff (and may also be set using this message). The global and local positions encode the position in the respective coordinate frames, while the q parameter encodes the orientation of the surface. Under normal conditions it describes the heading and terrain slope, which can be used by the aircraft to adjust the approach. The approach 3D vector describes the point to which the system should fly in normal flight mode and then perform a landing sequence along the vector. Note: the current home position may be emitted in a HOME_POSITION message on request (using MAV_CMD_REQUEST_MESSAGE with param1=242).
 ///
 /// MAVLink message 243 (`SET_HOME_POSITION`), from `common.xml`.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -29609,11 +30904,11 @@ pub struct SetHomePosition {
     pub longitude: i32,
     /// Altitude (MSL). Positive for up.
     pub altitude: i32,
-    /// Local X position of this position in the local coordinate frame
+    /// Local X position of this position in the local coordinate frame (NED)
     pub x: f32,
-    /// Local Y position of this position in the local coordinate frame
+    /// Local Y position of this position in the local coordinate frame (NED)
     pub y: f32,
-    /// Local Z position of this position in the local coordinate frame
+    /// Local Z position of this position in the local coordinate frame (NED: positive "down")
     pub z: f32,
     /// World to surface normal and heading transformation of the takeoff position. Used to indicate the heading and slope of the ground
     pub q: [f32; 4],
@@ -29841,7 +31136,7 @@ pub struct AdsbVehicle {
     /// Bitmap to indicate various statuses including valid data fields
     /// Values from [`AdsbFlags`].
     pub flags: u16,
-    /// Squawk code
+    /// Squawk code. Note that the code is in decimal: e.g. 7700 (general emergency) is encoded as binary 0b0001_1110_0001_0100, not(!) as 0b0000_111_111_000_000
     pub squawk: u16,
     /// ADSB altitude type.
     /// Values from [`AdsbAltitudeType`].
@@ -30404,7 +31699,7 @@ pub struct Statustext {
     /// Severity of status. Relies on the definitions within RFC-5424.
     /// Values from [`MavSeverity`].
     pub severity: u8,
-    /// Status text message, without null termination character
+    /// Status text message, without null termination character. UTF-8 encoded.
     pub text: [u8; 50],
     /// Unique (opaque) identifier for this statustext message. May be used to reassemble a logical long-statustext message from a sequence of chunks. A value of zero indicates this is the only chunk in the sequence and the message can be emitted immediately.
     /// MAVLink2 extension field: zero when absent.
@@ -30772,6 +32067,9 @@ pub struct CameraInformation {
     /// Gimbal id of a gimbal associated with this camera. This is the component id of the gimbal device, or 1-6 for non mavlink gimbals. Use 0 if no gimbal is associated with the camera.
     /// MAVLink2 extension field: zero when absent.
     pub gimbal_device_id: u8,
+    /// Camera id of a non-MAVLink camera attached to an autopilot (1-6). 0 if the component is a MAVLink camera (with its own component id).
+    /// MAVLink2 extension field: zero when absent.
+    pub camera_device_id: u8,
 }
 
 impl Message for CameraInformation {
@@ -30779,7 +32077,7 @@ impl Message for CameraInformation {
     const NAME: &'static str = "CAMERA_INFORMATION";
     const CRC_EXTRA: u8 = 92;
     const MIN_LEN: usize = 235;
-    const LEN: usize = 236;
+    const LEN: usize = 237;
 
     fn decode(payload: &[u8]) -> Self {
         Self {
@@ -30797,6 +32095,7 @@ impl Message for CameraInformation {
             lens_id: get_u8(payload, 94),
             cam_definition_uri: core::array::from_fn(|i| get_u8(payload, 95 + i)),
             gimbal_device_id: get_u8(payload, 235),
+            camera_device_id: get_u8(payload, 236),
         }
     }
 
@@ -30821,6 +32120,7 @@ impl Message for CameraInformation {
             put_bytes(out, 95 + i, &v.to_le_bytes());
         }
         put_bytes(out, 235, &self.gimbal_device_id.to_le_bytes());
+        put_bytes(out, 236, &self.camera_device_id.to_le_bytes());
         Self::LEN
     }
 }
@@ -30882,6 +32182,10 @@ impl CameraInformation {
                 "gimbal_device_id",
                 FieldValue::Unsigned(self.gimbal_device_id.into()),
             ),
+            (
+                "camera_device_id",
+                FieldValue::Unsigned(self.camera_device_id.into()),
+            ),
         ]
     }
 
@@ -30901,6 +32205,7 @@ impl CameraInformation {
         FieldInfo::new("lens_id", "uint8_t", 0, ""),
         FieldInfo::new("cam_definition_uri", "char", 140, ""),
         FieldInfo::new("gimbal_device_id", "uint8_t", 0, ""),
+        FieldInfo::new("camera_device_id", "uint8_t", 0, ""),
     ];
 }
 
@@ -30920,6 +32225,9 @@ pub struct CameraSettings {
     /// Current focus level as a percentage of the full range (0.0 to 100.0, NaN if not known)
     /// MAVLink2 extension field: zero when absent.
     pub focuslevel: f32,
+    /// Camera id of a non-MAVLink camera attached to an autopilot (1-6). 0 if the component is a MAVLink camera (with its own component id).
+    /// MAVLink2 extension field: zero when absent.
+    pub camera_device_id: u8,
 }
 
 impl Message for CameraSettings {
@@ -30927,7 +32235,7 @@ impl Message for CameraSettings {
     const NAME: &'static str = "CAMERA_SETTINGS";
     const CRC_EXTRA: u8 = 146;
     const MIN_LEN: usize = 5;
-    const LEN: usize = 13;
+    const LEN: usize = 14;
 
     fn decode(payload: &[u8]) -> Self {
         Self {
@@ -30935,6 +32243,7 @@ impl Message for CameraSettings {
             mode_id: get_u8(payload, 4),
             zoomlevel: get_f32(payload, 5),
             focuslevel: get_f32(payload, 9),
+            camera_device_id: get_u8(payload, 13),
         }
     }
 
@@ -30943,6 +32252,7 @@ impl Message for CameraSettings {
         put_bytes(out, 4, &self.mode_id.to_le_bytes());
         put_bytes(out, 5, &self.zoomlevel.to_le_bytes());
         put_bytes(out, 9, &self.focuslevel.to_le_bytes());
+        put_bytes(out, 13, &self.camera_device_id.to_le_bytes());
         Self::LEN
     }
 }
@@ -30959,6 +32269,10 @@ impl CameraSettings {
             ("mode_id", FieldValue::Unsigned(self.mode_id.into())),
             ("zoomLevel", FieldValue::Float(self.zoomlevel.into())),
             ("focusLevel", FieldValue::Float(self.focuslevel.into())),
+            (
+                "camera_device_id",
+                FieldValue::Unsigned(self.camera_device_id.into()),
+            ),
         ]
     }
 
@@ -30968,6 +32282,7 @@ impl CameraSettings {
         FieldInfo::new("mode_id", "uint8_t", 0, ""),
         FieldInfo::new("zoomLevel", "float", 0, ""),
         FieldInfo::new("focusLevel", "float", 0, ""),
+        FieldInfo::new("camera_device_id", "uint8_t", 0, ""),
     ];
 }
 
@@ -31002,6 +32317,10 @@ pub struct StorageInformation {
     /// Textual storage name to be used in UI (microSD 1, Internal Memory, etc.) This is a NULL terminated string. If it is exactly 32 characters long, add a terminating NULL. If this string is empty, the generic type is shown to the user.
     /// MAVLink2 extension field: zero when absent.
     pub name: [u8; 32],
+    /// Flags indicating whether this instance is preferred storage for photos, videos, etc. Note: Implementations should initially set the flags on the system-default storage id used for saving media (if possible/supported). This setting can then be overridden using MAV_CMD_SET_STORAGE_USAGE. If the media usage flags are not set, a GCS may assume storage ID 1 is the default storage for all media types.
+    /// Values from [`StorageUsageFlag`].
+    /// MAVLink2 extension field: zero when absent.
+    pub storage_usage: u8,
 }
 
 impl Message for StorageInformation {
@@ -31009,7 +32328,7 @@ impl Message for StorageInformation {
     const NAME: &'static str = "STORAGE_INFORMATION";
     const CRC_EXTRA: u8 = 179;
     const MIN_LEN: usize = 27;
-    const LEN: usize = 60;
+    const LEN: usize = 61;
 
     fn decode(payload: &[u8]) -> Self {
         Self {
@@ -31024,6 +32343,7 @@ impl Message for StorageInformation {
             status: get_u8(payload, 26),
             r#type: get_u8(payload, 27),
             name: core::array::from_fn(|i| get_u8(payload, 28 + i)),
+            storage_usage: get_u8(payload, 60),
         }
     }
 
@@ -31041,6 +32361,7 @@ impl Message for StorageInformation {
         for (i, v) in self.name.iter().enumerate() {
             put_bytes(out, 28 + i, &v.to_le_bytes());
         }
+        put_bytes(out, 60, &self.storage_usage.to_le_bytes());
         Self::LEN
     }
 }
@@ -31079,6 +32400,10 @@ impl StorageInformation {
                 "name",
                 FieldValue::UnsignedArray(self.name.iter().map(|v| (*v).into()).collect()),
             ),
+            (
+                "storage_usage",
+                FieldValue::Unsigned(self.storage_usage.into()),
+            ),
         ]
     }
 
@@ -31095,6 +32420,7 @@ impl StorageInformation {
         FieldInfo::new("status", "uint8_t", 0, ""),
         FieldInfo::new("type", "uint8_t", 0, ""),
         FieldInfo::new("name", "char", 32, ""),
+        FieldInfo::new("storage_usage", "uint8_t", 0, ""),
     ];
 }
 
@@ -31107,7 +32433,7 @@ pub struct CameraCaptureStatus {
     pub time_boot_ms: u32,
     /// Image capture interval
     pub image_interval: f32,
-    /// Time since recording started
+    /// Elapsed time since recording started (0: Not supported/available). A GCS should compute recording time and use non-zero values of this field to correct any discrepancy.
     pub recording_time_ms: u32,
     /// Available storage capacity.
     pub available_capacity: f32,
@@ -31118,6 +32444,9 @@ pub struct CameraCaptureStatus {
     /// Total number of images captured ('forever', or until reset using MAV_CMD_STORAGE_FORMAT).
     /// MAVLink2 extension field: zero when absent.
     pub image_count: i32,
+    /// Camera id of a non-MAVLink camera attached to an autopilot (1-6). 0 if the component is a MAVLink camera (with its own component id).
+    /// MAVLink2 extension field: zero when absent.
+    pub camera_device_id: u8,
 }
 
 impl Message for CameraCaptureStatus {
@@ -31125,7 +32454,7 @@ impl Message for CameraCaptureStatus {
     const NAME: &'static str = "CAMERA_CAPTURE_STATUS";
     const CRC_EXTRA: u8 = 12;
     const MIN_LEN: usize = 18;
-    const LEN: usize = 22;
+    const LEN: usize = 23;
 
     fn decode(payload: &[u8]) -> Self {
         Self {
@@ -31136,6 +32465,7 @@ impl Message for CameraCaptureStatus {
             image_status: get_u8(payload, 16),
             video_status: get_u8(payload, 17),
             image_count: get_i32(payload, 18),
+            camera_device_id: get_u8(payload, 22),
         }
     }
 
@@ -31147,6 +32477,7 @@ impl Message for CameraCaptureStatus {
         put_bytes(out, 16, &self.image_status.to_le_bytes());
         put_bytes(out, 17, &self.video_status.to_le_bytes());
         put_bytes(out, 18, &self.image_count.to_le_bytes());
+        put_bytes(out, 22, &self.camera_device_id.to_le_bytes());
         Self::LEN
     }
 }
@@ -31181,6 +32512,10 @@ impl CameraCaptureStatus {
                 FieldValue::Unsigned(self.video_status.into()),
             ),
             ("image_count", FieldValue::Signed(self.image_count.into())),
+            (
+                "camera_device_id",
+                FieldValue::Unsigned(self.camera_device_id.into()),
+            ),
         ]
     }
 
@@ -31193,10 +32528,11 @@ impl CameraCaptureStatus {
         FieldInfo::new("image_status", "uint8_t", 0, ""),
         FieldInfo::new("video_status", "uint8_t", 0, ""),
         FieldInfo::new("image_count", "int32_t", 0, ""),
+        FieldInfo::new("camera_device_id", "uint8_t", 0, ""),
     ];
 }
 
-/// Information about a captured image. This is emitted every time a message is captured. It may be re-requested using MAV_CMD_REQUEST_MESSAGE, using param2 to indicate the sequence number for the missing image.
+/// Information about a captured image. This is emitted every time a message is captured. MAV_CMD_REQUEST_MESSAGE can be used to (re)request this message for a specific sequence number or range of sequence numbers: MAV_CMD_REQUEST_MESSAGE.param2 indicates the sequence number the first image to send, or set to -1 to send the message for all sequence numbers. MAV_CMD_REQUEST_MESSAGE.param3 is used to specify a range of messages to send: set to 0 (default) to send just the the message for the sequence number in param 2, set to -1 to send the message for the sequence number in param 2 and all the following sequence numbers, set to the sequence number of the final message in the range.
 ///
 /// MAVLink message 263 (`CAMERA_IMAGE_CAPTURED`), from `common.xml`.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -31217,7 +32553,7 @@ pub struct CameraImageCaptured {
     pub q: [f32; 4],
     /// Zero based index of this image (i.e. a new image will have index CAMERA_CAPTURE_STATUS.image count -1)
     pub image_index: i32,
-    /// Deprecated/unused. Component IDs are used to differentiate multiple cameras.
+    /// Camera id of a non-MAVLink camera attached to an autopilot (1-6). 0 if the component is a MAVLink camera (with its own component id). Field name is usually camera_device_id.
     pub camera_id: u8,
     /// Image was captured successfully (MAV_BOOL_TRUE). Values not equal to 0 or 1 are invalid.
     /// Values from [`MavBool`].
@@ -31316,19 +32652,22 @@ impl CameraImageCaptured {
     ];
 }
 
-/// Information about flight since last arming.
+/// Flight information. This includes time since boot for arm, takeoff, and land, and a flight number. Takeoff and landing values reset to zero on arm. This can be requested using MAV_CMD_REQUEST_MESSAGE. Note, some fields are misnamed - timestamps are from boot (not UTC) and the flight_uuid is a sequence number.
 ///
 /// MAVLink message 264 (`FLIGHT_INFORMATION`), from `common.xml`.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct FlightInformation {
-    /// Timestamp at arming (time since UNIX epoch) in UTC, 0 for unknown
+    /// Timestamp at arming (since system boot). Set to 0 on boot. Set value on arming. Note, field is misnamed UTC.
     pub arming_time_utc: u64,
-    /// Timestamp at takeoff (time since UNIX epoch) in UTC, 0 for unknown
+    /// Timestamp at takeoff (since system boot). Set to 0 at boot and on arming. Note, field is misnamed UTC.
     pub takeoff_time_utc: u64,
-    /// Universally unique identifier (UUID) of flight, should correspond to name of log files
+    /// Flight number. Note, field is misnamed UUID.
     pub flight_uuid: u64,
     /// Timestamp (time since system boot).
     pub time_boot_ms: u32,
+    /// Timestamp at landing (in ms since system boot). Set to 0 at boot and on arming.
+    /// MAVLink2 extension field: zero when absent.
+    pub landing_time: u32,
 }
 
 impl Message for FlightInformation {
@@ -31336,7 +32675,7 @@ impl Message for FlightInformation {
     const NAME: &'static str = "FLIGHT_INFORMATION";
     const CRC_EXTRA: u8 = 49;
     const MIN_LEN: usize = 28;
-    const LEN: usize = 28;
+    const LEN: usize = 32;
 
     fn decode(payload: &[u8]) -> Self {
         Self {
@@ -31344,6 +32683,7 @@ impl Message for FlightInformation {
             takeoff_time_utc: get_u64(payload, 8),
             flight_uuid: get_u64(payload, 16),
             time_boot_ms: get_u32(payload, 24),
+            landing_time: get_u32(payload, 28),
         }
     }
 
@@ -31352,6 +32692,7 @@ impl Message for FlightInformation {
         put_bytes(out, 8, &self.takeoff_time_utc.to_le_bytes());
         put_bytes(out, 16, &self.flight_uuid.to_le_bytes());
         put_bytes(out, 24, &self.time_boot_ms.to_le_bytes());
+        put_bytes(out, 28, &self.landing_time.to_le_bytes());
         Self::LEN
     }
 }
@@ -31374,6 +32715,10 @@ impl FlightInformation {
                 "time_boot_ms",
                 FieldValue::Unsigned(self.time_boot_ms.into()),
             ),
+            (
+                "landing_time",
+                FieldValue::Unsigned(self.landing_time.into()),
+            ),
         ]
     }
 
@@ -31383,6 +32728,7 @@ impl FlightInformation {
         FieldInfo::new("takeoff_time_utc", "uint64_t", 0, "us"),
         FieldInfo::new("flight_uuid", "uint64_t", 0, ""),
         FieldInfo::new("time_boot_ms", "uint32_t", 0, "ms"),
+        FieldInfo::new("landing_time", "uint32_t", 0, "ms"),
     ];
 }
 
@@ -31727,6 +33073,9 @@ pub struct VideoStreamInformation {
     /// Values from [`VideoStreamEncoding`].
     /// MAVLink2 extension field: zero when absent.
     pub encoding: u8,
+    /// Camera id of a non-MAVLink camera attached to an autopilot (1-6). 0 if the component is a MAVLink camera (with its own component id).
+    /// MAVLink2 extension field: zero when absent.
+    pub camera_device_id: u8,
 }
 
 impl Message for VideoStreamInformation {
@@ -31734,7 +33083,7 @@ impl Message for VideoStreamInformation {
     const NAME: &'static str = "VIDEO_STREAM_INFORMATION";
     const CRC_EXTRA: u8 = 109;
     const MIN_LEN: usize = 213;
-    const LEN: usize = 214;
+    const LEN: usize = 215;
 
     fn decode(payload: &[u8]) -> Self {
         Self {
@@ -31751,6 +33100,7 @@ impl Message for VideoStreamInformation {
             name: core::array::from_fn(|i| get_u8(payload, 21 + i)),
             uri: core::array::from_fn(|i| get_u8(payload, 53 + i)),
             encoding: get_u8(payload, 213),
+            camera_device_id: get_u8(payload, 214),
         }
     }
 
@@ -31772,6 +33122,7 @@ impl Message for VideoStreamInformation {
             put_bytes(out, 53 + i, &v.to_le_bytes());
         }
         put_bytes(out, 213, &self.encoding.to_le_bytes());
+        put_bytes(out, 214, &self.camera_device_id.to_le_bytes());
         Self::LEN
     }
 }
@@ -31806,6 +33157,10 @@ impl VideoStreamInformation {
                 FieldValue::UnsignedArray(self.uri.iter().map(|v| (*v).into()).collect()),
             ),
             ("encoding", FieldValue::Unsigned(self.encoding.into())),
+            (
+                "camera_device_id",
+                FieldValue::Unsigned(self.camera_device_id.into()),
+            ),
         ]
     }
 
@@ -31824,6 +33179,7 @@ impl VideoStreamInformation {
         FieldInfo::new("name", "char", 32, ""),
         FieldInfo::new("uri", "char", 160, ""),
         FieldInfo::new("encoding", "uint8_t", 0, ""),
+        FieldInfo::new("camera_device_id", "uint8_t", 0, ""),
     ];
 }
 
@@ -31849,6 +33205,9 @@ pub struct VideoStreamStatus {
     pub hfov: u16,
     /// Video Stream ID (1 for first, 2 for second, etc.)
     pub stream_id: u8,
+    /// Camera id of a non-MAVLink camera attached to an autopilot (1-6). 0 if the component is a MAVLink camera (with its own component id).
+    /// MAVLink2 extension field: zero when absent.
+    pub camera_device_id: u8,
 }
 
 impl Message for VideoStreamStatus {
@@ -31856,7 +33215,7 @@ impl Message for VideoStreamStatus {
     const NAME: &'static str = "VIDEO_STREAM_STATUS";
     const CRC_EXTRA: u8 = 59;
     const MIN_LEN: usize = 19;
-    const LEN: usize = 19;
+    const LEN: usize = 20;
 
     fn decode(payload: &[u8]) -> Self {
         Self {
@@ -31868,6 +33227,7 @@ impl Message for VideoStreamStatus {
             rotation: get_u16(payload, 14),
             hfov: get_u16(payload, 16),
             stream_id: get_u8(payload, 18),
+            camera_device_id: get_u8(payload, 19),
         }
     }
 
@@ -31880,6 +33240,7 @@ impl Message for VideoStreamStatus {
         put_bytes(out, 14, &self.rotation.to_le_bytes());
         put_bytes(out, 16, &self.hfov.to_le_bytes());
         put_bytes(out, 18, &self.stream_id.to_le_bytes());
+        put_bytes(out, 19, &self.camera_device_id.to_le_bytes());
         Self::LEN
     }
 }
@@ -31903,6 +33264,10 @@ impl VideoStreamStatus {
             ("rotation", FieldValue::Unsigned(self.rotation.into())),
             ("hfov", FieldValue::Unsigned(self.hfov.into())),
             ("stream_id", FieldValue::Unsigned(self.stream_id.into())),
+            (
+                "camera_device_id",
+                FieldValue::Unsigned(self.camera_device_id.into()),
+            ),
         ]
     }
 
@@ -31916,6 +33281,7 @@ impl VideoStreamStatus {
         FieldInfo::new("rotation", "uint16_t", 0, "deg"),
         FieldInfo::new("hfov", "uint16_t", 0, "deg"),
         FieldInfo::new("stream_id", "uint8_t", 0, ""),
+        FieldInfo::new("camera_device_id", "uint8_t", 0, ""),
     ];
 }
 
@@ -31944,6 +33310,9 @@ pub struct CameraFovStatus {
     pub hfov: f32,
     /// Vertical field of view (NaN if unknown).
     pub vfov: f32,
+    /// Camera id of a non-MAVLink camera attached to an autopilot (1-6). 0 if the component is a MAVLink camera (with its own component id).
+    /// MAVLink2 extension field: zero when absent.
+    pub camera_device_id: u8,
 }
 
 impl Message for CameraFovStatus {
@@ -31951,7 +33320,7 @@ impl Message for CameraFovStatus {
     const NAME: &'static str = "CAMERA_FOV_STATUS";
     const CRC_EXTRA: u8 = 22;
     const MIN_LEN: usize = 52;
-    const LEN: usize = 52;
+    const LEN: usize = 53;
 
     fn decode(payload: &[u8]) -> Self {
         Self {
@@ -31965,6 +33334,7 @@ impl Message for CameraFovStatus {
             q: core::array::from_fn(|i| get_f32(payload, 28 + i * 4)),
             hfov: get_f32(payload, 44),
             vfov: get_f32(payload, 48),
+            camera_device_id: get_u8(payload, 52),
         }
     }
 
@@ -31981,6 +33351,7 @@ impl Message for CameraFovStatus {
         }
         put_bytes(out, 44, &self.hfov.to_le_bytes());
         put_bytes(out, 48, &self.vfov.to_le_bytes());
+        put_bytes(out, 52, &self.camera_device_id.to_le_bytes());
         Self::LEN
     }
 }
@@ -32006,6 +33377,10 @@ impl CameraFovStatus {
             ),
             ("hfov", FieldValue::Float(self.hfov.into())),
             ("vfov", FieldValue::Float(self.vfov.into())),
+            (
+                "camera_device_id",
+                FieldValue::Unsigned(self.camera_device_id.into()),
+            ),
         ]
     }
 
@@ -32021,6 +33396,7 @@ impl CameraFovStatus {
         FieldInfo::new("q", "float", 4, ""),
         FieldInfo::new("hfov", "float", 0, "deg"),
         FieldInfo::new("vfov", "float", 0, "deg"),
+        FieldInfo::new("camera_device_id", "uint8_t", 0, ""),
     ];
 }
 
@@ -32052,6 +33428,9 @@ pub struct CameraTrackingImageStatus {
     /// Defines location of target data
     /// Values from [`CameraTrackingTargetData`].
     pub target_data: u8,
+    /// Camera id of a non-MAVLink camera attached to an autopilot (1-6). 0 if the component is a MAVLink camera (with its own component id).
+    /// MAVLink2 extension field: zero when absent.
+    pub camera_device_id: u8,
 }
 
 impl Message for CameraTrackingImageStatus {
@@ -32059,7 +33438,7 @@ impl Message for CameraTrackingImageStatus {
     const NAME: &'static str = "CAMERA_TRACKING_IMAGE_STATUS";
     const CRC_EXTRA: u8 = 126;
     const MIN_LEN: usize = 31;
-    const LEN: usize = 31;
+    const LEN: usize = 32;
 
     fn decode(payload: &[u8]) -> Self {
         Self {
@@ -32073,6 +33452,7 @@ impl Message for CameraTrackingImageStatus {
             tracking_status: get_u8(payload, 28),
             tracking_mode: get_u8(payload, 29),
             target_data: get_u8(payload, 30),
+            camera_device_id: get_u8(payload, 31),
         }
     }
 
@@ -32087,6 +33467,7 @@ impl Message for CameraTrackingImageStatus {
         put_bytes(out, 28, &self.tracking_status.to_le_bytes());
         put_bytes(out, 29, &self.tracking_mode.to_le_bytes());
         put_bytes(out, 30, &self.target_data.to_le_bytes());
+        put_bytes(out, 31, &self.camera_device_id.to_le_bytes());
         Self::LEN
     }
 }
@@ -32112,6 +33493,10 @@ impl CameraTrackingImageStatus {
                 FieldValue::Unsigned(self.tracking_mode.into()),
             ),
             ("target_data", FieldValue::Unsigned(self.target_data.into())),
+            (
+                "camera_device_id",
+                FieldValue::Unsigned(self.camera_device_id.into()),
+            ),
         ]
     }
 
@@ -32127,6 +33512,7 @@ impl CameraTrackingImageStatus {
         FieldInfo::new("tracking_status", "uint8_t", 0, ""),
         FieldInfo::new("tracking_mode", "uint8_t", 0, ""),
         FieldInfo::new("target_data", "uint8_t", 0, ""),
+        FieldInfo::new("camera_device_id", "uint8_t", 0, ""),
     ];
 }
 
@@ -32162,6 +33548,9 @@ pub struct CameraTrackingGeoStatus {
     /// Current tracking status
     /// Values from [`CameraTrackingStatusFlags`].
     pub tracking_status: u8,
+    /// Camera id of a non-MAVLink camera attached to an autopilot (1-6). 0 if the component is a MAVLink camera (with its own component id).
+    /// MAVLink2 extension field: zero when absent.
+    pub camera_device_id: u8,
 }
 
 impl Message for CameraTrackingGeoStatus {
@@ -32169,7 +33558,7 @@ impl Message for CameraTrackingGeoStatus {
     const NAME: &'static str = "CAMERA_TRACKING_GEO_STATUS";
     const CRC_EXTRA: u8 = 18;
     const MIN_LEN: usize = 49;
-    const LEN: usize = 49;
+    const LEN: usize = 50;
 
     fn decode(payload: &[u8]) -> Self {
         Self {
@@ -32186,6 +33575,7 @@ impl Message for CameraTrackingGeoStatus {
             hdg: get_f32(payload, 40),
             hdg_acc: get_f32(payload, 44),
             tracking_status: get_u8(payload, 48),
+            camera_device_id: get_u8(payload, 49),
         }
     }
 
@@ -32203,6 +33593,7 @@ impl Message for CameraTrackingGeoStatus {
         put_bytes(out, 40, &self.hdg.to_le_bytes());
         put_bytes(out, 44, &self.hdg_acc.to_le_bytes());
         put_bytes(out, 48, &self.tracking_status.to_le_bytes());
+        put_bytes(out, 49, &self.camera_device_id.to_le_bytes());
         Self::LEN
     }
 }
@@ -32228,6 +33619,10 @@ impl CameraTrackingGeoStatus {
                 "tracking_status",
                 FieldValue::Unsigned(self.tracking_status.into()),
             ),
+            (
+                "camera_device_id",
+                FieldValue::Unsigned(self.camera_device_id.into()),
+            ),
         ]
     }
 
@@ -32246,10 +33641,11 @@ impl CameraTrackingGeoStatus {
         FieldInfo::new("hdg", "float", 0, "rad"),
         FieldInfo::new("hdg_acc", "float", 0, "rad"),
         FieldInfo::new("tracking_status", "uint8_t", 0, ""),
+        FieldInfo::new("camera_device_id", "uint8_t", 0, ""),
     ];
 }
 
-/// Camera absolute thermal range. This can be streamed when the associated `VIDEO_STREAM_STATUS.flag` bit `VIDEO_STREAM_STATUS_FLAGS_THERMAL_RANGE_ENABLED` is set, but a GCS may choose to only request it for the current active stream. Use MAV_CMD_SET_MESSAGE_INTERVAL to define message interval (param3 indicates the stream id of the current camera, or 0 for all streams, param4 indicates the target camera_device_id for autopilot-attached cameras or 0 for MAVLink cameras).
+/// Camera absolute thermal range. This can be streamed when the associated VIDEO_STREAM_STATUS `flag` field bit VIDEO_STREAM_STATUS_FLAGS_THERMAL_RANGE_ENABLED is set, but a GCS may choose to only request it for the current active stream. Use MAV_CMD_SET_MESSAGE_INTERVAL to define message interval (param3 indicates the stream id of the current camera, or 0 for all streams, param4 indicates the target camera_device_id for autopilot-attached cameras or 0 for MAVLink cameras).
 ///
 /// MAVLink message 277 (`CAMERA_THERMAL_RANGE`), from `common.xml`.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -32690,6 +34086,10 @@ pub struct GimbalDeviceInformation {
     /// This field is to be used if the gimbal manager and the gimbal device are the same component and hence have the same component ID. This field is then set to a number between 1-6. If the component ID is separate, this field is not required and must be set to 0.
     /// MAVLink2 extension field: zero when absent.
     pub gimbal_device_id: u8,
+    /// Extended bitmap of gimbal capability flags (32 bit). For backwards compatibility, the lower 16 bits should also be set in cap_flags. Ground stations should prefer this field if non-zero.
+    /// Values from [`GimbalDeviceCapFlags`].
+    /// MAVLink2 extension field: zero when absent.
+    pub cap_flags2: u32,
 }
 
 impl Message for GimbalDeviceInformation {
@@ -32697,7 +34097,7 @@ impl Message for GimbalDeviceInformation {
     const NAME: &'static str = "GIMBAL_DEVICE_INFORMATION";
     const CRC_EXTRA: u8 = 74;
     const MIN_LEN: usize = 144;
-    const LEN: usize = 145;
+    const LEN: usize = 149;
 
     fn decode(payload: &[u8]) -> Self {
         Self {
@@ -32717,6 +34117,7 @@ impl Message for GimbalDeviceInformation {
             model_name: core::array::from_fn(|i| get_u8(payload, 80 + i)),
             custom_name: core::array::from_fn(|i| get_u8(payload, 112 + i)),
             gimbal_device_id: get_u8(payload, 144),
+            cap_flags2: get_u32(payload, 145),
         }
     }
 
@@ -32743,6 +34144,7 @@ impl Message for GimbalDeviceInformation {
             put_bytes(out, 112 + i, &v.to_le_bytes());
         }
         put_bytes(out, 144, &self.gimbal_device_id.to_le_bytes());
+        put_bytes(out, 145, &self.cap_flags2.to_le_bytes());
         Self::LEN
     }
 }
@@ -32792,6 +34194,7 @@ impl GimbalDeviceInformation {
                 "gimbal_device_id",
                 FieldValue::Unsigned(self.gimbal_device_id.into()),
             ),
+            ("cap_flags2", FieldValue::Unsigned(self.cap_flags2.into())),
         ]
     }
 
@@ -32813,6 +34216,7 @@ impl GimbalDeviceInformation {
         FieldInfo::new("model_name", "char", 32, ""),
         FieldInfo::new("custom_name", "char", 32, ""),
         FieldInfo::new("gimbal_device_id", "uint8_t", 0, ""),
+        FieldInfo::new("cap_flags2", "uint32_t", 0, ""),
     ];
 }
 
@@ -33093,7 +34497,7 @@ pub struct AutopilotStateForGimbalDevice {
     /// The landed state. Is set to MAV_LANDED_STATE_UNDEFINED if landed state is unknown.
     /// Values from [`MavLandedState`].
     pub landed_state: u8,
-    /// Z component of angular velocity in NED (North, East, Down). NaN if unknown.
+    /// Z component of angular velocity in NED (North, East, Down). 0 if unknown. Use 0.00001 to represent a measured value of zero.
     /// MAVLink2 extension field: zero when absent.
     pub angular_velocity_z: f32,
 }
@@ -33401,14 +34805,14 @@ impl GimbalManagerSetManualControl {
 
 /// Airspeed information from a sensor.
 ///
-/// MAVLink message 295 (`AIRSPEED`), from `development.xml`.
+/// MAVLink message 295 (`AIRSPEED`), from `common.xml`.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Airspeed {
     /// Calibrated airspeed (CAS).
     pub airspeed: f32,
-    /// Raw differential pressure. NaN for value unknown/not supplied.
+    /// Raw differential pressure.
     pub raw_press: f32,
-    /// Temperature. INT16_MAX for value unknown/not supplied.
+    /// Temperature.
     pub temperature: i16,
     /// Sensor ID.
     pub id: u8,
@@ -33463,6 +34867,135 @@ impl Airspeed {
         FieldInfo::new("raw_press", "float", 0, "hPa"),
         FieldInfo::new("temperature", "int16_t", 0, "cdegC"),
         FieldInfo::new("id", "uint8_t", 0, ""),
+        FieldInfo::new("flags", "uint8_t", 0, ""),
+    ];
+}
+
+/// Reports measurement/estimate from a global position sensor. Used as navigation fusion source and optionally displayed in the UI.
+///
+/// MAVLink message 296 (`GLOBAL_POSITION_SENSOR`), from `common.xml`.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct GlobalPositionSensor {
+    /// Timestamp of message transmission (UNIX Epoch time or time since system boot). The receiving end can infer timestamp format (since 1.1.1970 or since system boot) by checking for the magnitude of the number.
+    pub time_usec: u64,
+    /// The time spent in processing the sensor data that is the basis for this position. The recipient can use this to improve time alignment of the data. This is the time between measurement (e.g. camera exposure time) and transmission of this message. Set to NaN if not known.
+    pub processing_time: u32,
+    /// Latitude (WGS84)
+    pub lat: i32,
+    /// Longitude (WGS84)
+    pub lon: i32,
+    /// Altitude (WGS84 elipsoid), preferred if available
+    pub alt_ellipsoid: f32,
+    /// Altitude (MSL - position-system specific value) use if no alt_ellipsoid available
+    pub alt: f32,
+    /// Standard deviation of horizontal position error
+    pub eph: f32,
+    /// Standard deviation of vertical position error
+    pub epv: f32,
+    /// System ID (ID of target system, normally autopilot and ground station).
+    pub target_system: u8,
+    /// Component ID (normally 0 for broadcast).
+    pub target_component: u8,
+    /// Sensor ID
+    pub id: u8,
+    /// Source of position/estimate (such as GNSS, estimator, etc.)
+    /// Values from [`GlobalPositionSrc`].
+    pub source: u8,
+    /// Status flags
+    /// Values from [`GlobalPositionFlags`].
+    pub flags: u8,
+}
+
+impl Message for GlobalPositionSensor {
+    const ID: u32 = 296;
+    const NAME: &'static str = "GLOBAL_POSITION_SENSOR";
+    const CRC_EXTRA: u8 = 158;
+    const MIN_LEN: usize = 41;
+    const LEN: usize = 41;
+
+    fn decode(payload: &[u8]) -> Self {
+        Self {
+            time_usec: get_u64(payload, 0),
+            processing_time: get_u32(payload, 8),
+            lat: get_i32(payload, 12),
+            lon: get_i32(payload, 16),
+            alt_ellipsoid: get_f32(payload, 20),
+            alt: get_f32(payload, 24),
+            eph: get_f32(payload, 28),
+            epv: get_f32(payload, 32),
+            target_system: get_u8(payload, 36),
+            target_component: get_u8(payload, 37),
+            id: get_u8(payload, 38),
+            source: get_u8(payload, 39),
+            flags: get_u8(payload, 40),
+        }
+    }
+
+    fn encode(&self, out: &mut [u8]) -> usize {
+        put_bytes(out, 0, &self.time_usec.to_le_bytes());
+        put_bytes(out, 8, &self.processing_time.to_le_bytes());
+        put_bytes(out, 12, &self.lat.to_le_bytes());
+        put_bytes(out, 16, &self.lon.to_le_bytes());
+        put_bytes(out, 20, &self.alt_ellipsoid.to_le_bytes());
+        put_bytes(out, 24, &self.alt.to_le_bytes());
+        put_bytes(out, 28, &self.eph.to_le_bytes());
+        put_bytes(out, 32, &self.epv.to_le_bytes());
+        put_bytes(out, 36, &self.target_system.to_le_bytes());
+        put_bytes(out, 37, &self.target_component.to_le_bytes());
+        put_bytes(out, 38, &self.id.to_le_bytes());
+        put_bytes(out, 39, &self.source.to_le_bytes());
+        put_bytes(out, 40, &self.flags.to_le_bytes());
+        Self::LEN
+    }
+}
+
+impl GlobalPositionSensor {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            ("time_usec", FieldValue::Unsigned(self.time_usec)),
+            (
+                "processing_time",
+                FieldValue::Unsigned(self.processing_time.into()),
+            ),
+            ("lat", FieldValue::Signed(self.lat.into())),
+            ("lon", FieldValue::Signed(self.lon.into())),
+            (
+                "alt_ellipsoid",
+                FieldValue::Float(self.alt_ellipsoid.into()),
+            ),
+            ("alt", FieldValue::Float(self.alt.into())),
+            ("eph", FieldValue::Float(self.eph.into())),
+            ("epv", FieldValue::Float(self.epv.into())),
+            (
+                "target_system",
+                FieldValue::Unsigned(self.target_system.into()),
+            ),
+            (
+                "target_component",
+                FieldValue::Unsigned(self.target_component.into()),
+            ),
+            ("id", FieldValue::Unsigned(self.id.into())),
+            ("source", FieldValue::Unsigned(self.source.into())),
+            ("flags", FieldValue::Unsigned(self.flags.into())),
+        ]
+    }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("time_usec", "uint64_t", 0, "us"),
+        FieldInfo::new("processing_time", "uint32_t", 0, "us"),
+        FieldInfo::new("lat", "int32_t", 0, "degE7"),
+        FieldInfo::new("lon", "int32_t", 0, "degE7"),
+        FieldInfo::new("alt_ellipsoid", "float", 0, "m"),
+        FieldInfo::new("alt", "float", 0, "m"),
+        FieldInfo::new("eph", "float", 0, "m"),
+        FieldInfo::new("epv", "float", 0, "m"),
+        FieldInfo::new("target_system", "uint8_t", 0, ""),
+        FieldInfo::new("target_component", "uint8_t", 0, ""),
+        FieldInfo::new("id", "uint8_t", 0, ""),
+        FieldInfo::new("source", "uint8_t", 0, ""),
         FieldInfo::new("flags", "uint8_t", 0, ""),
     ];
 }
@@ -33552,7 +35085,7 @@ pub struct AisVessel {
     /// Bitmask to indicate various statuses including valid data fields
     /// Values from [`AisFlags`].
     pub flags: u16,
-    /// Turn rate
+    /// Turn rate, 0.1 degrees per second
     pub turn_rate: i8,
     /// Navigational status
     /// Values from [`AisNavStatus`].
@@ -33683,7 +35216,7 @@ impl AisVessel {
         FieldInfo::new("dimension_stern", "uint16_t", 0, "m"),
         FieldInfo::new("tslc", "uint16_t", 0, "s"),
         FieldInfo::new("flags", "uint16_t", 0, ""),
-        FieldInfo::new("turn_rate", "int8_t", 0, "cdeg/s"),
+        FieldInfo::new("turn_rate", "int8_t", 0, "ddeg/s"),
         FieldInfo::new("navigational_status", "uint8_t", 0, ""),
         FieldInfo::new("type", "uint8_t", 0, ""),
         FieldInfo::new("dimension_port", "uint8_t", 0, "m"),
@@ -35289,6 +36822,80 @@ impl DebugFloatArray {
     ];
 }
 
+/// Vehicle status report that is sent out while orbit execution is in progress (see MAV_CMD_DO_ORBIT).
+///
+/// MAVLink message 360 (`ORBIT_EXECUTION_STATUS`), from `common.xml`.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct OrbitExecutionStatus {
+    /// Timestamp (UNIX Epoch time or time since system boot). The receiving end can infer timestamp format (since 1.1.1970 or since system boot) by checking for the magnitude of the number.
+    pub time_usec: u64,
+    /// Radius of the orbit circle. Positive values orbit clockwise, negative values orbit counter-clockwise.
+    pub radius: f32,
+    /// X coordinate of center point. Coordinate system depends on frame field: local = x position in meters * 1e4, global = latitude in degrees * 1e7.
+    pub x: i32,
+    /// Y coordinate of center point. Coordinate system depends on frame field: local = x position in meters * 1e4, global = latitude in degrees * 1e7.
+    pub y: i32,
+    /// Altitude of center point. Coordinate system depends on frame field.
+    pub z: f32,
+    /// The coordinate system of the fields: x, y, z.
+    /// Values from [`MavFrame`].
+    pub frame: u8,
+}
+
+impl Message for OrbitExecutionStatus {
+    const ID: u32 = 360;
+    const NAME: &'static str = "ORBIT_EXECUTION_STATUS";
+    const CRC_EXTRA: u8 = 11;
+    const MIN_LEN: usize = 25;
+    const LEN: usize = 25;
+
+    fn decode(payload: &[u8]) -> Self {
+        Self {
+            time_usec: get_u64(payload, 0),
+            radius: get_f32(payload, 8),
+            x: get_i32(payload, 12),
+            y: get_i32(payload, 16),
+            z: get_f32(payload, 20),
+            frame: get_u8(payload, 24),
+        }
+    }
+
+    fn encode(&self, out: &mut [u8]) -> usize {
+        put_bytes(out, 0, &self.time_usec.to_le_bytes());
+        put_bytes(out, 8, &self.radius.to_le_bytes());
+        put_bytes(out, 12, &self.x.to_le_bytes());
+        put_bytes(out, 16, &self.y.to_le_bytes());
+        put_bytes(out, 20, &self.z.to_le_bytes());
+        put_bytes(out, 24, &self.frame.to_le_bytes());
+        Self::LEN
+    }
+}
+
+impl OrbitExecutionStatus {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            ("time_usec", FieldValue::Unsigned(self.time_usec)),
+            ("radius", FieldValue::Float(self.radius.into())),
+            ("x", FieldValue::Signed(self.x.into())),
+            ("y", FieldValue::Signed(self.y.into())),
+            ("z", FieldValue::Float(self.z.into())),
+            ("frame", FieldValue::Unsigned(self.frame.into())),
+        ]
+    }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("time_usec", "uint64_t", 0, "us"),
+        FieldInfo::new("radius", "float", 0, "m"),
+        FieldInfo::new("x", "int32_t", 0, ""),
+        FieldInfo::new("y", "int32_t", 0, ""),
+        FieldInfo::new("z", "float", 0, "m"),
+        FieldInfo::new("frame", "uint8_t", 0, ""),
+    ];
+}
+
 /// Smart Battery information (static/infrequent update). Use for updates from: smart battery to flight stack, flight stack to GCS. Use BATTERY_STATUS for smart battery frequent updates.
 ///
 /// MAVLink message 370 (`SMART_BATTERY_INFO`), from `common.xml`.
@@ -35667,7 +37274,7 @@ impl ActuatorOutputStatus {
     ];
 }
 
-/// Reports the on/off state of relays, as controlled by MAV_CMD_DO_SET_RELAY.
+/// Reports the on/off state of relays, as controlled by MAV_CMD_DO_SET_RELAY. Message streaming should be requested using MAV_CMD_SET_MESSAGE_INTERVAL. Note that it should not be sent on every relay state change to avoid flooding the link.
 ///
 /// MAVLink message 376 (`RELAY_STATUS`), from `common.xml`.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -36060,6 +37667,249 @@ impl CanFilterModify {
         FieldInfo::new("bus", "uint8_t", 0, ""),
         FieldInfo::new("operation", "uint8_t", 0, ""),
         FieldInfo::new("num_ids", "uint8_t", 0, ""),
+    ];
+}
+
+/// Hardware status sent by an onboard computer.
+///
+/// MAVLink message 390 (`ONBOARD_COMPUTER_STATUS`), from `common.xml`.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct OnboardComputerStatus {
+    /// Timestamp (UNIX Epoch time or time since system boot). The receiving end can infer timestamp format (since 1.1.1970 or since system boot) by checking for the magnitude of the number.
+    pub time_usec: u64,
+    /// Time since system boot.
+    pub uptime: u32,
+    /// Amount of used RAM on the component system. A value of UINT32_MAX implies the field is unused.
+    pub ram_usage: u32,
+    /// Total amount of RAM on the component system. A value of UINT32_MAX implies the field is unused.
+    pub ram_total: u32,
+    /// Storage type: 0: HDD, 1: SSD, 2: EMMC, 3: SD card (non-removable), 4: SD card (removable). A value of UINT32_MAX implies the field is unused.
+    pub storage_type: [u32; 4],
+    /// Amount of used storage space on the component system. A value of UINT32_MAX implies the field is unused.
+    pub storage_usage: [u32; 4],
+    /// Total amount of storage space on the component system. A value of UINT32_MAX implies the field is unused.
+    pub storage_total: [u32; 4],
+    /// Link type: 0-9: UART, 10-19: Wired network, 20-29: Wifi, 30-39: Point-to-point proprietary, 40-49: Mesh proprietary
+    pub link_type: [u32; 6],
+    /// Network traffic from the component system. A value of UINT32_MAX implies the field is unused.
+    pub link_tx_rate: [u32; 6],
+    /// Network traffic to the component system. A value of UINT32_MAX implies the field is unused.
+    pub link_rx_rate: [u32; 6],
+    /// Network capacity from the component system. A value of UINT32_MAX implies the field is unused.
+    pub link_tx_max: [u32; 6],
+    /// Network capacity to the component system. A value of UINT32_MAX implies the field is unused.
+    pub link_rx_max: [u32; 6],
+    /// Fan speeds. A value of INT16_MAX implies the field is unused.
+    pub fan_speed: [i16; 4],
+    /// Type of the onboard computer: 0: Mission computer primary, 1: Mission computer backup 1, 2: Mission computer backup 2, 3: Compute node, 4-5: Compute spares, 6-9: Payload computers.
+    pub r#type: u8,
+    /// CPU usage on the component in percent (100 - idle). A value of UINT8_MAX implies the field is unused.
+    pub cpu_cores: [u8; 8],
+    /// Combined CPU usage as the last 10 slices of 100 MS (a histogram). This allows to identify spikes in load that max out the system, but only for a short amount of time. A value of UINT8_MAX implies the field is unused.
+    pub cpu_combined: [u8; 10],
+    /// GPU usage on the component in percent (100 - idle). A value of UINT8_MAX implies the field is unused.
+    pub gpu_cores: [u8; 4],
+    /// Combined GPU usage as the last 10 slices of 100 MS (a histogram). This allows to identify spikes in load that max out the system, but only for a short amount of time. A value of UINT8_MAX implies the field is unused.
+    pub gpu_combined: [u8; 10],
+    /// Temperature of the board. A value of INT8_MAX implies the field is unused.
+    pub temperature_board: i8,
+    /// Temperature of the CPU core. A value of INT8_MAX implies the field is unused.
+    pub temperature_core: [i8; 8],
+    /// Bitmap of status flags.
+    /// Values from [`ComputerStatusFlags`].
+    /// MAVLink2 extension field: zero when absent.
+    pub status_flags: u16,
+}
+
+impl Message for OnboardComputerStatus {
+    const ID: u32 = 390;
+    const NAME: &'static str = "ONBOARD_COMPUTER_STATUS";
+    const CRC_EXTRA: u8 = 156;
+    const MIN_LEN: usize = 238;
+    const LEN: usize = 240;
+
+    fn decode(payload: &[u8]) -> Self {
+        Self {
+            time_usec: get_u64(payload, 0),
+            uptime: get_u32(payload, 8),
+            ram_usage: get_u32(payload, 12),
+            ram_total: get_u32(payload, 16),
+            storage_type: core::array::from_fn(|i| get_u32(payload, 20 + i * 4)),
+            storage_usage: core::array::from_fn(|i| get_u32(payload, 36 + i * 4)),
+            storage_total: core::array::from_fn(|i| get_u32(payload, 52 + i * 4)),
+            link_type: core::array::from_fn(|i| get_u32(payload, 68 + i * 4)),
+            link_tx_rate: core::array::from_fn(|i| get_u32(payload, 92 + i * 4)),
+            link_rx_rate: core::array::from_fn(|i| get_u32(payload, 116 + i * 4)),
+            link_tx_max: core::array::from_fn(|i| get_u32(payload, 140 + i * 4)),
+            link_rx_max: core::array::from_fn(|i| get_u32(payload, 164 + i * 4)),
+            fan_speed: core::array::from_fn(|i| get_i16(payload, 188 + i * 2)),
+            r#type: get_u8(payload, 196),
+            cpu_cores: core::array::from_fn(|i| get_u8(payload, 197 + i)),
+            cpu_combined: core::array::from_fn(|i| get_u8(payload, 205 + i)),
+            gpu_cores: core::array::from_fn(|i| get_u8(payload, 215 + i)),
+            gpu_combined: core::array::from_fn(|i| get_u8(payload, 219 + i)),
+            temperature_board: get_i8(payload, 229),
+            temperature_core: core::array::from_fn(|i| get_i8(payload, 230 + i)),
+            status_flags: get_u16(payload, 238),
+        }
+    }
+
+    fn encode(&self, out: &mut [u8]) -> usize {
+        put_bytes(out, 0, &self.time_usec.to_le_bytes());
+        put_bytes(out, 8, &self.uptime.to_le_bytes());
+        put_bytes(out, 12, &self.ram_usage.to_le_bytes());
+        put_bytes(out, 16, &self.ram_total.to_le_bytes());
+        for (i, v) in self.storage_type.iter().enumerate() {
+            put_bytes(out, 20 + i * 4, &v.to_le_bytes());
+        }
+        for (i, v) in self.storage_usage.iter().enumerate() {
+            put_bytes(out, 36 + i * 4, &v.to_le_bytes());
+        }
+        for (i, v) in self.storage_total.iter().enumerate() {
+            put_bytes(out, 52 + i * 4, &v.to_le_bytes());
+        }
+        for (i, v) in self.link_type.iter().enumerate() {
+            put_bytes(out, 68 + i * 4, &v.to_le_bytes());
+        }
+        for (i, v) in self.link_tx_rate.iter().enumerate() {
+            put_bytes(out, 92 + i * 4, &v.to_le_bytes());
+        }
+        for (i, v) in self.link_rx_rate.iter().enumerate() {
+            put_bytes(out, 116 + i * 4, &v.to_le_bytes());
+        }
+        for (i, v) in self.link_tx_max.iter().enumerate() {
+            put_bytes(out, 140 + i * 4, &v.to_le_bytes());
+        }
+        for (i, v) in self.link_rx_max.iter().enumerate() {
+            put_bytes(out, 164 + i * 4, &v.to_le_bytes());
+        }
+        for (i, v) in self.fan_speed.iter().enumerate() {
+            put_bytes(out, 188 + i * 2, &v.to_le_bytes());
+        }
+        put_bytes(out, 196, &self.r#type.to_le_bytes());
+        for (i, v) in self.cpu_cores.iter().enumerate() {
+            put_bytes(out, 197 + i, &v.to_le_bytes());
+        }
+        for (i, v) in self.cpu_combined.iter().enumerate() {
+            put_bytes(out, 205 + i, &v.to_le_bytes());
+        }
+        for (i, v) in self.gpu_cores.iter().enumerate() {
+            put_bytes(out, 215 + i, &v.to_le_bytes());
+        }
+        for (i, v) in self.gpu_combined.iter().enumerate() {
+            put_bytes(out, 219 + i, &v.to_le_bytes());
+        }
+        put_bytes(out, 229, &self.temperature_board.to_le_bytes());
+        for (i, v) in self.temperature_core.iter().enumerate() {
+            put_bytes(out, 230 + i, &v.to_le_bytes());
+        }
+        put_bytes(out, 238, &self.status_flags.to_le_bytes());
+        Self::LEN
+    }
+}
+
+impl OnboardComputerStatus {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            ("time_usec", FieldValue::Unsigned(self.time_usec)),
+            ("uptime", FieldValue::Unsigned(self.uptime.into())),
+            ("ram_usage", FieldValue::Unsigned(self.ram_usage.into())),
+            ("ram_total", FieldValue::Unsigned(self.ram_total.into())),
+            (
+                "storage_type",
+                FieldValue::UnsignedArray(self.storage_type.iter().map(|v| (*v).into()).collect()),
+            ),
+            (
+                "storage_usage",
+                FieldValue::UnsignedArray(self.storage_usage.iter().map(|v| (*v).into()).collect()),
+            ),
+            (
+                "storage_total",
+                FieldValue::UnsignedArray(self.storage_total.iter().map(|v| (*v).into()).collect()),
+            ),
+            (
+                "link_type",
+                FieldValue::UnsignedArray(self.link_type.iter().map(|v| (*v).into()).collect()),
+            ),
+            (
+                "link_tx_rate",
+                FieldValue::UnsignedArray(self.link_tx_rate.iter().map(|v| (*v).into()).collect()),
+            ),
+            (
+                "link_rx_rate",
+                FieldValue::UnsignedArray(self.link_rx_rate.iter().map(|v| (*v).into()).collect()),
+            ),
+            (
+                "link_tx_max",
+                FieldValue::UnsignedArray(self.link_tx_max.iter().map(|v| (*v).into()).collect()),
+            ),
+            (
+                "link_rx_max",
+                FieldValue::UnsignedArray(self.link_rx_max.iter().map(|v| (*v).into()).collect()),
+            ),
+            (
+                "fan_speed",
+                FieldValue::SignedArray(self.fan_speed.iter().map(|v| (*v).into()).collect()),
+            ),
+            ("type", FieldValue::Unsigned(self.r#type.into())),
+            (
+                "cpu_cores",
+                FieldValue::UnsignedArray(self.cpu_cores.iter().map(|v| (*v).into()).collect()),
+            ),
+            (
+                "cpu_combined",
+                FieldValue::UnsignedArray(self.cpu_combined.iter().map(|v| (*v).into()).collect()),
+            ),
+            (
+                "gpu_cores",
+                FieldValue::UnsignedArray(self.gpu_cores.iter().map(|v| (*v).into()).collect()),
+            ),
+            (
+                "gpu_combined",
+                FieldValue::UnsignedArray(self.gpu_combined.iter().map(|v| (*v).into()).collect()),
+            ),
+            (
+                "temperature_board",
+                FieldValue::Signed(self.temperature_board.into()),
+            ),
+            (
+                "temperature_core",
+                FieldValue::SignedArray(
+                    self.temperature_core.iter().map(|v| (*v).into()).collect(),
+                ),
+            ),
+            (
+                "status_flags",
+                FieldValue::Unsigned(self.status_flags.into()),
+            ),
+        ]
+    }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("time_usec", "uint64_t", 0, "us"),
+        FieldInfo::new("uptime", "uint32_t", 0, "ms"),
+        FieldInfo::new("ram_usage", "uint32_t", 0, "MiB"),
+        FieldInfo::new("ram_total", "uint32_t", 0, "MiB"),
+        FieldInfo::new("storage_type", "uint32_t", 4, ""),
+        FieldInfo::new("storage_usage", "uint32_t", 4, "MiB"),
+        FieldInfo::new("storage_total", "uint32_t", 4, "MiB"),
+        FieldInfo::new("link_type", "uint32_t", 6, ""),
+        FieldInfo::new("link_tx_rate", "uint32_t", 6, "KiB/s"),
+        FieldInfo::new("link_rx_rate", "uint32_t", 6, "KiB/s"),
+        FieldInfo::new("link_tx_max", "uint32_t", 6, "KiB/s"),
+        FieldInfo::new("link_rx_max", "uint32_t", 6, "KiB/s"),
+        FieldInfo::new("fan_speed", "int16_t", 4, "rpm"),
+        FieldInfo::new("type", "uint8_t", 0, ""),
+        FieldInfo::new("cpu_cores", "uint8_t", 8, ""),
+        FieldInfo::new("cpu_combined", "uint8_t", 10, ""),
+        FieldInfo::new("gpu_cores", "uint8_t", 4, ""),
+        FieldInfo::new("gpu_combined", "uint8_t", 10, ""),
+        FieldInfo::new("temperature_board", "int8_t", 0, "degC"),
+        FieldInfo::new("temperature_core", "int8_t", 8, "degC"),
+        FieldInfo::new("status_flags", "uint16_t", 0, ""),
     ];
 }
 
@@ -36474,6 +38324,147 @@ impl GnssIntegrity {
         FieldInfo::new("system_status_summary", "uint8_t", 0, ""),
         FieldInfo::new("gnss_signal_quality", "uint8_t", 0, ""),
         FieldInfo::new("post_processing_quality", "uint8_t", 0, ""),
+    ];
+}
+
+/// Range information from a radio beacon for trilateration-based positioning. This message is telemetry intended for consumption by an autopilot (MAVLink does not define the mechanism used to determine the range).
+///
+/// MAVLink message 513 (`RANGING_BEACON`), from `development.xml`.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct RangingBeacon {
+    /// Timestamp (UNIX Epoch time or time since system boot). The receiving end can infer timestamp format (since 1.1.1970 or since system boot) by checking for the magnitude of the number.
+    pub time_usec: u64,
+    /// Range measurement between a beacon and a vehicle.
+    pub range: u32,
+    /// Beacon latitude (WGS84).
+    pub lat: i32,
+    /// Beacon longitude (WGS84).
+    pub lon: i32,
+    /// Beacon altitude (frame defined in alt_type).
+    pub alt: f32,
+    /// Beacon 1-sigma horizontal accuracy estimate.
+    pub hacc_est: u32,
+    /// Beacon 1-sigma vertical accuracy estimate.
+    pub vacc_est: u32,
+    /// Estimated 1-sigma range measurement accuracy.
+    pub range_accuracy: u32,
+    /// ID of the ranging beacon/station.
+    pub beacon_id: u16,
+    /// Ranging carrier frequency.
+    pub carrier_freq: u16,
+    /// System ID.
+    pub target_system: u8,
+    /// Component ID.
+    pub target_component: u8,
+    /// Altitude frame for alt field. RANGING_BEACON_ALT_TYPE_WGS84 (0) preferred.
+    /// Values from [`RangingBeaconAltType`].
+    pub alt_type: u8,
+    /// Measurement sequence number.
+    pub sequence: u8,
+    /// Ranging beacon status.
+    /// Values from [`RangingBeaconStatusFlag`].
+    pub status: u8,
+}
+
+impl Message for RangingBeacon {
+    const ID: u32 = 513;
+    const NAME: &'static str = "RANGING_BEACON";
+    const CRC_EXTRA: u8 = 99;
+    const MIN_LEN: usize = 45;
+    const LEN: usize = 45;
+
+    fn decode(payload: &[u8]) -> Self {
+        Self {
+            time_usec: get_u64(payload, 0),
+            range: get_u32(payload, 8),
+            lat: get_i32(payload, 12),
+            lon: get_i32(payload, 16),
+            alt: get_f32(payload, 20),
+            hacc_est: get_u32(payload, 24),
+            vacc_est: get_u32(payload, 28),
+            range_accuracy: get_u32(payload, 32),
+            beacon_id: get_u16(payload, 36),
+            carrier_freq: get_u16(payload, 38),
+            target_system: get_u8(payload, 40),
+            target_component: get_u8(payload, 41),
+            alt_type: get_u8(payload, 42),
+            sequence: get_u8(payload, 43),
+            status: get_u8(payload, 44),
+        }
+    }
+
+    fn encode(&self, out: &mut [u8]) -> usize {
+        put_bytes(out, 0, &self.time_usec.to_le_bytes());
+        put_bytes(out, 8, &self.range.to_le_bytes());
+        put_bytes(out, 12, &self.lat.to_le_bytes());
+        put_bytes(out, 16, &self.lon.to_le_bytes());
+        put_bytes(out, 20, &self.alt.to_le_bytes());
+        put_bytes(out, 24, &self.hacc_est.to_le_bytes());
+        put_bytes(out, 28, &self.vacc_est.to_le_bytes());
+        put_bytes(out, 32, &self.range_accuracy.to_le_bytes());
+        put_bytes(out, 36, &self.beacon_id.to_le_bytes());
+        put_bytes(out, 38, &self.carrier_freq.to_le_bytes());
+        put_bytes(out, 40, &self.target_system.to_le_bytes());
+        put_bytes(out, 41, &self.target_component.to_le_bytes());
+        put_bytes(out, 42, &self.alt_type.to_le_bytes());
+        put_bytes(out, 43, &self.sequence.to_le_bytes());
+        put_bytes(out, 44, &self.status.to_le_bytes());
+        Self::LEN
+    }
+}
+
+impl RangingBeacon {
+    /// Every field, by name, in wire order.
+    #[must_use]
+    pub fn fields(&self) -> Vec<(&'static str, FieldValue)> {
+        vec![
+            ("time_usec", FieldValue::Unsigned(self.time_usec)),
+            ("range", FieldValue::Unsigned(self.range.into())),
+            ("lat", FieldValue::Signed(self.lat.into())),
+            ("lon", FieldValue::Signed(self.lon.into())),
+            ("alt", FieldValue::Float(self.alt.into())),
+            ("hacc_est", FieldValue::Unsigned(self.hacc_est.into())),
+            ("vacc_est", FieldValue::Unsigned(self.vacc_est.into())),
+            (
+                "range_accuracy",
+                FieldValue::Unsigned(self.range_accuracy.into()),
+            ),
+            ("beacon_id", FieldValue::Unsigned(self.beacon_id.into())),
+            (
+                "carrier_freq",
+                FieldValue::Unsigned(self.carrier_freq.into()),
+            ),
+            (
+                "target_system",
+                FieldValue::Unsigned(self.target_system.into()),
+            ),
+            (
+                "target_component",
+                FieldValue::Unsigned(self.target_component.into()),
+            ),
+            ("alt_type", FieldValue::Unsigned(self.alt_type.into())),
+            ("sequence", FieldValue::Unsigned(self.sequence.into())),
+            ("status", FieldValue::Unsigned(self.status.into())),
+        ]
+    }
+
+    /// Every field's XML type and units, in wire order, as `fields` names them.
+    pub const FIELD_INFO: &'static [FieldInfo] = &[
+        FieldInfo::new("time_usec", "uint64_t", 0, "us"),
+        FieldInfo::new("range", "uint32_t", 0, "mm"),
+        FieldInfo::new("lat", "int32_t", 0, "degE7"),
+        FieldInfo::new("lon", "int32_t", 0, "degE7"),
+        FieldInfo::new("alt", "float", 0, "m"),
+        FieldInfo::new("hacc_est", "uint32_t", 0, "mm"),
+        FieldInfo::new("vacc_est", "uint32_t", 0, "mm"),
+        FieldInfo::new("range_accuracy", "uint32_t", 0, "mm"),
+        FieldInfo::new("beacon_id", "uint16_t", 0, ""),
+        FieldInfo::new("carrier_freq", "uint16_t", 0, "MHz"),
+        FieldInfo::new("target_system", "uint8_t", 0, ""),
+        FieldInfo::new("target_component", "uint8_t", 0, ""),
+        FieldInfo::new("alt_type", "uint8_t", 0, ""),
+        FieldInfo::new("sequence", "uint8_t", 0, ""),
+        FieldInfo::new("status", "uint8_t", 0, ""),
     ];
 }
 
@@ -41826,17 +43817,17 @@ pub struct OpenDroneIdSystem {
     pub operator_latitude: i32,
     /// Longitude of the operator. If unknown: 0 (both Lat/Lon).
     pub operator_longitude: i32,
-    /// Area Operations Ceiling relative to WGS84. If unknown: -1000 m.
+    /// Area Operations Ceiling relative to WGS84. If unknown: -1000 m. Used only for swarms/multiple UA.
     pub area_ceiling: f32,
-    /// Area Operations Floor relative to WGS84. If unknown: -1000 m.
+    /// Area Operations Floor relative to WGS84. If unknown: -1000 m. Used only for swarms/multiple UA.
     pub area_floor: f32,
     /// Geodetic altitude of the operator relative to WGS84. If unknown: -1000 m.
     pub operator_altitude_geo: f32,
     /// 32 bit Unix Timestamp in seconds since 00:00:00 01/01/2019.
     pub timestamp: u32,
-    /// Number of aircraft in the area, group or formation (default 1).
+    /// Number of aircraft in the area, group or formation (default 1). Used only for swarms/multiple UA.
     pub area_count: u16,
-    /// Radius of the cylindrical area of the group or formation (default 0).
+    /// Radius of the cylindrical area of the group or formation (default 0). Used only for swarms/multiple UA.
     pub area_radius: u16,
     /// System ID (0 for broadcast).
     pub target_system: u8,
@@ -42156,7 +44147,7 @@ impl OpenDroneIdMessagePack {
     ];
 }
 
-/// Status from the transmitter telling the flight controller if the remote ID system is ready for arming.
+/// Transmitter (remote ID system) is enabled and ready to start sending location and other required information. This is streamed by transmitter. A flight controller uses it as a condition to arm.
 ///
 /// MAVLink message 12918 (`OPEN_DRONE_ID_ARM_STATUS`), from `common.xml`.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -45753,6 +47744,8 @@ pub enum MavMessage {
     GimbalManagerSetManualControl(GimbalManagerSetManualControl),
     /// [`Airspeed`]
     Airspeed(Airspeed),
+    /// [`GlobalPositionSensor`]
+    GlobalPositionSensor(GlobalPositionSensor),
     /// [`WifiConfigAp`]
     WifiConfigAp(WifiConfigAp),
     /// [`AisVessel`]
@@ -45789,6 +47782,8 @@ pub enum MavMessage {
     ParamError(ParamError),
     /// [`DebugFloatArray`]
     DebugFloatArray(DebugFloatArray),
+    /// [`OrbitExecutionStatus`]
+    OrbitExecutionStatus(OrbitExecutionStatus),
     /// [`SmartBatteryInfo`]
     SmartBatteryInfo(SmartBatteryInfo),
     /// [`GeneratorStatus`]
@@ -45805,6 +47800,8 @@ pub enum MavMessage {
     CanfdFrame(CanfdFrame),
     /// [`CanFilterModify`]
     CanFilterModify(CanFilterModify),
+    /// [`OnboardComputerStatus`]
+    OnboardComputerStatus(OnboardComputerStatus),
     /// [`RadioRcChannels`]
     RadioRcChannels(RadioRcChannels),
     /// [`AvailableModes`]
@@ -45815,6 +47812,8 @@ pub enum MavMessage {
     AvailableModesMonitor(AvailableModesMonitor),
     /// [`GnssIntegrity`]
     GnssIntegrity(GnssIntegrity),
+    /// [`RangingBeacon`]
+    RangingBeacon(RangingBeacon),
     /// [`SensPower`]
     SensPower(SensPower),
     /// [`SensMppt`]
@@ -46337,6 +48336,9 @@ impl MavMessage {
                 GimbalManagerSetManualControl::decode(payload),
             )),
             295 => Some(Self::Airspeed(Airspeed::decode(payload))),
+            296 => Some(Self::GlobalPositionSensor(GlobalPositionSensor::decode(
+                payload,
+            ))),
             299 => Some(Self::WifiConfigAp(WifiConfigAp::decode(payload))),
             301 => Some(Self::AisVessel(AisVessel::decode(payload))),
             310 => Some(Self::UavcanNodeStatus(UavcanNodeStatus::decode(payload))),
@@ -46363,6 +48365,9 @@ impl MavMessage {
             340 => Some(Self::UtmGlobalPosition(UtmGlobalPosition::decode(payload))),
             345 => Some(Self::ParamError(ParamError::decode(payload))),
             350 => Some(Self::DebugFloatArray(DebugFloatArray::decode(payload))),
+            360 => Some(Self::OrbitExecutionStatus(OrbitExecutionStatus::decode(
+                payload,
+            ))),
             370 => Some(Self::SmartBatteryInfo(SmartBatteryInfo::decode(payload))),
             373 => Some(Self::GeneratorStatus(GeneratorStatus::decode(payload))),
             375 => Some(Self::ActuatorOutputStatus(ActuatorOutputStatus::decode(
@@ -46373,6 +48378,9 @@ impl MavMessage {
             386 => Some(Self::CanFrame(CanFrame::decode(payload))),
             387 => Some(Self::CanfdFrame(CanfdFrame::decode(payload))),
             388 => Some(Self::CanFilterModify(CanFilterModify::decode(payload))),
+            390 => Some(Self::OnboardComputerStatus(OnboardComputerStatus::decode(
+                payload,
+            ))),
             420 => Some(Self::RadioRcChannels(RadioRcChannels::decode(payload))),
             435 => Some(Self::AvailableModes(AvailableModes::decode(payload))),
             436 => Some(Self::CurrentMode(CurrentMode::decode(payload))),
@@ -46380,6 +48388,7 @@ impl MavMessage {
                 payload,
             ))),
             441 => Some(Self::GnssIntegrity(GnssIntegrity::decode(payload))),
+            513 => Some(Self::RangingBeacon(RangingBeacon::decode(payload))),
             8002 => Some(Self::SensPower(SensPower::decode(payload))),
             8003 => Some(Self::SensMppt(SensMppt::decode(payload))),
             8004 => Some(Self::AslctrlData(AslctrlData::decode(payload))),
@@ -46792,6 +48801,7 @@ impl MavMessage {
             Self::GimbalManagerSetPitchyaw(_) => 287,
             Self::GimbalManagerSetManualControl(_) => 288,
             Self::Airspeed(_) => 295,
+            Self::GlobalPositionSensor(_) => 296,
             Self::WifiConfigAp(_) => 299,
             Self::AisVessel(_) => 301,
             Self::UavcanNodeStatus(_) => 310,
@@ -46810,6 +48820,7 @@ impl MavMessage {
             Self::UtmGlobalPosition(_) => 340,
             Self::ParamError(_) => 345,
             Self::DebugFloatArray(_) => 350,
+            Self::OrbitExecutionStatus(_) => 360,
             Self::SmartBatteryInfo(_) => 370,
             Self::GeneratorStatus(_) => 373,
             Self::ActuatorOutputStatus(_) => 375,
@@ -46818,11 +48829,13 @@ impl MavMessage {
             Self::CanFrame(_) => 386,
             Self::CanfdFrame(_) => 387,
             Self::CanFilterModify(_) => 388,
+            Self::OnboardComputerStatus(_) => 390,
             Self::RadioRcChannels(_) => 420,
             Self::AvailableModes(_) => 435,
             Self::CurrentMode(_) => 436,
             Self::AvailableModesMonitor(_) => 437,
             Self::GnssIntegrity(_) => 441,
+            Self::RangingBeacon(_) => 513,
             Self::SensPower(_) => 8002,
             Self::SensMppt(_) => 8003,
             Self::AslctrlData(_) => 8004,
@@ -47147,6 +49160,7 @@ impl MavMessage {
             Self::GimbalManagerSetPitchyaw(m) => m.encode(out),
             Self::GimbalManagerSetManualControl(m) => m.encode(out),
             Self::Airspeed(m) => m.encode(out),
+            Self::GlobalPositionSensor(m) => m.encode(out),
             Self::WifiConfigAp(m) => m.encode(out),
             Self::AisVessel(m) => m.encode(out),
             Self::UavcanNodeStatus(m) => m.encode(out),
@@ -47165,6 +49179,7 @@ impl MavMessage {
             Self::UtmGlobalPosition(m) => m.encode(out),
             Self::ParamError(m) => m.encode(out),
             Self::DebugFloatArray(m) => m.encode(out),
+            Self::OrbitExecutionStatus(m) => m.encode(out),
             Self::SmartBatteryInfo(m) => m.encode(out),
             Self::GeneratorStatus(m) => m.encode(out),
             Self::ActuatorOutputStatus(m) => m.encode(out),
@@ -47173,11 +49188,13 @@ impl MavMessage {
             Self::CanFrame(m) => m.encode(out),
             Self::CanfdFrame(m) => m.encode(out),
             Self::CanFilterModify(m) => m.encode(out),
+            Self::OnboardComputerStatus(m) => m.encode(out),
             Self::RadioRcChannels(m) => m.encode(out),
             Self::AvailableModes(m) => m.encode(out),
             Self::CurrentMode(m) => m.encode(out),
             Self::AvailableModesMonitor(m) => m.encode(out),
             Self::GnssIntegrity(m) => m.encode(out),
+            Self::RangingBeacon(m) => m.encode(out),
             Self::SensPower(m) => m.encode(out),
             Self::SensMppt(m) => m.encode(out),
             Self::AslctrlData(m) => m.encode(out),
@@ -47281,7 +49298,7 @@ impl MavMessage {
     pub const fn len(&self) -> usize {
         match self {
             Self::Heartbeat(_) => 9,
-            Self::SysStatus(_) => 31,
+            Self::SysStatus(_) => 43,
             Self::SystemTime(_) => 12,
             Self::Ping(_) => 14,
             Self::ChangeOperatorControl(_) => 28,
@@ -47477,32 +49494,33 @@ impl MavMessage {
             Self::SetupSigning(_) => 42,
             Self::ButtonChange(_) => 9,
             Self::PlayTune(_) => 232,
-            Self::CameraInformation(_) => 236,
-            Self::CameraSettings(_) => 13,
-            Self::StorageInformation(_) => 60,
-            Self::CameraCaptureStatus(_) => 22,
+            Self::CameraInformation(_) => 237,
+            Self::CameraSettings(_) => 14,
+            Self::StorageInformation(_) => 61,
+            Self::CameraCaptureStatus(_) => 23,
             Self::CameraImageCaptured(_) => 255,
-            Self::FlightInformation(_) => 28,
+            Self::FlightInformation(_) => 32,
             Self::MountOrientation(_) => 20,
             Self::LoggingData(_) => 255,
             Self::LoggingDataAcked(_) => 255,
             Self::LoggingAck(_) => 4,
-            Self::VideoStreamInformation(_) => 214,
-            Self::VideoStreamStatus(_) => 19,
-            Self::CameraFovStatus(_) => 52,
-            Self::CameraTrackingImageStatus(_) => 31,
-            Self::CameraTrackingGeoStatus(_) => 49,
+            Self::VideoStreamInformation(_) => 215,
+            Self::VideoStreamStatus(_) => 20,
+            Self::CameraFovStatus(_) => 53,
+            Self::CameraTrackingImageStatus(_) => 32,
+            Self::CameraTrackingGeoStatus(_) => 50,
             Self::CameraThermalRange(_) => 30,
             Self::GimbalManagerInformation(_) => 33,
             Self::GimbalManagerStatus(_) => 13,
             Self::GimbalManagerSetAttitude(_) => 35,
-            Self::GimbalDeviceInformation(_) => 145,
+            Self::GimbalDeviceInformation(_) => 149,
             Self::GimbalDeviceSetAttitude(_) => 32,
             Self::GimbalDeviceAttitudeStatus(_) => 49,
             Self::AutopilotStateForGimbalDevice(_) => 57,
             Self::GimbalManagerSetPitchyaw(_) => 23,
             Self::GimbalManagerSetManualControl(_) => 23,
             Self::Airspeed(_) => 12,
+            Self::GlobalPositionSensor(_) => 41,
             Self::WifiConfigAp(_) => 96,
             Self::AisVessel(_) => 58,
             Self::UavcanNodeStatus(_) => 17,
@@ -47521,6 +49539,7 @@ impl MavMessage {
             Self::UtmGlobalPosition(_) => 70,
             Self::ParamError(_) => 21,
             Self::DebugFloatArray(_) => 252,
+            Self::OrbitExecutionStatus(_) => 25,
             Self::SmartBatteryInfo(_) => 109,
             Self::GeneratorStatus(_) => 42,
             Self::ActuatorOutputStatus(_) => 140,
@@ -47529,11 +49548,13 @@ impl MavMessage {
             Self::CanFrame(_) => 16,
             Self::CanfdFrame(_) => 72,
             Self::CanFilterModify(_) => 37,
+            Self::OnboardComputerStatus(_) => 240,
             Self::RadioRcChannels(_) => 73,
             Self::AvailableModes(_) => 46,
             Self::CurrentMode(_) => 9,
             Self::AvailableModesMonitor(_) => 1,
             Self::GnssIntegrity(_) => 17,
+            Self::RangingBeacon(_) => 45,
             Self::SensPower(_) => 16,
             Self::SensMppt(_) => 41,
             Self::AslctrlData(_) => 98,
@@ -47865,6 +49886,7 @@ impl MavMessage {
             Self::GimbalManagerSetPitchyaw(_) => 1,
             Self::GimbalManagerSetManualControl(_) => 20,
             Self::Airspeed(_) => 234,
+            Self::GlobalPositionSensor(_) => 158,
             Self::WifiConfigAp(_) => 19,
             Self::AisVessel(_) => 243,
             Self::UavcanNodeStatus(_) => 28,
@@ -47883,6 +49905,7 @@ impl MavMessage {
             Self::UtmGlobalPosition(_) => 99,
             Self::ParamError(_) => 209,
             Self::DebugFloatArray(_) => 232,
+            Self::OrbitExecutionStatus(_) => 11,
             Self::SmartBatteryInfo(_) => 75,
             Self::GeneratorStatus(_) => 117,
             Self::ActuatorOutputStatus(_) => 251,
@@ -47891,11 +49914,13 @@ impl MavMessage {
             Self::CanFrame(_) => 132,
             Self::CanfdFrame(_) => 4,
             Self::CanFilterModify(_) => 8,
+            Self::OnboardComputerStatus(_) => 156,
             Self::RadioRcChannels(_) => 20,
             Self::AvailableModes(_) => 134,
             Self::CurrentMode(_) => 193,
             Self::AvailableModesMonitor(_) => 30,
             Self::GnssIntegrity(_) => 169,
+            Self::RangingBeacon(_) => 99,
             Self::SensPower(_) => 218,
             Self::SensMppt(_) => 231,
             Self::AslctrlData(_) => 172,
@@ -48221,6 +50246,7 @@ impl MavMessage {
             Self::GimbalManagerSetPitchyaw(m) => m.fields(),
             Self::GimbalManagerSetManualControl(m) => m.fields(),
             Self::Airspeed(m) => m.fields(),
+            Self::GlobalPositionSensor(m) => m.fields(),
             Self::WifiConfigAp(m) => m.fields(),
             Self::AisVessel(m) => m.fields(),
             Self::UavcanNodeStatus(m) => m.fields(),
@@ -48239,6 +50265,7 @@ impl MavMessage {
             Self::UtmGlobalPosition(m) => m.fields(),
             Self::ParamError(m) => m.fields(),
             Self::DebugFloatArray(m) => m.fields(),
+            Self::OrbitExecutionStatus(m) => m.fields(),
             Self::SmartBatteryInfo(m) => m.fields(),
             Self::GeneratorStatus(m) => m.fields(),
             Self::ActuatorOutputStatus(m) => m.fields(),
@@ -48247,11 +50274,13 @@ impl MavMessage {
             Self::CanFrame(m) => m.fields(),
             Self::CanfdFrame(m) => m.fields(),
             Self::CanFilterModify(m) => m.fields(),
+            Self::OnboardComputerStatus(m) => m.fields(),
             Self::RadioRcChannels(m) => m.fields(),
             Self::AvailableModes(m) => m.fields(),
             Self::CurrentMode(m) => m.fields(),
             Self::AvailableModesMonitor(m) => m.fields(),
             Self::GnssIntegrity(m) => m.fields(),
+            Self::RangingBeacon(m) => m.fields(),
             Self::SensPower(m) => m.fields(),
             Self::SensMppt(m) => m.fields(),
             Self::AslctrlData(m) => m.fields(),
@@ -48579,6 +50608,7 @@ impl MavMessage {
             Self::GimbalManagerSetPitchyaw(_) => GimbalManagerSetPitchyaw::FIELD_INFO,
             Self::GimbalManagerSetManualControl(_) => GimbalManagerSetManualControl::FIELD_INFO,
             Self::Airspeed(_) => Airspeed::FIELD_INFO,
+            Self::GlobalPositionSensor(_) => GlobalPositionSensor::FIELD_INFO,
             Self::WifiConfigAp(_) => WifiConfigAp::FIELD_INFO,
             Self::AisVessel(_) => AisVessel::FIELD_INFO,
             Self::UavcanNodeStatus(_) => UavcanNodeStatus::FIELD_INFO,
@@ -48599,6 +50629,7 @@ impl MavMessage {
             Self::UtmGlobalPosition(_) => UtmGlobalPosition::FIELD_INFO,
             Self::ParamError(_) => ParamError::FIELD_INFO,
             Self::DebugFloatArray(_) => DebugFloatArray::FIELD_INFO,
+            Self::OrbitExecutionStatus(_) => OrbitExecutionStatus::FIELD_INFO,
             Self::SmartBatteryInfo(_) => SmartBatteryInfo::FIELD_INFO,
             Self::GeneratorStatus(_) => GeneratorStatus::FIELD_INFO,
             Self::ActuatorOutputStatus(_) => ActuatorOutputStatus::FIELD_INFO,
@@ -48607,11 +50638,13 @@ impl MavMessage {
             Self::CanFrame(_) => CanFrame::FIELD_INFO,
             Self::CanfdFrame(_) => CanfdFrame::FIELD_INFO,
             Self::CanFilterModify(_) => CanFilterModify::FIELD_INFO,
+            Self::OnboardComputerStatus(_) => OnboardComputerStatus::FIELD_INFO,
             Self::RadioRcChannels(_) => RadioRcChannels::FIELD_INFO,
             Self::AvailableModes(_) => AvailableModes::FIELD_INFO,
             Self::CurrentMode(_) => CurrentMode::FIELD_INFO,
             Self::AvailableModesMonitor(_) => AvailableModesMonitor::FIELD_INFO,
             Self::GnssIntegrity(_) => GnssIntegrity::FIELD_INFO,
+            Self::RangingBeacon(_) => RangingBeacon::FIELD_INFO,
             Self::SensPower(_) => SensPower::FIELD_INFO,
             Self::SensMppt(_) => SensMppt::FIELD_INFO,
             Self::AslctrlData(_) => AslctrlData::FIELD_INFO,
@@ -48945,6 +50978,7 @@ impl MavMessage {
             Self::GimbalManagerSetPitchyaw(_) => "GIMBAL_MANAGER_SET_PITCHYAW",
             Self::GimbalManagerSetManualControl(_) => "GIMBAL_MANAGER_SET_MANUAL_CONTROL",
             Self::Airspeed(_) => "AIRSPEED",
+            Self::GlobalPositionSensor(_) => "GLOBAL_POSITION_SENSOR",
             Self::WifiConfigAp(_) => "WIFI_CONFIG_AP",
             Self::AisVessel(_) => "AIS_VESSEL",
             Self::UavcanNodeStatus(_) => "UAVCAN_NODE_STATUS",
@@ -48963,6 +50997,7 @@ impl MavMessage {
             Self::UtmGlobalPosition(_) => "UTM_GLOBAL_POSITION",
             Self::ParamError(_) => "PARAM_ERROR",
             Self::DebugFloatArray(_) => "DEBUG_FLOAT_ARRAY",
+            Self::OrbitExecutionStatus(_) => "ORBIT_EXECUTION_STATUS",
             Self::SmartBatteryInfo(_) => "SMART_BATTERY_INFO",
             Self::GeneratorStatus(_) => "GENERATOR_STATUS",
             Self::ActuatorOutputStatus(_) => "ACTUATOR_OUTPUT_STATUS",
@@ -48971,11 +51006,13 @@ impl MavMessage {
             Self::CanFrame(_) => "CAN_FRAME",
             Self::CanfdFrame(_) => "CANFD_FRAME",
             Self::CanFilterModify(_) => "CAN_FILTER_MODIFY",
+            Self::OnboardComputerStatus(_) => "ONBOARD_COMPUTER_STATUS",
             Self::RadioRcChannels(_) => "RADIO_RC_CHANNELS",
             Self::AvailableModes(_) => "AVAILABLE_MODES",
             Self::CurrentMode(_) => "CURRENT_MODE",
             Self::AvailableModesMonitor(_) => "AVAILABLE_MODES_MONITOR",
             Self::GnssIntegrity(_) => "GNSS_INTEGRITY",
+            Self::RangingBeacon(_) => "RANGING_BEACON",
             Self::SensPower(_) => "SENS_POWER",
             Self::SensMppt(_) => "SENS_MPPT",
             Self::AslctrlData(_) => "ASLCTRL_DATA",

@@ -2,7 +2,7 @@
 # (`POI.POIAdd(MouseDownStart)`); Delete removes the point the menu opened over
 # (`POI.POIDelete(CurrentPOIMarker)`); Edit asks "Enter ID" again for it (`POI.POIEdit`). The
 # points are the flight screen's, saved to its poi.txt as they change, and drawn on the planner's
-# map from its own poioverlay. `GCSViews/FlightPlanner.cs:85, 5009-5027, 8113-8116;
+# map from its own poioverlay. `GCSViews/FlightPlanner.cs:85, 5009-5027, 8110-8113;
 # Utilities/POI.cs:59-124`
 #
 # Needs no link: tools/gui-test.sh tests/gui/plan-poi.gui

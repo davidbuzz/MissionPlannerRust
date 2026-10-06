@@ -32,7 +32,7 @@
 //!
 //! The run is a thread, as `Application.DoEvents()` between files keeps the C#'s window alive.
 //! `Directory.GetFiles` returns files in the file system's order; each kind is sorted here.
-//! `// C#: GCSViews/FlightPlanner.cs:8416-8527, GCSViews/FlightPlanner.resx (BUT_InjectCustomMap,
+//! `// C#: GCSViews/FlightPlanner.cs:8413-8524, GCSViews/FlightPlanner.resx (BUT_InjectCustomMap,
 //! progressBarInjectCustomMap); ExtLibs/Maps/Custom.cs`
 
 // This module is internal to the binary; `pub` here documents intent rather than exporting API.
@@ -100,7 +100,7 @@ pub fn scan(folder: &Path) -> Vec<PathBuf> {
 /// `\Z*([0-9]+)\([0-9]+)\([0-9]+)\.` on the path: the zoom, then `GPoint(X: group 3, Y: group 2)`,
 /// the directory under the zoom's being the row and the file name the column. Either separator.
 ///
-/// `// C#: GCSViews/FlightPlanner.cs:8456-8463`
+/// `// C#: GCSViews/FlightPlanner.cs:8453-8460`
 #[must_use]
 pub fn tile_of(path: &Path) -> Option<TileId> {
     let text = path.to_string_lossy();
@@ -142,7 +142,7 @@ impl Injection {
     /// The run started over `files` into `cache`: each file read, saved as JPEG and put under
     /// the Custom provider at the tile its path names, a file whose path names none skipped; the
     /// first file that is not an image ends the run, as the C#'s exception does.
-    /// `// C#: GCSViews/FlightPlanner.cs:8446-8482`
+    /// `// C#: GCSViews/FlightPlanner.cs:8443-8479`
     #[must_use]
     pub fn start(files: Vec<PathBuf>, cache: TileCache) -> Self {
         let shared = Arc::new(Shared::default());
@@ -217,7 +217,7 @@ impl Injection {
 
     /// The results box's text: "Number of tiles loaded per zoom : ", a line a zoom in order, then
     /// the total - "tile" for one, "tiles" past one and for none.
-    /// `// C#: GCSViews/FlightPlanner.cs:8514-8526`
+    /// `// C#: GCSViews/FlightPlanner.cs:8511-8523`
     #[must_use]
     pub fn results(&self) -> String {
         let counts = self

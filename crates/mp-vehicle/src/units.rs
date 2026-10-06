@@ -26,7 +26,7 @@
 //! `speedunits` settings, and applies them in each property's getter - `alt` returns
 //! `(_alt - altoffsethome) * multiplieralt`. The state in this crate stays SI; a display holds a
 //! [`DisplayUnits`] and converts with it, which is the same arithmetic in a different place.
-//! `// C#: ExtLibs/ArduPilot/CurrentState.cs:23-38, 4360-4383, 4549-4553; MainV2.cs:4247-4330`
+//! `// C#: ExtLibs/ArduPilot/CurrentState.cs:23-38, 4363-4386, 4552-4556; MainV2.cs:4254-4337`
 
 /// A distance or altitude unit: the C#'s `distances` and `altitudes` enums, which have the same
 /// two members. `// C#: ExtLibs/Utilities/distances.cs:3-7, altitudes.cs:3-7`
@@ -81,7 +81,7 @@ impl Speed {
 }
 
 /// Feet in a metre: the C#'s `3.2808399f`, spelled as the shortest literal that rounds to the
-/// same single. `// C#: MainV2.cs:4262, 4284, 4305`
+/// same single. `// C#: MainV2.cs:4269, 4291, 4312`
 const FEET: f32 = 3.280_84;
 
 /// The multipliers and unit names a display converts SI values with.
@@ -122,7 +122,7 @@ impl DisplayUnits {
     /// A setting that is not a member name makes `Enum.Parse` throw, and the C# catches that
     /// around the whole method - so the units after it are left as they were. That is kept:
     /// parsing stops at the first bad setting.
-    /// `// C#: MainV2.cs:4247-4330`
+    /// `// C#: MainV2.cs:4254-4337`
     #[must_use]
     pub fn change_units(
         self,
@@ -131,17 +131,17 @@ impl DisplayUnits {
         speedunits: Option<&str>,
     ) -> Self {
         let mut units = self;
-        // C#: MainV2.cs:4252-4270
+        // C#: MainV2.cs:4259-4277
         let Some(distance) = distunits.map_or(Some(Distance::Meters), Distance::parse) else {
             return units;
         };
         (units.dist, units.dist_unit) = distance_multiplier(distance);
-        // C#: MainV2.cs:4273-4292. Parsed as `altitudes`, which has the same members.
+        // C#: MainV2.cs:4280-4299. Parsed as `altitudes`, which has the same members.
         let Some(altitude) = altunits.map_or(Some(Distance::Meters), Distance::parse) else {
             return units;
         };
         (units.alt, units.alt_unit) = distance_multiplier(altitude);
-        // C#: MainV2.cs:4295-4325
+        // C#: MainV2.cs:4302-4332
         let Some(speed) = speedunits.map_or(Some(Speed::MetersPerSecond), Speed::parse) else {
             return units;
         };
@@ -158,35 +158,35 @@ impl DisplayUnits {
     }
 
     /// `toDistDisplayUnit`: metres in the display's distance unit.
-    /// `// C#: ExtLibs/ArduPilot/CurrentState.cs:4360-4363`
+    /// `// C#: ExtLibs/ArduPilot/CurrentState.cs:4363-4366`
     #[must_use]
     pub fn to_dist(&self, metres: f64) -> f64 {
         metres * f64::from(self.dist)
     }
 
     /// `toAltDisplayUnit`: metres in the display's altitude unit.
-    /// `// C#: ExtLibs/ArduPilot/CurrentState.cs:4365-4368`
+    /// `// C#: ExtLibs/ArduPilot/CurrentState.cs:4368-4371`
     #[must_use]
     pub fn to_alt(&self, metres: f64) -> f64 {
         metres * f64::from(self.alt)
     }
 
     /// `toSpeedDisplayUnit`: metres per second in the display's speed unit.
-    /// `// C#: ExtLibs/ArduPilot/CurrentState.cs:4370-4373`
+    /// `// C#: ExtLibs/ArduPilot/CurrentState.cs:4373-4376`
     #[must_use]
     pub fn to_speed(&self, metres_per_second: f64) -> f64 {
         metres_per_second * f64::from(self.speed)
     }
 
     /// `fromDistDisplayUnit`: a distance the user typed, in metres.
-    /// `// C#: ExtLibs/ArduPilot/CurrentState.cs:4375-4378`
+    /// `// C#: ExtLibs/ArduPilot/CurrentState.cs:4378-4381`
     #[must_use]
     pub fn from_dist(&self, value: f64) -> f64 {
         value / f64::from(self.dist)
     }
 
     /// `fromSpeedDisplayUnit`: a speed the user typed, in metres per second.
-    /// `// C#: ExtLibs/ArduPilot/CurrentState.cs:4380-4383`
+    /// `// C#: ExtLibs/ArduPilot/CurrentState.cs:4383-4386`
     #[must_use]
     pub fn from_speed(&self, value: f64) -> f64 {
         value / f64::from(self.speed)
@@ -194,7 +194,7 @@ impl DisplayUnits {
 
     /// A field's display text with its unit filled in, as `GetNameandUnit` does it: the first of
     /// `(dist)`, `(speed)` and `(alt)` that the text contains, in that order, is replaced.
-    /// `// C#: ExtLibs/ArduPilot/CurrentState.cs:4549-4553`
+    /// `// C#: ExtLibs/ArduPilot/CurrentState.cs:4552-4556`
     #[must_use]
     pub fn name_and_unit(&self, display: &str) -> String {
         if display.contains("(dist)") {
@@ -209,7 +209,7 @@ impl DisplayUnits {
     }
 }
 
-/// A distance unit's multiplier and name. `// C#: MainV2.cs:4255-4263`
+/// A distance unit's multiplier and name. `// C#: MainV2.cs:4262-4270`
 const fn distance_multiplier(unit: Distance) -> (f32, &'static str) {
     match unit {
         Distance::Meters => (1.0, "m"),
@@ -239,7 +239,7 @@ mod tests {
 
     #[test]
     fn the_multipliers_are_the_csharps_single_precision_literals() {
-        // C#: MainV2.cs:4262, 4284, 4305, 4309, 4313, 4317
+        // C#: MainV2.cs:4269, 4291, 4312, 4316, 4320, 4324
         let units =
             DisplayUnits::default().change_units(Some("Feet"), Some("Meters"), Some("knots"));
         assert_eq!((units.dist, units.dist_unit), (csharp("3.2808399"), "ft"));
@@ -289,7 +289,7 @@ mod tests {
 
     #[test]
     fn the_display_text_gets_its_unit() {
-        // C#: ExtLibs/ArduPilot/CurrentState.cs:4549-4553, over the texts the C# declares.
+        // C#: ExtLibs/ArduPilot/CurrentState.cs:4552-4556, over the texts the C# declares.
         let units = DisplayUnits::default().change_units(Some("Feet"), Some("Meters"), Some("mph"));
         assert_eq!(units.name_and_unit("Dist to WP (dist)"), "Dist to WP (ft)");
         assert_eq!(units.name_and_unit("AirSpeed (speed)"), "AirSpeed (mph)");

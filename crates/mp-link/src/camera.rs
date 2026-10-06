@@ -29,7 +29,7 @@
 //! making, the starting and the asking (`lib.rs`); this is the state, the commands and the
 //! pipeline a video stream is played with.
 //! `// C#: ExtLibs/ArduPilot/Mavlink/CameraProtocol.cs:1-664,
-//! ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:500-535, ExtLibs/ArduPilot/CurrentState.cs:4654`
+//! ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:500-535, ExtLibs/ArduPilot/CurrentState.cs:4657`
 //!
 //! `VideoStreams`, static in the C# and so shared by every link, is one table per link here
 //! ([`crate::Link::video_streams`]): this application has one link.
@@ -68,7 +68,7 @@ fn cmd(command: MavCmd) -> u16 {
 }
 
 /// Whether the C# makes a `CameraProtocol` for this component: the autopilot or a camera.
-/// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:503-505`
+/// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:505-507`
 #[must_use]
 pub const fn is_camera_component(compid: u8) -> bool {
     compid == 1 || (compid >= 100 && compid <= 105)
@@ -76,7 +76,7 @@ pub const fn is_camera_component(compid: u8) -> bool {
 
 /// Whether the C# makes a `GimbalManagerProtocol` for this component: the autopilot, or
 /// `MAV_COMP_ID_MISSIONPLANNER` (190) to `MAV_COMP_ID_ONBOARD_COMPUTER4` (194).
-/// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:563-565`
+/// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:565-567`
 #[must_use]
 pub const fn is_gimbal_manager_component(compid: u8) -> bool {
     compid == 1 || (compid >= 190 && compid <= 194)
@@ -625,6 +625,7 @@ mod tests {
             name,
             uri: bytes,
             encoding,
+            camera_device_id: 0,
         }
     }
 
@@ -718,6 +719,7 @@ mod tests {
             lens_id: 0,
             cam_definition_uri: [0; 140],
             gimbal_device_id: 0,
+            camera_device_id: 0,
         })
     }
 

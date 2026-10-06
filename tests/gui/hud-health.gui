@@ -11,16 +11,16 @@ screen fly
 window 1600x1200
 budget 2
 
-# A copter at rest in SITL shakes far below the C#'s 30 m/s² line (HUD.cs:3166).
+# A copter at rest in SITL shakes far below the C#'s 30 m/s² line (HUD.cs:3168).
 expect hud.vibe.colour white
-# The red CPU is up only at a SYS_STATUS.load of exactly 1000, a full 100% (HUD.cs:3206,
+# The red CPU is up only at a SYS_STATUS.load of exactly 1000, a full 100% (HUD.cs:3208,
 # CurrentState.cs:2949). A copter at rest in SITL reports far less - the copter recording in
 # testdata/mavlink/autotest.tlog reports 0 throughout - so it is down.
 expect hud.cpu false
 # A settled SITL EKF has attitude and horizontal velocity and variances near zero, so ekfstatus
-# is under the C#'s 0.5 (HUD.cs:3226).
+# is under the C#'s 0.5 (HUD.cs:3228).
 expect hud.ekf.colour white
-# Disarmed, so the pre-arm line is up (HUD.cs:3264). SITL passes its pre-arm checks once the
+# Disarmed, so the pre-arm line is up (HUD.cs:3266). SITL passes its pre-arm checks once the
 # EKF and GPS are ready, which is white "Ready to Arm".
 expect hud.prearm Ready to Arm
 expect hud.prearm.colour white

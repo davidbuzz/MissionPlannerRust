@@ -2,7 +2,7 @@
 # on this machine's webcam. Ported from GCSViews/ConfigurationView/ConfigPlanner.cs and
 # ExtLibs/WebCamService/Capture.cs, with V4L2 where the C# has DirectShow.
 #
-# The claim: with nothing saved, Activate lists no device (ConfigPlanner.cs:215-232). Clicking
+# The claim: with nothing saved, Activate lists no device (ConfigPlanner.cs:216-233). Clicking
 # Video Device lists the capture devices by name - the webcam's capture nodes, not its metadata
 # nodes, each named by its card and its node, "Integrated_Webcam_HD: Integrate (/dev/video0)",
 # where DirectShow gives the bare name (the owner's ruling: two nodes share the card) - and
@@ -11,7 +11,7 @@
 # 968-989). On Windows the devices are Media Foundation's, each by its bare friendly name, as
 # DirectShow's list names them. Start opens the device in that format; once it runs, video_device and video_options
 # are written as the two combos' indexes and frames arrive (:261-285); the flight screen's HUD
-# draws the latest one under everything (HUD.cs:1986-2013, FlightData.cs:1897-1900). Enable
+# draws the latest one under everything (HUD.cs:1986-2013, FlightData.cs:1907-1910). Enable
 # HUD Overlay unticked sets hudon false, and the HUD paints the picture alone, its instruments
 # hidden (:374-378, HUD.cs:2005-2008); Activate, while the capture runs, shows hudon in the box
 # (:136-145); ticked again, the instruments are back. Stop ends the capture and the HUD's picture

@@ -1,15 +1,15 @@
 # Ctrl+J: Mission Planner's DevOps window, MainV2.ProcessCmdKey's `new DevopsUI()
-# .ShowUserControl()` (MainV2.cs:4195-4200; Controls/DevopsUI.cs; crates/mp-gui/src/cmd_keys/
+# .ShowUserControl()` (MainV2.cs:4202-4207; Controls/DevopsUI.cs; crates/mp-gui/src/cmd_keys/
 # devops_ui.rs).
 #
 # The claim: the form opens as its Designer leaves it - sysid 1, compid 1, bus type SPI, the name
 # icm20948_ext, bus 0, address 0, regstart 255, count 0, every box enabled. The bus type's down
 # arrow, from no item chosen, chooses I2C: the name disabled, the bus and the address enabled; down
-# again, SPI, the other way round (dom_bustype_SelectedItemChanged, DevopsUI.cs:34-50). count's up
+# again, SPI, the other way round (dom_bustype_SelectedItemChanged, DevopsUI.cs:35-51). count's up
 # arrow twice reads 2. Do It sends DEVICE_OP_READ (MAVLinkInterface.cs:1012-1111) and, with no
-# vehicle to answer, the second passes and the line is "No Response - 0" (DevopsUI.cs:20-32). test
+# vehicle to answer, the second passes and the line is "No Response - 0" (DevopsUI.cs:21-33). test
 # writes, then reads, a second each, and its read brought nothing: `Aggregate`'s throw on the
-# status line by the owner's ruling, no line added (DevopsUI.cs:52-62).
+# status line by the owner's ruling, no line added (DevopsUI.cs:53-63).
 #
 # No vehicle: nothing answers, which is what the claim needs. Run from the repository root:
 #   tools/gui-test.sh tests/gui/keys-devops.gui

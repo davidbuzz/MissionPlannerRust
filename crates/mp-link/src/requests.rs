@@ -141,7 +141,7 @@ pub enum RequestKind {
     SetFencePoint(FencePointSet),
     /// `getFencePoint`: `FENCE_FETCH_POINT` for point `idx` until the vehicle sends it, three
     /// more times 700 ms apart; what came is [`Request::fence_point`].
-    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:5908-5967`
+    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:5871-5929`
     GetFencePoint {
         /// The point's place, from 0: the return point, then the polygon's corners.
         idx: u8,
@@ -149,7 +149,7 @@ pub enum RequestKind {
     /// `getWPAsync`: one item of one list read on its own - `MISSION_REQUEST_INT` for it, or
     /// `MISSION_REQUEST` to a vehicle without the `MISSION_INT` capability - until the vehicle
     /// sends it, five more times 2.5 s apart; what came is [`Request::wp`]. See [`WpRead`].
-    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:3413-3565`
+    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:3408-3558`
     GetWp {
         /// `index`: the item's sequence number.
         seq: u16,
@@ -161,7 +161,7 @@ pub enum RequestKind {
     },
     /// `setWPTotalAsync`: `MISSION_COUNT` until the vehicle asks for item 0 or 1 - or
     /// acknowledges the count - three more times 700 ms apart.
-    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:3764-3882`
+    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:3757-3872`
     ///
     /// The vehicle's first request is taken by this request and by nothing else, as the C#'s
     /// loop reads it off the port: the `setWP(0)` that follows never sees it, and so never sends
@@ -177,11 +177,11 @@ pub enum RequestKind {
 
 /// `MAV_PROTOCOL_CAPABILITY_MISSION_INT`: the vehicle speaks `MISSION_ITEM_INT`, and `getWP`
 /// asks it with `MISSION_REQUEST_INT`.
-/// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:3419`
+/// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:3414`
 pub const CAPABILITY_MISSION_INT: u32 = 4;
 
 /// The item a `getWP` read, as `getWPAsync` fills its `Locationwp` from it.
-/// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:3495-3557`
+/// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:3489-3550`
 ///
 /// What the machine does (`getWPAsync`, `:3413-3565`):
 ///
@@ -213,7 +213,7 @@ pub struct WpRead {
 
 /// The request `getWPAsync` sends for item `seq`: `mavlink_mission_request_int_t` or
 /// `mavlink_mission_request_t`, whose fields are the same.
-/// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:3421-3451`
+/// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:3416-3446`
 const fn wp_request(target: VehicleId, seq: u16, mission_type: u8, int: bool) -> MavMessage {
     if int {
         MavMessage::MissionRequestInt(MissionRequestInt {
@@ -234,7 +234,7 @@ const fn wp_request(target: VehicleId, seq: u16, mission_type: u8, int: bool) ->
 
 /// A `MISSION_ITEM_INT`'s coordinate as `getWPAsync` puts it in a `Locationwp`: over 1e7 for a
 /// location command, as it came otherwise.
-/// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:3539-3547`
+/// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:3532-3540`
 fn wp_coordinate(command: u16, value: i32) -> f64 {
     let location = mp_mission::MissionItem {
         command,
@@ -250,7 +250,7 @@ fn wp_coordinate(command: u16, value: i32) -> f64 {
 
 /// One geofence point as `setFencePoint` puts it in a `mavlink_fence_point_t`: the position as
 /// `(float)` degrees, the count as the C#'s `byte`.
-/// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:6415-6439`
+/// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:6376-6400`
 ///
 /// What the machine does (`setFencePoint` `:6415-6439`, `getFencePoint` `:5908-5967`):
 ///
@@ -278,7 +278,7 @@ pub struct FencePointSet {
 }
 
 /// A `FENCE_POINT` that answered a `getFencePoint`: its position, and `count`, the C#'s `total`.
-/// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:5959-5965`
+/// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:5921-5927`
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct FencePointRead {
     /// `fp.lat`.
@@ -291,11 +291,11 @@ pub struct FencePointRead {
 
 /// How many times `setFencePoint` sends a point before it gives up on reading it back the same:
 /// `int retry = 3; while (retry > 0)`.
-/// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:6426-6436`
+/// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:6387-6397`
 pub const FENCE_POINT_SENDS: u8 = 3;
 
 /// How close, in metres, a point read back must be to the one sent: `GetDistance(plla) < 5`.
-/// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:6433`
+/// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:6394`
 pub const FENCE_POINT_TOLERANCE: f64 = 5.0;
 
 /// The `FENCE_POINT` that sets `set` on `target`: `(float) plla.Lat`, `(float) plla.Lng`.
@@ -313,7 +313,7 @@ fn fence_point(target: VehicleId, set: &FencePointSet) -> MavMessage {
 }
 
 /// The `FENCE_FETCH_POINT` that reads point `idx` of `target` back.
-/// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:5916-5923`
+/// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:5879-5886`
 const fn fence_fetch(target: VehicleId, idx: u8) -> MavMessage {
     MavMessage::FenceFetchPoint(FenceFetchPoint {
         target_system: target.sysid,
@@ -379,7 +379,7 @@ pub struct RallyPointSet {
 
 /// How many times `setRallyPoint` sends a point before it gives up on reading it back:
 /// `int retry = 3; while (retry > 0)`.
-/// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:6458-6473`
+/// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:6419-6434`
 pub const RALLY_POINT_SENDS: u8 = 3;
 
 /// The `RALLY_POINT` that sets `set` on `target`.
@@ -420,20 +420,20 @@ pub enum RequestOutcome {
     ///
     /// The C# returns false on the first such ack and does not send again - including for
     /// `MAV_RESULT_TEMPORARILY_REJECTED`, whose name invites a retry the C# does not make
-    /// (C#: MAVLinkInterface.cs:2829-2833).
+    /// (C#: MAVLinkInterface.cs:2826-2830).
     Rejected(u8),
     /// Every retry went unanswered: the C#'s `TimeoutException`.
     TimedOut,
     /// Sent, and by the C#'s rule not waited for: `requireack` false, or a command whose answer
     /// would come too late or not at all - a reboot, `GET_HOME_POSITION`, the calibrations that
-    /// block (C#: MAVLinkInterface.cs:2720-2724, 2734-2747, 2758-2763, 2769-2773). The C#
+    /// block (C#: MAVLinkInterface.cs:2717-2721, 2731-2744, 2755-2760, 2766-2770). The C#
     /// returns true for these.
     Sent,
     /// Not sent: the vehicle has not listed a parameter of that name. The C# logs "Trying to set
-    /// Param that doesnt exist" and returns false (C#: MAVLinkInterface.cs:1640-1644).
+    /// Param that doesnt exist" and returns false (C#: MAVLinkInterface.cs:1637-1641).
     UnknownParameter,
     /// Not sent: the parameter already holds that value. The C# logs "not modified as same" and
-    /// returns true (C#: MAVLinkInterface.cs:1647-1651).
+    /// returns true (C#: MAVLinkInterface.cs:1644-1648).
     Unchanged,
 }
 
@@ -460,10 +460,10 @@ pub enum Outgoing {
     /// This message, once.
     Once(MavMessage),
     /// This message, twice back to back: how the C# sends a reboot and a compassmot, "just
-    /// incase" (C#: MAVLinkInterface.cs:2743-2744, 2760-2761).
+    /// incase" (C#: MAVLinkInterface.cs:2740-2741, 2757-2758).
     Twice(MavMessage),
     /// These two, in this order: a rally point and the fetch that reads it back
-    /// (C#: MAVLinkInterface.cs:6462-6464, 6360).
+    /// (C#: MAVLinkInterface.cs:6423-6425, 6322).
     Pair(MavMessage, MavMessage),
 }
 
@@ -476,7 +476,7 @@ pub struct Request {
     pub kind: RequestKind,
     state: RequestState,
     /// What goes on the wire, built once so every retry sends the same bytes - bar a command's
-    /// confirmation, which the C# counts up per retry (C#: MAVLinkInterface.cs:2789).
+    /// confirmation, which the C# counts up per retry (C#: MAVLinkInterface.cs:2786).
     message: Option<MavMessage>,
     policy: Retry,
     retries_left: u8,
@@ -726,7 +726,7 @@ impl Request {
     ///
     /// For a set, only the name has to match: whatever value comes back is the answer, and the
     /// set succeeded. The vehicle may have clamped or refused the value, and the C# still returns
-    /// true and stores what came back (C#: MAVLinkInterface.cs:1693-1731); so does this, carrying
+    /// true and stores what came back (C#: MAVLinkInterface.cs:1690-1728); so does this, carrying
     /// the reported value in [`RequestOutcome::Accepted`] for a caller that wants to compare.
     pub fn on_param_value(&mut self, from: VehicleId, name: &str, index: u16, value: ParamValue) {
         if self.state != RequestState::Waiting || from != self.target {
@@ -754,7 +754,7 @@ impl Request {
         }
     }
 
-    /// A `COMMAND_ACK` arrived from `from`. C#: MAVLinkInterface.cs:2800-2834.
+    /// A `COMMAND_ACK` arrived from `from`. C#: MAVLinkInterface.cs:2797-2831.
     ///
     /// Returns whether this request took it, so one ack answers one command.
     pub fn on_command_ack(
@@ -1062,7 +1062,7 @@ fn is_one(value: f32) -> bool {
     value == 1.0
 }
 
-/// A `PARAM_SET` built as `setParamAsync` builds it (C#: MAVLinkInterface.cs:1657-1678).
+/// A `PARAM_SET` built as `setParamAsync` builds it (C#: MAVLinkInterface.cs:1654-1675).
 ///
 /// The type field carries the parameter's declared type whatever the autopilot. The value field
 /// carries the number as a float for ArduPilot - which always sends floats and converts on its
@@ -1193,7 +1193,7 @@ mod tests {
 
     #[test]
     fn a_read_by_index_is_answered_by_that_index_whatever_its_name() {
-        // `par.param_index == index || st == name` (C#: MAVLinkInterface.cs:2365), with the name
+        // `par.param_index == index || st == name` (C#: MAVLinkInterface.cs:2362), with the name
         // empty when reading by index: only the index can match.
         let t = ProtocolTimeouts::default();
         let mut request = Request::new(target(), RequestKind::ReadParam(ParamKey::Index(7)));
@@ -1284,7 +1284,7 @@ mod tests {
     }
 
     /// Unanswered, the fetch goes four times, 700 ms apart - as `RALLY_FETCH_POINT`, where the
-    /// C#'s retries send `FENCE_FETCH_POINT` (MAVLinkInterface.cs:6372) - and then it has timed
+    /// C#'s retries send `FENCE_FETCH_POINT` (MAVLinkInterface.cs:6334) - and then it has timed
     /// out: "Failed to save rally point" to the handler.
     #[test]
     fn a_rally_point_never_read_back_times_out_after_four_fetches() {

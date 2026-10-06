@@ -36,7 +36,7 @@
 //! (Google Analytics, Mission Planner's account) is not ported. The C#'s special cases - "The
 //! port is closed", `MissingMethodException`, `FileNotFoundException` and the rest - are .NET's
 //! exceptions, which a panic never is.
-//! `// C#: Program.cs:80, 190, 677-691, 717-869; ExtLibs/Utilities/Download.cs:306-315`
+//! `// C#: Program.cs:80, 192, 679-693, 719-871; ExtLibs/Utilities/Download.cs:306-315`
 
 // This module is internal to the binary; `pub` here documents intent rather than exporting API.
 #![allow(unreachable_pub)]
@@ -62,14 +62,14 @@ pub const REPORTS_DIR: &str = "crash-reports";
 pub const SEEN_DIR: &str = "seen";
 /// Where a report is posted: a setting, empty until the owner has somewhere.
 pub const URL_KEY: &str = "CrashReportUrl";
-/// The question's caption and words. `// C#: Program.cs:802-803`
+/// The question's caption and words. `// C#: Program.cs:804-805`
 pub const CAPTION: &str = "Send Error";
 pub const HEAD: &str = "An error has occurred";
 pub const TAIL: &str = "Report this Error???";
-/// The message's `InputBox`. `// C#: Program.cs:815-816`
+/// The message's `InputBox`. `// C#: Program.cs:817-818`
 pub const MESSAGE_TITLE: &str = "Message";
 pub const MESSAGE_PROMPT: &str = "Please enter a message about this error if you can.";
-/// When the post fails. `// C#: Program.cs:866`
+/// When the post fails. `// C#: Program.cs:868`
 pub const COULD_NOT_SEND: &str =
     "Could not send report! Typically due to lack of internet connection.";
 /// How many of the report's lines the question shows.
@@ -99,13 +99,13 @@ fn os_version() -> String {
 }
 
 /// `'&'` and `'='` to spaces, as the C# clears the exception, the stack and the message of them
-/// before posting. `// C#: Program.cs:855-858`
+/// before posting. `// C#: Program.cs:857-860`
 fn cleared(text: &str) -> String {
     text.replace(['&', '='], " ")
 }
 
 /// A report's body, as `handleException` composes `postData` up to the message: the OS and the
-/// versions, the exception, its stack, its site and its data. `// C#: Program.cs:853-858`
+/// versions, the exception, its stack, its site and its data. `// C#: Program.cs:855-860`
 #[must_use]
 pub fn compose(message: &str, location: &str, thread: &str, stack: &str) -> String {
     let version = env!("CARGO_PKG_VERSION");
@@ -138,7 +138,7 @@ pub fn report_text(info: &PanicHookInfo<'_>, backtrace: &Backtrace) -> String {
 }
 
 /// `postData` whole: the report, the user's message, and the threads' stacks as JSON - here the
-/// one thread the report has, its frames. `// C#: Program.cs:859-860`
+/// one thread the report has, its frames. `// C#: Program.cs:861-862`
 #[must_use]
 pub fn post_body(report: &str, message: &str) -> String {
     let thread = report
@@ -236,7 +236,7 @@ fn mark_seen(path: &Path) {
 }
 
 /// The hook: the default's words on stderr, then the report written for the next start.
-/// `// C#: Program.cs:80, 190`
+/// `// C#: Program.cs:80, 192`
 pub fn install_hook(data_dir: Option<PathBuf>) {
     let default = std::panic::take_hook();
     std::panic::set_hook(Box::new(move |info| {
@@ -323,7 +323,7 @@ impl Crash {
     }
 
     /// The question's text: "An error has occurred", the report's first lines, "Report this
-    /// Error???". `// C#: Program.cs:802`
+    /// Error???". `// C#: Program.cs:804`
     #[must_use]
     pub fn question_text(&self) -> Option<String> {
         let Flow::Question { report, .. } = &self.flow else {
@@ -341,7 +341,7 @@ impl Crash {
         Some(format!("{HEAD}\n{}\n\n{TAIL}", shown.join("\n")))
     }
 
-    /// Yes asks for the message; No is the end of it. `// C#: Program.cs:804-817`
+    /// Yes asks for the message; No is the end of it. `// C#: Program.cs:806-819`
     pub fn answer(&mut self, yes: bool) {
         let Flow::Question { path, report } = std::mem::replace(&mut self.flow, Flow::Idle) else {
             return;
@@ -378,7 +378,7 @@ impl Crash {
 
     /// The message given (or the box cancelled - the C# posts either way, the message then
     /// empty): the report posted to `url`, or kept where it is when there is no `url`. Returns
-    /// what the status line says, if anything. `// C#: Program.cs:811-867`
+    /// what the status line says, if anything. `// C#: Program.cs:813-869`
     pub fn message_done(&mut self, url: Option<&str>) -> Option<String> {
         let Flow::Message {
             path,

@@ -198,7 +198,7 @@ pub const CURRENTSTATE: &[Field] = &[
         "",
         "",
         Done(
-            "VehicleState::kindex() (process-wide, -1 until `VehicleState::set_kindex`, which start-up must call with the `kindex` setting and the K-index download, as MainV2.cs:3940-3981 does)",
+            "VehicleState::kindex() (process-wide, -1 until `VehicleState::set_kindex`, which start-up must call with the `kindex` setting and the K-index download, as MainV2.cs:3947-3988 does)",
         ),
     ),
     row(
@@ -207,7 +207,7 @@ pub const CURRENTSTATE: &[Field] = &[
         "",
         "",
         Derived(
-            "from `autopilot` and `vehicle_type` as MAVLinkInterface.cs:6700-6815 does, `VehicleFamily::from_mav_type` for ArduPilot; the version-string lookup it tries first reads the firmware's `STATUSTEXT` banner (MAVLinkInterface.cs:1827-1830), which is not held here",
+            "from `autopilot` and `vehicle_type` as MAVLinkInterface.cs:6664-6779 does, `VehicleFamily::from_mav_type` for ArduPilot; the version-string lookup it tries first reads the firmware's `STATUSTEXT` banner (MAVLinkInterface.cs:1824-1827), which is not held here",
         ),
     ),
     row(
@@ -610,7 +610,7 @@ pub const CURRENTSTATE: &[Field] = &[
         "Alt Home Offset (dist)",
         "Position",
         Done(
-            "alt_offset_home (0 until the flight screen's Home Alt button writes it, FlightData.cs:1236-1247)",
+            "alt_offset_home (0 until the flight screen's Home Alt button writes it, FlightData.cs:1238-1249)",
         ),
     ),
     row(
@@ -1579,7 +1579,7 @@ pub const CURRENTSTATE: &[Field] = &[
         "",
         "",
         Derived(
-            "mp-gui's `hud::high_priority_message`, from `ekf` and `sensors`. Not derived there yet: the `STATUSTEXT` messages MAVLinkInterface raises to it (severity at or below the setting, default 4, or text starting `Tuning:`, `PreArm:` or `Arm:`; MAVLinkInterface.cs:5397-5420), and the fence-breach (`fence_breach`), over-current (`board.voltage_flags`) and high-latency failure texts",
+            "mp-gui's `hud::high_priority_message`, from `ekf` and `sensors`. Not derived there yet: the `STATUSTEXT` messages MAVLinkInterface raises to it (severity at or below the setting, default 4, or text starting `Tuning:`, `PreArm:` or `Arm:`; MAVLinkInterface.cs:5377-5400), and the fence-breach (`fence_breach`), over-current (`board.voltage_flags`) and high-latency failure texts",
         ),
     ),
     row(
@@ -1588,7 +1588,7 @@ pub const CURRENTSTATE: &[Field] = &[
         "",
         "Other",
         Derived(
-            "EMERGENCY for the messages the C# raises itself; the `STATUSTEXT`'s own severity for the ones MAVLinkInterface raises (MAVLinkInterface.cs:5399-5420)",
+            "EMERGENCY for the messages the C# raises itself; the `STATUSTEXT`'s own severity for the ones MAVLinkInterface raises (MAVLinkInterface.cs:5379-5400)",
         ),
     ),
     row(
@@ -2104,7 +2104,7 @@ pub const CURRENTSTATE: &[Field] = &[
         "",
         "Position",
         Done(
-            "VehicleState::planned_home() (process-wide, as the C#'s static is; `VehicleState::set_planned_home` is what start-up must call with the `TXT_homelat`, `TXT_homelng` and `TXT_homealt` settings, as MainV2.cs:1012-1025 does)",
+            "VehicleState::planned_home() (process-wide, as the C#'s static is; `VehicleState::set_planned_home` is what start-up must call with the `TXT_homelat`, `TXT_homelng` and `TXT_homealt` settings, as MainV2.cs:1014-1027 does)",
         ),
     ),
     row(
@@ -2122,7 +2122,7 @@ pub const CURRENTSTATE: &[Field] = &[
         "",
         "Position",
         Done(
-            "tracker_location() (home until `VehicleState::set_tracker_location` - the planner's Set Tracker Home, FlightPlanner.cs:760, 6977 - gives it a longitude)",
+            "tracker_location() (home until `VehicleState::set_tracker_location` - the planner's Set Tracker Home, FlightPlanner.cs:760, 6974 - gives it a longitude)",
         ),
     ),
     row(
@@ -2409,7 +2409,7 @@ pub const CURRENTSTATE: &[Field] = &[
         "",
         "Other",
         Done(
-            "time_since_last_shot (0 until the flight screen sets it from `VehicleState::shot_interval` over the camera feedback it keeps, as FlightData.cs:4021-4038 does)",
+            "time_since_last_shot (0 until the flight screen sets it from `VehicleState::shot_interval` over the camera feedback it keeps, as FlightData.cs:4135-4152 does)",
         ),
     ),
     row("press_abs", "float", "", "Sensor", Done("press_abs")),
@@ -2454,7 +2454,7 @@ pub const CURRENTSTATE: &[Field] = &[
         "",
         "Mount",
         Done(
-            "gimbal_point (`None` until the flight screen writes what `GimbalPoint.ProjectPoint` projects, FlightData.cs:3964-3995; that projection is not ported)",
+            "gimbal_point (`None` until the flight screen writes what `GimbalPoint.ProjectPoint` projects, FlightData.cs:4078-4109; that projection is not ported)",
         ),
     ),
     row("gimballat", "float", "", "Mount", Done("gimbal_lat()")),

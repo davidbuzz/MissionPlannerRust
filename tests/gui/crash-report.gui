@@ -1,8 +1,8 @@
 # Crash reports: Program.cs's handleException, ported in crates/mp-gui/src/crash.rs. A panic's
 # report is written under the data directory's crash-reports/ as it happens; the next start asks
-# the C#'s question about it - "An error has occurred ... Report this Error???" (Program.cs:802) -
-# Yes asks for a message in the "Message" InputBox (Program.cs:815-816) and posts the report where
-# CrashReportUrl says (Download.PostAsync, Program.cs:861), No puts the report away; the next
+# the C#'s question about it - "An error has occurred ... Report this Error???" (Program.cs:804) -
+# Yes asks for a message in the "Message" InputBox (Program.cs:817-818) and posts the report where
+# CrashReportUrl says (Download.PostAsync, Program.cs:863), No puts the report away; the next
 # report is asked about in turn. Two reports are seeded here; the first is posted to
 # tests/gui/update-server.py, which keeps the body, the second dismissed.
 #

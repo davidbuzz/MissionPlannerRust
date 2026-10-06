@@ -89,7 +89,7 @@ pub const CLOSE_GRACE: Duration = Duration::from_millis(250);
 
 /// `BUT_commitToFlash.Text`. `// C#: GCSViews/ConfigurationView/ConfigRawParams.resx`
 pub const COMMIT_PARAMS: &str = "Commit Params";
-/// `MAV_CMD.PREFLIGHT_STORAGE`. `// C#: ExtLibs/Mavlink/Mavlink.cs:1099`
+/// `MAV_CMD.PREFLIGHT_STORAGE`. `// C#: ExtLibs/Mavlink/Mavlink.cs:1103`
 pub const PREFLIGHT_STORAGE: u16 = 245;
 /// `doCommand(..., PREFLIGHT_STORAGE, 1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f)`.
 /// `// C#: GCSViews/ConfigurationView/ConfigRawParams.cs:1097`
@@ -325,7 +325,7 @@ impl Reset {
     /// false, sending nothing, for a name the vehicle has not listed - so the first name listed
     /// is the one written. A vehicle with neither returns false for both, which is no
     /// exception, and the reset goes on to the wait and the reboot.
-    /// `// C#: GCSViews/ConfigurationView/ConfigRawParams.cs:988; ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:1609-1620, 1640-1644`
+    /// `// C#: GCSViews/ConfigurationView/ConfigRawParams.cs:988; ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:1606-1617, 1637-1641`
     ///
     /// # Errors
     /// No link to write on: the `catch`'s text.
@@ -366,7 +366,7 @@ impl Reset {
                 };
                 // Every retry unanswered is `setParam`'s `TimeoutException`; any other end is
                 // a return, true or false, and the reset goes on.
-                // `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:1748-1770`
+                // `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:1745-1767`
                 if outcome == RequestOutcome::TimedOut {
                     return ResetProgress::Failed(communicating(&format!(
                         "Timeout on read - setParam {name}"
@@ -379,7 +379,7 @@ impl Reset {
             }
             Step::Sleeping { until } if now < until => ResetProgress::Waiting,
             // `doReboot(false, true)`: PREFLIGHT_REBOOT_SHUTDOWN with 1 to the vehicle shown.
-            // `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:2553-2567`
+            // `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:2550-2564`
             Step::Sleeping { .. } => {
                 if telemetry.reboot() {
                     self.step = Step::Closing {
@@ -1201,7 +1201,7 @@ mod tests {
 
     /// Yes: `FORMAT_VERSION` set to 0 and echoed, the wait, `PREFLIGHT_REBOOT_SHUTDOWN` with 1 on
     /// the wire twice - `doCommand`'s second send for a reboot - and then the port to close.
-    /// `// C#: GCSViews/ConfigurationView/ConfigRawParams.cs:986-995; ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:2758-2763`
+    /// `// C#: GCSViews/ConfigurationView/ConfigRawParams.cs:986-995; ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:2755-2760`
     #[test]
     fn a_reset_zeroes_format_version_waits_and_reboots() {
         let (telemetry, mut vehicle) = Vehicle::connect(fast());
@@ -1223,7 +1223,7 @@ mod tests {
     }
 
     /// A vehicle without `FORMAT_VERSION` has `SYSID_SW_MREV` written: the overload's second name.
-    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:1609-1620`
+    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:1606-1617`
     #[test]
     fn a_reset_writes_the_second_name_when_the_first_is_not_listed() {
         let (telemetry, mut vehicle) = Vehicle::connect(fast());

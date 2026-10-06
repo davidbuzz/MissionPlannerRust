@@ -152,7 +152,7 @@ pub const MAY_SCROLL: &[&str] = &[
     "logfield-",
     // FLIGHT DATA's quick view chooser, `selectform`, every property a check box in a form that
     // scrolls (fly-quick.gui: 186 below it, 2026-10-06).
-    // `// C#: GCSViews/FlightData.cs:4556-4566 (AutoScroll = true)`
+    // `// C#: GCSViews/FlightData.cs:4670-4680 (AutoScroll = true)`
     "fly-quick-choice-",
     // EXPERIMENTAL's Message Interval: `cmb`'s 349 messages and `cmbrate`'s 200 rates, each a
     // combo's list that scrolls, thirty rows in view.

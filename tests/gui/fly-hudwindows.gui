@@ -5,7 +5,7 @@
 # Status has five bars (each variance times 100) and the flags, every EKF_STATUS_FLAGS bit up to
 # EKF_UNINITIALIZED as "name On" or "name Off"; Vibration has the X, Y and Z bars and the three
 # clipping counts. Each is a form shown with Show(), so both can be open at once.
-# `ExtLibs/Controls/HUD.cs:1199-1231, 3148-3215, GCSViews/FlightData.cs:3293-3323,
+# `ExtLibs/Controls/HUD.cs:1199-1231, 3150-3217, GCSViews/FlightData.cs:3306-3437,
 # Controls/EKFStatus.cs, Controls/Vibration.cs`
 #
 # Plays the recorded copter flight, which sends EKF_STATUS_REPORT and VIBRATION, and needs no

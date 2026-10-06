@@ -40,7 +40,7 @@ use crate::source::TileSource;
 /// The C# is the same shape. GMap.NET's default is a browser string (`GMapProvider.cs:326-328`),
 /// but Mission Planner replaces it at startup with its product name, version and operating system,
 /// and that is what every provider, Google's and Bing's included, receives from it.
-/// `// C#: Program.cs:373-375`
+/// `// C#: Program.cs:375-377`
 pub const USER_AGENT: &str = concat!(
     "MissionPlannerRust/",
     env!("CARGO_PKG_VERSION"),

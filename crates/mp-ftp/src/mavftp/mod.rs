@@ -31,7 +31,7 @@
 //!
 //! A request is one of the C#'s public entry points, which are sequences of commands:
 //!
-//! * [`FtpRequest::List`] - `kCmdListDirectory` (MAVFtp.cs:1248-1262): with modification times
+//! * [`FtpRequest::List`] - `kCmdListDirectory` (MAVFtp.cs:1287-1301): with modification times
 //!   first, and once the vehicle has refused that opcode, plain listings from then on.
 //! * [`FtpRequest::Get`] - `GetFile` (MAVFtp.cs:560-574): reset sessions, open the file, then
 //!   a burst read or a plain one. The burst read (`kCmdBurstReadFile`, :694-870) is what the
@@ -50,8 +50,8 @@
 //! # Where this differs from the C#, and why
 //!
 //! * **`kErrNoSessionsAvailable`.** Several handlers call `kCmdResetSessions()` from inside
-//!   themselves, then carry on (e.g. MAVFtp.cs:654-658). In the C# that cannot work: the handler
-//!   runs on the thread that reads the link (MAVLinkInterface.cs:5367, 5528-5553), so the nested
+//!   themselves, then carry on (e.g. MAVFtp.cs:693-697). In the C# that cannot work: the handler
+//!   runs on the thread that reads the link (MAVLinkInterface.cs:5347, 5508-5533), so the nested
 //!   call waits five seconds for an answer nobody can read; and it writes its own payload into
 //!   the shared `fileTransferProtocol` (:39, :1916), so every later retry of the outer command
 //!   sends a reset instead of the command. The outer command then times out. This port does what
@@ -103,7 +103,7 @@ pub enum FtpRequest {
         /// `kCmdBurstReadFile` rather than `kCmdReadFile`. `GetFile`'s default is true.
         burst: bool,
         /// Bytes per read. `GetFile`'s default is [`RW_SIZE`], 80; the parameter and mission
-        /// downloads ask for 110 (MAVLinkInterface.cs:1877, GCSViews/FlightPlanner.cs:3995).
+        /// downloads ask for 110 (MAVLinkInterface.cs:1874, GCSViews/FlightPlanner.cs:3995).
         readsize: u8,
     },
     /// `UploadFile(file, srcfile, cancel)`.
@@ -170,7 +170,7 @@ pub enum FtpOutcome {
     Uploaded,
     /// `kCmdCalcFileCRC32`.
     Crc32 {
-        /// The vehicle's CRC, or `u32::MAX` if it never answered (MAVFtp.cs:929, 996).
+        /// The vehicle's CRC, or `u32::MAX` if it never answered (MAVFtp.cs:968, 1035).
         crc: u32,
         /// What the method returns: whether the vehicle answered.
         answered: bool,
@@ -304,7 +304,7 @@ impl MavFtp {
     ///
     /// As in the C#, the command notices at its next reply or the end of its current wait, and
     /// ends when that wait runs out (`timeout.RetriesCurrent = 999`); a reset or terminate in
-    /// progress does not look (MAVFtp.cs:1908-1961).
+    /// progress does not look (MAVFtp.cs:1947-2000).
     pub const fn cancel(&mut self) {
         if let Some(running) = self.running.as_mut() {
             running.cancelled = true;
@@ -443,7 +443,7 @@ fn first_step(
     };
     match request {
         FtpRequest::List { path } => {
-            // C#: MAVFtp.cs:1252-1261.
+            // C#: MAVFtp.cs:1291-1300.
             let with_time = !with_time_unsupported;
             let step = Step::List(List::new(&path, with_time, timeouts, ctx, now));
             (Job::List { path, with_time }, step)
@@ -485,7 +485,7 @@ fn first_step(
             simple(Opcode::CALC_FILE_CRC32, path.as_bytes(), &path, ctx),
         ),
         FtpRequest::RemoveFile { path } => {
-            // C#: MAVFtp.cs:1748.
+            // C#: MAVFtp.cs:1787.
             let path = path.replace("//", "/");
             (
                 Job::One,
@@ -493,7 +493,7 @@ fn first_step(
             )
         }
         FtpRequest::RemoveDirectory { path } => {
-            // C#: MAVFtp.cs:1663.
+            // C#: MAVFtp.cs:1702.
             let path = path.replace("//", "/");
             (
                 Job::One,
@@ -505,7 +505,7 @@ fn first_step(
             simple(Opcode::CREATE_DIRECTORY, path.as_bytes(), &path, ctx),
         ),
         FtpRequest::Rename { from, to } => {
-            // C#: MAVFtp.cs:1839, `src + "\0" + dest`.
+            // C#: MAVFtp.cs:1878, `src + "\0" + dest`.
             let data = format!("{from}\0{to}");
             (
                 Job::One,
@@ -536,7 +536,7 @@ fn step_finished(
                 ex,
             },
         ) => {
-            // C#: MAVFtp.cs:1441-1445, then :1254-1260.
+            // C#: MAVFtp.cs:1480-1484, then :1254-1260.
             if let Some(ex) = ex {
                 return Next::Done(Err(ex));
             }
@@ -583,7 +583,7 @@ fn step_finished(
             // C#: MAVFtp.cs:566-567 and :687, `size = localsize`: -1 unless the ACK came, and
             // the ACK's four bytes as an int if it did.
             let size = value.map_or(-1, |v| i32::from_ne_bytes(v.to_ne_bytes()));
-            // C#: MAVFtp.cs:690, "Opened " + file + " " + ans.
+            // C#: MAVFtp.cs:729, "Opened " + file + " " + ans.
             *ctx.progress = Progress {
                 message: format!("Opened {path} {}", if ans { "True" } else { "False" }),
                 percent: -1,
@@ -605,7 +605,7 @@ fn step_finished(
             }
         }
         (Job::Get { .. }, StepResult::Burst(result)) => {
-            // C#: MAVFtp.cs:866-869.
+            // C#: MAVFtp.cs:905-908.
             Next::Done(match result.ex {
                 Some(ex) => Err(ex),
                 None => Ok(FtpOutcome::File {
@@ -622,7 +622,7 @@ fn step_finished(
                 ex,
             },
         ) => {
-            // C#: MAVFtp.cs:1654-1658: not complete is null, whatever went wrong.
+            // C#: MAVFtp.cs:1693-1697: not complete is null, whatever went wrong.
             if !complete {
                 return Next::Done(Ok(FtpOutcome::File {
                     data: None,

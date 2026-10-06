@@ -50,7 +50,7 @@ fn nav(bearing: i16, wp_dist: u16, xtrack: f32, alt_error: f32, aspd_error: f32)
 
 #[test]
 fn the_controller_output_lands_in_the_state_in_the_wires_units() {
-    // C#: ExtLibs/ArduPilot/CurrentState.cs:3448-3455
+    // C#: ExtLibs/ArduPilot/CurrentState.cs:3451-3458
     let mut state = VehicleState::default();
     assert!(state.apply(&nav(273, 1_250, -4.5, 12.0, 2.0)));
     assert_eq!(state.nav.bearing, 273.0);
@@ -65,7 +65,7 @@ fn the_controller_output_lands_in_the_state_in_the_wires_units() {
 
 #[test]
 fn the_current_mission_item_is_the_waypoint_number() {
-    // C#: ExtLibs/ArduPilot/CurrentState.cs:3420
+    // C#: ExtLibs/ArduPilot/CurrentState.cs:3423
     let mut state = VehicleState::default();
     assert!(state.apply(&MavMessage::MissionCurrent(MissionCurrent {
         seq: 7,

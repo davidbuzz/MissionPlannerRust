@@ -45,7 +45,7 @@ pub(crate) const BAUDS: [&str; 16] = [
 ];
 
 /// The port box's entries after the serial ports.
-/// `// C#: MainV2.cs:1295-1299`
+/// `// C#: MainV2.cs:1297-1301`
 pub(crate) const NETWORK_PORTS: [&str; 4] = ["TCP", "UDP", "UDPCl", "WS"];
 
 /// `Strings.CONNECTc` and `DISCONNECTc`, the button's two texts.
@@ -53,21 +53,21 @@ pub(crate) const NETWORK_PORTS: [&str; 4] = ["TCP", "UDP", "UDPCl", "WS"];
 pub(crate) const CONNECT: &str = "CONNECT";
 pub(crate) const DISCONNECT: &str = "DISCONNECT";
 /// `Strings.Stillmoving`, asked before disconnecting from a moving model, under `Strings.Disconnect`.
-/// `// C#: MainV2.cs:1851-1857; ExtLibs/Strings/Strings.resx:274-296`
+/// `// C#: MainV2.cs:1858-1864; ExtLibs/Strings/Strings.resx:274-296`
 pub(crate) const STILL_MOVING: &str =
     "Your model is still moving are you sure you want to disconnect?";
 pub(crate) const DISCONNECT_TITLE: &str = "Disconnect";
 /// `Strings.InvalidBaudRate`, for a baud box that is not a number.
-/// `// C#: MainV2.cs:4335-4339; ExtLibs/Strings/Strings.resx:177-179`
+/// `// C#: MainV2.cs:4342-4346; ExtLibs/Strings/Strings.resx:177-179`
 pub(crate) const INVALID_BAUD_RATE: &str = "Invalid BaudRate";
 /// `comPort.MAV.cs.groundspeed > 4`: faster than this, disconnecting is asked about.
-/// `// C#: MainV2.cs:1851`
+/// `// C#: MainV2.cs:1858`
 pub(crate) const STILL_MOVING_SPEED: f64 = 4.0;
 
 /// `PopulateSerialportList`: `AUTO`, the serial ports as the system lists them, then the network
 /// kinds. `AUTO` is listed as the C# lists it, and refused when chosen: its port scan
 /// (`CommsSerialScan`) is not ported.
-/// `// C#: MainV2.cs:1291-1300`
+/// `// C#: MainV2.cs:1293-1302`
 #[must_use]
 pub(crate) fn port_list(serial_ports: &[String]) -> Vec<String> {
     let mut list = vec!["AUTO".to_owned()];
@@ -77,7 +77,7 @@ pub(crate) fn port_list(serial_ports: &[String]) -> Vec<String> {
 }
 
 /// `CMB_serialport_SelectedIndexChanged`: the baud box is off for the kinds that have no baud.
-/// `// C#: MainV2.cs:1967-1974`
+/// `// C#: MainV2.cs:1974-1981`
 #[must_use]
 pub(crate) fn baud_enabled(port: &str) -> bool {
     !matches!(port, "UDP" | "UDPCl" | "TCP" | "AUTO")
@@ -85,7 +85,7 @@ pub(crate) fn baud_enabled(port: &str) -> bool {
 
 /// `CMB_baudrate_TextChanged`: the text must parse as an integer, else "Invalid BaudRate"; the
 /// digits alone are then kept.
-/// `// C#: MainV2.cs:4333-4350`
+/// `// C#: MainV2.cs:4340-4357`
 ///
 /// # Errors
 ///
@@ -115,7 +115,7 @@ pub(crate) enum Kind {
 }
 
 /// `doConnect`'s `switch (portname)`.
-/// `// C#: MainV2.cs:1452-1526`
+/// `// C#: MainV2.cs:1454-1528`
 #[must_use]
 pub(crate) fn kind(port: &str) -> Kind {
     match port {
@@ -195,7 +195,7 @@ pub(crate) fn questions(kind: Kind) -> Vec<Question> {
 /// A question's OK: the box's text kept as `InputBox` keeps every titled answer - the transports'
 /// `OnInputBoxShow` is `Program.CommsBaseOnInputBoxShow`, an `InputBox.Show` - and the answer,
 /// trimmed, under the question's settings key. Returns the answer.
-/// `// C#: Program.cs:312, 564-566; ExtLibs/Comms/CommsBase.cs:33-39; ExtLibs/Controls/InputBox.cs:73-84, 178-184`
+/// `// C#: Program.cs:314, 566-568; ExtLibs/Comms/CommsBase.cs:33-39; ExtLibs/Controls/InputBox.cs:73-84, 178-184`
 pub(crate) fn answered(
     settings: &mut crate::settings::Persisted,
     question: &Question,
@@ -224,7 +224,7 @@ pub(crate) fn url(kind: Kind, port: &str, baud: &str, answers: &[String]) -> Opt
 }
 
 /// `Connect`'s first check: a moving model is asked about before disconnecting.
-/// `// C#: MainV2.cs:1851-1857`
+/// `// C#: MainV2.cs:1858-1864`
 #[must_use]
 pub(crate) fn asks_before_disconnecting(connected: bool, groundspeed: f64) -> bool {
     connected && groundspeed > STILL_MOVING_SPEED
@@ -401,7 +401,7 @@ mod tests {
     /// A question's OK keeps the text under `InputBox`'s key for it - the caption and question
     /// with all but letters and digits taken out - and the trimmed answer under its own key.
     /// Cancel calls nothing, so keeps nothing. The facts publish every key.
-    /// `// C#: Program.cs:564-566; ExtLibs/Controls/InputBox.cs:73-84, 178-184`
+    /// `// C#: Program.cs:566-568; ExtLibs/Controls/InputBox.cs:73-84, 178-184`
     #[test]
     fn an_answer_is_kept_under_the_input_box_key() {
         let mut keys: Vec<String> = [Kind::Tcp, Kind::Udp, Kind::UdpClient, Kind::WebSocket]

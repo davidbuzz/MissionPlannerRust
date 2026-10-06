@@ -345,7 +345,7 @@ fn value_of(parameters: &[(String, f64)], name: &str) -> Option<f64> {
 /// One condition the C# does not have, as the FailSafe page has it: `gotAllParams` needs a table
 /// that is not empty. Mission Planner downloads the parameters as part of connecting, so none
 /// received of none reported does not arise there; here they are downloaded when asked for.
-/// `// C#: GCSViews/InitialSetup.cs:79-87, 119-131, 189-191; ExtLibs/ArduPilot/CurrentState.cs:2360-2374, 4403`
+/// `// C#: GCSViews/InitialSetup.cs:79-87, 119-131, 189-191; ExtLibs/ArduPilot/CurrentState.cs:2360-2374, 4406`
 #[must_use]
 pub fn available(view: &TelemetryView) -> bool {
     let has_frame_class = value_of(&view.parameters, "FRAME_CLASS").is_some();
@@ -466,7 +466,7 @@ impl<H: Copy> Writes<H> {
     /// that timed out - and shows [`FAILED`], as `setParam`'s `TimeoutException` does inside
     /// `SetFrameParam`'s `try`. One the vehicle does not have, or already holds the value of, does
     /// not: `setParam` returns false or true for those and `SetFrameParam` does not look.
-    /// `// C#: GCSViews/ConfigurationView/ConfigFrameClassType.cs:281-293; ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:1640-1651, 1765`
+    /// `// C#: GCSViews/ConfigurationView/ConfigFrameClassType.cs:281-293; ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:1637-1648, 1762`
     pub fn advance<W: ParamWriter<Handle = H>>(&mut self, writer: &W) {
         loop {
             let mut current = match self.current.take() {

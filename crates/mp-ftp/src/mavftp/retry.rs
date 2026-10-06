@@ -62,17 +62,17 @@ impl Patience {
 /// Every command's patience. [`Default`] is Mission Planner's.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct FtpTimeouts {
-    /// `kCmdOpenFileRO`. C#: MAVFtp.cs:608 (`new RetryTimeout(5, 2000)`).
+    /// `kCmdOpenFileRO`. C#: MAVFtp.cs:647 (`new RetryTimeout(5, 2000)`).
     pub open_file_ro: Patience,
-    /// `kCmdCalcFileCRC32`. C#: MAVFtp.cs:928 (`new RetryTimeout(3, 30000)`).
+    /// `kCmdCalcFileCRC32`. C#: MAVFtp.cs:967 (`new RetryTimeout(3, 30000)`).
     pub calc_file_crc32: Patience,
-    /// `kCmdListDirectory` and `kCmdListDirectoryWithTime`. C#: MAVFtp.cs:1287
+    /// `kCmdListDirectory` and `kCmdListDirectoryWithTime`. C#: MAVFtp.cs:1326
     /// (`new RetryTimeout(5)`, the wait left at RetryTimeout.cs:37's 1000 ms).
     pub list_directory: Patience,
-    /// `kCmdResetSessions`. C#: MAVFtp.cs:1919 (`new RetryTimeout(5, 1000)`).
+    /// `kCmdResetSessions`. C#: MAVFtp.cs:1958 (`new RetryTimeout(5, 1000)`).
     pub reset_sessions: Patience,
     /// Every other command: `new RetryTimeout()`, which is 30 sends a second apart
-    /// (RetryTimeout.cs:37). C#: MAVFtp.cs:696 (`kCmdBurstReadFile`), :1061
+    /// (RetryTimeout.cs:37). C#: MAVFtp.cs:735 (`kCmdBurstReadFile`), :1061
     /// (`kCmdCreateDirectory`), :1153 (`kCmdCreateFile`), :1549 (`kCmdReadFile`), :1677
     /// (`kCmdRemoveDirectory`), :1762 (`kCmdRemoveFile`), :1846 (`kCmdRename`), :1974
     /// (`kCmdTerminateSession`), :2215 (`kCmdWriteFile`).
@@ -180,7 +180,7 @@ impl RetryTimeout {
     }
 
     /// What the handlers do when the caller has cancelled: `timeout.RetriesCurrent = 999`
-    /// (e.g. MAVFtp.cs:617), which ends the command when the current wait runs out.
+    /// (e.g. MAVFtp.cs:656), which ends the command when the current wait runs out.
     pub(crate) fn cancel(&mut self) {
         self.retries_current = 999;
     }

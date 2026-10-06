@@ -99,7 +99,7 @@ fn heartbeat(armed: bool) -> MavMessage {
 
 #[test]
 fn apply_at_stamps_the_senders_clock_and_apply_leaves_it() {
-    // C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:4721, 6649
+    // C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:4710, 6613
     let mut registry = VehicleRegistry::new();
     registry.apply_at(1, 1, 0, &heartbeat(false), at(1.5));
     registry.apply_at(2, 1, 0, &heartbeat(false), at(2.5));
@@ -178,7 +178,7 @@ fn the_vertical_speed_is_the_filtered_rate_of_the_alt_setter() {
 
 #[test]
 fn the_home_alt_offset_is_subtracted_before_the_rate() {
-    // C#: ExtLibs/ArduPilot/CurrentState.cs:327, 378-383; GCSViews/FlightData.cs:1236-1247
+    // C#: ExtLibs/ArduPilot/CurrentState.cs:327, 378-383; GCSViews/FlightData.cs:1238-1249
     let mut registry = VehicleRegistry::new();
     apply(&mut registry, t0(), &position(-35.0, 149.0, 10_000));
     registry.working_mut(AUTOPILOT).unwrap().alt_offset_home = -584.0;
@@ -258,7 +258,7 @@ fn leg(from: (f64, f64), to: (f64, f64)) -> f32 {
 
 #[test]
 fn time_in_air_and_distance_count_once_a_second_while_armed() {
-    // C#: ExtLibs/ArduPilot/CurrentState.cs:4602-4626, 2878-2882
+    // C#: ExtLibs/ArduPilot/CurrentState.cs:4605-4629, 2878-2882
     let mut registry = VehicleRegistry::new();
     let (a, b, c, d) = (
         (-35.36, 149.16),
@@ -443,7 +443,7 @@ fn the_gimbal_point_reads_as_floats_and_zero_unset() {
 
 #[test]
 fn the_shot_interval_is_the_last_two_shots_apart() {
-    // C#: GCSViews/FlightData.cs:4021-4038
+    // C#: GCSViews/FlightData.cs:4135-4152
     assert_eq!(VehicleState::shot_interval([]), None);
     // One shot: its time less double.MinValue, which rounds to double.MaxValue.
     assert_eq!(VehicleState::shot_interval([5_000_000]), Some(f64::MAX));
@@ -493,7 +493,7 @@ fn the_geofence_distance_on_simple_fences() {
 
 #[test]
 fn the_speedup_compares_the_imu_clock_with_ours() {
-    // C#: ExtLibs/ArduPilot/CurrentState.cs:3699-3713
+    // C#: ExtLibs/ArduPilot/CurrentState.cs:3702-3716
     let imu = |usec: u64| message!(RawImu, |m| m.time_usec = usec);
     let mut registry = VehicleRegistry::new();
     // The first reading within ten seconds of boot is measured from MinValue: next to nothing.
@@ -585,7 +585,7 @@ fn the_hil_channels_come_from_rc_channels_scaled_and_hil_controls() {
 
 #[test]
 fn the_low_airspeed_warning_needs_the_parameter_the_sensor_and_the_air() {
-    // C#: ExtLibs/ArduPilot/CurrentState.cs:3858-3888
+    // C#: ExtLibs/ArduPilot/CurrentState.cs:3861-3891
     const DIFF_PRESSURE: u32 = 16;
     let vfr = |airspeed: f32| {
         message!(VfrHud, |m| {
@@ -660,7 +660,7 @@ fn the_low_airspeed_warning_needs_the_parameter_the_sensor_and_the_air() {
 
 #[test]
 fn the_registry_counts_the_seconds_of_every_vehicle() {
-    // C#: MainV2.cs:3058-3069, every MAV on the port.
+    // C#: MainV2.cs:3065-3076, every MAV on the port.
     let mut registry = VehicleRegistry::new();
     for sysid in [1, 2] {
         registry.apply_at(sysid, 1, 0, &heartbeat(true), at(0.0));

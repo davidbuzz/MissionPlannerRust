@@ -19,7 +19,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
 //! Ctrl+W's Propagation Settings: `Controls/PropagationSettings.cs`, which `MainV2.ProcessCmdKey`
-//! opens with `new PropagationSettings().Show()` (`MainV2.cs:4147-4152`). The settings of the
+//! opens with `new PropagationSettings().Show()` (`MainV2.cs:4154-4159`). The settings of the
 //! map's propagation overlay (`ExtLibs/Maps/Propagation.cs`): which layers it draws and how. Every
 //! control is a `config.xml` key - the check boxes through `Maps.Propagation`'s properties, which
 //! read and write their own keys (`Propagation.cs:68-111`) - so the form needs nothing of the

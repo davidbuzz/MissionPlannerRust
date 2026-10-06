@@ -31,7 +31,7 @@
 use mp_os::fs::FsExt as _;
 /// The product's name, as the owner has it (2026-10-03): the window's title and the header over
 /// the screen buttons both carry it. Mission Planner shows its own name and version there
-/// (`MainV2.cs:815, 1739`); this application is not Mission Planner, and its title says which it
+/// (`MainV2.cs:817, 1741`); this application is not Mission Planner, and its title says which it
 /// is - which is also how the GUI runner tells our window from a real Mission Planner's.
 pub const PRODUCT_NAME: &str = "MissionPlannerRust";
 
@@ -143,7 +143,7 @@ use mp_tiles::store::TileStore;
 use plan::Plan;
 
 /// `FP_docking`: `panelAction.Dock`, Right by default, Bottom after Switch Docking.
-/// `// C#: GCSViews/FlightPlanner.cs:6762-6778`
+/// `// C#: GCSViews/FlightPlanner.cs:6759-6775`
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Docking {
     /// `DockStyle.Right`: the panels' column beside the map, the waypoints under it.
@@ -204,7 +204,7 @@ use telemetry::{Telemetry, TelemetryView};
 use ui::{action, theme};
 
 /// Auto Pan's setting, `CHK_autopan`, as the C#'s `bool.ToString()` writes it: "True" or "False".
-/// `// C#: GCSViews/FlightData.cs:1929-1933`
+/// `// C#: GCSViews/FlightData.cs:1939-1943`
 const AUTO_PAN_SETTING: &str = "CHK_autopan";
 
 /// The mission file name used when nothing has been typed.
@@ -263,25 +263,25 @@ enum Screen {
     /// Flight plan: the mission.
     Plan,
     /// Initial setup and calibration: `MainV2`'s SETUP button, `InitialSetup`.
-    /// `// C#: MainV2.cs:3179`
+    /// `// C#: MainV2.cs:3186`
     Setup,
     /// Configuration and tuning: `MainV2`'s CONFIG button, beside SETUP, `SoftwareConfig`.
-    /// `// C#: MainV2.cs:3180; MainV2.Designer.cs:150, 158`
+    /// `// C#: MainV2.cs:3187; MainV2.Designer.cs:150, 158`
     Config,
     // ---- SITL ----
     /// Simulation: `MainV2`'s SIMULATION button, beside CONFIG, `GCSViews/SITL.cs`.
-    /// `// C#: MainV2.cs:583, 872; MainV2.Designer.cs (MenuSimulation)`
+    /// `// C#: MainV2.cs:583, 874; MainV2.Designer.cs (MenuSimulation)`
     Sitl,
     // ---- end SITL ----
     /// Help: `MainV2`'s HELP button, beside SIMULATION, `GCSViews/Help.cs`.
-    /// `// C#: MainV2.cs:4055-4058; MainV2.Designer.cs:75, 168-174`
+    /// `// C#: MainV2.cs:4062-4065; MainV2.Designer.cs:75, 168-174`
     Help,
     /// The vehicle's parameters.
     Params,
     /// Reviewing a dataflash log.
     ///
     /// Mission Planner opens `Log/LogBrowse.cs` as a separate window from a button on the flight
-    /// screen (`BUT_logbrowse_Click`, `GCSViews/FlightData.cs:1380`). A single-window application
+    /// screen (`BUT_logbrowse_Click`, `GCSViews/FlightData.cs:1382`). A single-window application
     /// makes it a tab; what it holds is the same - the list of fields the log declares, and a
     /// chart of the chosen one.
     Logs,
@@ -389,7 +389,7 @@ struct MissionPlanner {
     /// `getParamListMavftp` (`:938`), run here once a vehicle is heard and nothing is held.
     params_requested: bool,
     /// Ctrl+T's `comPort.Open(false)`: the link the connect flow opens next is not to fetch the
-    /// parameters. `// C#: MainV2.cs:4146-4157`
+    /// parameters. `// C#: MainV2.cs:4153-4164`
     blind_connect: bool,
     /// Whether that automatic read has already happened.
     mission_requested: bool,
@@ -420,7 +420,7 @@ struct MissionPlanner {
     ///
     /// A press that never moves is a click, and a click on empty map adds a waypoint. `MainMap`
     /// decides the same way with `isMouseDraging`, set by any movement while the button is down.
-    /// `// C#: GCSViews/FlightPlanner.cs:7436, 7736-7745`
+    /// `// C#: GCSViews/FlightPlanner.cs:7433, 7733-7742`
     map_press: Option<(f32, f32)>,
     /// What was loaded from the settings file, and what will be written back to it.
     settings: settings::Settings,
@@ -714,21 +714,21 @@ impl MissionPlanner {
         cx: &mut Context<Self>,
     ) -> Self {
         // Mission Planner's config.xml, read once as `Settings.Instance` is, before anything
-        // below reads it: the map's access mode is one of its keys. `// C#: MainV2.cs:782-808`
+        // below reads it: the map's access mode is one of its keys. `// C#: MainV2.cs:784-810`
         let mut persisted = settings::Persisted::load();
         // The screens' culture, from its `language`, before the first screen asks for a word -
         // the flight screen's state below already does.
-        // `// C#: MainV2.cs:660-661, 697-700; L10N.cs:12-25`
+        // `// C#: MainV2.cs:660-661, 699-702; L10N.cs:12-25`
         i18n::init(persisted.get(i18n::SETTING));
         // A log to replay plays as the Telemetry Logs page plays one: at its own pace, under the
-        // page's controls. `// C#: GCSViews/FlightData.cs:669-701`
+        // page's controls. `// C#: GCSViews/FlightData.cs:671-703`
         // MP_STORM puts a synthetic vehicle behind the screens in place of any link: storm.rs.
         let mut fly_data = fly::FlightData::new();
         // The link this start opens, which Mission Planner's Connect would save.
         let opened = target.clone().filter(|_| !storm::enabled());
         // ---- Display view (row 71) ----
         // `MainV2.DisplayConfiguration` as its start-up makes it, before any list is built.
-        // `// C#: MainV2.cs:351-353, 898-933`
+        // `// C#: MainV2.cs:351-353, 900-935`
         display_view::start(&mut persisted);
         // ---- end Display view ----
         // `CurrentState`'s statics, as `MainV2`'s start-up sets them from config.xml: the
@@ -737,7 +737,7 @@ impl MissionPlanner {
         // thread of its own. Set before the link opens: a vehicle takes its `rate*` from the
         // backups as it is made, on the link's thread, at its first heartbeat - which came before
         // this block when it sat after the connect, so the saved `CMB_raterc` reached the vehicle
-        // only when start-up won the race. `// C#: MainV2.cs:981-1000, 1010-1028, 3306, 3940-3962`
+        // only when start-up won the race. `// C#: MainV2.cs:983-1002, 1012-1030, 3313, 3947-3969`
         mp_vehicle::StreamRates::set_backups(persisted.rate_backups());
         for (index, name) in persisted.custom_field_names() {
             mp_vehicle::VehicleState::add_custom_field_name(index, &name);
@@ -819,12 +819,12 @@ impl MissionPlanner {
         // and how a screenshot avoids depending on a tile server being up.
         let mut map = MapViewport::new(track_points, markers);
         // `FlightData.Activate`: the map opens where it was last left.
-        // `// C#: GCSViews/FlightData.cs:524-548`
+        // `// C#: GCSViews/FlightData.cs:526-550`
         if let Some((at, zoom)) = persisted.flight_map_start() {
             map.start_at(at, zoom);
         }
         // `CHK_autopan.Checked = Settings.Instance.GetBoolean("CHK_autopan")` when it is set.
-        // `// C#: GCSViews/FlightData.cs:2732-2733`
+        // `// C#: GCSViews/FlightData.cs:2742-2743`
         if let Some(ticked) = persisted.get(AUTO_PAN_SETTING) {
             map.set_auto_pan(raw_params::get_boolean(Some(ticked)));
         }
@@ -833,13 +833,13 @@ impl MissionPlanner {
             // The environment wins over the remembered choice, so a screenshot or a test can
             // pin a provider without disturbing what the operator picked. With neither, Mission
             // Planner's default, GoogleSatelliteMap.
-            // `// C#: GCSViews/FlightPlanner.cs:7282`
+            // `// C#: GCSViews/FlightPlanner.cs:7279`
             let source = std::env::var("MP_TILE_SOURCE")
                 .ok()
                 .or_else(|| settings::Settings::load().tile_source)
                 .and_then(|id| mp_tiles::source::source_by_id(&id))
                 .unwrap_or_else(mp_tiles::source::default_source);
-            // `mapCache`, the Planner page's Map Access Mode. `// C#: Program.cs:321-325`
+            // `mapCache`, the Planner page's Map Access Mode. `// C#: Program.cs:323-327`
             let store =
                 if std::env::var("MP_OFFLINE").is_ok() || config::planner::cache_only(&persisted) {
                     TileStore::offline(source, cache)
@@ -863,7 +863,7 @@ impl MissionPlanner {
             persisted.link_opened(url);
         }
         // The Planner page's keys `MainV2` sets up from before any page shows: the units, the
-        // telemetry rates and the GCS id. `// C#: MainV2.cs:683, 836, 981-1002`
+        // telemetry rates and the GCS id. `// C#: MainV2.cs:683, 838, 983-1004`
         let planner = config::planner::Planner::new(&persisted);
         // `if (Settings.Instance["FP_docking"] == "Bottom") switchDockingToolStripMenuItem_Click`.
         // `// C#: GCSViews/FlightPlanner.cs:3487-3490`
@@ -873,15 +873,15 @@ impl MissionPlanner {
             Docking::Right
         };
         // `CMB_serialport` and `CMB_baudrate` as the settings left them: `comport`, its baud.
-        // `// C#: MainV2.cs:961-975`
+        // `// C#: MainV2.cs:963-977`
         let connect_box = connect::ConnectBox::new(
             persisted.get("comport").unwrap_or_default(),
             persisted.baud(),
         );
         // ---- row 96 ----
-        // `PluginLoader.LoadAll`, less `DisabledPlugins`. `// C#: MainV2.cs:3185-3196`
+        // `PluginLoader.LoadAll`, less `DisabledPlugins`. `// C#: MainV2.cs:3192-3203`
         // `loadTabControlActions`: the flight screen's pages as the setting saved them.
-        // `// C#: GCSViews/FlightData.cs:733-791`
+        // `// C#: GCSViews/FlightData.cs:735-793`
         let mut fly_pages = fly::Pages::default();
         if let Some(saved) = persisted.get(fly::TAB_SETTING) {
             fly_pages.load_tab_control_actions(saved);
@@ -889,13 +889,13 @@ impl MissionPlanner {
         let plugins = plugins_ui::Plugins::start(&persisted, cx);
         // ---- end row 96 ----
         // `WarningEngine`'s `LoadConfig`, and speech as the settings left it.
-        // `// C#: MainV2.cs:1035-1036`
+        // `// C#: MainV2.cs:1037-1038`
         let warnings = warnings::WarningEngine::start(&persisted);
         let mut this = Self {
             telemetry,
             map: std::rc::Rc::new(std::cell::RefCell::new(map)),
             // `loadwpsonconnect`, the Planner page's Load Waypoints on connect.
-            // `// C#: MainV2.cs:1750-1759`
+            // `// C#: MainV2.cs:1752-1761`
             auto_read_mission: read_mission || config::planner::load_wps_on_connect(&persisted),
             mission_requested: false,
             params_requested: false,
@@ -1084,17 +1084,17 @@ impl MissionPlanner {
             this.help.activate(&this.persisted);
         }
         // `MainV2`'s update check, once a day, on a thread of its own.
-        // `// C#: MainV2.cs:3661-3671`
+        // `// C#: MainV2.cs:3668-3678`
         this.help.startup_check(&mut this.persisted);
         // `SaveConfig` at the end of `MainV2`'s constructor, "to test we have write access" - and
         // Connect's, for the link opened above.
-        // `// C#: MainV2.cs:1106-1107, 1841-1847`
+        // `// C#: MainV2.cs:1108-1109, 1848-1854`
         this.save_config(settings::SaveEvent::Startup);
         this
     }
 
     /// `MainV2.SaveConfig`. Its failure the C# shows in a message box; here, the status line.
-    /// `// C#: MainV2.cs:2219-2237`
+    /// `// C#: MainV2.cs:2226-2244`
     fn save_config(&mut self, event: settings::SaveEvent) {
         if let Err(err) = self.persisted.save_config(event) {
             self.file_status = Some(format!(
@@ -1107,7 +1107,7 @@ impl MissionPlanner {
     /// showing - the planning screen's is `config(true)` - and `SaveConfig` writes the file.
     /// (It also saves the window's size and place, which this application keeps in its own
     /// settings, and not on closing.)
-    /// `// C#: MainV2.cs:2010-2015, 2129-2132, 2170-2171; ExtLibs/Controls/MainSwitcher.cs:249-254`
+    /// `// C#: MainV2.cs:2017-2022, 2136-2139, 2177-2178; ExtLibs/Controls/MainSwitcher.cs:249-254`
     fn form_closing(&mut self) {
         if self.screen == Screen::Plan {
             self.persisted
@@ -1119,7 +1119,7 @@ impl MissionPlanner {
         }
         self.persisted.observe_quick_views(&self.fly_data.quick);
         self.save_config(settings::SaveEvent::Close);
-        // "closing httpthread": `httpserver.Stop()`. `// C#: MainV2.cs:2104-2108`
+        // "closing httpthread": `httpserver.Stop()`. `// C#: MainV2.cs:2111-2115`
         self.http.server.stop();
     }
 
@@ -1262,7 +1262,7 @@ impl MissionPlanner {
 
     /// `CMB_serialport_SelectedIndexChanged`: `comPortName`, and the baud saved for the port put
     /// back.
-    /// `// C#: MainV2.cs:1962-1984`
+    /// `// C#: MainV2.cs:1969-1991`
     fn select_port(&mut self, port: &str) {
         self.connect_box.port = port.to_owned();
         self.persisted.select_port(port);
@@ -1469,7 +1469,7 @@ impl MissionPlanner {
     /// `switchDockingToolStripMenuItem_Click`: `panelAction` between the right (131 wide, the
     /// waypoints along the bottom, 166 high) and the bottom (120 high, the waypoints at the
     /// right, half the width), the choice kept as `FP_docking`.
-    /// `// C#: GCSViews/FlightPlanner.cs:6762-6778`
+    /// `// C#: GCSViews/FlightPlanner.cs:6759-6775`
     fn toggle_docking(&mut self) {
         self.plan_docking = match self.plan_docking {
             Docking::Right => Docking::Bottom,
@@ -1514,7 +1514,7 @@ impl MissionPlanner {
                 .on_click(cx.listener(|this, _event, _window, cx| {
                     // `CMB_serialport_Click`: the list filled afresh, the old choice kept if
                     // it is still there.
-                    // `// C#: MainV2.cs:1283-1290`
+                    // `// C#: MainV2.cs:1285-1292`
                     if this.telemetry.view().connected {
                         return;
                     }
@@ -1606,7 +1606,7 @@ impl MissionPlanner {
                                 .child(*rate)
                                 .on_click(cx.listener(move |this, _event, _window, cx| {
                                     // `CMB_baudrate_TextChanged`: a number, its digits kept.
-                                    // `// C#: MainV2.cs:4333-4350`
+                                    // `// C#: MainV2.cs:4340-4357`
                                     match connect::baud_changed(rate) {
                                         Ok(baud) => {
                                             this.connect_box.baud = baud;
@@ -1627,7 +1627,7 @@ impl MissionPlanner {
                 })),
         );
         // `MenuConnect`: CONNECT, or DISCONNECT while the link is open.
-        // `// C#: MainV2.cs:2459-2482`
+        // `// C#: MainV2.cs:2466-2489`
         strip = strip.child(ui::action(
             "main-connect",
             if connected {
@@ -1647,7 +1647,7 @@ impl MissionPlanner {
 
     /// `MenuConnect_Click` → `Connect`: a moving model is asked about first; then the link is
     /// closed if it is open, else opened from the boxes; and the settings are saved either way.
-    /// `// C#: MainV2.cs:1841-1880`
+    /// `// C#: MainV2.cs:1848-1887`
     fn connect_clicked(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let view = self.telemetry.view();
         let connected = view.connected && !view.target.starts_with("file:");
@@ -1669,7 +1669,7 @@ impl MissionPlanner {
 
     /// `doDisconnect`: the port closed, the recording with it, and the settings saved as
     /// `MenuConnect_Click` saves them.
-    /// `// C#: MainV2.cs:1389-1447, 1844-1845`
+    /// `// C#: MainV2.cs:1391-1449, 1851-1852`
     fn do_disconnect(&mut self) {
         self.telemetry = Telemetry::idle();
         self.mission_requested = false;
@@ -1680,7 +1680,7 @@ impl MissionPlanner {
 
     /// `doConnect` from the boxes: AUTO's port scan is not ported and is refused as such; a
     /// serial port opens at once; a network kind asks its transport's questions first.
-    /// `// C#: MainV2.cs:1448-1526`
+    /// `// C#: MainV2.cs:1450-1528`
     fn do_connect(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         self.do_connect_with(false, window, cx);
     }
@@ -1722,7 +1722,7 @@ impl MissionPlanner {
 
     /// The link opened and, as `MenuConnect_Click` then does, the settings saved: the box's
     /// port and baud, a network kind's answers under its keys.
-    /// `// C#: MainV2.cs:1841-1847; ExtLibs/Comms/CommsTCPSerial.cs:142-143`
+    /// `// C#: MainV2.cs:1848-1854; ExtLibs/Comms/CommsTCPSerial.cs:142-143`
     fn open_link(&mut self, url: &str) {
         self.telemetry = Telemetry::connect(url);
         self.mission_requested = false;
@@ -1753,7 +1753,7 @@ impl MissionPlanner {
     }
 
     /// `BUT_InjectCustomMap_Click`: while a run is on the button reads "Cancel" and stops it;
-    /// otherwise the folder dialog. `// C#: GCSViews/FlightPlanner.cs:8416-8445`
+    /// otherwise the folder dialog. `// C#: GCSViews/FlightPlanner.cs:8413-8442`
     fn inject_map_clicked(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         if let Some(job) = &self.inject_map {
             job.cancel();
@@ -1764,7 +1764,7 @@ impl MissionPlanner {
     }
 
     /// The folder named: `Directory.GetFiles` of its images, the run started over them, the bar
-    /// shown. An empty name is the dialog cancelled. `// C#: GCSViews/FlightPlanner.cs:8428-8447`
+    /// shown. An empty name is the dialog cancelled. `// C#: GCSViews/FlightPlanner.cs:8425-8444`
     fn inject_map_begin(&mut self, folder: &str) {
         let folder = folder.trim();
         if folder.is_empty() {
@@ -1778,7 +1778,7 @@ impl MissionPlanner {
     /// The run's end, on the frame: the button's text back, the bar hidden, the map type to
     /// Custom - a new store, which is the memory cache cleared and the maps reloaded - and the
     /// results box; the exception that ended it, if one did, on the status line.
-    /// `// C#: GCSViews/FlightPlanner.cs:8488-8527`
+    /// `// C#: GCSViews/FlightPlanner.cs:8485-8524`
     fn inject_map_tick(&mut self) {
         if !self
             .inject_map
@@ -2025,7 +2025,7 @@ impl MissionPlanner {
     fn fly_here(&mut self, position: mp_units::LatLon) {
         // Once Fly To Here Alt has set a height, Fly To Here flies at it, in its frame, as
         // `goHereToolStripMenuItem_Click` does with `GuidedMode.z`.
-        // `// C#: GCSViews/FlightData.cs:3090-3113`
+        // `// C#: GCSViews/FlightData.cs:3103-3126`
         if self.fly_actions.guided.z != 0.0 {
             self.fly_to_here_guided(position);
             return;
@@ -2265,7 +2265,7 @@ impl MissionPlanner {
                     .planner_deactivated(&this.plan, this.altitude_frame);
             }
             // `FlightData.Deactivate` keeps the map's place for the next start.
-            // `// C#: GCSViews/FlightData.cs:662-664`
+            // `// C#: GCSViews/FlightData.cs:664-666`
             if this.screen == Screen::Fly {
                 this.persisted
                     .flight_data_deactivated(this.map.borrow().position_and_zoom());
@@ -2306,7 +2306,7 @@ impl MissionPlanner {
             this.remember();
             // FLIGHT DATA and FLIGHT PLAN save Mission Planner's config.xml once the
             // screen is shown; SETUP and CONFIG do not.
-            // `// C#: MainV2.cs:1309-1323`
+            // `// C#: MainV2.cs:1311-1325`
             match screen {
                 Screen::Fly => this.save_config(settings::SaveEvent::FlightData),
                 Screen::Plan => this.save_config(settings::SaveEvent::FlightPlanner),
@@ -2327,7 +2327,7 @@ impl MissionPlanner {
     /// `GMapMarkerBase`'s statics as `MainV2` reads them from the settings - `GetInt32
     /// ("GMapMarkerBase_length", 500)` and `GetBoolean("GMapMarkerBase_Display*", true)` - which
     /// the Planner page's check boxes write.
-    /// `// C#: MainV2.cs:3855-3860; GCSViews/ConfigurationView/ConfigPlanner.cs:1080-1108`
+    /// `// C#: MainV2.cs:3862-3867; GCSViews/ConfigurationView/ConfigPlanner.cs:1081-1109`
     fn marker_settings(&self) -> mapview::MarkerSettings {
         let flag = |key: &str| {
             self.persisted
@@ -2412,7 +2412,7 @@ impl MissionPlanner {
             .gap_2()
             .w(px(400.0))
             // `SwapHud1AndMap`: `tableMap` - the tuning graph over the map - where `hud1` was.
-            // `// C#: GCSViews/FlightData.cs:5139-5159, GCSViews/FlightData.Designer.cs:2472-2473`
+            // `// C#: GCSViews/FlightData.cs:5253-5273, GCSViews/FlightData.Designer.cs:2472-2473`
             .child(if self.fly_data.swapped {
                 div()
                     .flex()
@@ -2622,7 +2622,7 @@ impl MissionPlanner {
     /// `panelWaypoints` at the right, half the window wide,
     /// and `panelAction`'s panels in a row along the bottom (120 high in the C#; these panels are
     /// taller, so the row is as high as the tallest of them and scrolls sideways). The menus and dialogs go over either.
-    /// `// C#: GCSViews/FlightPlanner.cs:6762-6778`
+    /// `// C#: GCSViews/FlightPlanner.cs:6759-6775`
     fn plan_screen(
         &self,
         view: &TelemetryView,
@@ -2885,7 +2885,7 @@ impl MissionPlanner {
                                 return;
                             }
                             // `MouseDownStart`, which the flight map's menu entries act at.
-                            // `// C#: GCSViews/FlightData.cs:2956-2959`
+                            // `// C#: GCSViews/FlightData.cs:2969-2972`
                             if !planning {
                                 let at = this.map.borrow().position_at(x, y);
                                 this.fly_data.mouse_down_start = at.map(|at| (at, (x, y)));
@@ -2968,7 +2968,7 @@ impl MissionPlanner {
                             //
                             // so a click that grabbed an existing waypoint adds nothing, and a
                             // drag - of the map or of a waypoint - adds nothing either.
-                            // `// C#: GCSViews/FlightPlanner.cs:7736-7745`
+                            // `// C#: GCSViews/FlightPlanner.cs:7733-7742`
                             let (x, y) = (f32::from(event.position.x), f32::from(event.position.y));
                             if plan::map_release(planning, grabbed, press, (x, y))
                                 != plan::MapRelease::AddWaypoint
@@ -3041,7 +3041,7 @@ impl MissionPlanner {
                     .children(planning.then(|| plan::zoom_icon(cx)))
                     .children(planning.then(|| plan::poly_icon(cx)))
                     // The points of interest, over the flight map: `poioverlay`.
-                    // `// C#: GCSViews/FlightData.cs:52, 410, 4473-4476`
+                    // `// C#: GCSViews/FlightData.cs:52, 412, 4587-4590`
                     // The planner has its own `poioverlay` on `MainMap` (`FlightPlanner.cs:85,
                     // 215`), so the points are drawn on both screens.
                     .child(poi::layer(&self.fly_data.pois, self.map.clone()))
@@ -3234,20 +3234,20 @@ impl Render for MissionPlanner {
             .apply(&mut self.hud, view.state.as_deref());
         // The units the Planner page set, which `CurrentState`'s getters apply to what the HUD
         // and the quick views show and `FlightData.Activate` names on the HUD.
-        // `// C#: GCSViews/FlightData.cs:442-444, ExtLibs/ArduPilot/CurrentState.cs:23-38`
+        // `// C#: GCSViews/FlightData.cs:444-446, ExtLibs/ArduPilot/CurrentState.cs:23-38`
         let units = self.planner.units();
         self.hud.units = units;
         self.fly_data.quick.set_units(units);
         // `hudon`, which `MainV2` read from `CHK_hudshow` and Enable HUD Overlay sets.
-        // `// C#: MainV2.cs:938-939; ConfigPlanner.cs:374-378; ExtLibs/Controls/HUD.cs:2005-2008`
+        // `// C#: MainV2.cs:940-941; ConfigPlanner.cs:375-379; ExtLibs/Controls/HUD.cs:2005-2008`
         self.hud.hud_on = self.planner.hud_on();
         // The vehicle's banner names its firmware; its parameter documentation follows from it.
         self.telemetry.tick();
         // Handed over once a frame: the shown vehicle's fence as the link has seen it, which the
         // quick view's GeoFenceDist measures from (`CurrentState.cs:1632`); the Planner page's
         // telemetry rates, which its combos set as `cs.rateX` and the saved defaults
-        // (`ConfigPlanner.cs:573-640`); and a K-index the start-up download has fetched, which
-        // `KIndex_KIndex` writes as `kindex` (`MainV2.cs:3977-3981`).
+        // (`ConfigPlanner.cs:574-641`); and a K-index the start-up download has fetched, which
+        // `KIndex_KIndex` writes as `kindex` (`MainV2.cs:3984-3988`).
         quick::set_fence(self.telemetry.fence_points());
         let [attitude, position, status, rc, sensors] = self.planner.rates();
         self.telemetry.hand_over_rates(mp_vehicle::StreamRates {
@@ -3300,7 +3300,7 @@ impl Render for MissionPlanner {
         // application says what the C# puts in a message box. Unanswered, `doCommand` throws,
         // and the handler's `catch` shows the exception: its message here.
         // `// C#: GCSViews/ConfigurationView/ConfigFirmwareDisabled.cs:30-44;
-        // ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:2753-2757, 2784-2797`
+        // ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:2750-2754, 2781-2794`
         if self.install_firmware.take_bootloader_command()
             && let Some(id) = view.vehicle
         {
@@ -3460,7 +3460,7 @@ impl Render for MissionPlanner {
         }
         // A plain reboot on a serial port: the port looked at half a second on and, gone,
         // opened again as the connect button opens it, its parameters fetched afresh; a port
-        // that will not open is said on the status line. `// C#: MAVLinkInterface.cs:2573-2583`
+        // that will not open is said on the status line. `// C#: MAVLinkInterface.cs:2570-2580`
         match self
             .telemetry
             .reopen_after_reboot(web_time::Instant::now(), Telemetry::connect)
@@ -3496,7 +3496,7 @@ impl Render for MissionPlanner {
         // The mission overlay each screen builds: the planner's with its WP Radius and Loiter
         // Radius boxes, the flight screen's with none; and home's altitude, for its tooltip -
         // `homeplla`'s on the flight screen, the vehicle's home or else the planned one.
-        // `// C#: GCSViews/FlightPlanner.cs:1423-1434; GCSViews/FlightData.cs:3812-3843`
+        // `// C#: GCSViews/FlightPlanner.cs:1423-1434; GCSViews/FlightData.cs:3926-3957`
         let (overlay, home_altitude) = if self.screen == Screen::Plan {
             (
                 plan::map_overlay(&self.plan),
@@ -3537,7 +3537,7 @@ impl Render for MissionPlanner {
         }
         // `GMaps.Instance.Mode`, as `srtm.getAltitude` reads it: the Planner page's Map Access
         // Mode (MP_OFFLINE standing in for CacheOnly, as it does for the map's tiles).
-        // `// C#: Program.cs:321-325; ExtLibs/Utilities/srtm.cs:385`
+        // `// C#: Program.cs:323-327; ExtLibs/Utilities/srtm.cs:385`
         srtm::set_cache_only(
             std::env::var_os("MP_OFFLINE").is_some()
                 || config::planner::cache_only(&self.persisted),
@@ -3962,12 +3962,12 @@ impl Render for MissionPlanner {
                 Some(position) => {
                     map.observe(position, mp_units::Bearing(mp_units::Degrees(yaw)));
                     // Auto Pan, the flight screen's alone, as Mission Planner's planning map has
-                    // none. `// C#: GCSViews/FlightData.cs:4242-4253`
+                    // none. `// C#: GCSViews/FlightData.cs:4356-4367`
                     if on_flight_screen {
                         map.auto_pan(web_time::Instant::now());
                     }
                     // `Settings.Instance["CHK_autopan"] = CHK_autopan.Checked.ToString()` on a
-                    // change. `// C#: GCSViews/FlightData.cs:1929-1933`
+                    // change. `// C#: GCSViews/FlightData.cs:1939-1943`
                     let ticked = if map.is_following() { "True" } else { "False" };
                     if self.persisted.get(AUTO_PAN_SETTING) != Some(ticked) {
                         self.persisted.set(AUTO_PAN_SETTING, ticked);
@@ -4009,7 +4009,7 @@ impl Render for MissionPlanner {
         // the vehicle's mission while the operator draws a different one is how people fly the
         // mission they thought they had replaced. While the Survey (Grid) dialog is open it is
         // the dialog's map, showing its grid.
-        // `// C#: GCSViews/FlightData.cs:3810-3843`
+        // `// C#: GCSViews/FlightData.cs:3924-3957`
         if let Some((preview, _)) = self.survey_preview() {
             self.map.borrow_mut().set_mission(&preview);
         } else if self.plan.is_empty() {
@@ -4019,7 +4019,7 @@ impl Render for MissionPlanner {
         }
         // The rally markers likewise: the plan's while it has any, else the vehicle's as the
         // traffic has shown them - `MAV.rallypoints`, which the flight screen draws.
-        // `// C#: GCSViews/FlightData.cs:3898-3905`
+        // `// C#: GCSViews/FlightData.cs:4012-4019`
         if self.plan.rally().is_empty() {
             let positions: Vec<mp_units::LatLon> = view
                 .rally_points
@@ -4045,7 +4045,7 @@ impl Render for MissionPlanner {
         // The camera's shots: `photosoverlay`'s photo markers and, with Camera Overlap checked,
         // `kmlpolygons`' overlap count - the map loop's camera half, built again only when a
         // shot, the toggle, CAM_MIN_INTERVAL or the fields of view have changed.
-        // `// C#: GCSViews/FlightData.cs:4001-4082`
+        // `// C#: GCSViews/FlightData.cs:4115-4196`
         {
             let points = self.telemetry.camera_points();
             let min_interval = view
@@ -4091,7 +4091,7 @@ impl Render for MissionPlanner {
                 // could have changed since the last one - and never while the link is still
                 // retrying the last: `doARM` blocks its caller until the vehicle answers or its
                 // retries run out, so the C# cannot ask again before then either.
-                // `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:2632-2645, 2764-2768`
+                // `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:2632-2645, 2761-2765`
                 const BETWEEN_ATTEMPTS: std::time::Duration =
                     std::time::Duration::from_millis(1000);
                 let now = web_time::Instant::now();
@@ -4519,7 +4519,7 @@ impl Render for MissionPlanner {
             .bg(rgb(theme::BG))
             .text_color(rgb(theme::TEXT))
             // `MainV2.ProcessCmdKey`: a key no element inside took, on its way out.
-            // `// C#: MainV2.cs:4067-4182`
+            // `// C#: MainV2.cs:4074-4189`
             .track_focus(&self.root_focus)
             .on_key_down(cx.listener(|this, event: &gpui::KeyDownEvent, window, cx| {
                 if this.process_cmd_key(&event.keystroke, window, cx) {
@@ -4916,7 +4916,7 @@ fn main() {
         return;
     }
 
-    // `/update` and `/updatebeta`: the update alone, no window. `// C#: Program.cs:192-203`
+    // `/update` and `/updatebeta`: the update alone, no window. `// C#: Program.cs:194-205`
     if let Some(first) = raw.first()
         && (first == "/update" || first == "/updatebeta")
     {
@@ -4939,15 +4939,15 @@ fn main() {
     report_import(&imported);
 
     // `Program.CleanupFiles`: a new updater left beside the program by the last update, copied
-    // into place. `// C#: Program.cs:614-626`
+    // into place. `// C#: Program.cs:616-628`
     help::cleanup_files();
 
     // `Program`'s `UnhandledException` and `ThreadException` handlers: a panic's report, written
-    // for the next start to ask about. `// C#: Program.cs:80, 190, 717`
+    // for the next start to ask about. `// C#: Program.cs:80, 192, 719`
     crash::install_hook(mp_settings::data_directory());
 
     // `ThreadPool.QueueUserWorkItem(BGLogMessagesMetaData)`: the log browser's field
-    // descriptions, fetched and read in the background. `// C#: MainV2.cs:3299`
+    // descriptions, fetched and read in the background. `// C#: MainV2.cs:3306`
     logbrowse::metadata::start();
 
     // A flag beats its environment variable: the variable is the standing preference and the flag
@@ -5026,7 +5026,7 @@ fn main() {
         });
         match opened {
             // `Application.Run(new MainV2())`: the application ends when its main window does,
-            // whatever else it has open. `// C#: Program.cs:478`
+            // whatever else it has open. `// C#: Program.cs:480`
             Ok(main_window) => {
                 let main_window = main_window.window_id();
                 cx.on_window_closed(move |cx, closed| {

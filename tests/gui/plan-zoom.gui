@@ -1,12 +1,12 @@
 # The planning map's zoom (DELIVERABLES.md Deliverable 8, Deliverable 11).
 #
-# The zoom icon on the map (zoomicon, GCSViews/FlightPlanner.cs:4910-4911, 7624-7628) opens
+# The zoom icon on the map (zoomicon, GCSViews/FlightPlanner.cs:4910-4911, 7621-7625) opens
 # contextMenuStripZoom: Zoom to Vehicle centres on cs.Location, Zoom to Home on cs.HomeLocation or
 # else the planned home, each bringing a wider view in to 17, and Zoom to Mission is
-# MainMap.ZoomAndCenterMarkers("WPOverlay") (FlightPlanner.cs:8370-8401). The Zoom box and bar at
+# MainMap.ZoomAndCenterMarkers("WPOverlay") (FlightPlanner.cs:8367-8398). The Zoom box and bar at
 # the map's right set MainMap.Zoom and show it (Zoomlevel_ValueChanged, TRK_zoom_Scroll,
-# MainMap_OnMapZoomChanged; FlightPlanner.cs:6938-6969, 8012-8029). Map Tool > Zoom To asks for a
-# place (FlightPlanner.cs:8345-8368), and is cancelled here: its answer comes from OpenStreetMap's
+# MainMap_OnMapZoomChanged; FlightPlanner.cs:6935-6966, 8009-8026). Map Tool > Zoom To asks for a
+# place (FlightPlanner.cs:8342-8365), and is cancelled here: its answer comes from OpenStreetMap's
 # geocoder, and a test asks no server anything.
 #
 # Its own data directory, with the planned home at SITL's, so Zoom to Home lands in the same place
@@ -91,10 +91,10 @@ key Escape
 expect plan.prompt none
 expect plan.geocoding false
 
-# The flight screen's own radius circle: the Guided Mode marker (FlightData.cs:4214-4221). Fly To
+# The flight screen's own radius circle: the Guided Mode marker (FlightData.cs:4328-4335). Fly To
 # Coords puts the vehicle in Guided and sends it somewhere, and the marker there is circled at the
 # WP radius, in blue, its tooltip always showing. The mission's waypoints have no circles on this
-# screen: its overlay is built with no radii (FlightData.cs:3830-3843).
+# screen: its overlay is built with no radii (FlightData.cs:3944-3957).
 click tab-fly
 expect map.circles 0
 click fly-tab-actions

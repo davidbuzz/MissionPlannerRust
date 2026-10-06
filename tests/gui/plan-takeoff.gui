@@ -1,4 +1,4 @@
-# Takeoff: takeoffToolStripMenuItem_Click (GCSViews/FlightPlanner.cs:6780). Asks "Please enter
+# Takeoff: takeoffToolStripMenuItem_Click (GCSViews/FlightPlanner.cs:6777). Asks "Please enter
 # your takeoff altitude in m", offering 10, and appends a TAKEOFF (22) at that altitude with no
 # position. No vehicle is connected, so it is not ArduPlane and no pitch is asked. An altitude
 # int.TryParse refuses is "Bad Alt".

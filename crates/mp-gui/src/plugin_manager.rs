@@ -46,7 +46,7 @@
 //!   Save && Close. Its buttons are sized to their text, where the designer's 73 by 31 cut theirs
 //!   in half.
 //!
-//! `// C#: Plugin/PluginUI.cs:14-149; Plugin/PluginUI.Designer.cs:31-178; MainV2.cs:4118-4122`
+//! `// C#: Plugin/PluginUI.cs:14-149; Plugin/PluginUI.Designer.cs:31-178; MainV2.cs:4125-4129`
 
 use gpui::{
     AnyElement, Context, InteractiveElement, IntoElement, ParentElement, SharedString,
@@ -224,7 +224,7 @@ pub(crate) struct PluginManager {
 
 impl PluginManager {
     /// `new PluginUI().Show()`: a fresh form over the plugins as they are now.
-    /// `// C#: Plugin/PluginUI.cs:18-24; MainV2.cs:4118-4122`
+    /// `// C#: Plugin/PluginUI.cs:18-24; MainV2.cs:4125-4129`
     pub(crate) fn show(
         &mut self,
         plugins: &[PluginStatus],

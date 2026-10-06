@@ -2,7 +2,7 @@
 # HUD, in the order the Designer adds them and with the .resx's words, Quick showing at start
 # (SelectedIndex = 0), and one page at a time. Multiline is off by default, so the headers are one
 # row and the two arrows at its end move it along a header at a time.
-# `GCSViews/FlightData.Designer.cs:595-611, GCSViews/FlightData.resx, GCSViews/FlightData.cs:429`
+# `GCSViews/FlightData.Designer.cs:595-611, GCSViews/FlightData.resx, GCSViews/FlightData.cs:431`
 #
 # Every page must fit the column with a vehicle connected: fly.page.overflow is how far the page
 # runs past the bottom of the column - its scroll range - and it is zero on every page.

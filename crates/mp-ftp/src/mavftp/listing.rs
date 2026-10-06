@@ -20,7 +20,7 @@
 
 //! A directory listing: what one `kCmdListDirectory` acknowledgement says, entry by entry.
 //!
-//! C#: ExtLibs/ArduPilot/Mavlink/MAVFtp.cs:1349-1411 (the ACK half of the listing handler),
+//! C#: ExtLibs/ArduPilot/Mavlink/MAVFtp.cs:1388-1450 (the ACK half of the listing handler),
 //! :1238-1246 (`ParseListingTime`) and :2420-2452 (`FtpFileInfo`).
 //!
 //! Each entry is a type byte - `F`ile, `D`irectory or `S`kipped - and a NUL-terminated name. A file
@@ -40,14 +40,14 @@ const DIRENT_SKIP: u8 = b'S';
 
 /// One entry of a listing: the C#'s `FtpFileInfo`.
 ///
-/// C#: MAVFtp.cs:2420-2452.
+/// C#: MAVFtp.cs:2459-2491.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct FtpFileInfo {
     /// `Name`. Empty for an entry the vehicle skipped.
     pub name: String,
     /// `Parent`: the directory that was listed, as it was asked for.
     pub parent: String,
-    /// `isDirectory`. A skipped entry counts as one (MAVFtp.cs:1396).
+    /// `isDirectory`. A skipped entry counts as one (MAVFtp.cs:1435).
     pub is_directory: bool,
     /// `Size`, in bytes; zero for a directory.
     pub size: u64,
@@ -58,7 +58,7 @@ pub struct FtpFileInfo {
 }
 
 impl FtpFileInfo {
-    /// C#: MAVFtp.cs:2422-2431.
+    /// C#: MAVFtp.cs:2461-2470.
     #[must_use]
     pub fn new(
         name: String,
@@ -84,7 +84,7 @@ impl FtpFileInfo {
 }
 
 impl std::fmt::Display for FtpFileInfo {
-    /// C#: MAVFtp.cs:2446-2451 (`ToString`).
+    /// C#: MAVFtp.cs:2485-2490 (`ToString`).
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         if self.is_directory {
             write!(f, "Directory: {}", self.name)
@@ -98,7 +98,7 @@ impl std::fmt::Display for FtpFileInfo {
 ///
 /// An entry with no size, a size that is not a number, or a name that runs off the end of the
 /// payload without its NUL: `ulong.Parse` or an array index throws, `PacketReceived` swallows it
-/// (C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:5543-5550), and the handler has stopped
+/// (C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:5523-5530), and the handler has stopped
 /// with whatever entries it had already added still added - and without asking for the next
 /// offset, so the listing waits for its timeout and asks for the same one again.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -106,7 +106,7 @@ pub(crate) struct Malformed;
 
 /// Appends the entries in one acknowledgement to `answer`.
 ///
-/// C#: MAVFtp.cs:1349-1411. On [`Malformed`], the entries before the fault stay appended, as
+/// C#: MAVFtp.cs:1388-1450. On [`Malformed`], the entries before the fault stay appended, as
 /// they do in the C#.
 pub(crate) fn parse_entries(
     head: &Header,
@@ -136,7 +136,7 @@ pub(crate) fn parse_entries(
         offset += 1;
         match b {
             DIRENT_FILE => {
-                // C#: MAVFtp.cs:1358-1371.
+                // C#: MAVFtp.cs:1397-1410.
                 let name = read_name(&mut offset)?;
                 let items: Vec<&str> = name.split('\t').collect();
                 let size = items
@@ -152,7 +152,7 @@ pub(crate) fn parse_entries(
                 answer.push(FtpFileInfo::new(file, dir, false, size, modified));
             }
             DIRENT_DIR => {
-                // C#: MAVFtp.cs:1372-1389. A timed listing gives a directory the same trailing
+                // C#: MAVFtp.cs:1411-1428. A timed listing gives a directory the same trailing
                 // fields as a file; a plain one is just the name, where a tab would be part of it.
                 let name = read_name(&mut offset)?;
                 if with_time {
@@ -165,17 +165,17 @@ pub(crate) fn parse_entries(
                 }
             }
             DIRENT_SKIP => {
-                // C#: MAVFtp.cs:1390-1397. Kept, nameless, because the next request's offset is
+                // C#: MAVFtp.cs:1429-1436. Kept, nameless, because the next request's offset is
                 // the count of entries, and the vehicle counted this one.
                 read_name(&mut offset)?;
                 answer.push(FtpFileInfo::new(String::new(), dir, true, 0, None));
             }
             0 => {
-                // C#: MAVFtp.cs:1398-1410 with `b` already zero: the loop does not run, the name
+                // C#: MAVFtp.cs:1437-1449 with `b` already zero: the loop does not run, the name
                 // is empty, and nothing is added.
             }
             _ => {
-                // C#: MAVFtp.cs:1398-1410. An unknown type byte: the name after it is a file,
+                // C#: MAVFtp.cs:1437-1449. An unknown type byte: the name after it is a file,
                 // the type byte itself not part of it.
                 let name = read_name(&mut offset)?;
                 if !name.is_empty() {
@@ -191,7 +191,7 @@ pub(crate) fn parse_entries(
 /// know), for anything that is not a number, and for anything past a `u32`, which is a corrupt
 /// entry.
 ///
-/// C#: MAVFtp.cs:1240-1246.
+/// C#: MAVFtp.cs:1279-1285.
 pub(crate) fn parse_listing_time(seconds: &str) -> Option<u32> {
     let secs = parse_ulong(seconds)?;
     if secs == 0 {

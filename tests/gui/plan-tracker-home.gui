@@ -2,7 +2,7 @@
 # is set and the vehicle's home altitude otherwise; OK sets `cs.TrackerLocation` to where the menu
 # opened at that altitude, and the planner's timer draws a "Tracker Home" marker there - a green
 # pin with its tooltip and a blue radius rect - while the tracker is not at home. A word that is
-# not a number is double.Parse's exception. `GCSViews/FlightPlanner.cs:6910-6916, 6970-6982;
+# not a number is double.Parse's exception. `GCSViews/FlightPlanner.cs:6907-6913, 6967-6979;
 # ExtLibs/ArduPilot/CurrentState.cs:1606-1615`
 #
 # `cs.HomeAlt` is 0 until a HOME_POSITION has been heard, which nothing here asks for, so the

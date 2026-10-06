@@ -10,7 +10,7 @@
 # PointLatLng's default, which has no tile: "No SRTM data for this area". The C#'s menu is on the
 # map; here the entries are the map's right-click menu, contextMenuStripMap, so the map is
 # pressed first and the entry chosen after.
-# `GCSViews/FlightData.cs:58, 4478-4509, 4789-4811, 4852-4885, ExtLibs/Utilities/srtm.cs:104-275`
+# `GCSViews/FlightData.cs:58, 4592-4623, 4903-4925, 4966-4999, ExtLibs/Utilities/srtm.cs:104-275`
 #
 # THIS MOVES SITL'S HOME to the middle of the map - where the vehicle is while nothing else is on
 # it. Needs SITL (a copter):

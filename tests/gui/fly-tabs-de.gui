@@ -2,7 +2,7 @@
 # headers are FlightData.de-DE.resx's words where it has them and FlightData.resx's English where
 # it does not - .NET's ResourceManager falling back from the culture's file to the base file, here
 # Fluent's bundle for de-DE falling back to English (crate::i18n).
-# `L10N.cs:19-25, MainV2.cs:697-700, 4214-4243; GCSViews/FlightData.de-DE.resx`
+# `L10N.cs:19-25, MainV2.cs:699-702, 4221-4250; GCSViews/FlightData.de-DE.resx`
 #
 # i18n.culture and i18n.chain are the culture read and the cultures tried; i18n.missing is how
 # many keys the screens asked for that neither has - shown as the key's name in brackets - and is

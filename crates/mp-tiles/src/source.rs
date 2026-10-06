@@ -24,7 +24,7 @@
 //! had before the port began. The C#'s map-type box is `GMapProviders.List` handed over whole
 //! (`GCSViews/FlightPlanner.cs:176-178`), and that list is every `GMapProvider` field of the
 //! `GMapProviders` class in declaration order, with Mission Planner's own providers appended at
-//! startup (`GMap.NET.MapProviders/GMapProvider.cs:24-36`, `Program.cs:328-351`). [`CSHARP_LIST`]
+//! startup (`GMap.NET.MapProviders/GMapProvider.cs:24-36`, `Program.cs:330-353`). [`CSHARP_LIST`]
 //! is that list by name; [`SOURCES`] is the part of it ported so far, in the same order.
 
 use mp_os::Lock as _;
@@ -454,7 +454,7 @@ pub const SOURCES: &[TileSource] = &[
 ///
 /// Unless the interface language is simplified Chinese, when it is Google's China imagery - a
 /// provider that shifts coordinates onto China's GCJ-02 datum, which is not ported.
-/// `// C#: GCSViews/FlightPlanner.cs:7247-7295` (the default itself at `:7282`)
+/// `// C#: GCSViews/FlightPlanner.cs:7244-7292` (the default itself at `:7282`)
 pub const DEFAULT_PROVIDER: &str = "GoogleSatelliteMap";
 
 /// Every provider the C# application offers, by `Name`, in the order its map-type box lists them.
@@ -464,11 +464,11 @@ pub const DEFAULT_PROVIDER: &str = "GoogleSatelliteMap";
 /// Mission Planner `GMap.NET.Core.dll` gave when asked (`tests/fixtures/gmap-oracle.tsv`) - then
 /// the providers `Program.cs` adds. Two providers declared under `#if` (`OpenStreetOsm`, the
 /// `OpenStreetMapSurfer` pair) are not compiled in and so are not here, and a GDAL provider is
-/// added last only when a `gdal` directory sits beside the executable (`Program.cs:379-387`).
+/// added last only when a `gdal` directory sits beside the executable (`Program.cs:381-389`).
 ///
 /// Names are the English ones. The Google, Bing and AMap providers take theirs from
 /// `Resources/Strings.resx`, which has a simplified Chinese translation.
-/// `// C#: ExtLibs/GMap.NET.Core/GMap.NET.MapProviders/GMapProvider.cs:55-156; Program.cs:328-351`
+/// `// C#: ExtLibs/GMap.NET.Core/GMap.NET.MapProviders/GMapProvider.cs:55-156; Program.cs:330-353`
 pub const CSHARP_LIST: &[&str] = &[
     // GMapProvider.cs:55 - EmptyProvider, named at :515.
     "None",
@@ -544,7 +544,7 @@ pub const CSHARP_LIST: &[&str] = &[
     "ArcGIS_World_Terrain_Base_Map",
     "ArcGIS_World_Topo_Map",
     "ArcGIS_DarbAE_Q2_2011_NAVTQ_Eng_V5_MapProvider",
-    // Program.cs:328-351, each named in its own file under ExtLibs/Maps.
+    // Program.cs:330-353, each named in its own file under ExtLibs/Maps.
     "WMS Custom",
     "WMTS Custom",
     "Custom",
@@ -580,7 +580,7 @@ pub fn source_by_id(id: &str) -> Option<&'static TileSource> {
 /// Finds a provider by the C#'s `Name` - what `config.xml`'s `MapType` holds.
 ///
 /// `GMapProviders.List.FindIndex(x => x.Name == mapType)`, over the providers ported.
-/// `// C#: GCSViews/FlightPlanner.cs:7252`
+/// `// C#: GCSViews/FlightPlanner.cs:7249`
 #[must_use]
 pub fn source_by_name(name: &str) -> Option<&'static TileSource> {
     SOURCES.iter().find(|source| source.cache_name == name)
@@ -677,7 +677,7 @@ mod tests {
 
     #[test]
     fn the_default_is_the_csharps() {
-        // C#: GCSViews/FlightPlanner.cs:7282
+        // C#: GCSViews/FlightPlanner.cs:7279
         assert_eq!(DEFAULT_PROVIDER, "GoogleSatelliteMap");
         assert_eq!(default_source(), &GOOGLE_SATELLITE_MAP);
         assert_eq!(default_source().cache_name, DEFAULT_PROVIDER);

@@ -387,7 +387,7 @@ fn telemetry_streams_are_requested_when_a_vehicle_appears() {
     // ArduPilot sends almost nothing until asked. Forgetting this makes a working link look
     // like a dead one, so it is worth a test of its own. The rates are the vehicle's own, which
     // start from the saved defaults; each request goes twice, in `UpdateCurrentSettings`' order
-    // (ExtLibs/ArduPilot/CurrentState.cs:4632-4663; MAVLinkInterface.cs:3262-3263).
+    // (ExtLibs/ArduPilot/CurrentState.cs:4635-4666; MAVLinkInterface.cs:3258-3259).
     let (gcs_side, mut vehicle_side) = Loopback::pair();
     let config = LinkConfig {
         stream_rate_hz: 4,

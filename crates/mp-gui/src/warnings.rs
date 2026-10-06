@@ -33,11 +33,11 @@
 //!   the whole file or nothing (`LoadConfig`, `:30-43`), and written by the manager's Save as
 //!   `XmlSerializer` writes a `List<CustomWarning>` (`SaveConfig`, `:45-59`);
 //! * every 250 ms each rule is checked in turn (`MainLoop`, `:85-132`). A SpeakAndText rule that
-//!   holds is spoken - when speech was on as the application started (`MainV2.cs:1036`) - and
+//!   holds is spoken - when speech was on as the application started (`MainV2.cs:1038`) - and
 //!   raised as `WarningMessage`, which `MainV2` makes `cs.messageHigh`, the HUD's red message
-//!   (`MainV2.cs:1037`; [`message_high`]). A Coloring rule raises `QuickPanelColoring` with its
+//!   (`MainV2.cs:1039`; [`message_high`]). A Coloring rule raises `QuickPanelColoring` with its
 //!   colour when it holds and with "NoColor" when it does not, which colours the quick view bound
-//!   to its property and takes the colour off again (`MainV2.cs:4786-4811`, `quick.rs`).
+//!   to its property and takes the colour off again (`MainV2.cs:4793-4818`, `quick.rs`).
 //!   Something a rule throws ends that pass: the C#'s `catch` is round the whole loop.
 //!
 //! Where this is not the C#, each written at its site:
@@ -87,7 +87,7 @@ pub const FILE_NAME: &str = "warnings.xml";
 pub const PERIOD: Duration = Duration::from_millis(250);
 
 /// The colour name that takes a quick view's colour off.
-/// `// C#: ExtLibs/Utilities/Warnings/WarningEngine.cs:121; MainV2.cs:4800`
+/// `// C#: ExtLibs/Utilities/Warnings/WarningEngine.cs:121; MainV2.cs:4807`
 pub const NO_COLOR: &str = "NoColor";
 
 /// `Console.WriteLine` when `LoadConfig` throws, before the file's path.
@@ -197,7 +197,7 @@ impl WarningType {
 
 /// `WarningColors`, in `Enum.GetNames`' order as `CMB_color` lists them, each with the colour
 /// `Color.FromName` makes of it - `System.Drawing`'s known colours - and none for "NoColor".
-/// `// C#: ExtLibs/Utilities/Warnings/CustomWarning.cs:26-38; MainV2.cs:4809`
+/// `// C#: ExtLibs/Utilities/Warnings/CustomWarning.cs:26-38; MainV2.cs:4816`
 pub const COLORS: [(&str, Option<u32>); 10] = [
     (NO_COLOR, None),
     ("Red", Some(0xff_00_00)),
@@ -223,7 +223,7 @@ pub fn color_rgb(name: &str) -> Option<u32> {
 
 /// The number's colour on a quick view coloured `back`: black when the mean of its red, green and
 /// blue - the C#'s integer division - is over 128, else white.
-/// `// C#: MainV2.cs:4810-4813`
+/// `// C#: MainV2.cs:4817-4820`
 #[must_use]
 pub const fn readable_on(back: u32) -> u32 {
     let (r, g, b) = ((back >> 16) & 0xff, (back >> 8) & 0xff, back & 0xff);
@@ -695,7 +695,7 @@ pub struct WarningEngine {
 impl WarningEngine {
     /// The engine as `MainV2` starts it: the static constructor's `LoadConfig` of
     /// `warnings.xml` in the user data directory, and speech from the user's "speechenable".
-    /// `// C#: ExtLibs/Utilities/Warnings/WarningEngine.cs:14, 18-28; MainV2.cs:1005-1006, 1035-1036`
+    /// `// C#: ExtLibs/Utilities/Warnings/WarningEngine.cs:14, 18-28; MainV2.cs:1007-1008, 1037-1038`
     #[must_use]
     pub fn start(settings: &crate::settings::Persisted) -> Self {
         let mut engine = Self {
@@ -830,7 +830,7 @@ impl WarningEngine {
 /// `cs.messageHigh = s`, the HUD's message: an empty text, or the text the HUD shows now, is not
 /// raised again - the setter's "check against get" - so the ten seconds it shows for run from
 /// when it was first raised.
-/// `// C#: ExtLibs/ArduPilot/CurrentState.cs:1269-1284; MainV2.cs:1037`
+/// `// C#: ExtLibs/ArduPilot/CurrentState.cs:1269-1284; MainV2.cs:1039`
 pub fn message_high(timing: &mut crate::hud::Timing, text: String, now: Instant) {
     if text.is_empty() {
         return;
@@ -922,7 +922,7 @@ impl crate::MissionPlanner {
     /// has left read, then - when one is due - the engine's pass over the shown vehicle's state in
     /// the user's units (a state of zeros with none), its messages made the HUD's and its colours
     /// put on the quick views.
-    /// `// C#: ExtLibs/Utilities/Warnings/WarningEngine.cs:85-132; MainV2.cs:1035-1038, 4786-4811`
+    /// `// C#: ExtLibs/Utilities/Warnings/WarningEngine.cs:85-132; MainV2.cs:1037-1040, 4793-4818`
     pub(crate) fn warnings_tick(&mut self, view: &TelemetryView, window: &gpui::Window) {
         let now = Instant::now();
         crate::config::warnings_manager::focus_left(self, window, now);

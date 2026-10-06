@@ -6,7 +6,7 @@
 # <log folder>/<yyyy-MM-dd HH-mm-ss>.avi and the entry reads "Recording"; every 40 ms the HUD's
 # frame - the display drawn by the software rasteriser and encoded as JPEG at quality 50, as
 # GrabScreenshot's read-back is - goes in as a 00dc chunk and the headers are written again so a
-# partial file plays (FlightData.cs:3420-3431); Stop Record closes the file with its index and the
+# partial file plays (FlightData.cs:3534-3545); Stop Record closes the file with its index and the
 # entry reads "Start Recording". No vehicle is needed: the HUD draws without one.
 #
 # Needs no link: tools/gui-test.sh tests/gui/fly-hud-avi.gui

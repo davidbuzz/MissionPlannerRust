@@ -57,7 +57,7 @@ fn the_list_is_the_csharps_list_in_the_csharps_order() {
     // CSHARP_LIST is the oracle's list, then the providers Program.cs appends - which the oracle
     // cannot see, as it runs GMap.NET without Mission Planner.
     assert_eq!(&CSHARP_LIST[..listed.len()], listed.as_slice());
-    assert_eq!(CSHARP_LIST.len(), listed.len() + 24, "Program.cs:328-351");
+    assert_eq!(CSHARP_LIST.len(), listed.len() + 24, "Program.cs:330-353");
 }
 
 #[test]

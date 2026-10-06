@@ -20,7 +20,7 @@
 
 //! Which serial ports Mission Planner offers, as pure functions of what the OS shows it.
 //!
-//! Ports `MissionPlanner.Comms.SerialPort.GetPortNames()` (`ExtLibs/Comms/CommsSerialPort.cs:209`)
+//! Ports `MissionPlanner.Comms.SerialPort.GetPortNames()` (`ExtLibs/Comms/CommsSerialPort.cs:208`)
 //! and the pieces it leans on. Everything here takes a listing and returns a list, so the rules are
 //! tested against checked-in listings from machines we do not have (`testdata/ports/`), and
 //! [`crate::list_ports`] is left with nothing to do but produce the listing on this one.
@@ -59,7 +59,7 @@
 //!   macOS.
 //!
 //! Nothing here sorts. Mission Planner puts the list into its combo box as it comes
-//! (`MainV2.cs:1296`), so the order is part of what has to match.
+//! (`MainV2.cs:1298`), so the order is part of what has to match.
 
 use std::collections::HashSet;
 
@@ -122,17 +122,17 @@ impl PortInfo {
 /// `/dev/serial/by-id/` comes first on purpose: those names survive replugging and renumbering,
 /// so they are the ones worth picking.
 pub const UNIX_GLOBS: [(&str, &str); 7] = [
-    ("/dev/serial/by-id/", "*"), // C#: ExtLibs/Comms/CommsSerialPort.cs:224
-    ("/dev/", "ttyACM*"),        // C#: ExtLibs/Comms/CommsSerialPort.cs:232
-    ("/dev/", "ttyUSB*"),        // C#: ExtLibs/Comms/CommsSerialPort.cs:240
-    ("/dev/", "rfcomm*"),        // C#: ExtLibs/Comms/CommsSerialPort.cs:248
-    ("/dev/", "*usb*"),          // C#: ExtLibs/Comms/CommsSerialPort.cs:256
-    ("/dev/", "tty.*"),          // C#: ExtLibs/Comms/CommsSerialPort.cs:264
-    ("/dev/", "cu.*"),           // C#: ExtLibs/Comms/CommsSerialPort.cs:272
+    ("/dev/serial/by-id/", "*"), // C#: ExtLibs/Comms/CommsSerialPort.cs:223
+    ("/dev/", "ttyACM*"),        // C#: ExtLibs/Comms/CommsSerialPort.cs:231
+    ("/dev/", "ttyUSB*"),        // C#: ExtLibs/Comms/CommsSerialPort.cs:239
+    ("/dev/", "rfcomm*"),        // C#: ExtLibs/Comms/CommsSerialPort.cs:247
+    ("/dev/", "*usb*"),          // C#: ExtLibs/Comms/CommsSerialPort.cs:255
+    ("/dev/", "tty.*"),          // C#: ExtLibs/Comms/CommsSerialPort.cs:263
+    ("/dev/", "cu.*"),           // C#: ExtLibs/Comms/CommsSerialPort.cs:271
 ];
 
 /// The entries of the connection combo box that are not ports, and so never get a friendly name.
-// C#: ExtLibs/Comms/CommsSerialPort.cs:321
+// C#: ExtLibs/Comms/CommsSerialPort.cs:318
 pub const NOT_PORTS: [&str; 5] = ["AUTO", "UDP", "UDPCl", "TCP", "WS"];
 
 /// Whether `name` matches a `Directory.GetFiles` search pattern.
@@ -212,7 +212,7 @@ fn distinct(names: impl IntoIterator<Item = String>) -> Vec<String> {
 /// `entries` are absolute paths in directory order - `/dev` itself and `/dev/serial/by-id` are the
 /// only directories read - with each directory written with a trailing `/`. A `/dev/ttyACM0` that
 /// a by-id link points at is still listed in its own right: the C# compares names, not devices.
-// C#: ExtLibs/Comms/CommsSerialPort.cs:216-277
+// C#: ExtLibs/Comms/CommsSerialPort.cs:215-276
 #[must_use]
 pub fn unix_candidates(entries: &[&str]) -> Vec<String> {
     distinct(
@@ -264,7 +264,7 @@ pub fn windows_port_names(serialcomm_values: &[&str]) -> Vec<String> {
 /// `COM10c`. The C# keeps `COM` and whichever of the next three characters are digits. It says
 /// itself that this fails when the junk is a digit, and it also truncates anything past `COM999`;
 /// both are kept, because the list has to match.
-// C#: ExtLibs/Comms/CommsSerialPort.cs:391-411
+// C#: ExtLibs/Comms/CommsSerialPort.cs:361-381
 #[must_use]
 pub fn fix_bluetooth_port_name(port_name: &str) -> String {
     let Some(rest) = port_name.strip_prefix("COM") else {
@@ -279,7 +279,7 @@ pub fn fix_bluetooth_port_name(port_name: &str) -> String {
 /// trailing whitespace trimmed and the Bluetooth repair applied, keeping the first of each.
 ///
 /// On Windows `entries` is empty, since `/dev/` does not exist there.
-// C#: ExtLibs/Comms/CommsSerialPort.cs:209-309
+// C#: ExtLibs/Comms/CommsSerialPort.cs:208-308
 #[must_use]
 pub fn get_port_names<S: AsRef<str>>(entries: &[&str], runtime_names: &[S]) -> Vec<String> {
     let runtime = runtime_names
@@ -299,7 +299,7 @@ pub struct WmiSerialPort<'a> {
 
 /// The friendly name Mission Planner shows beside a port on Windows: the `Name` of the first
 /// `Win32_SerialPort` row whose `DeviceID` matches ignoring case, or nothing.
-// C#: ExtLibs/Comms/CommsSerialPort.cs:314-345 (GetNiceName), Program.cs:508-524 (the WMI query)
+// C#: ExtLibs/Comms/CommsSerialPort.cs:313-339 (GetNiceName), Program.cs:510-526 (the WMI query)
 #[must_use]
 pub fn nice_name(port: &str, wmi: &[WmiSerialPort<'_>]) -> String {
     if NOT_PORTS.contains(&port) {

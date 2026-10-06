@@ -246,7 +246,7 @@ fn without_a_position_the_caster_is_sent_nothing_but_the_request() {
 
 #[test]
 fn a_position_set_after_open_goes_on_the_next_read_and_then_every_thirty_seconds() {
-    // MainV2's `rtk` command line sets the position after Open (MainV2.cs:3757-3761).
+    // MainV2's `rtk` command line sets the position after Open (MainV2.cs:3764-3768).
     let (listener, port) = listen();
     let caster = mock_caster(&listener);
     let now = std::sync::Arc::new(std::sync::Mutex::new(noon_ish()));

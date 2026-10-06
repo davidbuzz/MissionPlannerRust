@@ -80,15 +80,15 @@ pub const CENTRE_LIMIT: f64 = 999.0;
 /// The start of the coverage test's message. `// C#: MagCalib.cs:674`
 pub const AIM_FOR: &str = "more data needed Aim For ";
 
-/// `MAV_CMD_PREFLIGHT_SET_SENSOR_OFFSETS`. `// C#: ExtLibs/Mavlink/Mavlink.cs:1093`
+/// `MAV_CMD_PREFLIGHT_SET_SENSOR_OFFSETS`. `// C#: ExtLibs/Mavlink/Mavlink.cs:1097`
 pub const CMD_PREFLIGHT_SET_SENSOR_OFFSETS: u16 = 242;
 
 /// `sensoroffsetsenum.magnetometer`, the first compass.
-/// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:6478-6486`
+/// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:6439-6447`
 pub const SENSOR_MAGNETOMETER: u8 = 2;
 
 /// `sensoroffsetsenum.second_magnetometer`.
-/// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:6478-6486`
+/// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:6439-6447`
 pub const SENSOR_SECOND_MAGNETOMETER: u8 = 5;
 
 /// `SetSensorOffsets`: `doCommand(PREFLIGHT_SET_SENSOR_OFFSETS, (int) sensor, x, y, z, 0, 0, 0)`.

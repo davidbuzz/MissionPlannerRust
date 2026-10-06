@@ -31,7 +31,7 @@
 use crate::state::VehicleState;
 
 /// `MAV_CMD.FENCE_RETURN_POINT`, and the four shapes after it.
-/// `// C#: ExtLibs/Mavlink/Mavlink.cs:1274-1290`
+/// `// C#: ExtLibs/Mavlink/Mavlink.cs:1301-1317`
 const FENCE_RETURN_POINT: u16 = 5000;
 /// `MAV_CMD.FENCE_POLYGON_VERTEX_INCLUSION`.
 const FENCE_POLYGON_VERTEX_INCLUSION: u16 = 5001;
@@ -121,7 +121,7 @@ fn position(item: &FenceItem) -> Point {
 /// `Extensions.ChunkByField` with `GeoFenceDist`'s rule: each shape is a run of items starting
 /// at one, taking the next while it has the first one's command and fewer items have been taken
 /// than its own `param1` says - except that a circle stands alone. As `(start, length)` ranges.
-/// `// C#: ExtLibs/Utilities/Extensions.cs:252-275; ExtLibs/ArduPilot/CurrentState.cs:1630-1643`
+/// `// C#: ExtLibs/Utilities/Extensions.cs:253-276; ExtLibs/ArduPilot/CurrentState.cs:1630-1643`
 fn chunks(items: &[FenceItem]) -> Vec<(usize, usize)> {
     let mut out = Vec::new();
     let mut start = 0;

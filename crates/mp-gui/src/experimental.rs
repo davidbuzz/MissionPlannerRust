@@ -19,7 +19,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
 //! The EXPERIMENTAL tab: Mission Planner's temp form, `temp.cs`, which Ctrl+F opens
-//! (MainV2.ProcessCmdKey's `new temp().Show()`, MainV2.cs:4099-4105) and the welcome text lists as
+//! (MainV2.ProcessCmdKey's `new temp().Show()`, MainV2.cs:4106-4112) and the welcome text lists as
 //! "Control-F - Temp screen". By the owner's word (2026-10-04) a tab of its own, EXPERIMENTAL
 //! between LOGS and PLUGINS, which Ctrl+F shows, where the C# opens a form.
 //!
@@ -56,7 +56,7 @@
 //! * not ported yet, dimmed, its press saying so - the matrix's EXPERIMENTAL row lists them, to be
 //!   ported one by one.
 //!
-//! `// C#: temp.cs:1-1434; temp.Designer.cs:31-1123; temp.resx; MainV2.cs:4099-4105`
+//! `// C#: temp.cs:1-1434; temp.Designer.cs:31-1123; temp.resx; MainV2.cs:4106-4112`
 
 use gpui::{
     AnyElement, Context, InteractiveElement, IntoElement, ParentElement, SharedString,
@@ -318,7 +318,7 @@ pub(crate) enum Act {
     BootloaderUpgrade,
     /// `but_disablearmswitch_Click`: "Are you sure?", then `setMode` with `SAFETY_ARMED` and the
     /// motor outputs' state as the custom mode - the flight screen's Toggle_Safety_Switch, which
-    /// is the same code. `// C#: temp.cs:1105-1118; GCSViews/FlightData.cs:1819-1830`
+    /// is the same code. `// C#: temp.cs:1105-1118; GCSViews/FlightData.cs:1829-1840`
     ToggleSafety,
     /// `BUT_magfit2_Click`: `MagCalib.ProcessLog(0)` - a log asked for, read and fitted off the
     /// window's thread (magcal_log's `process_log`), `magoffset.dxf` drawn, and the offsets
@@ -327,7 +327,7 @@ pub(crate) enum Act {
     MagCalLog,
     /// `myButton1_Click_2`: a log asked for, "How Many" pieces asked (10 offered), and
     /// `DFLogBuffer.SplitLog` writing `<log>_split<i>.bin` beside it, off the window's thread
-    /// (mp-log's `split_file`). `// C#: temp.cs:720-734; ExtLibs/Utilities/DFLogBuffer.cs:417-501`
+    /// (mp-log's `split_file`). `// C#: temp.cs:720-734; ExtLibs/Utilities/DFLogBuffer.cs:472-556`
     SplitDfLog,
     /// `BUT_clearcustommaps_Click`: every tile of the Custom provider - the imagery Inject GE and
     /// Inject Custom Map put in the cache - deleted (`DeleteOlderThan(DateTime.Now, Custom)`), and

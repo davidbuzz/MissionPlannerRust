@@ -25,7 +25,7 @@
 //! autopilot sends each twice), first dropping any earlier shot with the same camera and image
 //! numbers - a re-sent feedback replaces the shot it is for. The list is unbounded, as the C#'s
 //! is, a shot being a few dozen bytes; it starts over with the link, as `MAVState`'s does.
-//! `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:5736-5745, MAVState.cs:108, 319`
+//! `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:5704-5713, MAVState.cs:108, 319`
 
 use mp_mavlink_dialects::all::CameraFeedback;
 use mp_vehicle::VehicleId;
@@ -52,7 +52,7 @@ impl CameraPoints {
 
     /// `processInfoFromStream`'s `CAMERA_FEEDBACK`: nothing when the last shot has this one's
     /// time; else every shot with this one's `cam_idx * 256 + img_idx` removed and this one added
-    /// at the end. `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:5736-5745`
+    /// at the end. `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:5704-5713`
     pub fn observe(&mut self, id: VehicleId, point: &CameraFeedback) {
         let list = self.list_mut(id);
         if list

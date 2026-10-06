@@ -684,7 +684,7 @@ mod tests {
 
     /// A picture is its `HUDT` bitmap stretched into its rectangle - the resampled copy's pixels,
     /// blended by their alpha over what is behind - and nothing outside the rectangle; not the
-    /// stand-in. `// C#: ExtLibs/Controls/HUD.cs:3232, 1591`
+    /// stand-in. `// C#: ExtLibs/Controls/HUD.cs:3234, 1591`
     #[test]
     fn a_picture_is_its_bitmap_stretched_into_its_rectangle() {
         use super::super::Icon;

@@ -98,7 +98,7 @@ pub trait Transport: Send {
 
     /// When the bytes the last [`Transport::read`] returned were sent: [`ReadTime::Live`] - just
     /// now - for a link to a vehicle, and a recording's own clock for a replay. The C# stamps each
-    /// packet's `CurrentState.datetime` with one or the other (`MAVLinkInterface.cs:4721, 6649`),
+    /// packet's `CurrentState.datetime` with one or the other (`MAVLinkInterface.cs:4710, 6613`),
     /// and a link that holds only a `Box<dyn Transport>` learns which from here.
     fn read_time(&self) -> ReadTime {
         ReadTime::Live
@@ -114,7 +114,7 @@ pub enum ReadTime {
     /// the Unix epoch - `MAVLinkInterface.lastlogread` - or `None` before there is one, where the
     /// C#'s `lastlogread` is still `DateTime.MinValue`. A record whose timestamp is not usable
     /// leaves it where it was, as `readlogPacketMavlink` does.
-    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:482, 6539-6558, 6649`
+    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:484, 6500-6519, 6613`
     Recorded(Option<u64>),
 }
 

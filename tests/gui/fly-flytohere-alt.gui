@@ -5,7 +5,7 @@
 # already in Guided. goHereToolStripMenuItem_Click (a right click on the map here) then flies to
 # the clicked point at that height. SITL accepts Guided while disarmed and ignores the target on
 # the ground, so nothing moves.
-# `GCSViews/FlightData.cs:2899-2943, 3082-3120`
+# `GCSViews/FlightData.cs:2912-2956, 3095-3133`
 #
 # Needs SITL (a copter): tools/gui-test.sh tests/gui/fly-flytohere-alt.gui -- tcp:127.0.0.1:5760
 

@@ -92,7 +92,7 @@ words are still in the code, held at the owner's word); packaging beyond the Deb
 ## Verification
 
 The port is checked against the original rather than against our reading of it. **The C# source is
-the specification** - https://github.com/ArduPilot/MissionPlanner at commit efb0801, a clone of which the
+the specification** - https://github.com/ArduPilot/MissionPlanner at commit 5dbb2b0, a clone of which the
 environment variable `MP_SRC` names; it is not part of this repository - and a behaviour is ported by
 reading the `.cs` file, not by recalling what it probably does. The C# implementation's own output,
 recorded by running its code headless under mono, is the reference:

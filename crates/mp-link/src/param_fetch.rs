@@ -20,7 +20,7 @@
 
 //! The parameter fetch as Mission Planner does it: `getParamListMavftp`, the whole table read
 //! as one file over MAVFTP, with the classic `PARAM_REQUEST_LIST` stream as the fallback.
-//! `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:1781-1936`
+//! `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:1778-1933`
 //!
 //! `getParamList` (`:1781-1799`) - the button on the parameter screen, and the connect - runs
 //! `getParamListMavftp`: when the vehicle's `AUTOPILOT_VERSION` capabilities include FTP and the
@@ -55,11 +55,11 @@ use crate::timeouts::ProtocolTimeouts;
 use crate::{Link, Shared};
 
 /// The file `getParamListMavftp` reads.
-/// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:1877`
+/// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:1874`
 pub const PARAM_FILE: &str = "@PARAM/param.pck?withdefaults=1";
 
 /// `GetFile(..., true, 110)`: a burst read, 110 bytes at a time.
-/// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:1877`
+/// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:1874`
 pub const READ_SIZE: u8 = 110;
 
 /// `MAV_PROTOCOL_CAPABILITY_FTP`.
@@ -125,7 +125,7 @@ impl Link {
     /// once; the outcome is read with [`Link::param_fetch`]. A fetch already running for this
     /// vehicle starts again from nothing, as a second call to the C# does. False if nothing could
     /// be sent.
-    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:1781-1799, 1813-1936`
+    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:1778-1796, 1813-1936`
     pub fn fetch_params(&self, target: VehicleId) -> bool {
         let now = Instant::now();
         let no_ftp = self.vehicle(target).is_some_and(|handle| {
@@ -236,7 +236,7 @@ pub(crate) fn tick(
                     Ok(list) => {
                         // `param.Clear(); TotalReported = count; AddRange(mavlist)`: the table
                         // replaced whole, each entry at its place in the file.
-                        // C#: MAVLinkInterface.cs:1892-1897
+                        // C#: MAVLinkInterface.cs:1889-1894
                         let count = u16::try_from(list.len()).unwrap_or(u16::MAX);
                         let mut table = ParamTable::new();
                         let mut defaults = BTreeMap::new();
@@ -263,7 +263,7 @@ pub(crate) fn tick(
                     }
                     Err(why) => {
                         // `log.Error(e)` and `return await getParamListAsync(...)`.
-                        // C#: MAVLinkInterface.cs:1922-1930
+                        // C#: MAVLinkInterface.cs:1919-1927
                         if let Ok(mut downloads) = shared.param_downloads.os_lock() {
                             let download = ParamDownload::new(*id, timeouts, now);
                             actions.push((*id, download.begin()));

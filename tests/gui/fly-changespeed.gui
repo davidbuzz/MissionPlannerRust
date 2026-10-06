@@ -2,7 +2,7 @@
 #
 # modifyandSetSpeed_Click: doCommandAsync(DO_CHANGE_SPEED, 0, (float) Value, 0, 0, 0, 0, 0) - no
 # unit conversion. A disarmed SITL copter refuses a speed of type 0, but it answers, and the answer
-# in the message log is the proof the command arrived. `GCSViews/FlightData.cs:4426-4438`
+# in the message log is the proof the command arrived. `GCSViews/FlightData.cs:4540-4552`
 #
 # Needs SITL: tools/gui-test.sh tests/gui/fly-changespeed.gui -- tcp:127.0.0.1:5760
 

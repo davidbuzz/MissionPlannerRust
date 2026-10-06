@@ -165,7 +165,7 @@ pub const FLIGHTDATA: &[Action] = &[
         "but_disablejoystick_Click",
         "Disable Joystick",
         // The flight screen's "sticks flying - click to stop", shown while the sticks fly as the
-        // C#'s button is made visible then (FlightData.cs:3743), `Sticks::disable_joystick`.
+        // C#'s button is made visible then (FlightData.cs:3857), `Sticks::disable_joystick`.
         Done("sticks-live"),
     ),
     row(

@@ -6,7 +6,7 @@
 # directory, which the flight screen reads when it starts - here a scratch one, through
 # XDG_DATA_HOME. The entries are the map's right-click menu, contextMenuStripMap: Add Poi on it,
 # the other four in its drop-down, each acting where the menu was opened.
-# `GCSViews/FlightData.cs:1007-1010, 2632-2638, 2956-2959, 6011-6038, Utilities/POI.cs`
+# `GCSViews/FlightData.cs:1009-1012, 2642-2648, 2969-2972, 6125-6152, Utilities/POI.cs`
 #
 # Plays the recorded copter flight so the map has a view to press on, and needs no vehicle. Run
 # from the repository root:

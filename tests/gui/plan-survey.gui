@@ -1,4 +1,4 @@
-# Auto WP > Survey (Grid): surveyGridToolStripMenuItem_Click (GCSViews/FlightPlanner.cs:6755) runs
+# Auto WP > Survey (Grid): surveyGridToolStripMenuItem_Click (GCSViews/FlightPlanner.cs:6752) runs
 # GridPlugin.but_Click, which shows Grid/GridUI.cs over the drawn polygon - its tabs and controls
 # from GridUI.Designer.cs and GridUI.resx, the grid redrawn on every change
 # (domainUpDown1_ValueChanged), the Stats, and Accept adding the rows BUT_Accept_Click hands the

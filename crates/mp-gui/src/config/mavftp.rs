@@ -170,7 +170,7 @@ pub const USER_CANCEL: &str = "User Cancel";
 pub const FAILED_DELETE: &str = "Failed to delete file";
 
 /// `NewFolderToolStripMenuItem_Click`'s box.
-/// `// C#: Controls/MavFTPUI.cs:536`
+/// `// C#: Controls/MavFTPUI.cs:565`
 pub const FAILED_DIRECTORY: &str = "Failed to create directory";
 
 /// `NullReferenceException.Message`: `GetFile`'s null stream written, a node that is not there.
@@ -186,7 +186,7 @@ pub const NO_SELECTION: &str =
 pub const BAD_CRC: &str = "Exception of type 'Ionic.Zip.BadCrcException' was thrown.";
 
 /// "Mount as Drive"'s `InputBox`, and the drive it offers.
-/// `// C#: Controls/MavFTPUI.cs:671, 693-694`
+/// `// C#: Controls/MavFTPUI.cs:700, 722-723`
 pub const MOUNT_TITLE: &str = "Mount Point";
 /// Its question.
 pub const MOUNT_PROMPT: &str = "Enter drive letter or path (e.g. M:\\)";
@@ -199,14 +199,14 @@ pub const DOKAN_MISSING: &str =
     "Unable to load DLL 'dokan2.dll': The specified module could not be found.";
 
 /// The status strip's line after a mount fails.
-/// `// C#: Controls/MavFTPUI.cs:704-708`
+/// `// C#: Controls/MavFTPUI.cs:733-737`
 #[must_use]
 pub fn mount_failed(message: &str) -> String {
     format!("Failed to mount: {message}\n\nMake sure Dokan driver is installed.")
 }
 
 /// New Folder's `InputBox`.
-/// `// C#: Controls/MavFTPUI.cs:518`
+/// `// C#: Controls/MavFTPUI.cs:547`
 pub const FOLDER_TITLE: &str = "Folder Name";
 /// Its question.
 pub const FOLDER_PROMPT: &str = "Enter folder name";
@@ -227,7 +227,7 @@ pub fn unexpected(message: &str) -> String {
 
 /// `long.ToSizeUnits()`: bytes under a kilobyte, whole kilobytes under a megabyte, else whole
 /// megabytes.
-/// `// C#: ExtLibs/Utilities/Extensions.cs:1116-1153`
+/// `// C#: ExtLibs/Utilities/Extensions.cs:1109-1146`
 #[must_use]
 pub fn size_units(size: u64) -> String {
     if size < 1024 {
@@ -1079,7 +1079,7 @@ impl MavFtp {
 
     /// Shows the page: a new page object for a new screen, whose `Load` lists the tree.
     /// `MavFTPUI` is not `IActivate`: showing it again does nothing more.
-    /// `// C#: Controls/MavFTPUI.cs:29-71, 665-668`
+    /// `// C#: Controls/MavFTPUI.cs:29-71, 694-697`
     pub fn activate(&mut self, vehicle: Option<VehicleId>, key: Key) {
         if self.made_for != Some(key) {
             let messages = std::mem::take(&mut self.messages);
@@ -1511,7 +1511,7 @@ impl MavFtp {
     /// `ListView1_MouseDoubleClick`: the selected node expanded, and the child named as the first
     /// selected row selected and listed. A double click cancels the edit its first click armed
     /// (comctl32's `LISTVIEW_LButtonDblClk`).
-    /// `// C#: Controls/MavFTPUI.cs:587-605`
+    /// `// C#: Controls/MavFTPUI.cs:616-634`
     pub fn double_click(&mut self) {
         self.edit_due = None;
         let Some(first) = self
@@ -1638,7 +1638,7 @@ impl MavFtp {
         match item {
             Menu::DownloadBurst | Menu::Download => {
                 // `toolStripStatusLabel1.Text = "Download "`, then the folder asked for.
-                // `// C#: Controls/MavFTPUI.cs:326-329, 609-612`
+                // `// C#: Controls/MavFTPUI.cs:326-329, 638-641`
                 self.status = "Download ".to_owned();
                 let folder = mp_settings::user_data_directory()
                     .map(|dir| dir.display().to_string())
@@ -1653,7 +1653,7 @@ impl MavFtp {
             }
             Menu::Delete => self.delete(),
             Menu::Rename => {
-                // `listView1.SelectedItems[0].BeginEdit()`. `// C#: Controls/MavFTPUI.cs:482-485`
+                // `listView1.SelectedItems[0].BeginEdit()`. `// C#: Controls/MavFTPUI.cs:511-514`
                 match self.selected.first().copied() {
                     Some(index) => self.begin_edit(index),
                     None => self.status_line.push_back(NO_SELECTION.to_owned()),
@@ -1680,7 +1680,7 @@ impl MavFtp {
     }
 
     /// "Mount as Drive": unmounted, so the mount point asked for. The button takes the keyboard.
-    /// `// C#: Controls/MavFTPUI.cs:673-697`
+    /// `// C#: Controls/MavFTPUI.cs:702-726`
     pub fn press_mount(&mut self) {
         self.close_menu_and_rename();
         self.keys_to = None;
@@ -1715,7 +1715,7 @@ impl MavFtp {
 
     /// New Folder's or "Mount as Drive"'s box as its OK closed it, once: the answer `InputBox`
     /// keeps in `Settings.Instance`, which [`keep_answer`] writes.
-    /// `// C#: Controls/MavFTPUI.cs:518, 693; ExtLibs/Controls/InputBox.cs:73-84, 178-184`
+    /// `// C#: Controls/MavFTPUI.cs:547, 722; ExtLibs/Controls/InputBox.cs:73-84, 178-184`
     pub fn take_answered(&mut self) -> Option<InputBox> {
         self.answered.take()
     }
@@ -1733,7 +1733,7 @@ impl MavFtp {
                 self.answered = Some(input);
                 if mount {
                     // `MavFtpDokan.Mount` throws: no Dokan here. The C#'s box is the status
-                    // line's, by the owner's ruling. `// C#: Controls/MavFTPUI.cs:698-708`
+                    // line's, by the owner's ruling. `// C#: Controls/MavFTPUI.cs:727-737`
                     self.status_line.push_back(mount_failed(DOKAN_MISSING));
                 } else {
                     self.new_folder(Some(answer));
@@ -1760,7 +1760,7 @@ impl MavFtp {
     /// Download and Download Burst, the folder chosen or not: each selected row read - plainly,
     /// or in bursts - behind the window, into the folder; Cancel stops at once, with the status
     /// as it was.
-    /// `// C#: Controls/MavFTPUI.cs:324-379, 607-663`
+    /// `// C#: Controls/MavFTPUI.cs:324-379, 636-692`
     fn download(&mut self, folder: Option<PathBuf>, burst: bool) {
         let rows: Vec<Item> = self
             .selected
@@ -1769,7 +1769,7 @@ impl MavFtp {
             .collect();
         let Some(folder) = folder else {
             // Download names the first row before it looks at the answer; Download Burst after.
-            // `// C#: Controls/MavFTPUI.cs:330-375, 613-659`
+            // `// C#: Controls/MavFTPUI.cs:330-375, 642-688`
             match rows.first() {
                 None => self.steps.push_back(Step::Status(READY.to_owned())),
                 Some(first) if !burst => self
@@ -1846,7 +1846,7 @@ impl MavFtp {
     }
 
     /// Delete: each selected row removed behind the window, the directory listed again.
-    /// `// C#: Controls/MavFTPUI.cs:450-480`
+    /// `// C#: Controls/MavFTPUI.cs:450-504`
     fn delete(&mut self) {
         let rows: Vec<Item> = self
             .selected
@@ -1898,7 +1898,7 @@ impl MavFtp {
     /// The edit ended with a label: `ListView1_AfterLabelEdit`, the row renamed behind the window
     /// and the directory listed again. A name left as it was is `e.Label == null` - comctl32
     /// passes no text for it (`LISTVIEW_EndEditLabelT`) - and the C# returns at once.
-    /// `// C#: Controls/MavFTPUI.cs:487-513`
+    /// `// C#: Controls/MavFTPUI.cs:516-542`
     pub fn commit_rename(&mut self) {
         let Some((index, field)) = self.renaming.take() else {
             return;
@@ -1930,7 +1930,7 @@ impl MavFtp {
 
     /// New Folder answered: with OK the directory made behind the window; either way the
     /// directory listed again.
-    /// `// C#: Controls/MavFTPUI.cs:515-546`
+    /// `// C#: Controls/MavFTPUI.cs:544-575`
     fn new_folder(&mut self, folder: Option<String>) {
         if let Some(folder) = folder {
             let Some(node) = self.selected_full_path() else {
@@ -1952,7 +1952,7 @@ impl MavFtp {
     }
 
     /// GetCRC32: the first selected row's CRC behind the window, then the box.
-    /// `// C#: Controls/MavFTPUI.cs:548-572`
+    /// `// C#: Controls/MavFTPUI.cs:577-601`
     fn get_crc(&mut self) {
         let Some(name) = self
             .selected
@@ -3085,7 +3085,7 @@ fn list_panel(
         )
         // `ListView1_DragEnter` lets only files in (`DataFormats.FileDrop`, `DragDropEffects.Copy`,
         // else `None`): gpui offers the list a drop of paths alone. `ListView1_DragDrop` uploads
-        // each. `// C#: Controls/MavFTPUI.cs:279-298, 579-585`
+        // each. `// C#: Controls/MavFTPUI.cs:279-298, 608-614`
         .on_drop(cx.listener(|this, paths: &ExternalPaths, _window, cx| {
             this.software_pages2.mavftp.upload(paths.paths());
             cx.notify();
@@ -3362,7 +3362,7 @@ pub fn overlay(
 
 /// New Folder's or "Mount as Drive"'s answer kept as `InputBox` keeps it, after a key or a button
 /// that may have closed the box with OK: the page object holds no settings, the window does.
-/// `// C#: Controls/MavFTPUI.cs:518, 693; ExtLibs/Controls/InputBox.cs:178-184`
+/// `// C#: Controls/MavFTPUI.cs:547, 722; ExtLibs/Controls/InputBox.cs:178-184`
 fn keep_answer(this: &mut MissionPlanner) {
     if let Some(input) = this.software_pages2.mavftp.take_answered() {
         input.remember(&mut this.persisted);
@@ -3798,7 +3798,7 @@ mod tests {
         assert!(bench.vehicle.borrow().dirs.contains("/APM/fresh"));
         assert!(names(&page).contains(&"fresh"));
         // Made again, the vehicle says it exists, which `kCmdCreateDirectory` counts as made
-        // (MAVFtp.cs:1094-1097): no "Failed to create directory".
+        // (MAVFtp.cs:1133-1136): no "Failed to create directory".
         page.choose(Menu::NewFolder);
         page.type_prompt("fresh");
         page.close_prompt(true);
@@ -3885,7 +3885,7 @@ mod tests {
 
     /// New Folder's and "Mount as Drive"'s OK keep the answer as `InputBox` keeps every titled
     /// answer; Cancel keeps nothing, and neither do the two dialogs' stand-ins.
-    /// `// C#: Controls/MavFTPUI.cs:518, 693; ExtLibs/Controls/InputBox.cs:73-84, 178-184`
+    /// `// C#: Controls/MavFTPUI.cs:547, 722; ExtLibs/Controls/InputBox.cs:73-84, 178-184`
     #[test]
     fn the_input_boxes_ok_keeps_the_answer_under_the_input_box_key() {
         let folder_key = crate::config::optional::answers_key(FOLDER_TITLE, FOLDER_PROMPT);

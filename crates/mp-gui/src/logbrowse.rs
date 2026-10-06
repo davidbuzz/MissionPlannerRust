@@ -798,7 +798,7 @@ impl LogBrowse {
     /// parameters, the grid's rows, each curve - reads only the records of the types it needs,
     /// through that index (`mp_log::logfile`). Deliverable 14's budget for this is two seconds for a 1 GB
     /// log to its first plot; `crates/mp-log/benches/parse_1gb.rs` measures it.
-    /// `// C#: Log/LogBrowse.cs:359-401; ExtLibs/Utilities/DFLogBuffer.cs:43-200`
+    /// `// C#: Log/LogBrowse.cs:359-401; ExtLibs/Utilities/DFLogBuffer.cs:42-199`
     pub fn open(&mut self, path: &std::path::Path) {
         let log = match mp_log::logfile::LogFile::open(path) {
             Ok(log) => Rc::new(log),
@@ -2570,7 +2570,7 @@ fn map_contents(routes: &Routes) -> MapContents {
 /// `BinaryLog.onFlightMode` as `MainV2` wires it: the name the firmware's mode table gives a
 /// number. The tables are the parameter metadata's, as `getModesList` reads them; there is none
 /// here for a tracker, whose modes stay numbers.
-/// `// C#: MainV2.cs:3394-3418`
+/// `// C#: MainV2.cs:3401-3425`
 fn flight_mode_name(firmware: Firmware, mode: u64) -> Option<String> {
     let family = match firmware {
         Firmware::Copter => mp_vehicle::VehicleFamily::Copter,

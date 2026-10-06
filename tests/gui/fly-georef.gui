@@ -11,7 +11,7 @@
 # markers; GeoTag Images writes the 24 tagged copies. Then the boxes the C# wires to forget the
 # positions forget them: Use GPS2 the positions, a keystroke in the log box the pictures too, and
 # GeoTag Images is dimmed again.
-# `GeoRef/georefimage.cs:26-391, GeoRef/georefimage.resx, GCSViews/FlightData.cs:5933-5936,
+# `GeoRef/georefimage.cs:26-391, GeoRef/georefimage.resx, GCSViews/FlightData.cs:6047-6050,
 # testdata/georef/golden/`
 #
 # The lines and every byte of the files are held to mp-georef's goldens by

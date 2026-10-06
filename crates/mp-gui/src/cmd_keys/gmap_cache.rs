@@ -19,7 +19,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
 //! Ctrl+X's map cache window: `Controls/GMAPCache.cs`, which `MainV2.ProcessCmdKey` opens with
-//! `new GMAPCache().ShowUserControl()` (`MainV2.cs:4132-4136`) - the control in a form of its own
+//! `new GMAPCache().ShowUserControl()` (`MainV2.cs:4139-4143`) - the control in a form of its own
 //! size, captioned with its `Text`, which nothing sets.
 //!
 //! What it shows: `myDataGridView1`, read only and filling the control (675 x 534), one row for

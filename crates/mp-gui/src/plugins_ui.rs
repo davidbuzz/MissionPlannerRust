@@ -91,7 +91,7 @@ fn builtins() -> &'static [(&'static str, &'static [u8])] {
     }
 }
 
-/// The setting `PluginLoader.DisabledPluginNames` is read from. `// C#: MainV2.cs:3192-3194`
+/// The setting `PluginLoader.DisabledPluginNames` is read from. `// C#: MainV2.cs:3199-3201`
 const DISABLED: &str = "DisabledPlugins";
 
 /// The owner's Welcome-Demo-Sitl (2026-10-05), not in the C#: built into the browser build only
@@ -106,7 +106,7 @@ const DISABLED_BY_DEFAULT: &[&str] = &["opendroneid.wasm"];
 
 /// `PluginLoader.DisabledPluginNames` as the settings give it: `DisabledPlugins`, or with that
 /// never saved, [`DISABLED_BY_DEFAULT`].
-/// `// C#: MainV2.cs:3192-3194`
+/// `// C#: MainV2.cs:3199-3201`
 fn disabled_list(persisted: &crate::settings::Persisted) -> Vec<String> {
     match persisted.get(DISABLED) {
         Some(value) => crate::raw_params_grid::get_list(Some(value))
@@ -267,7 +267,7 @@ impl std::fmt::Debug for Plugins {
 impl Plugins {
     /// `PluginLoader.LoadAll` over [`folder`], less `DisabledPlugins`: each plugin on its own
     /// thread, its terrain and parameter documentation readers set once.
-    /// `// C#: MainV2.cs:3185-3196`
+    /// `// C#: MainV2.cs:3192-3203`
     pub fn start(persisted: &crate::settings::Persisted, cx: &mut gpui::App) -> Self {
         let disabled = in_force(disabled_list(persisted));
         // `PluginLoader.LoadAll` at start: the shipped plugins and the folder's, less the
@@ -312,7 +312,7 @@ impl Plugins {
     /// The PLUGINS tab's form (Ctrl+P's), `new PluginUI()`: the plugins as they are now and the
     /// disabled list as it is saved; a name counts as present when its file is in the plugins
     /// folder or it is built in.
-    /// `// C#: MainV2.cs:4118-4122; Plugin/PluginUI.cs:18-24`
+    /// `// C#: MainV2.cs:4125-4129; Plugin/PluginUI.cs:18-24`
     pub fn open_manager(&mut self, persisted: &crate::settings::Persisted) {
         let disabled = disabled_list(persisted);
         let dir = folder();
@@ -833,7 +833,7 @@ impl MissionPlanner {
             }
             RequestBody::ConfigSet { key, value } => self.persisted.set(&key, value),
             // `FlightData.saveTabControlActions()`, then `Settings.Instance.Save()`.
-            // `// C#: Plugins/OpenDroneID2/OpenDroneID_Plugin.cs:76-79; GCSViews/FlightData.cs:4747-4757`
+            // `// C#: Plugins/OpenDroneID2/OpenDroneID_Plugin.cs:76-79; GCSViews/FlightData.cs:4861-4871`
             RequestBody::SaveTabControlActions => {
                 let names = self.fly_pages.save_tab_control_actions();
                 self.persisted.set(crate::fly::TAB_SETTING, names);

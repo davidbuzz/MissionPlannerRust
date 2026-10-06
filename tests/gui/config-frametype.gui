@@ -63,7 +63,7 @@ expect config.frame.types.enabled true
 expect config.frame.types 0,1,2,3,4
 expect config.frame.bright 0
 # Activate's DoClass and DoType each wrote the vehicle's own values back; setParam's "not
-# modified as same" means none of them went out (MAVLinkInterface.cs:1647-1651).
+# modified as same" means none of them went out (MAVLinkInterface.cs:1644-1648).
 expect config.frame.pending 0
 expect config.frame.write FRAME_TYPE 0 unchanged
 expect config.frame.message none

@@ -253,10 +253,10 @@ impl Config {
     /// (defaults 127.0.0.1 and 14550; an empty setting is its default, as `CommsBase.OnSettings`
     /// takes an empty answer); `WS` is its `WebSocket`, whose URL is `WS_url` as typed, and with
     /// none there is nothing to open. `AUTO`, a scan of the serial ports, is not a link.
-    /// `// C#: ExtLibs/Utilities/Settings.cs:88-125; MainV2.cs:782-808, 1295-1301, 1481-1488;
+    /// `// C#: ExtLibs/Utilities/Settings.cs:88-125; MainV2.cs:784-810, 1297-1303, 1483-1490;
     /// ExtLibs/Comms/CommsTCPSerial.cs:35, 114-121; ExtLibs/Comms/CommsUdpSerial.cs:44, 110-112;
     /// ExtLibs/Comms/CommsUDPSerialConnect.cs:31-35, 133-138; ExtLibs/Comms/CommsWebSocket.cs:103;
-    /// ExtLibs/Comms/CommsBase.cs:41-55; Program.cs:661-675`
+    /// ExtLibs/Comms/CommsBase.cs:41-55; Program.cs:663-677`
     #[must_use]
     pub fn last_link(&self) -> Option<String> {
         let port = self.get("comport").filter(|port| !port.is_empty())?;
@@ -296,7 +296,7 @@ impl Config {
     /// Written whenever the map type is changed, as the box's text - which is the `Name`. Absent
     /// until the operator first changes it; the C# then shows `GoogleSatelliteMap`, which is
     /// `mp_tiles::source::DEFAULT_PROVIDER` on this side.
-    /// `// C#: GCSViews/FlightPlanner.cs:2237, 7247-7295`
+    /// `// C#: GCSViews/FlightPlanner.cs:2237, 7244-7292`
     #[must_use]
     pub fn map_type(&self) -> Option<&str> {
         self.get("MapType")
@@ -631,7 +631,7 @@ mod tests {
 
     #[test]
     fn the_udp_client_and_the_websocket_are_links_with_their_settings() {
-        // MainV2.cs:1481-1488: UDPCl is a UdpSerialConnect, WS a WebSocket.
+        // MainV2.cs:1483-1490: UDPCl is a UdpSerialConnect, WS a WebSocket.
         let mut config = Config::default();
         config.set("comport", "UDPCl");
         // The C#'s defaults, with nothing saved (CommsUDPSerialConnect.cs:33, 134)...

@@ -19,7 +19,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
 //! Geo Reference Images: the form `GeoRef/georefimage.cs` is, which the DataFlash Logs page's
-//! button opens (`new Georefimage().Show()`, `// C#: GCSViews/FlightData.cs:5933-5936`).
+//! button opens (`new Georefimage().Show()`, `// C#: GCSViews/FlightData.cs:6047-6050`).
 //!
 //! What the form's handlers do with `GeoRefImageBase` - Estimate Offset, Pre-process, GeoTag
 //! Images, what choosing a folder reads, what a change to the log box or to the GPS2 and CAM boxes
@@ -561,7 +561,7 @@ impl Prompt {
 }
 
 /// `Program.handleException`'s box, which an exception out of a click handler reaches: its
-/// caption, and the text before the exception. `// C#: Program.cs:791-793`
+/// caption, and the text before the exception. `// C#: Program.cs:793-795`
 const UNHANDLED: (&str, &str) = ("Send Error", "An error has occurred\n");
 
 /// `openFileDialog1.Filter`'s one description. `// C#: GeoRef/georefimage.cs:89`
@@ -673,7 +673,7 @@ struct Running {
 /// `GMapMarkerPhoto.hfov` and `vfov`, the footprint's field of view: the statics' 63 by 43. The
 /// flight screen's map loop sets them from `camera_fovh`/`camera_fovv` when it draws the
 /// vehicle's own camera markers, which this application's flight map does not draw.
-/// `// C#: ExtLibs/Maps/GMapMarkerPhoto.cs:20-21; GCSViews/FlightData.cs:4015-4019`
+/// `// C#: ExtLibs/Maps/GMapMarkerPhoto.cs:20-21; GCSViews/FlightData.cs:4129-4133`
 pub const PHOTO_FOV: (f64, f64) = (63.0, 43.0);
 
 /// Runs one button's call as its handler does, every line it appends going to `out`. Pre-process
@@ -1721,7 +1721,7 @@ impl Form {
 
     /// What the handler does after its call returns: the offset's line, the map drawn and the
     /// two buttons enabled after Pre-process, and the box an exception out of the handler shows.
-    /// `// C#: GeoRef/georefimage.cs:202-249, 265, 283-318; Program.cs:791-793`
+    /// `// C#: GeoRef/georefimage.cs:202-249, 265, 283-318; Program.cs:793-795`
     fn finish(&mut self, kind: Kind, outcome: Option<Outcome>) {
         self.last = Some(kind);
         match outcome {
@@ -1882,7 +1882,7 @@ impl GeorefUi {
 
 /// `new Georefimage().Show()`: the form, over the flight screen. This window shows one: a second
 /// click brings back the one showing rather than a second window beside it.
-/// `// C#: GCSViews/FlightData.cs:5933-5936; GeoRef/georefimage.cs:26-47`
+/// `// C#: GCSViews/FlightData.cs:6047-6050; GeoRef/georefimage.cs:26-47`
 pub fn open(this: &mut MissionPlanner) {
     if this.georef.form.is_some() {
         return;
