@@ -1,0 +1,82 @@
+# EXPERIMENTAL's CoT (temp.cs:1367-1370): Controls/SerialOutputCoT.cs, the vehicle's position as
+# a Cursor-on-Target event, written every few seconds to a port and shown in the box. The form as
+# Load fills it with no settings - TAK Multicast first, the baud disabled for a port with no "com"
+# in it, Type a-f-A-M-F-Q, every 10 s, Additional Details and Nice Formatting ticked - a UID row
+# for the vehicle typed into the grid with takv ticked, the interval typed down to a second, and
+# Connect on TAK Multicast (239.2.3.1:6969, nothing asked): the vehicle's event under its UID with
+# its takv, written and shown; Additional Details unticked hides the grid's last four columns and
+# the details; Nice Formatting unticked puts the event on one line; Stop ends the thread.
+#
+# Needs a vehicle for the event, a copter SITL:
+#   tools/gui-test.sh tests/gui/experimental-cot.gui -- tcp:127.0.0.1:5760
+screen fly
+window 1600x1200
+budget 20
+env XDG_DATA_HOME $WORK
+env MP_CONFIG_XML $WORK/config.xml
+
+within 30
+expect vehicle.count > 0
+key ctrl+f
+expect screen experimental
+click experimental-BUT_CoT
+expect config.cot.window true
+expect config.cot.title Output Cursor on Target
+expect config.cot.ports ~ TAK Multicast,TCP Host - 14551,TCP Client,UDP Host - 14551,UDP Client
+expect config.cot.port TAK Multicast
+expect config.cot.baud 4800
+expect config.cot.baud.enabled false
+expect config.cot.type a-f-A-M-F-Q
+expect config.cot.rate 10
+expect config.cot.advanced true
+expect config.cot.indent true
+expect config.cot.columns sysid,UID,takv,ContactCallsign,ContactEndPointIP,VMF
+expect config.cot.button Connect
+expect config.cot.rows 0
+
+# A row for sysid 1: its UID, and takv ticked.
+click cot-cell-0-0
+type 1
+key Return
+click cot-cell-0-1
+type UAV-1
+key Return
+click cot-cell-0-2
+expect config.cot.rows 1
+expect config.cot.row.0 1|UAV-1|True|||
+
+# The interval typed down to a second.
+click cot-updateRate
+key BackSpace
+key BackSpace
+type 1
+key Return
+expect config.cot.rate 1
+
+# Connect on TAK Multicast: the vehicle's event each second, under its row's UID.
+click cot-BUT_connect
+expect config.cot.button Stop
+expect config.cot.running true
+within 5
+expect config.cot.written > 0
+expect config.cot.output ~ uid="UAV-1"
+expect config.cot.output ~ type="a-f-A-M-F-Q"
+expect config.cot.output ~ <takv />
+
+# Additional Details unticked: the four columns hidden, and no details in the event.
+click cot-CB_advancedMode
+expect config.cot.columns sysid,UID
+within 3
+expect config.cot.output !~ <takv />
+
+# Nice Formatting unticked: the event on one line.
+click cot-chk_indent
+within 3
+expect config.cot.output ~ <event version="2.0" uid="UAV-1"
+
+# Stop, and the form closed.
+click cot-BUT_connect
+expect config.cot.running false
+expect config.cot.button Connect
+click cot-close
+expect config.cot.window false

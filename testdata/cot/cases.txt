@@ -1,0 +1,10 @@
+# Cursor-on-Target events for tools/csharp-reference/CotOracle.cs and mp-gui's cot_output tests:
+# name|uid|type|how|lat|lng|alt|course|speed|time|indent|takv|callsign|endpoint|vmf
+canberra_nice|NOsysid1|a-f-A-M-F-Q|m-g|-35.3632621|149.1652374|584.123|123.456|4.5|2026-10-06T03:21:45.1234567|1|0|||
+canberra_flat|NOsysid1|a-f-A-M-F-Q|m-g|-35.3632621|149.1652374|584.123|123.456|4.5|2026-10-06T03:21:45.1234567|0|0|||
+advanced_nice|UAV-1|a-f-A-M-F-Q|m-g|51.4778|-0.0015|45.5|359.999|21.345|2026-12-31T23:59:59.9999999|1|1|Hawk 1|192.168.1.10:4242:tcp|12345
+advanced_flat|UAV-1|a-f-A-M-F-Q|m-g|51.4778|-0.0015|45.5|359.999|21.345|2026-12-31T23:59:59.9999999|0|1|Hawk 1|192.168.1.10:4242:tcp|12345
+callsign_only|UAV-2|a-f-A|m-g|0|0|0|0|0|2026-01-01T00:00:00.0000000|1|0|Two||
+endpoint_only|UAV-3|a-f-A|m-g|10.5|20.25|1.5|-1|-1|2026-06-15T12:00:00.5000000|0|0||10.0.0.1:4242:udp|
+escaped|a&b<c>"d"'e|||-0.00000004|179.99999996|-12.345|-0.001|0.005|2026-03-01T01:02:03.0400000|1|0|x & y||
+rounding|NOsysid7|a-f-A-M-F-Q|m-g|1.23456785|-1.23456785|12345.678|0.125|0.135|2026-07-04T10:20:30.0099999|0|0|||

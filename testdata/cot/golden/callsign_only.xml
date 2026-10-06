@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes"?>
+<event
+  version="2.0"
+  uid="UAV-2"
+  type="a-f-A"
+  time="2026-01-01T00:00:00.00Z"
+  start="2025-12-31T23:59:55.00Z"
+  stale="2026-01-01T00:02:00.00Z"
+  how="m-g">
+  <detail>
+    <contact
+      callsign="Two" />
+    <track
+      course="0.00"
+      speed="0.00" />
+  </detail>
+  <point
+    lat="0.0000000"
+    lon="0.0000000"
+    hae=" 0.00"
+    ce="1.0"
+    le="1.0" />
+</event>

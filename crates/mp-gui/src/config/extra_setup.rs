@@ -128,6 +128,9 @@ pub struct ExtraSetup {
     pub mavlink_mirror: mavlink_mirror::MavlinkMirror,
     /// The NMEA output the Advanced page opens, and its thread (`config/nmea_output.rs`).
     pub nmea_output: nmea_output::NmeaOutput,
+    /// The Cursor-on-Target output EXPERIMENTAL's CoT opens, and its thread
+    /// (`config/cot_output.rs`).
+    pub cot_output: super::cot_output::CotOutput,
     /// Param gen's run and its dialogue (`config/param_gen.rs`).
     pub param_gen: param_gen::ParamGen,
 }
@@ -169,6 +172,9 @@ pub struct Focus {
     pub mirror_cell: FocusHandle,
     /// The NMEA output's questions.
     pub nmea_prompt: FocusHandle,
+    /// The CoT output's boxes and grid cell being typed into, and its questions.
+    pub cot_typing: FocusHandle,
+    pub cot_prompt: FocusHandle,
 }
 
 impl Focus {
@@ -192,6 +198,8 @@ impl Focus {
             dronecan_prompt: cx.focus_handle(),
             mirror_cell: cx.focus_handle(),
             nmea_prompt: cx.focus_handle(),
+            cot_typing: cx.focus_handle(),
+            cot_prompt: cx.focus_handle(),
         }
     }
 }
@@ -219,6 +227,7 @@ pub fn record_facts(pages: &ExtraSetup, view: &TelemetryView) {
     sikradio::record_facts(&pages.sikradio);
     mavlink_mirror::record_facts(&pages.mavlink_mirror);
     nmea_output::record_facts(&pages.nmea_output);
+    super::cot_output::record_facts(&pages.cot_output);
     param_gen::record_facts(&pages.param_gen);
 }
 
@@ -326,6 +335,21 @@ impl MissionPlanner {
             proxy_focus.text.is_focused(window),
         );
         let telemetry = &self.telemetry;
+        // The CoT output's vehicles, as `cs` gives them in the user's units.
+        let cot_vehicles: Vec<_> = if self.extra.cot_output.running() {
+            let units = self.planner.units();
+            telemetry
+                .vehicles()
+                .into_iter()
+                .filter_map(|id| {
+                    telemetry
+                        .vehicle_state(id)
+                        .map(|state| (id, super::cot_output::Position::of(&state, &units)))
+                })
+                .collect()
+        } else {
+            Vec::new()
+        };
         let pages = &mut self.extra;
         pages
             .parachute
@@ -380,6 +404,7 @@ impl MissionPlanner {
         // The Mavlink Mirror's streams and mirrors, and the NMEA output's stream and thread.
         let mirror_status = pages.mavlink_mirror.tick(telemetry);
         let nmea_status = pages.nmea_output.tick(view.state.as_deref());
+        let cot_status = pages.cot_output.tick(cot_vehicles);
         let paramgen_status = pages.param_gen.tick();
         // The link errors the C# boxes go on the status line instead (the owner's ruling); the
         // page never draws them, since they leave its queue in the tick before the frame.
@@ -422,6 +447,9 @@ impl MissionPlanner {
         }
         if nmea_status.is_some() {
             status = nmea_status;
+        }
+        if cot_status.is_some() {
+            status = cot_status;
         }
         if paramgen_status.is_some() {
             status = paramgen_status;
@@ -487,6 +515,15 @@ impl MissionPlanner {
                 mavlink_mirror::overlay(&pages.mavlink_mirror, &focus.mirror_cell, window, cx)
             })
             .or_else(|| nmea_output::overlay(&pages.nmea_output, &focus.nmea_prompt, window, cx))
+            .or_else(|| {
+                super::cot_output::overlay(
+                    &pages.cot_output,
+                    &focus.cot_typing,
+                    &focus.cot_prompt,
+                    window,
+                    cx,
+                )
+            })
             .or_else(|| param_gen::overlay(&pages.param_gen, window, cx))
     }
 }

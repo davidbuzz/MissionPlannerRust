@@ -1,0 +1,2 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes"?>
+<event version="2.0" uid="UAV-3" type="a-f-A" time="2026-06-15T12:00:00.50Z" start="2026-06-15T11:59:55.50Z" stale="2026-06-15T12:02:00.50Z" how="m-g"><detail><contact endpoint="10.0.0.1:4242:udp" /><track course="-1.00" speed="-1.00" /></detail><point lat="10.5000000" lon="20.2500000" hae=" 1.50" ce="1.0" le="1.0" /></event>

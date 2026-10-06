@@ -234,6 +234,8 @@ pub(crate) enum Tool {
     MessageInterval,
     /// LogIndex's form (log_index.rs).
     LogIndex,
+    /// The Cursor-on-Target output (config/cot_output.rs).
+    Cot,
     /// A command to the vehicle, ported here.
     Act(Act),
     /// Not here, and why.
@@ -259,6 +261,8 @@ pub(crate) fn tool(name: &str) -> Tool {
         "BUT_georefimage" => Tool::Georef,
         "but_messageinterval" => Tool::MessageInterval,
         "butlogindex" => Tool::LogIndex,
+        // `BUT_CoT_Click`: `new SerialOutputCoT().Show()`. C#: temp.cs:1367-1370
+        "BUT_CoT" => Tool::Cot,
         "but_paramrestore" => Tool::Act(Act::ParamRestore),
         "but_reboot" => Tool::Act(Act::Reboot),
         "BUT_forcecal_accel" => Tool::Act(Act::ForceAccelCal),
@@ -1387,6 +1391,10 @@ fn press(
         Tool::Georef => crate::georef_ui::open(this),
         Tool::MessageInterval => crate::message_interval::open(this, cx),
         Tool::LogIndex => crate::log_index::open(this),
+        Tool::Cot => {
+            let (cot, persisted) = (&mut this.extra.cot_output, &mut this.persisted);
+            cot.show(persisted);
+        }
         Tool::Act(what) => act(this, what, window, cx),
         Tool::Unavailable(why) => this.file_status = Some(format!("{text}: {why}")),
     }
@@ -1605,11 +1613,13 @@ mod tests {
                     assert!(advanced.contains(&button), "{name} ({text}): {button}");
                     opens += 1;
                 }
-                Tool::Georef | Tool::MessageInterval | Tool::LogIndex | Tool::Act(_) => opens += 1,
+                Tool::Georef | Tool::MessageInterval | Tool::LogIndex | Tool::Cot | Tool::Act(_) => {
+                    opens += 1;
+                }
                 Tool::Unavailable(why) => assert!(!why.is_empty()),
             }
         }
-        assert_eq!(opens, 29);
+        assert_eq!(opens, 30);
         assert_eq!(tool("but_paramrestore"), Tool::Act(Act::ParamRestore));
         assert_eq!(tool("BUT_magfit2"), Tool::Act(Act::MagCalLog));
         assert_eq!(tool("myButton1"), Tool::Act(Act::SplitDfLog));
@@ -1623,6 +1633,7 @@ mod tests {
         assert_eq!(tool("but_disablearmswitch"), Tool::Act(Act::ToggleSafety));
         assert_eq!(tool("but_messageinterval"), Tool::MessageInterval);
         assert_eq!(tool("butlogindex"), Tool::LogIndex);
+        assert_eq!(tool("BUT_CoT"), Tool::Cot);
         assert_eq!(tool("BUT_swarm"), Tool::Unavailable(SECTION_12_D13));
         assert_eq!(tool("but_GDAL"), Tool::Unavailable(NO_GDAL));
         assert_eq!(tool("but_anonlog"), Tool::Unavailable(ANON_LOG_RULED));

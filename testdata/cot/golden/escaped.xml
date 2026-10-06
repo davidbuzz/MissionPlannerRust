@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes"?>
+<event
+  version="2.0"
+  uid="a&amp;b&lt;c&gt;&quot;d&quot;'e"
+  type=""
+  time="2026-03-01T01:02:03.04Z"
+  start="2026-03-01T01:01:58.04Z"
+  stale="2026-03-01T01:04:03.04Z"
+  how="">
+  <detail>
+    <contact
+      callsign="x &amp; y" />
+    <track
+      course="0.00"
+      speed="0.01" />
+  </detail>
+  <point
+    lat="0.0000000"
+    lon="180.0000000"
+    hae="-12.35"
+    ce="1.0"
+    le="1.0" />
+</event>

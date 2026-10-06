@@ -82,6 +82,7 @@ pub mod user_params;
 // ---- end GeoFence / rover Basic Tuning / User Params ----
 // ---- SETUP's small pages (PLAN §13.6 row 70) ----
 pub mod compass_mot;
+pub mod cot_output;
 pub mod extra_setup;
 pub mod gps_order;
 pub mod hw_ids;

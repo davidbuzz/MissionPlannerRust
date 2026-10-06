@@ -93,6 +93,9 @@ pub enum Kind {
     UdpHost,
     /// `"UDP Client"`.
     UdpClient,
+    /// `"TAK Multicast"`: the CoT output's UDP client to TAK's multicast group, opened at once
+    /// with no question (`SerialOutputCoT.cs:85-89`).
+    TakMulticast,
     /// A serial port of this name.
     Serial(String),
 }
@@ -104,6 +107,7 @@ impl Kind {
         match text {
             "TCP Client" => Self::TcpClient,
             "UDP Client" => Self::UdpClient,
+            "TAK Multicast" => Self::TakMulticast,
             t if t.starts_with("TCP Host") => Self::TcpHost,
             t if t.starts_with("UDP Host") => Self::UdpHost,
             other => Self::Serial(other.to_owned()),
@@ -150,7 +154,7 @@ impl Kind {
                     default: "14550",
                 },
             ],
-            Self::TcpHost | Self::Serial(_) => Vec::new(),
+            Self::TcpHost | Self::TakMulticast | Self::Serial(_) => Vec::new(),
         }
     }
 }
@@ -255,6 +259,12 @@ pub fn open(kind: Kind, host_port: u16, baud: u32, answers: Vec<String>) -> Open
                         .map(|s| Box::new(s) as Box<dyn Transport>)
                         .map_err(|e| e.to_string())
                 }),
+                Kind::TakMulticast => UdpClientTransport::open(
+                    super::cot_output::TAK_HOST,
+                    super::cot_output::TAK_PORT,
+                )
+                .map(|s| Box::new(s) as Box<dyn Transport>)
+                .map_err(|e| e.to_string()),
                 Kind::Serial(name) => SerialTransport::open(&name, baud)
                     .map(|s| Box::new(s) as Box<dyn Transport>)
                     .map_err(|e| e.to_string()),
@@ -293,7 +303,7 @@ pub fn baud_of(text: &str) -> Result<u32, String> {
 /// them are this machine's.
 #[must_use]
 pub fn item_id(combo: &str, index: usize, text: &str) -> String {
-    if text.starts_with("TCP ") || text.starts_with("UDP ") {
+    if text.starts_with("TCP ") || text.starts_with("UDP ") || text.starts_with("TAK ") {
         let words: Vec<&str> = text.split([' ', '-']).filter(|w| !w.is_empty()).collect();
         format!("{combo}-{}", words.join("-"))
     } else {

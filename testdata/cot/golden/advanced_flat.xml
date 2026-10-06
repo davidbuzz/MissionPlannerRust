@@ -1,0 +1,2 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes"?>
+<event version="2.0" uid="UAV-1" type="a-f-A-M-F-Q" time="2026-12-31T23:59:59.99Z" start="2026-12-31T23:59:54.99Z" stale="2027-01-01T00:01:59.99Z" how="m-g"><detail><takv /><contact callsign="Hawk 1" endpoint="192.168.1.10:4242:tcp" /><uid vmf="12345" /><track course="360.00" speed="21.35" /></detail><point lat="51.4778000" lon="-0.0015000" hae="45.50" ce="1.0" le="1.0" /></event>
