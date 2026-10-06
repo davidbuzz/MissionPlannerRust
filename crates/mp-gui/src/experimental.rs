@@ -276,6 +276,7 @@ pub(crate) fn tool(name: &str) -> Tool {
         "BUT_magfit2" => Tool::Act(Act::MagCalLog),
         "myButton1" => Tool::Act(Act::SplitDfLog),
         "but_gpsinj" => Tool::Act(Act::ExtractGpsInject),
+        "BUT_shptopoly" => Tool::Act(Act::ShpToPoly),
         "BUT_clearcustommaps" => Tool::Act(Act::ClearCustomMaps),
         "but_agemapdata" => Tool::Act(Act::AgeMapData),
         "but_armandtakeoff" => Tool::Act(Act::ArmAndTakeoff),
@@ -335,6 +336,11 @@ pub(crate) enum Act {
     /// log's order - the corrections a base station sent - off the window's thread
     /// ([`gps_inject_bytes`]). `// C#: temp.cs:768-804`
     ExtractGpsInject,
+    /// `BUT_shptopoly_Click`: a shapefile asked for, and each of its features written beside it as
+    /// `poly-<n>.poly` - the C#'s heading line, then a "lat\tlng" line a coordinate, reprojected to
+    /// WGS 1984 where a `.prj` sits beside it - off the window's thread ([`shp_to_poly`]).
+    /// `// C#: temp.cs:415-495`
+    ShpToPoly,
     /// `myButton1_Click_2`: a log asked for, "How Many" pieces asked (10 offered), and
     /// `DFLogBuffer.SplitLog` writing `<log>_split<i>.bin` beside it, off the window's thread
     /// (mp-log's `split_file`). `// C#: temp.cs:720-734; ExtLibs/Utilities/DFLogBuffer.cs:472-556`
@@ -405,6 +411,10 @@ const DFLOG_FILE_MASK: &str = "Log Files|*.log;*.bin;*.BIN;*.LOG";
 /// `// C#: temp.cs:771, 775`
 const TLOG_FILE_MASK: &str = "tlog|*.tlog";
 const GPS_INJECT_OFFERED: &str = "output.dat";
+/// Shp to Poly's dialog's filter, and the heading of each file it writes.
+/// `// C#: temp.cs:419, 468`
+const SHP_FILE_MASK: &str = "Shape file|*.shp";
+const POLY_HEADING: &str = "#Shap to Poly - Mission Planner\r\n";
 const SPLIT_TITLE: &str = "How Many";
 const SPLIT_PROMPT: &str = "Enter how many pieces to split into";
 const SPLIT_OFFERED: i32 = 10;
@@ -519,6 +529,8 @@ enum Opened {
     /// extract gps_inject's telemetry log, and its `SaveFileDialog`.
     GpsInjectLog,
     GpsInjectOut,
+    /// Shp to Poly's shapefile.
+    ShpFile,
 }
 
 /// What an input box's answer is for.
@@ -569,10 +581,12 @@ pub(crate) struct Experimental {
     /// extract gps_inject's log, chosen, while where to write it is asked; and its extracting.
     gps_inject_log: Option<std::path::PathBuf>,
     gps_inject: Job,
+    /// Shp to Poly's writing.
+    shp_to_poly: Job,
 }
 
 /// A tool's work on files, on a thread of its own where the C#'s window waits on it - Split
-/// DFLog's, extract gps_inject's: one at a time, its answer taken by [`tick`], and what the last
+/// DFLog's, extract gps_inject's, Shp to Poly's: one at a time, its answer taken by [`tick`], and what the last
 /// one came to kept for the facts.
 #[derive(Default)]
 struct Job {
@@ -649,6 +663,7 @@ impl Default for Experimental {
             split: Job::default(),
             gps_inject_log: None,
             gps_inject: Job::default(),
+            shp_to_poly: Job::default(),
             takeoff: None,
             takeoff_last: None,
             sort: None,
@@ -818,6 +833,15 @@ fn act(
             ));
             focus_input(this, window, cx);
         }
+        // `OpenFileDialog` with the filter `Shape file|*.shp`, and no folder set.
+        // C#: temp.cs:417-421
+        Act::ShpToPoly => {
+            this.experimental.asking = Some(Asking::Path(
+                crate::config::firmware::PathBox::new("", SHP_FILE_MASK),
+                Opened::ShpFile,
+            ));
+            focus_input(this, window, cx);
+        }
         Act::SplitDfLog => {
             let folder = crate::fly::log_directory()
                 .map(|folder| folder.to_string_lossy().into_owned())
@@ -902,6 +926,7 @@ fn send(this: &mut MissionPlanner, what: Act) {
         | Act::MagCalLog
         | Act::SplitDfLog
         | Act::ExtractGpsInject
+        | Act::ShpToPoly
         | Act::ClearCustomMaps
         | Act::AgeMapData
         | Act::ArmAndTakeoff
@@ -1056,6 +1081,7 @@ fn path_answered(this: &mut MissionPlanner, ok: bool) {
             this.experimental.asking = Some(Asking::Path(save, Opened::GpsInjectOut));
         }
         Opened::GpsInjectOut => {}
+        Opened::ShpFile => write_polys(this, file),
         // `InputBox.Show("How Many", ..., ref a)` with `a = 10`.
         Opened::SplitDfLog => {
             this.experimental.asking = Some(Asking::Input {
@@ -1109,11 +1135,12 @@ fn read_mag_log(this: &mut MissionPlanner, file: std::path::PathBuf) {
 /// shows nothing. `// C#: MagCalib.cs:115-130`
 pub(crate) fn tick(this: &mut MissionPlanner) {
     crate::log_index::tick(this);
-    // Split DFLog's and extract gps_inject's answers: nothing said when one is done, as the C#
+    // Split DFLog's, extract gps_inject's and Shp to Poly's answers: nothing said when one is done, as the C#
     // says nothing; what threw on the status line, where the C#'s error box shows it.
     for job in [
         &mut this.experimental.split,
         &mut this.experimental.gps_inject,
+        &mut this.experimental.shp_to_poly,
     ] {
         if let Some(why) = job.answer() {
             this.file_status = Some(error_box(why));
@@ -1395,6 +1422,70 @@ fn extract_gps_inject(this: &mut MissionPlanner, log: std::path::PathBuf, out: s
             let data = gps_inject_bytes(&mp_os::fs::read(&log).map_err(|e| e.to_string())?)?;
             mp_os::fs::write(&out, &data).map_err(|e| e.to_string())?;
             Ok(data.len())
+        });
+}
+
+/// Shp to Poly's files' text, a feature's a file: [`POLY_HEADING`], then each of its coordinates
+/// as `point.Y + "\t" + point.X + "\r\n"` with `double.ToString(CultureInfo.InvariantCulture)` -
+/// latitude and longitude once a `.prj` has reprojected them to WGS 1984, the file's own numbers
+/// where there is none. A polygon's closing corner is kept, as `Geometry.Coordinates` keeps it.
+/// The `.prj`'s first line is parsed before the shapes are read, as the C# parses it first.
+///
+/// **Divergence:** a coordinate the reprojection cannot invert is passed over, as Polygon > From
+/// SHP passes it over, where DotSpatial writes what its arithmetic came to; what else this reading
+/// does not do as DotSpatial's (the `.shx` and `.dbf` not read, a `.prj` other than WGS 1984 or a
+/// UTM zone refused by name) is written at `mp_mission::shapefile`.
+/// `// C#: temp.cs:430-441, 459-485`
+pub(crate) fn shp_to_poly(shp: &[u8], prj: Option<&str>) -> Result<Vec<String>, String> {
+    use std::fmt::Write as _;
+    let projection = prj
+        .map(|text| mp_mission::shapefile::Projection::from_esri(text.lines().next().unwrap_or("")))
+        .transpose()
+        .map_err(|why| why.to_string())?;
+    let features = mp_mission::shapefile::features(shp).map_err(|why| why.to_string())?;
+    Ok(features
+        .iter()
+        .map(|feature| {
+            let mut text = POLY_HEADING.to_owned();
+            for &(x, y) in feature {
+                let (lat, lng) = match projection {
+                    Some(projection) => match projection.to_wgs84(x, y) {
+                        Some(position) => position,
+                        None => continue,
+                    },
+                    None => (y, x),
+                };
+                let _ = write!(
+                    text,
+                    "{}\t{}\r\n",
+                    mp_log::netfmt::double(lat),
+                    mp_log::netfmt::double(lng)
+                );
+            }
+            text
+        })
+        .collect())
+}
+
+/// Shp to Poly's shapefile chosen: the `.prj` of the same name read if there is one, and each
+/// feature's file written into the shapefile's folder as `poly-1.poly`, `poly-2.poly` and on, on a
+/// thread of its own where the C#'s window waits on it. Nothing is said when it is done, as the
+/// C# only logs each file.
+/// `// C#: temp.cs:427-490`
+fn write_polys(this: &mut MissionPlanner, file: std::path::PathBuf) {
+    this.experimental
+        .shp_to_poly
+        .start("mp-shp-to-poly", move || {
+            let shp = mp_os::fs::read(&file).map_err(|e| e.to_string())?;
+            // `Path.GetFileNameWithoutExtension(file) + ".prj"`, if it exists.
+            let prj = mp_os::fs::read_to_string(file.with_extension("prj")).ok();
+            let polys = shp_to_poly(&shp, prj.as_deref())?;
+            let folder = file.parent().unwrap_or(std::path::Path::new(""));
+            for (a, text) in (1..).zip(&polys) {
+                mp_os::fs::write(folder.join(format!("poly-{a}.poly")), text.as_bytes())
+                    .map_err(|e| e.to_string())?;
+            }
+            Ok(polys.len())
         });
 }
 
@@ -1695,6 +1786,8 @@ pub(crate) fn record_facts(state: &Experimental) {
         state.gps_inject.fact("extracting"),
     );
     facts::record("experimental.split", state.split.fact("splitting"));
+    // Shp to Poly: writing, or what the last one came to.
+    facts::record("experimental.shptopoly", state.shp_to_poly.fact("writing"));
     // mag calb log: reading, or what the last reading came to.
     facts::record(
         "experimental.magcal",
@@ -1709,6 +1802,52 @@ pub(crate) fn record_facts(state: &Experimental) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Shp to Poly: a file a feature, the C#'s heading and then a "Y\tX" line a coordinate as
+    /// `double.ToString` writes it, a polygon's closing corner kept; WGS 1984's `.prj` changes
+    /// nothing, and one in a UTM zone reprojects each coordinate as DotSpatial does - its first
+    /// corner the point testdata/planner/golden/reproject.csv holds - while one in any other system
+    /// is refused before the shapes are read.
+    /// `// C#: temp.cs:430-441, 459-485`
+    #[test]
+    fn shp_to_poly_writes_a_file_a_feature() {
+        let points = include_bytes!("../../../testdata/planner/points.shp");
+        let polys = shp_to_poly(points, None).expect("a point shapefile");
+        assert_eq!(
+            polys,
+            [
+                "#Shap to Poly - Mission Planner\r\n-35.363\t149.165\r\n",
+                "#Shap to Poly - Mission Planner\r\n-35.36\t149.16\r\n",
+                "#Shap to Poly - Mission Planner\r\n-35.366\t149.17\r\n",
+            ]
+        );
+        let wgs84 = include_str!("../../../testdata/planner/points.prj");
+        assert_eq!(shp_to_poly(points, Some(wgs84)), Ok(polys));
+
+        let field = include_bytes!("../../../testdata/planner/field.shp");
+        assert_eq!(
+            shp_to_poly(field, None),
+            Ok(vec![
+                "#Shap to Poly - Mission Planner\r\n6084100\t695400\r\n6084100\t695600\r\n\
+                 6083950\t695600\r\n6083950\t695400\r\n6084100\t695400\r\n"
+                    .to_owned()
+            ])
+        );
+        let utm = include_str!("../../../testdata/planner/field.prj");
+        let polys = shp_to_poly(field, Some(utm)).expect("a UTM shapefile");
+        let lines: Vec<&str> = polys.iter().flat_map(|poly| poly.split("\r\n")).collect();
+        assert_eq!(lines.len(), 7, "{lines:?}");
+        let (lat, lng) = lines
+            .get(1)
+            .and_then(|line| line.split_once('\t'))
+            .expect("a corner");
+        assert!((lat.parse::<f64>().expect("lat") - -35.367_300_938_561_82).abs() < 1e-11);
+        assert!((lng.parse::<f64>().expect("lng") - 149.150_818_946_920_45).abs() < 1e-11);
+        assert_eq!(lines.get(1), lines.get(5));
+
+        let nad83 = r#"PROJCS["NAD_1983_StatePlane_California_III_FIPS_0403_Feet"]"#;
+        assert!(shp_to_poly(b"not a shapefile", Some(nad83)).is_err_and(|why| why.contains("NAD")));
+    }
 
     /// extract gps_inject: the data of every GPS_INJECT_DATA and GPS_RTCM_DATA in the log's
     /// order, `len` bytes of each, the rest of the log and a frame whose checksum fails passed
@@ -1812,11 +1951,12 @@ mod tests {
                 Tool::Unavailable(why) => assert!(!why.is_empty()),
             }
         }
-        assert_eq!(opens, 31);
+        assert_eq!(opens, 32);
         assert_eq!(tool("but_paramrestore"), Tool::Act(Act::ParamRestore));
         assert_eq!(tool("BUT_magfit2"), Tool::Act(Act::MagCalLog));
         assert_eq!(tool("myButton1"), Tool::Act(Act::SplitDfLog));
         assert_eq!(tool("but_gpsinj"), Tool::Act(Act::ExtractGpsInject));
+        assert_eq!(tool("BUT_shptopoly"), Tool::Act(Act::ShpToPoly));
         assert_eq!(tool("BUT_clearcustommaps"), Tool::Act(Act::ClearCustomMaps));
         assert_eq!(tool("but_agemapdata"), Tool::Act(Act::AgeMapData));
         assert_eq!(tool("but_armandtakeoff"), Tool::Act(Act::ArmAndTakeoff));

@@ -1,0 +1,49 @@
+# EXPERIMENTAL's Shp to Poly (temp.cs:415-495): a shapefile asked for (`Shape file|*.shp`, no
+# folder set) and each of its features written beside it as poly-<n>.poly, its coordinates
+# reprojected to WGS 1984 where a .prj of the same name sits beside it. testdata's field, a polygon
+# in UTM 55S, is one file; its three points, with no .prj, three; a .prj in a coordinate system
+# this reader does not take is refused by name on the status line, where the C# throws.
+#
+# Run as: tools/gui-headless.sh experimental-shptopoly
+screen fly
+window 1600x1200
+budget 20
+# 20: one run took 12.8 s (2026-10-06), three long paths typed.
+env XDG_DATA_HOME $WORK
+env MP_CONFIG_XML $WORK/config.xml
+setup mkdir -p "$WORK/shp" && cp testdata/planner/field.shp testdata/planner/field.prj testdata/planner/points.shp "$WORK/shp/"
+setup cp testdata/planner/points.shp "$WORK/shp/other.shp" && printf 'PROJCS["NAD_1983_StatePlane"]\r\n' > "$WORK/shp/other.prj"
+
+key ctrl+f
+expect screen experimental
+expect experimental.shptopoly none
+
+# The field, reprojected from UTM 55S: one file.
+click experimental-BUT_shptopoly
+expect experimental.asking ~ Open:
+click experimental-path-value
+key ctrl+a
+type $WORK/shp/field.shp
+key Return
+expect experimental.asking none
+within 10
+expect experimental.shptopoly wrote 1
+
+# The points, as they are: three.
+click experimental-BUT_shptopoly
+click experimental-path-value
+key ctrl+a
+type $WORK/shp/points.shp
+key Return
+within 10
+expect experimental.shptopoly wrote 3
+
+# A projection this reader does not take.
+click experimental-BUT_shptopoly
+click experimental-path-value
+key ctrl+a
+type $WORK/shp/other.shp
+key Return
+within 10
+expect experimental.shptopoly failed: the projection NAD_1983_StatePlane is not supported
+expect status Error: the projection NAD_1983_StatePlane is not supported
