@@ -1,0 +1,116 @@
+# The Survey (Grid) dialog's own keys, which HELP's welcome text lists under "AutoWP Grid" - the
+# owner's ruling of 2026-10-14: every key it lists must work or go, and for these two, "port it".
+# GridUI.ProcessCmdKey's Control-S is SaveGrid - savegriddata, savesettings ("Save config too"),
+# then its SaveFileDialog filtered to *.grid, a name typed without an extension given .grid - and
+# its Control-O is LoadGrid - its OpenFileDialog, then every control set from the file under
+# `loading`, which draws nothing until the next change (Grid/GridUI.cs:154-323, 1896-1912;
+# crates/mp-gui/src/survey_ui.rs process_cmd_key; the file, XmlSerializer's GridData, is
+# crates/mp-mission/src/grid_file.rs). Then GridPlugin.but_Click over no polygon: "No polygon
+# defined. Load a file?", whose Yes is that loader before ShowDialog - so the dialog shows over the
+# file's corners at the file's angle, its GridUI_Load skipping loadsettings
+# (Grid/GridPlugin.cs:43-59, GridUI.cs:129-134).
+#
+# The square from a .fen and the SITL home planned, as plan-survey.gui has them; the file dialogs
+# are typed paths under $WORK, their folders listed to browse (crates/mp-gui/src/file_list.rs).
+# Run from the repository root:
+#   tools/gui-test.sh tests/gui/survey-grid-file.gui
+
+env XDG_DATA_HOME $WORK
+env MP_PLAN_DIR $WORK
+setup mkdir -p "$WORK/MissionPlannerRust" && printf '<?xml version="1.0" encoding="utf-8"?><Config><TXT_homelat>-35.3632621</TXT_homelat><TXT_homelng>149.1652374</TXT_homelng><TXT_homealt>584.1</TXT_homealt></Config>' > "$WORK/MissionPlannerRust/config.xml"
+setup printf '%s\n' '-35.3632621 149.1652374' '-35.3600 149.1600' '-35.3600 149.1710' '-35.3690 149.1710' '-35.3690 149.1600' '-35.3600 149.1600' > "$WORK/square.fen"
+
+screen plan
+window 1600x1200
+budget 24
+
+# The square, and the dialog over it. The map first: a press before its first paint records
+# nothing.
+expect map.ready true
+click map@0.30x0.70:right
+click menu-geoFence
+click menu-loadFromFile
+type square
+key Return
+expect survey.points 4
+click map@0.50x0.50:right
+click menu-autoWP
+click menu-surveyGrid
+expect survey.dialog open
+expect survey.dialog.shown true
+expect survey.dialog.polygon 4
+expect survey.dialog.NUM_altitude 100
+expect survey.dialog.NUM_angle 180
+expect survey.dialog.recomputes 1
+expect layout.hidden 0
+
+# An altitude of its own to save.
+click survey-NUM_altitude
+key ctrl+u
+type 120
+key Return
+expect survey.dialog.NUM_altitude 120
+expect survey.dialog.recomputes 2
+
+# Control-S: savesettings first, then Save As; Enter writes the file, .grid added to the name.
+expect config.grid_alt none
+key ctrl+s
+expect survey.dialog.file Save As
+expect config.grid_alt 120
+type $WORK/survey
+key Return
+expect survey.dialog.file none
+expect survey.dialog.prompt none
+
+# Another altitude, then Control-O: Open, listing the file saved; Enter loads it. The altitude
+# saved comes back, and nothing is drawn.
+click survey-NUM_altitude
+key ctrl+u
+type 150
+key Return
+expect survey.dialog.NUM_altitude 150
+expect survey.dialog.recomputes 3
+key ctrl+o
+expect survey.dialog.file Open
+type $WORK/survey.grid
+expect chooser.id survey-file
+expect chooser.files ~ survey.grid
+key Return
+expect survey.dialog.file none
+expect survey.dialog.NUM_altitude 120
+expect survey.dialog.NUM_angle 180
+expect survey.dialog.recomputes 3
+expect survey.dialog.prompt none
+click survey-close
+expect survey.dialog closed
+
+# No polygon: "No polygon defined. Load a file?" over the dialog made over no corners, whose
+# angle is 0. Yes is the same Open box; the file loaded, the dialog shows over its corners at its
+# angle, drawn once, while the planning screen's polygon stays empty.
+click map@0.50x0.50:right
+click menu-polygon
+click menu-clearPolygon2
+expect survey.points 0
+click map@0.50x0.50:right
+click menu-autoWP
+click menu-surveyGrid
+expect survey.dialog.prompt Load File
+expect survey.dialog.prompt.text No polygon defined. Load a file?
+expect survey.dialog.shown false
+expect survey.dialog.NUM_angle 0
+expect layout.hidden 0
+click survey-prompt-ok
+expect survey.dialog.prompt none
+expect survey.dialog.file Open
+type $WORK/survey.grid
+key Return
+expect survey.dialog.file none
+expect survey.dialog.shown true
+expect survey.dialog.polygon 4
+expect survey.dialog.NUM_angle 180
+expect survey.dialog.NUM_altitude 120
+expect survey.dialog.recomputes 1
+expect survey.dialog.grid.points > 0
+expect survey.points 0
+click survey-close
+expect survey.dialog closed

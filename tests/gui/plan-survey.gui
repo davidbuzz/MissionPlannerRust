@@ -21,17 +21,23 @@ setup printf '%s\n' '-35.3632621 149.1652374' '-35.3600 149.1600' '-35.3600 149.
 
 screen plan
 window 1600x1200
-budget 41
+budget 38
 
 expect survey.dialog closed
 
-# No polygon: the C#'s "Please define a polygon." (its "Load a file?" first is not ported).
+# No polygon: GridPlugin.but_Click's "No polygon defined. Load a file?" over the dialog it has
+# made, whose No is "Please define a polygon." and no dialog (Grid/GridPlugin.cs:43-59; the Yes,
+# a .grid file loaded, is tests/gui/survey-grid-file.gui's).
 # The map first: a press before its first paint records nothing.
 expect map.ready true
 click map@0.50x0.50:right
 click menu-autoWP
 expect plan.menu.submenu menu-autoWP
 click menu-surveyGrid
+expect survey.dialog.prompt Load File
+expect survey.dialog.prompt.text No polygon defined. Load a file?
+click survey-prompt-cancel
+expect survey.dialog closed
 expect plan.prompt Error
 expect plan.prompt.text Please define a polygon.
 click plan-prompt-ok

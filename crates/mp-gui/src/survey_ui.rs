@@ -38,14 +38,30 @@
 //!   (`FillCommand` and `setfromMap`): in the screen's altitude frame, a `WAYPOINT` as a
 //!   `SPLINE_WAYPOINT` while the planner's Spline box is ticked, a waypoint's position to seven
 //!   decimals and its altitude through Default Alt, its delay rounded to a tenth.
+//! - **Control-S and Control-O are the form's own** (`GridUI.ProcessCmdKey`, [`process_cmd_key`]),
+//!   whichever of its controls has the keyboard, and `label38` under Display says so. Control-S
+//!   is `SaveGrid`: `savegriddata`, `savesettings` ("Save config too"), then its
+//!   `SaveFileDialog`. Control-O is `LoadGrid`: its `OpenFileDialog`, then every control set from
+//!   the file under `loading`, which draws nothing until the next change. The `.grid` file is
+//!   `XmlSerializer`'s, byte for byte (`mp_mission::grid_file`); the file dialogs are the shared
+//!   one, a typed path with its folder listed to browse (`crate::file_list`). A box over the
+//!   dialog (a message, an `InputBox`, a file dialog) is a form of its own and has the keys while
+//!   it shows. While the dialog shows, Control-Z and the planner's other keys do nothing, as the
+//!   planner's `ProcessCmdKey` sees no key of a form of its own (`crate::plan::run_plan_key`).
+//! - **With fewer than three corners** `GridPlugin.but_Click` makes the dialog and asks "No polygon
+//!   defined. Load a file?": Yes is `LoadGrid` and then `ShowDialog`, whatever its file dialog
+//!   answered - `GridUI_Load` skipping `loadsettings` when a file was loaded - and No is "Please
+//!   define a polygon." and no dialog. The question and the file dialog are drawn over the dialog's
+//!   form, not yet shown, where the C#'s are over the planning screen: this screen draws the
+//!   dialog in the planning screen's place.
+//! - **A `.grid` file that cannot be read**, or holds a value its control refuses - `Deserialize`'s
+//!   and `NumericUpDown.Value`'s exceptions, which nothing in the C# catches - is said on the
+//!   status line; before the dialog has shown, the dialog goes, as the exception leaves
+//!   `but_Click` before `ShowDialog`.
 //!
 //! Not ported, each for a reason the C# gives: `TRK_zoom` (the map zooms with the wheel);
 //! dragging the polygon's corners on the dialog's map; the camera footprints (`CHK_footprints` is
-//! kept and saved, nothing is drawn); `BUT_samplephoto` (a JPEG's EXIF); Control-S and Control-O with `label38`, their hint (the
-//! `.grid` files are `XmlSerializer` output) - while the dialog shows, those keys and Control-Z
-//! do nothing, as the planner's `ProcessCmdKey` sees no key of a form of its own
-//! (`crate::plan::run_plan_key`); "No polygon defined. Load a file?", whose Yes is that `.grid`
-//! loader - with fewer than three corners this says its No, "Please define a polygon.".
+//! kept and saved, nothing is drawn); `BUT_samplephoto` (a JPEG's EXIF).
 //! `BUT_save` asks for a camera name and writes `cameras.xml`, and the constructor
 //! writes it when there is none, both in this application's user data directory
 //! (`mp_mission::cameras`). The settings Accept saves (`savesettings`, the `grid_*` keys and the
@@ -64,12 +80,15 @@ use mp_mission::MissionItem;
 use mp_mission::cameras::{self, Cameras};
 use mp_mission::dotnet::{bool_text, format_f64, parse_f64, to_int};
 use mp_mission::grid::{GridTag, StartPosition};
+use mp_mission::grid_file::{self, GridData, GridFileError};
 use mp_mission::gridui::{
     self, Call, Check, Dialog, Num, Refused, Stat, Step, Tab, Text, Trigger, cmd,
 };
 use mp_units::LatLon;
 
 use crate::MissionPlanner;
+use crate::config::firmware::{BoxIds, PathBox};
+use crate::fly::error_box;
 use crate::plan::{AltitudeFrame, Plan};
 use crate::textfield::{KeyOutcome, TextField};
 use crate::ui::theme;
@@ -98,7 +117,48 @@ struct Open {
     dropdown: Option<Combo>,
     /// `InputBox` or `CustomMessageBox`, over the dialog.
     prompt: Option<Prompt>,
+    /// `LoadGrid`'s `OpenFileDialog` or `SaveGrid`'s `SaveFileDialog`, over the dialog.
+    file: Option<(PathBox, GridFile)>,
+    /// Whether `ShowDialog` has run: not while `GridPlugin.but_Click` asks "No polygon defined.
+    /// Load a file?" over the dialog it has made, and shows its file dialog.
+    shown: bool,
 }
+
+/// What the file dialog over the grid is for.
+enum GridFile {
+    /// `LoadGrid`'s `OpenFileDialog`.
+    Load,
+    /// `SaveGrid`'s `SaveFileDialog`, with what `savegriddata` gathered before it showed.
+    Save(Box<GridData>),
+}
+
+/// The grid's file dialogs' ids. The dialog's questions and messages are its own boxes
+/// ([`prompt_box`]), so the question's and the message's ids name nothing drawn.
+const FILE_BOX: BoxIds = BoxIds {
+    question: "survey-file-question",
+    yes: "survey-file-yes",
+    no: "survey-file-no",
+    message: "survey-file-message",
+    ok: "survey-file-message-ok",
+    path: "survey-file",
+    path_value: "survey-file-value",
+    path_ok: "survey-file-ok",
+    path_cancel: "survey-file-cancel",
+};
+
+/// `GridPlugin.but_Click`'s question with fewer than three corners: its caption and its words.
+/// `// C#: Grid/GridPlugin.cs:50`
+const LOAD_FILE_CAPTION: &str = "Load File";
+/// See [`LOAD_FILE_CAPTION`].
+const LOAD_FILE_TEXT: &str = "No polygon defined. Load a file?";
+
+/// `GridPlugin.but_Click`'s box after the question's No, captioned "Error".
+/// `// C#: Grid/GridPlugin.cs:58`
+const DEFINE_POLYGON: &str = "Please define a polygon.";
+
+/// `label38`, the keys' hint under Display: the `.resx`'s two lines, "form" and all.
+/// `// C#: Grid/GridUI.resx (label38)`
+const KEYS_HINT: [&str; 2] = ["Control-S to save to file", "Control-O to load form file"];
 
 /// A box that takes typing.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -142,6 +202,9 @@ enum Prompt {
     Message(String, &'static str),
     /// `InputBox.Show("Camera Name", "Please and a camera name", ref camname)`: `BUT_save`'s.
     CameraName(TextField),
+    /// `CustomMessageBox.Show("No polygon defined. Load a file?", "Load File", YesNo)`:
+    /// `GridPlugin.but_Click`'s, before the dialog shows.
+    LoadFile,
 }
 
 impl SurveyUi {
@@ -155,7 +218,8 @@ impl SurveyUi {
         }
     }
 
-    /// Whether the dialog is showing.
+    /// Whether the dialog is showing - or made and about to, "No polygon defined. Load a file?"
+    /// or its file dialog over it - so that it is the planning screen and has the keys.
     #[must_use]
     pub const fn is_open(&self) -> bool {
         self.open.is_some()
@@ -208,17 +272,13 @@ fn preview(dialog: &Dialog) -> (Vec<MissionItem>, Vec<LatLon>) {
 // Opening, accepting and closing.
 // ---------------------------------------------------------------------------------------------
 
-/// `surveyGridToolStripMenuItem_Click`: `GridPlugin.but_Click`, which shows the dialog when the
-/// drawn polygon has more than two points.
+/// `surveyGridToolStripMenuItem_Click`: `GridPlugin.but_Click`, which makes the dialog
+/// (`new GridUI`) and shows it when the drawn polygon has more than two points; with fewer it asks
+/// "No polygon defined. Load a file?" over the dialog first ([`load_file_answered`]). The dialog
+/// takes the keyboard, as `ShowDialog` gives a form it ([`process_cmd_key`]).
 /// `// C#: GCSViews/FlightPlanner.cs:6752-6757; Grid/GridPlugin.cs:37-61`
 pub fn open(this: &mut MissionPlanner, window: &mut Window, cx: &mut Context<MissionPlanner>) {
     let polygon = this.plan.polygon().to_vec();
-    if polygon.len() <= 2 {
-        // The C# asks "No polygon defined. Load a file?" first; its Yes loads a `.grid`, which is
-        // not ported, so this is its No.
-        this.plan_menus.say("Error", "Please define a polygon.");
-        return;
-    }
     let view = this.telemetry.view();
     let home = this.plan.planned_home_location();
     let context = gridui::Context {
@@ -229,21 +289,53 @@ pub fn open(this: &mut MissionPlanner, window: &mut Window, cx: &mut Context<Mis
     // `xmlcamera`'s write `catch`: `CustomMessageBox.Show(ex.ToString())`.
     // `// C#: Grid/GridUI.cs:122-124, 497`
     let (cameras, unwritten) = Cameras::load(mp_settings::user_data_directory().as_deref());
-    let dialog = Dialog::open(
-        &polygon,
-        cameras,
-        &context,
-        &loaded_settings(&this.persisted),
-    );
+    let dialog = Dialog::new(&polygon, cameras, &context);
+    let show_now = polygon.len() > 2;
+    let mut prompt = unwritten_box(unwritten, cfg!(target_family = "wasm"));
+    if !show_now && prompt.is_none() {
+        prompt = Some(Prompt::LoadFile);
+    }
     this.survey.open = Some(Open {
         dialog,
         tab: Tab::Simple,
         editing: None,
         dropdown: None,
-        prompt: unwritten_box(unwritten, cfg!(target_family = "wasm")),
+        prompt,
+        file: None,
+        shown: false,
     });
     this.survey.added = 0;
+    if show_now {
+        show(this);
+    }
+    this.survey.focus.focus(window, cx);
     changed(this, window, cx);
+}
+
+/// `ShowDialog`: `GridUI_Load`, the settings loaded - unless a `.grid` file was, first - and the
+/// grid drawn.
+/// `// C#: Grid/GridPlugin.cs:45, 54; Grid/GridUI.cs:129-147`
+fn show(this: &mut MissionPlanner) {
+    let saved = loaded_settings(&this.persisted);
+    if let Some(open) = this.survey.open.as_mut() {
+        open.dialog.form_load(&saved);
+        open.shown = true;
+    }
+}
+
+/// "No polygon defined. Load a file?" answered. Yes is `LoadGrid` - its file dialog over the
+/// dialog, which shows once that is answered ([`opened_file`]) - and No is "Please define a
+/// polygon." with no dialog.
+/// `// C#: Grid/GridPlugin.cs:49-59`
+fn load_file_answered(this: &mut MissionPlanner, yes: bool) {
+    if yes {
+        if let Some(open) = this.survey.open.as_mut() {
+            load_grid(open);
+        }
+        return;
+    }
+    close(this);
+    this.plan_menus.say("Error", DEFINE_POLYGON);
 }
 
 /// What opening the dialog shows of its camera file's write, `page` in a web page: `xmlcamera`'s
@@ -266,9 +358,9 @@ fn loaded_settings(persisted: &crate::settings::Persisted) -> impl Fn(&str) -> O
 }
 
 /// `BUT_Accept_Click`'s writes to `Settings.Instance`: `camera_fovh` and `camera_fovv`, then
-/// `savesettings`' `grid_*` keys - in the dictionary at once, in `config.xml` at the next
-/// `SaveConfig`, as every `Settings.Instance[key] = value` is.
-/// `// C#: Grid/GridUI.cs:1858-1882, 409-447`
+/// `savesettings`' `grid_*` keys - and `SaveGrid`'s `savesettings` - in the dictionary at once,
+/// in `config.xml` at the next `SaveConfig`, as every `Settings.Instance[key] = value` is.
+/// `// C#: Grid/GridUI.cs:1858-1882, 409-447, 184`
 fn keep_settings(
     persisted: &mut crate::settings::Persisted,
     settings: Vec<(&'static str, String)>,
@@ -278,7 +370,7 @@ fn keep_settings(
     }
 }
 
-/// The form's close box: the dialog goes, and nothing is added.
+/// The form's close box, or a dialog that is not to show: the dialog goes, and nothing is added.
 fn close(this: &mut MissionPlanner) {
     if let Some(open) = this.survey.open.take() {
         this.survey.start_point = open.dialog.start_point();
@@ -451,8 +543,25 @@ fn ask_camera_name(open: &mut Open) {
     open.prompt = Some(Prompt::CameraName(field));
 }
 
+/// OK or Yes (`ok` true), or Cancel or No, on the box showing: "No polygon defined. Load a
+/// file?" goes on to its file dialog or away ([`load_file_answered`]); the others are the
+/// dialog's own ([`answer_prompt`]).
+fn answer(this: &mut MissionPlanner, ok: bool) {
+    let Some(open) = this.survey.open.as_mut() else {
+        return;
+    };
+    if matches!(open.prompt, Some(Prompt::LoadFile)) {
+        open.prompt = None;
+        load_file_answered(this, ok);
+    } else {
+        answer_prompt(open, ok);
+    }
+}
+
 /// OK (`ok` true) or Cancel on the box showing: "Enter point #" goes to the dialog; the camera
-/// name, on OK, saves the camera ([`save_camera`]); a message just goes.
+/// name, on OK, saves the camera ([`save_camera`]); a message just goes. A message over a dialog
+/// not yet shown is `xmlcamera`'s, from the constructor, after which `but_Click` asks "No polygon
+/// defined. Load a file?".
 fn answer_prompt(open: &mut Open, ok: bool) {
     match open.prompt.take() {
         Some(Prompt::Point(field)) => open.dialog.answer_point(ok.then_some(field.value())),
@@ -463,7 +572,8 @@ fn answer_prompt(open: &mut Open, ok: bool) {
                 mp_settings::user_data_directory().as_deref(),
             );
         }
-        Some(Prompt::CameraName(_) | Prompt::Message(..)) | None => {}
+        Some(Prompt::Message(..)) if !open.shown => open.prompt = Some(Prompt::LoadFile),
+        Some(Prompt::CameraName(_) | Prompt::Message(..) | Prompt::LoadFile) | None => {}
     }
 }
 
@@ -491,6 +601,231 @@ fn save_camera(open: &mut Open, name: &str, directory: Option<&std::path::Path>)
 }
 
 // ---------------------------------------------------------------------------------------------
+// The form's keys, and the grid file.
+// ---------------------------------------------------------------------------------------------
+
+/// `GridUI.ProcessCmdKey`'s two keys.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum GridKey {
+    /// Control-O: `LoadGrid`.
+    Load,
+    /// Control-S: `SaveGrid`.
+    Save,
+}
+
+/// The key `keystroke` is to `GridUI.ProcessCmdKey`, compared as `keyData ==` compares it:
+/// Control and the letter, nothing else held. Control on every platform, as the planner's own
+/// keys are (`crate::plan::plan_key`).
+/// `// C#: Grid/GridUI.cs:1896-1912`
+fn grid_key(keystroke: &gpui::Keystroke) -> Option<GridKey> {
+    let modifiers = &keystroke.modifiers;
+    if !modifiers.control || modifiers.alt || modifiers.shift || modifiers.platform {
+        return None;
+    }
+    match keystroke.key.to_ascii_lowercase().as_str() {
+        "o" => Some(GridKey::Load),
+        "s" => Some(GridKey::Save),
+        _ => None,
+    }
+}
+
+/// `GridUI.ProcessCmdKey`: a key on its way out of whichever control of the dialog has the
+/// keyboard. Control-O loads a grid file and Control-S saves one, and either is taken; any other
+/// key goes on. A box over the dialog is a form of its own, which has the keys while it shows,
+/// and a dialog not yet shown has none. The box being typed into is left first, its value taken,
+/// as the file dialog takes the focus from it.
+/// `// C#: Grid/GridUI.cs:1896-1912`
+fn process_cmd_key(
+    this: &mut MissionPlanner,
+    keystroke: &gpui::Keystroke,
+    window: &mut Window,
+    cx: &mut Context<MissionPlanner>,
+) -> bool {
+    let Some(key) = grid_key(keystroke) else {
+        return false;
+    };
+    let Some(open) = this.survey.open.as_mut() else {
+        return false;
+    };
+    if !open.shown || open.prompt.is_some() || open.file.is_some() {
+        return false;
+    }
+    commit_edit(open);
+    open.dropdown = None;
+    match key {
+        GridKey::Load => load_grid(open),
+        GridKey::Save => save_grid(this),
+    }
+    changed(this, window, cx);
+    true
+}
+
+/// `LoadGrid`: its `OpenFileDialog`, filtered to `*.grid`, over the dialog; what it answers is
+/// [`opened_file`].
+/// `// C#: Grid/GridUI.cs:154-161`
+fn load_grid(open: &mut Open) {
+    open.file = Some((PathBox::new("", grid_file::FILTER), GridFile::Load));
+}
+
+/// `SaveGrid`: `savegriddata` - whose `decimal.Parse` of the heading box throws for one that
+/// holds no number, before anything is saved - then `savesettings`, "Save config too", into
+/// `Settings.Instance`, then its `SaveFileDialog`, filtered to `*.grid`; what that answers is
+/// [`saved_file`]. The exception is said on the status line.
+/// `// C#: Grid/GridUI.cs:177-189, 409-447`
+fn save_grid(this: &mut MissionPlanner) {
+    let Some(open) = this.survey.open.as_mut() else {
+        return;
+    };
+    let data = match open.dialog.grid_data() {
+        Ok(data) => data,
+        Err(Refused::Message(text, _) | Refused::Exception(_, text)) => {
+            this.file_status = Some(error_box(text));
+            return;
+        }
+    };
+    let settings = open.dialog.save_settings();
+    let mut path = PathBox::new("", grid_file::FILTER);
+    path.caption = crate::joystick::SAVE_AS;
+    open.file = Some((path, GridFile::Save(Box::new(data))));
+    keep_settings(&mut this.persisted, settings);
+}
+
+/// The grid's file dialog over the dialog: the shared one, its path box with the keyboard and
+/// the folder it names listed by `*.grid` ([`crate::config::firmware::path_box`]).
+fn file_box(
+    open: &Open,
+    window: &Window,
+    focus: &FocusHandle,
+    cx: &mut Context<MissionPlanner>,
+) -> Option<AnyElement> {
+    let (path, _) = open.file.as_ref()?;
+    Some(crate::config::firmware::path_box(
+        FILE_BOX,
+        path,
+        focus,
+        window,
+        |this, event| {
+            let outcome = match this.survey.open.as_mut().and_then(|open| open.file.as_mut()) {
+                Some((path, _)) => path.field.key(event),
+                None => return false,
+            };
+            match outcome {
+                KeyOutcome::Submitted => file_answered(this, true),
+                KeyOutcome::Cancelled => file_answered(this, false),
+                KeyOutcome::Changed => {}
+                KeyOutcome::Ignored => return false,
+            }
+            true
+        },
+        file_answered,
+        cx,
+    ))
+}
+
+/// The grid's file dialog answered: OK (`ok`), or Cancel.
+fn file_answered(this: &mut MissionPlanner, ok: bool) {
+    let Some((path, purpose)) = this
+        .survey
+        .open
+        .as_mut()
+        .and_then(|open| open.file.take())
+    else {
+        return;
+    };
+    match purpose {
+        GridFile::Load => opened_file(this, path, ok),
+        GridFile::Save(data) => saved_file(this, path, data, ok),
+    }
+    this.sync_map_mission();
+    this.sync_map_polygon();
+}
+
+/// `LoadGrid` once its `OpenFileDialog` has answered: `if (File.Exists(ofd.FileName))`, the file
+/// read and every control set from it ([`Dialog::load_grid_data`]). A name that is no file is
+/// asked for again, as `OpenFileDialog` asks, and Cancel loads nothing. Before the dialog has
+/// shown, `ShowDialog` follows whatever was answered - but an exception reading or loading the
+/// file leaves `but_Click` first, and the dialog never shows. The exception is said on the
+/// status line.
+/// `// C#: Grid/GridUI.cs:161-174; Grid/GridPlugin.cs:53-54`
+fn opened_file(this: &mut MissionPlanner, path: PathBox, ok: bool) {
+    let file = if ok {
+        let Some(file) = grid_file_named(path.field.value()) else {
+            if let Some(open) = this.survey.open.as_mut() {
+                open.file = Some((path, GridFile::Load));
+            }
+            return;
+        };
+        Some(file)
+    } else {
+        None
+    };
+    let Some(open) = this.survey.open.as_mut() else {
+        return;
+    };
+    let failed = file.and_then(|file| {
+        load_grid_file(open, &file)
+            .err()
+            .map(|why| error_box(format!("{}: {why}", file.display())))
+    });
+    let shown = open.shown;
+    match failed {
+        Some(why) => {
+            this.file_status = Some(why);
+            if !shown {
+                close(this);
+            }
+        }
+        None if !shown => show(this),
+        None => {}
+    }
+}
+
+/// `LoadGrid`'s `using (StreamReader sr = new StreamReader(ofd.FileName))`: the file read and
+/// deserialised, then `loading = true; loadgriddata(test); loading = false;`.
+/// `// C#: Grid/GridUI.cs:165-171`
+fn load_grid_file(open: &mut Open, file: &std::path::Path) -> Result<(), GridFileError> {
+    let data = GridData::read(file)?;
+    open.dialog.load_grid_data(&data)
+}
+
+/// The file `OpenFileDialog` answers for what is typed: the file named - a relative name from the
+/// folder the dialog lists - or, for a name typed without an extension, that name with the
+/// filter's when that is the file there (`AddExtension`). None while it names no file there.
+fn grid_file_named(typed: &str) -> Option<std::path::PathBuf> {
+    let named = crate::plan::dialog_path(typed, "", &crate::file_list::start_folder())?;
+    if mp_os::fs::FsExt::os_is_file(named.as_path()) {
+        return Some(named);
+    }
+    let with_extension = named.with_extension(grid_file::EXTENSION);
+    (named.extension().is_none() && mp_os::fs::FsExt::os_is_file(with_extension.as_path()))
+        .then_some(with_extension)
+}
+
+/// `SaveGrid` once its `SaveFileDialog` has answered: on OK with a name - `.grid` added to one
+/// typed without an extension (`AddExtension`) - the file written with what was gathered before
+/// the dialog showed, over any file of that name. No name is asked for again, and Cancel writes
+/// nothing. A file that cannot be written is said on the status line.
+/// `// C#: Grid/GridUI.cs:186-198`
+fn saved_file(this: &mut MissionPlanner, path: PathBox, data: Box<GridData>, ok: bool) {
+    if !ok {
+        return;
+    }
+    let Some(file) = crate::plan::dialog_path(
+        path.field.value(),
+        grid_file::EXTENSION,
+        &crate::file_list::start_folder(),
+    ) else {
+        if let Some(open) = this.survey.open.as_mut() {
+            open.file = Some((path, GridFile::Save(data)));
+        }
+        return;
+    };
+    if let Err(why) = data.write(&file) {
+        this.file_status = Some(error_box(format!("{}: {why}", file.display())));
+    }
+}
+
+// ---------------------------------------------------------------------------------------------
 // Typing.
 // ---------------------------------------------------------------------------------------------
 
@@ -503,10 +838,14 @@ fn commit_edit(open: &mut Open) {
 }
 
 /// After any change to the dialog: the map shows its grid again, and the screen redraws, as
-/// `domainUpDown1_ValueChanged` ends with `map.Invalidate()`.
+/// `domainUpDown1_ValueChanged` ends with `map.Invalidate()`. The dialog gone, its keyboard is
+/// let go, and the window takes it back as it takes a keyboard nothing holds.
 fn changed(this: &mut MissionPlanner, window: &mut Window, cx: &mut Context<MissionPlanner>) {
     this.sync_map_mission();
     this.sync_map_polygon();
+    if this.survey.open.is_none() && this.survey.focus.is_focused(window) {
+        window.blur(cx);
+    }
     window.refresh();
     cx.notify();
 }
@@ -1099,13 +1438,14 @@ fn dropdown(
 }
 
 /// `tabSimple`.
-/// `// C#: Grid/GridUI.resx (groupBox6, groupBox4, BUT_Accept)`
+/// `// C#: Grid/GridUI.resx (groupBox6, groupBox4, label38, BUT_Accept)`
 fn simple_page(
     open: &Open,
     window: &Window,
     focus: &FocusHandle,
     cx: &mut Context<MissionPlanner>,
 ) -> Vec<AnyElement> {
+    let [save_keys, load_keys] = KEYS_HINT;
     let mut page = vec![
         group(
             "Simple Options",
@@ -1147,6 +1487,9 @@ fn simple_page(
                 checkbox(open, Check::Advanced, 8.0, 135.0, cx),
             ],
         ),
+        // label38, AutoSize, its two lines under Display: the form's keys (`process_cmd_key`).
+        label(3.0, 423.0, save_keys),
+        label(3.0, 436.0, load_keys),
         button(
             "BUT_Accept",
             "Accept",
@@ -1574,7 +1917,9 @@ fn stats(open: &Open) -> AnyElement {
         .into_any_element()
 }
 
-/// The box over the dialog: "Enter point #", or a message.
+/// The box over the dialog: "Enter point #", the camera's name, a message, or "No polygon
+/// defined. Load a file?" with Yes and No. Before the dialog shows, nothing of it can be clicked
+/// past the box.
 fn prompt_box(
     open: &Open,
     window: &Window,
@@ -1594,30 +1939,28 @@ fn prompt_box(
             Some(field),
         ),
         Prompt::Message(text, caption) => (*caption, text.clone(), None),
+        Prompt::LoadFile => (LOAD_FILE_CAPTION, LOAD_FILE_TEXT.to_owned(), None),
     };
+    let question = matches!(prompt, Prompt::LoadFile);
     let ok = crate::ui::action(
         "survey-prompt-ok",
-        "OK",
+        if question { "Yes" } else { "OK" },
         theme::ACCENT,
         true,
         cx.listener(|this, _event: &(), window, cx| {
-            if let Some(open) = this.survey.open.as_mut() {
-                answer_prompt(open, true);
-            }
+            answer(this, true);
             changed(this, window, cx);
         }),
     );
     let mut buttons = div().flex().justify_end().gap_2().child(ok);
-    if field.is_some() {
+    if field.is_some() || question {
         buttons = buttons.child(crate::ui::action(
             "survey-prompt-cancel",
-            "Cancel",
+            if question { "No" } else { "Cancel" },
             theme::TEXT,
             true,
             cx.listener(|this, _event: &(), window, cx| {
-                if let Some(open) = this.survey.open.as_mut() {
-                    answer_prompt(open, false);
-                }
+                answer(this, false);
                 changed(this, window, cx);
             }),
         ));
@@ -1664,18 +2007,18 @@ fn prompt_box(
                 .child(field.value().to_owned()),
         );
     }
-    Some(
-        div()
-            .absolute()
-            .left(px(0.0))
-            .top(px(0.0))
-            .size_full()
-            .flex()
-            .items_center()
-            .justify_center()
-            .child(body.child(buttons))
-            .into_any_element(),
-    )
+    let mut cover = div()
+        .absolute()
+        .left(px(0.0))
+        .top(px(0.0))
+        .size_full()
+        .flex()
+        .items_center()
+        .justify_center();
+    if !open.shown {
+        cover = cover.occlude();
+    }
+    Some(cover.child(body.child(buttons)).into_any_element())
 }
 
 /// The dialog's form, in place of the planning screen's sidebar and map while it shows.
@@ -1824,8 +2167,7 @@ pub fn form(
                 .child("\u{2715}")
                 .on_click(cx.listener(|this, _event: &gpui::ClickEvent, window, cx| {
                     close(this);
-                    window.refresh();
-                    cx.notify();
+                    changed(this, window, cx);
                 })),
         );
 
@@ -1840,6 +2182,18 @@ pub fn form(
             .bg(rgb(theme::BG))
             .border_1()
             .border_color(rgb(theme::BORDER))
+            // The form has the keyboard while it shows, as `ShowDialog` gives it a form: a click
+            // anywhere on it keeps it here, and a key no control of it takes comes out through
+            // `GridUI.ProcessCmdKey` (`process_cmd_key`) before the window's. The box being typed
+            // into, and a box over the dialog, track the same handle, and have it first.
+            .track_focus(focus)
+            .on_key_down(
+                cx.listener(|this, event: &gpui::KeyDownEvent, window, cx| {
+                    if process_cmd_key(this, &event.keystroke, window, cx) {
+                        cx.stop_propagation();
+                    }
+                }),
+            )
             .child(title)
             .child(
                 div()
@@ -1858,12 +2212,14 @@ pub fn form(
                     .child(tab_control),
             )
             .children(prompt_box(open, window, focus, cx))
+            .children(file_box(open, window, focus, cx))
             .into_any_element(),
     )
 }
 
 /// Facts a UI test asserts on: whether the dialog shows, its tabs, every control as it reads,
-/// the Stats, the grid's size, the box over it, and how many rows the last Accept added.
+/// the Stats, the grid's size, its polygon's corners, the box over it, its file dialog, and how
+/// many rows the last Accept added.
 pub fn record_facts(survey: &SurveyUi) {
     use crate::facts::record;
     record(
@@ -1941,9 +2297,20 @@ pub fn record_facts(survey: &SurveyUi) {
             },
             text.clone(),
         ),
+        Some(Prompt::LoadFile) => (LOAD_FILE_CAPTION, LOAD_FILE_TEXT.to_owned()),
     };
     record("survey.dialog.prompt", prompt);
     record("survey.dialog.prompt.text", text);
+    // Whether `ShowDialog` has run, the polygon the dialog holds, and its file dialog: the
+    // caption, "Open" or "Save As", and what is typed.
+    record("survey.dialog.shown", open.shown);
+    record("survey.dialog.polygon", dialog.polygon().len());
+    let (file, typed) = open
+        .file
+        .as_ref()
+        .map_or(("none", ""), |(path, _)| (path.caption, path.field.value()));
+    record("survey.dialog.file", file);
+    record("survey.dialog.file.value", typed);
 }
 
 #[cfg(test)]
@@ -1991,6 +2358,8 @@ mod tests {
             editing: None,
             dropdown: None,
             prompt: None,
+            file: None,
+            shown: true,
         }
     }
 
@@ -2277,7 +2646,21 @@ mod tests {
     /// as a script that cannot find what it looks for.
     #[test]
     fn the_gui_script_names_facts_and_controls_the_dialog_has() {
-        let script = include_str!("../../../tests/gui/plan-survey.gui");
+        let (facts, clicks) = checked_script(include_str!("../../../tests/gui/plan-survey.gui"));
+        assert!(facts > 40 && clicks > 8, "{facts} facts, {clicks} clicks");
+    }
+
+    /// Likewise `tests/gui/survey-grid-file.gui`'s, the grid file's keys and "Load a file?".
+    #[test]
+    fn the_grid_file_script_names_facts_and_controls_the_dialog_has() {
+        let (facts, clicks) =
+            checked_script(include_str!("../../../tests/gui/survey-grid-file.gui"));
+        assert!(facts > 20 && clicks > 3, "{facts} facts, {clicks} clicks");
+    }
+
+    /// A script's `expect survey.dialog...` facts and `click survey-...` controls, each held to
+    /// what [`record_facts`] records and what the form draws: how many of each it names.
+    fn checked_script(script: &str) -> (usize, usize) {
         let mut names: Vec<String> = [
             "added",
             "tab",
@@ -2292,6 +2675,10 @@ mod tests {
             "dropdown",
             "prompt",
             "prompt.text",
+            "shown",
+            "polygon",
+            "file",
+            "file.value",
         ]
         .map(ToOwned::to_owned)
         .to_vec();
@@ -2302,7 +2689,16 @@ mod tests {
         names.extend(Stat::ALL.map(|stat| stat.name().to_owned()));
         let mut ids: Vec<String> = names.clone();
         ids.extend(
-            ["tabSimple", "tabGrid", "tabCamera", "close", "BUT_Accept"].map(ToOwned::to_owned),
+            [
+                "tabSimple",
+                "tabGrid",
+                "tabCamera",
+                "close",
+                "BUT_Accept",
+                "prompt-ok",
+                "prompt-cancel",
+            ]
+            .map(ToOwned::to_owned),
         );
         let source = include_str!("survey_ui.rs");
         let (mut facts, mut clicks) = (0, 0);
@@ -2335,7 +2731,7 @@ mod tests {
                 _ => {}
             }
         }
-        assert!(facts > 40 && clicks > 8, "{facts} facts, {clicks} clicks");
+        (facts, clicks)
     }
 
     #[test]
@@ -2349,5 +2745,75 @@ mod tests {
         dialog.click_check(Check::Markers);
         let (items, boundary) = preview(&dialog);
         assert!(items.is_empty() && boundary.is_empty());
+    }
+
+    /// `GridUI.ProcessCmdKey` compares `keyData` whole: Control and O, or Control and S, with
+    /// nothing else held.
+    /// `// C#: Grid/GridUI.cs:1896-1912`
+    #[test]
+    fn the_forms_keys_are_control_o_and_control_s() {
+        let key = |modifiers: gpui::Modifiers, key: &str| gpui::Keystroke {
+            modifiers,
+            key: key.to_owned(),
+            key_char: None,
+        };
+        let control = gpui::Modifiers::control;
+        assert_eq!(grid_key(&key(control(), "o")), Some(GridKey::Load));
+        assert_eq!(grid_key(&key(control(), "s")), Some(GridKey::Save));
+        assert_eq!(grid_key(&key(control(), "S")), Some(GridKey::Save));
+        assert_eq!(grid_key(&key(control(), "z")), None);
+        assert_eq!(grid_key(&key(gpui::Modifiers::none(), "s")), None);
+        assert_eq!(
+            grid_key(&key(gpui::Modifiers::control_shift(), "s")),
+            None
+        );
+    }
+
+    /// Control-S's file read back by Control-O: the control changed since comes back, and nothing
+    /// is drawn; a file that is no grid file changes nothing, and says why.
+    /// `// C#: Grid/GridUI.cs:154-199`
+    #[test]
+    fn a_saved_grid_file_loads_back_and_draws_nothing() {
+        let dir = mp_os::temp_dir().join(format!("mp-gui-survey-grid-{}", mp_os::process_id()));
+        let _ = mp_os::fs::remove_dir_all(&dir);
+        mp_os::fs::create_dir_all(&dir).unwrap();
+        let file = dir.join("survey.grid");
+        let mut open = opened(gui_dialog());
+        open.dialog.type_num(Num::Altitude, "120");
+        let saved = open.dialog.grid_data().expect("a heading");
+        saved.write(&file).expect("written");
+        open.dialog.type_num(Num::Altitude, "150");
+        let recomputes = open.dialog.recomputes();
+        load_grid_file(&mut open, &file).expect("a grid file");
+        assert_eq!(open.dialog.num_text(Num::Altitude), "120");
+        assert_eq!(open.dialog.recomputes(), recomputes, "LoadGrid draws nothing");
+
+        let broken = dir.join("broken.grid");
+        mp_os::fs::write(&broken, "<Grid/>").unwrap();
+        assert!(matches!(
+            load_grid_file(&mut open, &broken),
+            Err(GridFileError::Document { .. })
+        ));
+        assert_eq!(open.dialog.num_text(Num::Altitude), "120");
+        let _ = mp_os::fs::remove_dir_all(&dir);
+    }
+
+    /// What `OpenFileDialog` answers for what is typed: the file named; a name typed without an
+    /// extension, when its `.grid` is there (`AddExtension`); nothing for a folder, an empty box or
+    /// a name of no file, for which the dialog asks again.
+    #[test]
+    fn the_open_dialog_finds_the_file_typed() {
+        let dir = mp_os::temp_dir().join(format!("mp-gui-survey-named-{}", mp_os::process_id()));
+        let _ = mp_os::fs::remove_dir_all(&dir);
+        mp_os::fs::create_dir_all(&dir).unwrap();
+        let file = dir.join("field.grid");
+        mp_os::fs::write(&file, "").unwrap();
+        let typed = |path: &std::path::Path| path.display().to_string();
+        assert_eq!(grid_file_named(&typed(&file)), Some(file.clone()));
+        assert_eq!(grid_file_named(&typed(&dir.join("field"))), Some(file));
+        assert_eq!(grid_file_named(&typed(&dir.join("other"))), None);
+        assert_eq!(grid_file_named(&typed(&dir)), None);
+        assert_eq!(grid_file_named(""), None);
+        let _ = mp_os::fs::remove_dir_all(&dir);
     }
 }

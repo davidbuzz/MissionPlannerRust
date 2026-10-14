@@ -1,0 +1,79 @@
+<?xml version="1.0" encoding="utf-8"?>
+<GridData xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema">
+  <poly>
+    <PointLatLngAlt>
+      <Lat>-35.36</Lat>
+      <Lng>149.16</Lng>
+      <Alt>0</Alt>
+      <Tag />
+      <Tag2 />
+      <color />
+    </PointLatLngAlt>
+    <PointLatLngAlt>
+      <Lat>-35.36</Lat>
+      <Lng>149.171</Lng>
+      <Alt>0</Alt>
+      <Tag />
+      <Tag2 />
+      <color />
+    </PointLatLngAlt>
+    <PointLatLngAlt>
+      <Lat>-35.369</Lat>
+      <Lng>149.171</Lng>
+      <Alt>0</Alt>
+      <Tag />
+      <Tag2 />
+      <color />
+    </PointLatLngAlt>
+    <PointLatLngAlt>
+      <Lat>-35.369</Lat>
+      <Lng>149.16</Lng>
+      <Alt>0</Alt>
+      <Tag />
+      <Tag2 />
+      <color />
+    </PointLatLngAlt>
+  </poly>
+  <camera>Canon SX230 HS</camera>
+  <alt>120</alt>
+  <angle>45</angle>
+  <camdir>true</camdir>
+  <speed>8.5</speed>
+  <usespeed>true</usespeed>
+  <autotakeoff>true</autotakeoff>
+  <autotakeoff_RTL>false</autotakeoff_RTL>
+  <splitmission>1</splitmission>
+  <internals>false</internals>
+  <footprints>true</footprints>
+  <advanced>true</advanced>
+  <dist>34.56</dist>
+  <overshoot1>5</overshoot1>
+  <overshoot2>0</overshoot2>
+  <leadin>0</leadin>
+  <leadin2>10</leadin2>
+  <startfrom>BottomLeft</startfrom>
+  <overlap>70</overlap>
+  <sidelap>65.5</sidelap>
+  <spacing>12.8</spacing>
+  <crossgrid>false</crossgrid>
+  <spiral>false</spiral>
+  <copter_delay>0.5</copter_delay>
+  <copter_headinghold_chk>true</copter_headinghold_chk>
+  <copter_headinghold>45</copter_headinghold>
+  <copter_spline>true</copter_spline>
+  <alternateLanes>false</alternateLanes>
+  <minlaneseparation>0</minlaneseparation>
+  <clockwiseLaps>1</clockwiseLaps>
+  <laps>200</laps>
+  <matchPerimeter>false</matchPerimeter>
+  <trigdist>false</trigdist>
+  <digicam>true</digicam>
+  <repeatservo>false</repeatservo>
+  <breaktrigdist>true</breaktrigdist>
+  <repeatservo_no>7</repeatservo_no>
+  <repeatservo_pwm>1500</repeatservo_pwm>
+  <repeatservo_cycle>3</repeatservo_cycle>
+  <setservo_no>9</setservo_no>
+  <setservo_low>1000</setservo_low>
+  <setservo_high>2000</setservo_high>
+</GridData>

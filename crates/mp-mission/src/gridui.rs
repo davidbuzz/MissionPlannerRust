@@ -27,8 +27,9 @@
 //! the grid regenerated on every change (`domainUpDown1_ValueChanged`) through
 //! [`crate::grid::create_grid`], [`crate::corridor::create_corridor`] and
 //! [`crate::rotary::create_rotary`], the Stats labels as that handler writes them, the settings
-//! `loadsettings` reads and `savesettings` writes, and the mission items `BUT_Accept_Click` hands
-//! the planner, call by call.
+//! `loadsettings` reads and `savesettings` writes, the `.grid` file `SaveGrid` writes and `LoadGrid`
+//! reads (`savegriddata` and `loadgriddata`, the file itself [`crate::grid_file`]), and the mission
+//! items `BUT_Accept_Click` hands the planner, call by call.
 //!
 //! `tests/gridui_vectors.rs` holds all of it to the dialog's own code run under mono (the grid
 //! oracle's `accept` verb; its file, GridUI.cs's code re-hosted, was deleted on 2026-10-03 and
@@ -48,6 +49,7 @@ use crate::dotnet::{
     parse_f64, parse_i32, to_int,
 };
 use crate::grid::{GridArgs, GridPoint, GridTag, StartPosition, create_grid};
+use crate::grid_file::{GridData, GridFileError, PointLatLngAlt};
 use crate::rotary::{RotaryArgs, create_rotary};
 use crate::utm::{pow2, to_utm};
 
@@ -832,12 +834,16 @@ pub struct Dialog {
     heading_enabled: bool,
     /// `TXT_headinghold.ReadOnly`.
     heading_read_only: bool,
+    /// `loadedfromfile`: a `.grid` file was loaded, so a `GridUI_Load` still to come - the dialog
+    /// not yet shown - skips `loadsettings`.
+    loaded_from_file: bool,
 }
 
 impl Dialog {
     /// `new GridUI(plugin)` and `GridUI_Load`: the controls at the Designer's values, the angle of
     /// the polygon's longest side, the camera list, the settings the last Accept saved (when
-    /// `grid_camera` is among them), and the grid drawn once.
+    /// `grid_camera` is among them), and the grid drawn once - [`Self::new`], then
+    /// [`Self::form_load`].
     /// `// C#: Grid/GridUI.cs:66-149`
     #[must_use]
     pub fn open(
@@ -846,6 +852,18 @@ impl Dialog {
         context: &Context,
         saved: &dyn Fn(&str) -> Option<String>,
     ) -> Self {
+        let mut dialog = Self::new(polygon, cameras, context);
+        dialog.form_load(saved);
+        dialog
+    }
+
+    /// `new GridUI(plugin)`: the controls at the Designer's values, the polygon and the angle of
+    /// its longest side, the heading box at that angle, a plane's flying speed - all under
+    /// `loading`, so nothing is drawn. `GridPlugin.but_Click` makes the dialog so before it looks
+    /// at the polygon, and [`Self::form_load`] is its showing.
+    /// `// C#: Grid/GridUI.cs:66-127; Grid/GridPlugin.cs:39`
+    #[must_use]
+    pub fn new(polygon: &[LatLon], cameras: Cameras, context: &Context) -> Self {
         let mut dialog = Self {
             list: polygon.to_vec(),
             nums: Num::ALL.map(|num| num.spec().initial),
@@ -864,6 +882,7 @@ impl Dialog {
             recomputes: 0,
             heading_enabled: false,
             heading_read_only: true,
+            loaded_from_file: false,
         };
 
         // CMB_startfrom.DataSource = Enum.GetNames(...); SelectedIndex = 0
@@ -885,15 +904,20 @@ impl Dialog {
             }
         }
         dialog.loading = false;
-
-        // GridUI_Load
-        dialog.loading = true;
-        if saved("grid_camera").is_some() {
-            dialog.load_settings(saved);
-        }
-        dialog.loading = false;
-        dialog.recompute();
         dialog
+    }
+
+    /// `GridUI_Load`, as `ShowDialog` raises it: the settings the last Accept or Save kept (when
+    /// `grid_camera` is among them) - unless a `.grid` file was loaded before the dialog showed
+    /// (`loadedfromfile`) - then the grid drawn.
+    /// `// C#: Grid/GridUI.cs:129-147`
+    pub fn form_load(&mut self, saved: &dyn Fn(&str) -> Option<String>) {
+        self.loading = true;
+        if !self.loaded_from_file && saved("grid_camera").is_some() {
+            self.load_settings(saved);
+        }
+        self.loading = false;
+        self.recompute();
     }
 
     // ---- What the controls hold ----
@@ -1483,6 +1507,196 @@ impl Dialog {
                 check(Check::MatchSpiralPerimeter),
             ),
         ]
+    }
+
+    // ---- LoadGrid and SaveGrid ----
+
+    /// `LoadGrid` once its file is read: `loading = true; loadgriddata(test); loading = false;`.
+    /// Every control is set from the file as the code sets one - a combo box's text selecting the
+    /// item it names, a radio button checked clearing the others, each raising its events - and
+    /// nothing is drawn while `loading` holds, so the grid, the map and the Stats stay as they
+    /// were until the next change draws them. `loadedfromfile` is set, so the `GridUI_Load` of a
+    /// dialog not yet shown skips `loadsettings` ([`Self::form_load`]).
+    /// `// C#: Grid/GridUI.cs:154-175, 201-261`
+    ///
+    /// # Errors
+    /// A corner this application can make no position of, before anything is set; a value
+    /// outside its control's range - `NumericUpDown.Value`'s `ArgumentOutOfRangeException`, which
+    /// nothing catches - ending the load there, the controls before it keeping the file's values.
+    /// **Divergence:** that exception leaves the C#'s `loading` set, its dialog drawing nothing
+    /// more; here `loading` is cleared and the dialog goes on drawing.
+    pub fn load_grid_data(&mut self, data: &GridData) -> Result<(), GridFileError> {
+        self.loading = true;
+        let loaded = self.apply_grid_data(data);
+        self.loading = false;
+        loaded
+    }
+
+    /// `loadgriddata`, in its order: the polygon, the camera, the Simple page, the Grid Options,
+    /// the trigger method and the servos, the copter's, the plane's and the spiral's options, and
+    /// the display options last.
+    /// `// C#: Grid/GridUI.cs:201-261`
+    fn apply_grid_data(&mut self, data: &GridData) -> Result<(), GridFileError> {
+        // list = griddata.poly
+        let mut list = Vec::with_capacity(data.poly.len());
+        for (index, point) in data.poly.iter().enumerate() {
+            let corner =
+                LatLon::new(point.lat, point.lng).map_err(|why| GridFileError::Corner {
+                    corner: index + 1,
+                    why,
+                })?;
+            list.push(corner);
+        }
+        self.list = list;
+
+        self.set_camera_text(&data.camera);
+        self.load_num(Num::Altitude, data.alt)?;
+        self.load_num(Num::Angle, data.angle)?;
+        self.set_check(Check::CamDirection, data.camdir);
+        self.set_check(Check::UseSpeed, data.usespeed);
+        self.load_num(Num::FlySpeed, data.speed)?;
+        self.set_check(Check::ToAndLand, data.autotakeoff);
+        self.set_check(Check::ToAndLandRtl, data.autotakeoff_rtl);
+        self.load_num(Num::Split, data.splitmission)?;
+
+        self.load_num(Num::Distance, data.dist)?;
+        self.load_num(Num::Overshoot, data.overshoot1)?;
+        self.load_num(Num::Overshoot2, data.overshoot2)?;
+        self.load_num(Num::Leadin, data.leadin)?;
+        self.load_num(Num::Leadin2, data.leadin2)?;
+        self.set_startfrom_text(&data.startfrom);
+        self.load_num(Num::Overlap, data.overlap)?;
+        self.load_num(Num::Sidelap, data.sidelap)?;
+        self.load_num(Num::Spacing, data.spacing)?;
+        self.set_check(Check::CrossGrid, data.crossgrid);
+        self.set_check(Check::Spiral, data.spiral);
+
+        self.set_trigger(Trigger::Distance, data.trigdist);
+        self.set_trigger(Trigger::Digicam, data.digicam);
+        self.set_trigger(Trigger::RepeatServo, data.repeatservo);
+        self.set_check(Check::StopStart, data.breaktrigdist);
+
+        self.load_num(Num::ReptServo, data.repeatservo_no)?;
+        self.load_num(Num::ReptPwm, data.repeatservo_pwm)?;
+        self.load_num(Num::ReptTime, data.repeatservo_cycle)?;
+
+        self.load_num(Num::SetServoNo, data.setservo_no)?;
+        self.load_num(Num::SetServoLow, data.setservo_low)?;
+        self.load_num(Num::SetServoHigh, data.setservo_high)?;
+
+        // Copter Settings
+        self.load_num(Num::CopterDelay, data.copter_delay)?;
+        self.set_check(Check::HeadingHold, data.copter_headinghold_chk);
+        self.set_check(Check::Spline, data.copter_spline);
+        // TXT_headinghold.Text = griddata.copter_headinghold.ToString()
+        self.put_text(Text::HeadingHold, data.copter_headinghold.to_text());
+
+        // Plane Settings
+        self.load_num(Num::LaneDist, data.minlaneseparation)?;
+
+        // Spiral Settings
+        self.load_num(Num::ClockwiseLaps, data.clockwise_laps)?;
+        self.load_num(Num::Laps, data.laps)?;
+        self.set_check(Check::MatchSpiralPerimeter, data.match_perimeter);
+
+        // update display options last
+        self.set_check(Check::Internals, data.internals);
+        self.set_check(Check::Footprints, data.footprints);
+        self.set_check(Check::Advanced, data.advanced);
+
+        self.loaded_from_file = true;
+        Ok(())
+    }
+
+    /// `NUM_x.Value = value` in `loadgriddata`: [`Self::set_num`], whose refusal of a value out of
+    /// the range is the exception that ends the load.
+    fn load_num(&mut self, num: Num, value: Decimal) -> Result<(), GridFileError> {
+        self.set_num(num, value)
+            .map_err(|()| GridFileError::OutOfRange {
+                control: num.name(),
+                value: value.to_text(),
+            })
+    }
+
+    /// `CMB_startfrom.Text = value` on its `DropDown` combo box: the start position it names, in
+    /// any case, as that item reads - the setter selects the item it finds ignoring case - else
+    /// the text as it is. `CMB_startfrom_SelectedIndexChanged` returns at once while loading.
+    /// `// C#: Grid/GridUI.cs:221, 1920-1923`
+    fn set_startfrom_text(&mut self, value: &str) {
+        let named = StartPosition::ALL
+            .into_iter()
+            .find(|start| start.name().eq_ignore_ascii_case(value));
+        match named {
+            Some(start) => start.name().clone_into(&mut self.startfrom),
+            None => value.clone_into(&mut self.startfrom),
+        }
+    }
+
+    /// `savegriddata`: every control `GridData` keeps, as `SaveGrid` gathers them - the polygon's
+    /// corners as the drawn polygon's are, with no altitude or tags, and `alternateLanes`, which
+    /// nothing sets, false.
+    /// `// C#: Grid/GridUI.cs:263-323`
+    ///
+    /// # Errors
+    /// `decimal.Parse(TXT_headinghold.Text)`'s `FormatException`, for a heading box that holds no
+    /// number: `SaveGrid` meets it before it saves anything.
+    pub fn grid_data(&self) -> Result<GridData, Refused> {
+        // griddata.copter_headinghold = decimal.Parse(TXT_headinghold.Text) - GridUI.cs:299
+        let Some(copter_headinghold) = Decimal::parse(self.text(Text::HeadingHold)) else {
+            return Err(Refused::Exception(Vec::new(), FORMAT_EXCEPTION));
+        };
+        let num = |num: Num| self.num(num);
+        let check = |check: Check| self.check(check);
+        let trigger = |trigger: Trigger| self.trigger(trigger);
+        Ok(GridData {
+            poly: self
+                .list
+                .iter()
+                .map(|corner| PointLatLngAlt::new(corner.latitude(), corner.longitude()))
+                .collect(),
+            camera: self.camera.clone(),
+            alt: num(Num::Altitude),
+            angle: num(Num::Angle),
+            camdir: check(Check::CamDirection),
+            speed: num(Num::FlySpeed),
+            usespeed: check(Check::UseSpeed),
+            autotakeoff: check(Check::ToAndLand),
+            autotakeoff_rtl: check(Check::ToAndLandRtl),
+            splitmission: num(Num::Split),
+            internals: check(Check::Internals),
+            footprints: check(Check::Footprints),
+            advanced: check(Check::Advanced),
+            dist: num(Num::Distance),
+            overshoot1: num(Num::Overshoot),
+            overshoot2: num(Num::Overshoot2),
+            leadin: num(Num::Leadin),
+            leadin2: num(Num::Leadin2),
+            startfrom: self.startfrom.clone(),
+            overlap: num(Num::Overlap),
+            sidelap: num(Num::Sidelap),
+            spacing: num(Num::Spacing),
+            crossgrid: check(Check::CrossGrid),
+            spiral: check(Check::Spiral),
+            copter_delay: num(Num::CopterDelay),
+            copter_headinghold_chk: check(Check::HeadingHold),
+            copter_headinghold,
+            copter_spline: check(Check::Spline),
+            alternate_lanes: false,
+            minlaneseparation: num(Num::LaneDist),
+            clockwise_laps: num(Num::ClockwiseLaps),
+            laps: num(Num::Laps),
+            match_perimeter: check(Check::MatchSpiralPerimeter),
+            trigdist: trigger(Trigger::Distance),
+            digicam: trigger(Trigger::Digicam),
+            repeatservo: trigger(Trigger::RepeatServo),
+            breaktrigdist: check(Check::StopStart),
+            repeatservo_no: num(Num::ReptServo),
+            repeatservo_pwm: num(Num::ReptPwm),
+            repeatservo_cycle: num(Num::ReptTime),
+            setservo_no: num(Num::SetServoNo),
+            setservo_low: num(Num::SetServoLow),
+            setservo_high: num(Num::SetServoHigh),
+        })
     }
 
     // ---- domainUpDown1_ValueChanged ----
@@ -2636,5 +2850,207 @@ mod tests {
         assert_eq!(seconds_to_nice(-1.0), "Infinity Seconds");
         assert_eq!(seconds_to_nice(f64::NAN), "NaN Seconds");
         assert_eq!(seconds_to_nice(f64::INFINITY), "NaN Seconds");
+    }
+
+    /// The `.grid` file as Mission Planner writes it - made by hand from `GridData.cs` and
+    /// `XmlSerializer`'s rules until the oracle writes one (`crate::grid_file`).
+    const FIXTURE: &str = include_str!("../../../testdata/grid/file/square.grid");
+
+    /// Control-O's file over an open dialog: every control `loadgriddata` sets, as the file has
+    /// it: the camera selected, which loads it over the boxes; the digicam checked, which clears
+    /// the others; the heading hold checked, which enables its box. Nothing is drawn until the
+    /// next change.
+    /// `// C#: Grid/GridUI.cs:154-175, 201-261`
+    #[test]
+    fn a_grid_file_sets_every_control_and_draws_nothing() {
+        let mut dialog = open(&Context::default());
+        let (recomputes, points) = (dialog.recomputes(), dialog.grid().len());
+        let data = GridData::from_xml(FIXTURE).expect("the fixture");
+        dialog.load_grid_data(&data).expect("every value in range");
+        assert_eq!(dialog.recomputes(), recomputes, "LoadGrid draws nothing");
+        assert_eq!(dialog.grid().len(), points);
+        assert_eq!(dialog.polygon(), square().as_slice());
+        assert_eq!(dialog.camera(), "Canon SX230 HS");
+        assert_eq!(dialog.text(Text::ImgWidth), "4000", "the camera's, loaded as it is selected");
+        assert_eq!(dialog.startfrom(), "BottomLeft");
+        assert_eq!(dialog.text(Text::HeadingHold), "45");
+        let nums = [
+            (Num::Altitude, "120"),
+            (Num::Angle, "45"),
+            (Num::FlySpeed, "8.5"),
+            (Num::Split, "1"),
+            (Num::Distance, "34.56"),
+            (Num::Overshoot, "5"),
+            (Num::Overshoot2, "0"),
+            (Num::Leadin, "0"),
+            (Num::Leadin2, "10"),
+            (Num::Overlap, "70"),
+            (Num::Sidelap, "65.5"),
+            (Num::Spacing, "12.8"),
+            (Num::CopterDelay, "0.5"),
+            (Num::LaneDist, "0"),
+            (Num::ClockwiseLaps, "1"),
+            (Num::Laps, "200"),
+            (Num::ReptServo, "7"),
+            (Num::ReptPwm, "1500"),
+            (Num::ReptTime, "3"),
+            (Num::SetServoNo, "9"),
+            (Num::SetServoLow, "1000"),
+            (Num::SetServoHigh, "2000"),
+        ];
+        for (num, text) in nums {
+            assert_eq!(dialog.num(num).to_text(), text, "{}", num.name());
+        }
+        let checks = [
+            (Check::CamDirection, true),
+            (Check::UseSpeed, true),
+            (Check::ToAndLand, true),
+            (Check::ToAndLandRtl, false),
+            (Check::Internals, false),
+            (Check::Footprints, true),
+            (Check::Advanced, true),
+            (Check::CrossGrid, false),
+            (Check::Spiral, false),
+            (Check::HeadingHold, true),
+            (Check::HeadingHoldLock, false),
+            (Check::Spline, true),
+            (Check::MatchSpiralPerimeter, false),
+            (Check::StopStart, true),
+        ];
+        for (check, value) in checks {
+            assert_eq!(dialog.check(check), value, "{}", check.name());
+        }
+        assert_eq!(
+            Trigger::ALL.map(|trigger| dialog.trigger(trigger)),
+            [false, true, false, false]
+        );
+        assert!(dialog.heading_enabled());
+        assert_eq!(dialog.tabs().len(), 3);
+        // The next change draws it all.
+        dialog.click_check(Check::Internals);
+        assert_eq!(dialog.recomputes(), recomputes + 1);
+        assert!(!dialog.grid().is_empty());
+    }
+
+    /// `savegriddata`, the file, and `loadgriddata` into another dialog - one made over no
+    /// corners, as "No polygon defined. Load a file?" makes it - then shown: the same file again.
+    /// `// C#: Grid/GridUI.cs:177-323; Grid/GridPlugin.cs:39-54`
+    #[test]
+    fn a_saved_grid_loads_back_the_same() {
+        let mut dialog = open(&Context::default());
+        dialog.type_num(Num::Altitude, "120");
+        dialog.type_num(Num::FlySpeed, "8.5");
+        dialog.type_num(Num::Overshoot, "7");
+        dialog.click_check(Check::Advanced);
+        dialog.click_check(Check::UseSpeed);
+        dialog.click_trigger(Trigger::RepeatServo);
+        assert!(!dialog.select_startfrom(StartPosition::TopRight));
+        let xml = dialog.grid_data().expect("a heading").to_xml();
+        let read = GridData::from_xml(&xml).expect("its own file");
+
+        let mut other = Dialog::new(&[], Cameras::builtin(), &Context::default());
+        other.load_grid_data(&read).expect("in range");
+        other.form_load(&|_| None);
+        assert_eq!(other.polygon(), square().as_slice());
+        assert_eq!(other.grid_data().expect("a heading").to_xml(), xml);
+        assert_eq!(other.recomputes(), 1, "GridUI_Load's draw alone");
+        assert!(!other.grid().is_empty());
+    }
+
+    /// A file loaded before the dialog shows takes the place of the saved settings:
+    /// `loadedfromfile` makes `GridUI_Load` skip `loadsettings`. Shown without one, the settings
+    /// load.
+    /// `// C#: Grid/GridUI.cs:129-134, 260; Grid/GridPlugin.cs:48-54`
+    #[test]
+    fn a_file_loaded_before_the_dialog_shows_stands_over_the_settings() {
+        let saved = |key: &str| match key {
+            "grid_camera" => Some(String::new()),
+            "grid_alt" => Some("300".to_owned()),
+            _ => None,
+        };
+        let mut dialog = Dialog::new(&[], Cameras::builtin(), &Context::default());
+        assert_eq!(dialog.num_text(Num::Angle), "0", "no corners, no longest side");
+        let data = GridData::from_xml(FIXTURE).expect("the fixture");
+        dialog.load_grid_data(&data).expect("in range");
+        dialog.form_load(&saved);
+        assert_eq!(dialog.num(Num::Altitude).to_text(), "120");
+        assert_eq!(dialog.num(Num::Angle).to_text(), "45");
+        assert_eq!(dialog.polygon().len(), 4);
+        assert_eq!(dialog.recomputes(), 1);
+        assert!(!dialog.grid().is_empty());
+
+        let mut unloaded = Dialog::new(&square(), Cameras::builtin(), &Context::default());
+        unloaded.form_load(&saved);
+        assert_eq!(unloaded.num(Num::Altitude).to_text(), "300");
+    }
+
+    /// A value outside its control's range - `NumericUpDown.Value` throws - ends the load there:
+    /// what came before it is the file's, what comes after it is not; and the dialog goes on
+    /// drawing.
+    #[test]
+    fn a_value_out_of_range_ends_the_load_there() {
+        let mut data = GridData::from_xml(FIXTURE).expect("the fixture");
+        // NUM_laps' Minimum is 1.
+        data.laps = Decimal::from_int(0);
+        let mut dialog = open(&Context::default());
+        assert_eq!(
+            dialog.load_grid_data(&data),
+            Err(GridFileError::OutOfRange {
+                control: "NUM_laps",
+                value: "0".to_owned(),
+            })
+        );
+        assert_eq!(dialog.num(Num::ClockwiseLaps).to_text(), "1", "set before it");
+        assert_eq!(dialog.num(Num::Laps).to_text(), "200", "kept");
+        assert!(!dialog.check(Check::Advanced), "the display options come after it");
+        let recomputes = dialog.recomputes();
+        dialog.click_check(Check::Internals);
+        assert_eq!(dialog.recomputes(), recomputes + 1);
+    }
+
+    /// A corner this application can make no position of loads nothing.
+    #[test]
+    fn a_corner_that_is_no_position_loads_nothing() {
+        let mut data = GridData::from_xml(FIXTURE).expect("the fixture");
+        data.poly[1].lat = 91.0;
+        let mut dialog = open(&Context::default());
+        assert!(matches!(
+            dialog.load_grid_data(&data),
+            Err(GridFileError::Corner { corner: 2, .. })
+        ));
+        assert_eq!(dialog.polygon(), square().as_slice());
+        assert_eq!(dialog.num_text(Num::Altitude), "100");
+    }
+
+    /// `CMB_startfrom.Text` set: the item it names in any case, or the text as it is.
+    #[test]
+    fn the_start_is_selected_in_any_case() {
+        let mut data = GridData::from_xml(FIXTURE).expect("the fixture");
+        data.startfrom = "topright".to_owned();
+        let mut dialog = open(&Context::default());
+        dialog.load_grid_data(&data).expect("in range");
+        assert_eq!(dialog.startfrom(), "TopRight");
+        data.startfrom = "Nowhere".to_owned();
+        dialog.load_grid_data(&data).expect("in range");
+        assert_eq!(dialog.startfrom(), "Nowhere");
+    }
+
+    /// `savegriddata`'s `decimal.Parse` of the heading box: unlocked and holding no number, it
+    /// throws, and nothing is saved.
+    /// `// C#: Grid/GridUI.cs:299`
+    #[test]
+    fn saving_needs_a_heading_that_is_a_number() {
+        let mut dialog = open(&Context::default());
+        dialog.click_check(Check::HeadingHold);
+        dialog.click_check(Check::HeadingHoldLock);
+        dialog.set_text(Text::HeadingHold, "north");
+        assert!(matches!(
+            dialog.grid_data(),
+            Err(Refused::Exception(_, FORMAT_EXCEPTION))
+        ));
+        dialog.set_text(Text::HeadingHold, "90");
+        let saved = dialog.grid_data().expect("a number");
+        assert_eq!(saved.copter_headinghold.to_text(), "90");
+        assert!(saved.copter_headinghold_chk);
     }
 }

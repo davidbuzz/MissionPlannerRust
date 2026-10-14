@@ -37,6 +37,7 @@ pub mod fence;
 pub mod fence_file;
 pub mod geoutility;
 pub mod grid;
+pub mod grid_file;
 pub mod gridui;
 pub mod item;
 pub mod mission_file;

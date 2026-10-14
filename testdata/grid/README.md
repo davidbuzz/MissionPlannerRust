@@ -142,6 +142,28 @@ floats (G9), its focal length as `(decimal)float` and the four `float.ToString()
 `CMB_camera_SelectedIndexChanged` puts in the boxes. All of it is compared exactly: every call's
 numbers bit for bit, every label character for character.
 
+### The `.grid` file
+
+`file/square.grid` is the dialog's Control-S file, `XmlSerializer`'s `GridData` (`Grid/GridData.cs`,
+`GridUI.SaveGrid`), over the 1 km square around the SITL home with a setting of its own in most
+members. **It is made by hand**, from `GridData.cs`'s fields and `PointLatLngAlt`'s properties in
+declaration order and `XmlSerializer`'s rules under the .NET Framework 4.7.2 Mission Planner is
+built for: the `utf-8` declaration, no byte order mark, the root's `xmlns:xsi` then `xmlns:xsd`, two
+spaces an indent, CR LF line ends and none after the root's end tag, `decimal`s with their scale,
+`true`/`false`, doubles `"R"`, empty strings and `color` closed short.
+`crates/mp-mission/src/grid_file.rs` reads it member by member and writes it back byte for byte
+(its line ends the platform's), and `crates/mp-mission/src/gridui.rs` loads it into the dialog
+control by control.
+
+No oracle has written it yet. One would be a `gridfile` verb compiled from the pinned clone as
+`regen-grid.sh` compiles `MpGrid.cs` - `Grid/GridData.cs` from `$MP_SRC` (no line of it in this
+repository), against `MissionPlanner.Utilities.dll` for `PointLatLngAlt` and mono's
+`System.Drawing.dll` for its `color` - that fills a `GridData` from a case's values, serialises it
+with `new XmlSerializer(typeof(GridData))` into a `StreamWriter`, and reads the file back with
+`Deserialize`, printing each member. Under mono on Linux its line ends would be LF, and mono's
+`XmlSerializer` may order the two namespace declarations otherwise: the test compares line ends
+the platform's way, and a different order would be a difference to settle with a Windows run.
+
 ## Tolerance
 
 PLAN.md §7.2 class C: the same number of points, in the same order with the same tags, each within
