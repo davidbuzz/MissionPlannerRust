@@ -3895,6 +3895,7 @@ impl Render for MissionPlanner {
             config::flight_modes::record_facts(&self.flight_modes, &view);
             facts::record("recording", self.telemetry.recording().is_some());
             facts::record("status", self.file_status.as_deref().unwrap_or(""));
+            facts::record("ui.textfields", probe::text_fields_text());
             // What the Actions tab last put on the wire and what the vehicle said back.
             self.fly_actions.record_facts(&view);
             self.fly_data.record_facts(

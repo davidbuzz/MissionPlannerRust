@@ -133,6 +133,31 @@ struct Measured {
     visible: Rect,
 }
 
+/// The measured controls that are text fields, by name: a click alone answers them with no more
+/// than a caret, so tools/gui-crawl types into them instead (the `ui.textfields` fact).
+fn text_fields() -> &'static Mutex<std::collections::BTreeSet<&'static str>> {
+    static FIELDS: OnceLock<Mutex<std::collections::BTreeSet<&'static str>>> = OnceLock::new();
+    FIELDS.get_or_init(Mutex::default)
+}
+
+/// Notes that the control `name` is a text field, while the probe is on.
+pub fn text_field(name: &'static str) {
+    if enabled()
+        && let Ok(mut fields) = text_fields().os_lock()
+    {
+        fields.insert(name);
+    }
+}
+
+/// Every text field noted so far, comma-separated: the `ui.textfields` fact.
+#[must_use]
+pub fn text_fields_text() -> String {
+    text_fields()
+        .os_lock()
+        .map(|fields| fields.iter().copied().collect::<Vec<_>>().join(","))
+        .unwrap_or_default()
+}
+
 fn registry() -> &'static Mutex<BTreeMap<String, Measured>> {
     static REGISTRY: OnceLock<Mutex<BTreeMap<String, Measured>>> = OnceLock::new();
     REGISTRY.get_or_init(|| Mutex::new(BTreeMap::new()))
@@ -585,6 +610,19 @@ mod tests {
         let found = snapshot();
         let rect = found.get("moving-control").copied().expect("recorded");
         assert_eq!((rect.x, rect.y), (5.0, 5.0));
+    }
+
+    /// A text field drawn with the probe on is named in the `ui.textfields` fact, once however
+    /// often it is drawn, and a control that is not one is not.
+    #[test]
+    fn text_fields_are_named_for_the_crawler() {
+        enable();
+        text_field("probe-test-field");
+        text_field("probe-test-field");
+        record("probe-test-button", bounds(0.0, 0.0, 10.0, 10.0), WINDOW);
+        let named = text_fields_text();
+        assert_eq!(named.matches("probe-test-field").count(), 1, "{named}");
+        assert!(!named.contains("probe-test-button"), "{named}");
     }
 
     #[test]

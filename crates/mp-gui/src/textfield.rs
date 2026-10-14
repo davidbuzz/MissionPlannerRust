@@ -984,6 +984,7 @@ fn field_box(
     let released = Arc::clone(&cursor);
     let released_out = Arc::clone(&cursor);
 
+    crate::probe::text_field(id);
     crate::probe::measured(id, div())
         .id(id)
         .track_focus(focus)

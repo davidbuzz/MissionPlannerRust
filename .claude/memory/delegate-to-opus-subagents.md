@@ -1,11 +1,13 @@
 ---
 name: delegate-to-opus-subagents
-description: ONE new Opus subagent for coding help since 2026-10-05 (Buzz: "1 new opus subagent is allowed for coding assistnce"); before that none since 2026-10-02 (the order: three, six, none, three, six, none, two, none, six, none, one)
+description: Up to FIVE Opus subagents since 2026-10-14, edits only - no builds, tests or runs; the coordinator builds and tests all their work together at the end (Buzz). Before: one (2026-10-05), none, six... (the order: three, six, none, three, six, none, two, none, six, none, one, five)
 metadata:
   type: feedback
 ---
 
-**ONE (current), 2026-10-05: "modificiation: 1 new opus subagent is allowed for coding
+**FIVE (current), 2026-10-14: "would it be helpful to use upto 5 Opus 5 subagents to work on this.?"** then **"perhas get them to just do the code edits un-tested, and you can test tem all together as 1 at the end.?"** - Buzz, during the click-everything bug list. At most five at once; each in its own worktree on disjoint files, **no cargo of any kind, no planner, no GUI or SITL runs** - they write the code and the tests and report; I take each worktree's diff, build once, fix what does not compile, run the tests, and commit. This also removes the shared-target-dir and build-lock contention. Order: ... → one → five (this).
+
+**ONE (superseded), 2026-10-05: "modificiation: 1 new opus subagent is allowed for coding
 assistnce."** - Buzz, while the browser work was on `main`. At most one agent at a time, for
 coding: its own worktree, files disjoint from mine, no window, no commit; I verify, merge and
 commit. All the "How to apply" rules below hold. Order: ... → six → none → one (this).

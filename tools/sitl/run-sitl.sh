@@ -32,5 +32,26 @@ cd "$WORK"
 EXTRA=()
 [ -n "${SITL_EXTRA_OUT:-}" ] && EXTRA=(--serial1 "$SITL_EXTRA_OUT")
 
-echo "SITL $VEHICLE in $WORK, listening on tcp:127.0.0.1:5760 (speedup ${SITL_SPEEDUP:-1})"
+# The instance (-I N, or -IN) moves SERIAL0 to tcp 5760 + 10 N. A port something already listens
+# on is refused, loudly: SITL itself only logs its failed bind and runs on, and a script that then
+# connects to "its" port finds whatever else holds it - on 2026-10-14 that was the owner's own
+# SITL, started from the planner's SIMULATION tab, which a click audit then drove for an hour.
+INSTANCE=0
+ARGS=("$@")
+for ((i = 0; i < ${#ARGS[@]}; i++)); do
+    case "${ARGS[i]}" in
+        -I) INSTANCE="${ARGS[i + 1]:-0}" ;;
+        -I*) INSTANCE="${ARGS[i]#-I}" ;;
+        --instance) INSTANCE="${ARGS[i + 1]:-0}" ;;
+        --instance=*) INSTANCE="${ARGS[i]#--instance=}" ;;
+    esac
+done
+PORT=$((5760 + 10 * INSTANCE))
+if command -v ss >/dev/null && ss -ltnH "sport = :$PORT" | grep -q .; then
+    echo "tcp:$PORT is already in use - another SITL? Not starting one on it." >&2
+    ss -ltnpH "sport = :$PORT" >&2 || true
+    exit 3
+fi
+
+echo "SITL $VEHICLE in $WORK, listening on tcp:127.0.0.1:$PORT (speedup ${SITL_SPEEDUP:-1})"
 exec "$BIN" --model "$MODEL" --speedup "${SITL_SPEEDUP:-1}" --defaults "$PARAMS" "${EXTRA[@]}" "$@"

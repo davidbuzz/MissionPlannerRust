@@ -1,0 +1,49 @@
+#!/usr/bin/env bash
+# The crawler's own test. First its guards, which keep a crawl inside its own planners: every
+# button that opens a port of its own - a serial device, a network host, a camera - is on the deny
+# list, and run-sitl.sh will not start a simulator on a port something already holds (on
+# 2026-10-14 an audit's SITL failed to bind 5760 and its planners drove the owner's own SITL for
+# an hour). Then HELP crawled alone, and the verdicts it already knows checked - Show Console
+# Window changes itself, Change Log hands a link to the desktop, the welcome text is no control.
+# Display :90.
+set -euo pipefail
+HERE="$(cd "$(dirname "$0")" && pwd)"
+OUT="$(mktemp -d)"
+trap 'rm -rf "$OUT"' EXIT
+python3 - "$HERE" <<'PY'
+import socket, subprocess, sys
+sys.path.insert(0, sys.argv[1])
+import crawl
+denied = ["nmea-BUT_connect", "cot-BUT_connect", "rtk-BUT_connect", "proxy-BUT_connect",
+          "dronecan-connect", "mirror-cell-0-4", "mirror-cell-1-5", "sikradio-BUT_upload",
+          "experimental-but_mavserialport", "planner-BUT_videostart", "fw-bootloaderupdate",
+          "experimental-but_reboot"]
+allowed = ["cot-CMB_serialport", "mirror-cell-0-1", "experimental-BUT_CoT", "help-updatecheck"]
+bad = [n for n in denied if not crawl.DENY.search(n)] + [n for n in allowed if crawl.DENY.search(n)]
+held = socket.socket()
+held.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+held.bind(("127.0.0.1", 5850))
+held.listen(1)
+sitl = subprocess.run([sys.argv[1] + "/../sitl/run-sitl.sh", "copter", "-I9"],
+                      capture_output=True, text=True, timeout=30)
+if sitl.returncode != 3:
+    bad.append(f"run-sitl.sh started on a port in use (exit {sitl.returncode})")
+print("guards: " + ("passed" if not bad else "FAILED: " + ", ".join(bad)))
+sys.exit(1 if bad else 0)
+PY
+python3 "$HERE/crawl.py" selftest --display :90 --screens help --out "$OUT" "$@"
+python3 "$HERE/report.py" --out "$OUT" > /dev/null
+python3 - "$OUT" <<'PY'
+import json, sys
+rows = {json.loads(l)["id"]: json.loads(l) for l in open(sys.argv[1] + "/results-selftest.jsonl")}
+want = {"help-showconsole": ("changed-itself", "visible"), "help-changelog": ("visible",)}
+bad = [f"{k}: {rows.get(k, {}).get('verdict')}, wanted {v}" for k, v in want.items()
+       if rows.get(k, {}).get("verdict") not in v]
+if rows.get("help-changelog", {}).get("opened", 0) < 1:
+    bad.append("help-changelog handed nothing to the desktop")
+report = open(sys.argv[1] + "/report.md").read()
+if "help-text" in report:
+    bad.append("help-text, the welcome text, reported as a dead control")
+print("selftest: " + ("passed" if not bad else "FAILED: " + "; ".join(bad)))
+sys.exit(1 if bad else 0)
+PY

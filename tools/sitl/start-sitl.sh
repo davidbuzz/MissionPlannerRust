@@ -22,6 +22,11 @@
 #
 # Any earlier SITL of ours is stopped first - matched by its binary's path, never by a pattern
 # that a calling shell's command line would also match.
+#
+# The simulator that streams must be this one: on 2026-10-14 a SITL that could not bind 5760 -
+# the owner's own, started from the planner's SIMULATION tab, held it - left a click audit's
+# planners driving his. run-sitl.sh now refuses a port in use, and here the listener on 5760 must
+# be the pid started, else nothing is handed over (exit 3).
 
 set -u
 VEHICLE="${1:-copter}"
@@ -64,8 +69,18 @@ for attempt in 1 2 3; do
     SITL_WORKDIR="${SITL_WORKDIR:-$(mktemp -d -t mp-sitl-XXXXXX)}" nohup "$HERE/run-sitl.sh" "$VEHICLE" > "$LOG" 2>&1 &
     SITL=$!
     sleep 2
+    if ! kill -0 "$SITL" 2>/dev/null && grep -q "already in use" "$LOG"; then
+        cat "$LOG" >&2
+        exit 3
+    fi
     if streams; then
         # run-sitl.sh execs the binary, so $SITL is the simulator's own pid.
+        holder=$(ss -ltnpH "sport = :5760" | grep -o 'pid=[0-9]*' | head -1 | cut -d= -f2)
+        if [ "$holder" != "$SITL" ]; then
+            echo "tcp:5760 streams, but from pid ${holder:-unknown}, not this SITL ($SITL)" >&2
+            kill "$SITL" 2>/dev/null
+            exit 3
+        fi
         echo "sitl ready pid $SITL, log $LOG"
         trap 'kill "$SITL" 2>/dev/null; wait "$SITL" 2>/dev/null; echo "sitl stopped"; exit 0' INT TERM HUP
         wait "$SITL"
