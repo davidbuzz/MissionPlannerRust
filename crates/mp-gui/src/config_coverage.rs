@@ -267,18 +267,18 @@ pub const PANELS: &[Panel] = &[
         // board (mp_firmware::flow::Stop).
         Partial(
             at("crates/mp-gui/src/config/firmware.rs", "fn page"),
-            "the catalogue fetched as APFirmware.GetList fetches it, each vehicle labelled with
-        //     the newest firmware of the release, Beta, and DEV after Ctrl+Q's warning; a device
-        //     arriving probed for its bootloader on every port, its board id taken by LookForPort;
-        //     a vehicle's click asks, runs LookForPort, opens FirmwareSelection - its pickers
-        //     narrowing the list from the board's platform, Ignore undoing each - downloads the
-        //     file chosen with the progress bar and status line, and UploadFlash reboots the board
-        //     into its bootloader and writes it; All Options over the whole catalogue; Load custom
-        //     firmware by extension; Force Bootloader over the window's link; Bootloader Update
-        //     over a link of its own; the vehicle pictures are the C#'s images (crate::pictures);
-        //     not DFU, the STK500 upload and probes, VRBRAIN, Parrot or Solo, which stop where
-        //     they would write to a board and say that step is not ported, nor Tracking's
-        //     AddFW and AddTiming",
+            "the catalogue fetched as APFirmware.GetList fetches it, each vehicle labelled with \
+             the newest firmware of the release, Beta, and DEV after Ctrl+Q's warning; a device \
+             arriving probed for its bootloader on every port, its board id taken by LookForPort; \
+             a vehicle's click asks, runs LookForPort, opens FirmwareSelection - its pickers \
+             narrowing the list from the board's platform, Ignore undoing each - downloads the \
+             file chosen with the progress bar and status line, and UploadFlash reboots the board \
+             into its bootloader and writes it; All Options over the whole catalogue; Load custom \
+             firmware by extension; Force Bootloader over the window's link; Bootloader Update \
+             over a link of its own; the vehicle pictures are the C#'s images (crate::pictures); \
+             not DFU, the STK500 upload and probes, VRBRAIN, Parrot or Solo, which stop where \
+             they would write to a board and say that step is not ported, nor Tracking's \
+             AddFW and AddTiming",
         ),
     ),
     panel(
@@ -292,17 +292,17 @@ pub const PANELS: &[Panel] = &[
         // (mp_firmware::flow), which stop at the board.
         Partial(
             at("crates/mp-gui/src/config/firmware_legacy.rs", "fn page"),
-            "every control at its .resx place; the firmware2.xml list loaded behind its progress
-        //     dialog with each entry's git-version.txt, and each picture labelled and tagged as
-        //     updateDisplayName does; a vehicle's click asks, detects the board from the device
-        //     list, chooses the entry's URL for it (CubeBlack, ChibiOS), downloads firmware.hex
-        //     and reads it; Pick previous firmware from FirmwareHistory.txt, Beta firmwares, Load
-        //     custom firmware, and the three links; Force Bootloader over the window's link, the
-        //     manifest page's handler shared (config/force_bootloader.rs); UploadFlash the
-        //     manifest page's too - a px4-family board rebooted into its bootloader and written
-        //     through mp_firmware::flow::upload_px4, the other boards' uploads stopping as not
-        //     ported; not Ctrl+Q or Ctrl+P, nor the bootloader probe on a device's arrival; the
-        //     pictures are the C#'s images (crate::pictures)",
+            "every control at its .resx place; the firmware2.xml list loaded behind its progress \
+             dialog with each entry's git-version.txt, and each picture labelled and tagged as \
+             updateDisplayName does; a vehicle's click asks, detects the board from the device \
+             list, chooses the entry's URL for it (CubeBlack, ChibiOS), downloads firmware.hex \
+             and reads it; Pick previous firmware from FirmwareHistory.txt, Beta firmwares, Load \
+             custom firmware, and the three links; Force Bootloader over the window's link, the \
+             manifest page's handler shared (config/force_bootloader.rs); UploadFlash the \
+             manifest page's too - a px4-family board rebooted into its bootloader and written \
+             through mp_firmware::flow::upload_px4, the other boards' uploads stopping as not \
+             ported; not Ctrl+Q or Ctrl+P, nor the bootloader probe on a device's arrival; the \
+             pictures are the C#'s images (crate::pictures)",
         ),
     ),
     panel(
@@ -567,13 +567,13 @@ pub const PANELS: &[Panel] = &[
         // any serial port, not only a name with "com" in it.
         Partial(
             at("crates/mp-gui/src/config/rtk_inject.rs", "fn page"),
-            "every control and handler, the read loop, the RTCM/SBP/UBX/NMEA parsers,
-        //     GPS_RTCM_DATA and GPS_INJECT_DATA injection, cs.Base, the .gpsbase log, the u-blox,
-        //     Septentrio and Unicore set-up, the base positions; config-rtk.gui passes against
-        //     its own caster; not DroneCAN over SLCAN (ExtLibs/DroneCAN is not ported - the
-        //     DroneCAN page's row); CommsSerialPipe, the C#'s Win32 CreateFile fallback for a
-        //     port name .NET's SerialPort refuses, is not needed: SerialTransport opens those
-        //     names first time (rtk_inject.rs's module note)",
+            "every control and handler, the read loop, the RTCM/SBP/UBX/NMEA parsers, \
+             GPS_RTCM_DATA and GPS_INJECT_DATA injection, cs.Base, the .gpsbase log, the u-blox, \
+             Septentrio and Unicore set-up, the base positions; config-rtk.gui passes against \
+             its own caster; not DroneCAN over SLCAN (ExtLibs/DroneCAN is not ported - the \
+             DroneCAN page's row); CommsSerialPipe, the C#'s Win32 CreateFile fallback for a \
+             port name .NET's SerialPort refuses, is not needed: SerialTransport opens those \
+             names first time (rtk_inject.rs's module note)",
         ),
     ),
     // ---- end RTK/GPS Inject ----
@@ -654,15 +654,15 @@ pub const PANELS: &[Panel] = &[
         // (config/dronecan_inspector.rs): the 15 wirings whole
         Partial(
             at("crates/mp-gui/src/config/dronecan.rs", "fn page"),
-            "the interface list, Connect over MAVLinkCAN1/2 (CAN_FORWARD each second, CAN_FRAME
-        //     both ways), SLCAN (the CPORT/TIMOUT/DRIVER writes, the link's port taken, the
-        //     adapter opened) and MCastCan1/2; node 127 heard by itself; the node grid, details and
-        //     debug grid; the node menu's Parameters (the parameter window), Restart, Update and
-        //     Update Beta (CubePilot's server, the manifest, a .bin or .apj), both passthroughs;
-        //     Filter, Stats, the Inspector (every message heard field by field, Graph It, the
-        //     Subscriber), Check for Updates, Log, Exit SLCAN; not the parameter window's Compare
-        //     Params and Reset to Default, which act on the autopilot from the node's window
-        //     (for the owner's ruling)",
+            "the interface list, Connect over MAVLinkCAN1/2 (CAN_FORWARD each second, CAN_FRAME \
+             both ways), SLCAN (the CPORT/TIMOUT/DRIVER writes, the link's port taken, the \
+             adapter opened) and MCastCan1/2; node 127 heard by itself; the node grid, details and \
+             debug grid; the node menu's Parameters (the parameter window), Restart, Update and \
+             Update Beta (CubePilot's server, the manifest, a .bin or .apj), both passthroughs; \
+             Filter, Stats, the Inspector (every message heard field by field, Graph It, the \
+             Subscriber), Check for Updates, Log, Exit SLCAN; not the parameter window's Compare \
+             Params and Reset to Default, which act on the autopilot from the node's window \
+             (for the owner's ruling)",
         ),
     ),
     panel(
@@ -815,30 +815,30 @@ pub const PANELS: &[Panel] = &[
         // (:27-30, :114-117); each other is dimmed with the window it would open as the reason.
         Partial(
             at("crates/mp-gui/src/config/advanced.rs", "fn page"),
-            "the text and the thirteen buttons with their labels at the table's places; Warning
-        //     Manager opens the manager (config/warnings_manager.rs: a row per rule and per
-        //     child over the engine's rules, warnings.rs, which checks them every 250 ms and
-        //     raises the HUD's message or a quick view's colour), Proximity the proximity window
-        //     (config/proximity.rs: the readings from DISTANCE_SENSOR and OBSTACLE_DISTANCE
-        //     drawn as Temp_Paint draws them, its keys), Mavlink Signing the keys window
-        //     (config/auth_keys.rs: the store authkeys.xml as Crypto.cs encrypts it, Add with
-        //     the strength score, Use and Disable Signing driving the link's setupSigning), FFT
-        //     opens the FFT window (config/fftui.rs) and MAVLink Inspector the inspector
-        //     (config/mavlink_inspector.rs: the tree of each system, component, message with its
-        //     rate and bytes a second, and field with its value and .NET type, every 333 ms; Show
-        //     GCS Traffic; Graph It's history question and live graph of a field), Spectrogram the
-        //     spectrogram window (config/spectrogram.rs: a log's IMU or ISBH samples drawn as
-        //     Spectrogram.cs's GenerateImage draws them), Support Proxy the proxy
-        //     (config/support_proxy.rs: the link mirrored to a support engineer's server over
-        //     TCP or UDP, mp-link's mirror.rs), Mavlink Mirror the grid of outputs
-        //     (config/mavlink_mirror.rs: each row a mirror of the link started by Go, kept in the
-        //     serialpasslist setting), NMEA the NMEA output (config/nmea_output.rs: GGA, GLL,
-        //     HDG, VTG, RMC and RPY to a port at the rate, the geoid from mp-terrain) and Param
-        //     gen the run behind Downloading updated data (config/param_gen.rs:
-        //     ParameterMetaDataParser over every location's Parameters.cpp and its groups'
-        //     files, ParameterMetaData.xml written in the user data directory), 10 of the 13
-        //     wirings; the other three dimmed - the Follow Me, moving base and log anonymiser
-        //     windows they open are ruled out of scope",
+            "the text and the thirteen buttons with their labels at the table's places; Warning \
+             Manager opens the manager (config/warnings_manager.rs: a row per rule and per \
+             child over the engine's rules, warnings.rs, which checks them every 250 ms and \
+             raises the HUD's message or a quick view's colour), Proximity the proximity window \
+             (config/proximity.rs: the readings from DISTANCE_SENSOR and OBSTACLE_DISTANCE \
+             drawn as Temp_Paint draws them, its keys), Mavlink Signing the keys window \
+             (config/auth_keys.rs: the store authkeys.xml as Crypto.cs encrypts it, Add with \
+             the strength score, Use and Disable Signing driving the link's setupSigning), FFT \
+             opens the FFT window (config/fftui.rs) and MAVLink Inspector the inspector \
+             (config/mavlink_inspector.rs: the tree of each system, component, message with its \
+             rate and bytes a second, and field with its value and .NET type, every 333 ms; Show \
+             GCS Traffic; Graph It's history question and live graph of a field), Spectrogram the \
+             spectrogram window (config/spectrogram.rs: a log's IMU or ISBH samples drawn as \
+             Spectrogram.cs's GenerateImage draws them), Support Proxy the proxy \
+             (config/support_proxy.rs: the link mirrored to a support engineer's server over \
+             TCP or UDP, mp-link's mirror.rs), Mavlink Mirror the grid of outputs \
+             (config/mavlink_mirror.rs: each row a mirror of the link started by Go, kept in the \
+             serialpasslist setting), NMEA the NMEA output (config/nmea_output.rs: GGA, GLL, \
+             HDG, VTG, RMC and RPY to a port at the rate, the geoid from mp-terrain) and Param \
+             gen the run behind Downloading updated data (config/param_gen.rs: \
+             ParameterMetaDataParser over every location's Parameters.cpp and its groups' \
+             files, ParameterMetaData.xml written in the user data directory), 10 of the 13 \
+             wirings; the other three dimmed - the Follow Me, moving base and log anonymiser \
+             windows they open are ruled out of scope",
         ),
     ),
     panel(
@@ -1058,20 +1058,20 @@ pub const PANELS: &[Panel] = &[
         // place, bound to the Settings key its handler writes.
         Partial(
             at("crates/mp-gui/src/config/planner.rs", "fn planner_page"),
-            "every control at its place, each bound to the Settings key its handler writes; the
-        //     units (ChangeUnits), the telemetry rates and their stream requests, the speech boxes
-        //     and their InputBox templates (each OK's answer kept as InputBox keeps it), Load
-        //     Waypoints on connect, the map access mode, Joystick Setup, Browse and Open Map
-        //     Cache act at once; Layout picks the display
-        //     view the lists read (Basic, Advanced, or the Custom file), saved as displayview;
-        //     Video Device and Video Format list the V4L2 capture devices and their MJPEG and
-        //     YUYV formats, Start captures (mp-video) and the HUD draws the frame under
-        //     everything, Stop ends it - Linux only, DirectShow on Windows not yet; Enable HUD
-        //     Overlay sets hudon, the picture alone when unticked; dimmed for
-        //     want of what they drive: GDI+, language, theme, OSD colour, Vario,
-        //     password, the ADSB server, analytics, beta updates, MAVLink debug and the testing
-        //     screen; the flight screen does not yet read the units, the track length, the map's
-        //     rotation or the icon settings, nor the link the GCS id or the rates on connecting",
+            "every control at its place, each bound to the Settings key its handler writes; the \
+             units (ChangeUnits), the telemetry rates and their stream requests, the speech boxes \
+             and their InputBox templates (each OK's answer kept as InputBox keeps it), Load \
+             Waypoints on connect, the map access mode, Joystick Setup, Browse and Open Map \
+             Cache act at once; Layout picks the display \
+             view the lists read (Basic, Advanced, or the Custom file), saved as displayview; \
+             Video Device and Video Format list the V4L2 capture devices and their MJPEG and \
+             YUYV formats, Start captures (mp-video) and the HUD draws the frame under \
+             everything, Stop ends it - Linux only, DirectShow on Windows not yet; Enable HUD \
+             Overlay sets hudon, the picture alone when unticked; dimmed for \
+             want of what they drive: GDI+, language, theme, OSD colour, Vario, \
+             password, the ADSB server, analytics, beta updates, MAVLink debug and the testing \
+             screen; the flight screen does not yet read the units, the track length, the map's \
+             rotation or the icon settings, nor the link the GCS id or the rates on connecting",
         ),
     ),
     // ---- Neither list adds these ----
@@ -1081,8 +1081,8 @@ pub const PANELS: &[Panel] = &[
         Some(6),
         &[],
         Ours::Dropped(
-            "Mission Planner never shows it: its entry is commented out at InitialSetup.cs:275,
-        //     beside ConfigDroneCAN's",
+            "Mission Planner never shows it: its entry is commented out at InitialSetup.cs:275, \
+             beside ConfigDroneCAN's",
         ),
     ),
     panel(
@@ -1098,8 +1098,8 @@ pub const PANELS: &[Panel] = &[
         Some(6),
         &[],
         Ours::Dropped(
-            "Mission Planner never shows it: nothing lists or opens it; the Secure page is
-        //     ConfigSecureAP",
+            "Mission Planner never shows it: nothing lists or opens it; the Secure page is \
+             ConfigSecureAP",
         ),
     ),
     panel(
@@ -1108,8 +1108,8 @@ pub const PANELS: &[Panel] = &[
         Some(22),
         &[],
         Ours::Dropped(
-            "Mission Planner never shows it: its entry is commented out at InitialSetup.cs:186;
-        //     Heli Setup is ConfigTradHeli4",
+            "Mission Planner never shows it: its entry is commented out at InitialSetup.cs:186; \
+             Heli Setup is ConfigTradHeli4",
         ),
     ),
 ];
@@ -1136,12 +1136,12 @@ pub const OTHER_PAGES: &[Panel] = &[
         // pickchannel, Expo, mainloop, button functions and files in mp-input.
         Partial(
             at(JOYSTICK_RS, "fn load"),
-            "all of the page - the device list, the sixteen channel rows with axis, Auto Detect,
-        //     bar, expo and reverse, the button rows with number, Detect, bar, function and the
-        //     seven Joy_* settings forms, Enable, Save, Elevons, Manual Control, Export and Import,
-        //     each button function sending what ProcessButtonEvent sends - flying a Linux js
-        //     device; missing: a device on Windows, where mp-input has no reader for DirectInput
-        //     (the C#'s JoystickWindows.cs), so the list is empty there",
+            "all of the page - the device list, the sixteen channel rows with axis, Auto Detect, \
+             bar, expo and reverse, the button rows with number, Detect, bar, function and the \
+             seven Joy_* settings forms, Enable, Save, Elevons, Manual Control, Export and Import, \
+             each button function sending what ProcessButtonEvent sends - flying a Linux js \
+             device; missing: a device on Windows, where mp-input has no reader for DirectInput \
+             (the C#'s JoystickWindows.cs), so the list is empty there",
         ),
     ),
     panel(
@@ -1300,14 +1300,14 @@ pub fn report() -> String {
     let mut out = String::new();
     out.push_str("# Configuration panel coverage\n\n");
     out.push_str(
-        "Generated from `crates/mp-gui/src/config_coverage.rs` by `cargo test -p mp-gui
-        // config_coverage::tests::update_report -- --ignored`; a test fails when this file is
-        // stale. One
-        // row per panel in `GCSViews/ConfigurationView/` - every `Config*.cs` - in the order
-        // `GCSViews/InitialSetup.cs` (the SETUP button) and then `GCSViews/SoftwareConfig.cs` (the
-        // CONFIG button) first add it to their left-hand lists; panels neither list adds come
-        // last. Wirings are the events the panel's Designer wires, a measure of its size that
-        // undercounts a panel which builds its controls in code.\n\n",
+        "Generated from `crates/mp-gui/src/config_coverage.rs` by `cargo test -p mp-gui \
+         config_coverage::tests::update_report -- --ignored`; a test fails when this file is \
+         stale. One \
+         row per panel in `GCSViews/ConfigurationView/` - every `Config*.cs` - in the order \
+         `GCSViews/InitialSetup.cs` (the SETUP button) and then `GCSViews/SoftwareConfig.cs` (the \
+         CONFIG button) first add it to their left-hand lists; panels neither list adds come \
+         last. Wirings are the events the panel's Designer wires, a measure of its size that \
+         undercounts a panel which builds its controls in code.\n\n",
     );
     out.push_str(&format!(
         "| panels | done | partial | missing | plumbing | dropped | wirings |\n\
@@ -1318,8 +1318,8 @@ pub fn report() -> String {
     ));
 
     out.push_str(
-        "| group | panels | done | partial | missing | plumbing | dropped | wirings | wirings
-        // in missing panels |\n|---|---:|---:|---:|---:|---:|---:|---:|---:|\n",
+        "| group | panels | done | partial | missing | plumbing | dropped | wirings | wirings \
+         in missing panels |\n|---|---:|---:|---:|---:|---:|---:|---:|---:|\n",
     );
     let groups = [
         (
@@ -1345,8 +1345,8 @@ pub fn report() -> String {
             .filter_map(|panel| panel.wirings)
             .sum();
         out.push_str(&format!(
-            "| {name} | {} | {done} | {partial} | {missing} | {plumbing} | {dropped} | {} |
-        //     {missing_wirings} |\n",
+            "| {name} | {} | {done} | {partial} | {missing} | {plumbing} | {dropped} | {} | \
+             {missing_wirings} |\n",
             members.len(),
             wirings_of(&members)
         ));
@@ -1359,9 +1359,9 @@ pub fn report() -> String {
         .map(|page| format!("`{}`", page.class))
         .collect();
     out.push_str(&format!(
-        "The lists also add {} pages that are not in `ConfigurationView/` ({}): {done} done,
-        // {partial} partial, {missing} missing, {plumbing} plumbing, {dropped} dropped. They are
-        // in the lists below and not in the counts above.\n\n",
+        "The lists also add {} pages that are not in `ConfigurationView/` ({}): {done} done, \
+         {partial} partial, {missing} missing, {plumbing} plumbing, {dropped} dropped. They are \
+         in the lists below and not in the counts above.\n\n",
         OTHER_PAGES.len(),
         others.join(", ")
     ));
@@ -1389,13 +1389,13 @@ pub fn report() -> String {
     out.push('\n');
 
     out.push_str(
-        "Vehicles: **any** is a connected vehicle whose parameter list is whole
-        // (`isConnected && gotAllParams`); **always** is connected or not; **connected** and
-        // **disconnected** are the link alone; a named vehicle, parameter or view is what the
-        // call, or the `if` around it, checks. **Advanced view** is `DisplayView.isAdvancedMode`.
-        // A page with a `DisplayView` switch also needs it on, which it is by default unless the
-        // vehicles say otherwise. The list shows a heading as `>> title` and indents what is
-        // under it (`ExtLibs/Controls/BackstageView/BackstageView.cs:227`, `:232`).\n\n",
+        "Vehicles: **any** is a connected vehicle whose parameter list is whole \
+         (`isConnected && gotAllParams`); **always** is connected or not; **connected** and \
+         **disconnected** are the link alone; a named vehicle, parameter or view is what the \
+         call, or the `if` around it, checks. **Advanced view** is `DisplayView.isAdvancedMode`. \
+         A page with a `DisplayView` switch also needs it on, which it is by default unless the \
+         vehicles say otherwise. The list shows a heading as `>> title` and indents what is \
+         under it (`ExtLibs/Controls/BackstageView/BackstageView.cs:227`, `:232`).\n\n",
     );
 
     for screen in Screen::ALL {

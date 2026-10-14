@@ -35,7 +35,8 @@
 //!   screen's Read;
 //! * `CustomMessageBox.Show`, `InputBox.Show` and the file dialogs as a modal box over the window,
 //!   one at a time in the order asked, the plugin waiting on its thread for the answer (a file
-//!   dialog is a typed path here, as every file dialog in this application is);
+//!   dialog lists its folder to browse, as every file dialog in this application does,
+//!   `crate::file_list`);
 //! * the map menus' entries - the planning map's drawn at the end of its right-click menu
 //!   (`plan.rs`), the flight map's in a panel of their own on the flight screen, since that map's
 //!   `contextMenuStripMap` entries are the Actions tab's chips here;

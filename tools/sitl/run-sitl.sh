@@ -53,5 +53,10 @@ if command -v ss >/dev/null && ss -ltnH "sport = :$PORT" | grep -q .; then
     exit 3
 fi
 
+# The vehicle's defaults file when the tree has one (copter's); plane has none, and runs on the
+# defaults built into the binary.
+DEFAULTS=()
+[ -f "$PARAMS" ] && DEFAULTS=(--defaults "$PARAMS")
+
 echo "SITL $VEHICLE in $WORK, listening on tcp:127.0.0.1:$PORT (speedup ${SITL_SPEEDUP:-1})"
-exec "$BIN" --model "$MODEL" --speedup "${SITL_SPEEDUP:-1}" --defaults "$PARAMS" "${EXTRA[@]}" "$@"
+exec "$BIN" --model "$MODEL" --speedup "${SITL_SPEEDUP:-1}" "${DEFAULTS[@]}" "${EXTRA[@]}" "$@"

@@ -27,8 +27,10 @@ for _ in $(seq 1 50); do
 done
 
 failed=0
+ran=0
 run() {
     local check=$1 query=$2
+    ran=$((ran + 1))
     mkdir -p "$out/$check"
     if timeout 400 node "$here/$check.js" "$out/$check" "http://127.0.0.1:$port/$query" > "$out/$check.log" 2>&1 \
         && grep -q '^PASS' "$out/$check.log"; then
@@ -58,6 +60,7 @@ mkdir -p "$out/pages-root"
 rm -rf "$out/pages-root/MissionPlannerRust"
 cp -r "$site" "$out/pages-root/MissionPlannerRust"
 mkdir -p "$out/pages_check"
+ran=$((ran + 1))
 if timeout 400 node "$here/pages_check.js" "$out/pages-root" "$out/pages_check" > "$out/pages_check.log" 2>&1 \
     && grep -q '^PASS' "$out/pages_check.log"; then
     echo "pages_check: PASS"
@@ -68,5 +71,6 @@ else
 fi
 rm -rf "$out/pages-root"
 
-echo "$failed of 9 failed"
+# Counted as they run, so a check added never leaves the total behind ("of 9" was 12).
+echo "$failed of $ran failed"
 [ "$failed" -eq 0 ]

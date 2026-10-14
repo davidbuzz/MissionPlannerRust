@@ -19,20 +19,18 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
 //! Deliverable 20's package smoke test, for the Debian package `tools/package.sh deb` writes: installed into
-//! a clean container, both programs run, the package removed and nothing left behind.
+//! a clean container, the planner run, the package removed and nothing left behind. The package
+//! ships the planner alone (7d92e5a: headless-planner is an internal testing tool, the owner,
+//! 2026-10-04), so the container is asked that it has no headless-planner.
 //!
 //! Needs Docker and the package, which a plain `cargo test` has neither of, so it is ignored
-//! until asked: `MP_PACKAGE_DEB=dist/missionplanner-rust_0.1.0_amd64.deb cargo test -p mp-cli
+//! until asked: `MP_PACKAGE_DEB=dist/missionplanner-rust_0.0.0_amd64.deb cargo test -p mp-cli
 //! --test package_smoke -- --ignored`. The container is `ubuntu:noble`, the release the package
 //! is built on (its glibc is the floor the control file states).
 
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
 use std::path::{Path, PathBuf};
-
-fn testdata() -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR")).join("../../testdata")
-}
 
 #[test]
 #[ignore = "needs Docker and MP_PACKAGE_DEB"]
@@ -48,14 +46,12 @@ fn the_deb_installs_runs_and_removes_cleanly() {
             .join(deb)
     };
     let deb = deb.canonicalize().expect("the package exists");
-    let testdata = testdata().canonicalize().unwrap();
     let script = "set -e\n\
         export DEBIAN_FRONTEND=noninteractive\n\
         apt-get update -qq >/dev/null\n\
         apt-get install -y -qq /pkg.deb >/dev/null\n\
         planner --version\n\
-        headless-planner log loganalysis /testdata/dataflash/synthetic.log /tmp/report.xml | head -5\n\
-        test -s /tmp/report.xml\n\
+        test ! -e /usr/bin/headless-planner\n\
         test -f /usr/share/applications/planner.desktop\n\
         test -f /usr/share/icons/hicolor/128x128/apps/planner.png\n\
         apt-get remove -y -qq missionplanner-rust >/dev/null\n\
@@ -68,8 +64,6 @@ fn the_deb_installs_runs_and_removes_cleanly() {
         .args(["run", "--rm"])
         .arg("-v")
         .arg(format!("{}:/pkg.deb:ro", deb.display()))
-        .arg("-v")
-        .arg(format!("{}:/testdata:ro", testdata.display()))
         .args(["ubuntu:noble", "bash", "-c", script])
         .output()
         .expect("docker runs");
@@ -79,10 +73,8 @@ fn the_deb_installs_runs_and_removes_cleanly() {
         output.status.success(),
         "stdout:\n{stdout}\nstderr:\n{stderr}"
     );
-    assert!(stdout.contains("planner 0.1.0\n"), "{stdout}");
-    assert!(
-        stdout.contains("Log File /testdata/dataflash/synthetic.log\n"),
-        "{stdout}"
-    );
+    // The workspace's version, which the planner's `--version` says.
+    let version = format!("planner {}\n", env!("CARGO_PKG_VERSION"));
+    assert!(stdout.contains(&version), "{stdout}");
     assert!(stdout.trim_end().ends_with("SMOKE-OK"), "{stdout}");
 }
