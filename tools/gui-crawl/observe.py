@@ -43,6 +43,9 @@ ACTION = np.array([0x2D, 0x33, 0x3B])
 DIM = np.array([0x8B, 0x94, 0x9E])
 SEEN_PIXELS = 40
 SMALL_PIXELS = 8
+# A change wholly inside the control, the mouse parked and what blinks or moves by itself left
+# out: a check box's tick is some thirty pixels (DroneCAN's ALL, RTK's NTRIP v1: 36, 2026-10-15).
+INSIDE_PIXELS = 24
 
 
 def share(crop, colour, tolerance):
@@ -121,7 +124,7 @@ def judge(app, before, baseline, rect, opened_count, wait=0.7):
     screen_changed = facts.get("screen") != before.facts.get("screen")
     if outside_px > SEEN_PIXELS or appeared or vanished or opened or screen_changed:
         verdict = "visible"
-    elif inside_px > SEEN_PIXELS or (own and inside_px > SMALL_PIXELS):
+    elif inside_px > INSIDE_PIXELS or (own and inside_px > SMALL_PIXELS):
         # A small change inside with the planner's own state changed is an answer too: a tick
         # in a box twelve pixels wide.
         verdict = "changed-itself"

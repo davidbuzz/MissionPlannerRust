@@ -60,7 +60,7 @@ FAMILY_MIN = 7
 # The window's frame, the page containers and the selectors: navigation, not controls.
 CHROME = re.compile(
     r"^(tab-.*|root|header|header-byline|body|.*-body|.*-backdrop|panel:.*|status-bar|"
-    r"main-(port|baud|connect)|map-canvas)$")
+    r"main-(port|baud|connect)|map-canvas|setup-page|config-page)$")
 # Never clicked: what ends the session or the simulator, or rewrites firmware or parameters
 # wholesale; and what opens a port of its own - a serial device, a network host or a camera -
 # which reaches outside the crawl's planner: the output windows' Connect (NMEA, CoT, RTK inject,
@@ -77,8 +77,10 @@ SCREENS = {
     "setup": r"^setup-page-", "config": r"^config-page-", "simulation": None, "help": None,
     "experimental": None, "plugins": None,
 }
-# A box a page opens with: answered before the page is crawled.
-BOX_OKS = ("raw-param-warning-ok",)
+# A box a page opens with: answered before the page is crawled - the Full Parameter List's
+# warning, and FailSafe's "Ensure your props are not on" (ConfigFailSafe.cs:91-92), under which
+# every one of the page's controls was reported dead (2026-10-15).
+BOX_OKS = ("raw-param-warning-ok", "failsafe-message-ok")
 # Right-clicked, for their menus.
 RIGHT_CLICK = {"fly": ["map", "hud"], "plan": ["map"]}
 # The shortcuts the HELP text lists, on the screen each belongs to.
