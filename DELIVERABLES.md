@@ -685,21 +685,25 @@ and strict backward compatibility with the C# app's user data.
   the repo; missing-translation lint in CI; the Rust app **reads and writes the existing** `config.xml`,
   `.waypoints`, `.param`, `.tlog`, mission/fence/rally files and map cache without conversion; a user can
   run both apps side by side, each in its own data directory - the Rust app's is
-  `~/.local/share/MissionPlannerRust` on Linux, which imports the C#'s user files once on its first
-  start (owner's ruling, PLAN.md §12 D11).
+  `~/.local/share/MissionPlannerRust` on Linux, which offers at its first start to import the C#'s
+  settings and logs (owner's rulings, PLAN.md §12 D11 and 2026-10-14).
 - **Replaces:** `L10N.cs`, `ExtLibs/Strings`, the per-culture `.resx` sprawl, `crowdin.bat`, settings code.
 - **Today:** `mp-settings` ports the data-directory rules from `ExtLibs/Utilities/Settings.cs`,
   including the mono quirk that puts a Linux installation under `~/.local/share` rather than
   `~/Documents`, which is how it finds the C#'s `Mission Planner` directory - only ever read. This
   application's own is `~/.local/share/MissionPlannerRust` on Linux (`$XDG_DATA_HOME` when set;
   never `~/MissionPlannerRust`, where the C#'s old-approach rule would look) and
-  `Documents\MissionPlannerRust` on Windows (PLAN.md §12 D11, §13.6 row 77). On the first start that finds its
-  own directory missing or empty, `mp_settings::migrate` copies the C#'s `config.xml`, `poi.txt`,
-  `cameras.xml`, `checklist.xml`, `warnings.xml`, `UserAlerts.json`, `authkeys.xml`, `logo.png`,
-  `logo.txt` and `History` across by name, once, recording them in a marker file and leaving the
-  C#'s copies as they were; the tile cache, terrain, logs and parameter metadata are left behind
-  to be re-created. The GUI publishes what a start imported as `config.imported`
-  (`tests/gui/config-import.gui`). Since a44244a (2026-10-14, the owner's bug: a `config.xml`
+  `Documents\MissionPlannerRust` on Windows (PLAN.md §12 D11, §13.6 row 77). At the first start with no settings of its own, while the C#'s folder holds settings
+  or logs, `mp_gui::mp_import` offers them, each separately (the owner's word of 2026-10-14, a
+  native PLUGINS row, "Import from Mission Planner", on until unticked): Import settings lays the
+  C#'s `config.xml` over this application's (`Config::overlay`, then `rehome`) and copies its
+  `poi.txt`, `cameras.xml`, `checklist.xml`, `warnings.xml`, `UserAlerts.json`, `authkeys.xml`,
+  `logo.png`, `logo.txt` and `History` where this application has none; Copy logs copies its
+  `.tlog`, `.bin`, `.log` and `.rlog` files on a thread, keeping their folders and overwriting
+  nothing (`migrate::copy_logs`); Not now asks again, Don't ask again never. The C#'s folder is only
+  read. The GUI publishes what came across (`mpimport.*`; `tests/gui/mp-import.gui`,
+  `mp-import-later.gui`, `mp-import-disabled.gui`, `config-import.gui`); `headless-planner`, an
+  internal tool, imports nothing. Since a44244a (2026-10-14, the owner's bug: a `config.xml`
   imported from Mission Planner kept its log folder in `~/.local/share/Mission Planner/logs`, where
   this application then recorded) a setting that points into the C#'s user or shared data folder is
   pointed at the same place in this application's at every load, whole path components only, and the

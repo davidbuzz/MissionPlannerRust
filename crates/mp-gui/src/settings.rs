@@ -376,6 +376,11 @@ pub struct Persisted {
     config: mp_settings::Config,
     /// Why the file was not read, if it exists and could not be. Such a file is not written over.
     unreadable: Option<String>,
+    /// Whether the file held settings when this start read it: not when it was missing or empty,
+    /// and yes when it could not be read - something is in it. Without, this is the application's
+    /// first start, which the offer of Mission Planner's settings and logs asks about
+    /// (`crate::mp_import`).
+    had_settings: bool,
     /// `MainV2.comPortName`: the connection box's port, which every save writes as `comport`.
     comport: String,
     /// `CMB_baudrate.Text`, which every save writes as `<comport>_BAUD`.
@@ -389,9 +394,11 @@ pub struct Persisted {
     saves: usize,
     last_save: Option<SaveEvent>,
     save_error: Option<String>,
-    /// What this start's one-shot import copied from Mission Planner's directory, or `none`.
+    /// What this session's import of Mission Planner's settings brought across, the first start's
+    /// offer's Import settings (`crate::mp_import`), or `none`.
     imported: String,
-    /// What this load pointed out of Mission Planner's folder (`mp_settings::rehome`).
+    /// What this load, and an import of Mission Planner's settings since, pointed out of Mission
+    /// Planner's folder (`mp_settings::rehome`).
     rehomed: Vec<mp_settings::rehome::Rehomed>,
 }
 
@@ -417,6 +424,7 @@ impl Persisted {
             Some(Err(why)) => (mp_settings::Config::default(), Some(why)),
             None => (mp_settings::Config::default(), None),
         };
+        let had_settings = unreadable.is_some() || !config.is_empty();
         // A setting pointing into Mission Planner's own folder - its log folder, carried across
         // by the import - pointed into this application's (the owner's bug of 2026-10-14).
         let rehomed = mp_settings::Folders::from_environment()
@@ -425,16 +433,12 @@ impl Persisted {
         for moved in &rehomed {
             log::info!("{}: {} -> {}", moved.key, moved.was, moved.now);
         }
-        let comport = config.get("comport").unwrap_or_default().to_owned();
-        let baud = config
-            .get(&format!("{comport}_BAUD"))
-            .filter(|baud| !baud.is_empty())
-            .unwrap_or(DEFAULT_BAUD)
-            .to_owned();
+        let (comport, baud) = port_and_baud(&config);
         Self {
             path,
             config,
             unreadable,
+            had_settings,
             comport,
             baud,
             quick_written: 0,
@@ -447,16 +451,52 @@ impl Persisted {
         }
     }
 
-    /// The settings this load pointed out of Mission Planner's folder and into this one's.
+    /// The settings this load - and an import of Mission Planner's since
+    /// ([`Persisted::import_mission_planner`]) - pointed out of Mission Planner's folder and into
+    /// this one's.
     #[must_use]
     pub fn rehomed(&self) -> &[mp_settings::rehome::Rehomed] {
         &self.rehomed
     }
 
-    /// Remembers what this start's one-shot import copied (`mp_settings::migrate`), for the
-    /// `config.imported` fact.
-    pub fn set_imported(&mut self, summary: String) {
-        self.imported = summary;
+    /// The file: the user data directory's `config.xml`, or `MP_CONFIG_XML`'s.
+    #[must_use]
+    pub fn path(&self) -> Option<&Path> {
+        self.path.as_deref()
+    }
+
+    /// Whether the file held settings when this start read it - not on the first start, when it
+    /// was missing or empty.
+    #[must_use]
+    pub const fn had_settings(&self) -> bool {
+        self.had_settings
+    }
+
+    /// The first start's Import settings (`crate::mp_import`): Mission Planner's `config.xml`,
+    /// `theirs`, laid over this dictionary - every key of Mission Planner's as it is, and the keys
+    /// only this application holds kept - then what points into Mission Planner's folder pointed
+    /// into this application's, as every load does (`mp_settings::rehome`), and the connection
+    /// box's port and baud taken from the result as a load takes them. `imported` is what came
+    /// across, for the `config.imported` fact. In the file at the next save, as every change is.
+    /// Not in the C#: the owner's feature of 2026-10-14.
+    pub fn import_mission_planner(
+        &mut self,
+        theirs: Option<&mp_settings::Config>,
+        folders: Option<&mp_settings::Folders>,
+        imported: String,
+    ) {
+        if let Some(theirs) = theirs {
+            self.config.overlay(theirs);
+            if let Some(folders) = folders {
+                let moved = mp_settings::rehome::rehome(&mut self.config, folders);
+                for each in &moved {
+                    log::info!("{}: {} -> {}", each.key, each.was, each.now);
+                }
+                self.rehomed.extend(moved);
+            }
+            (self.comport, self.baud) = port_and_baud(&self.config);
+        }
+        self.imported = imported;
     }
 
     /// The dictionary.
@@ -955,6 +995,19 @@ impl Persisted {
     }
 }
 
+/// What `MainV2`'s start-up takes from the dictionary for the connection box: the port,
+/// `comport`, and the baud rate saved for it, `<comport>_BAUD`, or the box's default.
+/// `// C#: MainV2.cs:784-810`
+fn port_and_baud(config: &mp_settings::Config) -> (String, String) {
+    let comport = config.get("comport").unwrap_or_default().to_owned();
+    let baud = config
+        .get(&format!("{comport}_BAUD"))
+        .filter(|baud| !baud.is_empty())
+        .unwrap_or(DEFAULT_BAUD)
+        .to_owned();
+    (comport, baud)
+}
+
 /// Reads `config.xml` for [`Persisted::at`]: a missing or empty file is an empty dictionary, and
 /// any other failure is the reason.
 fn read_config(path: &Path) -> Result<mp_settings::Config, String> {
@@ -1384,17 +1437,21 @@ mod tests {
     }
 
     /// `tests/gui/config-import.gui` against the model: the C#'s directory seeded as the script
-    /// seeds it, the import `main` runs before anything reads the directory, and the files then
-    /// read from this application's own directory - twice, as the script's restart does. What
-    /// the script expects of `config.imported` is what each start's import reports.
+    /// seeds it; the first start, with no `config.xml` of its own, is asked
+    /// (`crate::mp_import::asked_for`), saves at start-up, and takes Import settings - the C#'s
+    /// files read and copied, its `config.xml` laid over this one and saved; the restart reads
+    /// them from this application's own directory, is not asked again and imports nothing. What
+    /// the script expects of `config.imported` is what each start reports.
     #[test]
     fn the_import_script_expects_what_the_import_copies() {
+        use crate::mp_import::{ANSWER_KEY, Answer, asked_for};
         let script = include_str!("../../../tests/gui/config-import.gui");
         let expected: Vec<&str> = script
             .lines()
             .filter_map(|line| line.strip_prefix("expect config.imported "))
             .collect();
         assert_eq!(expected, ["config.xml, poi.txt, History", "none"]);
+        assert!(script.contains("\nclick mpimport-settings\n"), "the script takes the offer");
 
         let scratch = Scratch::new("import");
         // `env XDG_DATA_HOME $WORK`, on a machine with neither application's old directory.
@@ -1420,17 +1477,126 @@ mod tests {
         )
         .expect("poi.txt");
         mp_os::fs::write(theirs.join("History").join("firmware.hex"), "fw").expect("History");
+        let path = directories.to_user.join("config.xml");
 
-        for expect in expected {
-            let imported = mp_settings::migrate::import(&directories);
-            let mut persisted = Persisted::at(Some(directories.to_user.join("config.xml")));
-            persisted.set_imported(imported.summary());
-            assert_eq!(persisted.imported, expect);
-            assert_eq!(persisted.get("distunits"), Some("Feet"));
-            assert_eq!(persisted.get("MapType"), Some("OpenStreetMap"));
-            let poi = crate::poi::Pois::kept_in(Some(directories.to_user.join("poi.txt")));
-            assert_eq!(poi.points().len(), 2);
+        // The first start: nothing of its own, so asked; the start-up's save, then the answer.
+        let mut persisted = Persisted::at(Some(path.clone()));
+        assert!(!persisted.had_settings());
+        let answer = Answer::read(persisted.get(ANSWER_KEY));
+        assert!(asked_for(true, true, persisted.had_settings(), answer));
+        persisted.set(ANSWER_KEY, Answer::Later.word());
+        persisted.save_config(SaveEvent::Startup).expect("saved");
+        let found = mp_settings::migrate::look(&directories).expect("the C#'s directory");
+        assert!(found.anything());
+        let outcome = mp_settings::migrate::import_settings(&directories);
+        persisted.import_mission_planner(outcome.config.as_ref(), Some(&folders), outcome.summary());
+        persisted.set(ANSWER_KEY, Answer::Done.word());
+        persisted.save_config(SaveEvent::Plugin).expect("saved");
+        assert_eq!(persisted.imported, expected[0]);
+
+        // The restart.
+        let restarted = Persisted::at(Some(path));
+        assert!(restarted.had_settings());
+        let answer = Answer::read(restarted.get(ANSWER_KEY));
+        assert_eq!(answer, Answer::Done);
+        assert!(!asked_for(true, true, restarted.had_settings(), answer));
+        assert_eq!(restarted.imported, expected[1]);
+        for read in [&persisted, &restarted] {
+            assert_eq!(read.get("distunits"), Some("Feet"));
+            assert_eq!(read.get("MapType"), Some("OpenStreetMap"));
         }
+        let poi = crate::poi::Pois::kept_in(Some(directories.to_user.join("poi.txt")));
+        assert_eq!(poi.points().len(), 2);
+    }
+
+    /// The first start is a `config.xml` missing or empty when the start reads it; one with
+    /// anything in it, or that cannot be read, held settings.
+    #[test]
+    fn a_first_start_is_a_config_with_nothing_in_it() {
+        let scratch = Scratch::new("first-start");
+        assert!(!Persisted::at(None).had_settings());
+        let path = scratch.config();
+        assert!(!Persisted::at(Some(path.clone())).had_settings());
+        scratch.seed("");
+        assert!(!Persisted::at(Some(path.clone())).had_settings());
+        scratch.seed("\u{feff}<?xml version=\"1.0\" encoding=\"utf-8\"?>\n<Config />");
+        assert!(!Persisted::at(Some(path.clone())).had_settings());
+        scratch.seed(CSHARP_FILE);
+        assert!(Persisted::at(Some(path.clone())).had_settings());
+        scratch.seed("<Config><unclosed></Config>");
+        assert!(Persisted::at(Some(path.clone())).had_settings());
+
+        // And a start that found none has some once its start-up save has written them.
+        let _ = mp_os::fs::remove_file(&path);
+        let mut first = Persisted::at(Some(path.clone()));
+        assert_eq!(first.path(), Some(path.as_path()));
+        first.save_config(SaveEvent::Startup).expect("saved");
+        assert!(Persisted::at(Some(path)).had_settings());
+    }
+
+    /// Import settings lays Mission Planner's file over this one: its keys as they are, the keys
+    /// only this application holds kept, its log folder pointed home, and the port and baud the
+    /// next save writes taken from it - what a load of the merged file would have made.
+    #[test]
+    fn an_import_lays_mission_planners_settings_over_these_and_points_them_home() {
+        let scratch = Scratch::new("import-overlay");
+        let home = scratch.0.join("home");
+        let folders = mp_settings::Folders {
+            my_documents: home.clone(),
+            local_application_data: home.join(".local/share"),
+            common_application_data: PathBuf::from("/usr/share"),
+            unix: true,
+        };
+        let path = scratch.config();
+        let mut persisted = Persisted::at(Some(path.clone()));
+        persisted.set("mpimport_offer", "later");
+        persisted.save_config(SaveEvent::Startup).expect("saved");
+        let mut theirs = mp_settings::Config::default();
+        theirs.set("comport", "TCP");
+        theirs.set("TCP_BAUD", "57600");
+        theirs.set("distunits", "Feet");
+        theirs.set(
+            "logdirectory",
+            home.join(".local/share/Mission Planner/logs")
+                .to_string_lossy()
+                .into_owned(),
+        );
+
+        persisted.import_mission_planner(Some(&theirs), Some(&folders), "config.xml".to_owned());
+
+        assert_eq!(persisted.get("distunits"), Some("Feet"));
+        assert_eq!(persisted.get("mpimport_offer"), Some("later"));
+        let ours = home
+            .join(".local/share/MissionPlannerRust/logs")
+            .to_string_lossy()
+            .into_owned();
+        assert_eq!(persisted.get("logdirectory"), Some(ours.as_str()));
+        assert_eq!(
+            persisted
+                .rehomed()
+                .iter()
+                .map(|moved| moved.key.as_str())
+                .collect::<Vec<_>>(),
+            ["logdirectory"]
+        );
+        assert_eq!(persisted.baud(), "57600");
+        assert_eq!(persisted.imported, "config.xml");
+        persisted.save_config(SaveEvent::Plugin).expect("saved");
+        let saved = reload(&path);
+        assert_eq!(saved.get("comport"), Some("TCP"));
+        assert_eq!(saved.get("TCP_BAUD"), Some("57600"));
+        assert_eq!(saved.get("logdirectory"), Some(ours.as_str()));
+        // Read again, nothing is left pointing into Mission Planner's folder.
+        assert!(
+            mp_settings::rehome::rehome(&mut saved.clone(), &folders).is_empty(),
+            "{saved:?}"
+        );
+
+        // Without a config.xml of Mission Planner's, the dictionary is as it was.
+        let before = persisted.config().clone();
+        persisted.import_mission_planner(None, Some(&folders), "poi.txt".to_owned());
+        assert_eq!(persisted.config(), &before);
+        assert_eq!(persisted.imported, "poi.txt");
     }
 
     /// `tests/gui/settings-persist.gui`, step for step, against the model: the same changes at

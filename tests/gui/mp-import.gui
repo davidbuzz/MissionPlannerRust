@@ -1,0 +1,59 @@
+# The first start's offer, both halves taken: Import settings, then Copy logs (the owner's feature
+# of 2026-10-14; crates/mp-gui/src/mp_import.rs, the PLUGINS tab's Import from Mission Planner).
+#
+# Mission Planner's config.xml names its log folder, inside its own data folder: imported, that
+# setting points into this application's (mp_settings::rehome) - in the dictionary at once, and in
+# the file, so the restart has nothing left to point home. Its logs - a .tlog and its .rlog under
+# QUADROTOR/1, a .BIN under HELI - are copied into this application's log folder on a thread of
+# their own, the folders kept: the .tlog this application already has is left as it is, and the
+# .txt beside them is not a log and stays. Mission Planner's folder is only read.
+#
+# Self-contained, as config-import.gui: XDG_DATA_HOME puts both data folders in $WORK. Needs no
+# link: tools/gui-headless.sh mp-import
+
+env XDG_DATA_HOME $WORK
+setup mkdir -p "$WORK/Mission Planner/logs/QUADROTOR/1" "$WORK/Mission Planner/logs/HELI" "$WORK/MissionPlannerRust/logs/QUADROTOR/1" && printf '\357\273\277<?xml version="1.0" encoding="utf-8"?>\n<Config>\n  <distunits>Feet</distunits>\n  <logdirectory>%s</logdirectory>\n</Config>' "$WORK/Mission Planner/logs" > "$WORK/Mission Planner/config.xml" && printf 'theirs' > "$WORK/Mission Planner/logs/QUADROTOR/1/2026-01-02 10-00-00.tlog" && printf 'raw' > "$WORK/Mission Planner/logs/QUADROTOR/1/2026-01-02 10-00-00.rlog" && printf 'df' > "$WORK/Mission Planner/logs/HELI/00000001.BIN" && printf 'notes' > "$WORK/Mission Planner/logs/QUADROTOR/1/notes.txt" && printf 'ours' > "$WORK/MissionPlannerRust/logs/QUADROTOR/1/2026-01-02 10-00-00.tlog"
+
+tiles offline
+screen fly
+window 1600x1200
+budget 12
+
+# The first start: no config.xml of its own, Mission Planner's data there - offered, and the
+# offer's setting written at once to ask again should this start end unanswered.
+expect mpimport.offer shown
+expect mpimport.answer later
+expect mpimport.found ~ Mission Planner
+expect mpimport.settings none
+expect mpimport.logs none
+
+# Import settings: Mission Planner's keys, its log folder pointed home.
+click mpimport-settings
+expect mpimport.settings config.xml
+expect config.imported config.xml
+expect config.distunits Feet
+expect config.rehomed ~ logdirectory=
+linux: expect config.rehomed logdirectory=$WORK/MissionPlannerRust/logs
+
+# Copy logs: two copied, one already here, the folders kept; the count on the status line.
+click mpimport-logs
+expect mpimport.logs 2
+expect mpimport.logs.already 1
+expect mpimport.logs.files HELI/00000001.BIN, QUADROTOR/1/2026-01-02 10-00-00.rlog
+expect mpimport.logs.to ~ MissionPlannerRust
+expect status ~ Copied 2 logs
+expect mpimport.answer done
+click mpimport-close
+expect mpimport.offer none
+
+# The restart: answered, so not offered again; the settings read from the file, which already
+# points home, and the Planner page shows this application's log folder.
+restart
+expect mpimport.offer none
+expect mpimport.answer done
+expect config.distunits Feet
+expect config.rehomed none
+click tab-config
+click config-page-ConfigPlanner
+expect config.planner.logdir ~ MissionPlannerRust
+linux: expect config.planner.logdir $WORK/MissionPlannerRust/logs

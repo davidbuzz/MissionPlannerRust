@@ -73,6 +73,8 @@ mod message_interval;
 // EXPERIMENTAL's adjust aircraft baro height: its window.
 mod baro_height;
 mod metadata;
+// The first start's offer of Mission Planner's settings and logs: the owner's, not in the C#.
+mod mp_import;
 mod params;
 mod payload;
 mod pictures;
@@ -731,6 +733,9 @@ struct MissionPlanner {
     /// handleException`), and the message box's keyboard.
     crash: crash::Crash,
     crash_focus: gpui::FocusHandle,
+    /// The first start's offer of Mission Planner's settings and logs - the PLUGINS tab's Import
+    /// from Mission Planner - and the log copy it may be running (`mp_import`).
+    mp_import: mp_import::MpImport,
     // ---- row 96 ----
     /// The WebAssembly plugins (`PluginLoader.Plugins`) and what the window shows of them.
     plugins: plugins_ui::Plugins,
@@ -1105,6 +1110,8 @@ impl MissionPlanner {
             help: help::Help::new(),
             crash: crash::Crash::new(mp_settings::data_directory().as_deref()),
             crash_focus: cx.focus_handle(),
+            // Made, when it is due, once this is built: `mp_import_start`, in `main`.
+            mp_import: mp_import::MpImport::default(),
             // ---- row 96 ----
             plugins,
             // ---- end row 96 ----
@@ -4029,6 +4036,7 @@ impl Render for MissionPlanner {
             help::record_facts(&self.help);
             crash::record_facts(&self.crash);
             // ---- end SITL ----
+            mp_import::record_facts(&self.mp_import, &self.persisted);
             facts::publish();
             // The harness's work, which a normal run does not do, is not the frame's.
             storm::exclude(harness.elapsed());
@@ -4709,7 +4717,9 @@ impl Render for MissionPlanner {
                             // A crash report from a last run: its question, on the main thread
                             // at start.
                             .children(crash::overlay(self, window, cx))
-                            // Tailscale's first-start offer.
+                            // The first start's offer of Mission Planner's settings and logs.
+                            .children(mp_import::overlay(self, window, cx))
+                            // Tailscale's first-start offer, once that one is answered.
                             .children(self.tailnet_offer_box(window, cx)),
                     )
                     .child(
@@ -4995,26 +5005,6 @@ fn parse_arguments(arguments: impl IntoIterator<Item = String>) -> Result<Argume
     Ok(parsed)
 }
 
-/// Says on stderr what the start's one-shot import copied, when it copied or failed anything.
-fn report_import(imported: &mp_settings::migrate::Import) {
-    match imported {
-        mp_settings::migrate::Import::Imported { from, failed, .. } => {
-            eprintln!(
-                "planner: imported from {} (left as it was): {}",
-                from.display(),
-                imported.summary()
-            );
-            for failure in failed {
-                eprintln!("planner: not imported: {failure}");
-            }
-        }
-        mp_settings::migrate::Import::Failed(why) => {
-            eprintln!("planner: importing Mission Planner's files: {why}");
-        }
-        _ => {}
-    }
-}
-
 fn main() {
     // In a web page a panic says nothing unless it is sent to the console, and `log` goes there
     // too: what gpui_platform's `web_init` does (the browser experiment).
@@ -5056,13 +5046,6 @@ fn main() {
             std::process::exit(2);
         }
     };
-
-    // This application's own data directory, `MissionPlannerRust` (PLAN.md section 12, D11): on
-    // the first start that finds it missing or empty, Mission Planner's files are copied into it
-    // once, by name, before anything below reads the directory or writes to it. The C#'s copies
-    // are left as they were.
-    let imported = mp_settings::migrate::import_at_start();
-    report_import(&imported);
 
     // `Program.CleanupFiles`: a new updater left beside the program by the last update, copied
     // into place. `// C#: Program.cs:616-628`
@@ -5138,7 +5121,11 @@ fn main() {
         let opened = cx.open_window(options, |window, cx| {
             let app = cx.new(|cx| {
                 let mut app = MissionPlanner::new(target, read_mission, screen, cx);
-                app.persisted.set_imported(imported.summary());
+                // This application's own data directory, `MissionPlannerRust` (PLAN.md section
+                // 12, D11), takes nothing of Mission Planner's unasked: the first start offers its
+                // settings and logs (`mp_import`, the owner's of 2026-10-14), once the start-up
+                // has read and saved this application's own settings.
+                app.mp_import_start();
                 // Said once: what pointed into Mission Planner's folder and now points here.
                 if let Some(first) = app.persisted.rehomed().first() {
                     app.file_status = Some(format!(

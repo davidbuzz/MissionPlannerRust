@@ -18,25 +18,34 @@
 //
 // SPDX-License-Identifier: GPL-3.0-only
 
-//! The one-shot import of Mission Planner's files into this application's own directory.
+//! Bringing Mission Planner's files into this application's own directory.
 //!
 //! This application keeps its files under [`crate::APP_CONFIG_NAME`], not under the C#'s
 //! `Mission Planner` directory, by the owner's ruling of 2026-09-25 (PLAN.md section 12, D11): a
 //! user running both applications must not lose data to the other one's writes. A pilot moving
-//! over should not have to set everything up again either, so on the first start that finds this
-//! application's user data directory missing or empty while the C#'s exists, the C#'s files are
-//! copied across once, each artefact by name ([`ARTEFACTS`]), and a marker file ([`MARKER`])
-//! records what was copied. The marker makes the directory non-empty, so the import never runs a
-//! second time - not even when nothing was found to copy.
+//! over should not have to set everything up again either. Two ways bring the C#'s files across,
+//! each artefact by name ([`ARTEFACTS`]), with a marker file ([`MARKER`]) recording what came:
+//!
+//! * The planner's first start offers them - the owner's feature of 2026-10-14, a native row of
+//!   its PLUGINS tab (`crates/mp-gui/src/mp_import.rs` says when the offer is made). [`look`] says
+//!   what the C#'s folders hold; Import settings is [`import_settings`], which reads the C#'s
+//!   `config.xml` for the planner to lay over its own and copies every other artefact; Copy logs is
+//!   [`copy_logs`], the C#'s log files copied into this application's log folder, the folders kept.
+//!   The planner imports nothing unasked: its silent import is gone (the owner, 2026-10-14).
+//! * [`import`], the one-shot import: on the first start that finds this application's user data
+//!   directory missing or empty while the C#'s exists, every artefact copied across once, and the
+//!   marker making the directory non-empty, so it never runs a second time - not even when nothing
+//!   was found to copy. Only `headless-planner` still runs it.
 //!
 //! The C#'s directory is only ever read: nothing in it is written, renamed or deleted, and a file
 //! this application already has is never overwritten.
 //!
-//! What is not imported, on purpose: the map tile cache (`gmapcache`), the terrain tiles (`srtm`),
-//! the flight logs and recordings (`logs`), and the parameter metadata (`*.pdef.xml` and the
-//! `LogMessages*.xml` files). They are large - gigabytes of tiles and logs on a machine that has
-//! flown - and every one of them is re-created on demand: tiles and terrain are downloaded again,
-//! the metadata is fetched again, and the logs stay where the C# wrote them, readable from there.
+//! What is not imported, on purpose: the map tile cache (`gmapcache`), the terrain tiles (`srtm`)
+//! and the parameter metadata (`*.pdef.xml` and the `LogMessages*.xml` files). They are large -
+//! gigabytes of tiles on a machine that has flown - and every one of them is re-created on demand:
+//! tiles and terrain are downloaded again, the metadata is fetched again. Nor are the flight logs
+//! and recordings (`logs`) part of [`import`]: they stay where the C# wrote them, readable from
+//! there, and the planner's offer copies them only when Copy logs is chosen.
 //!
 //! Each artefact is copied from the C# directory the C# keeps it in to the same directory under
 //! this application's name: the user data directory for most, the shared data directory for
@@ -49,7 +58,7 @@ use std::fmt::Write as _;
 use std::io;
 use std::path::{Path, PathBuf};
 
-use crate::Folders;
+use crate::{Config, Folders};
 
 /// Which of an application's two data directories an artefact is kept in.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -171,13 +180,6 @@ impl Import {
     }
 }
 
-/// Imports for this process's directories: what the applications call at start-up, before
-/// anything reads or writes the data directory.
-#[must_use]
-pub fn import_at_start() -> Import {
-    Folders::from_environment().map_or(Import::NoHome, |folders| import(&Directories::of(&folders)))
-}
-
 /// Imports the C#'s artefacts once, if this application's user data directory is missing or
 /// empty and the C#'s exists.
 #[must_use]
@@ -269,6 +271,285 @@ fn marker_text(directories: &Directories, names: &[String], failed: &[String]) -
         let _ = writeln!(text, "not copied: {failure}");
     }
     text
+}
+
+// --- The planner's first-start offer -------------------------------------------------------------
+
+/// The extensions of the files [`copy_logs`] copies, compared without regard to case: telemetry
+/// logs and the raw recordings beside them (`.tlog`, `.rlog`), and dataflash logs, binary and text
+/// (`.bin`, `.log`).
+pub const LOG_EXTENSIONS: [&str; 4] = ["tlog", "rlog", "bin", "log"];
+
+/// What Mission Planner's folders hold, for the offer to say.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Found {
+    /// The C#'s user data directory.
+    pub from: PathBuf,
+    /// Its `config.xml`, when it has one.
+    pub config: Option<PathBuf>,
+    /// The artefacts of [`ARTEFACTS`] that are there, `config.xml` among them, in that order.
+    pub settings: Vec<String>,
+    /// The C#'s log folder, `Settings.LogDir`: its `config.xml`'s `logdirectory` when that is set,
+    /// else `logs` in its user data directory.
+    pub logs: PathBuf,
+    /// Whether a log file ([`is_log`]) is anywhere under that folder.
+    pub has_logs: bool,
+}
+
+impl Found {
+    /// Whether there is anything to offer: a `config.xml`, or logs.
+    #[must_use]
+    pub const fn anything(&self) -> bool {
+        self.config.is_some() || self.has_logs
+    }
+}
+
+/// What Mission Planner's folders hold, or `None` when its user data directory is not there. Only
+/// looks: the log folder is walked until its first log.
+#[must_use]
+pub fn look(directories: &Directories) -> Option<Found> {
+    let from = &directories.from_user;
+    if !from.os_is_dir() {
+        return None;
+    }
+    let config = Some(from.join(crate::config::FILE_NAME)).filter(|path| path.os_is_file());
+    let settings = ARTEFACTS
+        .iter()
+        .filter(|&&(name, kept)| {
+            mp_os::fs::symlink_metadata(directories.from(kept).join(name)).is_ok()
+        })
+        .map(|&(name, _)| name.to_owned())
+        .collect();
+    let logs = csharp_log_directory(from, config.as_deref());
+    let has_logs = holds_a_log(&logs);
+    Some(Found {
+        from: from.clone(),
+        config,
+        settings,
+        logs,
+        has_logs,
+    })
+}
+
+/// `Settings.LogDir` for the C#: its `config.xml`'s `logdirectory` when that is set, else `logs`
+/// in its user data directory (`GetDefaultLogDir`). A file that cannot be read names none.
+/// `// C#: ExtLibs/Utilities/Settings.cs:127-158`
+fn csharp_log_directory(from_user: &Path, config: Option<&Path>) -> PathBuf {
+    config
+        .and_then(|path| read_config(path).ok())
+        .and_then(|config| config.log_directory())
+        .unwrap_or_else(|| from_user.join("logs"))
+}
+
+/// A `config.xml` read as `Settings.Load` reads one: a file with nothing in it is no settings,
+/// and any other failure is the reason.
+fn read_config(path: &Path) -> Result<Config, String> {
+    let text = mp_os::fs::read_to_string(path).map_err(|err| err.to_string())?;
+    if text.trim_start_matches('\u{feff}').trim().is_empty() {
+        return Ok(Config::default());
+    }
+    Config::parse(&text).map_err(|err| err.to_string())
+}
+
+/// Whether a file is a log, by its extension ([`LOG_EXTENSIONS`]).
+#[must_use]
+pub fn is_log(path: &Path) -> bool {
+    path.extension()
+        .and_then(|extension| extension.to_str())
+        .is_some_and(|extension| {
+            LOG_EXTENSIONS
+                .iter()
+                .any(|log| extension.eq_ignore_ascii_case(log))
+        })
+}
+
+/// Each log file under `dir` handed to `each` by its path relative to `root`, the entries of a
+/// folder in name order; `each` answering false ends the walk, and the walk then answers false
+/// too. A folder that cannot be read is passed over; a link to a folder is not followed, so a loop
+/// of links cannot recurse for ever; and `skip`, a folder the walk must not enter, is not entered.
+fn walk_logs(
+    root: &Path,
+    dir: &Path,
+    skip: Option<&Path>,
+    each: &mut dyn FnMut(PathBuf) -> bool,
+) -> bool {
+    let Ok(entries) = mp_os::fs::read_dir(dir) else {
+        return true;
+    };
+    let mut entries: Vec<mp_os::fs::DirEntry> = entries.flatten().collect();
+    entries.sort_by_cached_key(mp_os::fs::DirEntry::file_name);
+    for entry in entries {
+        let path = entry.path();
+        let Ok(kind) = entry.file_type() else {
+            continue;
+        };
+        if kind.is_dir() {
+            if skip != Some(path.as_path()) && !walk_logs(root, &path, skip, each) {
+                return false;
+            }
+        } else if is_log(&path) {
+            let relative = path
+                .strip_prefix(root)
+                .map_or_else(|_| path.clone(), Path::to_path_buf);
+            if !each(relative) {
+                return false;
+            }
+        }
+    }
+    true
+}
+
+/// The log files under `root`, by their paths relative to it, folders in name order; `skip` is a
+/// folder not walked.
+#[must_use]
+pub fn log_files(root: &Path, skip: Option<&Path>) -> Vec<PathBuf> {
+    let mut files = Vec::new();
+    walk_logs(root, root, skip, &mut |relative| {
+        files.push(relative);
+        true
+    });
+    files
+}
+
+/// Whether a log file is anywhere under `root`: the walk ends at the first.
+fn holds_a_log(root: &Path) -> bool {
+    !walk_logs(root, root, None, &mut |_| false)
+}
+
+/// What [`copy_logs`] did.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct LogCopy {
+    /// How many log files were found.
+    pub found: usize,
+    /// Those copied, by their paths relative to the C#'s log folder, in the walk's order.
+    pub copied: Vec<PathBuf>,
+    /// How many this application already had: left as they were.
+    pub already: usize,
+    /// Those that could not be copied, each with why.
+    pub failed: Vec<String>,
+}
+
+/// Copies every log file under `from` ([`is_log`]) to the same place under `to`, the folders
+/// kept. A file already there is this application's and is left as it is - never overwritten -
+/// and `from` is only read. Each file lands under a name of its own first and is then renamed into
+/// place, so a copy cut short leaves no half a log under a log's name for the next copy to take as
+/// done. `progress` hears how many of how many are done: once the files are found, and after each.
+/// A `to` inside `from` is not walked, so this application's logs are not copied into themselves.
+#[must_use]
+pub fn copy_logs(from: &Path, to: &Path, mut progress: impl FnMut(usize, usize)) -> LogCopy {
+    let files = log_files(from, Some(to));
+    let mut outcome = LogCopy {
+        found: files.len(),
+        ..LogCopy::default()
+    };
+    progress(0, files.len());
+    for (done, relative) in files.iter().enumerate() {
+        let target = to.join(relative);
+        if mp_os::fs::symlink_metadata(&target).is_ok() {
+            outcome.already += 1;
+        } else {
+            match copy_log(&from.join(relative), &target) {
+                Ok(()) => outcome.copied.push(relative.clone()),
+                Err(err) => outcome
+                    .failed
+                    .push(format!("{}: {err}", relative.display())),
+            }
+        }
+        progress(done + 1, files.len());
+    }
+    outcome
+}
+
+/// One log copied: to `<name>.part` beside where it goes, then renamed into place; what a failure
+/// left of the partial file removed.
+fn copy_log(source: &Path, target: &Path) -> io::Result<()> {
+    if let Some(parent) = target.parent() {
+        mp_os::fs::create_dir_all(parent)?;
+    }
+    let mut partial = target.as_os_str().to_owned();
+    partial.push(".part");
+    let partial = PathBuf::from(partial);
+    let copied =
+        mp_os::fs::copy(source, &partial).and_then(|_| mp_os::fs::rename(&partial, target));
+    if copied.is_err() {
+        let _ = mp_os::fs::remove_file(&partial);
+    }
+    copied
+}
+
+/// What the offer's Import settings did with Mission Planner's files.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct SettingsImport {
+    /// Mission Planner's `config.xml`, read: for the planner to lay over its own dictionary and
+    /// save, since this application's `config.xml` is its own to write - and by the time the
+    /// offer is answered, the start-up has written one.
+    pub config: Option<Config>,
+    /// What came across, in [`ARTEFACTS`] order: `config.xml` when it was read, and each other
+    /// artefact copied.
+    pub names: Vec<String>,
+    /// What was there and could not be read or copied, each with why.
+    pub failed: Vec<String>,
+}
+
+impl SettingsImport {
+    /// What came across, comma-separated, or `none`.
+    #[must_use]
+    pub fn summary(&self) -> String {
+        if self.names.is_empty() {
+            "none".to_owned()
+        } else {
+            self.names.join(", ")
+        }
+    }
+}
+
+/// The offer's Import settings, the files: Mission Planner's `config.xml` read, and each other
+/// artefact ([`ARTEFACTS`]) copied from the C# directory that keeps it to the same directory under
+/// this application's name, by [`import`]'s rules - a file this application already has is its own
+/// and is not overwritten, and the C#'s directory is only read. The marker records what came
+/// across, after whatever an earlier import wrote in it.
+#[must_use]
+pub fn import_settings(directories: &Directories) -> SettingsImport {
+    let mut outcome = SettingsImport::default();
+    for &(name, kept) in ARTEFACTS {
+        let source = directories.from(kept).join(name);
+        if mp_os::fs::symlink_metadata(&source).is_err() {
+            continue;
+        }
+        if name == crate::config::FILE_NAME {
+            match read_config(&source) {
+                Ok(config) => {
+                    outcome.config = Some(config);
+                    outcome.names.push(name.to_owned());
+                }
+                Err(why) => outcome.failed.push(format!("{name}: {why}")),
+            }
+            continue;
+        }
+        let target = directories.to(kept).join(name);
+        if mp_os::fs::symlink_metadata(&target).is_ok() {
+            continue;
+        }
+        match copy(&source, &target) {
+            Ok(()) => outcome.names.push(name.to_owned()),
+            Err(err) => outcome.failed.push(format!("{name}: {err}")),
+        }
+    }
+    if (!outcome.names.is_empty() || !outcome.failed.is_empty())
+        && let Err(err) = add_to_marker(directories, &outcome.names, &outcome.failed)
+    {
+        outcome.failed.push(format!("{MARKER}: {err}"));
+    }
+    outcome
+}
+
+/// The marker with this import's lines added after what it held, if anything.
+fn add_to_marker(directories: &Directories, names: &[String], failed: &[String]) -> io::Result<()> {
+    mp_os::fs::create_dir_all(&directories.to_user)?;
+    let path = directories.to_user.join(MARKER);
+    let mut text = mp_os::fs::read_to_string(&path).unwrap_or_default();
+    text.push_str(&marker_text(directories, names, failed));
+    mp_os::fs::write(&path, text)
 }
 
 #[cfg(test)]
@@ -553,5 +834,225 @@ mod tests {
             b"{}"
         );
         assert!(!directories.to_user.join("UserAlerts.json").os_exists());
+    }
+
+    // --- The planner's first-start offer ---------------------------------------------------------
+
+    /// Writes a file, making its folder.
+    fn put(path: &Path, bytes: &[u8]) {
+        mp_os::fs::create_dir_all(path.parent().expect("a folder")).expect("folder");
+        mp_os::fs::write(path, bytes).expect("written");
+    }
+
+    /// What the offer is told: nothing without the C#'s directory; with it, its `config.xml`, the
+    /// other artefacts there, and its log folder - `logdirectory` when the file names one - with
+    /// whether a log is under it, a `.txt` not being one.
+    #[test]
+    fn the_offer_looks_for_a_config_and_logs() {
+        let scratch = Scratch::new("look");
+        let directories = Directories::of(&scratch.mono());
+        assert_eq!(look(&directories), None);
+
+        let theirs = &directories.from_user;
+        put(&theirs.join("logs").join("notes.txt"), b"not a log");
+        let found = look(&directories).expect("the C#'s directory");
+        assert_eq!(found.from, *theirs);
+        assert_eq!(found.config, None);
+        assert_eq!(found.logs, theirs.join("logs"));
+        assert!(!found.has_logs);
+        assert!(!found.anything());
+        assert!(found.settings.is_empty());
+
+        // A log, deep down: found.
+        put(&theirs.join("logs").join("QUADROTOR").join("1").join("a.tlog"), b"t");
+        assert!(look(&directories).expect("there").has_logs);
+
+        // A config.xml naming a log folder of its own: that folder, and only its logs count.
+        let elsewhere = scratch.0.join("drive").join("flights");
+        put(&elsewhere.join("HELI").join("00000001.BIN"), b"df");
+        put(
+            &theirs.join("config.xml"),
+            format!(
+                "\u{feff}<?xml version=\"1.0\" encoding=\"utf-8\"?>\n<Config>\n  <logdirectory>{}</logdirectory>\n</Config>",
+                elsewhere.display()
+            )
+            .as_bytes(),
+        );
+        put(&theirs.join("poi.txt"), b"poi");
+        let found = look(&directories).expect("there");
+        assert_eq!(found.config, Some(theirs.join("config.xml")));
+        assert_eq!(found.logs, elsewhere);
+        assert!(found.has_logs);
+        assert!(found.anything());
+        assert_eq!(found.settings, ["config.xml".to_owned(), "poi.txt".to_owned()]);
+    }
+
+    #[test]
+    fn a_log_is_known_by_its_extension_whatever_its_case() {
+        for name in ["a.tlog", "a.TLOG", "a.rlog", "00000001.BIN", "1.bin", "old.log"] {
+            assert!(is_log(Path::new(name)), "{name}");
+        }
+        for name in ["a.txt", "a.param", "tlog", "a.tlog.part", "a.bin.gz"] {
+            assert!(!is_log(Path::new(name)), "{name}");
+        }
+    }
+
+    /// Copy logs: every log under the C#'s folder lands at the same place under this
+    /// application's, the folders kept; a log already there is left as it is; a file that is not
+    /// a log stays where it is; the C#'s folder is byte for byte what it was; no partial file is
+    /// left behind; the progress counts to the end; and a second copy copies nothing.
+    #[test]
+    fn copy_logs_keeps_the_folders_and_never_overwrites() {
+        let scratch = Scratch::new("copy-logs");
+        let from = scratch.0.join("Mission Planner").join("logs");
+        let to = scratch.0.join("MissionPlannerRust").join("logs");
+        put(&from.join("QUADROTOR/1/a.tlog"), &content("a.tlog"));
+        put(&from.join("QUADROTOR/1/a.rlog"), &content("a.rlog"));
+        put(&from.join("QUADROTOR/1/notes.txt"), b"notes");
+        put(&from.join("HELI/00000001.BIN"), &content("bin"));
+        put(&from.join("old.log"), &content("old.log"));
+        put(&to.join("QUADROTOR/1/a.tlog"), b"ours");
+        let before = snapshot(&from);
+
+        let mut heard = Vec::new();
+        let outcome = copy_logs(&from, &to, |done, of| heard.push((done, of)));
+
+        assert_eq!(outcome.found, 4);
+        assert_eq!(
+            outcome.copied,
+            [
+                PathBuf::from("HELI/00000001.BIN"),
+                PathBuf::from("QUADROTOR/1/a.rlog"),
+                PathBuf::from("old.log"),
+            ]
+        );
+        assert_eq!(outcome.already, 1);
+        assert!(outcome.failed.is_empty(), "{:?}", outcome.failed);
+        assert_eq!(heard.first(), Some(&(0, 4)));
+        assert_eq!(heard.last(), Some(&(4, 4)));
+        assert_eq!(heard.len(), 5);
+        for copied in &outcome.copied {
+            assert_eq!(
+                mp_os::fs::read(to.join(copied)).expect("copied"),
+                mp_os::fs::read(from.join(copied)).expect("theirs"),
+                "{}",
+                copied.display()
+            );
+        }
+        assert_eq!(
+            mp_os::fs::read(to.join("QUADROTOR/1/a.tlog")).expect("ours"),
+            b"ours"
+        );
+        assert!(!to.join("QUADROTOR/1/notes.txt").os_exists());
+        assert!(
+            snapshot(&to)
+                .keys()
+                .all(|path| path.extension().is_none_or(|extension| extension != "part")),
+            "a partial file was left"
+        );
+        assert_eq!(snapshot(&from), before, "the C#'s logs were changed");
+
+        let again = copy_logs(&from, &to, |_, _| {});
+        assert!(again.copied.is_empty());
+        assert_eq!(again.already, 4);
+    }
+
+    /// This application's log folder inside the C#'s is not walked, so its own logs are not
+    /// copied into themselves; one folder for both copies nothing.
+    #[test]
+    fn a_log_folder_inside_the_csharps_is_not_copied_into_itself() {
+        let scratch = Scratch::new("copy-inside");
+        let from = scratch.0.join("logs");
+        let to = from.join("MissionPlannerRust");
+        put(&from.join("theirs.tlog"), b"theirs");
+        put(&to.join("ours.tlog"), b"ours");
+        let outcome = copy_logs(&from, &to, |_, _| {});
+        assert_eq!(outcome.found, 1);
+        assert_eq!(outcome.copied, [PathBuf::from("theirs.tlog")]);
+        assert!(!to.join("MissionPlannerRust").os_exists());
+
+        let same = copy_logs(&from, &from, |_, _| {});
+        assert!(same.copied.is_empty());
+        assert_eq!(same.already, same.found);
+    }
+
+    /// Import settings: the C#'s `config.xml` is read, not copied - this application's is its own
+    /// to write, and the start-up has written one - and every other artefact comes across unless
+    /// this application has it already; the marker keeps what an earlier import wrote and adds
+    /// this one's lines; the C#'s directory is byte for byte what it was.
+    #[test]
+    fn import_settings_reads_the_config_and_copies_the_rest() {
+        let scratch = Scratch::new("import-settings");
+        let directories = Directories::of(&scratch.mono());
+        let theirs = &directories.from_user;
+        put(
+            &theirs.join("config.xml"),
+            b"\xef\xbb\xbf<?xml version=\"1.0\" encoding=\"utf-8\"?>\n<Config>\n  <distunits>Feet</distunits>\n</Config>",
+        );
+        put(&theirs.join("poi.txt"), &content("poi.txt"));
+        put(&theirs.join("cameras.xml"), &content("cameras.xml"));
+        put(&theirs.join("History").join("firmware.hex"), &content("hex"));
+        let ours = &directories.to_user;
+        put(&ours.join("config.xml"), b"the start-up's");
+        put(&ours.join("cameras.xml"), b"ours");
+        put(&ours.join(MARKER), b"earlier\n");
+        let before = snapshot(theirs);
+
+        let outcome = import_settings(&directories);
+
+        assert_eq!(
+            outcome.names,
+            [
+                "config.xml".to_owned(),
+                "poi.txt".to_owned(),
+                "History".to_owned()
+            ]
+        );
+        assert_eq!(outcome.summary(), "config.xml, poi.txt, History");
+        assert!(outcome.failed.is_empty(), "{:?}", outcome.failed);
+        let config = outcome.config.expect("their config.xml, read");
+        assert_eq!(config.get("distunits"), Some("Feet"));
+        assert_eq!(
+            mp_os::fs::read(ours.join("config.xml")).expect("ours"),
+            b"the start-up's"
+        );
+        assert_eq!(mp_os::fs::read(ours.join("cameras.xml")).expect("ours"), b"ours");
+        assert_eq!(
+            mp_os::fs::read(ours.join("poi.txt")).expect("copied"),
+            content("poi.txt")
+        );
+        assert_eq!(
+            mp_os::fs::read(ours.join("History").join("firmware.hex")).expect("copied"),
+            content("hex")
+        );
+        let marker = mp_os::fs::read_to_string(ours.join(MARKER)).expect("the marker");
+        assert!(marker.starts_with("earlier\n"), "{marker}");
+        assert!(marker.lines().any(|line| line == "poi.txt"), "{marker}");
+        assert!(marker.lines().any(|line| line == "config.xml"), "{marker}");
+        assert_eq!(snapshot(theirs), before, "the C#'s directory was changed");
+    }
+
+    /// A `config.xml` of the C#'s that does not read is said, and the other artefacts still come.
+    #[test]
+    fn an_unreadable_csharp_config_is_said_and_the_rest_still_comes() {
+        let scratch = Scratch::new("import-unreadable");
+        let directories = Directories::of(&scratch.mono());
+        put(
+            &directories.from_user.join("config.xml"),
+            b"<Config><unclosed></Config>",
+        );
+        put(&directories.from_user.join("poi.txt"), b"poi");
+        let outcome = import_settings(&directories);
+        assert_eq!(outcome.config, None);
+        assert_eq!(outcome.names, ["poi.txt".to_owned()]);
+        assert_eq!(outcome.failed.len(), 1);
+        assert!(outcome.failed[0].starts_with("config.xml: "), "{:?}", outcome.failed);
+        assert!(directories.to_user.join("poi.txt").os_is_file());
+
+        // An empty one is no settings, as `Load` reads it.
+        put(&directories.from_user.join("config.xml"), b"");
+        let outcome = import_settings(&directories);
+        assert_eq!(outcome.config, Some(Config::default()));
+        assert!(outcome.failed.is_empty(), "{:?}", outcome.failed);
     }
 }

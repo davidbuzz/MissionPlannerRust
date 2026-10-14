@@ -98,8 +98,19 @@ pub(crate) const TAILSCALE: NativePlugin = NativePlugin {
     file: "tailscale.native",
 };
 
+/// Import from Mission Planner: the first start's offer of Mission Planner's settings and logs
+/// (mp_import.rs) - the owner's proposal of 2026-10-14, "this first-time-user-migrate *MIGHT* be
+/// best done as a disableable plugin", approved the same day as a row like Tailscale's. On until
+/// it is unticked.
+pub(crate) const MP_IMPORT: NativePlugin = NativePlugin {
+    name: "Import from Mission Planner",
+    author: "MissionPlannerRust",
+    version: "built in",
+    file: "mpimport.native",
+};
+
 /// The native features the manager lists, after the plugins.
-pub(crate) const NATIVE: &[NativePlugin] = &[TAILSCALE];
+pub(crate) const NATIVE: &[NativePlugin] = &[TAILSCALE, MP_IMPORT];
 
 /// Whether a native feature is on: not in the disabled list, compared as plugins' files are.
 #[must_use]
@@ -785,6 +796,15 @@ mod tests {
                     colour: RowColour::Green,
                     plugin: None,
                 },
+                Row {
+                    name: "Import from Mission Planner".to_owned(),
+                    author: "MissionPlannerRust".to_owned(),
+                    version: "built in".to_owned(),
+                    dll: "mpimport.native".to_owned(),
+                    enabled: true,
+                    colour: RowColour::Green,
+                    plugin: None,
+                },
             ]
         );
     }
@@ -796,25 +816,25 @@ mod tests {
     fn tailscale_is_a_row_like_a_plugins_but_native() {
         let plugins = [running("Dowding", "Dowding.wasm")];
         let on = rows(&plugins, &[], |_| true);
-        assert_eq!(on.len(), 2);
-        let last = on.last().expect("a row");
-        assert_eq!((last.name.as_str(), last.enabled, last.plugin), ("Tailscale", true, None));
+        assert_eq!(on.len(), 3, "the plugin, then Tailscale and Import from Mission Planner");
+        let tailscale = on.iter().position(|row| row.name == "Tailscale").expect("its row");
+        assert_eq!(tailscale, 1);
+        assert_eq!((on[tailscale].enabled, on[tailscale].plugin), (true, None));
         assert!(native_enabled(&TAILSCALE, &[]));
+        assert!(native_enabled(&MP_IMPORT, &[]));
 
         let disabled = ["Tailscale.Native".to_owned()];
         assert!(!native_enabled(&TAILSCALE, &disabled));
+        assert!(native_enabled(&MP_IMPORT, &disabled));
         let off = rows(&plugins, &disabled, |_| true);
-        assert_eq!(off.len(), 2, "no Not loaded row for it");
-        let last = off.last().expect("a row");
+        assert_eq!(off.len(), 3, "no Not loaded row for it");
         assert_eq!(
-            (last.name.as_str(), last.enabled, last.colour),
+            (off[1].name.as_str(), off[1].enabled, off[1].colour),
             ("Tailscale", false, RowColour::DarkOrange)
         );
 
         let mut ticked = on;
-        if let Some(row) = ticked.last_mut() {
-            row.enabled = false;
-        }
+        ticked[1].enabled = false;
         assert_eq!(disabled_after(&ticked), ["tailscale.native"]);
     }
 

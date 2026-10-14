@@ -1,14 +1,18 @@
-# The first start in an empty data directory of its own imports Mission Planner's files, once.
+# The first start offers Mission Planner's settings, and Import settings brings them across, once.
 #
 # This application keeps its files under MissionPlannerRust, not the C#'s "Mission Planner"
-# (PLAN.md section 12, D11; section 13.6 row 77). On the first start that finds its directory
-# missing or empty and the C#'s there, mp_settings::migrate copies the C#'s artefacts by name -
-# config.xml, poi.txt, History and the rest - and writes a marker, so it never runs again. The C#'s
-# copies are left as they were. The fact config.imported is what this start copied, or none.
+# (PLAN.md section 12, D11; section 13.6 row 77), and takes nothing of Mission Planner's unasked
+# (the owner, 2026-10-14: the silent import every first start made is gone). Its first start - no
+# config.xml of its own - with Mission Planner's data folder there makes the offer
+# (crates/mp-gui/src/mp_import.rs, the PLUGINS tab's Import from Mission Planner). Import settings
+# lays Mission Planner's config.xml over this application's and copies its other artefacts by name
+# - poi.txt, History and the rest - where this application has none
+# (mp_settings::migrate::import_settings); the C#'s copies are left as they were. The fact
+# config.imported is what this start imported, or none.
 #
 # Self-contained: XDG_DATA_HOME puts both applications' directories in the scratch one - the C#'s
 # as "$WORK/Mission Planner", seeded below, and this application's as "$WORK/MissionPlannerRust",
-# which does not exist until the import makes it. (Where a ~/Mission Planner directory exists, the
+# which does not exist until the start makes it. (Where a ~/Mission Planner directory exists, the
 # C#'s rules put that application's directory there instead, XDG_DATA_HOME does not move it, and
 # this fails. A ~/MissionPlannerRust changes nothing: PLAN.md section 12, D11.)
 
@@ -18,18 +22,24 @@ setup mkdir -p "$WORK/Mission Planner/History" && printf '\357\273\277<?xml vers
 tiles offline
 screen fly
 window 1600x1200
-budget 4
+budget 5
 
-# Copied, and read from where they were copied to.
+# Offered, and taken: what came across is read at once from where it was copied to.
+expect mpimport.offer shown
+click mpimport-settings
 expect config.imported config.xml, poi.txt, History
 expect config.distunits Feet
 expect config.MapType OpenStreetMap
 expect fly.poi.count 2
 expect fly.poi.file ~ MissionPlannerRust/poi.txt
+click mpimport-close
+expect mpimport.offer none
 
-# The second start finds the directory holding the import's marker, and imports nothing; what the
-# first one copied is still what it reads.
+# The second start: the offer was answered, so it is not made again and nothing is imported; what
+# the first one brought is what it reads.
 restart
+expect mpimport.offer none
+expect mpimport.answer done
 expect config.imported none
 expect config.distunits Feet
 expect fly.poi.count 2

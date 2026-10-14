@@ -1256,6 +1256,10 @@ impl crate::MissionPlanner {
         cx: &mut gpui::Context<crate::MissionPlanner>,
     ) -> Option<gpui::AnyElement> {
         let offer = self.tailnet_offer?;
+        // After Mission Planner's import offer, never over it.
+        if self.mp_import.is_open() {
+            return None;
+        }
         let mut text = offer.text.to_owned();
         for command in offer.commands {
             text.push_str("\n\n    ");

@@ -28,7 +28,9 @@
 //! of 2026-10-14). On every load such a value has the C#'s directory replaced by this
 //! application's: the user data directory's by the user data directory, the shared data
 //! directory's by the shared one. Anything else is left as it is. The C#'s files are not moved
-//! or copied by this; what was written there stays there.
+//! or copied by this; what was written there stays there. The planner's first-start offer
+//! rehomes the settings it imports the same way, as it lays them over its own, so the file it
+//! then saves already points home.
 
 use std::path::{Path, PathBuf};
 

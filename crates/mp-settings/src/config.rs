@@ -163,6 +163,16 @@ impl Config {
         self.entries.insert(key.into(), value.into());
     }
 
+    /// Every setting of `other` set here, as `Settings.Instance[key] = value` sets each: a key both
+    /// hold takes `other`'s value, and a key only this one holds is kept. Not the C#'s: the first
+    /// start's offer lays Mission Planner's file over this application's this way
+    /// ([`crate::migrate::import_settings`]).
+    pub fn overlay(&mut self, other: &Self) {
+        for (key, value) in &other.entries {
+            self.entries.insert(key.clone(), value.clone());
+        }
+    }
+
     /// How many settings there are.
     #[must_use]
     pub fn len(&self) -> usize {
@@ -583,6 +593,26 @@ mod tests {
         assert!(rendered.contains("<ctl>a&#x1;b</ctl>"), "{rendered}");
         assert!(rendered.contains("<crlf>a\r\nb</crlf>"), "{rendered}");
         assert!(rendered.contains("<tab>a\tb</tab>"), "{rendered}");
+    }
+
+    /// Mission Planner's keys laid over this application's: theirs win where both have one, ours
+    /// alone are kept, and theirs are taken as they are - `____` and empty values included.
+    #[test]
+    fn an_overlay_takes_every_key_of_the_other_and_keeps_the_rest() {
+        let mut ours = Config::default();
+        ours.set("comport", "");
+        ours.set("_BAUD", "115200");
+        ours.set("mpimport_offer", "later");
+        let theirs = Config::parse(FIXTURE).expect("the fixture parses");
+        ours.overlay(&theirs);
+        for key in theirs.keys() {
+            assert_eq!(ours.get(key), theirs.get(key), "{key}");
+        }
+        assert_eq!(ours.get("comport"), Some("TCP"));
+        assert_eq!(ours.get("mpimport_offer"), Some("later"));
+        assert_eq!(ours.get("_BAUD"), Some("115200"));
+        assert_eq!(ours.get("rawparam____panel1collapsed"), Some("True"));
+        assert_eq!(ours.len(), theirs.len() + 2);
     }
 
     #[test]

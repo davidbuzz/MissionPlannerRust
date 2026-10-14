@@ -1,0 +1,23 @@
+# Unticked in the PLUGINS tab, Import from Mission Planner makes no offer, and nothing of Mission
+# Planner's comes across unasked (crates/mp-gui/src/mp_import.rs; the owner, 2026-10-14: no silent
+# import). The story: an earlier start made the offer and was answered Not now, so its setting asks
+# again - and the row has been unticked since, as the plugin manager's Save & Close writes it to
+# DisabledPlugins. Mission Planner's settings and a log are there to offer, and are not offered.
+#
+# Self-contained, as config-import.gui: XDG_DATA_HOME puts both data folders in $WORK.
+
+env XDG_DATA_HOME $WORK
+setup mkdir -p "$WORK/Mission Planner/logs" "$WORK/MissionPlannerRust" && printf '\357\273\277<?xml version="1.0" encoding="utf-8"?>\n<Config>\n  <distunits>Feet</distunits>\n</Config>' > "$WORK/Mission Planner/config.xml" && printf 'theirs' > "$WORK/Mission Planner/logs/1.tlog" && printf '\357\273\277<?xml version="1.0" encoding="utf-8"?>\n<Config>\n  <DisabledPlugins>mpimport.native</DisabledPlugins>\n  <mpimport_offer>later</mpimport_offer>\n</Config>' > "$WORK/MissionPlannerRust/config.xml"
+
+tiles offline
+screen fly
+window 1600x1200
+budget 5
+
+expect mpimport.answer later
+expect mpimport.offer none
+expect mpimport.found none
+expect mpimport.settings none
+expect mpimport.logs none
+expect config.imported none
+expect config.distunits none

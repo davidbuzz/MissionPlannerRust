@@ -191,11 +191,16 @@ The GUI records every flight without being asked, into its own data directory's 
 `~/.local/share/MissionPlannerRust/logs` on Linux (`$XDG_DATA_HOME` when set, and never
 `~/MissionPlannerRust`), `Documents\MissionPlannerRust\logs` on Windows - a directory of its own
 rather than the C#'s `Mission Planner`, so a user running both loses nothing to the other (see
-`crates/mp-settings`). On the first start that finds that directory
-missing or empty, Mission Planner's `config.xml`, `poi.txt`, `cameras.xml`, `checklist.xml`,
-`warnings.xml`, `UserAlerts.json`, `authkeys.xml`, `logo.png`, `logo.txt` and `History` are
-copied into it once and left untouched where they were; the tile cache, terrain, logs and
-parameter metadata are not copied, and are fetched or recorded again. A setting that points into
+`crates/mp-settings`). At the first start with no settings of its own, while Mission Planner's
+folder holds settings or logs, the planner offers to bring them across (the PLUGINS tab's
+"Import from Mission Planner", a native row like Tailscale's, on until unticked; the owner's word
+of 2026-10-14): **Import settings** lays Mission Planner's `config.xml` over this application's
+and copies its `poi.txt`, `cameras.xml`, `checklist.xml`, `warnings.xml`, `UserAlerts.json`,
+`authkeys.xml`, `logo.png`, `logo.txt` and `History` where this application has none; **Copy
+logs** copies its `.tlog`, `.bin`, `.log` and `.rlog` files into this application's log folder,
+keeping their folders and overwriting nothing; **Not now** asks again at the next start, **Don't
+ask again** never. Mission Planner's folder is only read. The tile cache, terrain and parameter
+metadata are not copied, and are fetched again. A setting that points into
 Mission Planner's folder - the log folder a copied `config.xml` carries - is pointed at the same
 place in this application's at every load, and the status line says so once (`crates/mp-settings`'
 `rehome`, a44244a). Map tiles go to the same place's `gmapcache`. `MP_NO_RECORD` turns recording

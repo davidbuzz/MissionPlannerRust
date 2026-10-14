@@ -34,7 +34,10 @@ env MP_SETTINGS $WORK/settings.conf
 # board passed through (COM3 is its second interface, MI_02).
 linux: env MP_FIRMWARE_PORT /dev/serial/by-id/usb-Hex_ProfiCNC_CubeOrange_19002E000F51303339323537-if00
 windows: env MP_FIRMWARE_PORT COM4
-setup mkdir -p "$WORK/Mission Planner" && printf '<?xml version="1.0" encoding="utf-8"?><Config></Config>' > "$WORK/Mission Planner/config.xml"
+# The empty config.xml, this application's own: it came through Mission Planner's folder and the
+# silent import until that import gave way to the first start's offer (crates/mp-gui/src/
+# mp_import.rs), which an empty folder of Mission Planner's would now put over Install Firmware.
+setup mkdir -p "$WORK/MissionPlannerRust" && printf '<?xml version="1.0" encoding="utf-8"?><Config></Config>' > "$WORK/MissionPlannerRust/config.xml"
 
 screen setup
 window 1600x1200

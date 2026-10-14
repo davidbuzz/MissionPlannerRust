@@ -1,0 +1,39 @@
+# The first start's offer put off, then declined (crates/mp-gui/src/mp_import.rs, the PLUGINS
+# tab's Import from Mission Planner): Not now asks again at the next start, Don't ask again never
+# asks again, and neither brings anything across - this application starts on its own defaults
+# (the owner, 2026-10-14: no silent import).
+#
+# Self-contained, as config-import.gui: XDG_DATA_HOME puts both data folders in $WORK.
+
+env XDG_DATA_HOME $WORK
+setup mkdir -p "$WORK/Mission Planner/logs" && printf '\357\273\277<?xml version="1.0" encoding="utf-8"?>\n<Config>\n  <distunits>Feet</distunits>\n</Config>' > "$WORK/Mission Planner/config.xml" && printf 'theirs' > "$WORK/Mission Planner/logs/1.tlog"
+
+tiles offline
+screen fly
+window 1600x1200
+budget 10
+
+# Offered at the first start, and put off: nothing came across.
+expect mpimport.offer shown
+expect mpimport.answer later
+click mpimport-later
+expect mpimport.offer none
+expect mpimport.answer later
+expect mpimport.settings none
+expect mpimport.logs none
+expect config.imported none
+expect config.distunits none
+
+# Not now: offered again; and declined for good.
+restart
+expect mpimport.offer shown
+click mpimport-never
+expect mpimport.offer none
+expect mpimport.answer never
+
+# Don't ask again: not offered, and still nothing of Mission Planner's.
+restart
+expect mpimport.offer none
+expect mpimport.answer never
+expect config.imported none
+expect config.distunits none

@@ -22,14 +22,17 @@ Mission Planner keeps its files under *Mission Planner* (`Documents\Mission Plan
 `~/.local/share/Mission Planner` on Linux). This application keeps its own under
 *MissionPlannerRust* next to it, so running both never writes over the other's files.
 
-On the first start that finds its directory missing or empty, it copies these from Mission
-Planner's, once, and leaves the originals as they were: `config.xml` (every setting), `poi.txt`,
-`cameras.xml`, `checklist.xml`, `warnings.xml`, `UserAlerts.json`, `authkeys.xml`, `logo.png`,
-`logo.txt` and the `History` folder. A file named `imported-from-Mission-Planner.txt` records what
-was copied. Not copied, because each is large and comes back on its own: the map tile cache
-(`gmapcache`), the terrain tiles (`srtm`), the flight logs (`logs`) and the parameter metadata -
-the tiles and terrain are fetched again as you look at them, and your old logs stay where Mission
-Planner wrote them, readable from there with Load Log.
+At its first start with no settings of its own, when Mission Planner's folder holds settings or
+logs, the planner asks what to bring across, each separately - and nothing until you say:
+**Import settings** lays Mission Planner's `config.xml` (every setting) over this application's
+and copies `poi.txt`, `cameras.xml`, `checklist.xml`, `warnings.xml`, `UserAlerts.json`,
+`authkeys.xml`, `logo.png`, `logo.txt` and the `History` folder where this application has none;
+**Copy logs** copies your `.tlog`, `.bin`, `.log` and `.rlog` files into this application's log
+folder, keeping their folders and overwriting nothing; **Not now** asks again at the next start,
+and **Don't ask again** never asks. Mission Planner's folder is only ever read. The offer is the
+PLUGINS tab's "Import from Mission Planner" row: untick it and the planner never asks. Not copied,
+because each is large and comes back on its own: the map tile cache (`gmapcache`), the terrain
+tiles (`srtm`) and the parameter metadata, fetched again as you need them.
 
 A setting that points into Mission Planner's folder - the log folder above all, which the copied
 `config.xml` carries - is pointed at the same place in this application's folder each time the

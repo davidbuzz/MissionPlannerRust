@@ -27,9 +27,9 @@
 //! (`Settings.AppConfigName`), and this application calls its own [`APP_CONFIG_NAME`],
 //! `MissionPlannerRust` - the owner's ruling of 2026-09-25 (PLAN.md section 12, D11): a user
 //! running both applications must not lose data to the other one's writes. The formats stay the
-//! C#'s, so a file copied from one directory to the other reads the same; [`migrate`] copies the
-//! C#'s files into this application's directory once, on the first start that finds it empty, and
-//! leaves the C#'s copies as they were.
+//! C#'s, so a file copied from one directory to the other reads the same; [`migrate`] brings the
+//! C#'s files into this application's directory - when the planner's first start offers them and
+//! the user takes them - and leaves the C#'s copies as they were.
 //!
 //! The rules are not what a Linux user would guess. `GetUserDataDirectory` asks .NET for
 //! `MyDocuments`, and under mono that is `$HOME`, not `~/Documents` - so the C# application on
