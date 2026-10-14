@@ -424,6 +424,11 @@ struct MissionPlanner {
     adopt_vehicle_mission: bool,
     /// The last thing a file operation did, shown so a save is not silent.
     file_status: Option<String>,
+    /// Which status message the last frame saw - its text's address, as every message set is a
+    /// string made new - and how many have been set, for the `status.serial` fact: a message set
+    /// again with the same words changes nothing on screen, and a script or the click crawler
+    /// must still tell a repeated answer from none (the owner's click audit, 2026-10-14).
+    status_seen: (Option<usize>, u64),
     /// The waypoint being dragged on the map, if one is.
     dragging_waypoint: Option<u16>,
     /// The altitude frame new waypoints are created in.
@@ -925,6 +930,7 @@ impl MissionPlanner {
             adopt_vehicle_rally: false,
             // In a page, the logs past what a visit loads, said once.
             file_status: mp_os::fs::left_in_page().map(left_in_page_note),
+            status_seen: (None, 0),
             dragging_waypoint: None,
             // `CMB_altmode` as `config(false)` restores it, else this application's own choice.
             // `// C#: GCSViews/FlightPlanner.cs:2609-2610`
@@ -3896,6 +3902,18 @@ impl Render for MissionPlanner {
             config::flight_modes::record_facts(&self.flight_modes, &view);
             facts::record("recording", self.telemetry.recording().is_some());
             facts::record("status", self.file_status.as_deref().unwrap_or(""));
+            let address = self
+                .file_status
+                .as_ref()
+                .filter(|text| !text.is_empty())
+                .map(|text| text.as_ptr().addr());
+            if address != self.status_seen.0 {
+                self.status_seen.0 = address;
+                if address.is_some() {
+                    self.status_seen.1 += 1;
+                }
+            }
+            facts::record("status.serial", self.status_seen.1);
             facts::record("ui.textfields", probe::text_fields_text());
             // What the Actions tab last put on the wire and what the vehicle said back.
             self.fly_actions.record_facts(&view);

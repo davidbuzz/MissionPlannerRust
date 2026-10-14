@@ -182,6 +182,11 @@ def main():
            f"{len(rows)} clicks; {len(faults)} gave no visible answer.", "",
            "| verdict | count |", "|---|---|"]
     out += [f"| {k} | {v} |" for k, v in sorted(counts.items(), key=lambda kv: -kv[1])]
+    repeats = sorted({(r["screen"], r["page"], r["id"]) for r in rows if r["final"] == "repeated-status"})
+    if repeats:
+        out += ["", "## Answered with the message already showing", "",
+                "Each said again what the status line already said: nothing changes on screen.", ""]
+        out += [f"- {screen} / {page}: `{name}`" for screen, page, name in repeats]
     out += ["", "## The faults", ""]
     for (screen, page), items in sorted(by_page.items()):
         out.append(f"### {screen} / {page}")

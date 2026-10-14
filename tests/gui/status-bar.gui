@@ -17,10 +17,15 @@ env MP_CONFIG_XML $WORK/config.xml
 
 expect screen experimental
 
-# EXPERIMENTAL: a tool not ported says so.
+# EXPERIMENTAL: a tool not ported says so - and again, the same words, which change nothing on
+# screen but are counted (status.serial), so a repeated answer is told from none.
+expect status.serial 0
 click experimental-but_dem
 expect status.drawn DEM: not ported yet (NOT_DONE_YET_MATRIX.md, the EXPERIMENTAL row)
 expect status-bar below tab-fly
+expect status.serial 1
+click experimental-but_dem
+expect status.serial 2
 
 # LOGS > Review a log: Open's file chooser, and a name that is not there.
 click tab-logs

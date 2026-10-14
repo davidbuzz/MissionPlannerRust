@@ -33,7 +33,7 @@ import numpy as np
 
 # Facts that move with the vehicle or the clock, whatever is clicked.
 TELEMETRY = re.compile(
-    r"^(fly\.quick|fly\.ekf|fly\.messages|fly\.xpdr|fly\.gauge|hud\.|raw\.|vehicle\.|link\.|"
+    r"^(status\.serial$|fly\.quick|fly\.ekf|fly\.messages|fly\.xpdr|fly\.gauge|hud\.|raw\.|vehicle\.|link\.|"
     r"sticks\.|map\.(centre|ready|tiles|paint)|config\.failsafe\.out|config\.servo\.[0-9]+\.(pwm|bar)|"
     r"params\.table\.built|frames|recording|status\.drawn$)")
 # The theme's colours (crates/mp-gui/src/ui.rs): ui::action draws a disabled button as dim text
@@ -108,6 +108,10 @@ def judge(app, before, baseline, rect, opened_count, wait=0.7):
     appeared = sorted(set(probe) - set(before.probe))
     vanished = sorted(set(before.probe) - set(probe))
     status = facts.get("status") if facts.get("status") != before.facts.get("status") else None
+    # The same words set again: nothing changes on screen, but the planner counts every message
+    # (`status.serial`), so a repeated answer is told from none.
+    repeated = (status is None and facts.get("status.serial") is not None
+                and facts.get("status.serial") != before.facts.get("status.serial"))
     screen_changed = facts.get("screen") != before.facts.get("screen")
     if outside_px > SEEN_PIXELS or appeared or vanished or opened or screen_changed:
         verdict = "visible"
@@ -117,6 +121,8 @@ def judge(app, before, baseline, rect, opened_count, wait=0.7):
         verdict = "changed-itself"
     elif status:
         verdict = "status-only"
+    elif repeated:
+        verdict = "repeated-status"
     elif own:
         verdict = "internal-only"
     else:
