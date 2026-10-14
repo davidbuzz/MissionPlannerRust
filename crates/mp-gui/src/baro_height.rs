@@ -29,9 +29,9 @@
 //! line, by the owner's ruling. One window at a time: a press while one shows reads the pressure
 //! again and starts it over, where the C# opens another.
 //!
-//! **Not working yet (2026-10-06):** typing a number into the box. In the headless test the box
-//! never got the keyboard after a click, for a reason not found; the ▲ and ▼ buttons change the
-//! number and write, and are what experimental-baro.gui tests.
+//! A number typed into the box - typed at its end and cleared with Ctrl+U, as the planner's number
+//! boxes are - is the value when Enter validates it, and written then; the ▲ and ▼ buttons change
+//! the number and write at once (experimental-baro.gui tests both).
 //!
 //! `// C#: temp.cs:1169-1187; Utilities/ExtensionsMP.cs:110-132`
 
