@@ -79,10 +79,12 @@ class App:
         self.facts_file = os.path.join(self.work, "facts.txt")
         env = dict(self.env0, MP_SCREEN=screen, MP_WINDOW=window, MP_PROBE=self.probe_file,
                    MP_FACTS=self.facts_file, XDG_DATA_HOME=self.work, HOME=self.work,
-                   MP_CONFIG_XML=os.path.join(self.work, "config.xml"), MP_NO_TILES="1",
-                   # Offline, and the firmware pages shown a made-up board in place of the
-                   # machine's ports, so Force Bootloader and Bootloader Update refuse any real
-                   # serial device (config/firmware.rs's DEVICE_ENV).
+                   MP_CONFIG_XML=os.path.join(self.work, "config.xml"),
+                   # Offline - a map source configured and nothing fetched, as a script's
+                   # `tiles offline` has it, so the map type buttons act (with MP_NO_TILES they
+                   # did nothing, 2026-10-15) - and the firmware pages shown a made-up board in
+                   # place of the machine's ports, so Force Bootloader and Bootloader Update
+                   # refuse any real serial device (config/firmware.rs's DEVICE_ENV).
                    MP_OFFLINE="1", MP_FIRMWARE_DEVICE="gui-crawl, no device",
                    # A fake Tailscale on a tailnet, as tools/gui-test.sh gives every script: the
                    # crawl never reads this computer's own, and no first-start offer covers it.
@@ -144,16 +146,29 @@ class App:
         return out
 
     def shot(self):
-        """The window's pixels, height x width x RGB."""
+        """The window's pixels, height x width x RGB.
+
+        Each pixel a 32-bit word in the header's byte order, its channels where the header's
+        masks put them: on an X server that is LSBFirst, as Xvfb is, the bytes run B, G, R, so
+        reading them as they lie gave BGR, and observe.look() - whose colours are RGB - never
+        found a dimmed control (2026-10-15)."""
         data = subprocess.run(["xwd", "-silent", "-id", self.win], capture_output=True,
                               env=self.env0).stdout
         header, = struct.unpack(">I", data[0:4])
         width, height = struct.unpack(">II", data[16:24])
+        byte_order, = struct.unpack(">I", data[28:32])
         per_line, = struct.unpack(">I", data[48:52])
+        masks = struct.unpack(">III", data[56:68])
         colours, = struct.unpack(">I", data[76:80])
         start = header + colours * 12
-        pixels = np.frombuffer(data[start:start + per_line * height], dtype=np.uint8)
-        return pixels.reshape(height, per_line)[:, :width * 4].reshape(height, width, 4)[:, :, :3].copy()
+        words = np.frombuffer(data[start:start + per_line * height],
+                              dtype="<u4" if byte_order == 0 else ">u4")
+        words = words.reshape(height, per_line // 4)[:, :width]
+        channels = []
+        for mask in masks:
+            shift = (mask & -mask).bit_length() - 1
+            channels.append(((words & mask) >> shift).astype(np.uint8))
+        return np.stack(channels, axis=2)
 
     @staticmethod
     def seen(rect):

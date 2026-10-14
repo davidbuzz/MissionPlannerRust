@@ -35,7 +35,7 @@ import numpy as np
 TELEMETRY = re.compile(
     r"^(status\.serial$|fly\.quick|fly\.ekf|fly\.messages|fly\.xpdr|fly\.gauge|hud\.|raw\.|vehicle\.|link\.|"
     r"sticks\.|map\.(centre|ready|tiles|paint)|config\.failsafe\.out|config\.servo\.[0-9]+\.(pwm|bar)|"
-    r"params\.table\.built|frames|recording|status\.drawn$)")
+    r"params\.table\.built|params\.metadata\.|frames|recording|status\.drawn$)")
 # The theme's colours (crates/mp-gui/src/ui.rs): ui::action draws a disabled button as dim text
 # on the panel's colour, an enabled one on the action colour.
 PANEL = np.array([0x24, 0x29, 0x2E])
@@ -57,8 +57,14 @@ def look(shot, rect):
     crop = shot[y0:y1, x0:x1].reshape(-1, 3).astype(int)
     if share(crop, ACTION, 6) > 0.4:
         return "live"
-    if share(crop, PANEL, 6) > 0.4 and share(crop, DIM, 12) > 0.01:
-        return "disabled"
+    if share(crop, PANEL, 6) > 0.4:
+        # The label's ink, by its brightness: its glyphs are drawn with coloured fringes (the
+        # LCD's subpixels), so few pixels are DIM itself (2026-10-15). Dim text is there and
+        # none of it brighter than DIM; a live label's TEXT is far brighter.
+        peak = crop.max(axis=1)
+        ink = peak[peak > 0x50]
+        if ink.size and np.percentile(ink, 95) <= DIM.max() + 0x18:
+            return "disabled"
     return "other"
 
 

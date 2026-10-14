@@ -6,7 +6,8 @@
 # an hour). Then HELP crawled alone, and the verdicts it already knows checked - Show Console
 # Window changes itself, Change Log hands a link to the desktop, the welcome text is no control.
 # Then the Full Parameter List reached as verify.py reaches a control the screen shows at once:
-# its opening warning answered, its search box typed into. Display :90.
+# its opening warning answered, its search box typed into; and a dimmed control told from a live
+# one by its colours. Display :90.
 set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
 OUT="$(mktemp -d)"
@@ -74,5 +75,31 @@ if left:
 if typed != crawl.TYPED:
     bad.append(f"param-search took no typing: {typed!r}")
 print("boxes: " + ("passed" if not bad else "FAILED: " + "; ".join(bad)))
+sys.exit(1 if bad else 0)
+PY
+# A dimmed control is told from a live one by its colours (observe.look): on FLIGHT DATA with no
+# vehicle, Force Arm is dimmed and Raw Sensor View is live. The screenshot read BGR as RGB until
+# 2026-10-15, and every dimmed control came out a dead one.
+python3 - "$HERE" "$OUT" "$@" <<'PY'
+import sys
+sys.path.insert(0, sys.argv[1])
+import crawl, observe
+args = sys.argv[3:]
+binary = args[args.index("--binary") + 1] if "--binary" in args else None
+crawler = crawl.Crawler("selftest-look", ":90", [], sys.argv[2], binary)
+app = crawler.launch("fly", [("click", "fly-tab-actions")])
+try:
+    probe = app.probe()
+    shot = app.shot()
+    looks = {name: observe.look(shot, probe[name]) if name in probe else "missing"
+             for name in ("force-arm", "fly-rawsensor")}
+finally:
+    app.close()
+bad = []
+if looks["force-arm"] != "disabled":
+    bad.append(f"force-arm looks {looks['force-arm']}, not disabled")
+if looks["fly-rawsensor"] != "live":
+    bad.append(f"fly-rawsensor looks {looks['fly-rawsensor']}, not live")
+print("look: " + ("passed" if not bad else "FAILED: " + "; ".join(bad)))
 sys.exit(1 if bad else 0)
 PY

@@ -148,9 +148,16 @@ def main():
     parser.add_argument("--out", default=os.path.join(HERE, "out"))
     options = parser.parse_args()
     rows = load(options.out)
+    # A text field answers a click with no more than its caret: when typing into it showed what
+    # was typed, its click is no fault (2026-10-15).
+    typed = {(r["state"], r["screen"], r["page"], r["id"]) for r in rows
+             if r["kind"] == "type" and r["final"] == "typed"}
     for r in rows:
         if r["final"] in FAULTS and r["kind"] == "click" and not clickable(r["id"]):
             r["final"] = "not-a-control"
+        elif (r["final"] in FAULTS and r["kind"] == "click"
+              and (r["state"], r["screen"], r["page"], r["id"]) in typed):
+            r["final"] = "typed"
     faults = [r for r in rows if r["final"] in FAULTS]
     # One fault a control: the same screen, page, control and kind, reached by several ways.
     unique = {}
