@@ -1,0 +1,147 @@
+# Click everything: the first full crawl's report (2026-10-15)
+
+The owner's request of 2026-10-14: "click all the things, and report all the stuff that doesnt
+work". The plan is [click-everything.md](click-everything.md); this is its Part 3, the report.
+
+## In short
+
+`tools/gui-crawl` clicked every control of every screen and page of the planner, as built at
+0c7f15e, in four states: two with no vehicle, two connected to an ArduCopter SITL of the crawl's
+own. 8,770 clicks; 4,367 answered visibly, 175 changed only themselves (a tick), 146 took
+typing; the rest were rows of long lists sampled out (3,106), out of reach (383), not controls by
+the source (259) or denied as opening a port of their own (42).
+
+292 clicks gave no visible answer. Each was clicked again, alone, in a fresh window: 257 still
+gave none - 185 controls once the states are merged. Three of those, on the Full Parameter List,
+were the crawler's own fault (its opening warning left over the screen, 13d6a27) and work. The
+other 182 were each read against the Rust and the C# it ports:
+
+| What it was | Rows | |
+|---|---|---|
+| Not a control: a label, picture, gauge, chart or page background | 47 | no change |
+| Dimmed on purpose: drawn disabled in that state, so it takes no click | 45 | **question 1** |
+| Silent in the C# too: the handler returns without a word in that state | 33 | **fixed**: the status line says why, quietly |
+| Missing what the C# shows | 1 | **fixed** |
+| Dead | 10 | **9 fixed**; 1 not ported |
+| The crawler's own doing | 44 | the crawler fixed where it could |
+| Not in the C# | 2 | **question 2** |
+
+Found on the way, and fixed: the compass page's Fitness list pressed the button under it, and a
+debug build's cut-off strip lay over DroneCAN's filter list. Not fixed: four real gaps, below.
+
+## Fixed (55bb4be)
+
+### Dead
+
+- **CONFIG > Planner > Joystick Setup, the eight Settings buttons**: each opened its settings form
+  and the form was never drawn - nor the page's message boxes, Import's question or its file
+  dialogs. SETUP's joystick page drew them; the joystick window over CONFIG did not
+  (`config/planner.rs`; `tests/gui/config-planner-joystick.gui`, new).
+- **CONFIG > Planner > Browse** (the log folder): on a desktop with no folder dialog to show (no
+  XDG portal) the press did nothing; it now says why on the status line.
+
+### Missing what the C# shows
+
+- **EXPERIMENTAL > Log Index, a sorted column's header**: the sort arrow was appended to the
+  title and cut off with it in a 60-pixel column; the C# draws it beside the text. Drawn beside
+  it now (`log_index.rs`).
+
+### Silent in the C# too - now said on the status line, quietly
+
+The port's rule for a press the C# answers with nothing (`fly::Refusal::Quiet`, the owner's bug
+of 2026-10-14): say why, so a press that did nothing is not taken for one that did.
+
+- FLIGHT DATA > Telemetry Logs: Play with no log loaded - "no log loaded".
+- SETUP and CONFIG > Joystick: Detect with no joystick (fourteen rows) - "no joystick".
+- CONFIG > Planner: Stop with no video running - "no video capture to stop".
+- SETUP > Compass: Remove Missing with none missing - "no compass is missing".
+- SETUP > OSD: Enable Telemetry where the vehicle has none of SR0_, SR1_ or SR3_'s rates.
+- SETUP > RTK/GPS Inject: Messages Seen with none seen; Delete on the new base-position row.
+- EXPERIMENTAL and SETUP > Advanced > Auth Keys: Disable Signing and Use with no vehicle - "no
+  vehicle".
+- EXPERIMENTAL > CoT: Clear on an empty box.
+- EXPERIMENTAL > Log Index: Default or a folder with no logs in it.
+- EXPERIMENTAL and LOGS > Geo Ref Images: Pre-process with no log or no folder of pictures; OK on
+  a folder box naming nothing that is there.
+
+Some presses did something and showed nothing; these now say what they did (**question 3**):
+Auth Keys' and the Warning Manager's Save ("saved ... to" the file), Disable Signing with a vehicle,
+EXPERIMENTAL's ReSort All logs ("N logs sorted"), and Force Accel Cal and Force Compass Cal
+(whether the vehicle accepted).
+
+### Found on the way
+
+- **SETUP > Compass, the Fitness drop-down**: its list was drawn inside the page, so the Large
+  Vehicle MagCal button lay under its second row - choosing "8" also opened MagCal's box. The list
+  is drawn over the page now, as every other drop-down is.
+- **SETUP > DroneCAN > Filter, in a debug build**: the red cut-off strip listed the filter's ninety
+  boxes, which scroll in their list as the C#'s do, and lay over the list's rows. They may scroll
+  now (`layout_guard.rs`).
+
+## For the owner to decide
+
+1. **Dimmed controls** (45 rows, listed below). A dimmed control takes no click, as anywhere;
+   Mission Planner seldom dims - its buttons take the click and return without a word, which the
+   port now says. Should a dimmed control say why when it is clicked, as the Advanced page's
+   withheld buttons do ("Param gen: not implemented yet")?
+2. **FLIGHT DATA's tuning graph, its Clear button**: not in the C#, whose graph has none. Keep it -
+   with "nothing to clear" when the graph is empty - or remove it?
+3. **Confirmations of a silent success** (above): keep them, or say only what is missing?
+4. **CONFIG > Planner > Browse** opens the desktop's own folder dialog; every other file dialog is
+   the planner's own chooser (a typed path with its folder listed). The same here?
+5. **SETUP > Frame Type**: clicking the frame the vehicle already has shows nothing, as in the C#.
+   A quiet "already Plus"?
+
+## Not fixed: real gaps
+
+- **LOGS > DataFlash > Download DataFlash Log Via Mavlink**: First Person KML, Create KML, Clear
+  Logs and .bin to .log are greyed, and the window says why: Clear Logs needs a LOG_ERASE request
+  the link does not have, and the other three are not ported (the ledger's row for
+  `Log/LogDownloadMavLink.cs`). Create KML and .bin to .log are the DataFlash page's own
+  conversions, which are ported; First Person KML needs a writer of its own
+  (`LogOutput.cs:244-368`).
+- **FLIGHT DATA > HUD**: the C#'s third click zone, the pre-arm text that opens PrearmStatus
+  (`HUD.cs:1227-1231`), has none; the EKF and vibration zones work.
+- **FLIGHT DATA > Telemetry Logs, Play**: the C# clears the tuning graph when playback starts
+  (`FlightData.cs:569-591`); the port does not.
+- **SETUP > DroneCAN > Filter**: a request's and its response's boxes share an id and tick
+  together; the C# keeps each box's own tick.
+
+## The crawler's own faults
+
+Fixed: it never told a dimmed control from a dead one (its screenshot read BGR as RGB); a box a
+page opens with was left over a control the screen shows at once (13d6a27); its planners had no
+map imagery, so the map type buttons did nothing; the parameter metadata's loading counted as a
+click's effect; a text field's click counted as a fault where typing into it worked (0ad02f6);
+FailSafe's "Ensure your props are not on" box took every click on its page; a check box's tick
+fell under its threshold; and page backgrounds were clicked as controls (95315c9).
+
+Still to teach it: answer a chain of boxes (Auth Keys' Add asks for a name, a passphrase and a
+strength before Use is reachable); step a number up before down; pick another radio button before
+clicking the checked one; drag a map rather than click it; press F2 from another screen; and leave
+the SITL's frame class alone - its click on Tri dimmed the frame types for the rest of the crawl.
+
+## The lists
+
+**Dimmed on purpose** (question 1): CONFIG > Planner: Vario, Theme Custom, GDI+, Password, Beta
+updates, MAVLink debug, Language, OSD colour, Theme, ADSB, Analytics, Temp; Full Parameter List:
+Apply (until a comparison finds a change); EXPERIMENTAL: CoT's baud rate, Log Index's Delete, Geo
+Ref's GeoTag Images, Estimate Offset and its seconds, MAVLink Inspector's Graph It, Warning
+Manager's colour box; FLIGHT DATA > Actions without a vehicle: Abort Land, Change Speed, Force
+Arm; the page strip's left arrow; FLIGHT PLAN: the fence's and the survey area's Clear and Undo
+with nothing drawn; SETUP: ADSB's Save, Battery Monitor 2's pins, the Y6B frame type under a
+quad, Airspeed's pin, Compass's Accept and Cancel before Start, the Mount page without
+CAM_TRIGG_TYPE; SIMULATION: the swarm buttons (Multilink is not ported).
+
+**Not controls**: labels (the Advanced page's thirteen, Auth Keys', the Log Index's statistics,
+Proximity's caption, Accelerometer's text), pictures (Battery Monitor, Airspeed, OSD, Optical Flow,
+Parachute, Geo Ref), the HUD clicked away from its zones, the raw sensor's output bars, the
+DroneCAN and Auth Keys grids with nothing in them, Geo Ref's map with no marker, the telemetry
+log's file name, Proximity's picture, and the background of seven pages, five of them pages ruled
+out of the port.
+
+**The crawler's own doing**: FailSafe's twelve (its opening box), Frame Type's four (the crawl's own
+Tri), text fields already holding the keyboard (nine), DroneCAN's filter ticks (under the strip
+above), RTK's NTRIP v1 tick, the map type buttons (no imagery), Auth Keys' Use (behind Add's
+boxes), Geo Ref's checked radio button, Support Proxy's port at its minimum, MAVFtp's root node
+(listed already), F2 on FLIGHT DATA, and SIMULATION's map (it acts on a drag).

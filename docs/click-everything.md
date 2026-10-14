@@ -111,8 +111,12 @@ reported as a control).
 The report goes to the owner, with the faults in priority order. Fixing them is separate work;
 each fix comes with its `dead/*.gui` script turned into a passing test.
 
+The first full run's report, with every confirmed fault read against the Rust and the C# and what
+was fixed: [click-report.md](click-report.md) (2026-10-15).
+
 ## Order of work
 
 1. Part 1: the status bar, its tests, a commit (2b33c13; the count, 2aaff89).
 2. Part 2: the crawler, its self-test, a commit (40c7425).
-3. The full crawl on the planner as built at that commit; the report to the owner.
+3. The full crawl on the planner as built at that commit; the report to the owner
+   (click-report.md, 2026-10-15).
