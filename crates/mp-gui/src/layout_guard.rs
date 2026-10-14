@@ -166,11 +166,12 @@ pub const MAY_SCROLL: &[&str] = &[
     // 1,153 wide. `// C#: Log/LogIndex.Designer.cs:83-87, 96-174`
     "experimental-logindex-row-",
     "experimental-logindex-header-",
-    // DroneCAN's Filter window, `panel`, a FlowLayoutPanel with AutoScroll in a 600-high panel: a
-    // box for every data type `MSG_INFO` knows, named by the type - whose first names are these -
-    // scrolls in it; ALL and the close box do not (the click crawl, 2026-10-15: the debug build's
+    // DroneCAN's Filter window, `panel`, a FlowLayoutPanel with AutoScroll in a 600-high panel:
+    // ALL and a box for every data type `MSG_INFO` knows, named by the type - whose first names are
+    // these - scroll in it; the close box does not (the click crawl, 2026-10-15: the debug build's
     // strip listed some ninety boxes and lay over the list's rows).
-    // `// C#: GCSViews/ConfigurationView/ConfigDroneCAN.cs:918-924`
+    // `// C#: GCSViews/ConfigurationView/ConfigDroneCAN.cs:918-924, 945`
+    "dronecan-filter-all",
     "dronecan-filter-ardupilot_",
     "dronecan-filter-com_",
     "dronecan-filter-cuav_",
@@ -470,19 +471,16 @@ mod tests {
         );
     }
 
-    /// DroneCAN's Filter window: a box for every data type `MSG_INFO` knows may scroll out of
-    /// sight in its list, as the C#'s panel scrolls; ALL, the close box and the window may not.
+    /// DroneCAN's Filter window: ALL and a box for every data type `MSG_INFO` knows may scroll
+    /// out of sight in its list, as the C#'s panel scrolls; the close box and the window may not.
     #[test]
     fn the_dronecan_filters_boxes_scroll_in_their_list() {
         for row in mp_dronecan::names::MSG_INFO {
             let name = format!("dronecan-filter-{}", row.name);
             assert!(!must_show(&name), "{name}");
         }
-        for control in [
-            "dronecan-filter-all",
-            "dronecan-filter-close",
-            "dronecan-filter-form",
-        ] {
+        assert!(!must_show("dronecan-filter-all"));
+        for control in ["dronecan-filter-close", "dronecan-filter-form"] {
             assert!(must_show(control), "{control}");
         }
     }

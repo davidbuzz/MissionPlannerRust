@@ -48,7 +48,15 @@
 //! indenting `XmlWriter` do. The `.kmz` goes to the log's directory with its file name in lower
 //! case; the C# lower-cases the whole path (`LogOutput.cs:1105`), which on Windows is the same
 //! place and on Linux fails for any directory with a capital in it.
-//! `// C#: ExtLibs/Utilities/LogOutput.cs; GCSViews/FlightData.cs:1137-1199`
+//!
+//! The Log Downloader's Create KML and First Person KML (`Log/LogDownloadMavLink.cs:469-575`) read
+//! a log as text whatever its name ([`process_text`]). Create KML then writes what Create KML +
+//! gpx writes ([`write_kml_files`]); First Person KML writes `writeKMLFirstPerson`'s tour - the
+//! flight seen from the aircraft, a `gx:FlyTo` to each attitude sample's place at its attitude -
+//! zipped with the plane model into `<name>-fp.kmz` ([`LogOutput::write_kml_first_person`]). The
+//! tour's text is the C#'s strings as they stand on every platform: a header with `\n` in it, and
+//! verbatim strings holding the source file's `\r\n`.
+//! `// C#: ExtLibs/Utilities/LogOutput.cs; GCSViews/FlightData.cs:1137-1199; Log/LogDownloadMavLink.cs:469-575`
 
 use std::collections::HashMap;
 use std::fmt::Write as _;
@@ -644,11 +652,12 @@ fn right(text: &str, width: usize) -> String {
     format!("{text:>width$}")
 }
 
-/// What `writeKML` leaves on disk for one log: each file and what goes in it.
+/// What `writeKML` or `writeKMLFirstPerson` leaves on disk for one log: each file and what goes
+/// in it.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct KmlFiles {
-    /// Every file written, in the order the C# writes them: the `.gpx`, the `.obs`, the waypoint
-    /// files, the rally files, the `.param`, and last the `.kmz`.
+    /// Every file written, in the order the C# writes them: `writeKML`'s `.gpx`, `.obs`, waypoint
+    /// files, rally files, `.param`, and last the `.kmz`; `writeKMLFirstPerson`'s `.kmz` alone.
     pub files: Vec<(PathBuf, Vec<u8>)>,
     /// The `.kml` inside the `.kmz`, for reading back.
     pub kml: Vec<u8>,
@@ -1304,7 +1313,153 @@ const RINEX_HEADER: &str = concat!(
     "                                                            END OF HEADER       ",
 );
 
-/// Why "Create KML + gpx" wrote nothing, or less than everything.
+/// `writeKMLFirstPerson`'s header: a string with `\n` in it, the start of the document and its
+/// path style. `// C#: ExtLibs/Utilities/LogOutput.cs:248-250`
+const FIRST_PERSON_HEADER: &str = concat!(
+    "<?xml version=\"1.0\" encoding=\"UTF-8\"?><kml xmlns=\"http://www.opengis.net/kml/2.2\" ",
+    "xmlns:gx=\"http://www.google.com/kml/ext/2.2\" xmlns:kml=\"http://www.opengis.net/kml/2.2\" ",
+    "xmlns:atom=\"http://www.w3.org/2005/Atom\">\n",
+    "     <Document>   <name>Paths</name>    <description>Path</description>\n",
+    "    <Style id=\"yellowLineGreenPoly\">      <LineStyle>        <color>7f00ffff</color>",
+    "        <width>4</width>      </LineStyle>      <PolyStyle>        <color>7f00ff00</color>",
+    "      </PolyStyle>    </Style>\n  ",
+);
+
+/// The tour's folder, up to its playlist of flights. `// C#: ExtLibs/Utilities/LogOutput.cs:295-301`
+const FIRST_PERSON_TOUR: &str = concat!(
+    "\r\n",
+    "        <Folder>\r\n",
+    "            <name>Flight</name> \r\n",
+    "            <gx:Tour>\r\n",
+    "                <name>Flight Do</name> \r\n",
+    "                <gx:Playlist>\r\n",
+    "                    ",
+);
+
+/// The end of the playlist, and of the document. `// C#: ExtLibs/Utilities/LogOutput.cs:302-307`
+const FIRST_PERSON_END: &str = concat!(
+    "</gx:Playlist> \r\n",
+    "            </gx:Tour>\r\n",
+    "        </Folder>\r\n",
+    "    </Document>\r\n",
+    "</kml>\r\n",
+);
+
+/// A `gx:FlyTo`'s text before each of its seven numbers: the duration, then the camera's
+/// longitude, latitude, altitude, roll, tilt and heading. `// C#: ExtLibs/Utilities/LogOutput.cs:270-285`
+const FLY_TO: [&str; 7] = [
+    concat!(
+        "\r\n",
+        "        <gx:FlyTo>\r\n",
+        "            <gx:duration>"
+    ),
+    concat!(
+        "</gx:duration>\r\n",
+        "            <gx:flyToMode>smooth</gx:flyToMode>\r\n",
+        "            <Camera>\r\n",
+        "                <longitude>",
+    ),
+    concat!("</longitude>\r\n", "                <latitude>"),
+    concat!("</latitude>\r\n", "                <altitude>"),
+    concat!("</altitude>\r\n", "                <roll>"),
+    concat!("</roll>\r\n", "                <tilt>"),
+    concat!("</tilt>\r\n", "                <heading>"),
+];
+
+/// A `gx:FlyTo`'s text after its heading. `// C#: ExtLibs/Utilities/LogOutput.cs:285-289`
+const FLY_TO_END: &str = concat!(
+    "</heading>              \r\n",
+    "                <altitudeMode>absolute</altitudeMode>\r\n",
+    "            </Camera>\r\n",
+    "        </gx:FlyTo>\r\n",
+);
+
+impl LogOutput {
+    /// `writeKMLFirstPerson`: the flight as a Google Earth tour seen from the aircraft, zipped with
+    /// the plane model into the `.kmz` that `filename` names - `<log>.log-fp.kml` makes
+    /// `<log>-fp.kmz` beside it - the `.kml` itself deleted once it is in it, so the `.kmz` is all
+    /// it leaves. The tour flies to the camera at each attitude sample with a latitude, at its
+    /// roll, its pitch from the horizon (`90 - tilt`) and its heading, taking a tenth of a second
+    /// for each sample since the last one flown to ("assumeing 10hz in log file"); a sample at the
+    /// place of the last one flown to is not flown to. `modified` stamps the `.kmz`'s entries.
+    ///
+    /// # Errors
+    ///
+    /// [`DflogKmlError::InUse`] for a `filename` whose name holds no `.log-fp.kml` - a log named
+    /// `.LOG`, say: the C#'s `.kmz` is then the `.kml` itself, which it holds open writing the one
+    /// as it opens the other to read, and throws. [`DflogKmlError::Io`] when the zip cannot be
+    /// made.
+    /// `// C#: ExtLibs/Utilities/LogOutput.cs:244-368`
+    pub fn write_kml_first_person(
+        &self,
+        filename: &Path,
+        modified: zip::DosTime,
+    ) -> Result<KmlFiles, DflogKmlError> {
+        let mut tour = String::new();
+        let (mut last_lat, mut last_lng) = (0.0, 0.0);
+        let (mut packets, mut last_packet) = (0u32, 0u32);
+        for data in &self.flightdata {
+            let model = &data.model;
+            if model.latitude == 0.0 {
+                continue;
+            }
+            packets = packets.saturating_add(1);
+            // The doubles compared as the C# compares them.
+            #[allow(clippy::float_cmp)]
+            if last_lat == model.latitude && last_lng == model.longitude {
+                continue;
+            }
+            let numbers = [
+                f64::from(packets.saturating_sub(last_packet)) * 0.1,
+                model.longitude,
+                model.latitude,
+                model.altitude,
+                model.roll,
+                90.0 - model.tilt,
+                model.heading,
+            ];
+            for (text, number) in FLY_TO.iter().zip(numbers) {
+                tour.push_str(text);
+                tour.push_str(&netfmt::double(number));
+            }
+            tour.push_str(FLY_TO_END);
+            (last_lat, last_lng) = (model.latitude, model.longitude);
+            last_packet = packets;
+        }
+        let kml = format!("{FIRST_PERSON_HEADER}{FIRST_PERSON_TOUR}{tour}{FIRST_PERSON_END}")
+            .into_bytes();
+        let name = filename
+            .file_name()
+            .map(|s| s.to_string_lossy().into_owned())
+            .unwrap_or_default();
+        // `filename.Replace(".log-fp.kml", "-fp.kmz")`, in the file's name.
+        let kmz_name = name.replace(".log-fp.kml", "-fp.kmz");
+        if kmz_name == name {
+            return Err(DflogKmlError::InUse(filename.to_path_buf()));
+        }
+        let entries = [
+            zip::Entry {
+                name,
+                data: kml.clone(),
+            },
+            zip::Entry {
+                name: PLANE_MODEL_NAME.to_owned(),
+                data: PLANE_MODEL.to_vec(),
+            },
+        ];
+        let kmz = zip::write(&entries, modified).map_err(|err| match err {
+            zip::ZipError::Io(err) => DflogKmlError::Io(err),
+            other => DflogKmlError::Io(std::io::Error::other(other.to_string())),
+        })?;
+        let dir = filename.parent().unwrap_or_else(|| Path::new(""));
+        Ok(KmlFiles {
+            files: vec![(dir.join(kmz_name), kmz)],
+            kml,
+        })
+    }
+}
+
+/// Why "Create KML + gpx" or First Person KML wrote nothing, or less than everything.
 #[derive(Debug, thiserror::Error)]
 pub enum DflogKmlError {
     /// The log could not be read, or a file could not be written.
@@ -1313,11 +1468,18 @@ pub enum DflogKmlError {
     /// `writeKML` threw on a `CMD` line: the side files are written, the `.kmz` is not.
     #[error("the log's mission could not be read; {} files written, no .kmz", .0.len())]
     Mission(Vec<PathBuf>),
+    /// `writeKMLFirstPerson` on a `.kml` whose name holds no `.log-fp.kml`, whose `.kmz` would be
+    /// the `.kml` itself: what .NET's `IOException` says, and nothing written.
+    #[error(
+        "The process cannot access the file '{}' because it is being used by another process.",
+        .0.display()
+    )]
+    InUse(PathBuf),
 }
 
 /// Every line of a log as `but_dflogtokml_Click` feeds them to `processLine`: a `.bin` (by its
-/// name) through `DFLogBuffer`, anything else as text, `StreamReader.ReadLine` by
-/// `StreamReader.ReadLine`. `// C#: GCSViews/FlightData.cs:1156-1188`
+/// name) through `DFLogBuffer`, anything else as text ([`process_text`]).
+/// `// C#: GCSViews/FlightData.cs:1156-1188`
 pub fn process_log(log: &Path, data: &[u8], mode_name: ModeName<'_>, output: &mut LogOutput) {
     if log.to_string_lossy().to_lowercase().ends_with(".bin") {
         let mut buffer = DfLogBuffer::new(data, mode_name);
@@ -1326,19 +1488,28 @@ pub fn process_log(log: &Path, data: &[u8], mode_name: ModeName<'_>, output: &mu
             output.process_line(&line);
         }
     } else {
-        let text = String::from_utf8_lossy(data);
-        let text = text.strip_prefix('\u{feff}').unwrap_or(&text);
-        let mut rest = text;
-        while !rest.is_empty() {
-            let end = rest.find(['\r', '\n']).unwrap_or(rest.len());
-            output.process_line(rest.get(..end).unwrap_or_default());
-            let after = rest.get(end..).unwrap_or_default();
-            rest = after
-                .strip_prefix("\r\n")
-                .or_else(|| after.strip_prefix('\r'))
-                .or_else(|| after.strip_prefix('\n'))
-                .unwrap_or(after);
-        }
+        process_text(data, output);
+    }
+}
+
+/// Every line of a text log to `processLine`, `StreamReader.ReadLine` by `StreamReader.ReadLine`:
+/// split at `\r\n`, `\r` or `\n`, a byte-order mark the reader's and not the text's. How "Create
+/// KML + gpx" reads a log not named `.bin`, and how the Log Downloader's Create KML and First
+/// Person KML read every log, whatever its name.
+/// `// C#: GCSViews/FlightData.cs:1178-1186; Log/LogDownloadMavLink.cs:495-501, 554-561`
+pub fn process_text(data: &[u8], output: &mut LogOutput) {
+    let text = String::from_utf8_lossy(data);
+    let text = text.strip_prefix('\u{feff}').unwrap_or(&text);
+    let mut rest = text;
+    while !rest.is_empty() {
+        let end = rest.find(['\r', '\n']).unwrap_or(rest.len());
+        output.process_line(rest.get(..end).unwrap_or_default());
+        let after = rest.get(end..).unwrap_or_default();
+        rest = after
+            .strip_prefix("\r\n")
+            .or_else(|| after.strip_prefix('\r'))
+            .or_else(|| after.strip_prefix('\n'))
+            .unwrap_or(after);
     }
 }
 
@@ -1396,6 +1567,24 @@ pub fn dflog_to_kml_at(
     let data = mp_os::fs::read(log)?;
     let mut output = LogOutput::new();
     process_log(log, &data, mode_name, &mut output);
+    write_kml_files(&mut output, kml, zone)
+}
+
+/// `writeKML(kml)` for what `output` has read, each file it makes written where it names it -
+/// the writing half of [`dflog_to_kml_at`], and the Log Downloader's Create KML's, which reads
+/// the log itself ([`process_text`]) - returning where. `zone` is the local time zone for the GPX
+/// times and the `.kmz`'s stamps.
+///
+/// # Errors
+///
+/// A file cannot be written; or [`DflogKmlError::Mission`] when the C# would throw out of
+/// `writeKML`, after the side files.
+/// `// C#: ExtLibs/Utilities/LogOutput.cs:776-1163; Log/LogDownloadMavLink.cs:508`
+pub fn write_kml_files(
+    output: &mut LogOutput,
+    kml: &Path,
+    zone: Zone<'_>,
+) -> Result<Vec<PathBuf>, DflogKmlError> {
     let written = output.write_kml(kml, zone, NEWLINE, dos_now(zone));
     let (files, complete) = match written {
         Ok(files) => (files.files, true),
@@ -1411,6 +1600,29 @@ pub fn dflog_to_kml_at(
     } else {
         Err(DflogKmlError::Mission(paths))
     }
+}
+
+/// First Person KML (`BUT_firstperson`) for what `output` has read of a log:
+/// `writeKMLFirstPerson(kml)` - the Log Downloader names it `<log>-fp.kml` - with the `.kmz`
+/// written where it names it, `<name>-fp.kmz` beside the log, which is all it leaves; returns
+/// where. `zone` is the local time zone for the `.kmz`'s stamps.
+///
+/// # Errors
+///
+/// As [`LogOutput::write_kml_first_person`], or the `.kmz` cannot be written.
+/// `// C#: Log/LogDownloadMavLink.cs:569; ExtLibs/Utilities/LogOutput.cs:244-368`
+pub fn write_first_person_files(
+    output: &LogOutput,
+    kml: &Path,
+    zone: Zone<'_>,
+) -> Result<Vec<PathBuf>, DflogKmlError> {
+    let written = output.write_kml_first_person(kml, dos_now(zone))?;
+    let mut paths = Vec::with_capacity(written.files.len());
+    for (path, contents) in written.files {
+        mp_os::fs::write(&path, contents)?;
+        paths.push(path);
+    }
+    Ok(paths)
 }
 
 #[cfg(test)]
@@ -1453,5 +1665,202 @@ mod tests {
         assert_eq!(netfmt::double(0.0 / -1.0), "0");
         assert_eq!(xml_double(f64::INFINITY), "INF");
         assert_eq!(xml_single(4.0), "4");
+    }
+
+    /// The `.kmz`s' stamp in these tests.
+    const WHEN: zip::DosTime = zip::DosTime {
+        year: 2026,
+        month: 9,
+        day: 24,
+        hour: 5,
+        minute: 30,
+        second: 0,
+    };
+
+    fn testdata(name: &str) -> PathBuf {
+        Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../testdata")
+            .join(name)
+    }
+
+    /// `writeKMLFirstPerson`'s text for the hand-written log's three attitude samples - the flight
+    /// data its `.gpx` golden holds - worked through the C# source's own strings: a tenth of a
+    /// second each, the tilt 90 less the pitch, a roll of `-0` written `0`, the header's `\n` and
+    /// the verbatim strings' `\r\n`. `// C#: ExtLibs/Utilities/LogOutput.cs:244-310`
+    const SYNTHETIC_TOUR: &str = concat!(
+        "<?xml version=\"1.0\" encoding=\"UTF-8\"?><kml xmlns=\"http://www.opengis.net/kml/2.2\" xmlns:gx=\"http://www.google.com/kml/ext/2.2\" xmlns:kml=\"http://www.opengis.net/kml/2.2\" xmlns:atom=\"http://www.w3.org/2005/Atom\">\n",
+        "     <Document>   <name>Paths</name>    <description>Path</description>\n",
+        "    <Style id=\"yellowLineGreenPoly\">      <LineStyle>        <color>7f00ffff</color>        <width>4</width>      </LineStyle>      <PolyStyle>        <color>7f00ff00</color>      </PolyStyle>    </Style>\n",
+        "  \r\n",
+        "        <Folder>\r\n",
+        "            <name>Flight</name> \r\n",
+        "            <gx:Tour>\r\n",
+        "                <name>Flight Do</name> \r\n",
+        "                <gx:Playlist>\r\n",
+        "                    \r\n",
+        "        <gx:FlyTo>\r\n",
+        "            <gx:duration>0.1</gx:duration>\r\n",
+        "            <gx:flyToMode>smooth</gx:flyToMode>\r\n",
+        "            <Camera>\r\n",
+        "                <longitude>149.1652374</longitude>\r\n",
+        "                <latitude>-35.3632621</latitude>\r\n",
+        "                <altitude>584.09</altitude>\r\n",
+        "                <roll>-1.5</roll>\r\n",
+        "                <tilt>87.75</tilt>\r\n",
+        "                <heading>91.5</heading>              \r\n",
+        "                <altitudeMode>absolute</altitudeMode>\r\n",
+        "            </Camera>\r\n",
+        "        </gx:FlyTo>\r\n",
+        "\r\n",
+        "        <gx:FlyTo>\r\n",
+        "            <gx:duration>0.1</gx:duration>\r\n",
+        "            <gx:flyToMode>smooth</gx:flyToMode>\r\n",
+        "            <Camera>\r\n",
+        "                <longitude>149.16524</longitude>\r\n",
+        "                <latitude>-35.36327</latitude>\r\n",
+        "                <altitude>585.1</altitude>\r\n",
+        "                <roll>0</roll>\r\n",
+        "                <tilt>90</tilt>\r\n",
+        "                <heading>92</heading>              \r\n",
+        "                <altitudeMode>absolute</altitudeMode>\r\n",
+        "            </Camera>\r\n",
+        "        </gx:FlyTo>\r\n",
+        "\r\n",
+        "        <gx:FlyTo>\r\n",
+        "            <gx:duration>0.1</gx:duration>\r\n",
+        "            <gx:flyToMode>smooth</gx:flyToMode>\r\n",
+        "            <Camera>\r\n",
+        "                <longitude>149.1654</longitude>\r\n",
+        "                <latitude>-35.3634</latitude>\r\n",
+        "                <altitude>590</altitude>\r\n",
+        "                <roll>3.5</roll>\r\n",
+        "                <tilt>94.75</tilt>\r\n",
+        "                <heading>181</heading>              \r\n",
+        "                <altitudeMode>absolute</altitudeMode>\r\n",
+        "            </Camera>\r\n",
+        "        </gx:FlyTo>\r\n",
+        "</gx:Playlist> \r\n",
+        "            </gx:Tour>\r\n",
+        "        </Folder>\r\n",
+        "    </Document>\r\n",
+        "</kml>\r\n",
+    );
+
+    /// First Person KML over the hand-written log, read as the Log Downloader reads it: the tour
+    /// is the C#'s text, zipped with the plane model as `<name>-fp.kmz`, the `.kml` under its own
+    /// name. `// C#: Log/LogDownloadMavLink.cs:550-569; ExtLibs/Utilities/LogOutput.cs:244-368`
+    #[test]
+    fn the_first_person_tour_is_the_csharps_text() {
+        let data = std::fs::read(testdata("dataflash/synthetic.log")).unwrap();
+        let mut output = LogOutput::new();
+        process_text(&data, &mut output);
+        let written = output
+            .write_kml_first_person(Path::new("out/synthetic.log-fp.kml"), WHEN)
+            .unwrap();
+        assert_eq!(
+            String::from_utf8(written.kml.clone()).unwrap(),
+            SYNTHETIC_TOUR
+        );
+        assert_eq!(written.files.len(), 1);
+        let (path, kmz) = &written.files[0];
+        assert_eq!(path, Path::new("out/synthetic-fp.kmz"));
+        let entries = zip::read(kmz).unwrap();
+        let names: Vec<&str> = entries.iter().map(|entry| entry.name.as_str()).collect();
+        assert_eq!(names, ["synthetic.log-fp.kml", "block_plane_0.dae"]);
+        assert_eq!(entries[0].data, written.kml);
+        assert_eq!(entries[1].data, PLANE_MODEL);
+    }
+
+    /// A sample with no latitude is passed over and not counted; one at the place last flown to is
+    /// counted and not flown to, so the next flight takes its tenth of a second too.
+    /// `// C#: ExtLibs/Utilities/LogOutput.cs:260-293`
+    #[test]
+    fn the_tour_waits_through_samples_it_does_not_fly_to() {
+        let mut output = LogOutput::new();
+        for line in [
+            "FMT, 95, 51, GPS, QBBIHBcLLeffffB, TimeUS,I,Status,GMS,GWk,NSats,HDop,Lat,Lng,Alt,Spd,GCrs,VZ,Yaw,U",
+            "FMT, 73, 36, ATT, QffffffB, TimeUS,DesRoll,Roll,DesPitch,Pitch,DesYaw,Yaw,AEKF",
+            // A sample at A, one at latitude 0, A again, then B.
+            "GPS, 1, 0, 3, 0, 2300, 12, 0.8, -35.1, 149.1, 100, 0, 0, 0, 0, 1",
+            "ATT, 2, 0, 1, 0, 2, 0, 30, 0",
+            "GPS, 3, 0, 3, 0, 2300, 12, 0.8, 0, 149.2, 100, 0, 0, 0, 0, 1",
+            "ATT, 4, 0, 1, 0, 2, 0, 30, 0",
+            "GPS, 5, 0, 3, 0, 2300, 12, 0.8, -35.1, 149.1, 100, 0, 0, 0, 0, 1",
+            "ATT, 6, 0, 1, 0, 2, 0, 30, 0",
+            "GPS, 7, 0, 3, 0, 2300, 12, 0.8, -35.2, 149.3, 110, 0, 0, 0, 0, 1",
+            "ATT, 8, 0, -1, 0, -2, 0, 45, 0",
+        ] {
+            output.process_line(line);
+        }
+        assert_eq!(output.flightdata.len(), 4);
+        let written = output
+            .write_kml_first_person(Path::new("a.log-fp.kml"), WHEN)
+            .unwrap();
+        let kml = String::from_utf8(written.kml).unwrap();
+        let durations: Vec<&str> = kml
+            .split("<gx:duration>")
+            .skip(1)
+            .filter_map(|rest| rest.split('<').next())
+            .collect();
+        assert_eq!(durations, ["0.1", "0.2"]);
+        assert!(!kml.contains("149.2"), "{kml}");
+        assert!(kml.contains(concat!(
+            "<longitude>149.1</longitude>\r\n",
+            "                <latitude>-35.1</latitude>\r\n",
+            "                <altitude>100</altitude>\r\n",
+            "                <roll>-1</roll>\r\n",
+            "                <tilt>92</tilt>\r\n",
+            "                <heading>30</heading>"
+        )));
+        assert!(kml.contains(concat!(
+            "<longitude>149.3</longitude>\r\n",
+            "                <latitude>-35.2</latitude>\r\n",
+            "                <altitude>110</altitude>\r\n",
+            "                <roll>1</roll>\r\n",
+            "                <tilt>88</tilt>\r\n",
+            "                <heading>45</heading>"
+        )));
+        assert_eq!(written.files[0].0, Path::new("a-fp.kmz"));
+    }
+
+    /// A log whose name does not end `.log` - `FLIGHT.LOG`, which the `*.log` filter lists on
+    /// Windows - has no `.kmz` of its own: the C# throws, and nothing is made.
+    /// `// C#: ExtLibs/Utilities/LogOutput.cs:314-332`
+    #[test]
+    fn a_tour_whose_kmz_would_be_its_kml_is_not_made() {
+        let error = LogOutput::new()
+            .write_kml_first_person(Path::new("out/FLIGHT.LOG-fp.kml"), WHEN)
+            .unwrap_err();
+        assert!(matches!(error, DflogKmlError::InUse(_)), "{error}");
+        assert_eq!(
+            error.to_string(),
+            "The process cannot access the file 'out/FLIGHT.LOG-fp.kml' because it is being used \
+             by another process."
+        );
+    }
+
+    /// The product path: the `.kmz` lands beside the log, and nothing else does - the `.kml` is
+    /// in it, not beside it. `// C#: ExtLibs/Utilities/LogOutput.cs:336`
+    #[test]
+    fn first_person_kml_leaves_only_the_kmz() {
+        let dir = mp_os::temp_dir().join(format!("mp-kml-first-person-{}", mp_os::process_id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let mut output = LogOutput::new();
+        process_text(
+            &std::fs::read(testdata("dataflash/synthetic.log")).unwrap(),
+            &mut output,
+        );
+        let written =
+            write_first_person_files(&output, &dir.join("flight.log-fp.kml"), &utc).unwrap();
+        assert_eq!(written, [dir.join("flight-fp.kmz")]);
+        let names: Vec<String> = std::fs::read_dir(&dir)
+            .unwrap()
+            .map(|entry| entry.unwrap().file_name().to_string_lossy().into_owned())
+            .collect();
+        assert_eq!(names, ["flight-fp.kmz"]);
+        let entries = zip::read(&std::fs::read(&written[0]).unwrap()).unwrap();
+        assert_eq!(entries[0].data, SYNTHETIC_TOUR.as_bytes());
+        std::fs::remove_dir_all(&dir).unwrap();
     }
 }

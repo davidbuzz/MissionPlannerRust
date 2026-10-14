@@ -98,6 +98,7 @@ mod demo_pointer;
 // ---- end row 96 ----
 mod platform;
 mod poi;
+mod prearm_status;
 mod prefetch_ui;
 mod probe;
 mod quick;

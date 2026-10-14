@@ -4696,10 +4696,11 @@ impl MissionPlanner {
     }
 
     /// Once a frame: `cs.lastautowp`, a Resume Mission moved on, the Telemetry Logs page
-    /// following the log it plays, the Transponder page's wait and look for a status, and the
-    /// DataFlash Logs page's conversion finishing.
+    /// following the log it plays, the Prearm Checks window's timers, the Transponder page's
+    /// wait and look for a status, and the DataFlash Logs page's conversion finishing.
     pub(crate) fn fly_tick(&mut self, view: &TelemetryView, window: &Window) {
         self.fly_data.playback.tick();
+        self.prearm_status_tick(view);
         self.fly_avi_tick();
         // The Scripts tab: the run's output and end, and the requests its script has made.
         if let Some(status) =
@@ -4861,6 +4862,8 @@ pub struct FlightData {
     pub ekf_open: bool,
     /// Whether the `Vibration` window is showing.
     pub vibration_open: bool,
+    /// The `PrearmStatus` window, which the HUD's pre-arm line opens.
+    pub prearm: crate::prearm_status::PrearmStatus,
     /// `CameraOverlap`: the map menu's Camera Overlap, `CheckOnClick`.
     /// `// C#: GCSViews/FlightData.cs:66, 4571-4585`
     pub camera_overlap: bool,
@@ -5193,6 +5196,7 @@ impl FlightData {
             logs: crate::logdownload::LogDownloader::default(),
             ekf_open: false,
             vibration_open: false,
+            prearm: crate::prearm_status::PrearmStatus::default(),
             camera_overlap: false,
             photos: crate::camera_photos::PhotoLayer::default(),
             mouse_down_start: None,
@@ -5260,6 +5264,7 @@ impl FlightData {
         self.logs.record_facts(listed);
         crate::facts::record("fly.ekf.open", self.ekf_open);
         crate::facts::record("fly.vibration.open", self.vibration_open);
+        self.prearm.record_facts();
         crate::facts::record("fly.camera_overlap", self.camera_overlap);
         self.photos.record_facts();
         let state = view.state.as_deref();
@@ -5650,12 +5655,24 @@ impl Playback {
         }
     }
 
-    /// Play/Pause pressed: [`Playback::toggle`], and with no log loaded, why nothing happened.
-    /// The C# sets `logreadmode`, and its main loop, finding no `logplaybackfile`, turns it
-    /// straight back off and leaves the button "Play" without a word; said on the status line,
-    /// quietly, as [`Refusal::Quiet`] is, so a press that did nothing is not mistaken for one
-    /// that did. `// C#: GCSViews/FlightData.cs:558-596, 3553, 3684-3689`
-    pub fn play_pressed(&self) -> Result<(), Refusal> {
+    /// Play/Pause pressed, `BUT_playlog_Click`: [`Playback::toggle`], and with no log loaded,
+    /// why nothing happened. A press that finds `logreadmode` false - a log paused or at its
+    /// end, or none loaded - starts the tuning graph over first: `list1` to `list20` emptied
+    /// and `tickStart`, the clock its seconds count from, taken again, so the graph shows the
+    /// log from the press on. A press while a log plays only pauses it, the graph left as it is.
+    /// With no log the C# sets `logreadmode`, and its main loop, finding no `logplaybackfile`,
+    /// turns it straight back off and leaves the button "Play" without a word; said on the
+    /// status line, quietly, as [`Refusal::Quiet`] is, so a press that did nothing is not
+    /// mistaken for one that did. `// C#: GCSViews/FlightData.cs:558-596, 3553, 3684-3689`
+    pub fn play_pressed(&self, tuning: &mut crate::tuning::Tuning) -> Result<(), Refusal> {
+        // `logreadmode`: what `toggle` turns over.
+        if self
+            .control
+            .as_ref()
+            .is_none_or(|control| control.is_paused())
+        {
+            tuning.clear();
+        }
         if !self.loaded() {
             return Err(Refusal::quiet("no log loaded"));
         }
@@ -5870,7 +5887,7 @@ pub fn playback_page(playback: &Playback, cx: &mut Context<MissionPlanner>) -> A
             theme::ACCENT,
             true,
             cx.listener(|this, _event: &(), _window, cx| {
-                if let Err(refusal) = this.fly_data.playback.play_pressed() {
+                if let Err(refusal) = this.fly_data.playback.play_pressed(&mut this.tuning) {
                     this.file_status = Some(refusal.text().to_owned());
                 }
                 cx.notify();
@@ -6463,6 +6480,9 @@ fn log_analyzer_window(report: &str, cx: &mut Context<MissionPlanner>) -> AnyEle
 
 // --- The windows the HUD opens --------------------------------------------------------------------
 
+/// A HUD window and its zone, `(x, y, width, height)` in the HUD.
+pub type HudZone = (HudWindow, (f32, f32, f32, f32));
+
 /// Which window a click on the HUD opens.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum HudWindow {
@@ -6470,28 +6490,45 @@ pub enum HudWindow {
     Ekf,
     /// `Vibration`, from `vibehitzone`.
     Vibration,
+    /// `PrearmStatus`, from `prearmhitzone`, while disarmed.
+    Prearm,
 }
 
 impl HudWindow {
+    /// The three, in the order `OnMouseClick` tests their zones.
+    /// `// C#: ExtLibs/Controls/HUD.cs:1211-1231`
+    pub const ALL: [Self; 3] = [Self::Ekf, Self::Vibration, Self::Prearm];
+
     /// The click target's id.
     #[must_use]
     pub const fn id(self) -> &'static str {
         match self {
             Self::Ekf => "hud-ekf",
             Self::Vibration => "hud-vibe",
+            Self::Prearm => "hud-prearm",
         }
     }
 }
 
+/// Grown up and left by the five pixels of the box `OnMouseClick` tests a zone against: a
+/// click's `new Rectangle(e.X, e.Y, 5, 5)` meets the zone wherever its corner is less than five
+/// pixels above or left of it. `// C#: ExtLibs/Controls/HUD.cs:1211, 1219, 1227`
+const fn grown((x, y, w, h): (f32, f32, f32, f32)) -> (f32, f32, f32, f32) {
+    (x - 5.0, y - 5.0, w + 5.0, h + 5.0)
+}
+
 /// Where a click on the HUD opens a window: the rectangle `doPaint` sets where it draws "EKF"
-/// or "Vibe" - at the text, 40 wide and twice the font high - grown up and left by the five
-/// pixels of the box `OnMouseClick` tests against it. `(left, top, width, height)` in the HUD.
-/// `// C#: ExtLibs/Controls/HUD.cs:1203-1231, 3158-3160, 3214-3217`
+/// or "Vibe" - at the text, 40 wide and twice the font high - or, while disarmed, the pre-arm
+/// line - at the text, as wide as it measures - grown up and left by the five pixels of the box
+/// `OnMouseClick` tests against it. `(left, top, width, height)` in the HUD.
+/// `// C#: ExtLibs/Controls/HUD.cs:1203-1231, 3158-3160, 3214-3217, 3266-3280`
 #[must_use]
 pub fn hud_zone(scene: &crate::hud::Scene, window: HudWindow) -> Option<(f32, f32, f32, f32)> {
     let (element, text) = match window {
         HudWindow::Ekf => (crate::hud::Element::Ekf, "EKF"),
         HudWindow::Vibration => (crate::hud::Element::Vibe, "Vibe"),
+        // The scene keeps the line's rectangle: its width is the text's, not a fixed 40.
+        HudWindow::Prearm => return scene.zone(crate::hud::Element::Prearm).map(grown),
     };
     scene
         .owners
@@ -6512,17 +6549,36 @@ pub fn hud_zone(scene: &crate::hud::Scene, window: HudWindow) -> Option<(f32, f3
         })
         // With the pictures showing there is no label: the picture's own rectangle, padded as
         // the C# pads its click zones. `// C#: ExtLibs/Controls/HUD.cs:3152-3303`
-        .or_else(|| {
-            scene
-                .zone(element)
-                .map(|(x, y, w, h)| (x - 5.0, y - 5.0, w + 5.0, h + 5.0))
+        .or_else(|| scene.zone(element).map(grown))
+}
+
+/// The windows a click on a zone opens. `OnMouseClick` tests the click's box against every
+/// zone in turn and raises each one's event, so a click opens its own zone's window and any
+/// other whose zone holds its point: where the pre-arm line's zone and EKF's overlap, five pixels
+/// along the top of EKF's, both. `at` is the click's point in the HUD, which a click with no
+/// pointer has not got. `// C#: ExtLibs/Controls/HUD.cs:1207-1232`
+#[must_use]
+pub fn hud_zones_met(
+    zones: &[HudZone],
+    clicked: HudWindow,
+    at: Option<(f32, f32)>,
+) -> Vec<HudWindow> {
+    zones
+        .iter()
+        .filter(|(which, (left, top, width, height))| {
+            *which == clicked
+                || at.is_some_and(|(x, y)| {
+                    x > *left && x < left + width && y > *top && y < top + height
+                })
         })
+        .map(|(which, _)| *which)
+        .collect()
 }
 
 /// The least the HUD gives way to the page under it.
 const HUD_LEAST: f32 = 140.0;
 
-/// The primary flight display, with the two places a click opens a window and its menu on the
+/// The primary flight display, with the three places a click opens a window and its menu on the
 /// right button. Where the HUD and the map have been swapped it fills the map's place rather than
 /// the column's top.
 pub fn hud_panel(
@@ -6600,10 +6656,33 @@ pub fn hud_panel(
                 cx.notify();
             }),
         );
-    for which in [HudWindow::Ekf, HudWindow::Vibration] {
-        let Some((left, top, width, height)) = hud_zone(&scene, which) else {
-            continue;
-        };
+    // Each zone a box of its own, with the hand over it (`OnMouseMove`) and for a script to
+    // find; a click on one is `OnMouseClick`'s, which opens every window whose zone it meets.
+    // `// C#: ExtLibs/Controls/HUD.cs:1207-1256`
+    let zones: Rc<[HudZone]> = HudWindow::ALL
+        .into_iter()
+        .filter_map(|which| hud_zone(&scene, which).map(|zone| (which, zone)))
+        .collect();
+    for &(which, (left, top, width, height)) in zones.iter() {
+        let met = Rc::clone(&zones);
+        let laid_out = Rc::clone(&data.hud_bounds);
+        // Where in the HUD the pointer was - the canvas's place, as last laid out - against
+        // every zone.
+        let clicked = cx.listener(move |this, event: &gpui::ClickEvent, _window, cx| {
+            let at = event
+                .mouse_position()
+                .zip(laid_out.get())
+                .map(|(pointer, bounds)| {
+                    (
+                        f32::from(pointer.x - bounds.origin.x),
+                        f32::from(pointer.y - bounds.origin.y),
+                    )
+                });
+            for opened in hud_zones_met(&met, which, at) {
+                this.hud_window_open(opened);
+            }
+            cx.notify();
+        });
         hud = hud.child(
             crate::probe::measured(which.id(), div())
                 .id(which.id())
@@ -6615,18 +6694,22 @@ pub fn hud_panel(
                 .cursor_pointer()
                 // Measured through a child, as the probe measures: an empty box has none.
                 .child(div().size_full())
-                .on_click(cx.listener(move |this, _event, _window, cx| {
-                    // `hud1_ekfclick` and `hud1_vibeclick`: the form shown.
-                    // `// C#: GCSViews/FlightData.cs:3306-3437`
-                    match which {
-                        HudWindow::Ekf => this.fly_data.ekf_open = true,
-                        HudWindow::Vibration => this.fly_data.vibration_open = true,
-                    }
-                    cx.notify();
-                })),
+                .on_click(clicked),
         );
     }
     hud
+}
+
+impl MissionPlanner {
+    /// A HUD zone's event: `hud1_ekfclick`, `hud1_vibeclick` or `hud1_prearmclick`, its form
+    /// made and shown. `// C#: GCSViews/FlightData.cs:3306-3314, 3429-3447`
+    pub(crate) fn hud_window_open(&mut self, which: HudWindow) {
+        match which {
+            HudWindow::Ekf => self.fly_data.ekf_open = true,
+            HudWindow::Vibration => self.fly_data.vibration_open = true,
+            HudWindow::Prearm => self.prearm_status_open(),
+        }
+    }
 }
 
 /// `EKFStatus.timer1_Tick`'s five bars: each variance times a hundred, as an `int`.
@@ -6793,8 +6876,8 @@ pub(crate) fn floating_window(
     .into_any_element()
 }
 
-/// The windows the HUD has open: `EKFStatus` and `Vibration`, each `TopMost` and each updated
-/// by its own timer - here, every frame.
+/// The windows the HUD has open: `EKFStatus`, `Vibration` and `PrearmStatus`, each `TopMost`
+/// and each updated by its own timer - here, every frame.
 pub fn hud_windows(
     data: &FlightData,
     view: &TelemetryView,
@@ -6938,6 +7021,7 @@ pub fn hud_windows(
             }),
         ));
     }
+    windows.extend(crate::prearm_status::window(&data.prearm, cx));
     windows
 }
 
@@ -11297,6 +11381,91 @@ mod tests {
         assert_eq!(HudWindow::Vibration.id(), "hud-vibe");
     }
 
+    /// The pre-arm line's zone is `prearmhitzone` grown by the C#'s five-pixel box, at either
+    /// text, while disarmed; armed there is none, as `OnMouseClick` asks `!status`.
+    /// `// C#: ExtLibs/Controls/HUD.cs:1227-1231, 3266-3280`
+    #[test]
+    fn a_click_on_the_prearm_line_is_a_click_in_the_csharps_rectangle() {
+        let (w, h) = (398.0, 258.0);
+        let armed = crate::hud::HudInputs {
+            has_vehicle: true,
+            armed: true,
+            ..crate::hud::HudInputs::default()
+        };
+        assert_eq!(
+            hud_zone(&crate::hud::scene(&armed, w, h), HudWindow::Prearm),
+            None
+        );
+        for ready in [true, false] {
+            let inputs = crate::hud::HudInputs {
+                armed: false,
+                prearm_ready: ready,
+                ..armed.clone()
+            };
+            let scene = crate::hud::scene(&inputs, w, h);
+            let csharp = scene
+                .zone(crate::hud::Element::Prearm)
+                .expect("prearmhitzone");
+            let zone = hud_zone(&scene, HudWindow::Prearm).expect("the line is drawn");
+            for dx in -8..140 {
+                for dy in -8..30 {
+                    #[allow(clippy::cast_precision_loss)]
+                    let point = (csharp.0 + dx as f32, csharp.1 + dy as f32);
+                    let (left, top, width, height) = zone;
+                    let ours = point.0 > left
+                        && point.0 < left + width
+                        && point.1 > top
+                        && point.1 < top + height;
+                    assert_eq!(ours, csharp_hit(csharp, point), "{ready} at {point:?}");
+                }
+            }
+        }
+        assert_eq!(HudWindow::Prearm.id(), "hud-prearm");
+    }
+
+    /// A click opens its own zone's window and every other whose zone holds the point, as the
+    /// C# raises each event whose zone the click's box meets: in the five pixels where the
+    /// pre-arm line's zone lies over EKF's, both open; at EKF's middle, EKF Status alone.
+    /// `// C#: ExtLibs/Controls/HUD.cs:1207-1232`
+    #[test]
+    fn a_click_opens_every_window_whose_zone_it_meets() {
+        let inputs = crate::hud::HudInputs {
+            has_vehicle: true,
+            armed: false,
+            prearm_ready: false,
+            ..crate::hud::HudInputs::default()
+        };
+        let scene = crate::hud::scene(&inputs, 398.0, 258.0);
+        let zones: Vec<HudZone> = HudWindow::ALL
+            .into_iter()
+            .filter_map(|which| hud_zone(&scene, which).map(|zone| (which, zone)))
+            .collect();
+        assert_eq!(zones.len(), 3);
+        let ekf = hud_zone(&scene, HudWindow::Ekf).expect("EKF");
+        let prearm = hud_zone(&scene, HudWindow::Prearm).expect("pre-arm");
+        // Inside both: EKF's top five pixels, under the pre-arm line's bottom.
+        let both = (ekf.0 + ekf.2 / 2.0, ekf.1 + 2.0);
+        assert!(both.1 < prearm.1 + prearm.3, "{ekf:?} {prearm:?}");
+        assert_eq!(
+            hud_zones_met(&zones, HudWindow::Prearm, Some(both)),
+            [HudWindow::Ekf, HudWindow::Prearm]
+        );
+        assert_eq!(
+            hud_zones_met(&zones, HudWindow::Ekf, Some(both)),
+            [HudWindow::Ekf, HudWindow::Prearm]
+        );
+        let middle = (ekf.0 + ekf.2 / 2.0, ekf.1 + ekf.3 / 2.0);
+        assert_eq!(
+            hud_zones_met(&zones, HudWindow::Ekf, Some(middle)),
+            [HudWindow::Ekf]
+        );
+        // A click with no pointer: its own zone's window.
+        assert_eq!(
+            hud_zones_met(&zones, HudWindow::Vibration, None),
+            [HudWindow::Vibration]
+        );
+    }
+
     #[test]
     fn the_ekf_window_lists_every_flag_to_uninitialized() {
         let lines = ekf_flags(0x0001 | 0x0004);
@@ -11434,18 +11603,56 @@ mod tests {
     #[test]
     fn play_with_no_log_loaded_says_so_quietly() {
         let mut playback = Playback::default();
+        let mut tuning = crate::tuning::Tuning::new();
         assert_eq!(
-            playback.play_pressed(),
+            playback.play_pressed(&mut tuning),
             Err(Refusal::Quiet("no log loaded".to_owned()))
         );
         assert!(!playback.playing());
         assert_eq!(playback.button(), "Play");
         let control = control(10);
         playback.load("flight.tlog", Arc::clone(&control));
-        assert_eq!(playback.play_pressed(), Ok(()));
+        assert_eq!(playback.play_pressed(&mut tuning), Ok(()));
         assert!(!playback.playing());
-        assert_eq!(playback.play_pressed(), Ok(()));
+        assert_eq!(playback.play_pressed(&mut tuning), Ok(()));
         assert!(playback.playing());
+    }
+
+    /// A tuning graph showing, with a sample taken from a snapshot.
+    fn sampled_tuning() -> crate::tuning::Tuning {
+        let mut tuning = crate::tuning::Tuning::new();
+        tuning.set_visible(true);
+        let mut state = mp_vehicle::VehicleState::default();
+        state.messages_applied = 1;
+        let mut view = TelemetryView::disconnected("file:flight.tlog");
+        view.state = Some(Arc::new(state));
+        tuning.sample(&view);
+        assert_eq!(tuning.samples(), 1);
+        tuning
+    }
+
+    /// `BUT_playlog_Click` from `logreadmode` false - a log paused, or none loaded, which the
+    /// main loop turns straight back off - empties the tuning graph's lists and takes its clock
+    /// again before it starts the log; from true, a log playing, it pauses and leaves the graph
+    /// as it is. `// C#: GCSViews/FlightData.cs:558-596`
+    #[test]
+    fn play_starts_the_tuning_graph_over_and_pause_leaves_it() {
+        let mut playback = Playback::default();
+        let mut tuning = sampled_tuning();
+        assert!(playback.play_pressed(&mut tuning).is_err());
+        assert_eq!(tuning.samples(), 0, "no log: cleared all the same");
+
+        let control = control(10);
+        playback.load("flight.tlog", Arc::clone(&control));
+        assert!(playback.playing());
+        let mut tuning = sampled_tuning();
+        assert_eq!(playback.play_pressed(&mut tuning), Ok(()));
+        assert!(!playback.playing());
+        assert_eq!(tuning.samples(), 1, "Pause leaves the graph");
+        assert_eq!(playback.play_pressed(&mut tuning), Ok(()));
+        assert!(playback.playing());
+        assert_eq!(tuning.samples(), 0, "Play starts it over");
+        assert!(tuning.is_visible(), "and it stays showing");
     }
 
     #[test]

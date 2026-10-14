@@ -471,10 +471,11 @@ impl MissionPlanner {
         true
     }
 
-    /// `FlightData.ProcessCmdKey`'s playback keys: Space toggles a loaded log's play and pause,
-    /// and is taken; the keypad's - and + step `LogPlayBackSpeed` and leave the key untaken, as
-    /// the C# returns false after them.
-    /// `// C#: GCSViews/FlightData.cs:920-945`
+    /// `FlightData.ProcessCmdKey`'s playback keys: Space is `BUT_playlog_Click` over a loaded
+    /// log - its play and pause, the tuning graph cleared as play starts - and is taken; the
+    /// keypad's - and + step `LogPlayBackSpeed` and leave the key untaken, as the C# returns
+    /// false after them.
+    /// `// C#: GCSViews/FlightData.cs:920-945, 558-596`
     fn run_playback_key(&mut self, key: PlaybackKey, cx: &mut Context<Self>) -> bool {
         let playback = &mut self.fly_data.playback;
         match key {
@@ -482,7 +483,8 @@ impl MissionPlanner {
                 if !playback.loaded() {
                     return false;
                 }
-                playback.toggle();
+                // Loaded, so there is no refusal to say.
+                let _ = playback.play_pressed(&mut self.tuning);
                 true
             }
             PlaybackKey::Slower | PlaybackKey::Faster => {

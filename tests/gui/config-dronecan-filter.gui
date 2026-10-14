@@ -1,0 +1,114 @@
+# Initial Setup's DroneCAN/UAVCAN page, its Filter window, with no vehicle:
+# GCSViews/ConfigurationView/ConfigDroneCAN.cs:897-988. Filter is enabled from the Designer on,
+# and the window's boxes change the list whether or not a bus runs - only the CAN_FILTER_MODIFY a
+# change sends waits for the MAVLink bus (:932, 969), which config-dronecan.gui drives.
+#
+# The claim: the window lists all 155 types, a box ticked where `defaultfilter` holds its id -
+# the list holds 1 twice, for GetNodeInfo's request and for the node id allocation (:899-914) - so
+# a service's request and its response, which share an id, start ticked together; but each box
+# keeps a tick of its own (:947-950). Ticked, a box adds its id unless the list holds it;
+# unticked, it removes one copy of it - List.Remove, the first - whatever its twin's tick
+# (:951-961). ALL's tick is its own, and changes neither the list nor the boxes (:924-944).
+# Filter again opens a new window, from the default list (:899).
+#
+# No vehicle: the page is listed without one (InitialSetup.cs:273-277). Run as
+#
+#   tools/gui-test.sh tests/gui/config-dronecan-filter.gui
+
+env MP_CONFIG_XML $WORK/config.xml
+env MP_LOG_DIR $WORK
+screen setup
+window 1600x1200
+budget 20
+# A first budget, set by hand until a passing run records one: fifteen clicks, and the wheel
+# notch by notch down some seventy rows to GetNodeInfo's boxes.
+
+click setup-page-ConfigOptional
+click setup-page-ConfigDroneCAN
+expect setup.page ConfigDroneCAN
+expect config.dronecan.active true
+expect config.dronecan.bus none
+expect config.dronecan.filter.enabled true
+
+# The window: the page's ids ticked, a request's and its response's boxes alike.
+click dronecan-filter
+expect config.dronecan.window filter
+expect config.dronecan.filter.boxes 155
+expect config.dronecan.filter.list 0,341,1,5,11,10,40,48,45,1,16383
+expect config.dronecan.filter.ticked 18
+expect config.dronecan.filter.all false
+expect config.dronecan.filter.sent 0
+expect config.dronecan.filter.box.com_hobbywing_esc_SetLED_req false
+expect config.dronecan.filter.box.com_hobbywing_esc_SetLED_res false
+expect config.dronecan.filter.box.uavcan_protocol_GetNodeInfo_req true
+expect config.dronecan.filter.box.uavcan_protocol_GetNodeInfo_res true
+expect config.dronecan.filter.box.uavcan_protocol_dynamic_node_id_Allocation true
+
+# SetLED's request ticked: its box alone, and 212 added.
+click dronecan-filter-com_hobbywing_esc_SetLED_req
+expect config.dronecan.filter.box.com_hobbywing_esc_SetLED_req true
+expect config.dronecan.filter.box.com_hobbywing_esc_SetLED_res false
+expect config.dronecan.filter.list 0,341,1,5,11,10,40,48,45,1,16383,212
+expect config.dronecan.filter.ticked 19
+# Its response ticked: the list holds 212 already.
+click dronecan-filter-com_hobbywing_esc_SetLED_res
+expect config.dronecan.filter.box.com_hobbywing_esc_SetLED_res true
+expect config.dronecan.filter.box.com_hobbywing_esc_SetLED_req true
+expect config.dronecan.filter.list 0,341,1,5,11,10,40,48,45,1,16383,212
+expect config.dronecan.filter.ticked 20
+# The request unticked: 212 removed, the response's box still ticked.
+click dronecan-filter-com_hobbywing_esc_SetLED_req
+expect config.dronecan.filter.box.com_hobbywing_esc_SetLED_req false
+expect config.dronecan.filter.box.com_hobbywing_esc_SetLED_res true
+expect config.dronecan.filter.list 0,341,1,5,11,10,40,48,45,1,16383
+expect config.dronecan.filter.ticked 19
+# The response unticked: no 212 left to remove.
+click dronecan-filter-com_hobbywing_esc_SetLED_res
+expect config.dronecan.filter.box.com_hobbywing_esc_SetLED_res false
+expect config.dronecan.filter.list 0,341,1,5,11,10,40,48,45,1,16383
+expect config.dronecan.filter.ticked 18
+
+# ALL: its own tick, the list and the boxes as they were.
+click dronecan-filter-all
+expect config.dronecan.filter.all true
+expect config.dronecan.filter.list 0,341,1,5,11,10,40,48,45,1,16383
+expect config.dronecan.filter.ticked 18
+click dronecan-filter-all
+expect config.dronecan.filter.all false
+# No bus: nothing sent.
+expect config.dronecan.filter.sent 0
+
+# GetNodeInfo's request unticked, seventy rows down: the first of the two 1s removed, its
+# response's box and the allocation's still ticked.
+reveal dronecan-filter-list dronecan-filter-uavcan_protocol_GetNodeInfo_req
+click dronecan-filter-uavcan_protocol_GetNodeInfo_req
+expect config.dronecan.filter.box.uavcan_protocol_GetNodeInfo_req false
+expect config.dronecan.filter.box.uavcan_protocol_GetNodeInfo_res true
+expect config.dronecan.filter.box.uavcan_protocol_dynamic_node_id_Allocation true
+expect config.dronecan.filter.list 0,341,5,11,10,40,48,45,1,16383
+expect config.dronecan.filter.ticked 17
+# Its response unticked: the second 1; the allocation's box keeps its tick with no 1 left.
+click dronecan-filter-uavcan_protocol_GetNodeInfo_res
+expect config.dronecan.filter.box.uavcan_protocol_GetNodeInfo_res false
+expect config.dronecan.filter.box.uavcan_protocol_dynamic_node_id_Allocation true
+expect config.dronecan.filter.list 0,341,5,11,10,40,48,45,16383
+expect config.dronecan.filter.ticked 16
+# The request ticked again: 1 added at the end, once; the response's box stays unticked.
+click dronecan-filter-uavcan_protocol_GetNodeInfo_req
+expect config.dronecan.filter.box.uavcan_protocol_GetNodeInfo_req true
+expect config.dronecan.filter.box.uavcan_protocol_GetNodeInfo_res false
+expect config.dronecan.filter.list 0,341,5,11,10,40,48,45,16383,1
+expect config.dronecan.filter.ticked 17
+expect config.dronecan.filter.sent 0
+
+# Closed and opened again: a new window, the default list and its ticks.
+click dronecan-filter-close
+expect config.dronecan.window none
+click dronecan-filter
+expect config.dronecan.window filter
+expect config.dronecan.filter.list 0,341,1,5,11,10,40,48,45,1,16383
+expect config.dronecan.filter.ticked 18
+expect config.dronecan.filter.all false
+expect config.dronecan.filter.box.uavcan_protocol_GetNodeInfo_res true
+click dronecan-filter-close
+expect config.dronecan.window none

@@ -1,0 +1,38 @@
+# Play starts the tuning graph over. BUT_playlog_Click, finding logreadmode false - a log paused or
+# at its end, or none loaded - empties the graph's lists (list1 to list20) and takes tickStart
+# again, the clock its seconds count from, before it plays; finding it true, a log playing, it
+# pauses and leaves the graph alone. `GCSViews/FlightData.cs:558-596, 3804-3806`
+#
+# The graph samples while it shows, whatever page is up; its facts are how many samples it holds
+# and the newest one's time on its clock in whole seconds. The Play/Pause pressed is the LOGS
+# tab's Telemetry Logs page's, which is the flight screen's own.
+#
+# Plays the recorded copter flight, so it needs no vehicle. Run from the repository root:
+#   tools/gui-test.sh tests/gui/fly-playback-tuning.gui -- file:testdata/mavlink/autotest.tlog
+#
+
+screen fly
+window 1600x1200
+budget 8
+expect fly.playback.playing true
+# Hidden, it takes nothing.
+expect tuning.samples 0
+click tuning-show
+expect tuning.visible true
+# Two seconds of the log on it.
+expect tuning.newest >= 2
+expect tuning.samples > 10
+
+click tab-logs
+click logs-tab-tlogs
+expect logs.page tlogs
+
+# Pause: the graph keeps what it has.
+click fly-playlog
+expect fly.playback.playing false
+expect tuning.newest >= 2
+
+# Play: the graph starts again from nothing, its seconds from the press.
+click fly-playlog
+expect fly.playback.playing true
+expect tuning.newest < 2

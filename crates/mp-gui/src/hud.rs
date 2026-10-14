@@ -1290,8 +1290,9 @@ pub fn health_facts(scene: &Scene) -> Vec<(&'static str, String)> {
 /// * `hud.battery.upper`, `hud.battery.lower`: the battery text on each bottom line;
 /// * `hud.gps`: the GPS lines, top first, comma separated;
 /// * `hud.icons`: the pictures drawn, by file name, in the order drawn;
-/// * `hud.zone.vibe`, `hud.zone.ekf`: the click rectangles, `left,top,width,height` in whole
-///   pixels - at the text, or at the pictures with the icons on.
+/// * `hud.zone.vibe`, `hud.zone.ekf`, `hud.zone.prearm`: the click rectangles,
+///   `left,top,width,height` in whole pixels - at the text, or at the pictures with the icons
+///   on; the pre-arm one only while disarmed.
 ///
 /// "none" for anything not drawn.
 #[must_use]
@@ -1354,6 +1355,7 @@ pub fn readout_facts(scene: &Scene) -> Vec<(&'static str, String)> {
         ("hud.icons", joined(&icons)),
         ("hud.zone.vibe", zone(Element::Vibe)),
         ("hud.zone.ekf", zone(Element::Ekf)),
+        ("hud.zone.prearm", zone(Element::Prearm)),
     ]
 }
 
@@ -1522,9 +1524,10 @@ pub struct Scene {
     pub drawn: Vec<Element>,
     /// Which element drew which label or picture, as an index into `items`, for the facts.
     pub owners: Vec<(Element, usize)>,
-    /// The rectangles `doPaint()` keeps for a click - `vibehitzone`, `ekfhitzone` - where it
-    /// sets them: at the text, or at the picture with the icons on. Left, top, width, height.
-    /// `// C#: ExtLibs/Controls/HUD.cs:3152-3160, 3213-3221`
+    /// The rectangles `doPaint()` keeps for a click - `vibehitzone`, `ekfhitzone` and, while
+    /// disarmed, `prearmhitzone` - where it sets them: at the text, or at the picture with the
+    /// icons on. Left, top, width, height.
+    /// `// C#: ExtLibs/Controls/HUD.cs:3152-3160, 3213-3221, 3266-3280`
     pub zones: Vec<(Element, (f32, f32, f32, f32))>,
 }
 
@@ -2729,8 +2732,9 @@ pub fn scene(inputs: &HudInputs, w: f32, h: f32) -> Scene {
 
     // While disarmed, the pre-arm state on the upper text line: "Ready to Arm" in white, or
     // "Not Ready to Arm" in red starting two characters further left; with the icons on, the
-    // green or red picture, two wide, above EKF's. C#: HUD.cs:3266-3303, HUDT.resx
-    // NotReadyToArm and ReadyToArm
+    // green or red picture, two wide, above EKF's. `prearmhitzone` is set to where either goes:
+    // the picture's rectangle, or a box at the text as wide as the text measures and twice the
+    // font high. C#: HUD.cs:3266-3303, HUDT.resx NotReadyToArm and ReadyToArm
     if !inputs.armed {
         if icons {
             let zone = (
@@ -2739,6 +2743,7 @@ pub fn scene(inputs: &HudInputs, w: f32, h: f32) -> Scene {
                 wide * 2.0,
                 fontsize + 8.0,
             );
+            scene.zones.push((Element::Prearm, zone));
             let icon = if inputs.prearm_ready {
                 Icon::PrearmGreen
             } else {
@@ -2751,6 +2756,15 @@ pub fn scene(inputs: &HudInputs, w: f32, h: f32) -> Scene {
             } else {
                 ("Not Ready to Arm", w - 26.0 * fontsize, colour::ALERT)
             };
+            scene.zones.push((
+                Element::Prearm,
+                (
+                    x,
+                    y_upper - 4.0,
+                    measured_width(text, fontsize + 2.0),
+                    fontsize * 2.0,
+                ),
+            ));
             scene.owned_label(
                 Element::Prearm,
                 text,
@@ -2764,6 +2778,19 @@ pub fn scene(inputs: &HudInputs, w: f32, h: f32) -> Scene {
     scene.drew(Element::Prearm);
 
     scene
+}
+
+/// `TextRenderer.MeasureText(text, new Font(HUDT.Font, size)).Width`, which `doPaint()` takes
+/// as the pre-arm line's click rectangle's width, estimated: the scene is made without a text
+/// system to ask. `HUDT.Font` is Arial, `new Font(string, float)` counts its size in points,
+/// four thirds of a pixel each at 96 DPI where `drawstring` counts pixels, and Arial's letters
+/// average about half an em ("Not Ready to Arm" is 7.95 em of 16 characters); so each character
+/// is taken as two thirds of `size`.
+/// `// C#: ExtLibs/Controls/HUD.cs:3277-3279, ExtLibs/Controls/HUDT.resx (Font)`
+fn measured_width(text: &str, size: f32) -> f32 {
+    #[allow(clippy::cast_precision_loss)] // a line of the display
+    let characters = text.chars().count() as f32;
+    characters * size * 2.0 / 3.0
 }
 
 /// Which side of the display a scroller is on: where its ticks, numbers and arrow point.
@@ -4171,13 +4198,15 @@ mod tests {
     }
 
     /// While disarmed, "Ready to Arm" in white at width - 24 characters or "Not Ready to Arm"
-    /// in red at width - 26, on the upper text line less four; armed, neither.
-    /// C#: HUD.cs:3266-3303
+    /// in red at width - 26, on the upper text line less four; armed, neither. `prearmhitzone`
+    /// is at the text, as wide as the text measures - two thirds of the size a character - and
+    /// twice the font high; armed, there is none to click. C#: HUD.cs:3266-3303
     #[test]
     fn prearm_shows_only_while_disarmed() {
         let (fontsize, upper, _) = text_lines(H);
         let armed = scene(&flying(), W, H);
         assert!(armed.labels_of(Element::Prearm).is_empty());
+        assert_eq!(armed.zone(Element::Prearm), None);
         assert!(health_facts(&armed).contains(&("hud.prearm", "none".to_owned())));
         let mut inputs = flying();
         inputs.armed = false;
@@ -4185,14 +4214,58 @@ mod tests {
         let (at, size, colour) = label_at(&ready, "Ready to Arm").expect("shown");
         assert!(close(at, (W - 24.0 * fontsize, upper - 4.0)), "{at:?}");
         assert_eq!((size, colour), (fontsize + 2.0, colour::INK));
+        let zone = ready.zone(Element::Prearm).expect("a zone");
+        assert!(close((zone.0, zone.1), at), "{zone:?}");
+        assert!(
+            close(
+                (zone.2, zone.3),
+                (12.0 * (fontsize + 2.0) * 2.0 / 3.0, fontsize * 2.0)
+            ),
+            "{zone:?}"
+        );
         inputs.prearm_ready = false;
         let not_ready = scene(&inputs, W, H);
         let (at, _, colour) = label_at(&not_ready, "Not Ready to Arm").expect("shown");
         assert!(close(at, (W - 26.0 * fontsize, upper - 4.0)), "{at:?}");
         assert_eq!(colour, colour::ALERT);
+        let zone = not_ready.zone(Element::Prearm).expect("a zone");
+        assert!(close((zone.0, zone.1), at), "{zone:?}");
+        assert!(
+            close(
+                (zone.2, zone.3),
+                (16.0 * (fontsize + 2.0) * 2.0 / 3.0, fontsize * 2.0)
+            ),
+            "{zone:?}"
+        );
         let facts = health_facts(&not_ready);
         assert!(facts.contains(&("hud.prearm", "Not Ready to Arm".to_owned())));
         assert!(facts.contains(&("hud.prearm.colour", "red".to_owned())));
+    }
+
+    /// `MeasureText` estimated: within two pixels of what Arial's advance widths make the two
+    /// lines at the HUD's smallest size, 11 points of four thirds of a pixel. The widths are
+    /// Arial's, as Helvetica's, in thousandths of the em. C#: HUD.cs:3277-3279
+    #[test]
+    fn the_prearm_text_measures_about_what_arial_makes_it() {
+        let advance = |character: char| match character {
+            ' ' | 't' => 278.0,
+            'r' => 333.0,
+            'y' => 500.0,
+            'a' | 'd' | 'e' | 'o' => 556.0,
+            'A' => 667.0,
+            'N' | 'R' => 722.0,
+            'm' => 833.0,
+            other => panic!("no width for {other:?}"),
+        };
+        let em = 11.0 * 4.0 / 3.0;
+        for text in ["Ready to Arm", "Not Ready to Arm"] {
+            let arial = text.chars().map(advance).sum::<f32>() / 1000.0 * em;
+            let estimate = measured_width(text, 11.0);
+            assert!(
+                (estimate - arial).abs() < 2.0,
+                "{text}: {estimate} against {arial}"
+            );
+        }
     }
 
     /// `prearmstatus`: the pre-arm bit healthy, or not enabled - so a vehicle that has sent no
@@ -5087,6 +5160,11 @@ mod tests {
             rect_of(&disarmed, Icon::PrearmGreen).expect("ready"),
             picture(prearm)
         ));
+        // `prearmhitzone` is the picture's rectangle, two pixels above the picture as drawn.
+        assert!(same(
+            disarmed.zone(Element::Prearm).expect("a zone"),
+            prearm
+        ));
         assert!(label_at(&disarmed, "Ready to Arm").is_none());
         let not_ready = scene(
             &HudInputs {
@@ -5156,12 +5234,14 @@ mod tests {
     }
 
     /// The click rectangles as facts, at the size the facts' scene is drawn (`main.rs`, 800 by
-    /// 260): what `tests/gui/hud-icons.gui` expects, text then pictures.
+    /// 260): what `tests/gui/hud-icons.gui` expects, text then pictures. The pre-arm one is
+    /// there only while disarmed: at "Ready to Arm" or "Not Ready to Arm", or at its picture.
     #[test]
     fn the_zone_facts_are_the_ones_the_icon_script_expects() {
         let text = readout_facts(&scene(&flying(), 800.0, 260.0));
         assert_eq!(fact(&text, "hud.zone.vibe"), "638,239,40,18");
         assert_eq!(fact(&text, "hud.zone.ekf"), "593,239,40,18");
+        assert_eq!(fact(&text, "hud.zone.prearm"), "none");
         let icons = HudInputs {
             display_icons: true,
             ..flying()
@@ -5169,6 +5249,23 @@ mod tests {
         let pictures = readout_facts(&scene(&icons, 800.0, 260.0));
         assert_eq!(fact(&pictures, "hud.zone.vibe"), "617,238,51,17");
         assert_eq!(fact(&pictures, "hud.zone.ekf"), "561,238,51,17");
+        let disarmed = |inputs: HudInputs| {
+            let inputs = HudInputs {
+                armed: false,
+                ..inputs
+            };
+            fact(
+                &readout_facts(&scene(&inputs, 800.0, 260.0)),
+                "hud.zone.prearm",
+            )
+        };
+        assert_eq!(disarmed(flying()), "584,221,88,18");
+        let failing = HudInputs {
+            prearm_ready: false,
+            ..flying()
+        };
+        assert_eq!(disarmed(failing), "566,221,117,18");
+        assert_eq!(disarmed(icons), "564,217,102,17");
     }
 
     /// Each readout's picture follows its level as its text's colour does.

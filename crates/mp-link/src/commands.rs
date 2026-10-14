@@ -362,6 +362,20 @@ pub fn log_request_end(target: VehicleId) -> MavMessage {
     })
 }
 
+/// Asks the vehicle to erase every dataflash log it holds: `EraseLog`'s `LOG_ERASE`, addressed to
+/// the vehicle being flown.
+///
+/// Nothing answers it, so the C# writes it twice - "send twice - we have no feedback on this" -
+/// and a caller does the same: the Log Downloader's Clear Logs (`mp-gui`'s `logdownload.rs`).
+/// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:6269-6279`
+#[must_use]
+pub fn log_erase(target: VehicleId) -> MavMessage {
+    MavMessage::LogErase(mp_mavlink_dialects::all::LogErase {
+        target_system: target.payload_target(),
+        target_component: target.compid,
+    })
+}
+
 /// Asks the vehicle how many items it holds, starting a download.
 ///
 /// `mission_type` selects which list: the mission, the geofence or the rally points. They share
@@ -1271,5 +1285,23 @@ mod tests {
         };
         assert_eq!(message.command, 42_701);
         assert_eq!(message.param1, 3.0);
+    }
+
+    /// `EraseLog`'s `LOG_ERASE`: message 121, to the vehicle and component named, as
+    /// `MAV.sysid` and `MAV.compid` address it; a system wider than a byte is 255 in the payload,
+    /// its whole id in the frame's header.
+    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:6269-6279`
+    #[test]
+    fn erasing_the_logs_is_log_erase_to_the_vehicle() {
+        let message = log_erase(VehicleId::new(7, 1));
+        assert_eq!((message.id(), message.name()), (121, "LOG_ERASE"));
+        let MavMessage::LogErase(erase) = message else {
+            panic!("log_erase must build a LOG_ERASE");
+        };
+        assert_eq!((erase.target_system, erase.target_component), (7, 1));
+        let MavMessage::LogErase(wide) = log_erase(VehicleId::new(300, 1)) else {
+            panic!("log_erase must build a LOG_ERASE");
+        };
+        assert_eq!((wide.target_system, wide.target_component), (255, 1));
     }
 }

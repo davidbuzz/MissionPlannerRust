@@ -1,0 +1,40 @@
+# The HUD's third click zone: the pre-arm line, which opens Prearm Checks.
+#
+# While the vehicle is disarmed HUD.cs writes "Ready to Arm" or "Not Ready to Arm" and keeps a
+# rectangle where it does (prearmhitzone, as wide as the text measures); a click whose 5x5 box
+# meets it raises prearmclick, and FlightData shows PrearmStatus: "Prearm Checks", one text box.
+# As it opens, and every five seconds while the checks fail, it asks the vehicle to run them
+# (MAV_CMD_RUN_PREARM_CHECKS, not waited for); every 100 ms it writes the box - "Ready to Arm"
+# while they pass, else each message of the vehicle's beginning "PreArm:" since the last request a
+# second old, else "Prearm checks failing" over "Waiting for error messages..." - and arming
+# closes it. `ExtLibs/Controls/HUD.cs:1199-1256, 3266-3303, GCSViews/FlightData.cs:3439-3447,
+# Controls/PrearmStatus.cs, Controls/PrearmStatus.Designer.cs`
+#
+# Plays the recorded copter flight, so it needs no vehicle: disarmed for its first ten seconds,
+# its checks failing but from 5.5 s to 5.9 s and from 9.9 s, "PreArm: Need Position Estimate" at
+# 4.5 s, armed at 10.1 s. A recording takes the request and does not answer it. Run from the
+# repository root:
+#   tools/gui-test.sh tests/gui/fly-prearm.gui -- file:testdata/mavlink/autotest.tlog
+#
+
+screen fly
+window 1600x1200
+budget 11
+expect fly.prearm.open false
+expect fly.prearm.text none
+
+# Disarmed and failing its checks: the line is up, and its zone with it.
+expect hud.prearm Not Ready to Arm
+expect hud.zone.prearm ~ ,18
+click hud-prearm
+expect fly.prearm.open true
+# Asked as it opened, the checks failing.
+expect fly.prearm.requests >= 1
+
+# 4.5 s in, the vehicle says why it will not arm, and the box says it.
+expect fly.prearm.text PreArm: Need Position Estimate
+
+# 10.1 s in it arms: the form closes itself, and the line and its zone go.
+expect fly.prearm.open false
+expect hud.prearm none
+expect hud.zone.prearm none

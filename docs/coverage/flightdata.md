@@ -77,7 +77,7 @@ Generated from `crates/mp-gui/src/coverage.rs` by `cargo test -p mp-gui coverage
 | `hud1` | DoubleClick | `hud1_DoubleClick` | the HUD: HUD Dropout, its own window | dropped: one window: the HUD has nowhere to drop out to |
 | `hud1` | ekfclick | `hud1_ekfclick` | the HUD's EKF indicator | done: `hud-ekf` |
 | `hud1` | Load | `hud1_Load` | the HUD | plumbing |
-| `hud1` | prearmclick | `hud1_prearmclick` | the HUD's pre-arm indicator | done: `pre-arm` |
+| `hud1` | prearmclick | `hud1_prearmclick` | the HUD's pre-arm indicator | done: `hud-prearm` |
 | `hud1` | Resize | `hud1_Resize` | the HUD | plumbing |
 | `hud1` | vibeclick | `hud1_vibeclick` | the HUD's vibration indicator | done: `hud-vibe` |
 | `IDENT_btn` | Click | `IDENT_btn_Click` | IDENT (transponder) | done: `fly-xpdr-ident` |

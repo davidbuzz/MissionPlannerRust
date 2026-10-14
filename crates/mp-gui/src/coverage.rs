@@ -576,7 +576,7 @@ pub const FLIGHTDATA: &[Action] = &[
         "prearmclick",
         "hud1_prearmclick",
         "the HUD's pre-arm indicator",
-        Done("pre-arm"),
+        Done("hud-prearm"),
     ),
     row("hud1", "Resize", "hud1_Resize", "the HUD", Plumbing),
     row(

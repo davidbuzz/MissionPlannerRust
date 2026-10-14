@@ -11,8 +11,10 @@
 # DroneCAN.cs:300-386). The Menu cell opens the node's menu; Parameters asks node 127 for its
 # parameters behind "Getting Params", which our node does not answer, so after two seconds the
 # parameter window opens empty (:657-671; DroneCAN.cs:534-602). Filter's window lists all 155
-# message types and its "ALL" box sends CAN_FILTER_MODIFY once the forwarding loop runs
-# (:782-866). Stats opens its window (:1394-1478). Inspector, not ported, says so on the status
+# message types, and its "ALL" box and a type's box each send CAN_FILTER_MODIFY once the
+# forwarding loop runs - a request's box ticked alone, its response's keeping its own tick
+# (ConfigDroneCAN.cs:897-988; config-dronecan-filter.gui has the boxes' ways, with no bus).
+# Stats opens its window (:1394-1478). Inspector, not ported, says so on the status
 # line. Disconnect, and leaving the page, stop the bus (:673-709).
 #
 # What it cannot check: SITL has no DroneCAN node of its own on a CAN bus it forwards (CAN_FORWARD
@@ -28,7 +30,7 @@
 
 screen params
 window 1600x1200
-budget 25
+budget 26
 # A first budget, set by hand until a passing run records one.
 # A config.xml of its own, so the "Show me again?" boxes this script clicks are not already
 # suppressed by the settings of the machine running it.
@@ -105,13 +107,19 @@ click dronecan-menu-restart
 expect config.dronecan.restarts 1
 expect config.dronecan.restarts 0
 
-# Filter: every type, the page's ticked; ALL sends CAN_FILTER_MODIFY.
+# Filter: every type, the page's ticked; ALL sends CAN_FILTER_MODIFY, and so does a type's box:
+# SetLED's request ticked adds 212 and ticks its own box, not its response's.
 click dronecan-filter
 expect config.dronecan.window filter
 expect config.dronecan.filter.boxes 155
 expect config.dronecan.filter.sent 0
 click dronecan-filter-all
 expect config.dronecan.filter.sent 1
+click dronecan-filter-com_hobbywing_esc_SetLED_req
+expect config.dronecan.filter.sent 2
+expect config.dronecan.filter.box.com_hobbywing_esc_SetLED_req true
+expect config.dronecan.filter.box.com_hobbywing_esc_SetLED_res false
+expect config.dronecan.filter.list 0,341,1,5,11,10,40,48,45,1,16383,212
 click dronecan-filter-close
 expect config.dronecan.window none
 

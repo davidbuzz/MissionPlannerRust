@@ -65,7 +65,10 @@
 //!   `:740-865, 990-1208`): a TCP port whose client gets the GPS's RTCM (or its tunnel) and
 //!   whose bytes go to it.
 //! * **Filter** (`but_filter_Click`, `:897-988`): a window of every message type, those the page
-//!   needs ticked; each box changed sends `CAN_FILTER_MODIFY` while the MAVLink bus runs.
+//!   needs ticked - a service's request and its response alike, which share an id - each box
+//!   with a tick of its own. Ticked, a box adds its id to the list unless the list holds it;
+//!   unticked, it removes one copy of it, the list starting with `1` twice. Each box changed sends
+//!   `CAN_FILTER_MODIFY` while the MAVLink bus runs.
 //! * **Stats** (`but_stats_Click`, `:1392-1471`): a window of the nodes' `CanStats` and `Stats`.
 //! * **Check for Updates** (`CHK_checkupdate_CheckedChanged`, `:1700-1751`): each node's info
 //!   compared with the manifest's peripheral firmware, "New firmware" said for a newer one; and
@@ -1351,41 +1354,93 @@ pub fn in_range(min: &str, max: &str, text: &str) -> bool {
 /// `// C#: GCSViews/ConfigurationView/ConfigDroneCAN.cs:897-988`
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct FilterWindow {
-    /// `defaultfilter`, in the order ids were added.
+    /// `defaultfilter`, in the order ids were added, duplicates and all: it starts with `1`
+    /// twice.
     pub ids: Vec<u16>,
-    /// The boxes: name and id, by name ignoring case.
-    pub boxes: Vec<(&'static str, u16)>,
+    /// The boxes, by name ignoring case.
+    pub boxes: Vec<FilterBox>,
     /// "ALL"'s box.
     pub all: bool,
     /// How many `CAN_FILTER_MODIFY`s it has sent.
     pub sent: usize,
 }
 
-/// The ids the filter starts with: 0 and what the page and its windows need.
-/// `// C#: GCSViews/ConfigurationView/ConfigDroneCAN.cs:899-912`
+/// A type's box in the Filter window: its `CheckBox`, whose tick is its own. A service's request
+/// and its response share an id (`com_hobbywing_esc_SetLED_req` and `_res`), not a tick.
+/// `// C#: GCSViews/ConfigurationView/ConfigDroneCAN.cs:947-950`
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct FilterBox {
+    /// `Name` and `Text`: the type's name.
+    pub name: &'static str,
+    /// `a.msgid`: the type's id.
+    pub id: u16,
+    /// `Checked`.
+    pub checked: bool,
+}
+
+/// The ids the filter starts with: 0 and what the page and its windows need - `1` twice, for
+/// `GetNodeInfo`'s request and for the node id allocation, a message whose id is the same number.
+/// `// C#: GCSViews/ConfigurationView/ConfigDroneCAN.cs:899-914`
 pub const DEFAULT_FILTER: [u16; 11] = [0, 341, 1, 5, 11, 10, 40, 48, 45, 1, 16383];
 
 impl FilterWindow {
-    /// The window: every type in `MSG_INFO`, by name ignoring case.
+    /// The window: every type in `MSG_INFO`, by name ignoring case, each box ticked whose id the
+    /// list holds as the window opens - a service's request and response both.
+    /// `// C#: GCSViews/ConfigurationView/ConfigDroneCAN.cs:916, 947-950`
     #[must_use]
     pub fn new() -> Self {
-        let mut boxes: Vec<(&'static str, u16)> = names::MSG_INFO
+        let ids = DEFAULT_FILTER.to_vec();
+        let mut boxes: Vec<FilterBox> = names::MSG_INFO
             .iter()
-            .map(|row| (row.name, row.id))
+            .map(|row| FilterBox {
+                name: row.name,
+                id: row.id,
+                checked: ids.contains(&row.id),
+            })
             .collect();
-        boxes.sort_by_key(|(name, _)| name.to_lowercase());
+        boxes.sort_by_key(|item| item.name.to_lowercase());
         Self {
-            ids: DEFAULT_FILTER.to_vec(),
+            ids,
             boxes,
             all: false,
             sent: 0,
         }
     }
 
-    /// Whether a type's box is ticked: its id is in the list.
+    /// Whether a type's box is ticked: its own tick, whatever its twin's.
+    #[cfg(test)]
     #[must_use]
-    pub fn ticked(&self, id: u16) -> bool {
-        self.ids.contains(&id)
+    pub fn ticked(&self, name: &str) -> bool {
+        self.boxes
+            .iter()
+            .any(|item| item.name == name && item.checked)
+    }
+
+    /// The box at `index` clicked: its tick turned over, and `CheckedChanged` on the list -
+    /// ticked, the id added unless the list holds it; unticked, the first copy of it removed
+    /// (`List<ushort>.Remove`), the other boxes of that id keeping their ticks. The list's count
+    /// after, which the box sends as `num_ids`; `None` for no box there.
+    /// `// C#: GCSViews/ConfigurationView/ConfigDroneCAN.cs:951-961`
+    #[must_use]
+    pub fn toggle(&mut self, index: usize) -> Option<usize> {
+        let item = self.boxes.get_mut(index)?;
+        item.checked = !item.checked;
+        let (id, checked) = (item.id, item.checked);
+        if checked {
+            if !self.ids.contains(&id) {
+                self.ids.push(id);
+            }
+        } else if let Some(first) = self.ids.iter().position(|held| *held == id) {
+            self.ids.remove(first);
+        }
+        Some(self.ids.len())
+    }
+
+    /// "ALL" clicked: its own tick turned over, and nothing more - the list and the boxes stay
+    /// as they are; its `CheckedChanged` sends the list with `num_ids` 0.
+    /// `// C#: GCSViews/ConfigurationView/ConfigDroneCAN.cs:924-944`
+    pub fn toggle_all(&mut self) {
+        self.all = !self.all;
     }
 }
 
@@ -2543,30 +2598,31 @@ impl DroneCan {
         }
     }
 
-    /// A box of the Filter window changed - `None` is "ALL" - and the `CAN_FILTER_MODIFY` it
-    /// sends while the MAVLink bus runs.
+    /// A box of the Filter window changed - `None` is "ALL", `Some` the type's box at that place
+    /// in the window ([`FilterWindow::boxes`]) - and the `CAN_FILTER_MODIFY` it sends while the
+    /// MAVLink bus runs.
     /// `// C#: GCSViews/ConfigurationView/ConfigDroneCAN.cs:924-983`
     pub fn click_filter_box(
         &mut self,
-        id: Option<u16>,
+        index: Option<usize>,
         telemetry: &Telemetry,
         view: &TelemetryView,
     ) {
         let Some(OpenWindow::Filter(filter)) = self.window.as_mut() else {
             return;
         };
-        let num_ids = match id {
+        let num_ids = match index {
             None => {
-                filter.all = !filter.all;
+                filter.toggle_all();
                 0
             }
-            Some(id) => {
-                if filter.ids.contains(&id) {
-                    filter.ids.retain(|held| *held != id);
-                } else {
-                    filter.ids.push(id);
-                }
-                u8::try_from(filter.ids.len()).unwrap_or(u8::MAX)
+            Some(index) => {
+                let Some(count) = filter.toggle(index) else {
+                    return;
+                };
+                // `(byte)defaultfilter.Count()`: an id is added only when the list lacks it, so
+                // it holds 0, the two 1s and each other type's id once at most - 125, a byte.
+                u8::try_from(count).unwrap_or(u8::MAX)
             }
         };
         if self.can_run
@@ -3901,7 +3957,27 @@ pub fn record_facts(page: &DroneCan) {
     if let Some(OpenWindow::Filter(filter)) = &page.window {
         record("config.dronecan.filter.boxes", filter.boxes.len());
         record("config.dronecan.filter.ids", filter.ids.len());
+        record(
+            "config.dronecan.filter.list",
+            filter
+                .ids
+                .iter()
+                .map(ToString::to_string)
+                .collect::<Vec<_>>()
+                .join(","),
+        );
         record("config.dronecan.filter.sent", filter.sent);
+        record("config.dronecan.filter.all", filter.all);
+        record(
+            "config.dronecan.filter.ticked",
+            filter.boxes.iter().filter(|item| item.checked).count(),
+        );
+        for item in &filter.boxes {
+            record(
+                format!("config.dronecan.filter.box.{}", item.name),
+                item.checked,
+            );
+        }
     }
     record("config.dronecan.restarts", page.restarts.len());
     record("config.dronecan.passthrough", page.passthrough.is_some());
@@ -4774,6 +4850,7 @@ fn params_form(
 }
 
 /// The Filter window: "ALL" and a box a type, two columns of 320.
+/// `// C#: GCSViews/ConfigurationView/ConfigDroneCAN.cs:918-950`
 fn filter_form(
     filter: &FilterWindow,
     window: &Window,
@@ -4806,25 +4883,26 @@ fn filter_form(
             },
             cx,
         )));
-    for (name, id) in &filter.boxes {
-        let id = *id;
+    // Each box drawn with its own tick, and clicked by its place: a request and its response
+    // share an id, not a box.
+    for (index, item) in filter.boxes.iter().enumerate() {
         let mut check = Check::default();
         check.enabled = true;
-        check.state = if filter.ticked(id) {
+        check.state = if item.checked {
             CheckState::Checked
         } else {
             CheckState::Unchecked
         };
         flow = flow.child(div().w(px(320.0)).h(px(20.0)).relative().child(check_box(
-            format!("dronecan-filter-{name}"),
+            format!("dronecan-filter-{}", item.name),
             &check,
-            name,
+            item.name,
             (0.0, 0.0),
             move |this| {
                 let view = this.telemetry.view();
                 this.extra
                     .dronecan
-                    .click_filter_box(Some(id), &this.telemetry, &view);
+                    .click_filter_box(Some(index), &this.telemetry, &view);
             },
             cx,
         )));
@@ -4833,7 +4911,11 @@ fn filter_form(
         "dronecan-filter-form",
         "dronecan-filter-close",
         "DroneCAN Messages".to_owned(),
-        div().p_2().child(flow),
+        // Measured by its scrolling box - the boxes in view, not the union of every box, which
+        // reaches far below it - so a script can `reveal` a box below it.
+        div()
+            .p_2()
+            .child(crate::probe::measured("dronecan-filter-list", div()).child(flow)),
         window,
         cx,
     )
@@ -5654,11 +5736,15 @@ mod tests {
         );
 
         // Filter: the ALL box replaces the vehicle's filter with none; a type's box sends the
-        // list without it.
+        // list without it; GetNodeInfo's response unticked sends the list with one of its two
+        // 1s left, its request's box still ticked.
         page.click_filter();
+        let node_status = filter_box(filter_window(&page), "uavcan_protocol_NodeStatus");
+        let node_info = filter_box(filter_window(&page), "uavcan_protocol_GetNodeInfo_res");
         let view = telemetry.view();
         page.click_filter_box(None, &telemetry, &view);
-        page.click_filter_box(Some(341), &telemetry, &view);
+        page.click_filter_box(Some(node_status), &telemetry, &view);
+        page.click_filter_box(Some(node_info), &telemetry, &view);
         run(
             &mut page,
             &telemetry,
@@ -5666,12 +5752,25 @@ mod tests {
             &mut peer,
             &mut now,
             "the filters",
-            |_, peer| peer.filters.len() == 2,
+            |_, peer| peer.filters.len() == 3,
         );
         assert_eq!(peer.filters[0].num_ids, 0);
         assert_eq!(peer.filters[0].bus, 1, "BusInUse, as it is");
         assert_eq!(peer.filters[1].num_ids, 10);
         assert!(!peer.filters[1].ids.contains(&341));
+        assert_eq!(peer.filters[2].num_ids, 9);
+        assert_eq!(
+            peer.filters[2].ids[..9],
+            [0, 5, 11, 10, 40, 48, 45, 1, 16383]
+        );
+        assert!(
+            peer.filters[2].ids[9..].iter().all(|id| *id == 0),
+            "MakeSize(16)"
+        );
+        let filter = filter_window(&page);
+        assert_eq!(filter.sent, 3);
+        assert!(filter.ticked("uavcan_protocol_GetNodeInfo_req"));
+        assert!(!filter.ticked("uavcan_protocol_GetNodeInfo_res"));
 
         // Disconnect: the bus stopped, the rows kept.
         let view = telemetry.view();
@@ -5979,7 +6078,25 @@ mod tests {
         assert_eq!(packet.len(), 2 + 8 + 20);
     }
 
-    /// The Filter window: every type, by name ignoring case, the page's ticked.
+    /// The open Filter window.
+    fn filter_window(page: &DroneCan) -> &FilterWindow {
+        match &page.window {
+            Some(OpenWindow::Filter(filter)) => filter,
+            _ => panic!("the Filter window is not open"),
+        }
+    }
+
+    /// The place of a type's box in the Filter window.
+    fn filter_box(filter: &FilterWindow, name: &str) -> usize {
+        filter
+            .boxes
+            .iter()
+            .position(|item| item.name == name)
+            .expect(name)
+    }
+
+    /// The Filter window: every type, by name ignoring case, a box ticked where the list holds
+    /// its id - a service's request and response both, and the allocation, whose id is 1 too.
     #[test]
     fn the_filter_window() {
         let filter = FilterWindow::new();
@@ -5987,13 +6104,157 @@ mod tests {
         let lower: Vec<String> = filter
             .boxes
             .iter()
-            .map(|(name, _)| name.to_lowercase())
+            .map(|item| item.name.to_lowercase())
             .collect();
         let mut sorted = lower.clone();
         sorted.sort();
         assert_eq!(lower, sorted);
-        assert!(filter.ticked(341) && filter.ticked(16383) && filter.ticked(0));
-        assert!(!filter.ticked(1062));
+        assert_eq!(filter.ids, DEFAULT_FILTER);
+        let ticked: Vec<&str> = filter
+            .boxes
+            .iter()
+            .filter(|item| item.checked)
+            .map(|item| item.name)
+            .collect();
+        assert_eq!(
+            ticked,
+            [
+                "uavcan_protocol_debug_LogMessage",
+                "uavcan_protocol_dynamic_node_id_Allocation",
+                "uavcan_protocol_file_BeginFirmwareUpdate_req",
+                "uavcan_protocol_file_BeginFirmwareUpdate_res",
+                "uavcan_protocol_file_GetInfo_req",
+                "uavcan_protocol_file_GetInfo_res",
+                "uavcan_protocol_file_Read_req",
+                "uavcan_protocol_file_Read_res",
+                "uavcan_protocol_GetNodeInfo_req",
+                "uavcan_protocol_GetNodeInfo_res",
+                "uavcan_protocol_NodeStatus",
+                "uavcan_protocol_Panic",
+                "uavcan_protocol_param_ExecuteOpcode_req",
+                "uavcan_protocol_param_ExecuteOpcode_res",
+                "uavcan_protocol_param_GetSet_req",
+                "uavcan_protocol_param_GetSet_res",
+                "uavcan_protocol_RestartNode_req",
+                "uavcan_protocol_RestartNode_res",
+            ]
+        );
+        assert!(filter.ticked("uavcan_protocol_NodeStatus"));
+        assert!(!filter.ticked("uavcan_equipment_gnss_RTCMStream"));
+        assert!(!filter.all);
+    }
+
+    /// A request's box and its response's keep a tick each: SetLED's request ticked adds 212
+    /// and ticks no other box; its response ticked adds nothing, the list holding 212; the
+    /// request unticked removes it, the response's box still ticked; the response unticked has
+    /// nothing to remove. Each gives the list's count, which it sends as `num_ids`.
+    #[test]
+    fn the_filter_windows_twin_boxes_keep_their_own_ticks() {
+        let mut filter = FilterWindow::new();
+        let request = filter_box(&filter, "com_hobbywing_esc_SetLED_req");
+        let response = filter_box(&filter, "com_hobbywing_esc_SetLED_res");
+        assert_eq!(filter.boxes[request].id, 212);
+        assert_eq!(filter.boxes[response].id, 212);
+        assert!(!filter.ticked("com_hobbywing_esc_SetLED_req"));
+        assert!(!filter.ticked("com_hobbywing_esc_SetLED_res"));
+
+        assert_eq!(filter.toggle(request), Some(12));
+        assert!(filter.ticked("com_hobbywing_esc_SetLED_req"));
+        assert!(!filter.ticked("com_hobbywing_esc_SetLED_res"));
+        assert_eq!(
+            filter.ids,
+            [0, 341, 1, 5, 11, 10, 40, 48, 45, 1, 16383, 212]
+        );
+
+        assert_eq!(filter.toggle(response), Some(12));
+        assert!(filter.ticked("com_hobbywing_esc_SetLED_req"));
+        assert!(filter.ticked("com_hobbywing_esc_SetLED_res"));
+        assert_eq!(
+            filter.ids,
+            [0, 341, 1, 5, 11, 10, 40, 48, 45, 1, 16383, 212]
+        );
+
+        assert_eq!(filter.toggle(request), Some(11));
+        assert!(!filter.ticked("com_hobbywing_esc_SetLED_req"));
+        assert!(filter.ticked("com_hobbywing_esc_SetLED_res"));
+        assert_eq!(filter.ids, DEFAULT_FILTER);
+
+        assert_eq!(filter.toggle(response), Some(11));
+        assert!(!filter.ticked("com_hobbywing_esc_SetLED_res"));
+        assert_eq!(filter.ids, DEFAULT_FILTER);
+
+        assert_eq!(filter.toggle(filter.boxes.len()), None);
+        assert_eq!(filter, FilterWindow::new());
+    }
+
+    /// The list starts with 1 twice, and the three boxes of that id ticked: `GetNodeInfo`'s
+    /// request unticked removes the first 1 (`List.Remove`), its response the second, and the
+    /// allocation's box, ticked still, then has none to remove; ticked again, a box of that id
+    /// adds 1 at the end, and another adds nothing.
+    #[test]
+    fn the_filter_lists_ones_go_a_copy_at_a_time() {
+        let mut filter = FilterWindow::new();
+        let request = filter_box(&filter, "uavcan_protocol_GetNodeInfo_req");
+        let response = filter_box(&filter, "uavcan_protocol_GetNodeInfo_res");
+        let allocation = filter_box(&filter, "uavcan_protocol_dynamic_node_id_Allocation");
+
+        assert_eq!(filter.toggle(request), Some(10));
+        assert_eq!(filter.ids, [0, 341, 5, 11, 10, 40, 48, 45, 1, 16383]);
+        assert!(!filter.ticked("uavcan_protocol_GetNodeInfo_req"));
+        assert!(filter.ticked("uavcan_protocol_GetNodeInfo_res"));
+        assert!(filter.ticked("uavcan_protocol_dynamic_node_id_Allocation"));
+
+        assert_eq!(filter.toggle(response), Some(9));
+        assert_eq!(filter.ids, [0, 341, 5, 11, 10, 40, 48, 45, 16383]);
+        assert!(filter.ticked("uavcan_protocol_dynamic_node_id_Allocation"));
+
+        assert_eq!(filter.toggle(allocation), Some(9));
+        assert!(!filter.ticked("uavcan_protocol_dynamic_node_id_Allocation"));
+        assert_eq!(filter.ids, [0, 341, 5, 11, 10, 40, 48, 45, 16383]);
+
+        assert_eq!(filter.toggle(allocation), Some(10));
+        assert_eq!(filter.ids, [0, 341, 5, 11, 10, 40, 48, 45, 16383, 1]);
+        assert_eq!(filter.toggle(request), Some(10));
+        assert_eq!(filter.ids, [0, 341, 5, 11, 10, 40, 48, 45, 16383, 1]);
+        assert!(filter.ticked("uavcan_protocol_GetNodeInfo_req"));
+        assert!(!filter.ticked("uavcan_protocol_GetNodeInfo_res"));
+    }
+
+    /// "ALL" ticks itself alone: the list and the boxes stay as they were.
+    #[test]
+    fn the_filter_windows_all_box_is_its_own() {
+        let mut filter = FilterWindow::new();
+        let before = filter.clone();
+        filter.toggle_all();
+        assert!(filter.all);
+        assert_eq!(filter.ids, before.ids);
+        assert_eq!(filter.boxes, before.boxes);
+        filter.toggle_all();
+        assert_eq!(filter, before);
+    }
+
+    /// With no bus a box still changes the list and its tick - only the send waits for the
+    /// MAVLink bus - and Filter again opens a new window, from the default list.
+    #[test]
+    fn the_filter_window_without_a_bus() {
+        let telemetry = Telemetry::idle();
+        let view = telemetry.view();
+        let mut page = DroneCan::default();
+        page.activate(key(), None, None);
+        assert!(page.filter_enabled);
+        page.click_filter();
+        let request = filter_box(filter_window(&page), "com_hobbywing_esc_SetLED_req");
+        page.click_filter_box(Some(request), &telemetry, &view);
+        page.click_filter_box(None, &telemetry, &view);
+        let filter = filter_window(&page);
+        assert!(filter.ticked("com_hobbywing_esc_SetLED_req"));
+        assert!(!filter.ticked("com_hobbywing_esc_SetLED_res"));
+        assert_eq!(filter.ids.last(), Some(&212));
+        assert!(filter.all);
+        assert_eq!(filter.sent, 0);
+        page.close_window();
+        page.click_filter();
+        assert_eq!(*filter_window(&page), FilterWindow::new());
     }
 
     /// Leaving the page is `Disconnect`; leaving the screen lets the page object go.
@@ -6115,9 +6376,17 @@ mod tests {
                         .and_then(|rest| rest.split_once('.'))
                         .filter(|(id, _)| id.parse::<u8>().is_ok())
                         .map(|(_, field)| format!("{{key}}.{field}"));
-                    let recorded = match generic {
-                        Some(field) => source.contains(&format!("format!(\"{field}\")")),
-                        None => source.contains(&format!("\"{key}\"")),
+                    let recorded = if let Some(name) = key.strip_prefix("config.dronecan.filter.box.")
+                    {
+                        // A filter box's own tick, named by its data type.
+                        names::MSG_INFO.iter().any(|row| row.name == name)
+                            && source
+                                .contains("format!(\"config.dronecan.filter.box.{}\", item.name)")
+                    } else {
+                        match generic {
+                            Some(field) => source.contains(&format!("format!(\"{field}\")")),
+                            None => source.contains(&format!("\"{key}\"")),
+                        }
                     };
                     assert!(recorded, "{key} is not recorded");
                     facts += 1;
@@ -6130,6 +6399,12 @@ mod tests {
                         } else {
                             source.contains("format!(\"dronecan-row-{}-menu\", row.id)")
                         }
+                    } else if id
+                        .strip_prefix("dronecan-filter-")
+                        .is_some_and(|name| names::MSG_INFO.iter().any(|row| row.name == name))
+                    {
+                        // The filter window's boxes, one a data type, named by it.
+                        source.contains("format!(\"dronecan-filter-{}\", item.name)")
                     } else if let Some(index) = id.strip_prefix("dronecan-interface-list-") {
                         index
                             .parse::<usize>()

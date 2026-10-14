@@ -1,0 +1,107 @@
+# The Log Downloader's log tools - LOGS > DataFlash Logs > Download DataFlash Log Via Mavlink -
+# which the click crawl of 2026-10-14 found drawn greyed (docs/click-report.md, "Not fixed: real
+# gaps"). Log/LogDownloadMavLink.cs:469-600, ExtLibs/Utilities/LogOutput.cs:244-368.
+#
+# Create KML and First Person KML ask for a `*.log` in the log directory, say "Processing <log>"
+# after two empty lines, read it as text and write what LogOutput writes, then say "Done": Create
+# KML the files the DataFlash page's Create KML + gpx writes - the .gpx at the golden's 770 bytes,
+# the .kmz named for the log - and First Person KML its tour zipped as <name>-fp.kmz. A name that
+# is no file keeps the dialog asking. .bin to .log asks for a DataFlash log, then where to save its
+# text - in the log's folder, `.log` put on a name typed without one - and writes the golden's
+# 868884 bytes there; the C# says nothing, and the status line says where it went. Clear Logs
+# wants a link (logs-downloader-clear.gui): without one it is dimmed and asks nothing.
+#
+# Run as: tools/gui-test.sh tests/gui/logs-downloader-tools.gui
+
+# A data directory of its own: the machine's config.xml remembers the last link, and the
+# application opens it when it is started without one.
+env XDG_DATA_HOME $WORK
+env MP_LOG_DIR $WORK/logs
+setup mkdir -p $WORK/logs && cp testdata/dataflash/synthetic.log $WORK/logs/flight.log && cp testdata/dataflash.bin $WORK/logs/
+
+screen logs
+window 1600x1200
+budget 28
+# A first budget, set by hand until a passing run records one.
+
+click logs-tab-dataflash
+expect logs.page dataflash
+click fly-dfmavlink
+expect fly.logs.open true
+expect fly.logs.output Please connect your drone
+expect fly.logs.clear.enabled false
+expect fly.logs.asking none
+expect fly.logs.tool.last none
+
+# Create KML: its dialog in the log directory, listing the `*.log` files; the log named, OK.
+click fly-logs-redokml
+expect fly.logs.asking redokml
+expect fly.logs.asking.path ~ Open: $WORK/logs
+expect chooser.id fly-logs-path
+expect chooser.type *.log
+click fly-logs-path-value
+key ctrl+a
+type $WORK/logs/flight.log
+click fly-logs-path-ok
+expect fly.logs.asking none
+within 15
+expect fly.logs.tool.last redokml
+expect fly.logs.tool none
+expect fly.logs.output Done
+expect fly.logs.output.text ~ Processing $WORK/logs/flight.log
+expect fly.logs.tool.files ~ flight.log.gpx:770
+expect fly.logs.tool.files ~ flight.log.param:
+expect fly.logs.tool.files ~ flight.kmz:
+
+# First Person KML: a name that is no file keeps the dialog asking; Cancel ends it.
+click fly-logs-firstperson
+expect fly.logs.asking firstperson
+click fly-logs-path-value
+key ctrl+a
+type $WORK/logs/gone.log
+click fly-logs-path-ok
+expect fly.logs.asking firstperson
+expect fly.logs.asking.path ~ gone.log
+click fly-logs-path-cancel
+expect fly.logs.asking none
+expect fly.logs.tool.last redokml
+expect fly.logs.output.text !~ gone.log
+
+# First Person KML of the log: its tour, zipped beside it as flight-fp.kmz, and "Done".
+click fly-logs-firstperson
+click fly-logs-path-value
+key ctrl+a
+type $WORK/logs/flight.log
+click fly-logs-path-ok
+within 15
+expect fly.logs.tool.last firstperson
+expect fly.logs.output Done
+expect fly.logs.tool.files ~ flight-fp.kmz:
+
+# .bin to .log: the DataFlash log, then its Save As in the log's folder; `converted` becomes
+# converted.log, the golden's bytes, and the status line says where.
+click fly-logs-bintolog
+expect fly.logs.asking bintolog
+expect chooser.type Binary Log
+click fly-logs-path-value
+key ctrl+a
+type $WORK/logs/dataflash.bin
+click fly-logs-path-ok
+expect fly.logs.asking bintolog-save
+expect fly.logs.asking.path ~ Save As: $WORK/logs
+click fly-logs-path-value
+key ctrl+a
+type $WORK/logs/converted
+click fly-logs-path-ok
+expect fly.logs.asking none
+within 15
+expect fly.logs.tool.last bintolog
+expect fly.logs.tool.files converted.log:868884
+expect status ~ .bin to .log:
+expect status ~ converted.log
+expect fly.logs.output.text !~ converted
+
+# Clear Logs wants a link: dimmed, a click asks nothing.
+click fly-logs-clear
+expect fly.logs.asking none
+expect fly.logs.clear.enabled false

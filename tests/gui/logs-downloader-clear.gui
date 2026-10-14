@@ -1,0 +1,59 @@
+# The Log Downloader's Clear Logs - LOGS > DataFlash Logs > Download DataFlash Log Via Mavlink -
+# which the click crawl of 2026-10-14 found drawn greyed (docs/click-report.md, "Not fixed: real
+# gaps"). LoadLogList allows it only with a link open; it asks "Are you sure?" (caption "sure"),
+# and No leaves everything as it was. Yes is EraseLog - LOG_ERASE to the vehicle, twice, as it
+# answers nothing - then "!!Allow 30-90 seconds for erase" and the list emptied, its checks with
+# it; Download All Logs over the emptied list asks for the list again.
+# Log/LogDownloadMavLink.cs:59-89, 158-167, 450-467; ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:6269-6279
+#
+# Against tests/gui/log-vehicle.py, which the setup line starts: a copter holding two logs until a
+# LOG_ERASE addressed to it arrives, saying "listed N" after each list it sends and counting each
+# LOG_ERASE aloud - so "LOG_ERASE 2" is two of them from the press of Yes, and none from No - and
+# holding no logs after.
+#
+# Run as: tools/gui-test.sh tests/gui/logs-downloader-clear.gui -- tcp:127.0.0.1:5792
+env XDG_DATA_HOME $WORK
+env MP_CONFIG_XML $WORK/config.xml
+setup python3 tests/gui/log-vehicle.py --work $WORK --port 5792
+
+screen logs
+window 1600x1200
+budget 7
+# A first budget, set by hand until a passing run records one.
+
+# The vehicle first: the window asks for its list as it opens.
+expect vehicle.count > 0
+click logs-tab-dataflash
+expect logs.page dataflash
+click fly-dfmavlink
+expect fly.logs.open true
+expect fly.messages.newest listed 2
+expect fly.logs.items 2
+expect fly.logs.output Found 2 log files, note: item sizes are just an estimate.
+expect fly.logs.clear.enabled true
+
+# No: nothing sent, the list as it was.
+click fly-logs-clear
+expect fly.logs.asking clear
+click fly-logs-question-no
+expect fly.logs.asking none
+expect fly.logs.items 2
+
+# Yes, with a log checked: two LOG_ERASE, the C#'s line, and the list empty.
+click fly-log-1
+expect fly.logs.checked 1
+click fly-logs-clear
+expect fly.logs.asking clear
+click fly-logs-question-yes
+expect fly.logs.asking none
+expect fly.messages.newest LOG_ERASE 2
+expect fly.logs.output !!Allow 30-90 seconds for erase
+expect fly.logs.items 0
+expect fly.logs.checked !~ 1
+
+# Download All Logs over the emptied list: the list asked for again, and the copter has none.
+click fly-logs-dlall
+expect fly.messages.newest listed 0
+expect fly.logs.output Getting list of log files...
+expect fly.logs.items 0
+expect fly.logs.fetching none

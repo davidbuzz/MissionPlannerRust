@@ -140,12 +140,19 @@ impl Tuning {
         self.chosen.contains(&field)
     }
 
-    /// Takes a sample from a snapshot, if it is a new one.
+    /// Takes a sample from a snapshot, if it is a new one, then says what the graph holds for a
+    /// script (`record_facts`): this is what every frame calls, whatever the screen.
+    pub fn sample(&mut self, view: &TelemetryView) {
+        self.take(view);
+        self.record_facts();
+    }
+
+    /// The sample itself.
     ///
     /// Only on a new snapshot. Sampling the same state repeatedly draws a horizontal line that
     /// looks exactly like a measurement of a steady value, when what it means is that nothing has
     /// arrived - and on a tuning graph those two readings lead to opposite conclusions.
-    pub fn sample(&mut self, view: &TelemetryView) {
+    fn take(&mut self, view: &TelemetryView) {
         // Nothing is sampled while the graph is hidden. The C# stops `ZedGraphTimer` when the
         // panel collapses, and doing the same means a session that never opens the graph does no
         // work for it at all.
@@ -193,11 +200,42 @@ impl Tuning {
     }
 
     /// Forgets everything drawn so far.
+    ///
+    /// Also what Play does when it starts a log: `list1` to `list20` emptied and `tickStart`
+    /// taken again, so the seconds along the bottom count from the press.
+    /// `// C#: GCSViews/FlightData.cs:569-590`
     pub fn clear(&mut self) {
         self.started = web_time::Instant::now();
         for series in &mut self.series {
             series.clear();
         }
+    }
+
+    /// How many samples the graph holds: the longest series' count.
+    #[must_use]
+    pub fn samples(&self) -> usize {
+        self.series.iter().map(Series::len).max().unwrap_or(0)
+    }
+
+    /// When the newest sample was taken, in seconds on the graph's clock; `None` with none.
+    #[must_use]
+    pub fn newest(&self) -> Option<f64> {
+        self.series
+            .iter()
+            .filter_map(Series::latest_time)
+            .reduce(f64::max)
+    }
+
+    /// What a script can see: how many samples the graph holds, `tuning.samples`, and the
+    /// newest one's time in whole seconds, `tuning.newest` - "none" with none. A Play that
+    /// starts a log empties the one and starts the other from 0.
+    fn record_facts(&self) {
+        crate::facts::record("tuning.samples", self.samples());
+        crate::facts::record(
+            "tuning.newest",
+            self.newest()
+                .map_or_else(|| "none".to_owned(), |at| format!("{:.0}", at.floor())),
+        );
     }
 }
 
@@ -466,6 +504,33 @@ mod tests {
             );
         }
         assert_ne!(drawn[0].colour, drawn[1].colour);
+    }
+
+    /// Clearing - as Play does when it starts a log - empties every series and takes the clock
+    /// again, so the next sample is at its start; the fields chosen stay.
+    /// `// C#: GCSViews/FlightData.cs:569-590`
+    #[test]
+    fn clearing_empties_the_graph_and_starts_its_clock_again() {
+        let mut tuning = Tuning::new();
+        tuning.set_visible(true);
+        assert_eq!((tuning.samples(), tuning.newest()), (0, None));
+        for step in 0..30 {
+            let at = 100.0 + f64::from(step) / 10.0;
+            tuning.series[0].push(at, at.sin());
+        }
+        tuning.series[1].push(100.5, 1.0);
+        assert_eq!(tuning.samples(), 30);
+        assert!(tuning.newest().is_some_and(|at| at > 102.0));
+        tuning.clear();
+        assert_eq!((tuning.samples(), tuning.newest()), (0, None));
+        assert_eq!(tuning.series().len(), 2);
+        let mut state = mp_vehicle::VehicleState::default();
+        state.messages_applied = 1;
+        let mut view = crate::telemetry::TelemetryView::disconnected(String::new());
+        view.state = Some(std::sync::Arc::new(state));
+        tuning.sample(&view);
+        assert_eq!(tuning.samples(), 1);
+        assert!(tuning.newest().is_some_and(|at| at < 1.0));
     }
 
     /// Every field has a colour, including past the end of the table.
