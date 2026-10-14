@@ -27,7 +27,8 @@ other 182 were each read against the Rust and the C# it ports:
 | Not in the C# | 2 | **question 2** |
 
 Found on the way, and fixed: the compass page's Fitness list pressed the button under it, and a
-debug build's cut-off strip lay over DroneCAN's filter list. Not fixed: four real gaps, below.
+debug build's cut-off strip lay over DroneCAN's filter list. And four real gaps, ported since
+(4f538d7, below).
 
 ## Fixed (55bb4be)
 
@@ -92,20 +93,26 @@ EXPERIMENTAL's ReSort All logs ("N logs sorted"), and Force Accel Cal and Force 
 5. **SETUP > Frame Type**: clicking the frame the vehicle already has shows nothing, as in the C#.
    A quiet "already Plus"?
 
-## Not fixed: real gaps
+## The real gaps, ported since (4f538d7)
 
-- **LOGS > DataFlash > Download DataFlash Log Via Mavlink**: First Person KML, Create KML, Clear
-  Logs and .bin to .log are greyed, and the window says why: Clear Logs needs a LOG_ERASE request
-  the link does not have, and the other three are not ported (the ledger's row for
-  `Log/LogDownloadMavLink.cs`). Create KML and .bin to .log are the DataFlash page's own
-  conversions, which are ported; First Person KML needs a writer of its own
-  (`LogOutput.cs:244-368`).
-- **FLIGHT DATA > HUD**: the C#'s third click zone, the pre-arm text that opens PrearmStatus
-  (`HUD.cs:1227-1231`), has none; the EKF and vibration zones work.
-- **FLIGHT DATA > Telemetry Logs, Play**: the C# clears the tuning graph when playback starts
-  (`FlightData.cs:569-591`); the port does not.
-- **SETUP > DroneCAN > Filter**: a request's and its response's boxes share an id and tick
-  together; the C# keeps each box's own tick.
+The four the triage found, each ported from the C# the same day:
+
+- **LOGS > DataFlash > Download DataFlash Log Via Mavlink**: its four greyed buttons work. Create
+  KML and .bin to .log run the DataFlash page's own conversions with this window's questions and
+  Output lines (`LogDownloadMavLink.cs:469-514, 577-600`); First Person KML writes the C#'s
+  first-person tour as a KMZ (`:525-575`, `LogOutput.cs:244-368`, a writer of its own in
+  `mp-kml`); Clear Logs asks "Are you sure?" and sends `LOG_ERASE` twice, a request the link has
+  now (`:450-467`, `MAVLinkInterface.cs:6269-6279`). Tested against a vehicle of the script's own
+  holding two logs, so no SITL is erased (`logs-downloader-tools.gui`, `logs-downloader-clear.gui`).
+- **FLIGHT DATA > HUD**: a click on the pre-arm text opens Prearm Checks, `PrearmStatus.cs`
+  ported - it asks the vehicle to run its checks on opening and every five seconds while they
+  fail, shows "Ready to Arm" or the vehicle's PreArm lines, and closes when the vehicle arms
+  (`HUD.cs:1227-1231`, `FlightData.cs:3439-3447`; `fly-prearm.gui`). Where its zone overlaps
+  EKF's, a click opens both, as the C#'s does.
+- **FLIGHT DATA > Telemetry Logs, Play** (and Space): playback starting clears the tuning graph
+  (`FlightData.cs:558-596`; `fly-playback-tuning.gui`).
+- **SETUP > DroneCAN > Filter**: each box keeps its own tick, an untick removes one copy of its id
+  from the list, ALL only its own (`ConfigDroneCAN.cs:899-962`; `config-dronecan-filter.gui`).
 
 ## The crawler's own faults
 
