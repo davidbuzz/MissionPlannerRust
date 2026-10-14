@@ -90,6 +90,15 @@ pub const UPDATE_CHECK_KEY: &str = "update_check";
 pub const BETA_UPDATES_KEY: &str = "beta_updates";
 /// The harness's door: the directory the update is written to in place of the program's.
 pub const INSTALL_DIR_ENV: &str = "MP_UPDATE_DIR";
+/// What Check for Updates and Check for BETA Updates say, and all they do: the owner's word of
+/// 2026-10-14, "for both of them to *ONLY* print "Sorry, Updates arent impleented yet", and do
+/// noting more", the update paths behind them refused. On the status line, which every screen
+/// draws.
+pub const UPDATES_NOT_IMPLEMENTED: &str = "Sorry, Updates aren't implemented yet";
+/// Whether this build updates itself at all: not yet ([`UPDATES_NOT_IMPLEMENTED`]) - not from the
+/// buttons, the check at startup, or `/update` and `/updatebeta`. The port of `Update.cs` behind
+/// them stays, and its tests turn it on ([`Help::allowing_updates`]).
+const UPDATES_ALLOWED: bool = false;
 /// The updater beside the planner. `// C#: Utilities/Update.cs:62-72`
 const UPDATER: &str = "headless-planner";
 
@@ -237,6 +246,10 @@ pub struct Help {
     fetch: Arc<dyn Fetch + Send + Sync>,
     /// `Settings.GetRunningDirectory()`: where the program and its `version.txt` are.
     install_dir: PathBuf,
+    /// Whether the update paths run ([`UPDATES_ALLOWED`]).
+    updates: bool,
+    /// How many times a button has been refused, for the facts.
+    refused: usize,
 }
 
 /// Where the program is, or the harness's door. `// C#: Settings.GetRunningDirectory`
@@ -319,7 +332,17 @@ impl Help {
             restart: None,
             fetch,
             install_dir,
+            updates: UPDATES_ALLOWED,
+            refused: 0,
         }
+    }
+
+    /// The update paths turned on, for the tests of the ported `Update.cs` behind them.
+    #[cfg(test)]
+    #[must_use]
+    pub const fn allowing_updates(mut self) -> Self {
+        self.updates = true;
+        self
     }
 
     /// `Help.Activate`: the check box from the setting. `// C#: GCSViews/Help.cs:17-31`
@@ -366,7 +389,7 @@ impl Help {
         notify_no_update: bool,
         persisted: &Persisted,
     ) {
-        if self.busy() {
+        if !self.updates || self.busy() {
             return;
         }
         let channel = Self::channel(which, persisted);
@@ -395,18 +418,33 @@ impl Help {
         self.check = Some(receiver);
     }
 
-    /// `BUT_updatecheck_Click`: the stable channel checked, "No update available." said.
+    /// `BUT_updatecheck_Click`: the stable channel checked, "No update available." said - or,
+    /// with updates refused, only the words for the status line.
     /// `// C#: GCSViews/Help.cs:33-48`
-    pub fn update_check_clicked(&mut self, persisted: &Persisted) {
+    pub fn update_check_clicked(&mut self, persisted: &Persisted) -> Option<&'static str> {
+        if !self.updates {
+            self.refused += 1;
+            return Some(UPDATES_NOT_IMPLEMENTED);
+        }
         self.check_for_update(Which::Stable, true, persisted);
+        None
     }
 
     /// `BUT_betaupdate_Click`: `dobeta`, and with Control held `domaster` behind "This will
-    /// update to MASTER release"; then `DoUpdate`, no version asked.
+    /// update to MASTER release"; then `DoUpdate`, no version asked - or, with updates refused,
+    /// only the words for the status line.
     /// `// C#: GCSViews/Help.cs:66-82`
-    pub fn beta_update_clicked(&mut self, control_held: bool, persisted: &Persisted) {
+    pub fn beta_update_clicked(
+        &mut self,
+        control_held: bool,
+        persisted: &Persisted,
+    ) -> Option<&'static str> {
+        if !self.updates {
+            self.refused += 1;
+            return Some(UPDATES_NOT_IMPLEMENTED);
+        }
         if self.busy() {
-            return;
+            return None;
         }
         self.which = Which::Beta;
         if control_held {
@@ -415,14 +453,19 @@ impl Help {
                 text: MASTER_WARNING.to_owned(),
                 then_update: true,
             };
-            return;
+            return None;
         }
         self.start_update(persisted);
+        None
     }
 
     /// `Update.DoUpdate`: the "Check for Updates" progress dialog and its worker, on a thread.
     /// `// C#: Utilities/Update.cs:199-217, 684-738`
     pub fn start_update(&mut self, persisted: &Persisted) {
+        if !self.updates {
+            self.flow = Flow::Idle;
+            return;
+        }
         let channel = Self::channel(self.which, persisted);
         self.flow = Flow::Updating;
         self.bar = Bar::default();
@@ -494,6 +537,9 @@ impl Help {
     /// `update_check`; on a day already checked, the beta channel when `beta_updates` is set.
     /// `// C#: MainV2.cs:3668-3678`
     pub fn startup_check(&mut self, persisted: &mut Persisted) {
+        if !self.updates {
+            return;
+        }
         let today = crate::settings::short_date_today();
         if persisted.get(UPDATE_CHECK_KEY) != Some(today.as_str()) {
             self.check_for_update(Which::Stable, false, persisted);
@@ -666,6 +712,7 @@ impl Help {
         record("help.progress", &self.progress_text);
         record("help.last", &self.last);
         record("help.written", self.written);
+        record("help.refused", self.refused);
         record("help.restart", self.restart.as_deref().unwrap_or("none"));
     }
 }
@@ -678,6 +725,10 @@ fn channel_pair<T>() -> (std::sync::mpsc::Sender<T>, Receiver<T>) {
 /// `/update` and `/updatebeta`: `DoUpdate` without a window - its progress on the console, the
 /// updater started and the exit code the shell sees. `// C#: Program.cs:194-205`
 pub fn update_from_command_line(beta: bool) -> i32 {
+    if !UPDATES_ALLOWED {
+        eprintln!("{UPDATES_NOT_IMPLEMENTED}");
+        return 1;
+    }
     let persisted = Persisted::load();
     let which = if beta { Which::Beta } else { Which::Stable };
     let channel = which.channel(&|key| persisted.get(key).map(str::to_owned));
@@ -796,7 +847,11 @@ pub fn screen(
         UPDATE_CHECK_TEXT,
         (0.0, 0.0, bw, bh),
         enabled,
-        |this, _window, _cx| this.help.update_check_clicked(&this.persisted),
+        |this, _window, _cx| {
+            if let Some(refused) = this.help.update_check_clicked(&this.persisted) {
+                this.file_status = Some(refused.to_owned());
+            }
+        },
         cx,
     ));
     let beta_update = from_bottom(BETA_UPDATE).child(button(
@@ -806,7 +861,9 @@ pub fn screen(
         enabled,
         |this, window, _cx| {
             let control = window.modifiers().control;
-            this.help.beta_update_clicked(control, &this.persisted);
+            if let Some(refused) = this.help.beta_update_clicked(control, &this.persisted) {
+                this.file_status = Some(refused.to_owned());
+            }
         },
         cx,
     ));
@@ -1093,7 +1150,7 @@ mod tests {
     #[test]
     fn no_channel_does_nothing_and_a_channel_asks_the_question() {
         let dir = scratch("question");
-        let mut help = Help::with(server(&dir, "2.0.0.0\n"), dir.clone());
+        let mut help = Help::with(server(&dir, "2.0.0.0\n"), dir.clone()).allowing_updates();
         help.update_check_clicked(&settings(&[]));
         assert_eq!(help.flow, Flow::Idle);
         assert_eq!(help.last, "no channel");
@@ -1141,7 +1198,7 @@ mod tests {
     #[test]
     fn yes_downloads_and_names_the_updater_and_the_beta_button_skips_the_question() {
         let dir = scratch("update");
-        let mut help = Help::with(server(&dir, "2.0.0.0\n"), dir.clone());
+        let mut help = Help::with(server(&dir, "2.0.0.0\n"), dir.clone()).allowing_updates();
         let persisted = settings(&KEYS);
         help.update_check_clicked(&persisted);
         wait(&mut help);
@@ -1195,7 +1252,7 @@ mod tests {
     #[test]
     fn cancel_is_the_users_request() {
         let dir = scratch("cancel");
-        let mut help = Help::with(server(&dir, "2.0.0.0\n"), dir.clone());
+        let mut help = Help::with(server(&dir, "2.0.0.0\n"), dir.clone()).allowing_updates();
         let persisted = settings(&KEYS);
         help.which = Which::Stable;
         help.start_update(&persisted);
@@ -1209,10 +1266,45 @@ mod tests {
         mp_os::fs::remove_dir_all(&dir).expect("cleanup");
     }
 
+    /// The owner's word of 2026-10-14: both buttons only say "Sorry, Updates aren't implemented
+    /// yet", and nothing behind them runs - not the check, the download, the master warning, the
+    /// daily check at startup or `/update` - with a channel set and a newer version waiting on it.
+    #[test]
+    fn the_product_refuses_every_update() {
+        let dir = scratch("refused");
+        let mut help = Help::with(server(&dir, "2.0.0.0\n"), dir.clone());
+        let mut persisted = settings(&KEYS);
+        persisted.set(BETA_UPDATES_KEY, "True");
+        assert_eq!(
+            help.update_check_clicked(&persisted),
+            Some(UPDATES_NOT_IMPLEMENTED)
+        );
+        assert_eq!(
+            help.beta_update_clicked(false, &persisted),
+            Some(UPDATES_NOT_IMPLEMENTED)
+        );
+        assert_eq!(
+            help.beta_update_clicked(true, &persisted),
+            Some(UPDATES_NOT_IMPLEMENTED)
+        );
+        assert_eq!(help.refused, 3);
+        help.startup_check(&mut persisted);
+        assert_eq!(persisted.get(UPDATE_CHECK_KEY), None, "no day kept: no check made");
+        help.start_update(&persisted);
+        help.check_for_update(Which::Beta, true, &persisted);
+        assert_eq!(help.flow, Flow::Idle);
+        assert!(help.check.is_none() && help.updating.is_none());
+        assert_eq!(help.written, 0);
+        assert!(help.restart.is_none());
+        assert_eq!(update_from_command_line(false), 1);
+        assert_eq!(update_from_command_line(true), 1);
+        mp_os::fs::remove_dir_all(&dir).expect("cleanup");
+    }
+
     #[test]
     fn the_console_setting_and_the_daily_check_follow_the_settings() {
         let dir = scratch("daily");
-        let mut help = Help::with(server(&dir, "2.0.0.0\n"), dir.clone());
+        let mut help = Help::with(server(&dir, "2.0.0.0\n"), dir.clone()).allowing_updates();
         let mut persisted = settings(&KEYS);
         help.activate(&persisted);
         assert!(!help.show_console());

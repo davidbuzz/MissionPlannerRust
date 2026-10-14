@@ -2,20 +2,17 @@
 # crates/mp-gui/src/help.rs over crates/mp-update (Utilities/Update.cs, Updater/Program.cs).
 #
 # The claim: MainV2's HELP tab shows the help text with Check for Updates, Check for BETA Updates,
-# Show Console Window (restart) and the Change Log link (Help.resx); at startup, on a day already
-# checked with beta_updates on, MainV2 checks the beta channel (MainV2.cs:3668-3678), whose
-# 2.0.0.0 is above the program's 1.0.0.0, so "BETA Update Found" asks "Update Now" with the
-# ChangeLog (Update.cs:181-199) - No puts it away; Show Console Window writes showconsole
-# (Help.cs:50-53); Check for Updates against the stable channel at the program's own version says
-# "No update available." (Update.cs:200-203); Check for BETA Updates runs DoUpdate with no
-# question (Help.cs:66-82): the files the channel lists and the program has not got come down as
-# .new (Update.cs:219-440) and the updater is started with the planner's path (Update.cs:60-101) -
-# here named, not started, by the harness's door MP_UPDATE_DIR, which also puts the files under
-# $WORK rather than beside the program.
+# Show Console Window (restart) and the Change Log link (Help.resx); Show Console Window writes
+# showconsole (Help.cs:50-53). Updates are refused, the owner's word of 2026-10-14 - "for both of
+# them to *ONLY* print "Sorry, Updates arent impleented yet", and do noting more": each button
+# puts help.rs's UPDATES_NOT_IMPLEMENTED on the status line and starts nothing, and MainV2's check
+# at startup (MainV2.cs:3668-3678) does not run - though the settings below, a channel with a
+# newer beta on it, beta_updates on and today already checked, would have asked "BETA Update
+# Found" at once. The update server runs so that a request, were one made, would be answered.
 #
 # Against tests/gui/update-server.py, a channel on 127.0.0.1:5793.
 #
-# Needs no link: tools/gui-test.sh tests/gui/help.gui
+# Needs no link: tools/gui-headless.sh help
 
 env XDG_DATA_HOME $WORK
 env MP_UPDATE_DIR $WORK/install
@@ -29,13 +26,9 @@ budget 6
 
 expect screen help
 
-# The startup check on the beta channel: 2.0.0.0 over the program's 1.0.0.0 asks the question.
-expect help.flow question
-expect help.question ~ BETA Update Found
-expect help.question ~ ChangeLog: http://127.0.0.1:5793/beta/ChangeLog.txt
-click help-question-no
+# No check at startup: nothing asked.
 expect help.flow idle
-expect help.last update found
+expect help.last none
 
 # Show Console Window (restart): the setting, and nothing else here.
 expect help.console false
@@ -44,18 +37,19 @@ expect help.console true
 click help-showconsole
 expect help.console false
 
-# Check for Updates: the stable channel is at the program's version.
+# Check for Updates: the words on the status line, and nothing started.
+expect help.refused 0
 click help-updatecheck
-expect help.flow message
-expect help.question No update available.
-click help-message-ok
+expect help.refused 1
+expect status.drawn Sorry, Updates aren't implemented yet
 expect help.flow idle
-expect help.last up to date
+expect help.last none
 
-# Check for BETA Updates: no question; the one file the channel lists comes down as .new out of
-# the channel's zip, and the updater is named with the planner's path.
+# Check for BETA Updates: the same, and nothing downloaded or started.
 click help-betaupdate
-expect help.last Starting Updater
+expect help.refused 2
+expect status.drawn Sorry, Updates aren't implemented yet
 expect help.flow idle
-expect help.written 1
-expect help.restart ~ update-apply
+expect help.written 0
+expect help.last none
+expect help.restart none
