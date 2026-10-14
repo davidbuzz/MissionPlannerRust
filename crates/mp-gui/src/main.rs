@@ -164,6 +164,19 @@ impl Docking {
     }
 }
 
+/// The status row's height, in pixels: fixed, so no screen moves when a message comes or goes.
+const STATUS_ROW_HEIGHT: f32 = 20.0;
+
+/// The status line's colour: an error's, as `error_box` makes one, in the alert colour; anything
+/// else in the text colour.
+fn status_colour(text: &str) -> u32 {
+    if text.starts_with("Error") {
+        theme::ALERT
+    } else {
+        theme::TEXT
+    }
+}
+
 /// A combo's open list: below its box, above everything else, thirty rows at most before it
 /// scrolls, as this application draws every drop-down. Measured under `id`, so a script can
 /// wheel it to an entry past the rows it shows (`reveal main-port-list main-port-TCP`).
@@ -2421,7 +2434,8 @@ impl MissionPlanner {
             .min_h(px(0.0))
             .gap_2()
             .w(px(400.0))
-            // `SwapHud1AndMap`: `tableMap` - the tuning graph over the map - where `hud1` was.
+            // `SwapHud1AndMap`: `tableMap` - the map and the tuning graph, the graph under the
+            // map by the owner's word of 2026-10-14 where the C# has it over - where `hud1` was.
             // `// C#: GCSViews/FlightData.cs:5253-5273, GCSViews/FlightData.Designer.cs:2472-2473`
             .child(if self.fly_data.swapped {
                 div()
@@ -2430,12 +2444,12 @@ impl MissionPlanner {
                     .flex_shrink_0()
                     .gap_2()
                     .h(px(260.0))
+                    .child(self.map_pane(window, cx))
                     .child(
                         div()
                             .flex_shrink_0()
                             .child(tuning::panel_for(&self.tuning, cx)),
                     )
-                    .child(self.map_pane(window, cx))
                     .into_any_element()
             } else {
                 fly::hud_panel(&self.hud, &self.fly_data, cx).into_any_element()
@@ -3101,8 +3115,7 @@ impl MissionPlanner {
                             )),
                         )
                     }),
-            )
-            .child(self.map_status());
+            );
         let pane = div()
             .flex()
             .flex_1()
@@ -3117,7 +3130,57 @@ impl MissionPlanner {
         }
     }
 
-    /// The strip under the map: what it drew and how long it took.
+    /// The status line on every screen: what the last action said - an "Error: ..." in the alert
+    /// colour - at the left of the status row ([`Self::status_row`]), cut to the room the row
+    /// leaves it with the whole text in a tooltip. It was drawn only in front of the map's
+    /// statistics under the two maps, so on the eight screens without one a button whose answer
+    /// is a status message looked dead (the owner's click audit, 2026-10-14;
+    /// docs/click-everything.md). `status.drawn` is what this drew, for the scripts that would
+    /// otherwise only know what was set.
+    fn status_bar(&self) -> Option<gpui::AnyElement> {
+        let Some(text) = self.file_status.as_deref().filter(|text| !text.is_empty()) else {
+            facts::record("status.drawn", "");
+            return None;
+        };
+        facts::record("status.drawn", text);
+        let whole = SharedString::from(text.to_owned());
+        Some(
+            probe::measured("status-bar", div())
+                .id("status-bar")
+                .flex_1()
+                .min_w(px(0.0))
+                .text_sm()
+                .text_color(rgb(status_colour(text)))
+                .truncate()
+                .child(text.to_owned())
+                .tooltip(move |_window, cx| -> gpui::AnyView {
+                    cx.new(|_| config::rover_tuning::Tip(whole.clone())).into()
+                })
+                .into_any_element(),
+        )
+    }
+
+    /// The status row ([`Self::status_row`]): the header's last line, across the window under
+    /// the tabs and the link's state - the owner's design of 2026-10-14, "OUTSIDE AND ABOVE the
+    /// map/s, and inside the top nav area" - so it is above every screen's body, next to the
+    /// maps, and "all tabs can now write info here and have it be seen by the user". On its left
+    /// what the last action said ([`Self::status_bar`]); on its right, on FLIGHT DATA and FLIGHT
+    /// PLAN, what their map drew and how long it took ([`Self::map_status`]), which was a strip
+    /// along the map's foot. SIMULATION's map is its own and never had one.
+    fn status_row(&self) -> impl IntoElement {
+        let shared_map = matches!(self.screen, Screen::Fly | Screen::Plan);
+        probe::measured("status-row", div())
+            .w_full()
+            .h(px(STATUS_ROW_HEIGHT))
+            .mb_1()
+            .flex()
+            .items_center()
+            .gap_4()
+            .children(self.status_bar())
+            .children(shared_map.then(|| self.map_status()))
+    }
+
+    /// What the shared map drew and how long it took, at the status row's right.
     fn map_status(&self) -> impl IntoElement {
         let map = self.map.borrow();
         let (drawn, approximate, missing) = map.tile_counts();
@@ -3144,21 +3207,18 @@ impl MissionPlanner {
                 map.paints(),
             )
         };
-        let text = match &self.file_status {
-            Some(status) => format!("{status}  -  {text}"),
-            None => text,
-        };
 
         // min_w(0) plus truncation is load-bearing, not cosmetic: a flex item defaults to
-        // min-width:auto, so this line's intrinsic text width was widening the whole column
-        // whenever a number grew a digit. The map viewport resized with it - 744px to 755px
+        // min-width:auto, so this line's intrinsic text width once widened the map's column
+        // whenever a number grew a digit, and the map viewport resized with it - 744px to 755px
         // between frames - which invalidated cached geometry every frame and made the renderer
-        // look four times slower than it is.
-        div()
+        // look four times slower than it is. In the status row it is held to half the row, so a
+        // message keeps the rest.
+        probe::measured("map-status", div())
             .flex()
-            .w_full()
+            .ml_auto()
             .min_w(px(0.0))
-            .px_2()
+            .max_w(gpui::relative(0.5))
             .text_xs()
             .text_color(rgb(theme::DIM))
             .truncate()
@@ -4232,21 +4292,25 @@ impl Render for MissionPlanner {
                         .min_w(px(0.0))
                         .min_h(px(0.0))
                         .gap_2()
-                        // The tuning graph above the map, where the C# has it: `zg1` is in
-                        // `splitContainer1.Panel1`, over the map in `Panel2`, collapsed until
-                        // `CB_tuning` opens it. It is on no page of `tabControlactions`.
+                        // The map first, right under the status row, and the tuning graph under
+                        // it: the owner's word of 2026-10-14, "there is a "tuning" block at teh
+                        // top above the map, i want it below the map instead, this brings teh map
+                        // itself, and the new-ly-localted map status next to each other". The C#
+                        // has the graph over the map: `zg1` in `splitContainer1.Panel1`, the map
+                        // in `Panel2`, collapsed until `CB_tuning` opens it; it is on no page of
+                        // `tabControlactions`.
                         // `// C#: GCSViews/FlightData.Designer.cs:2472, 2483, 2500`
-                        // Swapped, the HUD is here in their place.
-                        .children((!self.fly_data.swapped).then(|| {
-                            div()
-                                .flex_shrink_0()
-                                .child(tuning::panel_for(&self.tuning, cx))
-                        }))
+                        // Swapped, the HUD is here in the map's place.
                         .child(if self.fly_data.swapped {
                             fly::hud_panel(&self.hud, &self.fly_data, cx).into_any_element()
                         } else {
                             self.map_pane(window, cx).into_any_element()
                         })
+                        .children((!self.fly_data.swapped).then(|| {
+                            div()
+                                .flex_shrink_0()
+                                .child(tuning::panel_for(&self.tuning, cx))
+                        }))
                         .child(div().flex_shrink_0().child(fly::messages_panel(&view, cx))),
                 )
                 // The flight screen's dialogs and forms, drawn over the window: hung from a box of
@@ -4668,7 +4732,8 @@ impl Render for MissionPlanner {
                             }))
                             .child(div().size_2().rounded_full().bg(rgb(status_colour)))
                             .child(div().text_sm().text_color(rgb(theme::DIM)).child(status)),
-                    ),
+                    )
+                    .child(self.status_row()),
             )
             .child(body)
             // Dialogs over every screen, hung from a box of no size so their backdrops are not
@@ -5071,6 +5136,17 @@ fn main() {
 
 #[cfg(test)]
 mod tests {
+    /// The status line says an error in the alert colour, as `error_box` makes one, and anything
+    /// else in the text colour.
+    #[test]
+    fn the_status_bar_colours_an_error() {
+        assert_eq!(
+            super::status_colour(&crate::fly::error_box("Please Connect First")),
+            super::theme::ALERT
+        );
+        assert_eq!(super::status_colour("read 8 items from the vehicle"), super::theme::TEXT);
+    }
+
 
     /// A visit that left old logs unread says so, with what it does load.
     #[test]

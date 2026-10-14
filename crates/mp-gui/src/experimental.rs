@@ -209,7 +209,10 @@ const COLUMNS: [f32; 4] = [16.375, 33.625, 19.25, 30.75];
 /// below that the tab scrolls, with the indicator saying so. (Found by the owner, 2026-10-04: rows
 /// of a fixed 28 pixels ran off the bottom of a smaller window, and nothing showed there was more.)
 const ROWS: u8 = 32;
-const MIN_ROW_HEIGHT: f32 = 20.0;
+/// 19 pixels: a line of the table's small text and a pixel either side. The header's status row
+/// (the owner's design of 2026-10-14) left the table 679 pixels at 1280 by 800, where 32 rows of
+/// 20 and their gaps need 702.
+const MIN_ROW_HEIGHT: f32 = 19.0;
 /// The space between rows.
 const ROW_GAP: f32 = 2.0;
 

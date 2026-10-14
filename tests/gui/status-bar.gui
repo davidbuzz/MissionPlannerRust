@@ -1,0 +1,56 @@
+# The status line on every screen (docs/click-everything.md, Part 1; the owner's click audit and
+# his design of 2026-10-14): the status row is the header's last line, across the window under the
+# tabs and the link's state, so above every screen's body and next to the maps. On its left what
+# an action said, on whichever screen it was said - where it was once drawn only in front of the
+# map's statistics, along the foot of FLIGHT DATA's and FLIGHT PLAN's map, and every other screen's
+# buttons that answer with a status message looked dead; on its right, on those two screens, the
+# map's statistics, moved up out of the map's foot. FLIGHT DATA's tuning graph is under its map,
+# so the map is next to the row. `status.drawn` is what the line drew in the frame, not what was
+# set; `status-bar below tab-fly` also fails when the line is not on screen at all.
+#
+# Needs no link: tools/gui-headless.sh status-bar
+screen experimental
+window 1600x1200
+budget 20
+env XDG_DATA_HOME $WORK
+env MP_CONFIG_XML $WORK/config.xml
+
+expect screen experimental
+
+# EXPERIMENTAL: a tool not ported says so.
+click experimental-but_dem
+expect status.drawn DEM: not ported yet (NOT_DONE_YET_MATRIX.md, the EXPERIMENTAL row)
+expect status-bar below tab-fly
+
+# LOGS > Review a log: Open with no name asks for one.
+click tab-logs
+click logs-tab-review
+click log-open
+expect status.drawn type the name of a log to open
+expect status-bar below tab-fly
+
+# CONFIG > Planner: the video's Start with no device chosen.
+click tab-config
+click config-page-ConfigPlanner
+click planner-BUT_videostart
+expect status.drawn Camera Fail: no Video Device and Video Format chosen
+expect status-bar below tab-fly
+
+# FLIGHT DATA, which drew it before under its map: Ctrl+T with no port chosen. The row is above the
+# map, the map's statistics at its right, and the tuning graph's button under the map.
+click tab-fly
+key ctrl+t
+expect status.drawn choose a port first
+expect status-bar below tab-fly
+expect status-row below tab-fly
+expect map below status-row
+expect map-status right-of status-bar
+expect map-status below tab-fly
+expect tuning-show below map
+
+# FLIGHT PLAN: the same row above its map, the message kept from FLIGHT DATA.
+click tab-plan
+expect screen plan
+expect status.drawn choose a port first
+expect map below status-row
+expect map-status right-of status-bar
