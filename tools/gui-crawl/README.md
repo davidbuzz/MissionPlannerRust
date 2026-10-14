@@ -12,7 +12,8 @@ on what a user could see. The plan and its reasons: `docs/click-everything.md`.
 * `verify.py` - each fault clicked again alone, with a long wait.
 * `report.py` - `out/report.md`, `out/recipe.txt` (every click as `.gui` lines) and
   `out/dead/*.gui` (a script per fault, for `tools/gui-headless.sh`).
-* `observe.py` - the verdict: `visible`, `changed-itself`, `status-only`, `internal-only`,
+* `observe.py` - the verdict: `visible`, `changed-itself`, `status-only`, `repeated-status` (the
+  message already showing set again, counted by the `status.serial` fact), `internal-only`,
   `nothing`, `disabled`; a text field's `typed` or `untypable`; and `denied`, `sampled-out`,
   `unreachable`, `not-a-control`.
 * `driver.py` - the planner on Xvfb with lavapipe, its probe (`MP_PROBE`) and facts (`MP_FACTS`),

@@ -127,6 +127,20 @@ mavproxy.py --master tcp:127.0.0.1:5760 \
 The line under the MissionPlannerRust title now shows the link and a growing count of frames, and
 the vehicle's parameters download. The next time, the boxes offer your last answers.
 
+This guide is a click away in the desktop app: HELP's **Using Tailscale** link opens it, shown
+while Tailscale's row in the PLUGINS tab is ticked - as it is until you untick it.
+
+**The planner shows where your computer stands.** At the top, after the link's state, the
+Tailscale indicator says what the Tailscale app on this computer reports, checked every few
+seconds: *not installed*, *not running*, *signed out*, *waiting for approval*, *stopped*, or *on
+tailnet as* this computer's machine name and tailnet address, with a green dot. Point at it for
+the details; click it for the next step - the sign-in page when you are signed out, the download
+page when Tailscale is not installed. On Linux and macOS, the first start without Tailscale
+installed offers its download page once (and on Linux the two install lines of step 2); the
+planner never installs anything itself. If a link to a tailnet address or machine name fails
+while this computer is not on your tailnet, the status line under the tabs says so. Unticking
+Tailscale in the PLUGINS tab turns all of this off.
+
 ### In a web browser
 
 1. Open the planner's page, https://davidbuzz.github.io/MissionPlannerRust/, on any computer. You

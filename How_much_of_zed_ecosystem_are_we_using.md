@@ -1,6 +1,6 @@
 # How much of the Zed ecosystem are we using?
 
-As of 2026-09-26 (main at `a72f272`). "Zed" here is the Zed code editor
+As of 2026-09-26 (main at `a72f272`); §6 lists what has changed since. "Zed" here is the Zed code editor
 ([zed-industries/zed](https://github.com/zed-industries/zed)), a read-only clone of it kept outside this repository,
 and one of the models this port was built on: DELIVERABLES.md sets the goal - Mission Planner
 reimplemented "extremely fast, multi-platform, GPU-accelerated end to end" - and names the stack
@@ -165,6 +165,20 @@ was also rejected; it is not Zed's own.
   the port's GPLv3. Zed's application crates (`ui`, `editor`, ...) are GPL-3.0-or-later, which the
   port could take too (PLAN.md: "legally fine") - they were declined for being editor-shaped, not
   for their licence.
+
+## 6. Since 2026-09-26
+
+- **A fifth gpui crate named by us: `gpui_web`**, the web page's platform, at the same `62e5991`
+  (`crates/mp-gui/Cargo.toml`, for the wasm32 target; `platform.rs` starts it): the browser build,
+  since 42f3ca6 (2026-10-05).
+- **A second Zed fork named by us: `wasm_thread`**, at `0cf96c7`, in 17 of the workspace's
+  manifests: threads that are std's on the desktop and Web Workers in a web page.
+- **`gpui_macos` with its `font-kit` feature** (300b2e1, 2026-10-04): without it gpui_macos takes
+  gpui's no-op text system, and the planner drew no text on macOS. `zed-font-kit` was already in
+  the build.
+- `Cargo.lock` holds 1,033 packages, 28 of them from Zed's repositories: 21 from the monorepo
+  (`gpui_web` the new one) and 7 from its forks (`wasm_thread` the new one). The pin is still
+  `62e5991`.
 
 ---
 

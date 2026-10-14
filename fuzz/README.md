@@ -1,7 +1,8 @@
 # Fuzz targets
 
 Deep fuzzing for every parser that touches input from outside the process: MAVLink frames, the
-streaming decoder, waypoint files and telemetry logs.
+streaming decoder, waypoint files and telemetry logs, and since 2026-10-03 the eight readers
+written after them (the last section).
 
 **These targets are not built by `cargo build --workspace`** — the `fuzz` directory is excluded
 from the workspace because libfuzzer needs a nightly toolchain, and an ordinary build must not
@@ -17,6 +18,8 @@ tools/fuzz.sh frame_stream
 tools/fuzz.sh waypoint_file
 tools/fuzz.sh tlog_reader
 tools/fuzz.sh message_decode
+# and the eight added on 2026-10-03: dataflash_bin, loganalyzer_text, zip_archive, fence_file,
+# dbf_table, intel_hex, catalogue_text, dronecan_slcan
 
 # Any libFuzzer argument passes through:
 tools/fuzz.sh message_decode -max_total_time=3600

@@ -40,6 +40,10 @@ it does to a native SITL:
 node tools/sitl/wasm/bridge.mjs tools/sitl/wasm/arducopter.js 5760 -Mquad -O-35.36,149.16,584,353 -s1 --serial0 wasm --serial1 none --serial2 none
 ```
 
+The browser build runs the same modules in the page itself (2026-10-05): `web/www/sitl` is this
+folder, and `web/www/sitl-worker.js` pumps SERIAL0 as `bridge.mjs` does, in a Web Worker, with
+messages to the page in place of the TCP socket (`web/README.md`).
+
 ## Checking them
 
 `wasm_plane_smoke_test.mjs` is ArduPilot's own check, copied from `Tools/autotest/` at the same

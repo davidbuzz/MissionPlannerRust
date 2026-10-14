@@ -135,7 +135,10 @@ MP_SMOKE=1 MP_NO_TILES=1 MP_NO_RECORD=1 ./target/debug/planner   # open, paint, 
 ```
 
 CI's `test (macos-latest)` job does exactly that smoke step after the tests, on a hosted runner
-with a desktop session of its own.
+with a desktop session of its own. Since 2026-10-06 the smoke run also lays out a line of text once
+a frame has painted, and passes only when its letters come back as different glyphs (ced849a): the
+universal build of 2026-10-04 painted every frame and not one label, number or menu, gpui_macos
+having been built without its `font-kit` feature (fixed at 300b2e1).
 
 Settings, recorded flights and map tiles go to the planner's own data directory, never to Mission
 Planner's.
@@ -193,7 +196,8 @@ Metal, OpenGL, QuartzCore, CoreGraphics, CoreVideo, ColorSync, CoreLocation, Use
 Security, SystemConfiguration, IOKit, Carbon, ApplicationServices, CoreServices, Foundation and
 CoreFoundation, with `libSystem`, `libobjc`, `libiconv` and `libffi` from `/usr/lib`.
 
-CI's release workflow (`.github/workflows/release.yml`, run by hand) makes the same build on
+CI's release workflow (`.github/workflows/release.yml`, run by hand or by pushing a release tag,
+`v` and a number) makes the same build on
 GitHub's Apple Silicon runner for both architectures - `--target aarch64-apple-darwin` and
 `--target x86_64-apple-darwin` - and joins them with `lipo -create` into one universal planner
 that runs on every Mac, Intel ones included, which a build on an Apple Silicon Mac alone does not.

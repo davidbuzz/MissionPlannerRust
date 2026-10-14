@@ -8,11 +8,13 @@ became of it.
 
 ## Installing
 
-Linux: the Debian package `tools/package.sh deb` writes installs `planner` (the graphical
-application) and `headless-planner` (the same over the command line) into `/usr/bin`, with a
-desktop entry under *MissionPlannerRust*. It needs a Vulkan driver (`mesa-vulkan-drivers`
-answers for any GPU, in software when it must). Windows and macOS: build from source for now
-(`cargo build --release`); the installers are not made yet.
+Linux: the Debian package `tools/package.sh deb` writes installs `planner`, the application, into
+`/usr/bin`, with a desktop entry under *MissionPlannerRust*. It needs a Vulkan driver
+(`mesa-vulkan-drivers` answers for any GPU, in software when it must). A release
+(`.github/workflows/release.yml`, run for a tag of "v" and a number) carries that package and the
+planner for Linux (x86-64, glibc 2.35 or newer), Windows (a zip) and macOS (one universal binary for
+Apple Silicon and Intel), each unsigned; from source, `cargo build --release -p mp-gui --bin
+planner` builds it. The installers - an MSI, a `.dmg` - are not made yet.
 
 ## Your settings, missions and files
 
@@ -29,6 +31,11 @@ was copied. Not copied, because each is large and comes back on its own: the map
 the tiles and terrain are fetched again as you look at them, and your old logs stay where Mission
 Planner wrote them, readable from there with Load Log.
 
+A setting that points into Mission Planner's folder - the log folder above all, which the copied
+`config.xml` carries - is pointed at the same place in this application's folder each time the
+settings are loaded, and the status line says once what changed. Nothing in Mission Planner's
+folder is moved or copied by that.
+
 `config.xml` is read and written as Mission Planner reads and writes it - the same keys, the same
 events (start-up, the FLIGHT DATA and FLIGHT PLAN buttons, Connect, the close box) - so a setting
 made here is understood there and the other way round. Mission files (`.waypoints`), parameter
@@ -42,14 +49,17 @@ both.
 
 The menu across the top is `MainV2`'s: FLIGHT DATA (`fly`), FLIGHT PLAN (`plan`), SETUP, CONFIG,
 SIMULATION and HELP, and two more Mission Planner opens as windows - the vehicle's parameters and
-the log browser - which are tabs here. The flight screen's lower-left tab control, the planner's
-right-click menu, SETUP and CONFIG's lists and their pages are Mission Planner's own, in its order;
-each page's controls sit where the `.resx` puts them. The flight screen keeps its own panel of mode
-buttons beside Mission Planner's mode drop-down (the owner's choice).
+the log browser - which are tabs here, as are EXPERIMENTAL (Mission Planner's temp form, which
+Ctrl+F opens) and PLUGINS (the plugin manager, Ctrl+P's), the owner's additions. The flight
+screen's lower-left tab control, the planner's right-click menu, SETUP and CONFIG's lists and their
+pages are Mission Planner's own, in its order; each page's controls sit where the `.resx` puts them. The flight screen keeps its own panel of mode
+buttons, one click a mode, in place of Mission Planner's mode drop-down and Set Mode button (the
+owner's choice).
 
 An error the window can show as state - a port that would not open, a download that failed, a
-conversion that did not run - goes on the status line at the bottom rather than into a message
-box. Questions and warnings keep their boxes.
+conversion that did not run - goes on the status line rather than into a message box: the
+header's last line, under the tabs, on every screen, an error in the alert colour. Questions and
+warnings keep their boxes.
 
 ## Logs and recordings
 
@@ -61,11 +71,11 @@ download.
 
 ## Updates
 
-The HELP screen's *Check for Updates* and *Check for BETA Updates* are Mission Planner's, and the
-once-a-day check at start-up. Mission Planner's channels carry its own .NET files, so here the
-channel is empty until one is published for this program: the settings `UpdateLocationVersion`,
-`UpdateLocation` and `UpdateLocationMD5` (and the `Beta*` and `Master*` names from
-Mission Planner's `app.config`) in `config.xml` name it. With none set, the checks do nothing.
+The HELP screen's *Check for Updates* and *Check for BETA Updates* say only "Sorry, Updates
+aren't implemented yet" on the status line (the owner's word, 2026-10-14), and nothing else is
+done: the once-a-day check at start-up, the download and the `/update` and `/updatebeta`
+command-line switches are refused too. Mission Planner's own update code is ported
+(`crates/mp-update`) and held back, off.
 
 ## When it crashes
 
@@ -76,13 +86,18 @@ none set, the report is kept and the status line says where.
 
 ## The command line
 
-`headless-planner` does, without a window, what the screens do: watch and record a link, read and
-write parameters and missions, generate a survey, convert and analyse logs, download logs over
-MAVFTP, install firmware, query terrain. `headless-planner --help` lists it.
+There is none for pilots. `headless-planner`, built from the source, does some of what the screens
+do without a window - watch and record a link, read and write parameters and missions, generate a
+survey, convert and analyse logs, download logs over MAVFTP, describe firmware and the board on a
+port, query terrain (`headless-planner --help` lists it) - but it is an internal testing tool, not
+part of the application, and no release or package carries it (the owner, 2026-10-04). It flashes
+no firmware: that is done from SETUP's Install Firmware page, where the board is on screen.
 
 ## Not here
 
 Mission Planner's C# plugins: this application loads WebAssembly plugins from `plugins/` beside
-the program instead, and the shipped ones are ported. Python scripts run on Python 3 (RustPython);
-scripts that `import clr` stop there. Pages and windows not yet ported are listed in
+the program instead, and the shipped ones are ported and built in. Python scripts run on Python 3
+(RustPython); a script that does `import clr` is given the objects Mission Planner's scripts use -
+`MAV`, `MainV2`, the screens, `Ports`, `Joystick` - and stops, with the name, at a .NET member that
+is not there. Pages and windows not yet ported are listed in
 `NOT_DONE_YET_MATRIX.md`; the matrix is the order they come in.

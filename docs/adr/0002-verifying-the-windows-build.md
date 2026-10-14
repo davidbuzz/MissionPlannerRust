@@ -90,3 +90,17 @@ in `render`, which is a relaxed atomic add against a function that is doing layo
 
 A smoke test that passes is easy to read as "Windows works". It does not mean that. This document
 exists so the next person to ask has the list above rather than a green tick.
+
+## Since then
+
+- **2026-09-26 and 27: a Windows machine, of a kind.** The owner's Windows 10 VM
+  (`win10_vm_setup.md`) built the planner natively, ran it against SITL on its virtual WDDM
+  adapter through gpui's Direct3D 11 path, ran the GUI suite, and found and flashed the bench
+  CubeOrange passed through to it.
+- **2026-10-03: the cross-compile job builds and links** `planner.exe` and `headless-planner.exe`
+  for `x86_64-pc-windows-gnu` with MinGW, where it ran `cargo check` on the non-GUI crates
+  (3f158f5). A *release* build still cannot be cross-compiled: gpui's Windows backend compiles its
+  shaders with `fxc.exe` only when built on Windows (`README.md`).
+- **2026-10-06: the smoke run checks text as well as frames.** Once a frame has painted it lays out
+  a line and passes only when its letters come back as different glyphs (ced849a): a macOS build
+  had painted every frame and not one label.

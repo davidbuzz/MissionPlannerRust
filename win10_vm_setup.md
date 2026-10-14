@@ -4,6 +4,10 @@ The Windows build of the planner is made and run in `tiny10`, a Windows 10 VM in
 VirtualBox on this laptop. This is what was set up on 2026-09-26, so it can be done again on
 another machine, and what to type to use it.
 
+Since 2026-10-05, at the owner's word, Windows builds and tests are left to CI - the
+`test (windows-latest)` job and the release workflow's Windows job - and the VM is not started for
+them: it holds 12 GB of the laptop's 31.
+
 ## The VM
 
 | | |
@@ -24,6 +28,11 @@ VBoxManage controlvm tiny10 acpipowerbutton # shut down
 VBoxManage showvminfo tiny10 --machinereadable | grep VMState
 VBoxManage snapshot tiny10 take <name>      # only with the VM off or saved - see below
 ```
+
+**Never save, pause, power off or reset it without the owner's word for that occasion.** On
+2026-09-26 a `savestate` for a build on the host stopped a suite running in the VM and the owner's
+session at once - from his side no different from pulling the plug
+(`.claude/memory/never-save-the-vm.md`). The lifecycle commands above are his to ask for.
 
 **Never reboot it and expect it to come back.** A restart lands on the login screen, and
 nothing (not sshd's key login either) is reachable until the human logs in at the console.
@@ -180,10 +189,12 @@ with the same command and `-NotifyOnListen NotConfigured`.
 Everything written for the VM on the Linux side is in `tools/win10/` in this repository, not
 in the share or the VM alone: the toolchain installer above, the build and run scripts that
 follow it, the console (`console-runner.ps1`, `vm-run.sh`) and the GUI suite's runner, relay
-and budgets. The share and `C:\setup\` hold copies.
+and budgets, the SIMULATION tab's launch (`sitl-launch.ps1`) and the release build
+(`release-build.ps1`, 2026-10-04: the planner built with the release profile, opened once and
+zipped with the licence files into `S:\release`). The share and `C:\setup\` hold copies.
 
 ## What is recorded elsewhere
 
 The memory note `.claude/memory/windows-vm-tiny10.md` holds the access details for future
-sessions; PLAN.md §13 and NOT_DONE_YET_MATRIX.md track the Windows row ("First Windows run of
-the application").
+sessions. NOT_DONE_YET_MATRIX.md's row "First Windows run of the application" closed with the run
+above (95126ce); DELIVERABLES.md's Windows column records what has run there since.

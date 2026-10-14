@@ -7,8 +7,9 @@
 *Both taken on 2026-10-03 from the current build, replaying a recorded flight (`testdata/mavlink/autotest.tlog`).*
 
 A complete, file-by-file reimplementation of [ArduPilot Mission
-Planner](https://github.com/ArduPilot/MissionPlanner) — 3,678 C# files, 1,208,836 lines, ~93
-projects — as a Rust application that is **fast**, **multi-platform** and **GPU-accelerated**.
+Planner](https://github.com/ArduPilot/MissionPlanner) — 3,684 C# files, 1,211,646 lines at
+upstream 5dbb2b0, ~93 projects — as a Rust application that is **fast**, **multi-platform** and
+**GPU-accelerated**.
 
 - **What we are building**: [DELIVERABLES.md](DELIVERABLES.md) — 21 deliverables, each with a
   falsifiable definition of done, the C# paths it replaces, and a numeric target.
@@ -27,13 +28,15 @@ across 355 commits. Linux first, and Windows since 2026-09-26 in the owner's Win
 there, run against SITL, the whole GUI suite run there on 2026-09-27, the bench board flashed from
 it (`win10_vm_setup.md`), and cross-compiled from Linux since 2026-10-03 (below); macOS since 2026-10-03
 on a borrowed Apple Silicon machine - built, the whole test suite run there and a release binary made
-(`DEV_MACOS.md`). The repository has been public at
+(`DEV_MACOS.md`), its window on a macOS desktop since 2026-10-04; and in a web browser since
+2026-10-05, the whole planner built for WebAssembly and published at
+https://davidbuzz.github.io/MissionPlannerRust/ (`web/README.md`). The repository has been public at
 https://github.com/davidbuzz/MissionPlannerRust since 2026-10-03, where the three-OS workflow runs.
 
 | Working today | |
 |---|---|
 | MAVLink v1/v2 codec | zero-copy parse, allocation-free encode (unproven: it writes into the caller's buffer, and no test counts its allocations), v2 signing |
-| Generated dialect | 349 messages, 206 enums, generated from the upstream XML |
+| Generated dialect | 353 messages, 232 enums, generated from the upstream XML at the pinned commit |
 | Transports | serial, TCP, UDP, a UDP client, websocket and NTRIP (the last three held to the C# classes run under mono), file replay, in-memory test doubles; port enumeration by `CommsSerialPort.GetPortNames`'s rules, held to per-OS fixtures; faults and a real pty unplug rehearsed in tests |
 | Link engine | I/O thread, multi-vehicle routing (50 systems in one test), stream requests; parameter sets, reads, commands and `COMMAND_INT`s, set-current, single mission items, the home-position ask and mission transfer with Mission Planner's own retry counts and waits, proved by counting sends under dropped, delayed and duplicated frames; every set and command the screens and `headless-planner` send goes through them |
 | Vehicle state | lock-free snapshot bus, packet-loss tracking; all 550 of `CurrentState`'s members accounted for (471 held with the C#'s rules, 48 derived, 30 plumbing, 1 dropped), the last 55 matched per packet to the C#'s own `UpdateCurrentSettings` under mono |
@@ -57,16 +60,16 @@ https://github.com/davidbuzz/MissionPlannerRust since 2026-10-03, where the thre
 | HUD | all 24 elements `HUD.cs` paints, from a pure scene builder with a coverage table, held to 18 golden frames drawn by a software rasteriser: horizon and ladder, heading tape with target and course marks, cross-track and turn rate, speed and altitude scrollers, VSI, mode and waypoint, link, battery, GPS, ARMED/DISARMED/SAFE/FAILSAFE, the message line, Vibe and EKF with the C#'s thresholds, Ready/Not Ready to Arm, custom items, flight-path vector and AOA scale; a camera's frame under it, started from the Planner page's Video Device (V4L2 on Linux, Media Foundation on Windows), the HUD menu's GStreamer, HereLink and MJPEG streams, and Record HUD to AVI |
 | Maps | GPU tile rendering; Mission Planner's default `GoogleSatelliteMap` and six of its providers with its URL schemes and version checks, proved against its own `GMap.NET.Core.dll`; overlays; the on-disk cache is Mission Planner's own, so a cache filled by either application is read by both, and it is served by a thread that never waits on the network, with GMap.NET's five fetch threads behind it, so a cached view is on screen at start-up whatever the network is doing |
 | CLI | `headless-planner watch \| record \| fly \| params \| param set\|save\|load\|diff \| mission \| survey \| log [bintolog\|dflogtokml\|matlab\|loganalysis\|fft] \| logs \| ftp \| fields \| kml \| firmware info\|detect\|list \| terrain \| georef \| magcal \| command \| ports` (`command` is bench scaffolding: one `COMMAND_LONG` and its ack) |
-| GUI | fly, plan, setup, config, simulation (`SITL.cs`), params and log screens on gpui; the flight screen's lower-left is Mission Planner's fourteen-page tab control and SETUP/CONFIG are its backstage lists, every entry in the C#'s order under the C#'s conditions; `MainV2`'s port box, baud box and CONNECT/DISCONNECT at the top right, with each network kind's questions and the still-moving check (AUTO's port scan not ported) |
+| GUI | fly, plan, setup, config, simulation (`SITL.cs`), params and log screens on gpui, and EXPERIMENTAL (`temp.cs`, Ctrl+F's form), PLUGINS (Ctrl+P's plugin manager) and HELP; a status row, the header's last line on every screen, where what an action said shows and an error is in the alert colour (`docs/click-everything.md`); a file box lists its folder to browse, filtered as the C#'s dialog's `Filter` (`file_list.rs`); the flight screen's lower-left is Mission Planner's fourteen-page tab control and SETUP/CONFIG are its backstage lists, every entry in the C#'s order under the C#'s conditions; `MainV2`'s port box, baud box and CONNECT/DISCONNECT at the top right, with each network kind's questions and the still-moving check (AUTO's port scan not ported) |
 | DroneCAN, Sik Radio, warnings | the DroneCAN/UAVCAN page over `crates/mp-dronecan` (node 127, the transfer layer, SLCAN, MAVLinkCAN, multicast, the parameter window, firmware updates, passthroughs, the Inspector) and the Sik Radio page over `crates/mp-sikradio` (the AT/RT session, settings, SiK and RFD900x bootloader uploads), each against a scripted stand-in; the warnings engine (`Warnings/`) with its manager, `warnings.xml` as the C# writes it, the HUD's message and the quick views' colouring; the Onboard OSD page over `ExtLibs/OSDConfigurator` |
-| Updates, crash reports, a package | `Utilities/Update.cs` and `Updater/Program.cs` as `crates/mp-update` behind the HELP screen; `Program.cs`'s `handleException` as a panic hook, the report under `crash-reports/` and the next start's question; `tools/package.sh deb` builds the Debian package, installed and removed in a clean container by a test; the cold start measured at 200 ms to the third frame |
+| Updates, crash reports, a package | `Utilities/Update.cs` and `Updater/Program.cs` as `crates/mp-update`, held back: HELP's Check for Updates and Check for BETA Updates say only "Sorry, Updates aren't implemented yet" (the owner's word of 2026-10-14), and the start-up check, the download and the `/update` and `/updatebeta` switches are refused; `Program.cs`'s `handleException` as a panic hook, the report under `crash-reports/` and the next start's question; `tools/package.sh deb` builds the Debian package, installed and removed in a clean container by a test; the cold start measured at 200 ms to the third frame |
 | HTTP server | `Utilities/httpserver.cs` on 56781: the websockets, the KMLs for Google Earth, the HUD's JPEG stream, `/guided`, `/mavlink/`'s JSON, the files beside the program; the planner's View KML and the Geo Reference form's Location Kml open over it |
-| Porting ledger | `ledger/ledger.csv`, one row per C# file with its tier and state - 196 past `ready` (187 `tested`, 9 `ported`) with their evidence and omissions, 117,472 C# lines, and 864 files `dropped` with their reasons, 149,229 lines: 461 with no callers (`xtask/tests/dead_csharp.rs` re-derives them), 354 at the owner's rulings, 44 separate programs, 4 empty files; `cargo xtask ledger check` fails on anything unaccounted for |
+| Porting ledger | `ledger/ledger.csv`, one row per C# file with its tier and state - 220 past `ready` (211 `tested`, 9 `ported`) with their evidence and omissions, 121,738 C# lines, and 866 files `dropped` with their reasons, 149,497 lines: 461 with no callers in the C# tree (`xtask/tests/dead_csharp.rs` re-derives them) and 2 with none in the planner, 354 at the owner's rulings, 45 separate programs, 4 empty files; `cargo xtask ledger check` fails on anything unaccounted for; upstream's changes since the pin moved to 5dbb2b0 on 2026-10-06 are reviewed whole, `ledger/upstream-review-5dbb2b0.txt` emptied the same day |
 | Flight screen coverage | every one of `FlightData`'s 136 wired actions listed with what stands in for it here — 113 done, 1 elsewhere, 2 missing (Set Aspect Ratio, the owner's call; the HUD's pop-out), 18 plumbing, 2 dropped — in `docs/coverage/flightdata.md`, kept current by a test; the lower-left is Mission Planner's own fourteen-page tab control with its Quick view, its tlog playback, its DataFlash Logs page and log downloader, and its Actions page (Set WP, Restart/Resume Mission, Change Alt/Speed/Loiter Radius, Fly To Coords, Abort Landing, Do Action, Jump To Tag) sends what the C# sends, with a script each against SITL (`fly-resumemis.gui` asserts the C#'s own outcome on ArduCopter, which refuses a take-off once airborne, PLAN.md §13.6 row 67); the DataFlash page's conversions run on a thread against the golden files; the HUD's right-click menu has Russian HUD, Ground Color, User Items, Swap With Map, Show icons and Battery Cell Voltage; Set Home/EKF Origin, the camera and gimbal commands, the Transponder page and the speed dial are there too; since 2026-10-03 the RAW Sensor window, Camera Overlap's photo markers, Record HUD to AVI and the Geo Reference form's Location Kml |
 | Configuration coverage | every one of the 61 `Config*.cs` panels listed in Mission Planner's SETUP and CONFIG order with what stands in for it here — 41 done, 6 partial, 0 missing, 2 plumbing, 12 dropped at the owner's ruling — in `docs/coverage/configuration.md`, held to the C# by tests; every page has its `config-*.gui` script, run in the Linux suite of 2026-09-26 and the Windows suite of 2026-09-27 or headless at its commit; the six partial pages are named in the report with what each still owes |
-| Planner coverage and menu | every one of `FlightPlanner`'s 121 wired actions listed the same way — 107 done, 2 missing (Rotate Map, blocked on the renderer; GDAL Opacity, the owner's call), 12 plumbing — in `docs/coverage/flightplanner.md`; the map's right-click menu is Mission Planner's, in its order, every entry but those two working, 8 more on the polygon icon's menu, each held to its ledger row by `planner_coverage.rs`'s tests; home is its Home Location boxes written first and drawn as its green pin, the panel's radius and altitude boxes set the C#'s parameters after Write; 60 `plan-*.gui` scripts drive them |
+| Planner coverage and menu | every one of `FlightPlanner`'s 121 wired actions listed the same way — 107 done, 2 missing (Rotate Map, blocked on the renderer; GDAL Opacity, the owner's call), 12 plumbing — in `docs/coverage/flightplanner.md`; the map's right-click menu is Mission Planner's, in its order, every entry but those two working, 8 more on the polygon icon's menu, each held to its ledger row by `planner_coverage.rs`'s tests; home is its Home Location boxes written first and drawn as its green pin, the panel's radius and altitude boxes set the C#'s parameters after Write; FLIGHT PLAN's own keys, Control-Z (undo), -O and -S and Control-Shift-F, -W and -R, as `FlightPlanner.ProcessCmdKey` has them (597fdbb); 62 `plan-*.gui` scripts drive them |
 
-**GUI scripts run at the application's pace.** `tests/gui/` holds 202 scripts. The owner runs them
+**GUI scripts run at the application's pace.** `tests/gui/` holds 260 scripts. The owner runs them
 (`tools/gui-test.sh`, or `tools/gui-suite.sh` for several); they take the machine's pointer, so no
 agent does. No script waits a fixed time: `expect` polls its fact for up to ten seconds, a click
 waits for its control, and every script carries `budget N`, the run time it is expected to take
@@ -76,18 +79,19 @@ debug-build suite (its number is the release build's: run in release on 2026-09-
 else building it passes whole - frames p99 3.8 ms with no stall in 570 at 200 Hz, packet-to-pixel p99
 14.7 ms) and `config-compass-livecal` without an
 ArduPlane 3.7.1-4.0 SITL; the two `-bench` scripts flash the CubeOrange and run only on the owner's
-word (both ran on 2026-09-25). The full suite runs in about 25 minutes where the settled scripts took over 50. The whole suite also ran in the owner's Windows 10 VM on 2026-09-27 at 16895c7: 148 pass, 22 pass over budget, 4 fail (three budgets since retimed, one lost wheel notch since spaced), 3 skip by design, of 177. The 25 scripts written since (2026-10-02 and 2026-10-03) each passed headless at their commit; no full pass has been run since. `tools/gui-headless.sh` runs the same scripts on a virtual X display (Xvfb, the
+word (both ran on 2026-09-25). The full suite runs in about 25 minutes where the settled scripts took over 50. The whole suite also ran in the owner's Windows 10 VM on 2026-09-27 at 16895c7: 148 pass, 22 pass over budget, 4 fail (three budgets since retimed, one lost wheel notch since spaced), 3 skip by design, of 177. The 25 scripts written since (2026-10-02 and 2026-10-03) each passed headless at their commit, and 58 more have been written since then; no clean full pass has been run since (a whole-suite run on 2026-10-05 was on a loaded machine, with budget overruns and some hard stops, 240e943). `tools/gui-headless.sh` runs the same scripts on a virtual X display (Xvfb, the
 application drawn by Mesa's lavapipe), so a run needs neither the desktop nor its pointer: found
 on 2026-09-26 when the desktop's session-failed screen took every click, and used since for the
 Quick page's scripts. `sitl-launch.gui` (the SIMULATION tab's copter picture starting a simulator and the
 application flying it) needs port 5760 free and is skipped by a suite whose SITL holds it.
 
-**Not yet**: the planner's window opened on a macOS desktop (built, tested and released there over SSH,
-`DEV_MACOS.md`, CI's macOS job runs the smoke step); on Windows the planner has been built, run against SITL, put through the whole GUI suite and used to flash the bench board in the owner's Windows 10 VM (2026-09-26 and 27, `win10_vm_setup.md`), but no release is built there, the unit tests have not been run there, and the repository has no remote, so the three-OS CI matrix has never executed - the columns in `DELIVERABLES.md` say so; a joystick latency histogram from a real device
+**Not yet**: `DELIVERABLES.md`'s Windows and macOS columns re-scored against what has run on those
+systems - on macOS the planner built, tested and released over SSH (`DEV_MACOS.md`) and its window
+opened on a desktop on 2026-10-04; on Windows built, run against SITL, put through the whole GUI suite and used to flash the bench board in the owner's Windows 10 VM (2026-09-26 and 27, `win10_vm_setup.md`); and on both, CI's unit tests and paint smoke on every push to main since 2026-10-03; a joystick latency histogram from a real device
 (none is attached to this machine); i18n beyond the flight screen (its 46 tab and button texts read the
 `.ftl` files generated from the `.resx`, in the culture that config.xml's `language` names; every other screen's
-words are still in the code, held at the owner's word); packaging beyond the Debian package - signing, the AppImage, the MSI and the `.dmg` are not started; speech (`Utilities/Speech.cs`). `PLAN.md` §13.6 is the queue, re-prioritised on 2026-09-24, and says what
-*done* means for each.
+words are still in the code, held at the owner's word); packaging beyond the Debian package and the release workflow's archives - signing, the AppImage, the MSI and the `.dmg` are not started; speech (`Utilities/Speech.cs`). `NOT_DONE_YET_MATRIX.md` holds the work not yet done, worked in its priority order; `PLAN.md` §13.6, the queue before it (re-prioritised on 2026-09-24), says what
+*done* meant for each of its rows.
 
 ## Verification
 
@@ -102,8 +106,8 @@ recorded by running its code headless under mono, is the reference:
 - **24,626 field values** across 3,000 messages match field-by-field *by name*, via reflection
   over the C# structs. A field at the right offset with the wrong name round-trips perfectly and
   is still wrong everywhere it is displayed.
-- **349 of 349** generated `CRC_EXTRA`, `min_len` and `len` values match the table inside the
-  shipped assembly.
+- **353 of 353** generated `CRC_EXTRA`, `min_len` and `len` values match the table inside
+  Mission Planner's `MAVLink.dll`, built from the pinned source.
 - On a second corpus we decode **85 frames the C# parser drops**, with none missed — its reader
   loses sync after a corrupt frame. Every extra frame passes CRC with the correct per-message
   seed.
@@ -119,12 +123,11 @@ recorded by running its code headless under mono, is the reference:
 
 Run it yourself: `cargo test` compares against the recorded corpora under `testdata/`.
 
-Beyond the differential corpus: a smoke test that opens a window and paints,
-
+Beyond the differential corpus: a smoke test that opens a window, paints and shapes a line of text,
 written into the CI workflow for Linux, Windows and macOS and run on Linux here — the only thing
 that exercises a graphics backend rather than merely compiling it. The workflow runs on GitHub -
-the repository is public at https://github.com/davidbuzz/MissionPlannerRust since 2026-10-03 - and
-its first runs are being worked through.
+the repository is public at https://github.com/davidbuzz/MissionPlannerRust since 2026-10-03 - on
+every push to main and every pull request.
 
 The UI is driven and **checked**, not photographed. `tools/gui-test.sh` runs a script of clicks
 and keystrokes against the real binary and asserts on what the application says it believes:
@@ -192,8 +195,11 @@ rather than the C#'s `Mission Planner`, so a user running both loses nothing to 
 missing or empty, Mission Planner's `config.xml`, `poi.txt`, `cameras.xml`, `checklist.xml`,
 `warnings.xml`, `UserAlerts.json`, `authkeys.xml`, `logo.png`, `logo.txt` and `History` are
 copied into it once and left untouched where they were; the tile cache, terrain, logs and
-parameter metadata are not copied, and are fetched or recorded again. Map tiles go to the same
-place's `gmapcache`. `MP_NO_RECORD` turns recording off.
+parameter metadata are not copied, and are fetched or recorded again. A setting that points into
+Mission Planner's folder - the log folder a copied `config.xml` carries - is pointed at the same
+place in this application's at every load, and the status line says so once (`crates/mp-settings`'
+`rehome`, a44244a). Map tiles go to the same place's `gmapcache`. `MP_NO_RECORD` turns recording
+off.
 
 Requires a recent stable Rust (see `rust-toolchain.toml`). `DEV_MACOS.md` is the same process on a
 Mac, with what it measured, through to the release binary.
@@ -226,7 +232,7 @@ crates/
   mp-log               .tlog reading, dataflash parsing, the log conversions, FFT2
   mp-tiles             map tile fetching, decoding and caching
   mp-input             joystick and gamepad, mapped to RC channels
-    mp-firmware          .apj files, the px4 bootloader protocol, board detection, the firmware catalogue
+  mp-firmware          .apj files, the px4 bootloader protocol, board detection, the firmware catalogue
   mp-dronecan          DroneCAN: node 127, the transfer layer, SLCAN, MAVLinkCAN, multicast, parameters, firmware update
   mp-sikradio          SiK radio: the AT/RT session, settings, the SiK and RFD900x bootloaders, IHex, XModem
   mp-update            Update.cs and Updater/Program.cs: the version check, the download, the swap and restart
@@ -235,6 +241,7 @@ crates/
   mp-kml               missions and flight paths as KML
   mp-chart             time series for the tuning graph and log plots
   mp-units             typed units and geodesy
+  mp-os                the std calls a web page lacks (files, http, temp_dir), std's own on the desktop
   mp-settings          where Mission Planner keeps things on disk, ported from Settings.cs
   mp-terrain           srtm.cs: SRTM tiles, the download queue, getAltitude, proved against the C# DLL
   mp-georef            georefimage.cs: photos matched to a log by time, CAM or TRIG, every output byte for byte to the C#
@@ -245,6 +252,7 @@ xtask/                 codegen and repository invariants
 assets/i18n/           the .ftl per culture, generated from Mission Planner's .resx, with the key map and the zero-loss report
 tests/gui/              click-and-assert UI tests, run by tools/gui-test.sh
 testdata/              golden corpora
+web/                   the planner in a web browser: the page, its checks, its Tailscale node
 
 ```
 

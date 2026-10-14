@@ -19,11 +19,13 @@ redistributing a binary.
 
 ```sh
 tools/sitl/run-sitl.sh copter      # listens on tcp:127.0.0.1:5760
+tools/sitl/run-sitl.sh copter -I7  # instance 7: tcp:127.0.0.1:5830 (5760 + 10 N)
 tools/sitl/run-sitl.sh plane
 tools/sitl/start-sitl.sh copter    # the same, in the background, proved to be streaming first
+tools/sitl/make-damaged-log.py     # testdata/dataflash_damaged.bin, flown on the copter (pymavlink)
 
 headless-planner watch tcp:127.0.0.1:5760
-cargo test -p mp-link -- --ignored   # the live-vehicle test
+cargo test -p mp-link -- --ignored   # the live-vehicle tests
 ```
 
 ## Why a binary is committed
@@ -46,9 +48,16 @@ frame. SITL accepts one client at a time on 5760 and the next one the moment the
 stop it, kill by pid - `pgrep -f "sitl/arducopte[r]"` - never with a pattern the killing shell's own
 command line would match.
 
+A port something already listens on is refused: `run-sitl.sh` exits 3 rather than start a
+simulator there, as SITL itself only logs its failed bind and runs on - on 2026-10-14 a click
+audit's planners, whose SITL could not bind 5760, drove the owner's own SITL (started from the
+SIMULATION tab) instead. `start-sitl.sh` hands its simulator over only when the listener on 5760
+is the pid it started, and `tools/gui-crawl/run.sh` checks its two (instances 7 and 8) the same way.
+
 ## WebAssembly builds
 
-`wasm/` holds the owner's local builds of ArduPilot's `wasm` board (copter and plane, 2026-09-25,
-Emscripten 6.0.8) with their provenance in `wasm/README.md`. They are Emscripten ES6 modules that
-expose SERIAL0 as exports rather than a TCP port, so they run under Node or a browser and need a
-bridge to tcp:5760 before the planner can connect to them.
+`wasm/` holds the owner's local builds of ArduPilot's `wasm` board (copter and plane on
+2026-09-25, rover and heli on 2026-10-04, Emscripten 6.0.8) with their provenance in
+`wasm/README.md`. They are Emscripten ES6 modules that expose SERIAL0 as exports rather than a TCP
+port, so they run under Node or a browser and need a bridge to tcp:5760 before the planner can
+connect to them: `wasm/bridge.mjs`, which the SIMULATION screen's "try local wasm" starts.

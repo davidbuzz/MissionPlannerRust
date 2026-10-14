@@ -35,6 +35,8 @@ screen, so none of them failed.
 - FLIGHT DATA's tuning graph under its map, where the C# has it over (`splitContainer1`), so the
   map is directly under the row.
 - A fact, `status.drawn`, records what the line drew in the frame (not what was set).
+- A second, `status.serial`, counts the messages set, so the same words set again - which change
+  nothing on screen - are told from none (2aaff89).
 
 (A first version drew a bar along the window's foot: at 1280 by 800 it cut EXPERIMENTAL's table
 off. A second put the message in the header's second line, after the link's state, until the
@@ -42,7 +44,8 @@ owner's design.)
 
 **Tests.** A unit test for the line's colour; `tests/gui/status-bar.gui` sets a status on four
 screens and expects `status.drawn` and the `status-bar` control on screen, and on FLIGHT DATA and
-FLIGHT PLAN the map under the row, the statistics at its right and the tuning graph under the map.
+FLIGHT PLAN the map under the row, the statistics at its right and the tuning graph under the map;
+it sets EXPERIMENTAL's DEM answer twice and expects `status.serial` to go 1, 2.
 
 ## Part 2 - the crawler, `tools/gui-crawl/`
 
@@ -64,31 +67,44 @@ disconnected, and connected to a copter SITL. On each page it clicks every named
   inside it separately (a focus border is not a response), a blinking caret and the screen's own
   animation (taken from an idle baseline) left out;
 - the facts compared, the telemetry that drifts on its own left out;
-- the status line's text; a URL or folder handed to the desktop (fake `xdg-open` and `gio`);
+- the status line's text, and its count (`status.serial`) for an answer that repeats the message
+  already showing; a URL or folder handed to the desktop (fake `xdg-open` and `gio`);
   controls that appeared or vanished; the screen changing;
 - whether the control is drawn disabled (dim text on the panel colour), which is not a fault.
 
-**Verdicts.** `visible`, `changed-itself`, `status-only`, `internal-only`, `nothing`,
-`disabled`, `unreachable`. Every `nothing` and `internal-only` is clicked again in a fresh window
-through its recipe, with a long wait, before it is reported.
+**Verdicts.** `visible`, `changed-itself`, `status-only`, `repeated-status`, `internal-only`,
+`nothing`, `disabled`; a text field's `typed` or `untypable`; and `denied`, `sampled-out`,
+`unreachable`, `not-a-control`. Every `nothing`, `internal-only`, `status-only` and `untypable` is
+clicked again in a fresh window through its recipe, with a long wait, before it is reported; a
+`repeated-status` is listed apart from the faults.
 
-**Safety.** A deny list is never clicked: reboot, bootloader or firmware flashing, DFU, erase,
-format, exit, quit, updates. SITL is disposable; no real hardware is connected; one SITL per
-connected worker.
+**Safety.** A deny list is never clicked: reboot, bootloader or firmware flashing, DFU, install,
+erase, format, exit, quit, the parameter resets, disconnect, and every button that opens a port of
+its own - the output windows' Connect, the MAVLink Mirror's Write and Go, DroneCAN's connect, SiK
+Radio, the serial passthrough, the video. HELP's update buttons are clicked: they only say updates
+are not implemented (df43b93). SITL is disposable; no real hardware is connected; one SITL per
+connected worker, on instances 7 and 8 (tcp 5830 and 5840), and `run.sh` stops unless the listener
+on each port is the simulator it started - `tools/sitl/run-sitl.sh` refuses a port already in use.
+The planners run offline with a made-up firmware device (`MP_FIRMWARE_DEVICE`), so no firmware page
+opens a real serial port.
 
 **Output**, under `tools/gui-crawl/out/`:
-- `report.md` - every control with its path and verdict, the faults first, grouped by screen;
-- `results.jsonl` - the same, one row a click;
+- `report.md` - every verdict counted, the controls that repeated the message already showing,
+  then the faults, grouped by screen and page, each with the way there;
+- `results-<worker>.jsonl` and `verify-<worker>.jsonl` - every click, one row each, and the
+  verification pass's;
 - `recipe.txt` - the whole crawl as one replayable list of actions;
-- `dead/<screen>-<control>.gui` - for each fault, a `.gui` script that reproduces it with
+- `dead/<state>-<screen>-<control>.gui` - for each fault, a `.gui` script that reproduces it with
   `tools/gui-headless.sh`, to test its fix.
 
 **Running it.** `tools/gui-crawl/run.sh` starts the displays and SITLs and four workers (two
 disconnected, two connected), and stops everything by PID at the end. Expected: a few thousand
 clicks, two to three hours.
 
-**Its own test.** `tools/gui-crawl/selftest.sh` crawls HELP alone and checks the verdicts it
-already knows (Show Console visible; Changelog hands a URL to the desktop).
+**Its own test.** `tools/gui-crawl/selftest.sh` checks the guards first - the deny list, and
+`run-sitl.sh` refusing a port something holds - then crawls HELP alone and checks the verdicts it
+already knows (Show Console visible; Changelog hands a URL to the desktop; the welcome text is not
+reported as a control).
 
 ## Part 3 - after the crawl
 
@@ -97,6 +113,6 @@ each fix comes with its `dead/*.gui` script turned into a passing test.
 
 ## Order of work
 
-1. Part 1: the status bar, its tests, a commit.
-2. Part 2: the crawler, its self-test, a commit.
+1. Part 1: the status bar, its tests, a commit (2b33c13; the count, 2aaff89).
+2. Part 2: the crawler, its self-test, a commit (40c7425).
 3. The full crawl on the planner as built at that commit; the report to the owner.

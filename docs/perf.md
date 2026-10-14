@@ -57,7 +57,7 @@ The flight screen connected, by the page showing under the HUD (paint): Quick 19
 
 - **The planner's own work is small.** Render - reading the state and building the tree - is 0.2 to 1.2 ms on every screen. The HUD's own drawing is 0.6 ms and the map's under 0.2 ms.
 - **gpui's layout is the planner-side cost.** Inside `Window::draw` on the connected flight screen, 77% is taffy's layout pass and a quarter of all of it is measuring text there - shaping, and resolving each text's font again (`resolve_font`, `font_id`: 15-19%). The cost follows the number of elements and text runs laid out each frame, and taffy measures text more than once in a flex layout.
-- **The 100 ms REFRESH is Mission Planner's own rate.** FlightData's binding update runs at 10 Hz (`GCSViews/FlightData.cs:5421-5424`, "run at 10 hz"), and the HUD's data comes through it; HUD.cs's 30 ms is only a cap on its repaint. PLAN.md §8.2 asks more of the port: 0 frames idle and disconnected (the planner draws 10 a second), packet to pixel within a frame and a millisecond (the fixed tick gives ~50 ms), ≤2% of a core with a vehicle at 10 Hz (the connected flight screen's ~18 ms a frame is ~18% at 10 frames a second). A faster repaint is only worth having once a frame is cheap.
+- **The 100 ms REFRESH is Mission Planner's own rate.** FlightData's binding update runs at 10 Hz (`GCSViews/FlightData.cs:5421-5424`, "run at 10 hz"), and the HUD's data comes through it; HUD.cs's 30 ms is only a cap on its repaint. PLAN.md §8.2 asks more of the port: 0 frames idle and disconnected (the planner drew 10 a second then; one, since the repaint policy below), packet to pixel within a frame and a millisecond (the fixed tick gives ~50 ms), ≤2% of a core with a vehicle at 10 Hz (the connected flight screen's ~18 ms a frame is ~18% at 10 frames a second). A faster repaint is only worth having once a frame is cheap.
 
 ## The easy wins
 
@@ -123,7 +123,7 @@ vehicle at 100 and 200 Hz (whose own repaint is every 16 ms). Milliseconds, p50 
 
 | run | policy | fps | fresh / stale | wait | render + paint | present |
 |---|---|---|---|---|---|---|
-| idle | 100 ms (today) | 9 | - | - | 5.1 | 51 |
+| idle | 100 ms (the default then) | 9 | - | - | 5.1 | 51 |
 | idle | data | **1** | - | - | 4.2 | 45 |
 | SITL 4 Hz | 100 ms | 6 | 100 / **40** | 78 / 177 | 8.7 | 123 |
 | SITL 4 Hz | 16 ms | 6 | 74 / 35 | 70 / 204 | 9.1 | 125 |
@@ -166,7 +166,7 @@ Milliseconds, p50 / p99.
 
 | run | policy | fps | fresh / stale | packet to pixel | wait | whole frame | present |
 |---|---|---|---|---|---|---|---|
-| SITL 4 Hz | 100 ms (today) | 10 | 96 / **144** | 49 / **164** | 39 | 5.1 / 18.4 | 1.5 / 13.2 |
+| SITL 4 Hz | 100 ms (the default then) | 10 | 96 / **144** | 49 / **164** | 39 | 5.1 / 18.4 | 1.5 / 13.2 |
 | SITL 4 Hz | data | 5 | 120 / 0 | **16 / 36** | 5.6 | 5.4 / 12.6 | 1.6 / 5.8 |
 | storm 100 Hz | data | **57** | 1430 / 0 | 21 / 30 | 7.9 | 7.0 / 11.1 | 2.3 / 6.0 |
 | storm 200 Hz | data | **55** | 1370 / 0 | 19 / 28 | 5.8 | 7.3 / 13.6 | 2.5 / 7.9 |
@@ -177,10 +177,12 @@ Milliseconds, p50 / p99.
 - A 100 or 200 Hz stream is drawn at the display's rate, every frame fresh, packet to pixel
   ~20 ms - most of it the wait for the display's next refresh. On a 100 Hz display most frames
   would fit the 10 ms budget and the slowest 1% (11-14 ms) would not.
-- Today's 10 Hz timer at a 4 Hz stream: 60% of its frames redraw what the frame before showed, and
-  the newest data on screen is 164 ms old at the 99th percentile; repainting on new data draws half
-  the frames, none stale, at 16 / 36 ms.
+- The 10 Hz timer, the default then, at a 4 Hz stream: 60% of its frames redraw what the frame
+  before showed, and the newest data on screen is 164 ms old at the 99th percentile; repainting on
+  new data draws half the frames, none stale, at 16 / 36 ms.
 
-Left before `data` could be the default: what changes without a vehicle's message - map tiles
-arriving, the demo's pointer, a progress bar - asks for its own frames rather than leaning on the
-10 Hz timer (found by the GUI suite run with `MP_REPAINT=data`); and the owner's choice.
+`data` is the default since 240e943 (2026-10-05), the owner's choice: the window repaints on new
+data and at least once a second (`repaint.rs`). What changes without a vehicle's message - map
+tiles arriving, the demo's pointer, a progress bar, a job in flight - asks for its own frames
+(`repaint::again_in`, `mp_os::wake`) rather than leaning on the timer. `MP_REPAINT=tick:100` keeps
+the old 10 Hz timer.
