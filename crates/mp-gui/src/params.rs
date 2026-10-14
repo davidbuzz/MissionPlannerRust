@@ -33,7 +33,7 @@
 #![allow(unreachable_pub)]
 
 use std::cell::RefCell;
-use std::collections::VecDeque;
+use std::collections::{BTreeMap, VecDeque};
 use std::ops::Range;
 use std::sync::Arc;
 use web_time::Instant;
@@ -102,15 +102,32 @@ impl Parameter {
     /// tells them what the vehicle will do.
     #[must_use]
     pub fn shown(&self) -> String {
+        self.shown_as(self.value)
+    }
+
+    /// `value` shown as [`Self::shown`] shows this parameter's own: an edit waiting for Write
+    /// Params, in the editor panel ([`editor_value`]).
+    #[must_use]
+    pub fn shown_as(&self, value: f64) -> String {
         #[allow(clippy::cast_possible_truncation)] // parameter values are small integers here
-        let as_integer = self.value as i64;
+        let as_integer = value as i64;
         if let Some(meta) = self.meta
             && let Some(name) = meta.value_name(as_integer)
         {
             return format!("{as_integer}  {name}");
         }
-        number_text(self.value)
+        number_text(value)
     }
+}
+
+/// The editor panel's value: the edit waiting for Write Params when there is one - `_changes`,
+/// which the panel's steps go on from (`MissionPlanner::nudge_parameter`) and the grid shows
+/// green - else the vehicle's; `true` with an edit waiting.
+#[must_use]
+pub fn editor_value(parameter: &Parameter, changes: &BTreeMap<String, f64>) -> (f64, bool) {
+    changes
+        .get(&parameter.name)
+        .map_or((parameter.value, false), |&value| (value, true))
 }
 
 /// Narrows a parameter list to those matching a search.
@@ -726,10 +743,13 @@ pub fn list_panel(
     .into_any_element()
     // ---- end ConfigRawParams remainder ----
 }
-/// What the selected parameter is, and controls to change it.
+/// What the selected parameter is, and controls to change it. With an edit waiting for Write
+/// Params, the value is the edit's, green as the grid's cell is, and the vehicle's under it
+/// ([`editor_value`]); the range and the bits are the edit's too.
 pub fn editor_panel(
     parameters: &[Parameter],
     selected: Option<&str>,
+    changes: &BTreeMap<String, f64>,
     cx: &mut Context<MissionPlanner>,
 ) -> AnyElement {
     let Some(parameter) = selected.and_then(|name| parameters.iter().find(|p| p.name == name))
@@ -771,6 +791,19 @@ pub fn editor_panel(
 
     let name = parameter.name.clone();
     let step = meta.increment.unwrap_or(1.0);
+    let (value, pending) = editor_value(parameter, changes);
+    let mut value_box = div()
+        .w(px(140.0))
+        .text_lg()
+        .text_color(rgb(theme::TEXT))
+        .child(parameter.shown_as(value));
+    if pending {
+        value_box = value_box
+            .px_1()
+            .rounded_sm()
+            .bg(rgb(theme::OK))
+            .text_color(rgb(theme::BG));
+    }
 
     let mut body = div()
         .flex()
@@ -793,19 +826,19 @@ pub fn editor_panel(
                 .flex()
                 .items_center()
                 .gap_2()
-                .child(
-                    div()
-                        .w(px(140.0))
-                        .text_lg()
-                        .text_color(rgb(theme::TEXT))
-                        .child(parameter.shown()),
-                )
+                .child(crate::probe::measured("param-editor-value", value_box))
                 .child(step_button(&name, -step, "-", cx))
                 .child(step_button(&name, step, "+", cx)),
         );
+    if pending {
+        body = body.child(div().text_xs().text_color(rgb(theme::DIM)).child(format!(
+            "on the vehicle: {} - Write Params sends the change",
+            parameter.shown()
+        )));
+    }
 
     if let Some((low, high)) = meta.range {
-        let inside = meta.accepts(parameter.value);
+        let inside = meta.accepts(value);
         body = body.child(
             div()
                 .text_xs()
@@ -821,7 +854,7 @@ pub fn editor_panel(
     }
     if !meta.bitmask.is_empty() {
         #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
-        let bits = meta.bit_names(parameter.value as u32);
+        let bits = meta.bit_names(value as u32);
         body = body.child(
             div()
                 .text_xs()
@@ -1877,6 +1910,28 @@ mod tests {
             shown.len() > 1,
             "expected a name alongside the number: {shown}"
         );
+    }
+
+    /// The editor panel's value is the edit waiting for Write Params, which its steps go on from,
+    /// shown as the parameter's own is - a name beside an enumeration's number - and the
+    /// vehicle's while nothing waits.
+    #[test]
+    fn the_editor_shows_an_edit_waiting_over_the_vehicles_value() {
+        let monitor = parameter("BATT_MONITOR", 4.0);
+        let mut changes = BTreeMap::new();
+        assert_eq!(editor_value(&monitor, &changes), (4.0, false));
+        changes.insert("BATT_CAPACITY".to_owned(), 5000.0);
+        assert_eq!(
+            editor_value(&monitor, &changes),
+            (4.0, false),
+            "another's edit"
+        );
+        changes.insert("BATT_MONITOR".to_owned(), 3.0);
+        assert_eq!(editor_value(&monitor, &changes), (3.0, true));
+        let waiting = monitor.shown_as(3.0);
+        assert!(waiting.starts_with("3  "), "{waiting}");
+        assert_ne!(waiting, monitor.shown());
+        assert_eq!(monitor.shown_as(monitor.value), monitor.shown());
     }
 
     #[test]

@@ -2199,6 +2199,21 @@ impl MissionPlanner {
                 |parameter| value_text(parameter, self.raw_params.changes()),
             ),
         );
+        // The editor panel beside the grid: its value - an edit waiting for Write Params when there
+        // is one, green - in the panel's words.
+        let editor = selected.map(|parameter| {
+            let (value, pending) =
+                crate::params::editor_value(parameter, self.raw_params.changes());
+            (parameter.shown_as(value), pending)
+        });
+        record(
+            "params.editor.value",
+            editor.as_ref().map_or("none", |(text, _)| text.as_str()),
+        );
+        record(
+            "params.editor.pending",
+            editor.as_ref().is_some_and(|&(_, pending)| pending),
+        );
         record(
             "params.control",
             match grid.control() {

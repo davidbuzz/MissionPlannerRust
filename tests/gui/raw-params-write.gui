@@ -135,13 +135,19 @@ click param-box-yes
 expect params.changes 0
 expect params.selected.value 5000
 expect params.box none
+expect params.editor.value 5000
+expect params.editor.pending false
 
-# The editor's +, twice, in steps of 1000: 6000 waiting, then 7000 from it. Nothing is written,
-# and leaving the screen and coming back drops it.
+# The editor's +, twice, in steps of 1000: 6000 waiting, then 7000 from it - the editor's own
+# value the edit's, green, as the grid's cell is. Nothing is written, and leaving the screen and
+# coming back drops it.
 click param-step-+
 expect params.selected.value 6000
+expect params.editor.value 6000
+expect params.editor.pending true
 click param-step-+
 expect params.selected.value 7000
+expect params.editor.value 7000
 expect params.changes 1
 click tab-fly
 expect params.active false
@@ -149,3 +155,5 @@ click tab-params
 expect params.active true
 expect params.changes 0
 expect params.selected.value 5000
+expect params.editor.value 5000
+expect params.editor.pending false

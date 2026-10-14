@@ -2867,7 +2867,12 @@ impl MissionPlanner {
                 cx,
             ))
             // ---- end row 82 ----
-            .child(params::editor_panel(&parameters, selected.as_deref(), cx))
+            .child(params::editor_panel(
+                &parameters,
+                selected.as_deref(),
+                self.raw_params.changes(),
+                cx,
+            ))
             .child(params::file_panel(
                 view,
                 &self.param_file_name,
