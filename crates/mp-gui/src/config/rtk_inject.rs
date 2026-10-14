@@ -3103,6 +3103,20 @@ pub fn error_connecting(why: &str) -> String {
 /// `closed port`: what a handler reading `comPort.BaseStream` with the port closed throws.
 const PORT_CLOSED: &str = "The port is closed.";
 
+/// What the status line says, quietly, when Messages Seen is clicked with none seen - no stream
+/// read yet: `labelmsgseen_Click` empties an empty dictionary and the label does not change, in
+/// Mission Planner as here. The owner's rule of 2026-10-14 for a press that shows nothing
+/// (`fly::Refusal::Quiet`): say why.
+/// `// C#: GCSViews/ConfigurationView/ConfigSerialInjectGPS.cs:1430-1433`
+pub const NONE_SEEN: &str = "no messages seen";
+
+/// What the status line says, quietly, when the base positions' new row's Delete is clicked:
+/// `Rows.RemoveAt` throws for the row for new records, and `Program`'s handler drops an
+/// `InvalidOperationException` without a word, so nothing changes. The owner's rule of 2026-10-14
+/// for a press that shows nothing (`fly::Refusal::Quiet`): say why.
+/// `// C#: GCSViews/ConfigurationView/ConfigSerialInjectGPS.cs:1329-1332; Program.cs:767-772`
+pub const NEW_ROW_STAYS: &str = "the new row cannot be deleted";
+
 /// Why DroneCAN's part of the read loop is not here.
 pub const CAN_DIMMED: &str = "DroneCAN over SLCAN (ExtLibs/DroneCAN: ReadSLCAN and the \
                               uavcan.equipment.gnss.RTCMStream it carries) is not ported";
@@ -4396,13 +4410,18 @@ impl Page {
 
 impl RtkInject {
     /// `dg_basepos_CellContentClick`: Use makes the row the base position - and, with the port
-    /// open, the receiver's; Delete removes the row.
+    /// open, the receiver's; Delete removes the row. The new row's Delete removes nothing, and
+    /// [`NEW_ROW_STAYS`] is returned for the status line.
     /// `// C#: GCSViews/ConfigurationView/ConfigSerialInjectGPS.cs:1308-1333`
-    pub fn cell_click(&mut self, row: usize, column: usize, persisted: &mut Persisted) {
+    #[must_use]
+    pub fn cell_click(
+        &mut self,
+        row: usize,
+        column: usize,
+        persisted: &mut Persisted,
+    ) -> Option<&'static str> {
         let open = self.is_open();
-        let Some(page) = self.page.as_mut() else {
-            return;
-        };
+        let page = self.page.as_mut()?;
         match column {
             4 => {
                 // A cell of the new row has no value: `null.ToInvariantString()` is null, and
@@ -4426,13 +4445,17 @@ impl RtkInject {
                         });
                     }
                 }
+                None
             }
-            // The new row cannot be removed: `RemoveAt` throws for it.
             5 if row < page.grid.len() => {
                 page.grid.remove(row);
                 page.rows_removed(row);
+                None
             }
-            _ => {}
+            // The new row cannot be removed: `RemoveAt` throws for it, which `Program`'s handler
+            // drops without a word.
+            5 => Some(NEW_ROW_STAYS),
+            _ => None,
         }
     }
 
@@ -4543,10 +4566,15 @@ impl RtkInject {
             .store(checked, std::sync::atomic::Ordering::Release);
     }
 
-    /// `labelmsgseen_Click`: the messages seen forgotten.
+    /// `labelmsgseen_Click`: the messages seen forgotten. With none seen there is nothing to
+    /// forget and the label does not change: [`NONE_SEEN`] is returned for the status line.
     /// `// C#: GCSViews/ConfigurationView/ConfigSerialInjectGPS.cs:1430-1433`
-    pub fn msgseen_click(&mut self) {
-        self.shared.counts().msgseen.clear();
+    #[must_use]
+    pub fn msgseen_click(&mut self) -> Option<&'static str> {
+        let mut counts = self.shared.counts();
+        let none = counts.msgseen.is_empty();
+        counts.msgseen.clear();
+        none.then_some(NONE_SEEN)
     }
 
     /// A row chosen from one of the lists: its `SelectedIndexChanged`, when the selection moved.
@@ -4959,7 +4987,9 @@ pub fn page(
             .cursor_pointer()
             .child(seen.clone())
             .on_click(cx.listener(|this, _event, _window, cx| {
-                this.rtk_inject.msgseen_click();
+                if let Some(words) = this.rtk_inject.msgseen_click() {
+                    this.file_status = Some(words.to_owned());
+                }
                 cx.notify();
             })),
     );
@@ -5377,7 +5407,11 @@ fn grid_element(
                     .cursor_pointer()
                     .child(if column == 4 { "Use" } else { "Delete" })
                     .on_click(cx.listener(move |this, _event, _window, cx| {
-                        this.rtk_inject.cell_click(row, column, &mut this.persisted);
+                        if let Some(words) =
+                            this.rtk_inject.cell_click(row, column, &mut this.persisted)
+                        {
+                            this.file_status = Some(words.to_owned());
+                        }
                         cx.notify();
                     }))
             } else if typing && page.editing == Some(Editing::Cell(row, column)) {
@@ -6777,7 +6811,17 @@ mod tests {
                     facts += 1;
                 }
                 (Some("click"), Some(id)) if id.starts_with("rtk-") => {
-                    assert!(source.contains(&format!("\"{id}\"")), "{id}");
+                    // A cell of the base positions' grid is named by its row and column.
+                    let cell = id.strip_prefix("rtk-dg_basepos-").is_some_and(|place| {
+                        place.split('-').count() == 2
+                            && place.split('-').all(|n| n.parse::<usize>().is_ok())
+                    });
+                    let drawn = if cell {
+                        source.contains("\"rtk-dg_basepos-{row}-{column}\"")
+                    } else {
+                        source.contains(&format!("\"{id}\""))
+                    };
+                    assert!(drawn, "{id}");
                     clicks += 1;
                 }
                 _ => {}
@@ -7123,27 +7167,39 @@ mod tests {
         assert_eq!((page.list[1].lat, page.list[1].lng), (-35.5, 0.0));
         assert_eq!(page.list[1].tag, "b");
 
-        rtk.cell_click(1, 4, &mut persisted);
+        assert_eq!(rtk.cell_click(1, 4, &mut persisted), None);
         assert_eq!(persisted.get("base_pos"), Some("-35.5,x,,b"));
         assert!(
             rtk.page.as_ref().is_some_and(|page| page.basepos.is_zero()),
             "a base position that does not parse is Zero"
         );
-        rtk.cell_click(0, 4, &mut persisted);
+        assert_eq!(rtk.cell_click(0, 4, &mut persisted), None);
         assert_eq!(
             rtk.page.as_ref().map(|page| page.basepos.tag.clone()),
             Some("roof".to_owned())
         );
 
-        rtk.cell_click(0, 5, &mut persisted);
+        assert_eq!(rtk.cell_click(0, 5, &mut persisted), None);
         let page = rtk.page.as_ref().expect("a page");
         assert_eq!(page.grid.len(), 1);
         assert_eq!(page.list.len(), 1);
         assert_eq!(page.list[0].tag, "b");
-        // The new row cannot be deleted.
-        rtk.cell_click(1, 5, &mut persisted);
+        // The new row cannot be deleted, and the status line is told why.
+        assert_eq!(rtk.cell_click(1, 5, &mut persisted), Some(NEW_ROW_STAYS));
         assert_eq!(rtk.page.as_ref().map(|page| page.grid.len()), Some(1));
         let _ = mp_os::fs::remove_dir_all(&dir);
+    }
+
+    /// Messages Seen forgets what was seen; with nothing seen there is nothing to forget, and
+    /// the status line is told why.
+    #[test]
+    fn messages_seen_clears_or_says_there_are_none() {
+        let mut rtk = RtkInject::default();
+        assert_eq!(rtk.msgseen_click(), Some(NONE_SEEN));
+        rtk.shared.counts().msgseen.insert("Rtcm1005".to_owned(), 2);
+        assert_eq!(rtk.msgseen_click(), None);
+        assert!(rtk.shared.counts().msgseen.is_empty());
+        assert_eq!(rtk.msgseen_click(), Some(NONE_SEEN));
     }
 
     /// `base_pos` read back: four fields, the last the name; anything else Zero.

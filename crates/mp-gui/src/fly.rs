@@ -5650,6 +5650,19 @@ impl Playback {
         }
     }
 
+    /// Play/Pause pressed: [`Playback::toggle`], and with no log loaded, why nothing happened.
+    /// The C# sets `logreadmode`, and its main loop, finding no `logplaybackfile`, turns it
+    /// straight back off and leaves the button "Play" without a word; said on the status line,
+    /// quietly, as [`Refusal::Quiet`] is, so a press that did nothing is not mistaken for one
+    /// that did. `// C#: GCSViews/FlightData.cs:558-596, 3553, 3684-3689`
+    pub fn play_pressed(&self) -> Result<(), Refusal> {
+        if !self.loaded() {
+            return Err(Refusal::quiet("no log loaded"));
+        }
+        self.toggle();
+        Ok(())
+    }
+
     /// `BUT_speed1_Click`: the button's tag as the speed, said on the label.
     /// `// C#: GCSViews/FlightData.cs:1676-1680`
     pub fn set_speed(&mut self, speed: f64) {
@@ -5857,7 +5870,9 @@ pub fn playback_page(playback: &Playback, cx: &mut Context<MissionPlanner>) -> A
             theme::ACCENT,
             true,
             cx.listener(|this, _event: &(), _window, cx| {
-                this.fly_data.playback.toggle();
+                if let Err(refusal) = this.fly_data.playback.play_pressed() {
+                    this.file_status = Some(refusal.text().to_owned());
+                }
                 cx.notify();
             }),
         )))
@@ -11410,6 +11425,26 @@ mod tests {
         assert!(!playback.playing());
         assert_eq!(playback.button(), "Play");
         playback.toggle();
+        assert!(playback.playing());
+    }
+
+    /// Play with no log loaded: nothing plays and the button stays Play, as the C#'s main loop
+    /// turns `logreadmode` straight back off - and the press says why, quietly. With a log
+    /// loaded it plays and pauses, and says nothing.
+    #[test]
+    fn play_with_no_log_loaded_says_so_quietly() {
+        let mut playback = Playback::default();
+        assert_eq!(
+            playback.play_pressed(),
+            Err(Refusal::Quiet("no log loaded".to_owned()))
+        );
+        assert!(!playback.playing());
+        assert_eq!(playback.button(), "Play");
+        let control = control(10);
+        playback.load("flight.tlog", Arc::clone(&control));
+        assert_eq!(playback.play_pressed(), Ok(()));
+        assert!(!playback.playing());
+        assert_eq!(playback.play_pressed(), Ok(()));
         assert!(playback.playing());
     }
 

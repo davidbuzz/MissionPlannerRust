@@ -36,6 +36,10 @@
 //!   GeoTag Images run on a thread of their own, as the DataFlash page's conversions do, the text
 //!   box filling as the lines arrive; the C# runs them on the window's thread, so while one runs
 //!   the form takes nothing - no click, no key - as the C#'s busy form takes nothing.
+//! - **A press that does nothing says why**, quietly, on the status line, where the C# says
+//!   nothing: Pre-process without its log or its folder of pictures, and a dialog's OK on a path
+//!   that is not there - the owner's rule of 2026-10-14, a press that answers nothing looks broken
+//!   (`fly.rs`, `Refusal::Quiet`).
 //! - **The map is `myGMAP1` as Pre-process leaves it:** the route through `vehicleLocations`, a
 //!   camera marker (`GMapMarkerPhoto`) per `camLocations` entry and a green pin
 //!   (`GMarkerGoogle`) per matched photo, each marker's tooltip while the pointer is over it and a
@@ -567,6 +571,39 @@ const UNHANDLED: (&str, &str) = ("Send Error", "An error has occurred\n");
 /// `openFileDialog1.Filter`'s one description. `// C#: GeoRef/georefimage.cs:89`
 pub const LOG_FILTER: &str = "Logs|*.log;*.tlog;*.bin;*.BIN";
 
+/// Why Pre-process does nothing for want of its log or its folder of pictures: `BUT_doit_Click`
+/// returns without a word when either is not there; here the status line says which, quietly -
+/// the owner's rule of 2026-10-14, a press that answers nothing looks broken (`fly.rs`,
+/// `Refusal::Quiet`). `None` with both there. `// C#: GeoRef/georefimage.cs:145-148`
+#[must_use]
+pub fn doit_refusal(log: &str, dir: &str) -> Option<String> {
+    let missing = |what: &str, path: &str| {
+        if path.trim().is_empty() {
+            format!("Pre-process: no {what} chosen")
+        } else {
+            format!("Pre-process: no {what} at {path}")
+        }
+    };
+    if !std::path::Path::new(log).os_is_file() {
+        Some(missing("log file", log))
+    } else if !std::path::Path::new(dir).os_is_dir() {
+        Some(missing("folder of pictures", dir))
+    } else {
+        None
+    }
+}
+
+/// What a dialog's OK says when the path typed is not there and the dialog stays: the system's
+/// dialogs the C# shows cannot be given a file or folder that is not there, and this typed box
+/// keeps asking - saying why, quietly (the owner's rule of 2026-10-14).
+fn not_there(what: &str, path: &str) -> String {
+    if path.is_empty() {
+        format!("no {what} typed")
+    } else {
+        format!("no {what} at {path}")
+    }
+}
+
 // ---------------------------------------------------------------------------------------------
 // The runs.
 // ---------------------------------------------------------------------------------------------
@@ -1026,6 +1063,8 @@ pub struct Form {
     terrain: Arc<dyn Terrain + Send + Sync>,
     /// A line arrived: the text box scrolls to its end, as `AppendText` leaves it.
     scroll_to_end: bool,
+    /// Why a press did nothing, for the status line, until the window takes it.
+    status: Option<String>,
 }
 
 impl Form {
@@ -1078,7 +1117,14 @@ impl Form {
             today,
             terrain,
             scroll_to_end: false,
+            status: None,
         }
+    }
+
+    /// Why the last press did nothing, once: for the status line.
+    #[must_use]
+    pub fn take_status(&mut self) -> Option<String> {
+        self.status.take()
     }
 
     // ---- What the controls hold ----
@@ -1520,9 +1566,10 @@ impl Form {
     }
 
     /// OK or Cancel on the box over the form. A dialog's OK takes only a file (a folder) that is
-    /// there, as the system's dialog does; the handler then goes on whatever the dialog returned,
-    /// as the C#'s does, which reads `FileName` and `SelectedPath` without asking - so Cancel
-    /// takes the last file chosen, and the folder the dialog was opened at.
+    /// there, as the system's dialog does, and says why it stays (`not_there`); the handler then
+    /// goes on whatever the dialog returned, as the C#'s does, which reads `FileName` and
+    /// `SelectedPath` without asking - so Cancel takes the last file chosen, and the folder the
+    /// dialog was opened at.
     /// `// C#: GeoRef/georefimage.cs:92-137`
     pub fn answer_prompt(&mut self, ok: bool) {
         match self.prompt.take() {
@@ -1530,6 +1577,7 @@ impl Form {
                 let path = field.value().trim().to_owned();
                 if ok {
                     if !std::path::Path::new(&path).os_is_file() {
+                        self.status = Some(not_there("file", &path));
                         self.prompt = Some(Prompt::Log(field));
                         return;
                     }
@@ -1552,6 +1600,7 @@ impl Form {
                         typed
                     };
                     if !std::path::Path::new(path).os_is_dir() {
+                        self.status = Some(not_there("folder", path));
                         self.prompt = Some(Prompt::Folder(field));
                         return;
                     }
@@ -1595,9 +1644,10 @@ impl Form {
         })
     }
 
-    /// Pre-process: nothing without the log and the folder, the offset's message for an offset
-    /// that is not a number, and otherwise the button disabled, the box emptied and the markers
-    /// taken off the map (the route stays until the run ends) before the run.
+    /// Pre-process: nothing without the log and the folder - and why, for the status line
+    /// ([`doit_refusal`]) - the offset's message for an offset that is not a number, and
+    /// otherwise the button disabled, the box emptied and the markers taken off the map (the
+    /// route stays until the run ends) before the run.
     /// `// C#: GeoRef/georefimage.cs:140-165`
     pub fn doit_click(&mut self) -> Option<Job> {
         if self.inert() || self.prompt.is_some() || !self.doit_enabled {
@@ -1606,7 +1656,8 @@ impl Form {
         self.commit_edit();
         let log = self.text(Field::LogFile).to_owned();
         let dir = self.text(Field::JpgDir).to_owned();
-        if !std::path::Path::new(&log).os_is_file() || !std::path::Path::new(&dir).os_is_dir() {
+        if let Some(why) = doit_refusal(&log, &dir) {
+            self.status = Some(why);
             return None;
         }
         let settings = self.settings();
@@ -1908,6 +1959,13 @@ fn run(this: &mut MissionPlanner, job: Option<Job>) {
     }
 }
 
+/// Why a press did nothing, from the form onto the status line.
+fn say(this: &mut MissionPlanner) {
+    if let Some(why) = this.georef.form.as_mut().and_then(Form::take_status) {
+        this.file_status = Some(why);
+    }
+}
+
 // ---------------------------------------------------------------------------------------------
 // Drawing the form.
 // ---------------------------------------------------------------------------------------------
@@ -2000,7 +2058,7 @@ fn text_box(
     body.into_any_element()
 }
 
-/// A key while the form has the keyboard.
+/// A key while the form has the keyboard - Enter in a dialog is its OK, which says why it stays.
 fn key(
     this: &mut MissionPlanner,
     event: &gpui::KeyDownEvent,
@@ -2010,6 +2068,7 @@ fn key(
     if let Some(form) = this.georef.form.as_mut()
         && form.key(event)
     {
+        say(this);
         cx.notify();
     }
 }
@@ -2189,6 +2248,7 @@ fn button(
         .on_click(
             cx.listener(move |this, _event: &gpui::ClickEvent, _window, cx| {
                 on_click(this);
+                say(this);
                 cx.notify();
             }),
         )
@@ -2585,6 +2645,7 @@ fn prompt_box(
             if let Some(form) = this.georef.form.as_mut() {
                 form.answer_prompt(true);
             }
+            say(this);
             cx.notify();
         }),
     );
@@ -3244,6 +3305,12 @@ mod tests {
             "the time offset panel is disabled"
         );
         assert_eq!(form.doit_click(), None, "no log");
+        // The C# returns without a word; the status line says what is missing.
+        assert_eq!(
+            form.take_status().as_deref(),
+            Some("Pre-process: no log file chosen")
+        );
+        assert_eq!(form.take_status(), None, "said once");
         assert_eq!(form.geotag_click(), None, "not until Pre-process");
         form.set_text(Field::LogFile, &log);
         form.set_text(Field::JpgDir, &dir);
@@ -3309,13 +3376,28 @@ mod tests {
         assert_eq!(form.doit_click(), None);
         assert!(!form.georef().unwrap().use_amsl_alt);
 
-        // A folder that is not there: nothing, the box as it was.
+        // A folder that is not there: nothing, the box as it was, and why on the status line.
         let mut form = flat();
         form.set_text(Field::LogFile, &log);
         form.set_text(Field::JpgDir, &format!("{dir}/missing"));
         form.output = "kept".to_owned();
         assert_eq!(form.doit_click(), None);
         assert_eq!(form.output(), "kept");
+        assert_eq!(
+            form.take_status(),
+            Some(format!(
+                "Pre-process: no folder of pictures at {dir}/missing"
+            ))
+        );
+        assert_eq!(
+            doit_refusal(&format!("{dir}/none.bin"), &dir),
+            Some(format!("Pre-process: no log file at {dir}/none.bin"))
+        );
+        assert_eq!(
+            doit_refusal(&log, " ").as_deref(),
+            Some("Pre-process: no folder of pictures chosen")
+        );
+        assert_eq!(doit_refusal(&log, &dir), None);
 
         // GeoTag Images once Pre-process has enabled it, with the folder and the controls.
         form.geotag_enabled = true;
@@ -3540,10 +3622,15 @@ mod tests {
         let without = without.to_str().unwrap().to_owned();
 
         let mut form = flat();
-        // An empty log box: `GetDirectoryName` throws, and the dialog starts where it was.
+        // An empty log box: `GetDirectoryName` throws, and the dialog starts where it was. OK on
+        // the empty box: no folder, so the dialog stays, and says why.
         form.browse_dir();
         assert_eq!(form.prompt().map(Prompt::text), Some(""));
+        form.answer_prompt(true);
+        assert!(form.prompt().is_some(), "an empty box is no folder");
+        assert_eq!(form.take_status().as_deref(), Some("no folder typed"));
         form.answer_prompt(false);
+        assert_eq!(form.take_status(), None, "Cancel says nothing");
         assert_eq!(form.text(Field::JpgDir), "");
 
         form.set_text(Field::LogFile, &format!("{with}/camera.bin"));
@@ -3571,6 +3658,10 @@ mod tests {
         field.set(format!("{without}/nothing"));
         form.answer_prompt(true);
         assert!(form.prompt().is_some());
+        assert_eq!(
+            form.take_status(),
+            Some(format!("no folder at {without}/nothing"))
+        );
         // Cancel: the folder the dialog opened at, the log's.
         form.answer_prompt(false);
         assert_eq!(form.text(Field::JpgDir), with);
@@ -3586,6 +3677,7 @@ mod tests {
         form.browse_log(&format!("{dir}/"));
         form.answer_prompt(true);
         assert!(form.prompt().is_some(), "a folder is not a file");
+        assert_eq!(form.take_status(), Some(format!("no file at {dir}/")));
         form.answer_prompt(false);
         assert_eq!(form.text(Field::LogFile), "");
 

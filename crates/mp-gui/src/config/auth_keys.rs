@@ -64,8 +64,11 @@
 //! * what the C# throws - Use on the row Add left empty, Delete on it, a Save that cannot write -
 //!   goes on the status line (the owner's ruling of 2026-09-25), where the C# shows its unhandled
 //!   exception's box; the strength of the phrase keeps its box, a report and not an error;
-//! * with no vehicle shown, Use and Disable Signing do nothing, where the C# signs to its
-//!   placeholder `MAVState`;
+//! * with no vehicle shown, Use and Disable Signing send nothing and say "no vehicle" on the status
+//!   line, where the C# signs to its placeholder `MAVState` through a port that is not open and
+//!   says nothing; Disable Signing with a vehicle and Save say what they did there, quietly, where
+//!   the C# says nothing - the owner's rule of 2026-10-14, a press that answers nothing looks
+//!   broken (`fly.rs`, `Refusal::Quiet`; docs/click-everything.md);
 //! * the grid's columns, rows and header are WinForms' defaults (`RowHeadersWidth` 41, a
 //!   column 100, a row 22), which the `.resx` does not hold; a stored key is a 32-byte key to
 //!   the link, cut or padded as `setupSigning` does, where the C#'s receive path hashes a key
@@ -161,6 +164,22 @@ pub const NOT_BASE64: &str = "The input is not a valid Base-64 string as it cont
 
 /// The store's file under the user data directory. `// C#: ExtLibs/ArduPilot/Mavlink/MAVAuthKeys.cs:18`
 pub const KEY_FILE: &str = "authkeys.xml";
+
+/// What Use and Disable Signing say with no vehicle shown: the C#'s `setupSigning` goes to its
+/// placeholder `MAVState`, `generatePacket` returns at once with the port closed, and nothing is
+/// said; here the status line says why nothing was sent, quietly (the owner's rule of 2026-10-14).
+/// `// C#: Controls/AuthKeys.cs:44-51, 130-133;
+/// ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:1265-1268`
+pub const NO_VEHICLE: &str = "no vehicle";
+
+/// What Disable Signing says once it has sent: `SETUP_SIGNING` with a key of zeros, twice, and
+/// signing off - which the C#'s form shows nothing of while signing was already off.
+/// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:1526-1581`
+pub const SIGNING_OFF: &str = "signing off: a key of zeros sent to the vehicle";
+
+/// What Save says once the store is written, before the file's path: `MAVAuthKeys.Save()` says
+/// nothing. `// C#: ExtLibs/ArduPilot/Mavlink/MAVAuthKeys.cs:57-69`
+pub const SAVED: &str = "saved the keys to ";
 
 // ---------------------------------------------------------------------------------------------
 // `Crypto`: the store's encryption.
@@ -842,14 +861,22 @@ impl AuthKeysWindow {
         saved
     }
 
-    /// Save: `MAVAuthKeys.Save()`. `// C#: Controls/AuthKeys.cs:23-26, 39-42`
-    pub fn save(&mut self) -> Result<(), String> {
-        self.store().save()
+    /// Save: `MAVAuthKeys.Save()`, and what the status line says - the file written, where the C#
+    /// says nothing ([`SAVED`]), or the error it throws.
+    /// `// C#: Controls/AuthKeys.cs:23-26, 39-42`
+    pub fn save(&mut self) -> Result<String, String> {
+        let store = self.store();
+        store.save()?;
+        Ok(store
+            .file
+            .as_deref()
+            .map_or_else(String::new, |file| format!("{SAVED}{}", file.display())))
     }
 
     /// Use, on row `index`: `setupSigning(MAV.sysid, MAV.compid, "", Convert.FromBase64String(
     /// key))` on the shown vehicle. The C#'s exception for a row with no key or a key that is
-    /// not base64.
+    /// not base64; with no vehicle shown, nothing sent and [`NO_VEHICLE`] said, where the C#
+    /// signs to its placeholder and says nothing.
     /// `// C#: Controls/AuthKeys.cs:44-51`
     pub fn use_row(
         &self,
@@ -866,18 +893,24 @@ impl AuthKeysWindow {
         let key = base64::engine::general_purpose::STANDARD
             .decode(key)
             .map_err(|_| NOT_BASE64.to_owned())?;
-        if let Some((sender, id)) = link {
-            sender.setup_signing(*id, "", Some(&key));
-        }
+        let Some((sender, id)) = link else {
+            return Err(NO_VEHICLE.to_owned());
+        };
+        sender.setup_signing(*id, "", Some(&key));
         Ok(())
     }
 
-    /// Disable Signing: `setupSigning(MAV.sysid, MAV.compid, "")`.
+    /// Disable Signing: `setupSigning(MAV.sysid, MAV.compid, "")`, and what the status line says
+    /// of it - [`SIGNING_OFF`], or [`NO_VEHICLE`] with none shown and nothing sent - where the C#
+    /// says nothing.
     /// `// C#: Controls/AuthKeys.cs:130-133`
-    pub fn disable(link: Option<&(LinkSender, VehicleId)>) {
-        if let Some((sender, id)) = link {
-            sender.setup_signing(*id, "", None);
-        }
+    #[must_use]
+    pub fn disable(link: Option<&(LinkSender, VehicleId)>) -> &'static str {
+        let Some((sender, id)) = link else {
+            return NO_VEHICLE;
+        };
+        sender.setup_signing(*id, "", None);
+        SIGNING_OFF
     }
 
     /// A row's header clicked: the row selected.
@@ -981,7 +1014,7 @@ pub fn record_facts(holder: &AuthKeysWindow) {
 // Drawing.
 // ---------------------------------------------------------------------------------------------
 
-/// What a handler threw, on the status line (the owner's ruling).
+/// What a handler threw, on the status line (the owner's ruling), or why it sent nothing.
 fn status(this: &mut MissionPlanner, result: Result<(), String>) {
     if let Err(error) = result {
         this.file_status = Some(error);
@@ -1157,7 +1190,7 @@ fn form(
             true,
             |this, _window, _cx| {
                 let link = this.telemetry.send_handle();
-                AuthKeysWindow::disable(link.as_ref());
+                this.file_status = Some(AuthKeysWindow::disable(link.as_ref()).to_owned());
             },
             cx,
         ))
@@ -1167,8 +1200,9 @@ fn form(
             SAVE_AT,
             true,
             |this, _window, _cx| {
-                let result = this.extra.auth_keys.save();
-                status(this, result);
+                this.file_status = Some(match this.extra.auth_keys.save() {
+                    Ok(said) | Err(said) => said,
+                });
             },
             cx,
         ))
@@ -1605,6 +1639,10 @@ mod tests {
         assert_eq!(form.rows.len(), 2);
         assert!(form.asking.is_none());
         assert_eq!(window.use_row(1, None), Err(NULL_REFERENCE.to_owned()));
+        // The named row's key, with no vehicle shown: nothing sent, and why said, where the C#
+        // signs to its placeholder without a word; Disable Signing likewise.
+        assert_eq!(window.use_row(0, None), Err(NO_VEHICLE.to_owned()));
+        assert_eq!(AuthKeysWindow::disable(None), NO_VEHICLE);
         window.select(1);
         assert_eq!(window.delete_selected(), Err(NULL_REFERENCE.to_owned()));
         assert_eq!(
@@ -1623,7 +1661,11 @@ mod tests {
                 .len(),
             1
         );
-        window.save().unwrap();
+        // Save says where it wrote, where the C# says nothing.
+        assert_eq!(
+            window.save(),
+            Ok(format!("{SAVED}{}", dir.join(KEY_FILE).display()))
+        );
         assert!(
             KeyStore::load(Some(dir.join(KEY_FILE)), Vec::new())
                 .keys
@@ -1732,7 +1774,7 @@ mod tests {
             "{label}"
         );
 
-        AuthKeysWindow::disable(Some(&link));
+        assert_eq!(AuthKeysWindow::disable(Some(&link)), SIGNING_OFF);
         until("signing off", || {
             link.0.signing(id).is_some_and(|state| !state.signing)
         });

@@ -101,6 +101,24 @@ pub const RATES: [&str; 24] = [
     "SR3_RC_CHAN",
 ];
 
+/// What the status line says, quietly, when "Enable Telemetry" is pressed on a vehicle that lists
+/// none of [`RATES`]: each `setParam` returns false for a name the vehicle has not listed and the
+/// handler ignores it, so nothing changes and nothing is said - in Mission Planner too. SITL's
+/// copter names its rates `MAVn_` (`MAV1_EXT_STAT`, `testdata/params/sitl-copter.param`). The
+/// owner's rule of 2026-10-14 for a press that shows nothing (`fly::Refusal::Quiet`): say why.
+/// `// C#: GCSViews/ConfigurationView/ConfigHWOSD.cs:23-68`
+pub const NO_RATES: &str = "no SR0_, SR1_ or SR3_ rates on the vehicle";
+
+/// [`NO_RATES`] for a vehicle whose table holds none of [`RATES`]; with any of them the writes
+/// are the answer, and nothing is said.
+#[must_use]
+pub fn no_rates(parameters: &[(String, f64)]) -> Option<&'static str> {
+    let listed = RATES
+        .iter()
+        .any(|name| value_of(parameters, name).is_some());
+    (!listed).then_some(NO_RATES)
+}
+
 /// `$this.Size`.
 /// `// C#: GCSViews/ConfigurationView/ConfigHWOSD.resx $this.Size`
 const PAGE_SIZE: (f32, f32) = (650.0, 119.0);
@@ -252,6 +270,9 @@ pub fn page(osd: &Osd, cx: &mut Context<MissionPlanner>) -> AnyElement {
             BUTTON_AT,
             true,
             |this, _window, _cx| {
+                if let Some(words) = no_rates(&this.telemetry.view().parameters) {
+                    this.file_status = Some(words.to_owned());
+                }
                 let jobs = this.extra.osd.click_enable_telemetry();
                 this.extra.osd.push(jobs);
             },
@@ -391,6 +412,28 @@ mod tests {
         page.activate(key());
         page.hide();
         assert!(page.click_enable_telemetry().is_empty());
+    }
+
+    /// SITL's copter, every line of its parameter dump.
+    fn sitl() -> Vec<(String, f64)> {
+        include_str!("../../../../testdata/params/sitl-copter.param")
+            .lines()
+            .filter_map(|line| {
+                let (name, value) = line.split_once(',')?;
+                Some((name.to_owned(), value.trim().parse().ok()?))
+            })
+            .collect()
+    }
+
+    /// A vehicle that lists none of the rates - SITL's copter, whose rates are `MAVn_` - is told
+    /// so on the status line; one that lists any of them is told nothing, the writes being the
+    /// answer.
+    #[test]
+    fn a_vehicle_without_the_rates_is_told_so() {
+        let sitl = sitl();
+        assert!(sitl.iter().any(|(name, _)| name == "MAV1_EXT_STAT"));
+        assert_eq!(no_rates(&sitl), Some(NO_RATES));
+        assert_eq!(no_rates(&[("SR3_RC_CHAN".to_owned(), 0.0)]), None);
     }
 
     /// Every fact the GUI script asserts on is one this page records, and every control it

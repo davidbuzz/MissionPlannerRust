@@ -25,7 +25,7 @@
 
 screen config
 window 1600x1200
-budget 11
+budget 12
 env XDG_DATA_HOME $WORK
 env MP_CONFIG_XML $WORK/config.xml
 # The capture is mp_video: V4L2 on Linux, Media Foundation on Windows. The tiny10 VM has no
@@ -108,3 +108,9 @@ expect hud.camera none
 expect hud.hudon false
 expect hud.instruments true
 expect config.planner.video_device 0
+
+# Stop again, with nothing running: the C#'s handler only enables Start, enabled already, and says
+# nothing (:287-294); the status line says so, quietly.
+click planner-BUT_videostop
+expect status no video capture to stop
+expect config.planner.video.running false

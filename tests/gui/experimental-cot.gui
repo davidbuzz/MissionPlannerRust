@@ -34,6 +34,12 @@ expect config.cot.columns sysid,UID,takv,ContactCallsign,ContactEndPointIP,VMF
 expect config.cot.button Connect
 expect config.cot.rows 0
 
+# Clear Window with nothing written yet: the C# empties an empty box without a word
+# (SerialOutputCoT.cs:362-365); the status line says why nothing changed, quietly (the owner's
+# rule of 2026-10-14).
+click cot-BTN_clear_TB
+expect status Clear Window: no output to clear
+
 # A row for sysid 1: its UID, and takv ticked.
 click cot-cell-0-0
 type 1

@@ -65,7 +65,9 @@
 //!   and a repeat so held is written to its rule, as the box's `ValueChanged` would write it -
 //!   where the C#'s `Value` setter throws and the form does not open;
 //! * Save's failure goes on the status line (the owner's ruling of 2026-09-25), where the C#'s
-//!   `StreamWriter` throws into the unhandled-exception box;
+//!   `StreamWriter` throws into the unhandled-exception box; and the file it wrote too, quietly,
+//!   where the C# says nothing (the owner's rule of 2026-10-14, a press that answers nothing
+//!   looks broken);
 //! * the number boxes are drawn and typed into as `servo_output::Number` is, a plain
 //!   `NumericUpDown`'s part of it: a typed value past the bounds is held to them, and nothing is
 //!   asked or written to a vehicle.
@@ -182,6 +184,8 @@ pub const REPEAT_BOX: Designer = Designer {
 
 /// The caption of Save's failure on the status line.
 pub const SAVE_FAILED: &str = "Failed to save warnings.xml: ";
+/// What Save says once the file is written, before its path ([`saved_text`]).
+pub const SAVED: &str = "saved the warnings to ";
 
 // ---------------------------------------------------------------------------------------------
 // A row.
@@ -901,15 +905,30 @@ pub(crate) fn focus_left(this: &mut MissionPlanner, window: &Window, now: Instan
 }
 
 /// Save: `WarningEngine.SaveConfig()`, after the box being typed into is read; a failure on the
-/// status line (the owner's ruling of 2026-09-25).
+/// status line (the owner's ruling of 2026-09-25), and the file written there too, quietly, where
+/// the C# says nothing ([`saved_text`]).
 /// `// C#: Warnings/WarningsManager.cs:78-81`
 fn save(this: &mut MissionPlanner) {
     if let Some((manager, rules)) = access(this) {
         manager.leave(rules, Instant::now());
     }
-    if let Err(error) = this.warnings.save_config() {
-        this.file_status = Some(format!("{SAVE_FAILED}{error}"));
-    }
+    this.file_status = Some(match this.warnings.save_config() {
+        Ok(()) => this
+            .warnings
+            .file
+            .as_deref()
+            .map(saved_text)
+            .unwrap_or_default(),
+        Err(error) => format!("{SAVE_FAILED}{error}"),
+    });
+}
+
+/// What Save says once `warnings.xml` is written: `SaveConfig` says nothing, and a Save that
+/// answers nothing looks broken (the owner's rule of 2026-10-14; `fly.rs`, `Refusal::Quiet`).
+/// `// C#: ExtLibs/Utilities/Warnings/WarningEngine.cs:45-59`
+#[must_use]
+pub fn saved_text(file: &std::path::Path) -> String {
+    format!("{SAVED}{}", file.display())
 }
 
 /// A row's "+" or "-": a button with an id of its own.
@@ -1633,6 +1652,16 @@ mod tests {
         pages.warnings_manager.close();
         assert!(pages.warnings_manager.window.is_none());
         assert_eq!(rules.len(), 2, "closing keeps the rules");
+    }
+
+    /// Save says where it wrote `warnings.xml`, where the C#'s `SaveConfig` says nothing.
+    /// `// C#: ExtLibs/Utilities/Warnings/WarningEngine.cs:45-59`
+    #[test]
+    fn save_says_where_it_wrote() {
+        assert_eq!(
+            saved_text(std::path::Path::new("data/warnings.xml")),
+            "saved the warnings to data/warnings.xml"
+        );
     }
 
     /// Every fact the GUI script asserts on is one recorded here or by the engine or the quick

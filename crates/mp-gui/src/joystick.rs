@@ -57,6 +57,9 @@
 //!   to ..." - are said on the status line (the owner's ruling of 2026-09-25); the instructions
 //!   (move an axis, press a button, reopen the page), "No settings to set" and Import's question
 //!   keep their boxes;
+//! * Detect and Auto Detect with no device of the box's name answer at once as the C# does, and
+//!   say "no joystick" on the status line, quietly, where the C# says nothing (the owner's rule of
+//!   2026-10-14 for a press that does nothing visible);
 //! * Enable's text says what a click does: the C#'s keeps "Disable" after the joystick is lost;
 //! * the devices are the `js` nodes by their sysfs names, as `mp_input::linux` lists them, rather
 //!   than `/dev/input/by-id/*joystick`: the C#'s Windows list is product names, which this is;
@@ -141,6 +144,11 @@ pub const PRESS_BUTTON: &str =
 /// What either says when ten seconds pass with nothing.
 /// `// C#: ExtLibs/ArduPilot/Joystick/JoystickBase.cs:219, 1267`
 pub const NOTHING_DETECTED: &str = "No valid option was detected";
+/// What either detection says, quietly, when the device box names no device that is there: the
+/// C# answers at once - `ARx` for an axis, -1 for a button - without a word, and a button row's
+/// -1 is most often what it showed already.
+/// `// C#: ExtLibs/ArduPilot/Joystick/JoystickBase.cs:186-191, 1174-1179`
+pub const NO_DEVICE: &str = "no joystick";
 /// `but_settings_Click` for a function with no form.
 /// `// C#: Joystick/JoystickSetup.cs:483-485`
 pub const NO_SETTINGS: &str = "No settings to set";
@@ -1315,7 +1323,18 @@ impl Sticks {
 
     fn start_detect(&mut self, kind: DetectKind, text: &'static str) -> bool {
         match self.open_detector() {
-            None => false,
+            None => {
+                // `getJoyStickByName` null: the C# answers without a word. Said on the status
+                // line, quietly, so a press that changed nothing is not taken for one that did
+                // (the owner's rule of 2026-10-14).
+                let words = if self.page.text.is_empty() {
+                    NO_DEVICE.to_owned()
+                } else {
+                    format!("{NO_DEVICE}: {} is not connected", self.page.text)
+                };
+                self.say(words);
+                false
+            }
             Some(Ok(reader)) => {
                 self.page.detect = Some(Detect {
                     kind,
@@ -1342,7 +1361,7 @@ impl Sticks {
     }
 
     /// A channel row's Auto Detect: `getMovingAxis(CMB_joysticks.Text, 16000)`. A device of that
-    /// name that is not there is `ARx` at once, as the C# answers it.
+    /// name that is not there is `ARx` at once, as the C# answers it, and [`NO_DEVICE`] said.
     /// `// C#: Joystick/JoystickAxis.cs:200-203; JoystickSetup.cs:91; JoystickBase.cs:1174-1270`
     pub fn detect_axis(&mut self, row: usize) {
         self.commit_editing();
@@ -1353,7 +1372,7 @@ impl Sticks {
     }
 
     /// A button row's Detect: `getPressedButton(CMB_joysticks.Text)`, -1 at once for a device
-    /// that is not there.
+    /// that is not there, and [`NO_DEVICE`] said.
     /// `// C#: Joystick/JoystickSetup.cs:339-345; JoystickBase.cs:186-222`
     pub fn detect_button(&mut self, slot: usize) {
         self.commit_editing();

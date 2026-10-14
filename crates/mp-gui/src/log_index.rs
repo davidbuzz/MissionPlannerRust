@@ -617,10 +617,38 @@ const POPULATING: &str = "Populating Data";
 /// What a deleted row reads. `// C#: LogIndex.cs:381, 401`
 const DELETED: &str = "--- DELETED ---";
 
-/// The form's work on its thread: what `Loading` says, then the rows.
+/// The form's work on its thread: what `Loading` says, then the rows - with the folder read and
+/// how many logs were found in it.
 enum Progress {
     Loading(String),
-    Done(Vec<(LogInfo, Option<image::RgbaImage>)>),
+    Done {
+        rows: Vec<(LogInfo, Option<image::RgbaImage>)>,
+        folder: PathBuf,
+        found: usize,
+    },
+}
+
+/// What a scan says on the status line when it read no log, where the C# adds nothing to the list
+/// and says nothing: the folder held no `.tlog`, `.bin` or `.log`, or none it held could be read
+/// (a telemetry log under 4 KiB, one the C# throws on). So a press over a folder with no logs is
+/// not taken for one that did nothing it should have - the owner's rule of 2026-10-14, a press
+/// that answers nothing looks broken (`fly.rs`, `Refusal::Quiet`). `// C#: LogIndex.cs:58-92`
+#[must_use]
+pub fn nothing_read(folder: &Path, found: usize, read: usize) -> Option<String> {
+    if read > 0 {
+        return None;
+    }
+    Some(if found == 0 {
+        format!(
+            "LogIndex: no .tlog, .bin or .log files in {}",
+            folder.display()
+        )
+    } else {
+        format!(
+            "LogIndex: none of the {found} logs in {} could be read",
+            folder.display()
+        )
+    })
 }
 
 /// What the form is asking.
@@ -844,7 +872,11 @@ fn scan(this: &mut MissionPlanner, folder: PathBuf) {
                 }
             }
             let _ = sender.send(Progress::Loading(POPULATING.to_owned()));
-            let _ = sender.send(Progress::Done(rows));
+            let _ = sender.send(Progress::Done {
+                rows,
+                found: logs.len(),
+                folder,
+            });
         });
     match spawned {
         Ok(_) => form.job = Some(receiver),
@@ -869,7 +901,8 @@ fn thumbnail(picture: &Path) -> Option<image::RgbaImage> {
 }
 
 /// Once a frame: what the scan says, and its rows when it is done - `AddObjects(logs)`, every row
-/// read so far added again. `// C#: LogIndex.cs:84-91`
+/// read so far added again - and, when it read none, why, on the status line ([`nothing_read`]).
+/// `// C#: LogIndex.cs:84-91`
 pub fn tick(this: &mut MissionPlanner) {
     let Some(form) = this.experimental.log_index.as_mut() else {
         return;
@@ -878,10 +911,16 @@ pub fn tick(this: &mut MissionPlanner) {
         return;
     };
     crate::repaint::in_flight();
+    let mut said = None;
     loop {
         match receiver.try_recv() {
             Ok(Progress::Loading(text)) => form.loading = Some(text),
-            Ok(Progress::Done(rows)) => {
+            Ok(Progress::Done {
+                rows,
+                folder,
+                found,
+            }) => {
+                said = nothing_read(&folder, found, rows.len());
                 form.adopt(
                     rows.into_iter()
                         .map(|(info, picture)| {
@@ -896,15 +935,18 @@ pub fn tick(this: &mut MissionPlanner) {
                 );
                 form.loading = None;
                 form.job = None;
-                return;
+                break;
             }
-            Err(std::sync::mpsc::TryRecvError::Empty) => return,
+            Err(std::sync::mpsc::TryRecvError::Empty) => break,
             Err(std::sync::mpsc::TryRecvError::Disconnected) => {
                 form.loading = None;
                 form.job = None;
-                return;
+                break;
             }
         }
+    }
+    if said.is_some() {
+        this.file_status = said;
     }
 }
 
@@ -1169,12 +1211,16 @@ pub fn window(
         .border_b_1()
         .border_color(rgb(theme::BORDER));
     // A header clicked sorts by its column; the column sorted by shows which way
-    // (`ShowSortIndicators`, on by default).
+    // (`ShowSortIndicators`, on by default): the arrow beside the title, whole however narrow the
+    // column, as the header's sort image is drawn apart from the text the header cuts short - an
+    // arrow written after the title was cut off with it in the 60-pixel columns, the click then
+    // showing nothing (the click crawl of 2026-10-14, "TimeInAir, sec").
+    // `// C#: ExtLibs/ObjectListView/ObjectListView.cs:8299-8335`
     for (column, (title, width)) in COLUMNS.into_iter().enumerate() {
         let indicator = match form.sort {
-            Some((sorted, false)) if sorted == column => " \u{25b4}",
-            Some((sorted, true)) if sorted == column => " \u{25be}",
-            _ => "",
+            Some((sorted, false)) if sorted == column => Some("\u{25b4}"),
+            Some((sorted, true)) if sorted == column => Some("\u{25be}"),
+            _ => None,
         };
         let id = format!("experimental-logindex-header-{column}");
         heading = heading.child(
@@ -1183,10 +1229,10 @@ pub fn window(
                 .w(px(width))
                 .flex_shrink_0()
                 .px_1()
+                .flex()
+                .gap_1()
                 .text_xs()
                 .text_color(rgb(theme::DIM))
-                // One line, cut short with an ellipsis, as a ListView's header is.
-                .truncate()
                 .cursor_pointer()
                 .on_click(cx.listener(move |this, _event, _window, cx| {
                     if let Some(form) = this.experimental.log_index.as_mut() {
@@ -1194,7 +1240,13 @@ pub fn window(
                     }
                     cx.notify();
                 }))
-                .child(format!("{title}{indicator}")),
+                // One line, cut short with an ellipsis, as a ListView's header is.
+                .child(div().flex_1().min_w(px(0.0)).truncate().child(title))
+                .children(indicator.map(|arrow| {
+                    crate::probe::measured("experimental-logindex-sorted", div())
+                        .flex_shrink_0()
+                        .child(arrow)
+                })),
         );
     }
     let mut list = div().flex().flex_col().child(heading);
@@ -1712,5 +1764,21 @@ mod tests {
         let names: Vec<String> = form.rows().map(LogInfo::name).collect();
         assert_eq!(names, [DELETED, DELETED, "b.bin"]);
         let _ = mp_os::fs::remove_dir_all(&folder);
+    }
+
+    /// A scan that read no log says why on the status line - no logs in the folder, or none of
+    /// them readable - where the C# adds nothing and says nothing; one that read any says nothing.
+    #[test]
+    fn a_scan_that_read_nothing_says_why() {
+        let folder = Path::new("logs");
+        assert_eq!(nothing_read(folder, 3, 2), None);
+        assert_eq!(
+            nothing_read(folder, 0, 0).as_deref(),
+            Some("LogIndex: no .tlog, .bin or .log files in logs")
+        );
+        assert_eq!(
+            nothing_read(folder, 2, 0).as_deref(),
+            Some("LogIndex: none of the 2 logs in logs could be read")
+        );
     }
 }

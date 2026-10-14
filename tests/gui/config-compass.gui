@@ -7,7 +7,8 @@
 # DO_START_MAG_CAL 0,1,1 and the timer fills the text box from MAG_CAL_PROGRESS; Accept and Cancel
 # send their commands and stop the timer (:264-356); Large Vehicle MagCal asks for a heading first
 # (:476-498); Up writes the first three rows as COMPASS_PRIOn_ID and leaves a reboot required, which
-# leaving the page asks about (:147-262).
+# leaving the page asks about (:147-262). The fitness list's rows take their own clicks, and Remove
+# Missing with none missing says so on the status line (:519-532).
 #
 # SITL cannot finish a calibration: it completes one only while the airframe is rotated through every
 # orientation, and the simulated vehicle sits still, so completion stays at 0%. This script Starts,
@@ -28,7 +29,7 @@
 
 screen params
 window 1600x1200
-budget 21
+budget 22
 # A first budget, set by hand until a passing run records one.
 # A config.xml of its own, so the "Show me again?" boxes this script clicks are not already
 # suppressed by the settings of the machine running it.
@@ -75,6 +76,20 @@ expect config.compass.learn unchecked
 expect config.compass.fitness 16
 expect config.compass.fitness.text Default
 expect config.compass.rebootrequired false
+
+# The fitness list lies over the page and a row takes its click alone, as a ComboBox's own window
+# does: drawn in the page, Large Vehicle MagCal's button was painted over its second row and
+# opened its box as that row was chosen (the click crawl, 2026-10-15). Chosen, written, put back.
+click compass-fitness
+click compass-fitness-8
+expect config.compass.fitness 8
+expect params.value.COMPASS_CAL_FIT 8
+expect config.compass.dialog none
+click compass-fitness
+click compass-fitness-16
+expect config.compass.fitness 16
+expect params.value.COMPASS_CAL_FIT 16
+expect config.compass.dialog none
 
 # Use Compass 1 off - written, echoed - and back on.
 click compass-use1
@@ -158,6 +173,16 @@ expect config.compass.devids 97539,131874,263178,97283,97795,98051
 expect params.value.COMPASS_PRIO1_ID 97539
 expect params.value.COMPASS_PRIO2_ID 131874
 expect config.compass.write COMPASS_PRIO3_ID accepted
+
+# Remove Missing with none missing: nothing taken out and the priorities written as they stand
+# (ConfigHWCompass2.cs:519-532), so the table does not change - in Mission Planner as here - and
+# the status line says why, quietly (the owner's rule of 2026-10-14).
+expect config.compass.jobs 0
+click compass-remove-missing
+expect status no compass is missing
+expect config.compass.jobs 0
+expect config.compass.devids 97539,131874,263178,97283,97795,98051
+expect params.value.COMPASS_PRIO1_ID 97539
 
 # Leaving the page runs Deactivate, whose CheckReboot asks; No leaves the vehicle as it is.
 click setup-page-ConfigMandatory

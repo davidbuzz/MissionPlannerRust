@@ -1,0 +1,51 @@
+# CONFIG's Planner page: Joystick Setup's window, and what the joystick page draws over the whole
+# window from it. Ported from GCSViews/ConfigurationView/ConfigPlanner.cs:553-556 and
+# Joystick/JoystickSetup.cs; the page itself is tests/gui/config-joystick.gui's, on SETUP.
+#
+# The claim: the page in the Planner's window draws its boxes and forms as SETUP draws them - a
+# button row's Settings opens the form for its function (JoystickSetup.cs:453-487), a Change Mode
+# form for a button the files say nothing of (JoyButton's first function), over the window, and
+# its close box closes it. The click crawl found the form opened and never drawn here (2026-10-15):
+# only SETUP's body drew the page's boxes.
+#
+# Detect with no joystick: getPressedButton finds no device of the box's name and answers -1 at
+# once, without a word (JoystickBase.cs:186-191), and the row shows -1 already; the status line says
+# why, quietly - the owner's rule of 2026-10-14 for a press that does nothing visible.
+#
+# No joystick on this machine: the list is empty, and the C#'s Linux joystick then makes ten button
+# rows (JoystickLinux.cs:293-312). No vehicle: the page needs none. Run as
+#
+#   tools/gui-test.sh tests/gui/config-planner-joystick.gui
+
+screen config
+window 1600x1200
+budget 5
+env XDG_DATA_HOME $WORK
+env MP_CONFIG_XML $WORK/config.xml
+
+expect config.page ConfigPlanner
+click planner-BUT_Joystick
+expect config.planner.joystick true
+expect config.joystick.host planner
+expect config.joystick.devices 0
+expect config.joystick.buttons 10
+expect config.joystick.but0.function ChangeMode
+
+# Settings: the form, drawn over the window - its close box is there to click.
+click joystick-but0-settings
+expect config.joystick.form Joy_ChangeMode
+expect config.joystick.form.slot 0
+click joystick-form-close
+expect config.joystick.form none
+
+# Detect: -1, as it was, and the status line says why.
+expect config.joystick.but0.buttonno -1
+click joystick-but0-detect
+expect status.drawn no joystick
+expect status-bar below tab-fly
+expect config.joystick.but0.buttonno -1
+expect config.joystick.message none
+
+click planner-joystick-close
+expect config.planner.joystick false
+expect config.joystick.active false

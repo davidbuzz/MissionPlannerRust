@@ -41,12 +41,17 @@
 //! * Map is rotated and No Fly untick each other; Load Waypoints on connect sets whether the
 //!   mission is read when a vehicle connects; the map access mode rebuilds the map's tile store
 //!   (`CacheOnly` is the store's offline mode); Joystick Setup opens the joystick page over this
-//!   one; Browse asks for a folder; Open Map Cache opens the tile cache's directory;
+//!   one, with the boxes and settings forms it opens drawn over the window as SETUP draws them;
+//!   Browse asks for a folder in the desktop's own folder dialog, and a desktop that has none to
+//!   show says why on the status line, where the C#'s `FolderBrowserDialog` always shows; Open
+//!   Map Cache opens the tile cache's directory;
 //! * Video Device lists the capture devices when it is clicked and Video Format the chosen
 //!   device's formats; Start opens the capture (`mp_video`, V4L2 on Linux where the C# has
 //!   DirectShow and does nothing under mono) and the flight screen's HUD draws its frames under
 //!   everything, and Stop ends it. A camera that will not start says "Camera Fail: " and why on
-//!   the status line, where the C# has a message box (the owner's ruling of 2026-09-25). Enable
+//!   the status line, where the C# has a message box (the owner's ruling of 2026-09-25); Stop
+//!   with no capture running, which the C# answers without a word, says so there, quietly (the
+//!   owner's rule of 2026-10-14 for a press that does nothing visible). Enable
 //!   HUD Overlay sets the HUD's `hudon`, saved as `CHK_hudshow`: unticked, the HUD draws the
 //!   camera's picture alone while there is one, and everything as before while there is none
 //!   (`ConfigPlanner.cs:375-379`, `HUD.cs:1988-2009`).
@@ -1193,9 +1198,14 @@ pub enum Effect {
     /// `BUT_videostop`: `MainV2.cam.Dispose()`, and `MainV2.cam = null`.
     /// `// C#: GCSViews/ConfigurationView/ConfigPlanner.cs:288-295`
     VideoStop,
-    /// Words for the status line: "Camera Fail: " and why, where the C# has a message box.
+    /// Words for the status line: "Camera Fail: " and why, where the C# has a message box, or
+    /// [`NO_CAPTURE`] for a Stop the C# answers with nothing.
     Status(String),
 }
+
+/// What Stop says, quietly, with no capture running.
+/// `// C#: GCSViews/ConfigurationView/ConfigPlanner.cs:288-295`
+pub const NO_CAPTURE: &str = "no video capture to stop";
 
 /// The video controls: `CMB_videosources` and `CMB_videoresolutions` with what they are bound
 /// to, and whether a capture runs, which is `MainV2.cam` being set and `BUT_videostart` disabled.
@@ -2298,8 +2308,14 @@ impl Planner {
                     }
                 }
             }
-            // C#: ConfigPlanner.cs:288-295
+            // C#: ConfigPlanner.cs:288-295. With no capture - `MainV2.cam` null - the handler only
+            // enables Start, which is enabled already, and says nothing: said here on the status
+            // line, quietly, so the press is not taken for one that did something (the owner's
+            // rule of 2026-10-14).
             "BUT_videostop" => {
+                if !self.video.running {
+                    self.effects.push(Effect::Status(NO_CAPTURE.to_owned()));
+                }
                 self.video.running = false;
                 self.effects.push(Effect::VideoStop);
             }
@@ -2378,6 +2394,22 @@ pub fn run_video(
         }
         Effect::Status(words) => Some(words.clone()),
         _ => None,
+    }
+}
+
+/// What Browse's folder dialog came to: the folder chosen; nothing, for a Cancel or a dialog that
+/// went away; or why there was no dialog, for the status line as an error. The dialog is the
+/// desktop's own (gpui's `prompt_for_paths`: the XDG desktop portal on Linux), and a desktop with
+/// no portal refuses it, where `FolderBrowserDialog` always shows: the refusal was dropped, and the
+/// press did nothing with no word (the click crawl, 2026-10-15, on a display with no portal).
+/// `// C#: GCSViews/ConfigurationView/ConfigPlanner.cs:779-786`
+fn browse_answer<E: std::fmt::Display, G>(
+    answer: Result<Result<Option<Vec<PathBuf>>, E>, G>,
+) -> Result<Option<PathBuf>, String> {
+    match answer {
+        Ok(Ok(paths)) => Ok(paths.and_then(|paths| paths.into_iter().next())),
+        Ok(Err(why)) => Err(crate::fly::error_box(why)),
+        Err(_gone) => Ok(None),
     }
 }
 
@@ -2505,17 +2537,18 @@ impl MissionPlanner {
                         prompt: None,
                     });
                     cx.spawn(async move |this, cx| {
-                        let Ok(Ok(Some(paths))) = chosen.await else {
-                            return;
-                        };
-                        let Some(folder) = paths.into_iter().next() else {
-                            return;
-                        };
+                        let answer = browse_answer(chosen.await);
                         let _ = this.update(cx, |this, cx| {
-                            let rest = this.planner_apply(|planner, settings| {
-                                planner.browsed(&folder, settings);
-                            });
-                            this.planner_window_effects(rest, cx);
+                            match answer {
+                                Ok(Some(folder)) => {
+                                    let rest = this.planner_apply(|planner, settings| {
+                                        planner.browsed(&folder, settings);
+                                    });
+                                    this.planner_window_effects(rest, cx);
+                                }
+                                Ok(None) => {}
+                                Err(why) => this.file_status = Some(why),
+                            }
                             cx.notify();
                         });
                     })
@@ -2674,12 +2707,24 @@ impl MissionPlanner {
         if let Some(dialog) = dialog(planner, focus, window, cx) {
             body = body.child(dialog);
         } else if planner.joystick_open() {
-            body = body.child(joystick_window(
-                &self.sticks,
-                &self.joystick_focus,
-                window,
-                cx,
-            ));
+            body = body
+                .child(joystick_window(
+                    &self.sticks,
+                    &self.joystick_focus,
+                    window,
+                    cx,
+                ))
+                // What the page draws over the whole window - its message boxes, Import's
+                // question, the file dialogs and a button's settings form - drawn for the page in
+                // this window as SETUP's body draws them for the page it shows: here a form was
+                // opened and never drawn (the click crawl, 2026-10-15).
+                // `// C#: Joystick/JoystickSetup.cs:453-487`
+                .children(crate::joystick::overlay(
+                    &self.sticks,
+                    &self.joystick_focus,
+                    window,
+                    cx,
+                ));
         }
         body.into_any_element()
     }
@@ -3162,7 +3207,8 @@ fn backdrop(id: &'static str, window: AnyElement) -> AnyElement {
 }
 
 /// `new JoystickSetup().ShowUserControl()`: the joystick page in a window of its own size - 702 by
-/// 331, grown as the page grows its rows (`Ctl_SizeChanged`) - with no title and a close box.
+/// 331, grown as the page grows its rows (`Ctl_SizeChanged`) - with no title and a close box. The
+/// boxes and forms the page opens are `crate::joystick::overlay`'s, drawn beside it.
 /// `// C#: GCSViews/ConfigurationView/ConfigPlanner.cs:553-556; Utilities/ExtensionsMP.cs:110-144;
 /// Joystick/JoystickSetup.resx ($this.Size)`
 fn joystick_window(
@@ -4568,6 +4614,61 @@ mod tests {
             planner.message().map(|message| message.text.as_str()),
             Some("/no/such/gmapcache Directory does not exist!")
         );
+    }
+
+    /// Browse's folder dialog: the folder chosen goes to the box; a Cancel, or a dialog that went
+    /// away, does nothing; a desktop with no folder dialog to show says why on the status line, as
+    /// an error, where the press said nothing (the click crawl, 2026-10-15).
+    /// `// C#: ConfigPlanner.cs:779-786`
+    #[test]
+    fn browse_says_why_when_the_desktop_has_no_folder_dialog() {
+        let folder = PathBuf::from("/var/log/planner");
+        assert_eq!(
+            browse_answer::<&str, ()>(Ok(Ok(Some(vec![folder.clone()])))),
+            Ok(Some(folder))
+        );
+        assert_eq!(browse_answer::<&str, ()>(Ok(Ok(None))), Ok(None));
+        assert_eq!(
+            browse_answer::<&str, ()>(Ok(Ok(Some(Vec::new())))),
+            Ok(None)
+        );
+        assert_eq!(browse_answer::<&str, ()>(Err(())), Ok(None));
+        assert_eq!(
+            browse_answer::<&str, ()>(Ok(Err(
+                "Couldn't open file picker due to missing xdg-desktop-portal implementation."
+            ))),
+            Err(
+                "Error: Couldn't open file picker due to missing xdg-desktop-portal implementation."
+                    .to_owned()
+            )
+        );
+    }
+
+    /// Stop with no capture: the C#'s handler enables Start, enabled already, and says nothing;
+    /// here the status line says so, quietly, and Stop still stops. With a capture running it says
+    /// nothing (`start_captures_and_writes_the_two_indexes_and_stop_ends_it`).
+    /// `// C#: ConfigPlanner.cs:287-295`
+    #[test]
+    fn stop_with_no_capture_says_so_quietly() {
+        let mut settings = Persisted::at(None);
+        let mut planner = activated(&mut settings);
+        assert!(!planner.video_running());
+        planner.press("BUT_videostop", Path::new("/"));
+        let effects = planner.take_effects();
+        assert_eq!(
+            effects,
+            [Effect::Status(NO_CAPTURE.to_owned()), Effect::VideoStop]
+        );
+        let mut capture = None;
+        let mut said = None;
+        for effect in &effects {
+            said = said.or(run_video(&mut planner, &mut settings, &mut capture, effect));
+        }
+        // Quietly: the words alone, no "Error: ", and no box.
+        assert_eq!(said.as_deref(), Some("no video capture to stop"));
+        assert!(planner.message().is_none());
+        assert!(capture.is_none());
+        assert!(!planner.video_running());
     }
 
     #[test]

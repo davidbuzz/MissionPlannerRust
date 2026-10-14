@@ -17,7 +17,7 @@ env MP_CONFIG_XML $WORK/config.xml
 env MP_LOG_DIR $WORK/logs
 env MP_TILE_CACHE $WORK/cache
 setup printf '<?xml version="1.0" encoding="utf-8"?><Config><tabcontrolactions>tabQuick;</tabcontrolactions></Config>' > "$WORK/config.xml"
-setup mkdir -p "$WORK/logs/deep" "$WORK/cache" && cp testdata/georef/camera.tlog "$WORK/logs/flight.tlog" && cp testdata/dataflash.bin "$WORK/logs/bench.bin" && cp testdata/georef/camera.bin "$WORK/logs/deep/flight.bin"
+setup mkdir -p "$WORK/logs/deep" "$WORK/cache" "$WORK/empty" && cp testdata/georef/camera.tlog "$WORK/logs/flight.tlog" && cp testdata/dataflash.bin "$WORK/logs/bench.bin" && cp testdata/georef/camera.bin "$WORK/logs/deep/flight.bin"
 
 key ctrl+f
 expect screen experimental
@@ -27,6 +27,17 @@ click experimental-butlogindex
 expect experimental.logindex.open true
 expect experimental.logindex.rows 0
 expect experimental.logindex.delete.enabled false
+
+# Custom Directory over a folder with no logs: nothing added, which the C# leaves unsaid
+# (LogIndex.cs:58-92); the status line says why, quietly (the owner's rule of 2026-10-14).
+click experimental-logindex-custom
+expect experimental.logindex.asking ~ folder:
+type $WORK/empty
+key Return
+expect experimental.logindex.asking none
+within 30
+expect status ~ LogIndex: no .tlog, .bin or .log files in
+expect experimental.logindex.rows 0
 
 # Default Log Dir: the telemetry log first, then the two dataflash logs, the deeper one last.
 click experimental-logindex-default
@@ -75,6 +86,13 @@ expect experimental.logindex.loading none
 expect experimental.logindex.row.1 ~ --- DELETED ---
 expect experimental.logindex.row.2 ~ | bench.bin |
 expect experimental.logindex.selected 1
+
+# A narrow column's header shows which way it sorts whole, beside its title cut short, as the
+# C#'s header draws its sort image apart from the text (ObjectListView.cs:8299-8335).
+click experimental-logindex-header-9
+expect experimental.logindex.sort TimeInAir, sec ascending
+expect experimental-logindex-sorted right-of experimental-logindex-header-8
+expect experimental-logindex-sorted left-of experimental-logindex-header-10
 
 click experimental-logindex-close
 expect experimental.logindex.open false

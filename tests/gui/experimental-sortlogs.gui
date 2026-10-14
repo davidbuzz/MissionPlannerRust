@@ -19,16 +19,32 @@ key ctrl+f
 expect screen experimental
 expect experimental.sort none
 
-# Sort TLogs: the folder offered, taken as it is.
+# Sort TLogs: the folder offered, taken as it is. The C# says nothing when it is done; the status
+# line says what was sorted, quietly (the owner's rule of 2026-10-14: a press that answers
+# nothing looks broken).
 click experimental-BUT_sorttlogs
 expect experimental.asking ~ Browse For Folder
 key Return
 expect experimental.asking none
 within 30
 expect experimental.sort sorted 2
+expect status ~ Sort TLogs: 2 logs sorted in
 
 # ReSort All logs: no question.
 click experimental-but_sortlogs
 expect experimental.asking none
 within 30
 expect experimental.sort sorted 3
+expect status ~ ReSort All logs: 3 logs sorted in
+
+# Sort TLogs on a folder that is not there: the C#'s catch swallows it (temp.cs:231-237); said
+# here, quietly.
+click experimental-BUT_sorttlogs
+expect experimental.asking ~ Browse For Folder
+key ctrl+a
+type $WORK/nowhere
+key Return
+expect experimental.asking none
+within 30
+expect experimental.sort ~ failed:
+expect status ~ Sort TLogs:

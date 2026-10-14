@@ -559,17 +559,29 @@ fn detect_finds_the_button_pressed() {
 }
 
 /// Detect for a device that is not there answers at once: `ARx` for an axis, -1 for a button.
+/// The C# says nothing; the status line says why, quietly - most of all for a button row already
+/// at -1, where the answer changes nothing on the page (the click crawl, 2026-10-15).
 #[test]
 fn detect_for_a_missing_device_answers_at_once() {
     let scratch = Scratch::new("detectnone");
     let (mut sticks, _feeds, _settings) = loaded(&scratch);
     sticks.choose_button_number(0, 1);
+    let _ = sticks.take_said();
     sticks.page.text = "Gone".to_owned();
     sticks.detect_axis(0);
     assert_eq!(sticks.page.rows[0].axis, "ARx");
+    assert_eq!(sticks.take_said(), ["no joystick: Gone is not connected"]);
     sticks.detect_button(0);
     assert_eq!(sticks.page.buttons[0].number, "-1");
     assert!(sticks.page.message.is_none());
+    assert_eq!(sticks.take_said(), ["no joystick: Gone is not connected"]);
+    // No device at all, the box empty, and the row at -1 already: nothing changes but the words.
+    sticks.page.text = String::new();
+    sticks.detect_button(0);
+    assert_eq!(sticks.page.buttons[0].number, "-1");
+    assert!(sticks.page.message.is_none());
+    assert_eq!(sticks.take_said(), [NO_DEVICE]);
+    assert_eq!(sticks.page.status.as_deref(), Some(NO_DEVICE));
 }
 
 /// An entry's name is taken as `ZipArchiveEntry.Name` takes it on Windows - after the last `/`,

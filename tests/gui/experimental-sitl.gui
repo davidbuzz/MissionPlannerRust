@@ -1,4 +1,4 @@
-# EXPERIMENTAL's Toggle Safety Switch and Bootloader Upgrade, against SITL.
+# EXPERIMENTAL's Toggle Safety Switch, Bootloader Upgrade and Force Accel Cal, against SITL.
 #
 # Toggle Safety Switch (temp.cs:1105-1118): "Are you sure?", then setMode with SAFETY_ARMED as the
 # base mode and, as the custom mode, 1 while the motor outputs are enabled (the safety off) and 0
@@ -43,3 +43,11 @@ expect vehicle.motor_control true
 click experimental-but_blupdate
 expect status Bootloader Upgrade: this button isn't tested yet, sorry
 expect experimental.asking none
+
+# Force Accel Cal (temp.cs:1404-1416): PREFLIGHT_CALIBRATION with 76 as param 5, waited for; the
+# copter, disarmed, takes it and marks its accelerometers calibrated. The C# reads nothing of the
+# answer; the status line says it, quietly (the owner's rule of 2026-10-14: a press that answers
+# nothing looks broken).
+click experimental-BUT_forcecal_accel
+within 10
+expect status Force Accel Cal: accepted

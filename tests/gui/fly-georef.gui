@@ -27,8 +27,7 @@ setup mkdir -p "$WORK/MissionPlannerRust/srtm" && python3 -c 'import sys, zipfil
 
 screen fly
 window 1600x1200
-budget 24
-
+budget 25
 # DataFlash Logs is the last header: bring it to the front of the row, then show its page.
 click fly-tabs-right
 click fly-tabs-right
@@ -74,6 +73,21 @@ expect fly.georef.TXT_shutterLag 0
 expect fly.georef.minshutter 0.5
 expect fly.georef.running none
 expect fly.georef.last none
+
+# Pre-process with no log yet: the C# returns without a word (georefimage.cs:145-148); the status
+# line says what is missing, quietly (the owner's rule of 2026-10-14: a press that answers nothing
+# looks broken). Browse Pictures with no log opens on an empty box; OK on it is no folder, so the
+# dialog stays and says so; Cancel leaves the photo box as it was.
+click georef-BUT_doit
+expect status Pre-process: no log file chosen
+expect fly.georef.running none
+click georef-BUT_browsedir
+expect fly.georef.prompt Browse Pictures
+click georef-prompt-ok
+expect status no folder typed
+expect fly.georef.prompt Browse Pictures
+click georef-prompt-cancel
+expect fly.georef.prompt none
 
 # Browse Log: the box starts in the log directory, the log's name typed after it.
 click georef-BUT_browselog

@@ -1,0 +1,61 @@
+# EXPERIMENTAL's signing (temp.cs's but_signkey: `new AuthKeys().Show()`, the window SETUP's
+# Advanced page's Mavlink Signing opens - Controls/AuthKeys.cs), with no vehicle.
+#
+# The claims: Disable Signing with no vehicle sends nothing and says "no vehicle" on the status
+# line, where the C#'s setupSigning goes to its placeholder MAVState through a port that is not
+# open and says nothing (AuthKeys.cs:130-133; MAVLinkInterface.cs:1265-1268, 1526-1581); Save
+# writes authkeys.xml into the scratch data directory and says where, where MAVAuthKeys.Save says
+# nothing (AuthKeys.cs:23-26; MAVAuthKeys.cs:57-69); a key added, Use on its row sends nothing and
+# says "no vehicle" too (AuthKeys.cs:44-51). The owner's rule of 2026-10-14: a press that answers
+# nothing looks broken. Use and Disable Signing with a vehicle are config-signing.gui's.
+#
+# Needs no link. Run as: tools/gui-headless.sh experimental-signing
+#
+screen fly
+window 1600x1200
+budget 11
+# A data directory of its own, so the key store starts empty and the machine's is not touched.
+env XDG_DATA_HOME $WORK
+env MP_CONFIG_XML $WORK/config.xml
+setup printf '<?xml version="1.0" encoding="utf-8"?><Config><tabcontrolactions>tabQuick;</tabcontrolactions></Config>' > "$WORK/config.xml"
+
+key ctrl+f
+expect screen experimental
+click experimental-but_signkey
+expect experimental.last but_signkey
+expect config.authkeys.window true
+expect config.authkeys.rows 0
+expect config.authkeys.signing none
+
+# Disable Signing, no vehicle: nothing sent, and why.
+click authkeys-but_disablesigning
+expect status no vehicle
+expect config.authkeys.signing none
+
+# A key added: its name, its phrase, the strength box's OK.
+click authkeys-but_add
+expect config.authkeys.prompt Name
+type bench
+click authkeys-prompt-ok
+expect config.authkeys.prompt Input Seed
+type Correct Horse 42!
+click authkeys-prompt-ok
+expect config.authkeys.box Password Strength: 130 Strong
+click authkeys-box-ok
+expect config.authkeys.rows 1
+expect config.authkeys.row.0 bench|oBPRD6pBgzO8Tbf6nQxJ5aCQaorJmv5BfT35Mr9oyDM=
+
+# Save: the store written, and where said.
+click authkeys-but_save
+expect config.authkeys.file true
+expect status ~ saved the keys to
+expect status ~ authkeys.xml
+
+# Use on the row, no vehicle: nothing sent, and why.
+click authkeys-use-0
+expect status no vehicle
+expect config.authkeys.signing none
+
+# The close box.
+click authkeys-close
+expect config.authkeys.window false

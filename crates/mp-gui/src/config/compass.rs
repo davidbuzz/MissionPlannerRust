@@ -146,6 +146,14 @@ pub const REBOOT_FAILED: &str = "Reboot failed. please manually reboot the hardw
 /// `// C#: GCSViews/ConfigurationView/ConfigHWCompass2.cs:502`
 pub const REBOOT_QUESTION: &str = "Reboot?";
 
+/// What the status line says, quietly, when Remove Missing finds no row missing. The C# takes
+/// nothing out and writes back the priorities the vehicle holds, and says nothing: the table does
+/// not change, so the press looks dead. The owner's rule of 2026-10-14 for a press that shows
+/// nothing (`fly::Refusal::Quiet`): say why. The writes, and the reboot they leave required, are
+/// made as before.
+/// `// C#: GCSViews/ConfigurationView/ConfigHWCompass2.cs:519-532`
+pub const NONE_MISSING: &str = "no compass is missing";
+
 /// What the timer says when every compass it heard from has saved its calibration.
 /// `// C#: GCSViews/ConfigurationView/ConfigHWCompass2.cs:457-463`
 pub const PLEASE_REBOOT: &str = "Please reboot the autopilot";
@@ -2022,11 +2030,15 @@ impl<H: Copy> Compass<H> {
         self.update_first3();
     }
 
-    /// Remove Missing: every missing row out of the table, then the first three written.
+    /// Remove Missing: every missing row out of the table, then the first three written. With no
+    /// row missing the table does not change, and [`NONE_MISSING`] is returned for the status line.
     /// `// C#: GCSViews/ConfigurationView/ConfigHWCompass2.cs:519-532`
-    pub fn remove_missing(&mut self) {
+    #[must_use]
+    pub fn remove_missing(&mut self) -> Option<&'static str> {
+        let missing = self.rows.iter().any(|row| row.missing);
         self.rows.retain(|row| !row.missing);
         self.update_first3();
+        (!missing).then_some(NONE_MISSING)
     }
 
     /// `UpdateFirst3`, queued: a checked write refused says `ErrorSettingParameter`, a throw ends
@@ -3167,6 +3179,13 @@ fn combo_box(
 }
 
 /// A combo's list, dropped down beneath it, scrolling past `MaxDropDownItems`' eight.
+///
+/// Drawn deferred and anchored at the combo's foot, as the shared list is
+/// (`servo_output::dropdown`), so it lies over the page and a click on a row is the row's alone:
+/// a `ComboBox`'s list is a window of its own in the C#. Drawn in place, what the page lays out
+/// after its group was painted over it and took the click too - Large Vehicle MagCal's button,
+/// under the fitness list's second row, opened its box as that row was chosen (the click crawl,
+/// 2026-10-15).
 fn dropdown(
     combo: ComboId,
     options: &[(i64, String)],
@@ -3177,9 +3196,6 @@ fn dropdown(
     const ROW: f32 = 16.0;
     let mut list = div()
         .id(SharedString::from(format!("{}-list", combo.id())))
-        .absolute()
-        .left(px(x))
-        .top(px(y))
         .w(px(width.max(140.0)))
         .max_h(px(ROW * 8.0 + 2.0))
         .overflow_y_scroll()
@@ -3211,7 +3227,12 @@ fn dropdown(
                 })),
         );
     }
-    list.into_any_element()
+    div()
+        .absolute()
+        .left(px(x))
+        .top(px(y))
+        .child(gpui::deferred(gpui::anchored().snap_to_window().child(list)).with_priority(1))
+        .into_any_element()
 }
 
 /// The priority table: its header, then a row per compass, scrolling within the Designer's
@@ -3586,7 +3607,9 @@ fn priority_page(compass: &Compass, cx: &mut Context<MissionPlanner>) -> AnyElem
             "Remove Missing",
             true,
             cx.listener(|this, _event: &(), _window, cx| {
-                this.compass.remove_missing();
+                if let Some(words) = this.compass.remove_missing() {
+                    this.file_status = Some(words.to_owned());
+                }
                 cx.notify();
             }),
         ))
@@ -4641,7 +4664,11 @@ mod tests {
         let mut compass = priority(&parameters);
         let mut fake = Fake::default();
         compass.answer(true, &mut fake);
-        compass.remove_missing();
+        assert_eq!(
+            compass.remove_missing(),
+            None,
+            "a row went: the table says so itself"
+        );
         run(&mut compass, &mut fake, Instant::now());
         assert!(compass.rows.iter().all(|row| !row.missing));
         assert_eq!(
@@ -4652,6 +4679,28 @@ mod tests {
                 "COMPASS_PRIO3_ID=97539"
             ]
         );
+    }
+
+    /// With no row missing Remove Missing changes no row, and says so for the status line; the
+    /// priorities are still written as they stand and a reboot left required, as the C#'s are.
+    #[test]
+    fn remove_missing_with_none_missing_says_so() {
+        let mut compass = priority(&sitl());
+        let before = compass.rows.clone();
+        let mut fake = Fake::default();
+        assert_eq!(compass.remove_missing(), Some(NONE_MISSING));
+        run(&mut compass, &mut fake, Instant::now());
+        assert_eq!(compass.rows, before);
+        assert_eq!(
+            fake.names(),
+            [
+                "COMPASS_PRIO1_ID=97539",
+                "COMPASS_PRIO2_ID=131874",
+                "COMPASS_PRIO3_ID=263178"
+            ]
+        );
+        assert!(compass.reboot_required);
+        assert!(compass.dialog().is_none());
     }
 
     // --- The onboard calibration -------------------------------------------------------------------

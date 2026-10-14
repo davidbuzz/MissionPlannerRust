@@ -60,7 +60,10 @@
 //!   `cs` live, and the closed form's last; the vehicles in the link's order, by their ids, where
 //!   the C#'s `MAVlist` has them in the order heard;
 //! * a stop ends the thread at once, where the C#'s wakes from its sleep and then sees it (and a
-//!   Connect inside that sleep had two threads running).
+//!   Connect inside that sleep had two threads running);
+//! * Clear Window with nothing in the box says so on the status line, quietly, where the C#
+//!   empties an empty box without a word (the owner's rule of 2026-10-14, a press that answers
+//!   nothing looks broken).
 
 // This module is internal to the binary; `pub` here documents intent rather than exporting API.
 #![allow(unreachable_pub)]
@@ -155,6 +158,11 @@ const ADVANCED_SETTING: &str = "CoT_CB_advancedMode";
 const INDENT_SETTING: &str = "CoT_chk_indent";
 /// A round that throws: a second's sleep. `// C#: Controls/SerialOutputCoT.cs:188-191`
 const AFTER_THROW: Duration = Duration::from_secs(1);
+/// What Clear Window says with nothing in the box: the C# empties an empty box without a word;
+/// here the status line says why nothing changed, quietly (the owner's rule of 2026-10-14, a
+/// press that answers nothing looks broken; `fly.rs`, `Refusal::Quiet`).
+/// `// C#: Controls/SerialOutputCoT.cs:362-365`
+pub const NOTHING_TO_CLEAR: &str = "Clear Window: no output to clear";
 
 // ---- The event -----------------------------------------------------------------------------
 
@@ -896,13 +904,21 @@ impl CotOutput {
         column < 2 || self.window.as_ref().is_some_and(|form| form.advanced)
     }
 
-    /// Clear Window. `// C#: Controls/SerialOutputCoT.cs:362-365`
-    pub fn clear(&mut self) {
-        if let Some(shared) = self.shared.as_ref()
-            && let Ok(mut view) = shared.view.os_lock()
-        {
-            view.clear();
+    /// Clear Window: the box emptied. With nothing in it - no event written since the form
+    /// opened, or the box just cleared - [`NOTHING_TO_CLEAR`], for the status line, where the
+    /// C#'s `TB_output.Text = ""` changes nothing and says nothing.
+    /// `// C#: Controls/SerialOutputCoT.cs:362-365`
+    #[must_use]
+    pub fn clear(&mut self) -> Option<&'static str> {
+        let Some(shared) = self.shared.as_ref() else {
+            return Some(NOTHING_TO_CLEAR);
+        };
+        let mut view = shared.view.os_lock().ok()?;
+        if view.is_empty() {
+            return Some(NOTHING_TO_CLEAR);
         }
+        view.clear();
+        None
     }
 
     /// The interval's arrows: a second up or down, within its range.
@@ -1592,7 +1608,11 @@ pub fn overlay(
             "Clear Window",
             CLEAR_AT,
             true,
-            |this, _window, _cx| access(this).clear(),
+            |this, _window, _cx| {
+                if let Some(why) = access(this).clear() {
+                    this.file_status = Some(why.to_owned());
+                }
+            },
             cx,
         ))
         .child(output)
@@ -1958,6 +1978,8 @@ mod tests {
         let mut persisted = Persisted::at(None);
         let mut cot = CotOutput::default();
         cot.show(&mut persisted);
+        // Clear Window with nothing written: said, where the C# says nothing.
+        assert_eq!(cot.clear(), Some(NOTHING_TO_CLEAR));
         cot.choose(false, 4);
         // A second's interval: the first round goes before the vehicle is handed over.
         cot.window.as_mut().expect("the form").rate = RATE_MIN;
@@ -2007,9 +2029,16 @@ mod tests {
             cot.output().contains("\r\n"),
             "the box keeps the C#'s line ends"
         );
+        // Clear Window with the events in the box: emptied, and nothing said.
+        assert_eq!(cot.clear(), None);
         cot.press_connect(&mut persisted);
         assert!(!cot.running());
         assert_eq!(cot.button(), CONNECT);
+        assert_eq!(
+            cot.clear(),
+            Some(NOTHING_TO_CLEAR),
+            "stopped, the box is empty"
+        );
     }
 
     /// TAK Multicast: a UDP client to 239.2.3.1:6969, asking nothing, its address kept as the

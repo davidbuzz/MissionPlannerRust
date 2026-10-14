@@ -9,7 +9,8 @@
 # .gpsbase file (:434-445, 709-719); a 1005 puts the base station in cs.Base and on the RTCM Base
 # line (:1062-1086); each constellation's messages turn its light green (:807-875) and each
 # observation message sets the signal bars (:167-252); the Messages Seen label clears them when
-# clicked (:1430-1433); Connect again closes the port (:301-319).
+# clicked (:1430-1433), and says on the status line when there are none; the base positions' new
+# row's Delete says it cannot be deleted (:1329-1332); Connect again closes the port (:301-319).
 #
 # The caster is the script's own: tests/gui/rtk-caster.py, started by the setup line on a free
 # port of 127.0.0.1, serving testdata/rtcm/base-station.rtcm3 - a minute of a base station's
@@ -28,7 +29,7 @@ setup python3 tests/gui/rtk-caster.py --work $WORK --stream testdata/rtcm/base-s
 
 screen params
 window 1600x1200
-budget 10
+budget 13
 # RawParamWarning, on the Full Parameter List's Activate (ConfigRawParams.cs:92): "Show me
 # again?" unticked, so no later visit asks, and OK.
 # The vehicle first: a click before its first heartbeat is a click the screen may forget
@@ -53,6 +54,24 @@ expect config.rtk.button Connect
 expect config.rtk.open false
 expect config.rtk.lights base=Red,gps=Red,glonass=Red,beidou=Red,galileo=Red
 expect config.rtk.bars 0
+
+# Messages Seen before any stream: nothing to forget, and the label does not change - in Mission
+# Planner as here (:1430-1433) - so the status line says why, quietly (the owner's rule of
+# 2026-10-14 for a press that shows nothing).
+click rtk-labelmsgseen
+expect status no messages seen
+expect config.rtk.messages 0
+
+# The base positions' new row cannot be deleted: RemoveAt throws for it, which Mission Planner's
+# handler drops without a word (:1329-1332; Program.cs:767-772); the status line says why. The
+# grid shows with Auto Config ticked, which is put back.
+expect config.rtk.autoconfig false
+click rtk-chk_autoconfig
+expect config.rtk.autoconfig true
+click rtk-dg_basepos-0-5
+expect status the new row cannot be deleted
+click rtk-chk_autoconfig
+expect config.rtk.autoconfig false
 
 # Connect: CommsNTRIP.Open's question, the saved URL in it. Its OK keeps the URL as InputBox
 # keeps every titled answer, URL-encoded (Program.cs:566-568; InputBox.cs:73-84, 178-184).

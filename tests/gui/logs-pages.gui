@@ -20,6 +20,13 @@ hover fly-loadtelem
 hover fly-playlog
 hover fly-tracklog
 
+# Play with no log loaded: the C#'s main loop turns logreadmode straight back off without a word
+# and the button stays Play (FlightData.cs:558-596, 3684-3689); the status line says why, quietly.
+click fly-playlog
+expect fly.playback.playing false
+expect fly.playback.button Play
+expect status no log loaded
+
 click logs-tab-dataflash
 expect logs.page dataflash
 hover fly-dfmavlink

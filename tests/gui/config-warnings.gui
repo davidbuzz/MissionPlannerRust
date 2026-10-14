@@ -131,11 +131,15 @@ expect config.warnings.row.1.depth 0
 expect config.warnings.row.1.field alt
 expect warnings.rule.0 satcount GT 5 SpeakAndText null 10 WARNING: {name} is {value}
 
-# Save: warnings.xml in the scratch data directory, read back with its two rules.
+# Save: warnings.xml in the scratch data directory, read back with its two rules. The C# says
+# nothing; the status line says where it wrote, quietly (the owner's rule of 2026-10-14: a press
+# that answers nothing looks broken).
 click warnings-save
 expect warnings.saved 1
 expect warnings.saved.rules 2
 expect warnings.file ~ warnings.xml
+expect status ~ saved the warnings to
+expect status ~ warnings.xml
 
 # The close box: the form goes, the rules stay and are still checked.
 click warnings-close

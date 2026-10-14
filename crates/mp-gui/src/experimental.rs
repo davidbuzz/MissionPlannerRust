@@ -39,13 +39,16 @@
 //!   armed, Guided and a take-off to 10 m, each in turn), Bootloader Upgrade (the "BL
 //!   Update" questions, then `FLASH_BOOTLOADER`), Toggle Safety Switch ("Are you sure?", then the
 //!   flight screen's Toggle_Safety_Switch, the same `setMode` with `SAFETY_ARMED`); what the C#
-//!   shows in a box when one fails is said on the status line, by the owner's ruling; and decode
-//!   HWIDs, the ids typed taken apart as `Device.DeviceStructure` does, in a box (one line of ids
-//!   here, where the C#'s box takes several);
+//!   shows in a box when one fails is said on the status line, by the owner's ruling, and Force
+//!   Accel Cal's and Force Compass Cal's answer, accepted or refused, which the C# does not read,
+//!   is said there quietly (the owner's rule of 2026-10-14: a press that answers nothing looks
+//!   broken); and decode HWIDs, the ids typed taken apart as `Device.DeviceStructure` does, in a
+//!   box (one line of ids here, where the C#'s box takes several);
 //! * a tool with files: Param Restore (a parameter file written as `but_paramrestore_Click` writes
 //!   it), mag calb log (`MagCalib.ProcessLog`: a log read and fitted, `magoffset.dxf` drawn, and
 //!   the offsets to the compass page's `SaveOffsets`), Split DFLog (`DFLogBuffer.SplitLog`), and
-//!   Sort TLogs and ReSort All logs (`LogSort.SortLogs`), and map logs (`LogMap.MapLogs`);
+//!   Sort TLogs and ReSort All logs (`LogSort.SortLogs`) - each saying, quietly, how many logs it
+//!   sorted where the C# says nothing - and map logs (`LogMap.MapLogs`);
 //! * the map cache's two: Clear Custom Maps (every Custom tile) and Age Map Data (the map's
 //!   provider's tiles older than thirty days), each "Removed N images" in a box;
 //! * out of scope by a ruling, dimmed, its press saying why on the status line: Follow Me, OSDVideo,
@@ -317,7 +320,7 @@ pub(crate) enum Act {
     /// `but_reboot_Click`: "Are you sure?", then `doReboot(false, true)`. `// C#: temp.cs:662-666`
     Reboot,
     /// `BUT_forcecal_accel_Click`: `PREFLIGHT_CALIBRATION` with 76 as param 5, the accelerometers
-    /// marked calibrated. `// C#: temp.cs:1404-1416`
+    /// marked calibrated; its answer said quietly (`force_cal_report`). `// C#: temp.cs:1404-1416`
     ForceAccelCal,
     /// `BUT_forcecal_mag_Click`: `PREFLIGHT_CALIBRATION` with 76 as param 2, the compasses.
     /// `// C#: temp.cs:1420-1432`
@@ -386,7 +389,7 @@ pub(crate) enum Act {
     ArmAndTakeoff,
     /// `BUT_sorttlogs_Click`: a folder asked for (the log directory offered), and its `.tlog`s
     /// sorted into folders by what flew them (mp-log's `log_sort`), off the window's thread; the
-    /// `catch` shows nothing. `// C#: temp.cs:224-239`
+    /// `catch` shows nothing, said here quietly (`sort_tick`). `// C#: temp.cs:224-239`
     SortTlogs,
     /// `but_sortlogs_Click`: every `.tlog`, `.bin`, `.log` and `.rlog` in the log directory and
     /// under it sorted again, there. `// C#: temp.cs:859-869`
@@ -528,6 +531,32 @@ const QNH_PROMPT: &str = "Enter the QNH in pascals (103040 = 1030.4 hPa)";
 const HWID_TITLE: &str = "hwid";
 const HWID_PROMPT: &str = "Enter the ID number";
 
+/// What Force Accel Cal and Force Compass Cal say when their command ends. The C# waits on
+/// `doCommand` and reads nothing of its answer, so an accepted calibration and a refused one look
+/// the same; here the status line says which, quietly (the owner's rule of 2026-10-14: a press
+/// that answers nothing looks broken; `fly.rs`, `Refusal::Quiet`). Unanswered, the `catch`'s box.
+/// `// C#: temp.cs:1404-1432`
+fn force_cal_report(name: &str) -> Report {
+    Report {
+        accepted: Some(format!("{name}: accepted")),
+        refused: Some(format!("{name}: refused")),
+        timed_out: Some(error_box(DO_COMMAND_TIMEOUT)),
+        fallback: None,
+    }
+}
+
+/// What Sort TLogs and ReSort All logs say when their sort ends, where the C# says nothing: how
+/// many logs were sorted in the folder, or that it held none - so a press over a folder with no
+/// logs is not taken for one that did nothing it should have (the owner's rule of 2026-10-14).
+/// `// C#: temp.cs:224-239, 859-869`
+fn sorted_text(name: &str, count: usize, folder: &std::path::Path) -> String {
+    if count == 0 {
+        format!("{name}: no logs in {}", folder.display())
+    } else {
+        format!("{name}: {count} logs sorted in {}", folder.display())
+    }
+}
+
 /// The parameter QNH and adjust aircraft baro height set: `GND_ABS_PRESS` where the vehicle has
 /// it, else `BARO1_GND_PRESS`. `// C#: temp.cs:670, 1171`
 #[must_use]
@@ -610,8 +639,13 @@ pub(crate) struct Experimental {
     magcal: Option<std::sync::mpsc::Receiver<Processed>>,
     /// What the last one came to, for the facts.
     magcal_last: Option<String>,
-    /// Sort TLogs' or ReSort All logs' sorting, on its thread, until its answer comes.
-    sort: Option<std::sync::mpsc::Receiver<std::io::Result<usize>>>,
+    /// Sort TLogs' or ReSort All logs' sorting, on its thread, until its answer comes: which of
+    /// the two, and the folder it sorts.
+    sort: Option<(
+        std::sync::mpsc::Receiver<std::io::Result<usize>>,
+        Act,
+        std::path::PathBuf,
+    )>,
     /// What the last one came to, for the facts.
     sort_last: Option<String>,
     /// map logs' drawing, on its thread, until its answer comes.
@@ -873,7 +907,7 @@ fn act(
         }
         Act::ResortAllLogs => {
             if let Some(folder) = crate::fly::log_directory() {
-                sort_logs(this, move || mp_log::log_sort::resort_all(&folder));
+                sort_logs(this, what, folder, mp_log::log_sort::resort_all);
             }
         }
         // `InitialDirectory = Settings.Instance.LogDir`.
@@ -933,10 +967,10 @@ fn send(this: &mut MissionPlanner, what: Act) {
     let sent = match what {
         Act::Reboot => this.telemetry.reboot(),
         Act::ForceAccelCal | Act::ForceCompassCal => {
-            let params = if what == Act::ForceAccelCal {
-                FORCE_ACCEL
+            let (params, name) = if what == Act::ForceAccelCal {
+                (FORCE_ACCEL, "Force Accel Cal")
             } else {
-                FORCE_COMPASS
+                (FORCE_COMPASS, "Force Compass Cal")
             };
             this.telemetry.send_handle().is_some_and(|(_, vehicle)| {
                 this.telemetry
@@ -944,7 +978,7 @@ fn send(this: &mut MissionPlanner, what: Act) {
                         vehicle,
                         PREFLIGHT_CALIBRATION,
                         params,
-                        Report::on_timeout(error_box(DO_COMMAND_TIMEOUT)),
+                        force_cal_report(name),
                     )
                     .is_some()
             })
@@ -1056,10 +1090,12 @@ fn answer(this: &mut MissionPlanner, yes: bool) {
         Asking::Input {
             input,
             then: Answered::SortFolder,
-        } => {
-            let folder = std::path::PathBuf::from(input.field.value().trim());
-            sort_logs(this, move || mp_log::log_sort::sort_folder(&folder));
-        }
+        } => sort_logs(
+            this,
+            Act::SortTlogs,
+            std::path::PathBuf::from(input.field.value().trim()),
+            mp_log::log_sort::sort_folder,
+        ),
         Asking::Input {
             input,
             then: Answered::Hwids,
@@ -1375,23 +1411,26 @@ fn takeoff_tick(this: &mut MissionPlanner) {
     }
 }
 
-/// A sort started on a thread of its own, where the C#'s window waits on it; [`tick`] takes its
-/// answer. One at a time.
+/// Sort TLogs' or ReSort All logs' sort of `folder` started on a thread of its own, where the
+/// C#'s window waits on it; [`tick`] takes its answer. One at a time.
 fn sort_logs(
     this: &mut MissionPlanner,
-    sort: impl FnOnce() -> std::io::Result<usize> + Send + 'static,
+    what: Act,
+    folder: std::path::PathBuf,
+    sort: fn(&std::path::Path) -> std::io::Result<usize>,
 ) {
     if this.experimental.sort.is_some() {
         return;
     }
     let (sender, receiver) = std::sync::mpsc::channel();
+    let sorting = folder.clone();
     let spawned = wasm_thread::Builder::new()
         .name("mp-log-sort".to_owned())
         .spawn(move || {
-            let _ = sender.send(sort());
+            let _ = sender.send(sort(&sorting));
         });
     match spawned {
-        Ok(_) => this.experimental.sort = Some(receiver),
+        Ok(_) => this.experimental.sort = Some((receiver, what, folder)),
         Err(error) => log::debug!("LogSort: {error}"),
     }
 }
@@ -1449,11 +1488,13 @@ fn map_logs_tick(this: &mut MissionPlanner) {
     });
 }
 
-/// A sort's answer, when it comes: nothing said, as the C# says nothing - Sort TLogs' `catch`
-/// swallows a folder it cannot read; ReSort All logs' unread log directory is the C#'s error box,
-/// on the status line. `// C#: temp.cs:231-237, 861`
+/// A sort's answer, when it comes. The C# says nothing of a sort done, nor of a folder Sort
+/// TLogs' `catch` swallows; here the status line says how many logs were sorted, or that the
+/// folder held none ([`sorted_text`]), and what Sort TLogs could not read, quietly (the owner's
+/// rule of 2026-10-14). ReSort All logs' unread log directory is the C#'s error box, on the status
+/// line. `// C#: temp.cs:231-237, 861`
 fn sort_tick(this: &mut MissionPlanner) {
-    let Some(receiver) = this.experimental.sort.as_ref() else {
+    let Some((receiver, ..)) = this.experimental.sort.as_ref() else {
         return;
     };
     let sorted = match receiver.try_recv() {
@@ -1466,13 +1507,26 @@ fn sort_tick(this: &mut MissionPlanner) {
             Err(std::io::Error::other("the sort stopped without an answer"))
         }
     };
-    this.experimental.sort = None;
+    let Some((_, what, folder)) = this.experimental.sort.take() else {
+        return;
+    };
+    let resort = what == Act::ResortAllLogs;
+    let name = if resort {
+        "ReSort All logs"
+    } else {
+        "Sort TLogs"
+    };
     this.experimental.sort_last = Some(match sorted {
-        Ok(count) => format!("sorted {count}"),
+        Ok(count) => {
+            this.file_status = Some(sorted_text(name, count, &folder));
+            format!("sorted {count}")
+        }
         Err(why) => {
-            if this.experimental.last == Some("but_sortlogs") {
-                this.file_status = Some(error_box(&why));
-            }
+            this.file_status = Some(if resort {
+                error_box(&why)
+            } else {
+                format!("{name}: {why}")
+            });
             format!("failed: {why}")
         }
     });
@@ -2107,6 +2161,41 @@ mod tests {
         assert_eq!(FLASH_BOOTLOADER[4], 290_876.0);
         assert_eq!(FLASH_BOOTLOADER.iter().filter(|p| **p != 0.0).count(), 1);
         assert_eq!(CMD_FLASH_BOOTLOADER, 42_650);
+    }
+
+    /// Force Accel Cal's answer said quietly, accepted or refused, where the C# reads nothing of
+    /// it; unanswered, the `catch`'s box as before.
+    /// `// C#: temp.cs:1404-1432`
+    #[test]
+    fn force_cal_says_the_vehicles_answer() {
+        use mp_link::requests::RequestOutcome;
+        let report = force_cal_report("Force Accel Cal");
+        assert_eq!(
+            report.text(RequestOutcome::Accepted { value: None }),
+            Some("Force Accel Cal: accepted")
+        );
+        assert_eq!(
+            report.text(RequestOutcome::Rejected(4)),
+            Some("Force Accel Cal: refused")
+        );
+        assert_eq!(
+            report.text(RequestOutcome::TimedOut),
+            Some(error_box(DO_COMMAND_TIMEOUT).as_str())
+        );
+    }
+
+    /// A sort says how many logs it sorted where, or that the folder held none.
+    #[test]
+    fn a_sort_says_what_it_sorted() {
+        let folder = std::path::Path::new("logs");
+        assert_eq!(
+            sorted_text("ReSort All logs", 3, folder),
+            "ReSort All logs: 3 logs sorted in logs"
+        );
+        assert_eq!(
+            sorted_text("Sort TLogs", 0, folder),
+            "Sort TLogs: no logs in logs"
+        );
     }
 
     /// decode HWIDs: each whole number on a line, the line and its device; words skipped; a
