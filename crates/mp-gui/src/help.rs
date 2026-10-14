@@ -96,7 +96,10 @@ const UPDATER: &str = "headless-planner";
 /// `Resources.help_text`, the RTF's words: its paragraphs, a tab where it has one, the links as
 /// their addresses - with "Mission Planner" read "MissionPlannerRust" (the owner, 2026-10-04).
 /// The companies are Mission Planner's, not this port's: none yet, the owner asks them to get in
-/// touch (2026-10-04).
+/// touch (2026-10-04). The C#'s "Main Developer: Michael Oborne" is two lines, the owner's words
+/// (2026-10-14): this port's developer, and Mission Planner's as its honorary one. The libraries
+/// are this port's, not the C#'s twelve, none of which it uses (the owner, 2026-10-14): the
+/// notable crates, GStreamer for video, and the count `THIRD_PARTY_LICENSES` lists.
 /// `// C#: Properties/Resources.resx (help_text)`
 pub const HELP_TEXT: &str = "\n\
     \tWelcome to the MissionPlannerRust, mission planning for Unmanned Aerial Vehicles (UAV).\n\
@@ -106,11 +109,12 @@ pub const HELP_TEXT: &str = "\n\
     ArduRover: http://ardupilot.org/rover\n\
     \n\
     \tPlease visit http://ardupilot.org/planner  further information.\n\
-    \tMain Developer: Michael Oborne\n\
+    \tMain Developer:David Buzz  <davidbuzz@gmail.com>\n\
+    \tHonourary Developer:Michael Oborne , the OG that this is inspired by/ripped off from.\n\
     \tDesign: Samantha Nelson\n\
     \tContributions from: Andrew Radford,  Marooned, Ryan Beall, Tom Pittenger and https://github.com/ArduPilot/MissionPlanner/graphs/contributors\n\
     \tArduCopter Illustrations: Max Levine\n\
-    Librarys: Gmap.net, Sharpkml, SharpZipLib, IronPython, KMLib, OpenTK, ZedGraph, alglib, BouncyCastle, DotSpatial, LibVLC, netDXF\n\
+    Libraries: gpui (Zed Industries), RustPython, wasmtime, serialport, ureq, image, tiny-skia, nalgebra, rustfft, dxf, roxmltree, flate2, ring, GStreamer - 1,002 crates in all, listed in THIRD_PARTY_LICENSES\n\
     \n\
     Companies that have contributed to MissionPlannerRust's development: none yet, pls get in touch\n\
     \n\
@@ -948,6 +952,60 @@ mod tests {
             "Companies that have contributed to MissionPlannerRust's development: none yet, pls get in touch"
         ));
         assert!(!HELP_TEXT.contains("3D Robotics"), "{HELP_TEXT}");
+        // The developers, the owner's two lines of 2026-10-14 in place of the C#'s one.
+        assert!(HELP_TEXT.contains("\tMain Developer:David Buzz  <davidbuzz@gmail.com>\n"));
+        assert!(HELP_TEXT.contains(
+            "\tHonourary Developer:Michael Oborne , the OG that this is inspired by/ripped off from.\n"
+        ));
+        assert!(
+            !HELP_TEXT.contains("Main Developer: Michael Oborne"),
+            "{HELP_TEXT}"
+        );
+    }
+
+    /// The libraries line names crates this port is built from - each a row of
+    /// `THIRD_PARTY_LICENSES`' table - and that file's count of them, so a change of dependencies
+    /// that regenerates the file (`cargo xtask licences`) fails here until the line says so too.
+    #[test]
+    fn the_libraries_line_is_this_ports() {
+        const LICENCES: &str = include_str!("../../../THIRD_PARTY_LICENSES");
+        let line = HELP_TEXT
+            .lines()
+            .find(|line| line.starts_with("Libraries: "))
+            .expect("the libraries line");
+        assert!(!HELP_TEXT.contains("Librarys"), "{HELP_TEXT}");
+        let named = line
+            .trim_start_matches("Libraries: ")
+            .split(" - ")
+            .next()
+            .unwrap_or_default();
+        for name in named.split(", ") {
+            // "gpui (Zed Industries)" is the crate gpui; GStreamer is a runtime, not a crate.
+            let crate_name = name.split(" (").next().unwrap_or(name).to_lowercase();
+            if crate_name == "gstreamer" {
+                continue;
+            }
+            assert!(
+                LICENCES.contains(&format!("\n| {crate_name} | ")),
+                "{crate_name} is not among THIRD_PARTY_LICENSES' crates"
+            );
+        }
+        let counted = LICENCES
+            .lines()
+            .find_map(|l| l.split_once(" crates, every target").map(|(n, _)| n))
+            .and_then(|n| n.trim().parse::<usize>().ok())
+            .expect("THIRD_PARTY_LICENSES' count of crates");
+        let said = line
+            .split(" - ")
+            .nth(1)
+            .and_then(|rest| rest.split(" crates in all").next())
+            .map(|n| n.replace(',', ""))
+            .and_then(|n| n.parse::<usize>().ok())
+            .expect("the line's count of crates");
+        assert_eq!(
+            said, counted,
+            "the libraries line's count is THIRD_PARTY_LICENSES'"
+        );
     }
     use std::collections::HashMap;
 
