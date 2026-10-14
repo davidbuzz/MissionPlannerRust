@@ -386,6 +386,10 @@ pub struct Plan {
     fence_download_text: String,
     /// Words for the status line from Geo-Fence > Upload or Download, until the screen takes them.
     fence_say: Option<String>,
+    /// `history`: the mission as it stood before each of the last forty edits that keep it, each
+    /// as `GetCommandList()` gave it with home inserted at item 0 - what Control-Z puts back.
+    /// `// C#: GCSViews/FlightPlanner.cs:113, 1053-1103`
+    history: Vec<Vec<MissionItem>>,
 }
 
 /// A mission transfer over MAVFTP: `saveWPs`' and `getWPs`' `chk_usemavftp.Checked` branches,
@@ -3768,9 +3772,16 @@ fn row_controls(seq: u16, selected: bool, cx: &mut Context<MissionPlanner>) -> V
             .child(label)
     };
 
+    // `Commands_CellContentClick`: each button keeps the mission for Control-Z first,
+    // `updateUndoBuffer(true)`, when it does anything - Up off the first row, Down off the last,
+    // Delete on any. `// C#: GCSViews/FlightPlanner.cs:2251-2289`
     vec![
         small(("plan-up", usize::from(seq)), "up", theme::TEXT)
             .on_click(cx.listener(move |this, _event, _window, cx| {
+                if this.plan.row_index(seq).is_some_and(|index| index != 0) {
+                    let home = vehicle_home(&this.telemetry.view());
+                    this.plan.update_undo_buffer(home);
+                }
                 this.plan.move_item(seq, -1);
                 this.sync_map_mission();
                 cx.notify();
@@ -3778,6 +3789,15 @@ fn row_controls(seq: u16, selected: bool, cx: &mut Context<MissionPlanner>) -> V
             .into_any_element(),
         small(("plan-down", usize::from(seq)), "down", theme::TEXT)
             .on_click(cx.listener(move |this, _event, _window, cx| {
+                let rows = this.plan.items().len();
+                if this
+                    .plan
+                    .row_index(seq)
+                    .is_some_and(|index| index + 1 < rows)
+                {
+                    let home = vehicle_home(&this.telemetry.view());
+                    this.plan.update_undo_buffer(home);
+                }
                 this.plan.move_item(seq, 1);
                 this.sync_map_mission();
                 cx.notify();
@@ -3785,6 +3805,10 @@ fn row_controls(seq: u16, selected: bool, cx: &mut Context<MissionPlanner>) -> V
             .into_any_element(),
         small(("plan-delete", usize::from(seq)), "delete", theme::ALERT)
             .on_click(cx.listener(move |this, _event, _window, cx| {
+                if this.plan.row_index(seq).is_some() {
+                    let home = vehicle_home(&this.telemetry.view());
+                    this.plan.update_undo_buffer(home);
+                }
                 this.plan.remove(seq);
                 this.sync_map_mission();
                 cx.notify();
@@ -3884,6 +3908,9 @@ fn strip_boxes(plan: &Plan, state: &StripState<'_>, cx: &mut Context<MissionPlan
         theme::TEXT,
         true,
         cx.listener(|this, _event: &(), _window, cx| {
+            // `updateUndoBuffer(true); // no new row added yet`. `// C#: FlightPlanner.cs:1783`
+            let home = vehicle_home(&this.telemetry.view());
+            this.plan.update_undo_buffer(home);
             this.plan.add_below(this.altitude_frame);
             this.sync_map_mission();
             cx.notify();
@@ -5280,11 +5307,16 @@ pub fn waypoint_grabbed(this: &mut MissionPlanner, seq: u16) {
     this.plan.begin_drag(seq);
 }
 
-/// A grabbed row let go on the map: `callMeDrag(tag, lat, lng, -2)`, which with Verify Height
-/// keeps the row's height above the ground ([`Plan::end_drag`]).
+/// A grabbed row let go on the map: `callMeDrag(tag, lat, lng, -2)`, which keeps the mission as it
+/// was before the drag for Control-Z ([`Plan::drag_undo_copy`]) and, with Verify Height, keeps the
+/// row's height above the ground ([`Plan::end_drag`]).
 /// `// C#: GCSViews/FlightPlanner.cs:7800-7807, 739-777`
 pub fn waypoint_dropped(this: &mut MissionPlanner, seq: u16) {
-    let family = firmware_family(&this.telemetry.view());
+    let view = this.telemetry.view();
+    if let Some(copy) = this.plan.drag_undo_copy(seq, vehicle_home(&view)) {
+        this.plan.keep_undo_copy(copy);
+    }
+    let family = firmware_family(&view);
     this.plan.end_drag(seq, this.altitude_frame, family);
     this.sync_map_mission();
 }
@@ -5292,13 +5324,23 @@ pub fn waypoint_dropped(this: &mut MissionPlanner, seq: u16) {
 /// A click on the map that adds something: `AddWPToMap(lat, lng, 0)` - home moved there when the
 /// Lat box has asked for it, otherwise the altitude from Default Alt as `setfromMap` takes it for
 /// a waypoint, Verify Height and all, or "Your default alt is not valid", and nothing.
-/// `// C#: GCSViews/FlightPlanner.cs:558-600, 1164-1236, 7740`
+///
+/// Moving home (`callMeDrag("H", ...)`) and adding a waypoint each keep the mission for Control-Z
+/// first, `updateUndoBuffer`. A corner of the geofence or a rally point does not: those are rows of
+/// the grid in the C# (`cmb_missiontype`), and lists of their own here, with their own undo.
+/// `// C#: GCSViews/FlightPlanner.cs:558-600, 747-755, 1164-1236, 7740`
 pub fn map_click(
     this: &mut MissionPlanner,
     position: LatLon,
     window: &mut gpui::Window,
     cx: &mut Context<MissionPlanner>,
 ) {
+    let home = vehicle_home(&this.telemetry.view());
+    // `if (sethome) { ... callMeDrag("H", ...) }`, after the polygon's branch: what
+    // `click_sets_home` takes.
+    if this.plan.draw_mode() != DrawMode::Area && this.plan.sethome() {
+        this.plan.update_undo_buffer(home);
+    }
     if this.plan.click_sets_home(position) {
         return;
     }
@@ -5320,8 +5362,295 @@ pub fn map_click(
     } else {
         0.0
     };
+    // `updateUndoBuffer(false)` on the row just added, which it leaves out of the copy: the
+    // mission before the row. `// C#: GCSViews/FlightPlanner.cs:574-599`
+    if this.plan.draw_mode() == DrawMode::Waypoints {
+        this.plan.update_undo_buffer(home);
+    }
     this.plan
         .add_wp_to_map(position, altitude, this.altitude_frame);
+}
+
+// ---------------------------------------------------------------------------------------------
+// The keys: `FlightPlanner.ProcessCmdKey`, and Control-Z's `history`.
+// ---------------------------------------------------------------------------------------------
+
+/// How many copies `history` keeps: "remove more than 40 revisions".
+/// `// C#: GCSViews/FlightPlanner.cs:1097-1101`
+const UNDO_REVISIONS: usize = 40;
+
+/// What Control-Z did.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum Undone {
+    /// `history` was empty: nothing.
+    Nothing,
+    /// The last copy was put back; with the home its item 0 offers, when that is not the boxes'.
+    PutBack(Option<Home>),
+}
+
+impl Plan {
+    /// `updateUndoBuffer`: the mission as it stands ([`Plan::undo_copy`]) kept on `history` for
+    /// Control-Z, no more than forty kept.
+    ///
+    /// The C#'s `false`, from a handler that has added its row and not yet filled it, leaves that
+    /// row out of the copy; every caller here keeps the copy before its row is added, which is the
+    /// same copy. Create Wp Circle and Create Spline Circle pass `false` with no row added, so the
+    /// C#'s copy goes without the row at `selectedrow` - or, past the last row, "A invalid entry
+    /// has been detected" and no copy; here their copy is the whole mission.
+    /// `// C#: GCSViews/FlightPlanner.cs:1053-1103, 2913, 3019`
+    pub fn update_undo_buffer(&mut self, vehicle_home: Option<Home>) {
+        let copy = self.undo_copy(vehicle_home);
+        self.keep_undo_copy(copy);
+    }
+
+    /// The copy `updateUndoBuffer` takes of the mission as it stands: `GetCommandList()`, the rows,
+    /// with home inserted at item 0 - the vehicle's, `cs.HomeLocation`, once it has a latitude and
+    /// a longitude other than 0, else the planned home, `cs.PlannedHomeLocation` - as a `WAYPOINT`
+    /// at that position, its altitude a `float`.
+    /// `// C#: GCSViews/FlightPlanner.cs:1060-1087`
+    #[must_use]
+    pub fn undo_copy(&self, vehicle_home: Option<Home>) -> Vec<MissionItem> {
+        let home = vehicle_home
+            .filter(Home::is_set)
+            .unwrap_or(self.planned_home);
+        #[allow(clippy::cast_possible_truncation)] // `home.alt = (float) HomeLocation.Alt`
+        let alt = f64::from(home.alt as f32);
+        let mut copy = Vec::with_capacity(self.items.len() + 1);
+        copy.push(MissionItem {
+            frame: FRAME_ABSOLUTE,
+            command: CMD_WAYPOINT,
+            x: home.lat,
+            y: home.lng,
+            z: alt,
+            ..MissionItem::default()
+        });
+        copy.extend_from_slice(&self.items);
+        copy
+    }
+
+    /// A copy from [`Plan::undo_copy`] kept: `history.Add`, then the oldest let go past forty.
+    /// `// C#: GCSViews/FlightPlanner.cs:1088-1101`
+    pub fn keep_undo_copy(&mut self, copy: Vec<MissionItem>) {
+        self.history.push(copy);
+        if self.history.len() > UNDO_REVISIONS {
+            let excess = self.history.len() - UNDO_REVISIONS;
+            self.history.drain(..excess);
+        }
+    }
+
+    /// The copy `callMeDrag`'s `updateUndoBuffer(true)` takes when a row dragged on the map is let
+    /// go: the mission before the drag. The C#'s grid cells hold where the row was until
+    /// `setfromMap` writes the drop; here the row has followed the pointer, so the copy puts it
+    /// back where it was grabbed. `None` for a row let go where it was grabbed, which was never
+    /// dragged (`isMouseDraging`), so `callMeDrag` never runs.
+    /// `// C#: GCSViews/FlightPlanner.cs:739-777, 7733-7810`
+    #[must_use]
+    pub fn drag_undo_copy(&self, seq: u16, vehicle_home: Option<Home>) -> Option<Vec<MissionItem>> {
+        let (grabbed, origin) = self.drag_origin?;
+        if grabbed != seq {
+            return None;
+        }
+        let mut copy = self.undo_copy(vehicle_home);
+        let row = copy.iter_mut().skip(1).find(|item| item.seq == seq)?;
+        if (row.x, row.y) == (origin.latitude(), origin.longitude()) {
+            return None;
+        }
+        row.x = origin.latitude();
+        row.y = origin.longitude();
+        Some(copy)
+    }
+
+    /// Control-Z's own: `history`'s last copy taken off it and put on the screen as
+    /// `processToScreen` puts a mission there, as a file's is - the rows the copy's, and its item 0
+    /// the home to offer when it is not the boxes' ([`Plan::home_offer`]).
+    /// `// C#: GCSViews/FlightPlanner.cs:348-360, 5496-5678`
+    pub fn undo(&mut self) -> Undone {
+        let Some(copy) = self.history.pop() else {
+            return Undone::Nothing;
+        };
+        self.origin = Origin::Edited;
+        Undone::PutBack(self.adopt(&copy))
+    }
+
+    /// How many copies `history` holds.
+    #[must_use]
+    pub fn undo_count(&self) -> usize {
+        self.history.len()
+    }
+
+    /// Where the row numbered `seq` is in the grid, if it is there.
+    #[must_use]
+    pub fn row_index(&self, seq: u16) -> Option<usize> {
+        self.items.iter().position(|item| item.seq == seq)
+    }
+}
+
+/// What `FlightPlanner.ProcessCmdKey` does with a key, compared as `keyData ==` compares it:
+/// Control and a letter, and Control and Shift and a letter for the three that write and read.
+///
+/// Two of its keys are not here. Control-N flips `GMapControl.GDI`, which picks between WinForms'
+/// two ways of drawing the map; this map has one, and there is nothing to flip. Control-M copies
+/// the grid, planned home first, into `MainV2.comPort.MAV.wps` - the link's own record of the
+/// vehicle's mission - without sending anything; that record is the link's (`mp_link`'s
+/// `MissionPoints`), filled from its traffic, and the link has no call that writes the mission
+/// into it from outside.
+/// `// C#: GCSViews/FlightPlanner.cs:346-414`
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum PlanKey {
+    /// Control-Z: the last copy `updateUndoBuffer` kept put back, `WPtoScreen(pop)`.
+    Undo,
+    /// Control-O: `loadWPFileToolStripMenuItem_Click`, the menu's Load WP File.
+    LoadWpFile,
+    /// Control-S: `saveWPFileToolStripMenuItem_Click`, the menu's Save WP File.
+    SaveWpFile,
+    /// Control-Shift-F: `but_writewpfast_Click`, Write Fast.
+    WriteFast,
+    /// Control-Shift-W: `BUT_write_Click`, Write.
+    Write,
+    /// Control-Shift-R: `BUT_read_Click`, Read.
+    Read,
+}
+
+/// The planning screen's key `keystroke` is, if any: Control, with Shift or not, and nothing else.
+/// Control on every platform, as the window's own keys are.
+/// `// C#: GCSViews/FlightPlanner.cs:346-414`
+#[must_use]
+pub(crate) fn plan_key(keystroke: &gpui::Keystroke) -> Option<PlanKey> {
+    let modifiers = &keystroke.modifiers;
+    if !modifiers.control || modifiers.alt || modifiers.platform {
+        return None;
+    }
+    let key = keystroke.key.to_ascii_lowercase();
+    match (modifiers.shift, key.as_str()) {
+        (false, "z") => Some(PlanKey::Undo),
+        (false, "o") => Some(PlanKey::LoadWpFile),
+        (false, "s") => Some(PlanKey::SaveWpFile),
+        (true, "f") => Some(PlanKey::WriteFast),
+        (true, "w") => Some(PlanKey::Write),
+        (true, "r") => Some(PlanKey::Read),
+        _ => None,
+    }
+}
+
+/// A key of [`plan_key`]'s on the planning screen: what its menu entry or button does, and whether
+/// the key is taken - as the C# returns true, but after the three that write and read, which go on
+/// to `base.ProcessCmdKey`. Write, Write Fast and Read do what their buttons do, which are enabled
+/// with a vehicle, and Write's with rows to write.
+///
+/// While a dialog of the planner's is over the screen the key is taken and nothing is done: each is
+/// a form of its own in the C#, shown with `ShowDialog`, which has every key while it shows - so
+/// neither the planner's `ProcessCmdKey` nor the window's sees one, and Control-Z under a dialog is
+/// not the window's camera test either.
+/// `// C#: GCSViews/FlightPlanner.cs:346-414, 4738-4741, 6181-6184`
+pub(crate) fn run_plan_key(
+    this: &mut MissionPlanner,
+    key: PlanKey,
+    window: &mut gpui::Window,
+    cx: &mut Context<MissionPlanner>,
+) -> bool {
+    if dialog_showing(this) {
+        return true;
+    }
+    let has_vehicle = this.telemetry.view().vehicle.is_some();
+    let taken = match key {
+        PlanKey::Undo => {
+            undo_on_screen(this, window, cx);
+            true
+        }
+        PlanKey::LoadWpFile => {
+            this.plan_menus.ask_mission_load();
+            this.plan_prompt_focus.focus(window, cx);
+            true
+        }
+        PlanKey::SaveWpFile => {
+            let name = this.plan_file_name();
+            this.plan_menus.ask_mission_save(&name);
+            this.plan_prompt_focus.focus(window, cx);
+            true
+        }
+        PlanKey::WriteFast | PlanKey::Write => {
+            if has_vehicle && !this.plan.is_empty() {
+                start_write(this, key == PlanKey::WriteFast, window, cx);
+            }
+            false
+        }
+        PlanKey::Read => {
+            if has_vehicle {
+                read_from_vehicle(this);
+            }
+            false
+        }
+    };
+    cx.notify();
+    taken
+}
+
+/// Whether a dialog of the planner's is over the screen - one of the menu's boxes, Survey (Grid),
+/// the elevation graph, the tile prefetch's menu or its progress - each shown with `ShowDialog` in
+/// the C#.
+/// `// C#: GCSViews/FlightPlanner.cs:3255, 5049; Grid/GridPlugin.cs:45, 54;
+/// ExtLibs/GMap.NET.WindowsForms/GMap.NET.WindowsForms/TilePrefetcher.cs:134`
+fn dialog_showing(this: &MissionPlanner) -> bool {
+    this.plan_menus.prompt.is_some()
+        || this.survey.is_open()
+        || this.plan_menus.elevation.is_some()
+        || this.plan_menus.prefetch_menu.is_some()
+        || this.plan_menus.prefetch.is_some()
+}
+
+/// Control-Z: `if (history.Count > 0)`, the last copy kept put back - `WPtoScreen(pop)`, which is
+/// `processToScreen`: the rows the copy's, its home offered when it is not the boxes' ("Reset Home
+/// to loaded coords"), `setWPParams`, and the map drawn again. With nothing kept, nothing.
+/// `// C#: GCSViews/FlightPlanner.cs:348-360, 1351-1378, 5496-5678`
+fn undo_on_screen(
+    this: &mut MissionPlanner,
+    window: &mut gpui::Window,
+    cx: &mut Context<MissionPlanner>,
+) {
+    let Undone::PutBack(offer) = this.plan.undo() else {
+        return;
+    };
+    if let Some(home) = offer {
+        this.plan_menus.offer_home_reset(home);
+        this.plan_prompt_focus.focus(window, cx);
+    }
+    // `processToScreen` ends with `setWPParams`. `// C#: GCSViews/FlightPlanner.cs:5630`
+    this.plan.set_wp_params(&this.telemetry.view().parameters);
+    this.sync_map_mission();
+}
+
+/// The menu's entries whose handlers keep the mission for Control-Z before they add their row:
+/// Insert Wp > At Current Position (`AddWPToMap`, which may move home instead), Land and Set ROI.
+/// `// C#: GCSViews/FlightPlanner.cs:3051-3054, 4302-4316, 6670-6690`
+const fn entry_keeps_undo(action: MenuAction) -> bool {
+    matches!(
+        action,
+        MenuAction::InsertAtCurrentPosition | MenuAction::Land | MenuAction::SetRoi
+    )
+}
+
+/// The boxes whose OK goes on into a handler that keeps the mission for Control-Z before it adds
+/// its rows: Insert WP and Insert Spline WP, Loiter Time, Loiter Turns, a circle's last box, and
+/// Enter UTM Coord's Northing.
+/// `// C#: GCSViews/FlightPlanner.cs:2913, 3019, 3283, 4065, 4089, 4757, 4790`
+const fn answer_keeps_undo(kind: PromptKind) -> bool {
+    matches!(
+        kind,
+        PromptKind::InsertWp { .. }
+            | PromptKind::LoiterTime { .. }
+            | PromptKind::LoiterTurns { .. }
+            | PromptKind::Circle { .. }
+            | PromptKind::UtmNorthing
+    )
+}
+
+/// What a handler that keeps the mission for Control-Z changes once it has gone as far as that:
+/// the rows, or the Home Location boxes (`callMeDrag("H", ...)`).
+fn undo_state(plan: &Plan) -> (Vec<MissionItem>, [String; 3]) {
+    (
+        plan.items().to_vec(),
+        HomeBox::ALL.map(|which| plan.home_text(which).to_owned()),
+    )
 }
 
 /// Geo-Fence > Clear: `FENCE_ENABLE`, `FENCE_ACTION` and `FENCE_TOTAL` set to 0, one after
@@ -10972,7 +11301,17 @@ fn choose_entry(
         }
         _ => {
             let context = menu_context(this);
+            // The entries whose handlers keep the mission for Control-Z before their row: the
+            // copy taken first, and kept if the handler went as far as the row (or home).
+            let copy = entry_keeps_undo(action)
+                .then(|| this.plan.undo_copy(vehicle_home(&this.telemetry.view())));
+            let before = undo_state(&this.plan);
             this.plan_menus.choose(&mut this.plan, action, &context);
+            if let Some(copy) = copy
+                && undo_state(&this.plan) != before
+            {
+                this.plan.keep_undo_copy(copy);
+            }
         }
     }
     sync_everything(this);
@@ -10990,7 +11329,21 @@ fn submit_prompt(
 ) {
     let context = menu_context(this);
     let home_hint = home_hint_showing(this);
+    // The boxes whose handlers go on to keep the mission for Control-Z before their rows: the copy
+    // taken first, and kept if the answer went as far as the rows.
+    let copy = this
+        .plan_menus
+        .prompt
+        .as_ref()
+        .is_some_and(|prompt| answer_keeps_undo(prompt.kind))
+        .then(|| this.plan.undo_copy(vehicle_home(&this.telemetry.view())));
+    let before = undo_state(&this.plan);
     let request = this.plan_menus.submit(&mut this.plan, &context);
+    if let Some(copy) = copy
+        && undo_state(&this.plan) != before
+    {
+        this.plan.keep_undo_copy(copy);
+    }
     // The answer kept as `InputBox` keeps it: the menus hold no settings, the window does.
     // `// C#: ExtLibs/Controls/InputBox.cs:178-184`
     if let Some((title, question, answer)) = this.plan_menus.take_answered() {
@@ -11026,8 +11379,24 @@ fn submit_prompt(
         this.plan_prompt_focus.focus(window, cx);
     } else if home_hint {
         focus_home_lat(this, window, cx);
+    } else {
+        give_back_keyboard(this, window, cx);
     }
     cx.notify();
+}
+
+/// A box closed with none after it: the keyboard back to the window, as the C#'s modal form hands
+/// it back to the planner when it closes, so `ProcessCmdKey`'s keys - Control-Z, -O and -S, and the
+/// window's own - work again at once. Left with the box, the keyboard stays with an element no
+/// longer drawn, and gpui hands its keys to none of the window's until a click moves it.
+fn give_back_keyboard(
+    this: &MissionPlanner,
+    window: &mut gpui::Window,
+    cx: &mut Context<MissionPlanner>,
+) {
+    if this.plan_prompt_focus.is_focused(window) {
+        window.blur(cx);
+    }
 }
 
 /// Whether the dialog showing is `TXT_homelat_Enter`'s.
@@ -11077,6 +11446,8 @@ fn cancel_prompt(
         this.plan_prompt_focus.focus(window, cx);
     } else if home_hint {
         focus_home_lat(this, window, cx);
+    } else {
+        give_back_keyboard(this, window, cx);
     }
     cx.notify();
 }
@@ -12055,6 +12426,8 @@ pub fn record_facts(plan: &Plan, menus: &PlanMenus) {
             .map_or_else(String::new, MissionFtp::label),
     );
     record("plan.commands.minimised", plan.commands_minimised());
+    // Control-Z's `history`: how many copies of the mission it holds.
+    record("plan.undo", plan.undo_count());
     record("plan.write.home_requests", plan.home_requests);
     record("plan.coords.system", plan.coords().system.name());
     record("plan.coords.lines", plan.coords().lines().join("|"));
@@ -18829,5 +19202,305 @@ mod geofence_tests {
             download.end().is_some()
         });
         assert_eq!(download.end(), Some(Err(FENCE_POINT_FAILED)));
+    }
+}
+
+/// The planning screen's keys, `FlightPlanner.ProcessCmdKey`, and Control-Z's `history`
+/// (`updateUndoBuffer`, `WPtoScreen`): the keys as `keyData ==` compares them, the copies as the C#
+/// takes and puts them back, and - when `MP_SRC` names the C# tree - each held to its handler.
+#[cfg(test)]
+mod key_tests {
+    use super::*;
+
+    fn key(text: &str) -> gpui::Keystroke {
+        gpui::Keystroke::parse(text).expect("a keystroke")
+    }
+
+    fn at(lat: f64, lng: f64) -> LatLon {
+        LatLon::new(lat, lng).expect("a position")
+    }
+
+    /// SITL's home at CMAC, as the boxes would hold it.
+    const PLANNED: Home = Home {
+        lat: -35.363_262_1,
+        lng: 149.165_237_4,
+        alt: 584.0,
+    };
+
+    /// A plan whose Home Location boxes, and so whose planned home, are [`PLANNED`].
+    fn planned() -> Plan {
+        let mut plan = Plan::default();
+        plan.reset_home_to(PLANNED);
+        plan
+    }
+
+    /// Each of `FlightPlanner.ProcessCmdKey`'s keys, and nothing else: not the letters alone, not
+    /// another modifier with them, not Shift on the three without it nor without it on the three
+    /// with it, not Control-N and Control-M (not ported), not the window's own Control keys.
+    #[test]
+    fn every_key_of_the_planners_process_cmd_key() {
+        let table = [
+            ("ctrl-z", PlanKey::Undo),
+            ("ctrl-o", PlanKey::LoadWpFile),
+            ("ctrl-s", PlanKey::SaveWpFile),
+            ("ctrl-shift-f", PlanKey::WriteFast),
+            ("ctrl-shift-w", PlanKey::Write),
+            ("ctrl-shift-r", PlanKey::Read),
+        ];
+        for (text, expected) in table {
+            assert_eq!(plan_key(&key(text)), Some(expected), "{text}");
+        }
+        for text in [
+            "z", "o", "s", "shift-z", "ctrl-alt-z", "cmd-z", "cmd-s", "ctrl-shift-z",
+            "ctrl-shift-o", "ctrl-shift-s", "ctrl-f", "ctrl-w", "ctrl-r", "ctrl-n", "ctrl-m",
+            "ctrl-t", "ctrl-1", "f3",
+        ] {
+            assert_eq!(plan_key(&key(text)), None, "{text}");
+        }
+    }
+
+    /// `updateUndoBuffer`'s copy: home at item 0 - the planned home while the vehicle has sent none
+    /// or one at 0,0, the vehicle's once it has - a `WAYPOINT` in the `GLOBAL` frame, its altitude
+    /// through a `float`; then the rows as they are.
+    #[test]
+    fn the_copy_is_home_then_the_rows() {
+        let mut plan = planned();
+        plan.add_waypoint(at(-35.361, 149.161), 100.0);
+        plan.add_waypoint(at(-35.362, 149.162), 120.0);
+        let home = plan.planned_home_location();
+
+        let copy = plan.undo_copy(None);
+        assert_eq!(copy.len(), 3);
+        assert_eq!(copy[0].command, CMD_WAYPOINT);
+        assert_eq!(copy[0].frame, FRAME_ABSOLUTE);
+        assert_eq!(
+            (copy[0].x, copy[0].y, copy[0].z),
+            (home.lat, home.lng, home.alt)
+        );
+        assert_eq!(&copy[1..], plan.items());
+
+        // `HomeLocation.Lat != 0 && HomeLocation.Lng != 0`, or the planned home.
+        let nowhere = Home {
+            lat: 0.0,
+            lng: 149.0,
+            alt: 10.0,
+        };
+        assert_eq!(plan.undo_copy(Some(nowhere))[0].x, home.lat);
+        let vehicle = Home {
+            lat: -35.37,
+            lng: 149.17,
+            alt: 0.1,
+        };
+        let copy = plan.undo_copy(Some(vehicle));
+        assert_eq!((copy[0].x, copy[0].y), (vehicle.lat, vehicle.lng));
+        assert_eq!(copy[0].z, f64::from(0.1_f32), "`(float) HomeLocation.Alt`");
+    }
+
+    /// Forty copies kept, the oldest let go first; Control-Z takes them newest first, each putting
+    /// its rows back, until none is left and it does nothing.
+    #[test]
+    fn forty_copies_are_kept_and_put_back_newest_first() {
+        let mut plan = planned();
+        for row in 0..45_u32 {
+            plan.update_undo_buffer(None);
+            plan.add_waypoint(at(-35.36 - f64::from(row) * 0.001, 149.16), 100.0);
+        }
+        assert_eq!(plan.items().len(), 45);
+        assert_eq!(plan.undo_count(), 40);
+
+        // The newest copy is the mission before the last row; its home is the boxes', not asked.
+        assert_eq!(plan.undo(), Undone::PutBack(None));
+        assert_eq!(plan.items().len(), 44);
+        assert_eq!(plan.items().last().map(|item| item.seq), Some(44));
+        assert_eq!(plan.origin(), &Origin::Edited);
+        for _ in 0..39 {
+            assert_eq!(plan.undo(), Undone::PutBack(None));
+        }
+        // The five oldest went: the mission with five rows is the last kept.
+        assert_eq!(plan.items().len(), 5);
+        assert_eq!(plan.undo_count(), 0);
+        assert_eq!(plan.undo(), Undone::Nothing);
+        assert_eq!(plan.items().len(), 5);
+    }
+
+    /// A copy whose home is not the boxes' - the vehicle's, here - offers it when it is put back:
+    /// `processToScreen`'s "Reset Home to loaded coords", which leaves the boxes until Yes.
+    #[test]
+    fn putting_back_offers_a_home_that_is_not_the_boxes() {
+        let mut plan = planned();
+        plan.add_waypoint(at(-35.361, 149.161), 100.0);
+        let vehicle = Home {
+            lat: -35.37,
+            lng: 149.17,
+            alt: 600.0,
+        };
+        plan.update_undo_buffer(Some(vehicle));
+        plan.add_waypoint(at(-35.362, 149.162), 100.0);
+
+        assert_eq!(plan.undo(), Undone::PutBack(Some(vehicle)));
+        assert_eq!(plan.items().len(), 1);
+        assert_eq!(plan.items()[0].seq, 1);
+        assert_eq!(plan.home_text(HomeBox::Lat), double_text(PLANNED.lat));
+    }
+
+    /// A row dragged and let go keeps the mission from before the drag, the row where it was
+    /// grabbed; let go where it was grabbed, or another row's drop, keeps nothing.
+    #[test]
+    fn a_drag_keeps_the_mission_from_before_it() {
+        let mut plan = planned();
+        plan.add_waypoint(at(-35.361, 149.161), 100.0);
+        plan.add_waypoint(at(-35.362, 149.162), 100.0);
+        let before = plan.undo_copy(None);
+
+        plan.begin_drag(2);
+        assert_eq!(plan.drag_undo_copy(2, None), None, "not moved");
+        plan.move_to(2, at(-35.365, 149.165));
+        assert_eq!(plan.drag_undo_copy(1, None), None, "another row");
+        assert_eq!(plan.drag_undo_copy(2, None), Some(before));
+    }
+
+    /// The row index the grid's buttons test: Up off the first row, Down off the last.
+    #[test]
+    fn a_rows_index_is_its_place() {
+        let mut plan = planned();
+        plan.add_waypoint(at(-35.361, 149.161), 100.0);
+        plan.add_waypoint(at(-35.362, 149.162), 100.0);
+        assert_eq!(plan.row_index(1), Some(0));
+        assert_eq!(plan.row_index(2), Some(1));
+        assert_eq!(plan.row_index(3), None);
+    }
+
+    /// The menu's entries and the boxes that keep a copy are the C#'s handlers that call
+    /// `updateUndoBuffer`, and the others are not.
+    #[test]
+    fn the_entries_and_boxes_that_keep_a_copy() {
+        for action in [
+            MenuAction::InsertAtCurrentPosition,
+            MenuAction::Land,
+            MenuAction::SetRoi,
+        ] {
+            assert!(entry_keeps_undo(action), "{action:?}");
+        }
+        for action in [
+            MenuAction::LoiterForever,
+            MenuAction::Rtl,
+            MenuAction::SetHomeHere,
+            MenuAction::DeleteWp,
+            MenuAction::ClearMission,
+            MenuAction::ReverseWps,
+            MenuAction::LoadWpFile,
+        ] {
+            assert!(!entry_keeps_undo(action), "{action:?}");
+        }
+        let position = at(-35.361, 149.161);
+        for kind in [
+            PromptKind::InsertWp {
+                spline: false,
+                position,
+            },
+            PromptKind::InsertWp {
+                spline: true,
+                position,
+            },
+            PromptKind::LoiterTime { position },
+            PromptKind::LoiterTurns { position },
+            PromptKind::Circle {
+                spline: false,
+                position,
+            },
+            PromptKind::UtmNorthing,
+        ] {
+            assert!(answer_keeps_undo(kind), "{kind:?}");
+        }
+        for kind in [
+            PromptKind::JumpStartRepeat,
+            PromptKind::TakeoffAltitude { ask_pitch: false },
+            PromptKind::ModifyAlt,
+            PromptKind::UtmZone,
+            PromptKind::MissionLoadFile,
+            PromptKind::ResetHome(PLANNED),
+        ] {
+            assert!(!answer_keeps_undo(kind), "{kind:?}");
+        }
+    }
+
+    /// The keys are the C#'s own: each arm of `FlightPlanner.ProcessCmdKey` calls what its key
+    /// does here, `history` keeps forty, and the handlers that keep a copy are the ones here -
+    /// read from the tree when `MP_SRC` names it.
+    #[test]
+    fn the_keys_are_flight_planners_csharp() {
+        let Some(source) = crate::config_coverage::source::csharp("GCSViews/FlightPlanner.cs")
+        else {
+            eprintln!(
+                "skipped: MP_SRC does not name a clone of https://github.com/ArduPilot/MissionPlanner"
+            );
+            return;
+        };
+        let body = source
+            .split("protected override bool ProcessCmdKey")
+            .nth(1)
+            .and_then(|rest| rest.split("public enum altmode").next())
+            .unwrap_or_default();
+        let arm = |keys: &str| {
+            body.split(&format!("keyData == ({keys})"))
+                .nth(1)
+                .and_then(|rest| rest.split("if (keyData").next())
+                .unwrap_or_default()
+                .to_owned()
+        };
+        assert!(arm("Keys.Control | Keys.Z").contains("WPtoScreen(pop)"));
+        assert!(
+            arm("Keys.Control | Keys.O").contains("loadWPFileToolStripMenuItem_Click(null, null)")
+        );
+        assert!(
+            arm("Keys.Control | Keys.S").contains("saveWPFileToolStripMenuItem_Click(null, null)")
+        );
+        assert!(arm("Keys.Control | Keys.F | Keys.Shift").contains("but_writewpfast_Click"));
+        assert!(arm("Keys.Control | Keys.W | Keys.Shift").contains("BUT_write_Click"));
+        assert!(arm("Keys.Control | Keys.R | Keys.Shift").contains("BUT_read_Click"));
+        assert!(source.contains("if (history.Count > 40)"));
+        assert_eq!(UNDO_REVISIONS, 40);
+
+        // A method's body, to its closing brace at the class's indent.
+        let handler = |name: &str| {
+            source
+                .split(&format!("public void {name}("))
+                .nth(1)
+                .and_then(|rest| rest.split("\n        }").next())
+                .unwrap_or_default()
+                .to_owned()
+        };
+        for name in [
+            "AddWPToMap",
+            "callMeDrag",
+            "BUT_Add_Click",
+            "Commands_CellContentClick",
+            "createSplineCircleToolStripMenuItem_Click",
+            "createWpCircleToolStripMenuItem_Click",
+            "enterUTMCoordToolStripMenuItem_Click",
+            "insertSplineWPToolStripMenuItem_Click",
+            "insertWpToolStripMenuItem_Click",
+            "landToolStripMenuItem_Click",
+            "loitercirclesToolStripMenuItem_Click",
+            "loitertimeToolStripMenuItem_Click",
+            "setROIToolStripMenuItem_Click",
+        ] {
+            assert!(handler(name).contains("updateUndoBuffer("), "{name}");
+        }
+        assert!(handler("currentPositionToolStripMenuItem_Click").contains("AddWPToMap("));
+        for name in [
+            "loiterForeverToolStripMenuItem_Click",
+            "rTLToolStripMenuItem_Click",
+            "setHomeHereToolStripMenuItem_Click",
+            "deleteWPToolStripMenuItem_Click",
+            "clearMissionToolStripMenuItem_Click",
+            "reverseWPsToolStripMenuItem_Click",
+            "jumpstartToolStripMenuItem_Click",
+            "takeoffToolStripMenuItem_Click",
+        ] {
+            let body = handler(name);
+            assert!(!body.is_empty(), "{name} is in the C#");
+            assert!(!body.contains("updateUndoBuffer("), "{name}");
+        }
     }
 }

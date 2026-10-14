@@ -1,0 +1,47 @@
+# The keys HELP's welcome text lists under "Main Screen": MainV2.ProcessCmdKey's F2 FlightData,
+# F3 FlightPlanner, F4 Tuning, F5 "Refresh full param list", Control-F "Temp screen" and Control-T
+# "Blind connect" (MainV2.cs:4087-4118, 4168-4180; crates/mp-gui/src/cmd_keys.rs).
+#
+# The claim: from HELP, F3 shows FLIGHT PLAN (MenuFlightPlanner_Click), F4 CONFIG
+# (MenuTuning_Click: CONFIG/TUNING), F2 FLIGHT DATA (MenuFlightData_Click), and Control-F the
+# EXPERIMENTAL tab (the owner's ruling of 2026-10-04 for `new temp().Show()`). F5 runs
+# `comPort.getParamList()` and shows the screen showing again (MyView.ShowScreen) - with no
+# vehicle there is nothing to fetch, and no fetch starts. Control-T, `comPort.Open(false)` on the
+# connect box's port, with none chosen says so on the status line, where the C# boxes what `Open`
+# throws. The keys work from any screen: F2 again from HELP.
+#
+# No vehicle. Its own data directory, with a config.xml checked for updates today, so no startup
+# check asks anything over the keys. Run from the repository root:
+#   tools/gui-test.sh tests/gui/keys-main.gui
+#
+# Not yet run: the budget is a guess, set by hand until a passing run records one.
+env XDG_DATA_HOME $WORK
+setup mkdir -p "$WORK/MissionPlannerRust" && printf '<?xml version="1.0" encoding="utf-8"?><Config><update_check>%s</update_check></Config>' "$(date +%-m/%-d/%Y)" > "$WORK/MissionPlannerRust/config.xml"
+screen help
+window 1600x1200
+budget 8
+
+expect screen help
+key F3
+expect screen plan
+key F4
+expect screen config
+key F2
+expect screen fly
+key ctrl+f
+expect screen experimental
+
+# F5: the parameters fetched when there is a vehicle to fetch them from, and the screen again.
+key F5
+expect screen experimental
+expect params.fetch none
+
+# Control-T: no port chosen.
+key ctrl+t
+expect status choose a port first
+
+# From HELP again.
+click tab-help
+expect screen help
+key F2
+expect screen fly

@@ -1,0 +1,27 @@
+# The window's shortcuts after a text box had the keyboard and its screen was left: the owner
+# found Control-1 doing nothing (2026-10-14), and a box no longer drawn can keep the keyboard, so
+# every shortcut does nothing until the next click. FLIGHT PLAN's Default Alt box is clicked,
+# FLIGHT DATA is shown by its tab, and Control-3 must show its third page (FlightData.cs:867-918),
+# Control-1 its first; back on FLIGHT PLAN, Control-S its Save WP File box (FlightPlanner.cs:370-374).
+#
+# Needs no link: tools/gui-headless.sh keys-after-focus
+env XDG_DATA_HOME $WORK
+setup mkdir -p "$WORK/MissionPlannerRust" && printf '<?xml version="1.0" encoding="utf-8"?><Config><update_check>%s</update_check></Config>' "$(date +%-m/%-d/%Y)" > "$WORK/MissionPlannerRust/config.xml"
+screen plan
+window 1600x1200
+budget 10
+
+expect screen plan
+click plan-defaultalt
+click tab-fly
+expect screen fly
+expect fly.tab tabQuick
+key ctrl+3
+expect fly.tab tabPagemessages
+key ctrl+1
+expect fly.tab tabQuick
+click tab-plan
+expect screen plan
+click plan-defaultalt
+key ctrl+s
+expect plan.prompt Save As

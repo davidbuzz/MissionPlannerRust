@@ -24,7 +24,9 @@
 //! WinForms gives `ProcessCmdKey` a key after the focused control and its parents have had it,
 //! so a page's own keys (the parameter grid's Ctrl+S and F2, Install Firmware's Ctrl+Q) come
 //! first; here the main window's root takes a key on its way out, after every element inside
-//! has had it and none took it.
+//! has had it and none took it. The screens whose own `ProcessCmdKey` sits between the page and
+//! the form - FLIGHT DATA's Ctrl+1 to Ctrl+0 and playback keys, FLIGHT PLAN's Ctrl+Z, Ctrl+O,
+//! Ctrl+S and the three that write and read (`crate::plan::plan_key`) - have theirs tried first.
 //!
 //! * `if (ConfigTerminal.SSHTerminal) return false;` has nothing to test: the Terminal page and
 //!   its SSH session are out of scope (the ledger's ConfigTerminal.cs and SSHTerminal.cs rows).
@@ -346,7 +348,8 @@ pub(crate) enum CmdKey {
     Spectrogram,
     /// Ctrl+W: `new PropagationSettings().Show()`.
     Propagation,
-    /// Ctrl+Z: `new Camera().test(comPort)`.
+    /// Ctrl+Z: `new Camera().test(comPort)` - on every screen but FLIGHT PLAN, whose own Ctrl+Z,
+    /// the mission's undo, takes the key first (`crate::plan::PlanKey::Undo`).
     CameraTest,
     /// Ctrl+T: `comPort.Open(false)`.
     OverrideConnect,
@@ -393,9 +396,11 @@ pub(crate) fn cmd_key(keystroke: &Keystroke) -> Option<CmdKey> {
 }
 
 impl MissionPlanner {
-    /// `ProcessCmdKey`: whether the key was one of its, and taken. The flight screen's own come
-    /// first, as its control's `ProcessCmdKey` runs before the form's.
-    /// `// C#: MainV2.cs:4074-4215; GCSViews/FlightData.cs:867-945`
+    /// `ProcessCmdKey`: whether the key was one of its, and taken. The flight and planning
+    /// screens' own come first, as each screen's control's `ProcessCmdKey` runs before the
+    /// form's: on FLIGHT PLAN, Control-Z is the mission's undo, not the window's camera test.
+    /// `// C#: MainV2.cs:4074-4215; GCSViews/FlightData.cs:867-945;
+    /// GCSViews/FlightPlanner.cs:346-414`
     pub(crate) fn process_cmd_key(
         &mut self,
         keystroke: &Keystroke,
@@ -407,6 +412,11 @@ impl MissionPlanner {
         {
             self.fly_pages.select_index(index);
             return true;
+        }
+        if self.screen == Screen::Plan
+            && let Some(key) = crate::plan::plan_key(keystroke)
+        {
+            return crate::plan::run_plan_key(self, key, window, cx);
         }
         // Only with the window itself holding the keyboard: a space or a minus typed into a box
         // reaches the window too, and is the box's.

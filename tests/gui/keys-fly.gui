@@ -1,0 +1,61 @@
+# The keys HELP's welcome text lists under "FlightData": FlightData.ProcessCmdKey's Control-1 to
+# Control-9, the first to the ninth of tabControlactions' pages, and Control-0 the tenth
+# (GCSViews/FlightData.cs:867-918; crates/mp-gui/src/cmd_keys.rs fly_tab_key).
+#
+# The claim: on FLIGHT DATA each key shows its page, in the Designer's order - Quick, Actions,
+# Messages, the second Actions, PreFlight, Gauges, Transponder, Status, Servo/Relay, Aux Function -
+# and Control-1 goes back to Quick from any page, one keyed to or one clicked to. The keys are
+# FLIGHT DATA's own: its control's ProcessCmdKey sees a key only while that screen shows, so on
+# HELP Control-1 changes neither the screen nor the page, which is still the one left showing.
+#
+# No vehicle. Its own data directory, with a config.xml checked for updates today, so no startup
+# check asks anything over the keys. Run from the repository root:
+#   tools/gui-test.sh tests/gui/keys-fly.gui
+#
+# Not yet run: the budget is a guess, set by hand until a passing run records one.
+env XDG_DATA_HOME $WORK
+setup mkdir -p "$WORK/MissionPlannerRust" && printf '<?xml version="1.0" encoding="utf-8"?><Config><update_check>%s</update_check></Config>' "$(date +%-m/%-d/%Y)" > "$WORK/MissionPlannerRust/config.xml"
+screen fly
+window 1600x1200
+budget 8
+
+expect fly.tab tabQuick
+key ctrl+3
+expect fly.tab tabPagemessages
+key ctrl+1
+expect fly.tab tabQuick
+key ctrl+2
+expect fly.tab tabActions
+key ctrl+4
+expect fly.tab tabActionsSimple
+key ctrl+5
+expect fly.tab tabPagePreFlight
+key ctrl+6
+expect fly.tab tabGauges
+key ctrl+7
+expect fly.tab tabTransponder
+key ctrl+8
+expect fly.tab tabStatus
+key ctrl+9
+expect fly.tab tabServo
+key ctrl+0
+expect fly.tab tabAuxFunction
+key ctrl+1
+expect fly.tab tabQuick
+
+# From a page clicked to.
+click fly-tab-actions
+expect fly.tab tabActions
+key ctrl+1
+expect fly.tab tabQuick
+
+# Not on another screen.
+key ctrl+3
+expect fly.tab tabPagemessages
+click tab-help
+expect screen help
+key ctrl+1
+expect screen help
+click tab-fly
+expect screen fly
+expect fly.tab tabPagemessages

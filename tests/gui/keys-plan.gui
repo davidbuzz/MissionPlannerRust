@@ -1,0 +1,117 @@
+# The keys HELP's welcome text lists under "FlightPlanner": FlightPlanner.ProcessCmdKey's
+# Control-Z undo, Control-O open wp file and Control-S save wp file
+# (GCSViews/FlightPlanner.cs:346-374; crates/mp-gui/src/plan.rs plan_key, run_plan_key).
+#
+# The claim: each waypoint a click adds keeps the mission before it on `history`
+# (updateUndoBuffer, FlightPlanner.cs:574-599, 1053-1103), and so do Add Below (BUT_Add_Click,
+# :1780-1783), the menu's Land (:4302-4316) and Loiter Time once its box says OK (:4776-4797);
+# Control-Z puts the last copy back (WPtoScreen(pop), :348-360), the newest first, until none is
+# left and the key does nothing. On FLIGHT PLAN the key is the planner's - its control's
+# ProcessCmdKey runs before MainV2's - so the window's camera test (MainV2.cs:4161-4166) does not
+# run; on FLIGHT DATA it does. Control-S is the menu's Save WP File
+# (saveWPFileToolStripMenuItem_Click, :6181-6184), its Save As box on the mission's file name, and
+# Control-O its Load WP File (loadWPFileToolStripMenuItem_Click, :4738-4741), its Open box listing
+# the file saved. Once a box has gone the keyboard is the window's again, so Control-Z straight
+# after the save undoes; the load leaves `history` as it was, as processToScreen does.
+#
+# No vehicle. Its own data directory, with a home in a config.xml - the planner's map has no view
+# without one - checked for updates today, so no startup check asks anything over the keys; the
+# file dialogs open in $WORK. Run from the repository root:
+#   tools/gui-test.sh tests/gui/keys-plan.gui
+#
+# Not yet run: the budget is a guess, set by hand until a passing run records one.
+env XDG_DATA_HOME $WORK
+setup mkdir -p "$WORK/MissionPlannerRust" && printf '<?xml version="1.0" encoding="utf-8"?><Config><TXT_homelat>-35.3632621</TXT_homelat><TXT_homelng>149.1652374</TXT_homelng><TXT_homealt>584.1</TXT_homealt><update_check>%s</update_check></Config>' "$(date +%-m/%-d/%Y)" > "$WORK/MissionPlannerRust/config.xml"
+env MP_PLAN_DIR $WORK
+screen plan
+window 1600x1200
+budget 18
+
+expect mission.home true
+expect plan.undo 0
+expect camera.test.started 0
+
+# Two waypoints, each keeping the mission before it. The map first: a press before its first
+# paint records nothing.
+expect map.ready true
+click map@0.45x0.40
+click map@0.60x0.55
+expect mission.items 2
+expect plan.undo 2
+
+# Control-Z: the second goes, then the first; then nothing is kept, and nothing happens.
+key ctrl+z
+expect mission.items 1
+expect plan.undo 1
+key ctrl+z
+expect mission.items 0
+expect plan.undo 0
+key ctrl+z
+expect mission.items 0
+expect camera.test.started 0
+
+# Add Below keeps one.
+click map@0.45x0.40
+expect mission.items 1
+click plan-add-below
+expect mission.items 2
+expect plan.undo 2
+key ctrl+z
+expect mission.items 1
+expect plan.undo 1
+
+# So does the menu's Land.
+click map@0.30x0.70:right
+click menu-land
+expect mission.items 2
+expect plan.undo 2
+key ctrl+z
+expect mission.items 1
+expect plan.undo 1
+
+# And Loiter Time, once its box says OK.
+click map@0.30x0.70:right
+click menu-loiter
+click menu-loitertime
+expect plan.prompt Loiter Time
+key Return
+expect plan.prompt none
+expect mission.items 2
+expect plan.undo 2
+key ctrl+z
+expect mission.items 1
+expect plan.undo 1
+
+# Control-S: Save As, on the mission's file name; Enter saves.
+click map@0.60x0.55
+expect mission.items 2
+expect plan.undo 2
+key ctrl+s
+expect plan.prompt Save As
+expect plan.prompt.value mission.waypoints
+key Return
+expect plan.prompt none
+expect status ~ saved 2 items
+
+# The box gone, the keyboard is the window's: Control-Z at once.
+key ctrl+z
+expect mission.items 1
+expect plan.undo 1
+
+# Control-O: Open, listing the file saved; Enter loads it, and `history` is left as it was.
+key ctrl+o
+expect plan.prompt Open
+expect plan.prompt.files ~ mission.waypoints
+type mission.waypoints
+key Return
+expect plan.prompt none
+expect status ~ loaded 2 items
+expect mission.items 2
+expect plan.undo 1
+expect camera.test.started 0
+
+# On FLIGHT DATA, Control-Z is the window's camera test.
+key F2
+expect screen fly
+key ctrl+z
+expect camera.test.started 1

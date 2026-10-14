@@ -42,9 +42,11 @@
 //! Not ported, each for a reason the C# gives: `TRK_zoom` (the map zooms with the wheel);
 //! dragging the polygon's corners on the dialog's map; the camera footprints (`CHK_footprints` is
 //! kept and saved, nothing is drawn); `BUT_samplephoto` (a JPEG's EXIF); Control-S and Control-O with `label38`, their hint (the
-//! `.grid` files are `XmlSerializer` output); "No polygon defined. Load a file?", whose Yes is
-//! that `.grid` loader - with fewer than three corners this says its No, "Please define a
-//! polygon.". `BUT_save` asks for a camera name and writes `cameras.xml`, and the constructor
+//! `.grid` files are `XmlSerializer` output) - while the dialog shows, those keys and Control-Z
+//! do nothing, as the planner's `ProcessCmdKey` sees no key of a form of its own
+//! (`crate::plan::run_plan_key`); "No polygon defined. Load a file?", whose Yes is that `.grid`
+//! loader - with fewer than three corners this says its No, "Please define a polygon.".
+//! `BUT_save` asks for a camera name and writes `cameras.xml`, and the constructor
 //! writes it when there is none, both in this application's user data directory
 //! (`mp_mission::cameras`). The settings Accept saves (`savesettings`, the `grid_*` keys and the
 //! camera's field of view) go into `Settings.Instance` - [`crate::settings::Persisted`], which the
