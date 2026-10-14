@@ -1,0 +1,73 @@
+# SETUP's links between Servo Output and Motor Test: the owner's request of 2026-10-14 ("bug5"),
+# which the C# does not have. At the foot of Mandatory Hardware > Servo Output, "Click here when
+# done, to test your motor outputs", drawn as a web page's link, shows Optional Hardware > Motor
+# Test; at the foot of Motor Test, "Click here to see your motor/servo outputs" shows Servo Output
+# again.
+#
+# The claim: each link shows its page as that page's entry in SETUP's list does
+# (crates/mp-gui/src/setup.rs, show_setup_page and page_link): the page chosen, the heading of a
+# page under a closed one opened - Optional Hardware, for Motor Test - the page left deactivated
+# and the page shown activated (ExtLibs/Controls/BackstageView/BackstageView.cs:428-523). Each
+# link sits under its page's controls - Servo Output's under the sixteenth row, Motor Test's under
+# Test all in Sequence - and is wholly in view at 1280x800 without scrolling: the layout guard
+# counts every control cut off (layout.hidden), asked here along the way and, as every run asks
+# it, at the end.
+#
+# Needs SITL copter on tcp:127.0.0.1:5760 started from tools/sitl/params/copter.parm, whose
+# SERVO_32_ENABLE is 0 (sixteen outputs) and whose frame is a quad. Run as
+#
+#   tools/gui-test.sh tests/gui/setup-links.gui -- tcp:127.0.0.1:5760
+#
+# or on the virtual display, leaving the desktop's pointer alone, as
+#
+#   tools/gui-headless.sh -- tests/gui/setup-links.gui -- tcp:127.0.0.1:5760
+
+screen setup
+# The size the links must show at without scrolling: tests/layout.rs's smaller window.
+window 1280x800
+budget 15
+# A first budget, set by hand until a passing run records one.
+# A config.xml of its own, so the display view is Mission Planner's Advanced one, which lists
+# both pages, and not whatever the machine running it chose.
+env MP_CONFIG_XML $WORK/config.xml
+
+# The vehicle first, and its parameters: SETUP lists both pages once every one is in
+# (isConnected && gotAllParams, InitialSetup.cs:213-216, 315-318).
+expect screen setup
+expect vehicle.count > 0
+expect params.held > 1000
+expect setup.pages ~ ConfigRadioOutput
+expect setup.pages ~ ConfigMotorTest
+
+# Servo Output, chosen from the list.
+click setup-page-ConfigMandatory
+click setup-page-ConfigRadioOutput
+expect setup.page ConfigRadioOutput
+expect config.servo.active true
+expect config.servo.rows 16
+expect servo-to-motortest below servo-SERVO16_MAX
+expect layout.hidden 0
+
+# Its link: Motor Test, with Optional Hardware opened for it as the list opens the heading of a
+# page under a closed one; Servo Output deactivated, Motor Test activated - its buttons built from
+# the frame, as a choice in the list builds them.
+click servo-to-motortest
+expect setup.page ConfigMotorTest
+expect setup.title Motor Test
+expect setup.expanded ConfigMandatory,ConfigOptional
+expect config.servo.active false
+expect config.motortest.active true
+expect config.motortest.count 4
+expect motortest-to-servo below motortest-sequence
+expect layout.hidden 0
+
+# Motor Test's link: Servo Output again, its sixteen rows the page object's still, as a choice in
+# the list keeps them; Motor Test hidden, both headings left open.
+click motortest-to-servo
+expect setup.page ConfigRadioOutput
+expect setup.title Servo Output
+expect config.motortest.active false
+expect config.servo.active true
+expect config.servo.rows 16
+expect setup.expanded ConfigMandatory,ConfigOptional
+expect servo-to-motortest below servo-SERVO16_MAX

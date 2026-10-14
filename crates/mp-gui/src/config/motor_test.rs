@@ -44,6 +44,12 @@
 //! The geometry is `ConfigMotorTest.resx`'s, each control at its `Location` in `groupBox1`, the
 //! run-time buttons where `Activate` puts them. The colours are this application's.
 //!
+//! Under the group box, where the C# has nothing, a link back to Servo Output: "Click here to see
+//! your motor/servo outputs" - the owner's request of 2026-10-14, the other half of Servo Output's
+//! link here - drawn as a web page's link and showing that page as its entry in SETUP's list does
+//! (`crate::setup::page_link`). Like the list, it can be followed while a Spin question or a
+//! message box shows, which then go with the page (`MotorTest::deactivate`).
+//!
 //! What is not ported, and why:
 //!
 //! * a picture of the motor order: the C# has none on this page - the link opens ArduPilot's
@@ -86,6 +92,11 @@ use crate::ui::theme;
 /// `groupBox1.Text`, the page's one group box.
 /// `// C#: GCSViews/ConfigurationView/ConfigMotorTest.resx groupBox1.Text`
 pub const TITLE: &str = "Motor Test";
+/// The class, as the lists name it.
+pub const CLASS: &str = "ConfigMotorTest";
+/// The link under the group box back to Servo Output, in the owner's words of 2026-10-14; the C#
+/// has no such link.
+const SERVO_OUTPUT_LINK: &str = "Click here to see your motor/servo outputs";
 /// `groupBox1.Size`, which `AutoSize` grows to fit the buttons `Activate` adds.
 /// `// C#: GCSViews/ConfigurationView/ConfigMotorTest.resx groupBox1.Size`
 const GROUP_SIZE: (f32, f32) = (528.0, 316.0);
@@ -1143,10 +1154,12 @@ fn number_box(
         .into_any_element()
 }
 
-/// The page, laid out as `ConfigMotorTest.resx` and `Activate` lay it out.
+/// The page, laid out as `ConfigMotorTest.resx` and `Activate` lay it out, and under it the link
+/// to Servo Output when SETUP's list holds that page (`to_servo_output`).
 pub fn page(
     test: &MotorTest,
     focus: &Focus,
+    to_servo_output: bool,
     window: &Window,
     cx: &mut Context<MissionPlanner>,
 ) -> Option<AnyElement> {
@@ -1304,7 +1317,23 @@ pub fn page(
     if let Some(dialog) = dialog(test, focus, window, cx) {
         body = body.child(dialog);
     }
-    Some(body.into_any_element())
+    // The owner's link back to Servo Output, under the group box (2026-10-14); the C# has none.
+    Some(
+        div()
+            .flex()
+            .flex_col()
+            .gap_2()
+            .child(body)
+            .children(to_servo_output.then(|| {
+                crate::setup::page_link(
+                    "motortest-to-servo",
+                    SERVO_OUTPUT_LINK,
+                    crate::config::servo_output::CLASS,
+                    cx,
+                )
+            }))
+            .into_any_element(),
+    )
 }
 
 /// The message box or the question showing, over the page: both are modal in the C#.

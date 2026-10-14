@@ -53,6 +53,11 @@ pub mod theme {
     pub const ACTION: u32 = 0x2d333b;
     /// Behind the selected text of a text box: the accent, darkened so the text stays legible.
     pub const SELECTION: u32 = 0x1f4f82;
+    /// A link's text, underlined as a web page's link is: the accent's blue, which the pages'
+    /// own link labels (Motor Test's motor order, Flight Modes' help) are drawn in.
+    pub const LINK: u32 = ACCENT;
+    /// A link's text with the pointer over it: a lighter blue.
+    pub const LINK_HOVER: u32 = 0x79c0ff;
 }
 
 /// A labelled value, the unit this UI is mostly made of.
@@ -294,5 +299,13 @@ mod tests {
         // sides are constants.
         const _: () = assert!(THUMB_FRACTION > 0.0);
         const _: () = assert!(THUMB_FRACTION < 1.0);
+    }
+
+    #[test]
+    fn a_link_changes_under_the_pointer() {
+        // A link with no hover state does not read as one, and the owner asked for SETUP's links
+        // between pages to look like a web page's (2026-10-14). Checked at compile time, because
+        // both sides are constants.
+        const _: () = assert!(theme::LINK_HOVER != theme::LINK);
     }
 }

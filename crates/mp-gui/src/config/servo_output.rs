@@ -50,6 +50,11 @@
 //! combo box, three 50-pixel numbers - each with WinForms' three-pixel margins. The colours are
 //! this application's.
 //!
+//! Under the table, where the C# has nothing, a link to Motor Test: "Click here when done, to
+//! test your motor outputs" - the owner's request of 2026-10-14 - drawn as a web page's link and
+//! showing that page as its entry in SETUP's list does (`crate::setup::page_link`). Motor Test
+//! has its link back.
+//!
 //! What is not ported, and why:
 //!
 //! * an `RCn_*` fallback for firmware without `SERVOn_*`: the C# has none. On such a vehicle every
@@ -85,6 +90,13 @@ use crate::ui::{action, panel, theme};
 /// The page's title in Initial Setup's list.
 /// `// C#: GCSViews/InitialSetup.cs:215`
 pub const TITLE: &str = "Servo Output";
+
+/// The class, as the lists name it.
+pub const CLASS: &str = "ConfigRadioOutput";
+
+/// The link at the page's foot to Motor Test, in the owner's words of 2026-10-14 ("you" made
+/// "your"); the C# has no such link.
+const MOTOR_TEST_LINK: &str = "Click here when done, to test your motor outputs";
 
 /// `Strings.ERROR`: the caption of a failed write's message box.
 /// `// C#: ExtLibs/Strings/Strings.resx:130-132`
@@ -1858,11 +1870,13 @@ fn bar(x: f32, y: f32, value: i64) -> AnyElement {
         .into_any_element()
 }
 
-/// The page, laid out as `ConfigRadioOutput`'s table is.
+/// The page, laid out as `ConfigRadioOutput`'s table is, and under it the link to Motor Test when
+/// SETUP's list holds that page (`to_motor_test`).
 pub fn page(
     servo: &ServoOutput,
     handle: &FocusHandle,
     view: &TelemetryView,
+    to_motor_test: bool,
     window: &Window,
     cx: &mut Context<MissionPlanner>,
 ) -> Option<AnyElement> {
@@ -1943,7 +1957,23 @@ pub fn page(
             cx,
         ));
     }
-    Some(panel(TITLE, body).into_any_element())
+    // The owner's link to Motor Test at the page's foot (2026-10-14); the C# has none.
+    Some(
+        div()
+            .flex()
+            .flex_col()
+            .gap_2()
+            .child(panel(TITLE, body))
+            .children(to_motor_test.then(|| {
+                crate::setup::page_link(
+                    "servo-to-motortest",
+                    MOTOR_TEST_LINK,
+                    crate::config::motor_test::CLASS,
+                    cx,
+                )
+            }))
+            .into_any_element(),
+    )
 }
 
 /// The question or message box showing, drawn over the whole window.

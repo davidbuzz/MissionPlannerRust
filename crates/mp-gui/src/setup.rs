@@ -43,6 +43,12 @@
 //! and fill the page area until a page is chosen, where the C# leaves it empty. Their homes in
 //! the C# are on the flight screen (the DataFlash Logs tab's `BUT_DFMavlink`, the HUD's EKF and
 //! vibration windows, the Actions tab's `Preflight_Calibration`), which this module does not draw.
+//!
+//! Two links join SETUP's pages where the C# has none, at the owner's request of 2026-10-14: at
+//! the foot of Servo Output, "Click here when done, to test your motor outputs", which shows
+//! Motor Test, and at the foot of Motor Test, "Click here to see your motor/servo outputs", which
+//! shows Servo Output again - each drawn as a web page's link (`page_link`) and showing its page
+//! as that page's entry in the list does (`MissionPlanner::show_setup_page`).
 
 // This module is internal to the binary; `pub` here documents intent rather than exporting API.
 #![allow(unreachable_pub)]
@@ -776,6 +782,16 @@ impl Backstage {
         self.tree(true)
     }
 
+    /// The page of `class`, as an index into the list's calls, when the list holds it: the page a
+    /// link to it shows (`MissionPlanner::show_setup_page`), and whether that link is drawn.
+    #[must_use]
+    pub fn listed(&self, class: &str) -> Option<usize> {
+        self.pages()
+            .into_iter()
+            .find(|row| row.class == class)
+            .map(|row| row.index)
+    }
+
     fn tree(&self, open: bool) -> Vec<Row> {
         let table = entries(self.list);
         let row = |index: usize, label: String| Row {
@@ -927,6 +943,17 @@ impl MissionPlanner {
             self.deactivate_page(list, old);
         }
         self.activate_page(list, index);
+    }
+
+    /// Shows one of SETUP's pages, by its class, as a click on its entry in the list does
+    /// (`list_button`): [`Self::choose_page`], so the heading of a page under a closed one opens,
+    /// the page left has its `Deactivate` and the page shown its `Activate`. Nothing when the list
+    /// does not hold the page. What a link between SETUP's pages does (`page_link`): the owner's
+    /// request of 2026-10-14; the C# has no such links.
+    pub(crate) fn show_setup_page(&mut self, class: &str) {
+        if let Some(index) = self.backstage(List::Setup).listed(class) {
+            self.choose_page(List::Setup, index);
+        }
     }
 
     /// `IActivate.Activate` for the pages that keep state.
@@ -1423,6 +1450,9 @@ impl MissionPlanner {
                 .children(crate::config::motor_test::page(
                     &self.motor_test,
                     &self.motor_focus,
+                    self.backstage(List::Setup)
+                        .listed(crate::config::servo_output::CLASS)
+                        .is_some(),
                     window,
                     cx,
                 ))
@@ -1433,6 +1463,9 @@ impl MissionPlanner {
                     &self.servo_output,
                     &self.servo_focus,
                     view,
+                    self.backstage(List::Setup)
+                        .listed(crate::config::motor_test::CLASS)
+                        .is_some(),
                     window,
                     cx,
                 ))
@@ -1625,6 +1658,38 @@ fn selected_arrow() -> impl IntoElement {
     .right_0()
     .w(px(8.0))
     .h_full()
+}
+
+/// A link from one of SETUP's pages to another, at the foot of the page it is drawn on: its text
+/// in the link colour and underlined, as a web page's link is, the pointer a hand over it and the
+/// text lighter, and a click showing `target` as its entry in the list does
+/// (`MissionPlanner::show_setup_page`). Held in a row of its own so it is as wide as its text: a
+/// column stretches what it holds across itself, and the page's whole width would take the click.
+/// The owner's request of 2026-10-14, Servo Output's link to Motor Test and Motor Test's back;
+/// the C# has no such links.
+pub(crate) fn page_link(
+    id: &'static str,
+    text: &'static str,
+    target: &'static str,
+    cx: &mut Context<MissionPlanner>,
+) -> AnyElement {
+    div()
+        .flex()
+        .child(
+            crate::probe::measured(id, div())
+                .id(id)
+                .text_sm()
+                .text_color(rgb(theme::LINK))
+                .underline()
+                .cursor_pointer()
+                .hover(|style| style.text_color(rgb(theme::LINK_HOVER)))
+                .child(text)
+                .on_click(cx.listener(move |this, _event, _window, cx| {
+                    this.show_setup_page(target);
+                    cx.notify();
+                })),
+        )
+        .into_any_element()
 }
 
 /// A page the list names and this application does not have.
@@ -2401,6 +2466,57 @@ mod tests {
         config.activate(raw);
         config.close();
         assert_eq!(config.load(&copter(&params), KEY), Some(raw));
+    }
+
+    /// The owner's links of 2026-10-14 between Servo Output and Motor Test, which the C# does not
+    /// have: each names a page SETUP's list holds once a copter's parameters are in, and is drawn
+    /// only while the list holds it; following one is a choice in the list - the heading of a
+    /// page under a closed one opened, the page left handed back for its `Deactivate` - so Servo
+    /// Output's link shows Motor Test with Optional Hardware opened, and Motor Test's shows Servo
+    /// Output again (`MissionPlanner::show_setup_page`, `page_link`).
+    #[test]
+    fn the_links_between_servo_output_and_motor_test_choose_each_other() {
+        use crate::config::{motor_test, servo_output};
+        let params = parameters(&["FRAME_CLASS", "COMPASS_PRIO1_ID"]);
+        let mut setup = loaded(List::Setup, &copter(&params));
+        let servo = index_of(List::Setup, servo_output::CLASS);
+        let motors = index_of(List::Setup, motor_test::CLASS);
+        assert_eq!(setup.listed(servo_output::CLASS), Some(servo));
+        assert_eq!(setup.listed(motor_test::CLASS), Some(motors));
+
+        // Servo Output, chosen from the list: Mandatory Hardware opened, then the page.
+        let mandatory = index_of(List::Setup, "ConfigMandatory");
+        let optional = index_of(List::Setup, "ConfigOptional");
+        setup.activate(mandatory);
+        assert_eq!(setup.activate(servo), Some(mandatory));
+
+        // Its link: Motor Test, under Optional Hardware, which opens for it; Servo Output is the
+        // page to deactivate.
+        assert_eq!(setup.activate(motors), Some(servo));
+        assert_eq!(
+            setup.page().map(|entry| entry.class),
+            Some(motor_test::CLASS)
+        );
+        assert_eq!(setup.expanded, [mandatory, optional]);
+        assert!(
+            setup
+                .rows()
+                .iter()
+                .any(|row| row.index == motors && row.selected)
+        );
+
+        // Motor Test's link: Servo Output again, both headings left open.
+        assert_eq!(setup.activate(servo), Some(motors));
+        assert_eq!(
+            setup.page().map(|entry| entry.class),
+            Some(servo_output::CLASS)
+        );
+        assert_eq!(setup.expanded, [mandatory, optional]);
+
+        // With no vehicle the list holds neither page, so neither link is drawn.
+        let idle = loaded(List::Setup, &disconnected());
+        assert_eq!(idle.listed(servo_output::CLASS), None);
+        assert_eq!(idle.listed(motor_test::CLASS), None);
     }
 
     /// The link opening under Install Firmware while Force Bootloader holds it (`held`) keeps the
