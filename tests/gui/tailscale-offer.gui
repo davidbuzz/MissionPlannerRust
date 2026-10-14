@@ -1,0 +1,34 @@
+# Tailscale not installed, the owner's plan of 2026-10-14: "offer Tailscale at first start, if its
+# not already installed (linux & osx) ... offer it as a link, not run an installer: open
+# Tailscale's download page, or show the one-line Linux command". The first start shows the
+# offer; Open hands the download page for this system to the browser; Close puts it away, and
+# the next start does not offer again - the indicator, "not installed", opens it when asked.
+#
+# Linux only (the page is Linux's; macOS has its own). Needs no link:
+#   tools/gui-headless.sh tailscale-offer
+screen fly
+window 1600x1200
+budget 12
+env XDG_DATA_HOME $WORK
+env MP_CONFIG_XML $WORK/config.xml
+env MP_OPEN_WITH_SHELL_LOG $WORK/opened.txt
+env MP_TAILSCALE_CLI none
+
+within 12
+expect tailscale.state not-installed
+expect tailscale.text Tailscale: not installed
+linux:expect tailscale.offer shown
+linux:click tailscale-offer-open
+linux:expect tailscale.opened https://tailscale.com/download/linux
+linux:click tailscale-offer-close
+expect tailscale.offer none
+
+# The next start: no offer; the indicator opens it.
+restart
+within 12
+expect tailscale.state not-installed
+expect tailscale.offer none
+linux:click tailscale-indicator
+linux:expect tailscale.offer shown
+linux:click tailscale-offer-close
+linux:expect tailscale.offer none

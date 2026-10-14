@@ -85,3 +85,6 @@ node "$here/tailscale_check.js" "$work" http://127.0.0.1:8091 "$key" "$address" 
 node "$here/tailscale_udp_check.js" "$work" http://127.0.0.1:8091 "$key" "$work/bin/udp-vehicle" http://127.0.0.1:8090
 # And without a key: the sign-in a pilot meets.
 node "$here/tailscale_login_check.js" "$work" http://127.0.0.1:8091 "$address"
+# The node as the planner's Tailscale indicator reads it: Running, its name and addresses; then,
+# without the key, NeedsLogin at the page's sign-in link.
+node "$here/tailscale_state_check.js" "$work" "http://127.0.0.1:8080/?facts=1&demo=0" http://127.0.0.1:8091 "$key"

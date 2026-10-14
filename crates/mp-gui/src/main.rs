@@ -124,6 +124,7 @@ mod log_index;
 mod page_storage;
 mod repaint;
 mod survey_ui;
+mod tailscale;
 mod telemetry;
 mod tour;
 mod textfield;
@@ -429,6 +430,15 @@ struct MissionPlanner {
     /// again with the same words changes nothing on screen, and a script or the click crawler
     /// must still tell a repeated answer from none (the owner's click audit, 2026-10-14).
     status_seen: (Option<usize>, u64),
+    /// This computer's Tailscale: the poller asking the official client (tailscale.rs), started
+    /// while Tailscale is enabled in the PLUGINS tab and let go when it is not.
+    tailnet: Option<tailscale::Poller>,
+    /// The first start's offer of Tailscale, while its box shows.
+    tailnet_offer: Option<tailscale::Offer>,
+    /// The link target whose failure the status line has explained as off the tailnet, once.
+    tailnet_explained: Option<String>,
+    /// The last Tailscale page handed to the desktop's browser, for the facts.
+    tailnet_opened: Option<String>,
     /// The waypoint being dragged on the map, if one is.
     dragging_waypoint: Option<u16>,
     /// The altitude frame new waypoints are created in.
@@ -931,6 +941,10 @@ impl MissionPlanner {
             // In a page, the logs past what a visit loads, said once.
             file_status: mp_os::fs::left_in_page().map(left_in_page_note),
             status_seen: (None, 0),
+            tailnet: None,
+            tailnet_offer: None,
+            tailnet_explained: None,
+            tailnet_opened: None,
             dragging_waypoint: None,
             // `CMB_altmode` as `config(false)` restores it, else this application's own choice.
             // `// C#: GCSViews/FlightPlanner.cs:2609-2610`
@@ -3419,6 +3433,8 @@ impl Render for MissionPlanner {
         }
         // EXPERIMENTAL's mag calb log, its answer handed to the Compass page's SaveOffsets.
         experimental::tick(self);
+        // Tailscale: its poller, the first start's offer, a failed tailnet link explained.
+        self.tailnet_tick(&view);
         // The Servo Output, Serial Ports and ESC Calibration pages: each page object disposed
         // with its screen, a number that lost the focus read, the numbers' timers, and every
         // write's answer.
@@ -3914,6 +3930,7 @@ impl Render for MissionPlanner {
                 }
             }
             facts::record("status.serial", self.status_seen.1);
+            self.tailnet_record_facts();
             facts::record("ui.textfields", probe::text_fields_text());
             // What the Actions tab last put on the wire and what the vehicle said back.
             self.fly_actions.record_facts(&view);
@@ -4691,7 +4708,9 @@ impl Render for MissionPlanner {
                             .children(help::overlay(self, window, cx))
                             // A crash report from a last run: its question, on the main thread
                             // at start.
-                            .children(crash::overlay(self, window, cx)),
+                            .children(crash::overlay(self, window, cx))
+                            // Tailscale's first-start offer.
+                            .children(self.tailnet_offer_box(window, cx)),
                     )
                     .child(
                         div()
@@ -4751,7 +4770,10 @@ impl Render for MissionPlanner {
                                     ))
                             }))
                             .child(div().size_2().rounded_full().bg(rgb(status_colour)))
-                            .child(div().text_sm().text_color(rgb(theme::DIM)).child(status)),
+                            .child(div().text_sm().text_color(rgb(theme::DIM)).child(status))
+                            // Tailscale's indicator, while it is enabled in the PLUGINS tab (the
+                            // owner's plan of 2026-10-14).
+                            .children(self.tailnet_indicator(cx)),
                     )
                     .child(self.status_row()),
             )

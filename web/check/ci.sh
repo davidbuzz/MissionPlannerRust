@@ -50,6 +50,8 @@ run osm_tiles_check "?facts=1&demo=0"
 # An Android phone's screen: the planner laid out at 1280x800 and scrolled to, and no red strip.
 run phone_check "?facts=1&demo=0"
 run plugins_check "?facts=1&demo=0"
+# The page's Tailscale node as the planner reads it, started with no coordination server to reach.
+run tailscale_state_check "?facts=1&demo=0"
 
 # The site as Pages serves it: under the project's path, with no header of its own.
 mkdir -p "$out/pages-root"

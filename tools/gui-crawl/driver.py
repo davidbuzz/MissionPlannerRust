@@ -84,6 +84,11 @@ class App:
                    # machine's ports, so Force Bootloader and Bootloader Update refuse any real
                    # serial device (config/firmware.rs's DEVICE_ENV).
                    MP_OFFLINE="1", MP_FIRMWARE_DEVICE="gui-crawl, no device",
+                   # A fake Tailscale on a tailnet, as tools/gui-test.sh gives every script: the
+                   # crawl never reads this computer's own, and no first-start offer covers it.
+                   MP_TAILSCALE_CLI=os.path.join(
+                       os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
+                       "tests", "gui", "fake-tailscale.sh"),
                    MP_LOG_DIR=os.path.join(self.work, "logs"),
                    MP_PLAN_DIR=os.path.join(self.work, "plans"))
         if openers:

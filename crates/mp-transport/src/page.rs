@@ -27,6 +27,11 @@
 //! The link's thread is a Web Worker and may wait. The page's script runs on the browser's main
 //! thread, which may never wait (`Atomics.wait` throws there), so its three calls only
 //! `try_lock`: what one cannot hand over now, the page keeps for its next turn.
+//!
+//! The page's Tailscale node is the planner's to show as well: what it is doing - not started,
+//! loading, waiting for a sign-in, on the tailnet under which name and addresses - is read from the
+//! page, on its main thread, for the connection area's Tailscale indicator ([`tailnet`]), which can
+//! start it without a link ([`start_tailnet`]).
 
 use mp_os::Lock as _;
 use std::collections::VecDeque;
@@ -34,6 +39,7 @@ use std::io;
 use std::sync::{Condvar, Mutex, MutexGuard};
 use std::time::Duration;
 
+use wasm_bindgen::JsCast as _;
 use wasm_bindgen::prelude::wasm_bindgen;
 
 use crate::{OpenError, Transport};
@@ -146,6 +152,109 @@ pub fn serial_ports() -> Vec<crate::PortInfo> {
 /// Asks the page to stop the SITL it runs, if any.
 pub fn stop_sitl() {
     shared().requests.push_back("sitl-stop".to_owned());
+}
+
+/// The page's Tailscale node, as the page has it ([`tailnet`]): what the connection area's
+/// Tailscale indicator shows in a browser, where the desktop's shows the computer's own Tailscale
+/// (the owner's ruling of 2026-10-14). The node is the page's own (web/www/tailscale.js), its 8 MB
+/// fetched only once something needs it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PageTailnet {
+    /// Where the node is.
+    pub state: PageTailnetState,
+    /// Its name on the tailnet - `mpr-` and two words, `mpr-jerboa-stonecat`, or the page's
+    /// `?tshostname=` - while it is on the tailnet or waiting for approval: its MagicDNS name's
+    /// first label, as the page's own banner shows it.
+    pub name: Option<String>,
+    /// Its tailnet addresses then, the `100.x` first and the `fd7a:` after it.
+    pub addresses: Vec<String>,
+    /// The sign-in link the page shows ("sign in to Tailscale"), while the node waits to be
+    /// signed in and the coordination server has given one.
+    pub login_url: Option<String>,
+    /// Why it stopped, when the page knows: its 8 MB could not be fetched, say, or it ended.
+    pub reason: Option<String>,
+}
+
+/// Where the page's Tailscale node is ([`PageTailnet`]).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PageTailnetState {
+    /// Nothing has asked for it yet: it starts at a link's first use of the tailnet, or at
+    /// [`start_tailnet`].
+    NotStarted,
+    /// Being fetched, or on its way to the coordination server and the tailnet.
+    Loading,
+    /// Waiting to be signed in, at [`PageTailnet::login_url`] once the coordination server has
+    /// given it - a moment after the node asks, or never when the server cannot be reached.
+    NeedsLogin,
+    /// Signed in, and waiting for the tailnet's admin to approve the device in Tailscale's admin
+    /// console.
+    NeedsApproval,
+    /// On the tailnet, as [`PageTailnet::name`] at [`PageTailnet::addresses`].
+    Running,
+    /// Off the tailnet and not getting there, until the page is loaded again;
+    /// [`PageTailnet::reason`] says why, when the page knows.
+    Stopped,
+}
+
+/// The page's Tailscale node this moment, for the Tailscale indicator: one call into the page,
+/// which answers from what it holds, so cheap enough for every frame. Asking starts nothing;
+/// [`start_tailnet`] does. None from a thread other than the page's main one, whose global this is
+/// not, or in a page without the node.
+#[must_use]
+pub fn tailnet() -> Option<PageTailnet> {
+    let node = page_function("mprTailscaleState")?
+        .call0(&wasm_bindgen::JsValue::NULL)
+        .ok()?;
+    let field = |name: &str| js_sys::Reflect::get(&node, &name.into()).ok();
+    let text = |name: &str| {
+        field(name)
+            .and_then(|value| value.as_string())
+            .filter(|word| !word.is_empty())
+    };
+    let state = match text("state")?.as_str() {
+        "NotStarted" => PageTailnetState::NotStarted,
+        "NeedsLogin" => PageTailnetState::NeedsLogin,
+        "NeedsApproval" => PageTailnetState::NeedsApproval,
+        "Running" => PageTailnetState::Running,
+        "Stopped" => PageTailnetState::Stopped,
+        // "Loading", and any word of a later page's that this planner does not know.
+        _ => PageTailnetState::Loading,
+    };
+    let addresses: Vec<String> = match field("addresses") {
+        Some(list) if js_sys::Array::is_array(&list) => js_sys::Array::from(&list)
+            .iter()
+            .filter_map(|address| address.as_string())
+            .collect(),
+        _ => Vec::new(),
+    };
+    Some(PageTailnet {
+        state,
+        name: text("name"),
+        addresses,
+        login_url: text("loginURL"),
+        reason: text("reason"),
+    })
+}
+
+/// Asks the page to start its Tailscale node without a link - the Tailscale indicator's "sign
+/// in" - as a link's first use of the tailnet starts it: its 8 MB fetched, the coordination server
+/// asked, and the sign-in link shown once given ([`PageTailnet::login_url`]). Nothing for a node
+/// started already, or in a page without one.
+pub fn start_tailnet() {
+    if let Some(start) = page_function("mprTailscaleStart") {
+        // It answers with the node's state, which [`tailnet`] reads when it is wanted.
+        let _ = start.call0(&wasm_bindgen::JsValue::NULL);
+    }
+}
+
+/// One of the functions the page's script puts on the page's global for the planner
+/// (web/www/tailscale.js's `mprTailscaleState`, say); none on another thread, whose global it is
+/// not.
+fn page_function(name: &str) -> Option<js_sys::Function> {
+    js_sys::Reflect::get(&js_sys::global(), &name.into())
+        .ok()?
+        .dyn_into()
+        .ok()
 }
 
 /// The page: bytes from the vehicle. False when the link's thread holds the buffer this moment;

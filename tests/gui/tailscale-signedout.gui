@@ -1,0 +1,20 @@
+# Tailscale signed out, the owner's plan of 2026-10-14: the indicator says so, and a click hands the
+# sign-in link Tailscale gave (`AuthURL`) to the desktop's browser - the planner signs in nothing
+# itself. tests/gui/fake-tailscale.sh's needslogin: NeedsLogin with a link waiting.
+#
+# Needs no link: tools/gui-headless.sh tailscale-signedout
+screen fly
+window 1600x1200
+budget 8
+env XDG_DATA_HOME $WORK
+env MP_CONFIG_XML $WORK/config.xml
+env MP_OPEN_WITH_SHELL_LOG $WORK/opened.txt
+env FAKE_TAILSCALE_STATE needslogin
+
+within 12
+expect tailscale.state signed-out
+expect tailscale.text Tailscale: signed out
+expect tailscale.offer none
+expect tailscale.opened none
+click tailscale-indicator
+expect tailscale.opened https://login.tailscale.com/a/1a2b3c4d5e6f7

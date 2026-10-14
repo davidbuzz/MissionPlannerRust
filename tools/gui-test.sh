@@ -107,6 +107,12 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 # The debug binary, as every script runs against; MP_GUI_BIN names another, such as a release
 # build for a measurement whose number the debug build cannot stand for (tests/gui/storm.gui).
 BIN="${MP_GUI_BIN:-$ROOT/target/debug/planner}"
+# The planner's Tailscale indicator asks this computer's Tailscale every few seconds: under the
+# harness a fake one, on a tailnet (tests/gui/fake-tailscale.sh), so no script depends on what is
+# installed here and the first start's offer - made only when it is not installed - never covers
+# the window. A script about Tailscale chooses its own: `env FAKE_TAILSCALE_STATE needslogin`,
+# or `env MP_TAILSCALE_CLI none` for none installed.
+export MP_TAILSCALE_CLI="${MP_TAILSCALE_CLI:-$ROOT/tests/gui/fake-tailscale.sh}"
 WINDOW_TITLE="MissionPlannerRust"
 [ -x "$BIN" ] || { echo "binary not built: $BIN" >&2; exit 1; }
 : "${DISPLAY:=:0}"

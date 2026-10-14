@@ -104,6 +104,12 @@ fn measure_with(width: u32, height: u32, screen: &str, config: &Path) -> BTreeMa
         .env("MP_WINDOW", format!("{width}x{height}"))
         .env("MP_SCREEN", screen)
         .env("MP_OFFLINE", "1")
+        // A fake Tailscale on a tailnet, as tools/gui-test.sh gives every script: no first-start
+        // offer over the window, whatever this computer has installed.
+        .env(
+            "MP_TAILSCALE_CLI",
+            concat!(env!("CARGO_MANIFEST_DIR"), "/../../tests/gui/fake-tailscale.sh"),
+        )
         .env("XDG_DATA_HOME", &home)
         .env("MP_CONFIG_XML", config)
         .env(

@@ -1,0 +1,32 @@
+# A link to a tailnet name failing while this computer is off its tailnet, the owner's plan of
+# 2026-10-14: "A status-line reason when a tailnet address fails and this computer isn't on a
+# tailnet". TCP to my-pi.tail1234.ts.net, which no resolver here knows, with Tailscale signed out
+# (tests/gui/fake-tailscale.sh's needslogin): the status line says why, once.
+#
+# Needs no link: tools/gui-headless.sh tailscale-reason
+screen fly
+window 1600x1200
+budget 15
+env XDG_DATA_HOME $WORK
+env MP_CONFIG_XML $WORK/config.xml
+env FAKE_TAILSCALE_STATE needslogin
+
+within 12
+expect tailscale.state signed-out
+click main-port
+expect link.ports >= 5
+# The list's thirty rows end before TCP on a computer with many serial ports.
+reveal main-port-list main-port-TCP
+click main-port-TCP
+expect link.port TCP
+click main-connect
+expect link.prompt remote host
+key ctrl+u
+type my-pi.tail1234.ts.net
+key Return
+expect link.prompt remote Port
+key ctrl+u
+type 5760
+key Return
+within 20
+expect status ~ my-pi.tail1234.ts.net is a Tailscale name, and this computer is not on a tailnet (Tailscale: signed out)

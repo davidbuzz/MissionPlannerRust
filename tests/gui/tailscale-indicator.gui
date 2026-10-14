@@ -1,0 +1,23 @@
+# Tailscale's indicator in the connection area, the owner's plan of 2026-10-14 (phase 1, "make it
+# visible on every port"; crates/mp-gui/src/tailscale.rs): after the link's state it reads this
+# computer's Tailscale - here tests/gui/fake-tailscale.sh, which tools/gui-test.sh gives every
+# script, on a tailnet as buzz-laptop - in Tailscale's own `status --json` words, its dot the OK
+# colour. On a tailnet there is no first-start offer.
+#
+# Needs no link: tools/gui-headless.sh tailscale-indicator
+screen fly
+window 1600x1200
+budget 8
+env XDG_DATA_HOME $WORK
+env MP_CONFIG_XML $WORK/config.xml
+env FAKE_TAILSCALE_STATE running
+
+within 12
+expect tailscale.state on-tailnet
+expect tailscale.shown true
+expect tailscale.text Tailscale: on tailnet as buzz-laptop, 100.101.102.103
+expect tailscale.name buzz-laptop
+expect tailscale.address 100.101.102.103
+expect tailscale.offer none
+expect tailscale-indicator above status-row
+expect tailscale-indicator below tab-fly

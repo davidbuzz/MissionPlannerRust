@@ -7,6 +7,11 @@
 // The node's keys are kept in the browser's localStorage, so a signed-in page stays signed in.
 // Until it is, the page shows Tailscale's sign-in link (`notifyBrowseToURL`).
 //
+// The planner's Tailscale indicator (the owner's ruling of 2026-10-14: "In the browser: the page
+// node's state") reads the node's state through globalThis.mprTailscaleState (`tailscaleState`;
+// crates/mp-transport/src/page.rs's `tailnet`), and its "sign in" starts the node without a link
+// through globalThis.mprTailscaleStart (page.rs's `start_tailnet`).
+//
 // Page query options, for a tailnet of one's own and for tests:
 //   ?tscontrol=<url>    a coordination server other than Tailscale's (Headscale, say)
 //   ?tsauthkey=<key>    join with an auth key instead of signing in
@@ -19,6 +24,10 @@ let ipn = null;
 let state = "NoState";
 let netMap = null;
 const running = [];
+// For the planner's indicator (`tailscaleState`): the sign-in link the coordination server gave
+// the node last, until it is on the tailnet, and why the node stopped, once it has.
+let loginURL = null;
+let failure = null;
 
 /** The node's state and addresses, for the page's status and for tests. */
 export function tailscaleStatus() {
@@ -26,12 +35,70 @@ export function tailscaleStatus() {
 }
 globalThis.mpTailscale = tailscaleStatus;
 
+/**
+ * The node as the planner's Tailscale indicator shows it (crates/mp-transport/src/page.rs's
+ * `tailnet`), answered at once from what is held here, so the planner may ask at every frame:
+ * - state: "NotStarted" (nothing has asked for it, and none of its 8 MB is fetched), "Loading"
+ *   (being fetched, or on its way to the coordination server and the tailnet), "NeedsLogin"
+ *   (waiting to be signed in, at `loginURL` once the server has given it), "NeedsApproval" (signed
+ *   in, waiting for the tailnet's admin to approve the device), "Running" (on the tailnet) or
+ *   "Stopped" (off it and not getting there, until the page is loaded again);
+ * - backend: Tailscale's own word for it ("NoState", "Starting", "Running", ...), null until the
+ *   node has said one;
+ * - name, dnsName and addresses: its name on the tailnet (mpr-jerboa-stonecat), its MagicDNS name
+ *   and its tailnet addresses, the 100.x first - while it is Running or NeedsApproval, when they
+ *   are its own and not a former sign-in's;
+ * - loginURL: the sign-in link the page shows, while it is NeedsLogin;
+ * - reason: why it is Stopped, when the page knows.
+ */
+export function tailscaleState() {
+    let shown = "Loading";
+    if (failure !== null) shown = "Stopped";
+    else if (starting === null) shown = "NotStarted";
+    else if (state === "NeedsLogin") shown = "NeedsLogin";
+    else if (state === "NeedsMachineAuth") shown = "NeedsApproval";
+    else if (state === "Running") shown = "Running";
+    else if (state === "Stopped" || state === "InUseOtherUser") shown = "Stopped";
+    const node = shown === "Running" || shown === "NeedsApproval" ? netMap?.self : null;
+    // The netmap's name is the node's MagicDNS name, with DNS's trailing dot.
+    const dnsName = node?.name ? node.name.replace(/\.$/, "") : null;
+    return {
+        state: shown,
+        backend: ipn === null ? null : state,
+        name: dnsName ? dnsName.split(".")[0] : null,
+        dnsName,
+        // The IPv4 first, each family in the order the coordination server gave it.
+        addresses: [...(node?.addresses ?? [])].sort((a, b) => a.includes(":") - b.includes(":")),
+        loginURL: shown === "NeedsLogin" ? loginURL : null,
+        reason: shown === "Stopped" ? failure : null,
+    };
+}
+globalThis.mprTailscaleState = tailscaleState;
+
+/**
+ * Starts the node for the planner without a link - its Tailscale indicator's "sign in" - as a
+ * link's first use does: the sign-in link is shown once the coordination server gives one. A node
+ * started already is left as it is. Answers its state after, as `tailscaleState` does.
+ */
+globalThis.mprTailscaleStart = () => {
+    startTailscale();
+    return tailscaleState();
+};
+
 /** Starts the node once; resolves when it is on the tailnet. */
 export function startTailscale() {
     if (starting === null) {
         starting = start();
+        // A node that could not start - its 8 MB not fetched, say - is stopped, and says why.
+        starting.catch((err) => stopped(`could not start: ${err?.message ?? err}`));
     }
     return starting;
+}
+
+// The node gone, until the page is loaded again: the first reason is the planner's to show.
+function stopped(reason) {
+    failure ??= reason;
+    console.error(`tailscale: ${reason}`);
 }
 
 async function start() {
@@ -49,7 +116,12 @@ async function start() {
         headers: { "Content-Type": "application/wasm" },
     });
     const { instance } = await WebAssembly.instantiateStreaming(unpacked, go.importObject);
-    go.run(instance);
+    // Its Go program ends only on a fatal error of the node's own (main.go's log.Fatal, whose
+    // words are in the console): the node is gone then.
+    go.run(instance).then(
+        () => stopped("the node ended (the browser's console says why)"),
+        (err) => stopped(`the node failed: ${err?.message ?? err}`),
+    );
 
     const config = {
         stateStorage: {
@@ -83,6 +155,7 @@ async function start() {
                     ipn.login();
                 }
                 if (next === "Running") {
+                    loginURL = null;
                     hideSignIn();
                     resolve();
                     for (const go of running.splice(0)) go();
@@ -93,7 +166,10 @@ async function start() {
                 netMap = JSON.parse(json);
                 showStatus();
             },
-            notifyBrowseToURL: (url) => showSignIn(url),
+            notifyBrowseToURL: (url) => {
+                loginURL = url;
+                showSignIn(url);
+            },
             notifyPanicRecover: (err) => console.error(`tailscale: ${err}`),
         });
     });
