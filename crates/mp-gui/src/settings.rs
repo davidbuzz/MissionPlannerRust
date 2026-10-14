@@ -391,6 +391,8 @@ pub struct Persisted {
     save_error: Option<String>,
     /// What this start's one-shot import copied from Mission Planner's directory, or `none`.
     imported: String,
+    /// What this load pointed out of Mission Planner's folder (`mp_settings::rehome`).
+    rehomed: Vec<mp_settings::rehome::Rehomed>,
 }
 
 impl Persisted {
@@ -410,11 +412,19 @@ impl Persisted {
     /// `// C#: ExtLibs/Utilities/Settings.cs:22-36, 427-505; MainV2.cs:784-810`
     #[must_use]
     pub fn at(path: Option<PathBuf>) -> Self {
-        let (config, unreadable) = match path.as_deref().map(read_config) {
+        let (mut config, unreadable) = match path.as_deref().map(read_config) {
             Some(Ok(config)) => (config, None),
             Some(Err(why)) => (mp_settings::Config::default(), Some(why)),
             None => (mp_settings::Config::default(), None),
         };
+        // A setting pointing into Mission Planner's own folder - its log folder, carried across
+        // by the import - pointed into this application's (the owner's bug of 2026-10-14).
+        let rehomed = mp_settings::Folders::from_environment()
+            .map(|folders| mp_settings::rehome::rehome(&mut config, &folders))
+            .unwrap_or_default();
+        for moved in &rehomed {
+            log::info!("{}: {} -> {}", moved.key, moved.was, moved.now);
+        }
         let comport = config.get("comport").unwrap_or_default().to_owned();
         let baud = config
             .get(&format!("{comport}_BAUD"))
@@ -433,7 +443,14 @@ impl Persisted {
             last_save: None,
             save_error: None,
             imported: "none".to_owned(),
+            rehomed,
         }
+    }
+
+    /// The settings this load pointed out of Mission Planner's folder and into this one's.
+    #[must_use]
+    pub fn rehomed(&self) -> &[mp_settings::rehome::Rehomed] {
+        &self.rehomed
     }
 
     /// Remembers what this start's one-shot import copied (`mp_settings::migrate`), for the
@@ -753,6 +770,18 @@ impl Persisted {
         );
         crate::facts::record("config.error", self.save_error.as_deref().unwrap_or("none"));
         crate::facts::record("config.imported", &self.imported);
+        crate::facts::record(
+            "config.rehomed",
+            if self.rehomed.is_empty() {
+                "none".to_owned()
+            } else {
+                self.rehomed
+                    .iter()
+                    .map(|moved| format!("{}={}", moved.key, moved.now))
+                    .collect::<Vec<_>>()
+                    .join(",")
+            },
+        );
     }
 }
 
@@ -1287,6 +1316,14 @@ mod tests {
         let path = scratch.seed(&text);
         let mut persisted = Persisted::at(Some(path.clone()));
         persisted.save_config(SaveEvent::Startup).expect("saved");
+        // Except what pointed into Mission Planner's own folder, which now points into this
+        // application's (mp_settings::rehome).
+        let text = persisted.rehomed().iter().fold(text, |text, moved| {
+            text.replace(
+                &format!("<{0}>{1}</{0}>", moved.key, moved.was),
+                &format!("<{0}>{1}</{0}>", moved.key, moved.now),
+            )
+        });
         assert_eq!(mp_os::fs::read_to_string(&path).expect("read"), text);
         // And a planning screen left as it was loaded changes only what config(true) writes.
         let mut plan = Plan::default();

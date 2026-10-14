@@ -1,0 +1,18 @@
+# A setting that points into Mission Planner's own folder is pointed into this application's (the
+# owner's bug of 2026-10-14; crates/mp-settings/src/rehome.rs): his config, imported from Mission
+# Planner, had its log folder in ~/.local/share/Mission Planner/logs, and this application
+# recorded there, offered it to Sort TLogs and showed it on CONFIG > Planner. With the data
+# folders under $WORK, Mission Planner's is "$WORK/Mission Planner" and this one's
+# "$WORK/MissionPlannerRust".
+#
+# Needs no link: tools/gui-headless.sh rehome-logdir
+screen config
+window 1600x1200
+budget 15
+env XDG_DATA_HOME $WORK
+env MP_CONFIG_XML $WORK/MissionPlannerRust/config.xml
+setup mkdir -p "$WORK/MissionPlannerRust" "$WORK/Mission Planner/logs" && printf '<?xml version="1.0" encoding="utf-8"?><Config><logdirectory>%s</logdirectory></Config>' "$WORK/Mission Planner/logs" > "$WORK/MissionPlannerRust/config.xml"
+
+expect config.rehomed logdirectory=$WORK/MissionPlannerRust/logs
+click config-page-ConfigPlanner
+expect config.planner.logdir $WORK/MissionPlannerRust/logs

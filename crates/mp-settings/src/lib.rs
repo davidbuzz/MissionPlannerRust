@@ -46,6 +46,7 @@
 use mp_os::fs::FsExt as _;
 pub mod config;
 pub mod migrate;
+pub mod rehome;
 
 pub use config::{Config, ConfigError};
 

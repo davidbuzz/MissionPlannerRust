@@ -5097,6 +5097,13 @@ fn main() {
             let app = cx.new(|cx| {
                 let mut app = MissionPlanner::new(target, read_mission, screen, cx);
                 app.persisted.set_imported(imported.summary());
+                // Said once: what pointed into Mission Planner's folder and now points here.
+                if let Some(first) = app.persisted.rehomed().first() {
+                    app.file_status = Some(format!(
+                        "{} was Mission Planner's {}; it is now {}",
+                        first.key, first.was, first.now
+                    ));
+                }
                 app
             });
             // The close box is `MainV2_FormClosing`, which saves Mission Planner's config.xml.
