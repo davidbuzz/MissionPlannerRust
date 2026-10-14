@@ -1,7 +1,7 @@
 # The Full Parameter List's grid (the ConfigRawParams remainder, after rows 81 and 82): the
 # RawParamWarning box, the columns' widths and the splitter kept in config.xml, the Fav column and
 # its sort, the Desc column, the Options column's NumericUpDown, the typed Value cell's
-# out-of-range question answered No, and Ctrl+S with nothing to write.
+# out-of-range question answered No, and Write Params - its button and Ctrl+S - over the edits.
 #
 # The claims, each the C#'s (GCSViews/ConfigurationView/ConfigRawParams.cs):
 # * Activate shows Common.MessageShowAgain(Strings.RawParamWarning, ...) (:92) every time, until
@@ -17,17 +17,20 @@
 # * Desc, Units and Options come from the documentation (:604-645). RTL_LOIT_TIME's bundled
 #   documentation: "Time (in milliseconds) to loiter above home before beginning final descent",
 #   ms, 0 to 60000 in steps of 1000 - so the row entered gets a NumericUpDown (:1270-1316) whose
-#   arrows put their text in the Value cell, which is an edit, written here as it is made.
+#   arrows put their text in the Value cell, which is an edit, waiting green in _changes
+#   (:518-524) until Write Params.
 # * A typed value outside the range asks "RTL_LOIT_TIME value is out of range. Do you want to
 #   continue?" under "Out of range"; No keeps the old value (:499-516).
-# * Ctrl+S is Write Params (:116-125); with nothing waiting it says "No parameters were changed."
-#   under "No changes" (:370-371).
+# * Write Params - its button, or Ctrl+S (:116-125) - asks first, listing each change
+#   (:270-310); No writes nothing, Yes writes each and takes it out of _changes once heard back
+#   (:313-357); with nothing waiting it says "No parameters were changed." under "No changes"
+#   (:370-371).
 #
 # NOT RUN HERE: dragging a header's edge or the splitter - the runner has no drag; the drag is
 # proven in crates/mp-gui/src/raw_params_grid.rs (a_drag_moves_a_width_and_the_splitter), and
 # the widths here are the settings' and the restart's. The ReadOnly box needs the fetched
-# apm.pdef.xml's ReadOnly field (an_edit_writes_or_asks); Ctrl+S's writes and the reboot's box
-# need a write never echoed (write_params_writes_and_says_a_reboot_is_required).
+# apm.pdef.xml's ReadOnly field (an_edit_is_a_change_or_asks); the reboot's box needs a
+# parameter documented to need one (write_params_writes_and_says_a_reboot_is_required).
 #
 # Needs SITL copter on tcp:127.0.0.1:5760 started from tools/sitl/params/copter.parm, with
 # RTL_LOIT_TIME at its default 5000. Run as
@@ -39,10 +42,12 @@ setup printf '\357\273\277<?xml version="1.0" encoding="utf-8"?>\n<Config>\n  <r
 
 screen params
 window 1600x1200
-budget 23
+budget 27
 
 expect vehicle.connected true
 expect params.held > 1000
+# The whole list: Write Params' end compares the count held with the vehicle's (:379-393).
+expect params.fetch ~ over
 expect params.active true
 
 # RawParamWarning, "Show me again?" ticked; OK closes it.
@@ -90,7 +95,7 @@ expect params.selected.value 5000
 expect params.control range
 expect params.control.text 5000
 
-# The typed Value cell: out of range, asked, No - nothing written, the value kept.
+# The typed Value cell: out of range, asked, No - nothing changed, the value kept.
 expect params.write.name none
 doubleclick param-value-RTL_LOIT_TIME
 expect params.editing RTL_LOIT_TIME
@@ -102,24 +107,49 @@ expect params.box Out of range
 expect params.box.text RTL_LOIT_TIME value is out of range. Do you want to continue?
 click param-box-no
 expect params.box none
+expect params.changes 0
 expect params.write.name none
 expect params.selected.value 5000
 expect params.red none
 
-# The NumericUpDown's arrows: 6000 written and heard back, then 5000 again.
+# The NumericUpDown's arrow: 6000 in the Value cell, waiting in _changes - nothing written.
 click param-options-up
 expect params.control.text 6000
-expect params.write.name RTL_LOIT_TIME
-expect params.write.outcome accepted
 expect params.selected.value 6000
-expect params.changes 0
-click param-options-down
-expect params.write.outcome accepted
-expect params.selected.value 5000
+expect params.changes 1
+expect params.write.name none
 
-# Ctrl+S from the grid with nothing waiting.
+# Write Params asks, listing the change; No writes nothing.
+click param-write
+expect params.box Confirm Parameter Changes
+expect params.box.text ~ RTL_LOIT_TIME: 5000 -> 6000
+click param-box-no
+expect params.box none
+expect params.changes 1
+expect params.write.name none
+
+# Ctrl+S from the grid is Write Params too: Yes writes 6000, heard back and out of _changes.
 click param-value-RTL_LOIT_TIME
 key ctrl+s
+expect params.box Confirm Parameter Changes
+click param-box-yes
+expect params.write.name RTL_LOIT_TIME
+expect params.write.outcome accepted
+expect params.changes 0
+expect params.selected.value 6000
+
+# The other arrow back to 5000, and Write Params' Yes.
+click param-options-down
+expect params.selected.value 5000
+expect params.changes 1
+click param-write
+expect params.box Confirm Parameter Changes
+click param-box-yes
+expect params.changes 0
+expect params.selected.value 5000
+
+# Write Params with nothing waiting.
+click param-write
 expect params.box No changes
 expect params.box.text No parameters were changed.
 click param-box-ok

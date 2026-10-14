@@ -1,20 +1,22 @@
-# A parameter step is setParam's retrying request, and the vehicle's echo is what ends it.
+# A parameter write is setParam's retrying request, and the vehicle's echo is what ends it.
 #
-# The editor's + and - write RTL_ALT through the link's request, which puts PARAM_SET on the wire
-# and sends it again every 700 ms, up to three times, until the vehicle echoes the parameter -
-# setParamAsync's loop. The link counts every send, and params.write.sends publishes the count
-# for the last write to end. `ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:1635-1767`
+# The editor's + and - are edits of RTL_ALT's Value cell, waiting in _changes; Write Params writes
+# each through the link's request, which puts PARAM_SET on the wire and sends it again every
+# 700 ms, up to three times, until the vehicle echoes the parameter - setParamAsync's loop. The
+# link counts every send, and params.write.sends publishes the count for the last write to end.
+# `ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:1635-1767;
+# GCSViews/ConfigurationView/ConfigRawParams.cs:257-369, 518-524`
 #
-# SITL does not drop packets, so against it the count is one: this proves the path - the step is
-# a request the link counts, SITL's echo ends it, and the status line says what the vehicle now
-# holds - not the retry. The retry itself, a lost first send answered by a second, is proven
-# against a scripted vehicle that loses it: crates/mp-gui/src/params.rs,
+# SITL does not drop packets, so against it the count is one: this proves the path - the write is
+# a request the link counts, SITL's echo ends it, and the status line says Write Params' summary -
+# not the retry. The retry itself, a lost first send answered by a second, is proven against a
+# scripted vehicle that loses it: crates/mp-gui/src/params.rs,
 # a_write_whose_first_send_is_lost_is_sent_again_and_confirmed.
 #
 # Needs SITL (a copter): tools/gui-test.sh tests/gui/params-retry.gui -- tcp:127.0.0.1:5760
 screen params
 window 1600x1200
-budget 15
+budget 27
 # A config.xml of its own, so the "Show me again?" boxes this script clicks are not already
 # suppressed by the settings of the machine running it.
 env MP_CONFIG_XML $WORK/config.xml
@@ -27,6 +29,9 @@ click raw-param-warning-again
 click raw-param-warning-ok
 click param-download
 expect params.held > 500
+# The whole list: Write Params' end compares the count held with the vehicle's
+# (ConfigRawParams.cs:379-393).
+expect params.fetch ~ over
 # Nothing written yet.
 expect params.write.outcome none
 # This SITL (Copter 4.7-dev) names the parameter RTL_ALT_M; older firmware says RTL_ALT.
@@ -35,12 +40,20 @@ reveal params-tree param-group-RTL
 click param-group-RTL
 click param-RTL_ALT_M
 click param-step-+
+expect params.changes 1
+expect params.write.outcome none
+click param-write
+click param-box-yes
 expect params.write.name RTL_ALT_M
 expect params.write.outcome accepted
 expect params.write.sends 1
-expect status ~ RTL_ALT_M =
+expect status ~ 1 parameters successfully saved.
 # And back to where it was, the same way.
 click param-step--
+expect params.changes 1
+click param-write
+click param-box-yes
+expect params.changes 0
 expect params.write.name RTL_ALT_M
 expect params.write.outcome accepted
 expect params.write.sends 1

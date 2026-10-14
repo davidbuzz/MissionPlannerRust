@@ -2099,15 +2099,15 @@ impl MissionPlanner {
     /// what they meant. ArduPilot accepts an out-of-range write and then behaves oddly, so the
     /// editor is the last place to catch it.
     ///
-    /// `setParam`, sent again until the vehicle echoes it; the status line then says what the
-    /// vehicle holds, or the C#'s "Set NAME Failed".
-    /// `// C#: GCSViews/ConfigurationView/ConfigRawParams.cs:323, 359-363`
+    /// An edit of the Value cell, waiting in `_changes` for Write Params - so a second step goes
+    /// on from the value the first left waiting.
+    /// `// C#: GCSViews/ConfigurationView/ConfigRawParams.cs:454-533`
     fn nudge_parameter(&mut self, name: &str, delta: f64) {
         let view = self.telemetry.view();
         let Some((_, current)) = view.parameters.iter().find(|(held, _)| held == name) else {
             return;
         };
-        let mut next = current + delta;
+        let mut next = self.raw_params.changes().get(name).unwrap_or(current) + delta;
         if let Some(meta) = metadata::lookup(name)
             && let Some((low, high)) = meta.range
         {

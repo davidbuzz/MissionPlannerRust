@@ -32,7 +32,7 @@ env XDG_DATA_HOME $WORK
 env MP_CONFIG_XML $WORK/config.xml
 screen setup
 window 1600x1200
-budget 26
+budget 41
 
 # The vehicle first, and its parameters, which are fetched as it is heard: the SETUP list is
 # built again when they are in, and a click before that is a click the list may forget.
@@ -41,7 +41,7 @@ expect params.held > 1000
 expect config.authkeys.window false
 click setup-page-ConfigAdvanced
 expect setup.page ConfigAdvanced
-expect config.advanced.buttons.enabled Warning Manager,MAVLink Inspector,Proximity,Mavlink Signing,Mavlink Mirror,NMEA,Param gen,FFT,Spectrogram,Support Proxy
+expect config.advanced.buttons.enabled Warning Manager,MAVLink Inspector,Proximity,Mavlink Signing,Mavlink Mirror,NMEA,FFT,Spectrogram,Support Proxy
 
 # The constructor: the store, the grid from it, the timer.
 click advanced-but_signkey
@@ -83,22 +83,29 @@ expect config.authkeys.signed > 0
 
 # The vehicle takes what is now signed: RTL_LOIT_TIME written and its echo heard, then put back.
 # The keys window is drawn modal over SETUP here (a written divergence: the C#'s is a form of
-# its own), so it is closed before the screen changes and opened again after.
+# its own), so it is closed before the screen changes and opened again after. Each edit waits in
+# _changes until Write Params writes it (ConfigRawParams.cs:257-394, 518-524).
 click authkeys-close
 expect config.authkeys.window false
 click tab-params
 click raw-param-warning-again
 click raw-param-warning-ok
+expect params.fetch ~ over
 reveal params-tree param-group-RTL
 click param-group-RTL
 click param-RTL_LOIT_TIME
 expect params.selected.value 5000
 expect params.control range
 click param-options-up
+click param-write
+click param-box-yes
 expect params.write.name RTL_LOIT_TIME
 expect params.write.outcome accepted
 expect params.selected.value 6000
 click param-options-down
+click param-write
+click param-box-yes
+expect params.changes 0
 expect params.write.outcome accepted
 expect params.selected.value 5000
 

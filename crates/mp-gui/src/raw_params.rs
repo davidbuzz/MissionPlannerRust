@@ -18,12 +18,16 @@
 //
 // SPDX-License-Identifier: GPL-3.0-only
 
-//! The Full Parameter List's remainder: `ConfigRawParams`'s Reset to Default, Load Presaved and
-//! its file list, Commit Params, the Modified filter, Refresh Table and the tree's collapse.
+//! The Full Parameter List's remainder: `ConfigRawParams`'s Write Params, Reset to Default, Load
+//! Presaved and its file list, Commit Params, the Modified filter, Refresh Table and the tree's
+//! collapse.
 //!
 //! The screen itself - the group list, the rows, the editor and the file panel - is `params.rs`;
 //! this is the rest of the C#'s right-hand column and the state behind it.
 //!
+//! * Write Params (`BUT_writePIDS`): the button, first of these in the Designer's order, enabled
+//!   with the port open. Its handler is the grid's (`raw_params_grid.rs`), which Ctrl+S runs too:
+//!   it asks, then writes every edit waiting in `_changes`.
 //! * Reset to Default asks "Reset all parameters to default\nAre you sure!!" under "Reset", then
 //!   `setParam(new[] {"FORMAT_VERSION", "SYSID_SW_MREV"}, 0)` - the first of the two the vehicle
 //!   has listed -, a second's wait, `doReboot(false, true)`, the port closed, and "Your board is
@@ -36,7 +40,8 @@
 //!   `Tools/Frame_params` (`QuadPlanes/` for a vehicle with `Q_ENABLE` set) through GitHub's
 //!   contents API into `CMB_paramfiles`, once a process; the button fetches the one chosen,
 //!   saves it in the user data directory, reads it with `loadParamFile` and opens `ParamCompare`
-//!   over the vehicle's table and it.
+//!   over the vehicle's table and it; its OK puts the rows ticked in the grid, to wait for Write
+//!   Params.
 //! * Commit Params: `PREFLIGHT_STORAGE` with 1, shown only when the display view's
 //!   `displayParamCommitButton` is - which Mission Planner's own views never set.
 //! * Modified: only the rows in `_changes`, the edits not yet written.
@@ -65,6 +70,15 @@ use crate::fly::{error_box, strings};
 use crate::params::Written;
 use crate::telemetry::{Lookup, Report, Telemetry};
 use crate::ui::{action, theme};
+
+/// `BUT_writePIDS.Text`. `// C#: GCSViews/ConfigurationView/ConfigRawParams.resx`
+pub const WRITE_PARAMS: &str = "Write Params";
+/// What is said once `ParamCompare` has put a presaved file's rows in the grid, and its caption.
+/// `// C#: GCSViews/ConfigurationView/ConfigRawParams.cs:962-965`
+pub const LOADED: (&str, &str) = (
+    "Loaded",
+    "Loaded parameters, please make sure you write them!",
+);
 
 /// `BUT_reset_params.Text`. `// C#: GCSViews/ConfigurationView/ConfigRawParams.resx`
 pub const RESET_TO_DEFAULT: &str = "Reset to Default";
@@ -181,33 +195,34 @@ impl RawParams {
         self.active
     }
 
-    /// `_changes`: every value edited whose write the vehicle has not answered, or never did.
-    ///
-    /// In the C# a value edited in the grid waits there, green, until Write Params sends it, and
-    /// leaves `_changes` once its `setParam` returns; a `setParam` that throws leaves it in
-    /// (`ConfigRawParams.cs:313-364, 520`). This screen writes a value as soon as it is edited -
-    /// the editor's step, a file's differences, a presaved file's rows - so the same set is the
-    /// writes queued or in flight and the ones that timed out. It holds a name from the edit
-    /// until the vehicle echoes it, which is the C#'s "not yet written", and keeps one whose
-    /// every retry went unanswered, as the C#'s `catch` does.
+    /// `_changes`: every value edited and not yet written - the grid's Value cell typed into, its
+    /// Options control, the editor's step, a presaved file's rows - each waiting, its cell green,
+    /// until Write Params sends it. A change leaves once its `setParam` returns; one that throws,
+    /// every retry unanswered, stays for the next Write Params.
+    /// `// C#: GCSViews/ConfigurationView/ConfigRawParams.cs:313-364, 518-524`
     #[must_use]
     pub const fn changes(&self) -> &BTreeMap<String, f64> {
         &self.changes
     }
 
-    /// Writes started: each in `_changes` with the value asked for, `_changes[name] = newvalue`.
-    /// `// C#: GCSViews/ConfigurationView/ConfigRawParams.cs:520`
-    pub fn queued<'a>(&mut self, writes: impl Iterator<Item = (&'a str, f64)>) {
-        for (name, value) in writes {
-            self.changes.insert(name.to_owned(), value);
-        }
+    /// An edit that passed its checks: `_changes[name] = newvalue`, over any change already
+    /// waiting for the name.
+    /// `// C#: GCSViews/ConfigurationView/ConfigRawParams.cs:518-520`
+    pub fn stage(&mut self, name: &str, value: f64) {
+        self.changes.insert(name.to_owned(), value);
     }
 
     /// A write ended: out of `_changes` unless it timed out, which is `setParam`'s exception and
-    /// skips the `_changes.Remove`.
+    /// skips the `_changes.Remove`. Only while the value waiting is the one written: an edit
+    /// made again while the write was on its way waits for the next Write Params, where the C#'s
+    /// Write Params holds the screen until its writes are done.
     /// `// C#: GCSViews/ConfigurationView/ConfigRawParams.cs:323-363`
     pub fn written(&mut self, written: &Written) {
-        if written.outcome != RequestOutcome::TimedOut {
+        let waiting = self
+            .changes
+            .get(&written.name)
+            .is_some_and(|value| value.to_bits() == written.value.to_bits());
+        if waiting && written.outcome != RequestOutcome::TimedOut {
             self.changes.remove(&written.name);
         }
     }
@@ -792,22 +807,15 @@ impl MissionPlanner {
         }
     }
 
-    /// `ParamCompare`'s button over the screen's grid: each row ticked put into the grid, which
-    /// is the grid's `CellValueChanged` - and on this screen a value put in is a value written,
-    /// so the rows ticked are written, one after another, into `_changes` until each is heard
-    /// back. The form then closes with OK.
-    ///
-    /// The C# then shows "Loaded parameters, please make sure you write them!": the values wait
-    /// in its grid for Write Params. Here they are already being written, and there is no Write
-    /// Params to press, so the box would tell the operator to do something that does not exist;
-    /// the writes' own summary goes on the status line instead.
-    /// `// C#: Controls/paramcompare.cs:90-109; GCSViews/ConfigurationView/ConfigRawParams.cs:962-965`
-    /// `BUT_save_Click` with the grid handed in (`dgv`): each ticked row's new value is put in
-    /// the grid's Value cell, which is `Params_CellValueChanged` for it - the ReadOnly box, the
-    /// out-of-range question, the write through `_changes` - one row after another, so the
-    /// questions come in turn. A value that is no number is the C#'s `double.Parse` throwing
-    /// into the `ErrorSettingParameter` box: the status line's here (the owner's ruling).
-    /// `// C#: Controls/paramcompare.cs:65-108; GCSViews/ConfigurationView/ConfigRawParams.cs:453-524`
+    /// `ParamCompare`'s button over the screen's grid, `BUT_save_Click` with the grid handed in
+    /// (`dgv`): each ticked row's new value is put in the grid's Value cell, which is
+    /// `Params_CellValueChanged` for it - the ReadOnly box, the out-of-range question, the change
+    /// waiting green in `_changes` - one row after another, so the questions come in turn. A
+    /// value that is no number is the C#'s `double.Parse` throwing into the
+    /// `ErrorSettingParameter` box: the status line's here (the owner's ruling). The form then
+    /// closes with OK, and "Loaded parameters, please make sure you write them!" says the values
+    /// wait for Write Params.
+    /// `// C#: Controls/paramcompare.cs:65-108; GCSViews/ConfigurationView/ConfigRawParams.cs:453-524, 959-965`
     fn save_compare(&mut self) {
         let Some(form) = self.raw_params.compare.take() else {
             return;
@@ -820,6 +828,9 @@ impl MissionPlanner {
             }
             self.param_grid_edit(&name, row.new_value.trim());
         }
+        // After the questions the rows raised, as the C#'s box comes once the form has closed.
+        let (caption, text) = LOADED;
+        self.param_grid.notice(caption, text);
     }
 
     /// The facts a script reads.
@@ -942,9 +953,9 @@ pub fn collapse_button(collapsed: bool, cx: &mut Context<MissionPlanner>) -> Any
 /// `// C#: GCSViews/ConfigurationView/ConfigRawParams.resx`
 const COMBO_SIZE: (f32, f32) = (110.0, 21.0);
 
-/// The rest of the C#'s right-hand column: Commit Params (when the display view shows it), the
-/// presaved files and Load Presaved, Reset to Default, Modified, and Refresh Table (with Slow
-/// Machine ticked), in the Designer's top-to-bottom order.
+/// The rest of the C#'s right-hand column: Write Params, Commit Params (when the display view
+/// shows it), the presaved files and Load Presaved, Reset to Default, Modified, and Refresh Table
+/// (with Slow Machine ticked), in the Designer's top-to-bottom order.
 /// `// C#: GCSViews/ConfigurationView/ConfigRawParams.resx; ConfigRawParams.cs:58-66`
 pub fn controls(
     raw: &RawParams,
@@ -986,7 +997,26 @@ pub fn controls(
         ));
     }
 
-    let mut row = div().flex().flex_wrap().items_center().gap_2();
+    // `BUT_writePIDS`, row 3 of the column - before Commit Params' row 6 and the rest -
+    // `Enabled = MainV2.comPort.BaseStream.IsOpen`, and `BUT_writePIDS_Click` over `_changes`.
+    // Pressing it takes the keyboard from the grid, which commits a cell being typed into first.
+    // C#: GCSViews/ConfigurationView/ConfigRawParams.resx (tableLayoutPanel1); ConfigRawParams.cs:58, 257-394
+    let mut row = div()
+        .flex()
+        .flex_wrap()
+        .items_center()
+        .gap_2()
+        .child(action(
+            "param-write",
+            WRITE_PARAMS,
+            theme::WARN,
+            connected,
+            cx.listener(|this, _event: &(), _window, cx| {
+                this.param_grid_commit_edit();
+                this.param_grid_save();
+                cx.notify();
+            }),
+        ));
     if crate::setup::display(COMMIT_FLAG) {
         row = row.child(action(
             "param-commit",
@@ -1366,6 +1396,40 @@ mod tests {
         assert!(commit_params(&mut Telemetry::idle()).is_none());
     }
 
+    /// Write Params is the `.resx`'s button: its text, and its place in the right-hand column -
+    /// row 3, after Load from file and Save to file and before Commit Params' row 6, which is why
+    /// it comes first of the controls this module draws.
+    /// `// C#: GCSViews/ConfigurationView/ConfigRawParams.resx; ConfigRawParams.Designer.cs:323-337`
+    #[test]
+    fn write_params_is_the_resx_button() {
+        let Some(resx) = crate::config_coverage::source::csharp(
+            "GCSViews/ConfigurationView/ConfigRawParams.resx",
+        ) else {
+            eprintln!("skipped: MP_SRC does not name a clone of https://github.com/ArduPilot/MissionPlanner");
+            return;
+        };
+        let values = crate::config_coverage::source::resx(&resx);
+        assert_eq!(
+            values.get("BUT_writePIDS.Text").map(String::as_str),
+            Some(WRITE_PARAMS)
+        );
+        let layout = values
+            .get("tableLayoutPanel1.LayoutSettings")
+            .expect("the column's layout");
+        for (control, row) in [
+            ("BUT_load", 0),
+            ("BUT_save", 1),
+            ("BUT_writePIDS", 3),
+            ("BUT_commitToFlash", 6),
+            ("BUT_reset_params", 10),
+        ] {
+            assert!(
+                layout.contains(&format!("Control Name=\"{control}\" Row=\"{row}\"")),
+                "{control} in row {row}"
+            );
+        }
+    }
+
     /// Commit Params shows only under `displayParamCommitButton`, which the Advanced view -
     /// the only one this application has - leaves false.
     /// `// C#: GCSViews/ConfigurationView/ConfigRawParams.cs:61; ExtLibs/Utilities/DisplayView.cs:432`
@@ -1374,34 +1438,58 @@ mod tests {
         assert!(!crate::setup::display(COMMIT_FLAG));
     }
 
-    /// `_changes`: in when a write starts, out when it is heard back or refused, kept when it
-    /// timed out; `Activate` clears it.
-    /// `// C#: GCSViews/ConfigurationView/ConfigRawParams.cs:56, 323-363, 520`
+    /// `_changes`: in when an edit passes, the last edit of a name over the one before; out when
+    /// its write is heard back or refused, kept when it timed out or when the name was edited
+    /// again while the write was on its way; `Activate` clears it.
+    /// `// C#: GCSViews/ConfigurationView/ConfigRawParams.cs:56, 323-363, 518-520`
     #[test]
     fn changes_hold_what_is_not_yet_written() {
         let mut raw = RawParams::default();
-        raw.queued([("RTL_ALT", 2000.0), ("WPNAV_SPEED", 750.0)].into_iter());
-        assert_eq!(raw.changes().len(), 2);
-        let ended = |name: &str, outcome| Written {
+        raw.stage("RTL_ALT", 1800.0);
+        raw.stage("RTL_ALT", 2000.0);
+        raw.stage("WPNAV_SPEED", 750.0);
+        assert_eq!(
+            raw.changes().iter().collect::<Vec<_>>(),
+            [
+                (&"RTL_ALT".to_owned(), &2000.0),
+                (&"WPNAV_SPEED".to_owned(), &750.0)
+            ]
+        );
+        let ended = |name: &str, value: f64, outcome| Written {
             name: name.to_owned(),
+            value,
             outcome,
             sends: 1,
         };
-        raw.written(&ended("RTL_ALT", RequestOutcome::Accepted { value: None }));
-        raw.written(&ended("WPNAV_SPEED", RequestOutcome::TimedOut));
+        raw.written(&ended(
+            "RTL_ALT",
+            2000.0,
+            RequestOutcome::Accepted { value: None },
+        ));
+        raw.written(&ended("WPNAV_SPEED", 750.0, RequestOutcome::TimedOut));
         assert_eq!(
             raw.changes().iter().collect::<Vec<_>>(),
             [(&"WPNAV_SPEED".to_owned(), &750.0)]
         );
-        raw.written(&ended("WPNAV_SPEED", RequestOutcome::Unchanged));
+        raw.written(&ended("WPNAV_SPEED", 750.0, RequestOutcome::Unchanged));
         assert!(raw.changes().is_empty());
-        raw.queued([("RTL_ALT", 1.0)].into_iter());
+        // Edited again while the write of 1.0 was on its way: 2.0 waits on.
+        raw.stage("RTL_ALT", 2.0);
+        raw.written(&ended(
+            "RTL_ALT",
+            1.0,
+            RequestOutcome::Accepted { value: None },
+        ));
+        assert_eq!(
+            raw.changes().iter().collect::<Vec<_>>(),
+            [(&"RTL_ALT".to_owned(), &2.0)]
+        );
         raw.activate(None, &[]);
         assert!(raw.changes().is_empty());
     }
 
-    /// The screen's own writes feed `_changes`: a write never echoed stays in it, one echoed
-    /// leaves it - through the list of writes and the real link.
+    /// Write Params' writes over `_changes`: a write never echoed stays in it, one echoed leaves
+    /// it - through the list of writes and the real link.
     #[test]
     fn a_write_never_echoed_stays_modified() {
         let (telemetry, mut vehicle) = Vehicle::connect(fast());
@@ -1411,14 +1499,15 @@ mod tests {
         until("WPNAV_SPEED", || telemetry.holds_parameter("WPNAV_SPEED"));
 
         let mut raw = RawParams::default();
+        raw.stage("RTL_ALT", 2000.0);
+        raw.stage("WPNAV_SPEED", 750.0);
         let mut writes = crate::params::ParamWrites::apply(
-            [
-                ("RTL_ALT".to_owned(), 2000.0),
-                ("WPNAV_SPEED".to_owned(), 750.0),
-            ],
+            raw.changes()
+                .iter()
+                .map(|(name, value)| (name.clone(), *value))
+                .collect::<Vec<_>>(),
             0,
         );
-        raw.queued(writes.queued());
         until("the writes to finish", || {
             for message in vehicle.read() {
                 if let MavMessage::ParamSet(set) = message

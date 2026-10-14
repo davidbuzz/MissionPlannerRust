@@ -21,8 +21,8 @@
 //! The Full Parameter List's grid, the rest of it: `ConfigRawParams`'s Fav column and the sort
 //! that puts favourites first, the Options column and the control drawn in it when a row is
 //! entered, the Units and Desc columns and the Desc cell's link, the typed Value cell with its
-//! ReadOnly and out-of-range questions, Ctrl+S, the columns' widths and the splitter's distance
-//! kept between visits, and the RawParamWarning box.
+//! ReadOnly and out-of-range questions, Write Params and its Ctrl+S, the columns' widths and the
+//! splitter's distance kept between visits, and the RawParamWarning box.
 //!
 //! The screen is `params.rs` (the group list, the rows, the editor and the file panel) and
 //! `raw_params.rs` (row 82's right-hand column and `_changes`); this is the grid's own behaviour
@@ -35,17 +35,23 @@
 //! * **Options** (`:613-642, 1151-1320`): the cell's text is the documentation's range and its
 //!   values, one to a line. Entering a row puts a control over that cell: Set Bitmask for a
 //!   documented bitmask, a drop-down list of the values for a documented list, a `NumericUpDown`
-//!   over the range for a documented range, and nothing otherwise. Each writes the Value cell,
-//!   which is an edit like any other (below).
+//!   over the range for a documented range, and nothing otherwise. Each sets the Value cell,
+//!   which is an edit like any other (below). A click on the control is its own: it does not
+//!   reach the row, whose click lets the row go and the control with it.
 //! * **Units** and **Desc** (`:604-645, 1027-1091`): filled from the documentation when it has a
 //!   description; clicking the Desc cell opens the first `http`/`https` address in it.
 //! * **An edit** (`Params_CellValueChanged`, `:454-533`): `RCn_REV`/`HSn_REV` 0 is made -1, the
 //!   text is read as a number (a comma taken for a point), a parameter the documentation marks
 //!   ReadOnly gets "NAME is marked as ReadOnly, and will not be changed" and keeps its value, and
 //!   a value outside the documented range asks "NAME value is out of range. Do you want to
-//!   continue?" - No keeps the old value. A text that is no number turns the cell red.
-//! * **Ctrl+S** (`ProcessCmdKey`, `:116-125`) is Write Params (`BUT_writePIDS_Click`,
-//!   `:257-394`) over `_changes`.
+//!   continue?" - No keeps the old value. A text that is no number turns the cell red. One that
+//!   passes is `_changes[name] = newvalue`: it waits there, its cell green, and nothing is sent.
+//! * **Write Params** (`BUT_writePIDS_Click`, `:257-394`) - its button (`raw_params.rs`) or
+//!   Ctrl+S (`ProcessCmdKey`, `:116-125`) - asks first, listing each change, then writes every
+//!   one in `_changes`, each leaving it as it is heard back.
+//! * **Typing in a Value cell**: it begins with a click on the cell, F2 or a key; Enter ends it,
+//!   Escape drops it, and anything else done in the grid ends it. Only a cell whose text changed
+//!   is an edit, as only a dirty cell is committed (`IsCurrentCellDirty`).
 //! * **The widths and the splitter** (`:70-86, 99-114`): `Activate` sets each resizable column's
 //!   width from `rawparam_<column>_width` and the splitter from `rawparam_splitterdistance`;
 //!   `Deactivate` saves them. (No `SplitterMoved` or `ColumnWidthChanged` handler saves anything:
@@ -53,10 +59,6 @@
 //! * **RawParamWarning** (`:92`): `Common.MessageShowAgain(Strings.RawParamWarning,
 //!   Strings.RawParamWarningi)` on every `Activate`, with its "Show me again?" box kept under
 //!   `SHOWAGAIN_Raw_Param_Warning`.
-//!
-//! This screen writes a value as it is edited (see `raw_params.rs`, `RawParams::changes`), so an
-//! edit that passes its questions is written at once rather than waiting for Write Params, and
-//! `_changes` holds what is on its way or timed out; Ctrl+S writes those again.
 //!
 //! **Where the Options control is drawn.** In the row, over the entered row's Options cell: the
 //! C# adds it to the grid's own controls at `GetCellDisplayRectangle(Options.Index, row)`
@@ -74,7 +76,13 @@
 //!   whichever row is current by then (`param_grid_click_bit`);
 //! * the ReadOnly box and the out-of-range question keep their boxes (questions, per the owner's
 //!   ruling of 2026-09-25); Write Params' closed-port refusals go on the status line, and its
-//!   "N parameters successfully saved." with them (`RawGrid::save`, `RawGrid::saved`).
+//!   "N parameters successfully saved." with them (`RawGrid::save`, `RawGrid::saved`);
+//! * one click on a Value cell opens its box with the caret in it, where a `DataGridView` in its
+//!   default `EditOnKeystrokeOrF2` opens it on a click of the current cell, F2 or a key typed: the
+//!   owner's report of 2026-10-14 found no way to type a value in (`row`);
+//! * no cell shows its tooltip while a Value cell is typed into - one is drawn at the pointer, and
+//!   flipped back over the row at the window's edge, so it lay over the box being typed into (the
+//!   same report; `RawGrid::tips_shown`).
 //!
 //! `// C#: GCSViews/ConfigurationView/ConfigRawParams.cs`
 
@@ -860,11 +868,11 @@ pub fn out_of_range_text(name: &str) -> String {
 /// What an edit of the Value cell comes to.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Edit {
-    /// Every check passed: `_changes[name] = newvalue` - here, written.
-    Write(f64),
+    /// Every check passed: `_changes[name] = newvalue`, waiting for Write Params.
+    Change(f64),
     /// Marked ReadOnly: the box, and the old value kept.
     ReadOnly,
-    /// Outside the documented range: the question, and on Yes this value written.
+    /// Outside the documented range: the question, and on Yes this value in `_changes`.
     OutOfRange(f64),
     /// Not a number, or a ReadOnly text `bool.Parse` refuses: the `catch`, the cell red.
     Invalid,
@@ -921,7 +929,7 @@ pub fn cell_value_changed(
     {
         return Edit::OutOfRange(value);
     }
-    Edit::Write(value)
+    Edit::Change(value)
 }
 
 /// The Value cell's text: the value waiting in `_changes` as `newvalue.ToString()`, else the
@@ -1257,7 +1265,7 @@ impl Saving {
 pub enum BoxKind {
     /// A box with OK that does nothing more.
     Notice,
-    /// The out-of-range question: Yes writes the value.
+    /// The out-of-range question: Yes puts the value in `_changes`.
     OutOfRange {
         /// The parameter.
         name: String,
@@ -1319,6 +1327,18 @@ pub const REFRESH_TITLE: &str = "Refresh Params";
 /// `Strings.WarningUpdateParamList`, with the newline the `.resx` value ends in.
 pub const REFRESH_TEXT: &str = "Update Params\nDON'T DO THIS IF YOU ARE IN THE AIR\n";
 
+/// The Value cell being typed into.
+#[derive(Debug)]
+struct Editing {
+    /// The row's name.
+    name: String,
+    /// What is in the box.
+    field: TextField,
+    /// `IsCurrentCellDirty`: the text has changed since the typing began. Only a dirty cell is
+    /// committed, so a box opened and left as it was changes nothing.
+    dirty: bool,
+}
+
 /// The grid's state between frames.
 #[derive(Debug, Default)]
 pub struct RawGrid {
@@ -1330,8 +1350,8 @@ pub struct RawGrid {
     layout: Layout,
     /// A header edge or the splitter being dragged.
     drag: Option<Drag>,
-    /// The Value cell being typed into: its row's name and the text.
-    editing: Option<(String, TextField)>,
+    /// The Value cell being typed into.
+    editing: Option<Editing>,
     /// Rows whose Value cell is red: the last edit's text was no number.
     red: BTreeSet<String>,
     /// The entered row's Options control, and its row.
@@ -1409,7 +1429,16 @@ impl RawGrid {
     pub fn editing(&self) -> Option<(&str, &TextField)> {
         self.editing
             .as_ref()
-            .map(|(name, field)| (name.as_str(), field))
+            .map(|editing| (editing.name.as_str(), &editing.field))
+    }
+
+    /// Whether the grid's cells show their tooltips: not while a Value cell is typed into. A
+    /// tooltip is drawn at the pointer - over the cell clicked, or flipped back over the row at
+    /// the window's right edge - and lay over the box being typed into (the owner's report,
+    /// 2026-10-14).
+    #[must_use]
+    pub const fn tips_shown(&self) -> bool {
+        self.editing.is_none()
     }
 
     /// Whether a row's Value cell is red.
@@ -1553,34 +1582,90 @@ impl RawGrid {
         });
     }
 
-    /// Typing begins in a row's Value cell, with this text.
-    pub fn begin_edit(&mut self, name: &str, text: &str) {
+    /// Typing begins in a row's Value cell, with this text; `dirty` when that is a change already,
+    /// as a key typed in place of the value is.
+    pub fn begin_edit(&mut self, name: &str, text: &str, dirty: bool) {
         let mut field = TextField::new("");
         field.set(text);
-        self.editing = Some((name.to_owned(), field));
+        self.editing = Some(Editing {
+            name: name.to_owned(),
+            field,
+            dirty,
+        });
     }
 
-    /// A key in the Value cell being typed into: the row and its text when Enter ends it.
+    /// A key in the Value cell being typed into: the row and its text when Enter ends it, if the
+    /// text changed.
     pub fn edit_key(&mut self, event: &KeyDownEvent) -> (KeyOutcome, Option<(String, String)>) {
-        let Some((_, field)) = &mut self.editing else {
+        let Some(editing) = &mut self.editing else {
             return (KeyOutcome::Ignored, None);
         };
-        let outcome = field.key(event);
+        let outcome = editing.field.key(event);
         match outcome {
+            KeyOutcome::Changed => {
+                editing.dirty = true;
+                (outcome, None)
+            }
             KeyOutcome::Submitted => (outcome, self.end_edit()),
             KeyOutcome::Cancelled => {
                 self.editing = None;
                 (outcome, None)
             }
-            _ => (outcome, None),
+            KeyOutcome::Ignored => (outcome, None),
         }
     }
 
-    /// The typing ended - Enter, or the current cell changed: the row and what was typed.
+    /// The typing ended - Enter, or anything else done in the grid: the row and what was typed,
+    /// when it changed; `EndEdit` commits a dirty cell only.
     pub fn end_edit(&mut self) -> Option<(String, String)> {
-        self.editing
-            .take()
-            .map(|(name, field)| (name, field.value().to_owned()))
+        let Editing { name, field, dirty } = self.editing.take()?;
+        dirty.then(|| (name, field.value().to_owned()))
+    }
+
+    /// The Options drop-down's box clicked: its list dropped down, scrolled to the selection, or
+    /// put away.
+    pub fn toggle_list(&mut self) {
+        if let Some((_, OptionsControl::Values { combo, open })) = &mut self.control {
+            *open = !*open;
+            if *open {
+                combo.open_list();
+            }
+        }
+    }
+
+    /// The drop-down's list wheeled.
+    pub fn scroll_list(&mut self, lines: i32) {
+        if let Some((_, OptionsControl::Values { combo, .. })) = &mut self.control {
+            combo.scroll_list(lines);
+        }
+    }
+
+    /// Whether the Options drop-down's list is down.
+    #[must_use]
+    pub fn list_open(&self) -> bool {
+        matches!(
+            self.control,
+            Some((_, OptionsControl::Values { open: true, .. }))
+        )
+    }
+
+    /// A value chosen from the drop-down: the list put away, and - when the selection changed,
+    /// which is `SelectedIndexChanged` - the row and `SelectedValue.ToString()` for its Value
+    /// cell.
+    /// `// C#: GCSViews/ConfigurationView/ConfigRawParams.cs:1262-1266`
+    pub fn choose(&mut self, key: i64) -> Option<(String, String)> {
+        let Some((name, OptionsControl::Values { combo, open })) = &mut self.control else {
+            return None;
+        };
+        *open = false;
+        combo
+            .select(key)
+            .then(|| (name.clone(), key.to_string()))
+    }
+
+    /// A box with OK, after those already waiting.
+    pub fn notice(&mut self, caption: &str, text: &str) {
+        self.boxes.push_back(GridBox::notice(caption, text));
     }
 
     /// An edit's red cell: set by a text that is no number, cleared by one that is.
@@ -1620,8 +1705,8 @@ impl RawGrid {
 pub enum Answered {
     /// Nothing more.
     Nothing,
-    /// The out-of-range question's Yes: this written.
-    Write(String, f64),
+    /// The out-of-range question's Yes: this in `_changes`.
+    Change(String, f64),
     /// Write Params' Yes: these of `_changes` written.
     WriteChanges(Vec<String>),
     /// The count's box: the list fetched again.
@@ -1629,7 +1714,7 @@ pub enum Answered {
 }
 
 impl RawGrid {
-    /// `Params_CellValueChanged` over a Value cell's new text: the value to write when every
+    /// `Params_CellValueChanged` over a Value cell's new text: the value for `_changes` when every
     /// check passes; else the ReadOnly box, the out-of-range question or the red cell.
     /// `// C#: GCSViews/ConfigurationView/ConfigRawParams.cs:454-533`
     pub fn edit(
@@ -1640,7 +1725,7 @@ impl RawGrid {
         range: Option<(f64, f64)>,
     ) -> Option<(String, f64)> {
         match cell_value_changed(name, text, read_only, range) {
-            Edit::Write(value) => {
+            Edit::Change(value) => {
                 self.mark(name, false);
                 return Some((name.to_owned(), value));
             }
@@ -1661,8 +1746,8 @@ impl RawGrid {
     }
 
     /// The first box answered: OK and Yes are `true`, No `false`. No to the out-of-range
-    /// question keeps the old value, `cellEditValue`; Yes goes on to the write.
-    /// `// C#: GCSViews/ConfigurationView/ConfigRawParams.cs:504-516, 298-309`
+    /// question keeps the old value, `cellEditValue`; Yes goes on to `_changes`.
+    /// `// C#: GCSViews/ConfigurationView/ConfigRawParams.cs:504-520, 298-309`
     pub fn answer(&mut self, yes: bool) -> Answered {
         let Some(answered) = self.boxes.pop_front() else {
             return Answered::Nothing;
@@ -1672,17 +1757,17 @@ impl RawGrid {
             BoxKind::Refresh => Answered::Refresh,
             BoxKind::OutOfRange { name, value } if yes => {
                 self.mark(&name, false);
-                Answered::Write(name, value)
+                Answered::Change(name, value)
             }
             BoxKind::Confirm { names } if yes => Answered::WriteChanges(names),
             BoxKind::OutOfRange { .. } | BoxKind::Confirm { .. } => Answered::Nothing,
         }
     }
 
-    /// Ctrl+S, `BUT_writePIDS_Click`, over `_changes`: `Ok(true)` with nothing to write, which
-    /// asks nothing and goes straight to its end; `Ok(false)` with the question asked; `Err`
-    /// with twenty or fewer and no link, the first loop's refusal - on the status line, as the
-    /// owner ruled (2026-09-25) for an error the window shows as state.
+    /// Write Params - its button or Ctrl+S - `BUT_writePIDS_Click`, over `_changes`: `Ok(true)`
+    /// with nothing to write, which asks nothing and goes straight to its end; `Ok(false)` with
+    /// the question asked; `Err` with twenty or fewer and no link, the first loop's refusal - on
+    /// the status line, as the owner ruled (2026-09-25) for an error the window shows as state.
     /// `// C#: GCSViews/ConfigurationView/ConfigRawParams.cs:257-310`
     ///
     /// # Errors
@@ -1803,14 +1888,23 @@ impl MissionPlanner {
         }
     }
 
-    /// Once a frame: the entered row's control made when the row changes, and Write Params'
-    /// end when its last write is heard back.
+    /// Once a frame: the typing in a row no longer current ended, the entered row's control made
+    /// when the row changes, and Write Params' end when its last write is heard back.
     pub(crate) fn param_grid_tick(&mut self) {
         let running = !self.param_writes.is_empty();
         if let Some(saving) = self.param_grid.take_saved(running) {
             self.param_grid_saved(&saving);
         }
         let selected = self.selected_param.clone();
+        // A row typed into that is no longer the current one - another group chosen, another
+        // vehicle shown - ends its typing, as the grid ends an edit when its current cell goes.
+        if self
+            .param_grid
+            .editing()
+            .is_some_and(|(name, _)| selected.as_deref() != Some(name))
+        {
+            self.param_grid_commit_edit();
+        }
         if !self.raw_params.is_active() || self.param_grid.entered.as_deref() == selected.as_deref()
         {
             return;
@@ -1838,8 +1932,9 @@ impl MissionPlanner {
         );
     }
 
-    /// `Params_CellValueChanged`: a Value cell's new text - typed, or put there by the Options
-    /// control - checked, and written when it passes.
+    /// `Params_CellValueChanged`: a Value cell's new text - typed, put there by the Options
+    /// control, the editor's step or a presaved file - checked, and waiting in `_changes` for
+    /// Write Params when it passes.
     /// `// C#: GCSViews/ConfigurationView/ConfigRawParams.cs:454-533`
     pub(crate) fn param_grid_edit(&mut self, name: &str, text: &str) {
         let range = crate::metadata::lookup(name).and_then(|meta| meta.range);
@@ -1848,15 +1943,25 @@ impl MissionPlanner {
             .param_grid
             .edit(name, text, read_only.as_deref(), range)
         {
-            self.param_grid_write(&name, value);
+            self.param_grid_stage(&name, value);
         }
     }
 
-    /// An edit that passed: `_changes[name] = newvalue`, which on this screen is the write.
+    /// An edit that passed: `_changes[name] = newvalue`, the cell green with it, and nothing sent
+    /// until Write Params.
     /// `// C#: GCSViews/ConfigurationView/ConfigRawParams.cs:518-524`
-    fn param_grid_write(&mut self, name: &str, value: f64) {
-        self.file_status = Some(format!("{name} = {value}"));
-        self.start_param_writes(crate::params::ParamWrites::nudge(name, value));
+    fn param_grid_stage(&mut self, name: &str, value: f64) {
+        self.raw_params.stage(name, value);
+    }
+
+    /// The typing in a Value cell ended by anything else done in the grid - another cell
+    /// clicked, the Options control used, Write Params pressed: the edit, when the text changed,
+    /// as a `DataGridView` commits a dirty cell when its current cell changes or another control
+    /// takes the keyboard.
+    pub(crate) fn param_grid_commit_edit(&mut self) {
+        if let Some((name, text)) = self.param_grid.end_edit() {
+            self.param_grid_edit(&name, &text);
+        }
     }
 
     /// The box showing answered: OK, Yes or No.
@@ -1864,7 +1969,7 @@ impl MissionPlanner {
         match self.param_grid.answer(yes) {
             Answered::Nothing => {}
             Answered::Refresh => self.telemetry.download_parameters(),
-            Answered::Write(name, value) => self.param_grid_write(&name, value),
+            Answered::Change(name, value) => self.param_grid_stage(&name, value),
             Answered::WriteChanges(names) => {
                 let connected = self.telemetry.view().connected;
                 let reboot = |name: &str| {
@@ -1885,7 +1990,7 @@ impl MissionPlanner {
         }
     }
 
-    /// `ProcessCmdKey`'s Ctrl+S: `BUT_writePIDS_Click` over `_changes`.
+    /// Write Params pressed, or `ProcessCmdKey`'s Ctrl+S: `BUT_writePIDS_Click` over `_changes`.
     /// `// C#: GCSViews/ConfigurationView/ConfigRawParams.cs:116-125, 257-310`
     pub(crate) fn param_grid_save(&mut self) {
         let view = self.telemetry.view();
@@ -1940,6 +2045,7 @@ impl MissionPlanner {
     /// Set Bitmask pressed: the window over the entered row's value.
     /// `// C#: GCSViews/ConfigurationView/ConfigRawParams.cs:1176-1200`
     fn param_grid_open_bitmask(&mut self, name: &str) {
+        self.param_grid_commit_edit();
         let view = self.telemetry.view();
         let Some(parameter) =
             view.parameters
@@ -1965,6 +2071,7 @@ impl MissionPlanner {
     /// parameter's, where the C# writes whichever row is current by then.
     /// `// C#: GCSViews/ConfigurationView/ConfigRawParams.cs:1192-1197; Controls/MavlinkCheckBoxBitMask.cs:143-150`
     fn param_grid_click_bit(&mut self, bit: usize) {
+        self.param_grid_commit_edit();
         let Some(window) = &mut self.param_grid.bitmask else {
             return;
         };
@@ -1978,6 +2085,7 @@ impl MissionPlanner {
 
     /// The `NumericUpDown`'s arrow: its text into the Value cell when it changed.
     fn param_grid_step(&mut self, up: bool) {
+        self.param_grid_commit_edit();
         let Some((name, OptionsControl::Range(numeric))) = &mut self.param_grid.control else {
             return;
         };
@@ -1987,17 +2095,13 @@ impl MissionPlanner {
         }
     }
 
-    /// A value chosen from the drop-down: `SelectedValue.ToString()` into the Value cell.
+    /// A value chosen from the drop-down: `SelectedValue.ToString()` into the Value cell, an edit
+    /// waiting in `_changes` like any other.
     /// `// C#: GCSViews/ConfigurationView/ConfigRawParams.cs:1262-1266`
     fn param_grid_choose(&mut self, key: i64) {
-        let Some((name, OptionsControl::Values { combo, open })) = &mut self.param_grid.control
-        else {
-            return;
-        };
-        *open = false;
-        if combo.select(key) {
-            let name = name.clone();
-            self.param_grid_edit(&name, &key.to_string());
+        self.param_grid_commit_edit();
+        if let Some((name, text)) = self.param_grid.choose(key) {
+            self.param_grid_edit(&name, &text);
         }
     }
 
@@ -2112,10 +2216,19 @@ impl MissionPlanner {
                 _ => "none".to_owned(),
             },
         );
+        // The Options drop-down's list down, and the Value cell typed into: its box's text, and
+        // whether the cells show their tooltips meanwhile - they do not, so none lies over it.
+        record("params.control.open", grid.list_open());
         record(
             "params.editing",
             grid.editing().map_or("none", |(name, _)| name),
         );
+        record(
+            "params.editing.text",
+            grid.editing()
+                .map_or_else(|| "none".to_owned(), |(_, field)| or_none(field.value())),
+        );
+        record("params.tips", grid.tips_shown());
         let red: Vec<&str> = grid.red.iter().map(String::as_str).collect();
         record("params.red", or_none(&red.join(",")));
         record(
@@ -2286,27 +2399,41 @@ pub fn row(
     let name = parameter.name.clone();
     let texts = cells(parameter.meta);
     let value = value_text(parameter, view.changes);
-    // The description, broken into lines, as the Name, Value and Desc cells' tooltip.
+    // The description, broken into lines, as the Name, Value and Desc cells' tooltip - none while
+    // a Value cell is typed into, where it would lie over the box (`RawGrid::tips_shown`).
     // `// C#: GCSViews/ConfigurationView/ConfigRawParams.cs:610-611, 644`
-    let tip_text = (!texts.desc.is_empty()).then(|| tooltip_lines(&texts.desc));
+    let tips = view.grid.tips_shown();
+    let tip_text = (tips && !texts.desc.is_empty()).then(|| tooltip_lines(&texts.desc));
 
     // `Value`: typed into, or the value - green while it waits in `_changes`, red after a text
     // that was no number.
     let value_cell: AnyElement = match view.grid.editing() {
-        Some((editing, field)) if editing == name => crate::textfield::text_field(
-            "param-value-edit",
-            field,
-            view.edit_focus,
-            view.edit_focused,
-            width(layout, Column::Value),
-            cx.listener(|this, event: &KeyDownEvent, window, cx| {
-                if this.param_grid_edit_key(event, window, cx) {
-                    cx.stop_propagation();
-                }
-                cx.notify();
-            }),
-        )
-        .into_any_element(),
+        // The box and its caret, on the darkest colour so the box stands out from the row chosen
+        // around it. A click in it puts the caret there and goes no further: the row's click
+        // would let the row go and take the keyboard from the box.
+        Some((editing, field)) if editing == name => div()
+            .id("param-value-editing")
+            .w(width(layout, Column::Value))
+            .flex_shrink_0()
+            .h_full()
+            .flex()
+            .items_center()
+            .bg(rgb(theme::BG))
+            .on_click(|_event, _window, cx| cx.stop_propagation())
+            .child(crate::textfield::text_field(
+                "param-value-edit",
+                field,
+                view.edit_focus,
+                view.edit_focused,
+                width(layout, Column::Value),
+                cx.listener(|this, event: &KeyDownEvent, window, cx| {
+                    if this.param_grid_edit_key(event, window, cx) {
+                        cx.stop_propagation();
+                    }
+                    cx.notify();
+                }),
+            ))
+            .into_any_element(),
         _ => {
             let pending = view.changes.contains_key(&name);
             let red = view.grid.is_red(&name);
@@ -2322,12 +2449,12 @@ pub fn row(
                     .id(SharedString::from(format!("value-{name}")))
                     .cursor_text()
                     .on_click(
-                        cx.listener(move |this, event: &gpui::ClickEvent, window, cx| {
+                        cx.listener(move |this, _event: &gpui::ClickEvent, window, cx| {
                             this.param_grid_select(&clicked, false, window, cx);
-                            // A double click begins the edit, as the grid's does.
-                            if event.click_count() >= 2 {
-                                this.param_grid_begin_edit(None, window, cx);
-                            }
+                            // One click opens the box with its caret, ready for the keyboard
+                            // (the owner's report, 2026-10-14), where the C#'s grid opens it on
+                            // a click of its current cell, F2 or a key.
+                            this.param_grid_begin_edit(None, false, window, cx);
                             cx.stop_propagation();
                             cx.notify();
                         }),
@@ -2350,7 +2477,7 @@ pub fn row(
                 .id(SharedString::from(format!("options-{name}")))
                 .text_color(rgb(theme::DIM))
                 .child(texts.options.clone()),
-            options_tooltip(&texts.options),
+            options_tooltip(&texts.options).filter(|_| tips),
         )
         .into_any_element(),
     };
@@ -2458,6 +2585,11 @@ pub fn row(
 }
 
 /// The entered row's Options control, over its cell.
+///
+/// A click on the control is the control's and goes no further. The row's own click chooses the
+/// row again or lets it go, and letting it go took the control away with it: the drop-down's box
+/// dropped its list and lost it in the one click, so no value could be chosen (the owner's report,
+/// 2026-10-14). The C#'s control is a child of the grid, whose clicks never reach the row.
 /// `// C#: GCSViews/ConfigurationView/ConfigRawParams.cs:1174-1316`
 fn options_cell(
     control: &OptionsControl,
@@ -2469,6 +2601,8 @@ fn options_cell(
     match control {
         // `new MyButton() { Text = "Set Bitmask" }`.
         OptionsControl::Bitmask => cell(layout, Column::Options)
+            .id("param-options-control")
+            .on_click(|_event, _window, cx| cx.stop_propagation())
             .flex()
             .items_center()
             .child(action(
@@ -2488,23 +2622,19 @@ fn options_cell(
         OptionsControl::Values { combo, open } => {
             let height = 22.0;
             let mut holder = div()
+                .id("param-options-control")
                 .relative()
                 .w(px(w))
                 .h(px(height))
                 .flex_shrink_0()
+                .on_click(|_event, _window, cx| cx.stop_propagation())
                 .child(servo_output::combo_box(
                     "param-options-combo".to_owned(),
                     combo,
                     (0.0, 0.0, w, height),
                     |this: &mut MissionPlanner| {
-                        if let Some((_, OptionsControl::Values { combo, open })) =
-                            &mut this.param_grid.control
-                        {
-                            *open = !*open;
-                            if *open {
-                                combo.open_list();
-                            }
-                        }
+                        this.param_grid_commit_edit();
+                        this.param_grid.toggle_list();
                     },
                     cx,
                 ));
@@ -2514,13 +2644,7 @@ fn options_cell(
                     combo,
                     (0.0, height, w),
                     |this: &mut MissionPlanner, key| this.param_grid_choose(key),
-                    |this: &mut MissionPlanner, lines| {
-                        if let Some((_, OptionsControl::Values { combo, .. })) =
-                            &mut this.param_grid.control
-                        {
-                            combo.scroll_list(lines);
-                        }
-                    },
+                    |this: &mut MissionPlanner, lines| this.param_grid.scroll_list(lines),
                     cx,
                 ));
             }
@@ -2528,9 +2652,11 @@ fn options_cell(
         }
         // The `NumericUpDown`: its text and its arrows. Its own box is typed into: every
         // `TextChanged`, key by key, is the Value cell's text, so a click in the box begins the
-        // Value cell's edit with the box's text, and what is typed shows there.
+        // Value cell's edit with the box's text - not yet a change - and what is typed shows there.
         // C#: GCSViews/ConfigurationView/ConfigRawParams.cs:1281-1314
         OptionsControl::Range(numeric) => cell(layout, Column::Options)
+            .id("param-options-control")
+            .on_click(|_event, _window, cx| cx.stop_propagation())
             .flex()
             .items_center()
             .gap_1()
@@ -2546,7 +2672,7 @@ fn options_cell(
                     .cursor_text()
                     .child(numeric.text())
                     .on_click(cx.listener(move |this, _event, window, cx| {
-                        this.param_grid_begin_edit(Some(&text), window, cx);
+                        this.param_grid_begin_edit(Some(&text), false, window, cx);
                         cx.stop_propagation();
                         cx.notify();
                     }))
@@ -2949,10 +3075,11 @@ fn bitmask_window(
 }
 
 impl MissionPlanner {
-    /// A row clicked - on its Value, Desc or Fav cell, or elsewhere in it: the typing in another
-    /// row's Value cell ends and is its edit (the grid ends an edit when the current cell
-    /// changes), the row becomes the current one, and the grid takes the keyboard. A click
-    /// elsewhere in the row chooses it again or lets it go, as the screen's rows always have.
+    /// A row clicked - on its Value, Desc or Fav cell, or elsewhere in it: the typing in a Value
+    /// cell ends and is its edit when its text changed (the grid ends an edit when the current
+    /// cell changes, and the box being typed into keeps its own clicks), the row becomes the
+    /// current one, and the grid takes the keyboard. A click elsewhere in the row chooses it again
+    /// or lets it go, as the screen's rows always have.
     pub(crate) fn param_grid_select(
         &mut self,
         name: &str,
@@ -2960,14 +3087,7 @@ impl MissionPlanner {
         window: &mut Window,
         cx: &mut App,
     ) {
-        if self
-            .param_grid
-            .editing()
-            .is_some_and(|(editing, _)| editing != name)
-            && let Some((edited, text)) = self.param_grid.end_edit()
-        {
-            self.param_grid_edit(&edited, &text);
-        }
+        self.param_grid_commit_edit();
         let already = self.selected_param.as_deref() == Some(name);
         self.selected_param = if toggle && already {
             None
@@ -2977,19 +3097,23 @@ impl MissionPlanner {
         window.focus(&self.param_grid_focus, cx);
     }
 
-    /// Typing begins in the current row's Value cell: with the cell's text (a double click, F2)
-    /// or with the key that began it, which replaces it.
+    /// Typing begins in the current row's Value cell, its box taking the keyboard: with the cell's
+    /// text (a click, F2), or with `text` in its place - the key that began it, or the
+    /// `NumericUpDown`'s text. `dirty` is whether that is a change already, as a key typed over
+    /// the value is. Typing in another cell ends first.
     pub(crate) fn param_grid_begin_edit(
         &mut self,
-        typed: Option<&str>,
+        text: Option<&str>,
+        dirty: bool,
         window: &mut Window,
         cx: &mut App,
     ) {
+        self.param_grid_commit_edit();
         let Some(name) = self.selected_param.clone() else {
             return;
         };
-        let text = match typed {
-            Some(typed) => typed.to_owned(),
+        let text = match text {
+            Some(text) => text.to_owned(),
             None => {
                 let view = self.telemetry.view();
                 let Some(parameter) =
@@ -3008,7 +3132,7 @@ impl MissionPlanner {
                 value_text(&parameter, self.raw_params.changes())
             }
         };
-        self.param_grid.begin_edit(&name, &text);
+        self.param_grid.begin_edit(&name, &text, dirty);
         window.focus(&self.param_edit_focus, cx);
     }
 
@@ -3025,15 +3149,16 @@ impl MissionPlanner {
             return false;
         }
         if keystroke.key == "f2" {
-            self.param_grid_begin_edit(None, window, cx);
+            self.param_grid_begin_edit(None, false, window, cx);
             return true;
         }
         if keystroke.modifiers.control || keystroke.modifiers.platform {
             return false;
         }
+        // The key typed takes the value's place: a change already.
         match keystroke.key_char.as_deref() {
             Some(text) if !text.chars().any(char::is_control) => {
-                self.param_grid_begin_edit(Some(text), window, cx);
+                self.param_grid_begin_edit(Some(text), true, window, cx);
                 true
             }
             _ => false,
@@ -3363,11 +3488,11 @@ mod tests {
         let range = Some((0.0, 100.0));
         assert_eq!(
             cell_value_changed("RTL_ALT", "50", None, range),
-            Edit::Write(50.0)
+            Edit::Change(50.0)
         );
         assert_eq!(
             cell_value_changed("RTL_ALT", "2,5", None, range),
-            Edit::Write(2.5)
+            Edit::Change(2.5)
         );
         assert_eq!(
             cell_value_changed("RTL_ALT", "150", None, range),
@@ -3391,7 +3516,7 @@ mod tests {
         );
         assert_eq!(
             cell_value_changed("RTL_ALT", "1e3", None, None),
-            Edit::Write(1000.0)
+            Edit::Change(1000.0)
         );
         // ReadOnly before the range; a text `bool.Parse` refuses is the red cell.
         assert_eq!(
@@ -3400,7 +3525,7 @@ mod tests {
         );
         assert_eq!(
             cell_value_changed("STAT_BOOTCNT", "5", Some(" false "), range),
-            Edit::Write(5.0)
+            Edit::Change(5.0)
         );
         assert_eq!(
             cell_value_changed("STAT_BOOTCNT", "5", Some("yes"), range),
@@ -3408,27 +3533,28 @@ mod tests {
         );
         assert_eq!(
             cell_value_changed("STAT_BOOTCNT", "5", Some(""), range),
-            Edit::Write(5.0)
+            Edit::Change(5.0)
         );
         // An RC or HS reverse of 0 is -1.
         assert_eq!(
             cell_value_changed("RC3_REV", "0", None, None),
-            Edit::Write(-1.0)
+            Edit::Change(-1.0)
         );
         assert_eq!(
             cell_value_changed("HS2_REV", "0", None, None),
-            Edit::Write(-1.0)
+            Edit::Change(-1.0)
         );
         assert_eq!(
             cell_value_changed("SERVO3_REV", "0", None, None),
-            Edit::Write(0.0)
+            Edit::Change(0.0)
         );
     }
 
-    /// An edit's outcome in the grid: the write, the ReadOnly box, the question - No keeps the
-    /// value, Yes writes it - and the red cell, cleared by the next good edit.
+    /// An edit's outcome in the grid: the value for `_changes`, the ReadOnly box, the question -
+    /// No keeps the value, Yes puts it in `_changes` - and the red cell, cleared by the next good
+    /// edit.
     #[test]
-    fn an_edit_writes_or_asks() {
+    fn an_edit_is_a_change_or_asks() {
         let mut grid = RawGrid::default();
         assert_eq!(
             grid.edit("RTL_ALT", "50", None, Some((0.0, 100.0))),
@@ -3450,7 +3576,7 @@ mod tests {
         grid.edit("RTL_ALT", "500", None, Some((0.0, 100.0)));
         assert_eq!(
             grid.answer(true),
-            Answered::Write("RTL_ALT".to_owned(), 500.0)
+            Answered::Change("RTL_ALT".to_owned(), 500.0)
         );
 
         assert_eq!(grid.edit("FORMAT_VERSION", "1", Some("True"), None), None);
@@ -3475,7 +3601,10 @@ mod tests {
         assert!(!grid.is_red("RTL_ALT"));
     }
 
-    /// The Value cell typed into: Enter ends it with the text, Escape drops it.
+    /// The Value cell typed into: Enter ends it with the text, Escape drops it, and no cell shows
+    /// its tooltip meanwhile. A box opened on the value and left as it was - by Enter, or by
+    /// anything else done in the grid - is no edit, as `EndEdit` commits a dirty cell only; a key
+    /// typed over the value is a change at once.
     #[test]
     fn the_value_cell_is_typed_into() {
         let key = |text: &str| KeyDownEvent {
@@ -3488,7 +3617,9 @@ mod tests {
             prefer_character_input: false,
         };
         let mut grid = RawGrid::default();
-        grid.begin_edit("RTL_ALT", "1");
+        assert!(grid.tips_shown());
+        grid.begin_edit("RTL_ALT", "1", false);
+        assert!(!grid.tips_shown(), "no tooltip over the box");
         grid.edit_key(&key("5"));
         assert_eq!(grid.editing().map(|(_, field)| field.value()), Some("15"));
         assert_eq!(
@@ -3499,9 +3630,61 @@ mod tests {
             )
         );
         assert!(grid.editing().is_none());
-        grid.begin_edit("RTL_ALT", "1");
+        assert!(grid.tips_shown());
+        grid.begin_edit("RTL_ALT", "1", false);
         assert_eq!(grid.edit_key(&key("escape")), (KeyOutcome::Cancelled, None));
         assert!(grid.editing().is_none());
+
+        // Opened on the value and left as it was: nothing to commit, however it ends.
+        grid.begin_edit("RTL_ALT", "1500", false);
+        assert_eq!(grid.edit_key(&key("enter")), (KeyOutcome::Submitted, None));
+        assert!(grid.editing().is_none());
+        grid.begin_edit("RTL_ALT", "1500", false);
+        assert_eq!(grid.end_edit(), None);
+        assert!(grid.editing().is_none(), "ended all the same");
+        // The key that began it, over the value: a change before anything more is typed.
+        grid.begin_edit("RTL_ALT", "7", true);
+        assert_eq!(
+            grid.end_edit(),
+            Some(("RTL_ALT".to_owned(), "7".to_owned()))
+        );
+    }
+
+    /// The drop-down of a row with documented values: its box drops the list and puts it away; a
+    /// value chosen puts the list away and, when it changes the selection, which is
+    /// `SelectedIndexChanged`, is `SelectedValue.ToString()` for the row's Value cell. The value
+    /// already selected is no change; a row with no list has nothing to choose from.
+    /// `// C#: GCSViews/ConfigurationView/ConfigRawParams.cs:1206-1267`
+    #[test]
+    fn a_value_chosen_from_the_drop_down_is_the_value_cells_text() {
+        let values = meta(None, &[(0, "Relative to Home"), (1, "Terrain")], &[], "d");
+        let mut grid = RawGrid::default();
+        grid.enter_row(Some("RTL_ALT_TYPE"), "0", Some(values));
+        assert!(!grid.list_open());
+        grid.toggle_list();
+        assert!(grid.list_open());
+        assert_eq!(grid.choose(0), None, "already selected");
+        assert!(!grid.list_open());
+        grid.toggle_list();
+        assert_eq!(
+            grid.choose(1),
+            Some(("RTL_ALT_TYPE".to_owned(), "1".to_owned()))
+        );
+        assert!(!grid.list_open());
+        let shown = grid.control().and_then(|(name, control)| match control {
+            OptionsControl::Values { combo, .. } => Some((name, combo.text())),
+            _ => None,
+        });
+        assert_eq!(shown, Some(("RTL_ALT_TYPE", "Terrain")));
+        grid.toggle_list();
+        grid.toggle_list();
+        assert!(!grid.list_open(), "the box clicked again puts the list away");
+
+        let range = meta(Some((0.0, 60000.0)), &[], &[], "d");
+        grid.enter_row(Some("RTL_LOIT_TIME"), "5000", Some(range));
+        grid.toggle_list();
+        assert!(!grid.list_open());
+        assert_eq!(grid.choose(1), None);
     }
 
     /// The `NumericUpDown` over a range: places from the increment, or from a small minimum;
@@ -3781,17 +3964,40 @@ mod tests {
         );
     }
 
-    /// An edit that passes is written through the link and heard back.
+    /// An edit that passes waits in `_changes`, and the Value cell shows it; Write Params asks,
+    /// listing it, and its Yes writes it through the link - once heard back it leaves `_changes`
+    /// and the cell shows the vehicle's value.
+    /// `// C#: GCSViews/ConfigurationView/ConfigRawParams.cs:257-357, 518-524`
     #[test]
-    fn an_edit_is_written_to_the_vehicle() {
+    fn an_edit_waits_for_write_params_which_writes_it() {
         let (telemetry, mut vehicle) = Vehicle::connect(ProtocolTimeouts::default().faster(20));
         vehicle.send(&param("RTL_ALT", 1500.0, INT32));
         until("RTL_ALT", || telemetry.holds_parameter("RTL_ALT"));
         let mut grid = RawGrid::default();
+        let mut raw = crate::raw_params::RawParams::default();
         let (name, value) = grid
             .edit("RTL_ALT", "2500", None, Some((200.0, 300_000.0)))
             .expect("in range");
-        let mut write = crate::params::ParamWrites::nudge(&name, value);
+        raw.stage(&name, value);
+        assert_eq!(
+            value_text(&parameter("RTL_ALT", 1500.0), raw.changes()),
+            "2500"
+        );
+
+        let held = |name: &str| telemetry.held_parameter(name);
+        assert_eq!(grid.save(raw.changes(), true, held), Ok(false));
+        assert!(
+            grid.front()
+                .is_some_and(|asked| asked.text.contains("RTL_ALT: 1500 -> 2500")),
+            "the question lists the change"
+        );
+        let Answered::WriteChanges(names) = grid.answer(true) else {
+            panic!("Yes writes the changes");
+        };
+        let writes = grid
+            .write_changes(&names, raw.changes(), true, |_| false)
+            .expect("connected");
+        let mut list = crate::params::ParamWrites::apply(writes, 0);
         let mut outcome = None;
         until("the write to be heard back", || {
             for message in vehicle.read() {
@@ -3799,12 +4005,22 @@ mod tests {
                     vehicle.send(&param("RTL_ALT", set.param_value, INT32));
                 }
             }
-            if let Some(written) = write.advance(&telemetry).written {
+            if let Some(written) = list.advance(&telemetry).written {
+                raw.written(&written);
+                grid.written(&written);
                 outcome = Some(written.outcome);
             }
-            write.is_finished()
+            list.is_finished()
         });
         assert!(matches!(outcome, Some(RequestOutcome::Accepted { .. })));
+        assert!(raw.changes().is_empty());
+        assert!(grid.take_saved(false).is_some_and(|saving| saving.done()));
+        let held = telemetry.held_parameter("RTL_ALT").expect("held");
+        assert_eq!(
+            value_text(&parameter("RTL_ALT", held), raw.changes()),
+            "2500",
+            "the vehicle's own value now"
+        );
         let set = vehicle.count(|message| matches!(message, MavMessage::ParamSet(_)));
         assert_eq!(set, 1);
     }
@@ -3897,18 +4113,21 @@ mod tests {
         assert_eq!(value_text(&rtl, &changes), "0.25");
     }
 
-    /// Every control and fact the script names is one this module or the screen draws or
+    /// Every control and fact the scripts name is one this module or the screen draws or
     /// records.
     #[test]
     fn the_scripts_names_exist() {
-        let script = include_str!("../../../tests/gui/params-list-columns.gui");
+        let scripts = [
+            include_str!("../../../tests/gui/params-list-columns.gui"),
+            include_str!("../../../tests/gui/raw-params-write.gui"),
+        ];
         let sources = [
             include_str!("raw_params_grid.rs"),
             include_str!("raw_params.rs"),
             include_str!("params.rs"),
             include_str!("main.rs"),
         ];
-        for line in script.lines() {
+        for line in scripts.iter().flat_map(|script| script.lines()) {
             let line = line.split('#').next().unwrap_or_default().trim();
             let mut words = line.split_whitespace();
             let (Some(verb), Some(name)) = (words.next(), words.next()) else {

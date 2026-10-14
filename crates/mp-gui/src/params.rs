@@ -855,9 +855,10 @@ pub fn editor_panel(
 
 /// One step of a parameter's value.
 ///
-/// Writes immediately. A staged edit needs somewhere to stage it and a way to tell the operator
-/// what is pending, and a parameter write is already acknowledged by the vehicle echoing the new
-/// value - which the screen shows, so the confirmation is the number changing.
+/// An edit of the grid's Value cell like any other: it waits in `_changes`, the cell green, until
+/// Write Params writes it with every other change, as the C#'s grid holds an edit
+/// (`raw_params_grid.rs`). A second step goes on from the value the first left waiting.
+/// `// C#: GCSViews/ConfigurationView/ConfigRawParams.cs:454-533`
 fn step_button(
     name: &str,
     delta: f64,
@@ -1082,9 +1083,8 @@ pub enum Role {
 /// What a list of writes says when it has finished.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Finish {
-    /// One step of a value in the editor: the value the vehicle now holds.
-    Nudge,
-    /// A file's differences: Write Params' summary, and how many the firmware does not have.
+    /// Write Params, or a file's differences: Write Params' summary, and how many the firmware
+    /// does not have.
     Apply {
         /// Differences not written because this firmware has no such parameter.
         skipped: usize,
@@ -1098,6 +1098,9 @@ pub enum Finish {
 pub struct Written {
     /// The parameter.
     pub name: String,
+    /// The value the write asked for: an edit made again while it was on its way asks for
+    /// another, and is not the one this write took out of `_changes`.
+    pub value: f64,
     /// How the vehicle answered.
     pub outcome: RequestOutcome,
     /// How many times the `PARAM_SET` went on the wire.
@@ -1153,8 +1156,6 @@ pub struct ParamWrites {
     failures: Vec<String>,
     finish: Finish,
     finished: bool,
-    /// The last write that ended and the value the vehicle now holds for it.
-    reported: Option<(String, f64)>,
     /// Param Restore's counts.
     restored: Restored,
 }
@@ -1186,30 +1187,12 @@ impl ParamWrites {
             failures: Vec::new(),
             finish,
             finished: false,
-            reported: None,
             restored: Restored::default(),
         }
     }
 
-    /// The editor's one step: `setParam(name, value)`, and "Set NAME Failed" if it is never
-    /// echoed.
-    /// `// C#: GCSViews/ConfigurationView/ConfigRawParams.cs:323, 359-363`
-    #[must_use]
-    pub fn nudge(name: &str, value: f64) -> Self {
-        Self::new(
-            vec![ParamWrite {
-                name: name.to_owned(),
-                value,
-                force: false,
-                failure: format!("Set {name} Failed"),
-                role: Role::Plain,
-            }],
-            Finish::Nudge,
-        )
-    }
-
-    /// Write Params: every difference, one after another, each "Set NAME Failed" if it is never
-    /// echoed.
+    /// Write Params: every change, or a file's every difference, one after another, each "Set
+    /// NAME Failed" if it is never echoed.
     /// `// C#: GCSViews/ConfigurationView/ConfigRawParams.cs:313-370`
     #[must_use]
     pub fn apply(writes: impl IntoIterator<Item = (String, f64)>, skipped: usize) -> Self {
@@ -1247,13 +1230,6 @@ impl ParamWrites {
             .iter()
             .map(|(name, value)| write(name, *value, true, Role::Check));
         Self::new(enables.chain(checks).collect(), Finish::Restore)
-    }
-
-    /// The writes not yet started, and the values they ask for.
-    pub fn queued(&self) -> impl Iterator<Item = (&str, f64)> {
-        self.queue
-            .iter()
-            .map(|write| (write.name.as_str(), write.value))
     }
 
     /// Whether every write has ended and the summary has been said.
@@ -1303,6 +1279,7 @@ impl ParamWrites {
                         // Param Restore's `GetParam` throws for a name the vehicle has not got.
                         self.restore_failed(&write);
                         progress.written = Some(Written {
+                            value: write.value,
                             name: write.name,
                             outcome: RequestOutcome::UnknownParameter,
                             sends: 0,
@@ -1330,12 +1307,8 @@ impl ParamWrites {
                                 }
                             }
                         }
-                        let held = match outcome {
-                            RequestOutcome::Accepted { value: Some(value) } => value.as_f64(),
-                            _ => write.value,
-                        };
-                        self.reported = Some((write.name.clone(), held));
                         progress.written = Some(Written {
+                            value: write.value,
                             name: write.name,
                             outcome,
                             sends: request.map_or(0, |request| request.sends()),
@@ -1376,7 +1349,7 @@ impl ParamWrites {
                 if next.role == Role::Enable {
                     progress.status = Some("Set Enable's".to_owned());
                 }
-            } else if !matches!(self.finish, Finish::Nudge) {
+            } else {
                 progress.status = Some(format!(
                     "writing {} of {}: {}",
                     self.total - self.queue.len(),
@@ -1442,13 +1415,6 @@ impl ParamWrites {
     fn summary(&self) -> Option<String> {
         let failed = self.failures.join("; ");
         Some(match self.finish {
-            // What the vehicle now holds, which is what the C#'s grid shows once `setParam` has
-            // stored the echo - not necessarily what was asked for.
-            Finish::Nudge if failed.is_empty() => {
-                let (name, value) = self.reported.as_ref()?;
-                format!("{name} = {value}")
-            }
-            Finish::Nudge => failed,
             // "Set X Failed" for each, then the summary box.
             // `// C#: GCSViews/ConfigurationView/ConfigRawParams.cs:362-371`
             // `CustomMessageBox.Show("Set " + set + " params \nAlready Set " + alreadyset +
@@ -1486,10 +1452,6 @@ impl ParamWrites {
 impl MissionPlanner {
     /// Starts a list of parameter writes.
     pub(crate) fn start_param_writes(&mut self, writes: ParamWrites) {
-        // ---- row 82 ----
-        // Each value edited is in `_changes` until its write is heard back.
-        self.raw_params.queued(writes.queued());
-        // ---- end row 82 ----
         self.param_writes.push(writes);
         self.advance_param_writes();
     }
@@ -1505,6 +1467,8 @@ impl MissionPlanner {
             }
             if let Some(written) = progress.written {
                 // ---- row 82 ----
+                // A change written out of `_changes`, as Write Params takes each out once its
+                // `setParam` returns.
                 self.raw_params.written(&written);
                 // ---- end row 82 ----
                 // ---- ConfigRawParams remainder ----
@@ -2070,10 +2034,10 @@ mod tests {
         (said, written)
     }
 
-    /// The editor's one step, whose first `PARAM_SET` is lost: the link sends it again, the
-    /// vehicle echoes the second, and the status line says what the vehicle now holds. The C#'s
+    /// Write Params' one change, whose first `PARAM_SET` is lost: the link sends it again, the
+    /// vehicle echoes the second, and the status line says Write Params' summary. The C#'s
     /// `setParam` retry, driven through the screen's own list of writes and the real link.
-    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:1745-1767`
+    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:1745-1767; GCSViews/ConfigurationView/ConfigRawParams.cs:368-369`
     #[test]
     fn a_write_whose_first_send_is_lost_is_sent_again_and_confirmed() {
         let (telemetry, mut vehicle) = Vehicle::connect(fast());
@@ -2082,7 +2046,7 @@ mod tests {
             telemetry.holds_parameter("RTL_ALT")
         });
 
-        let mut writes = ParamWrites::nudge("RTL_ALT", 1501.0);
+        let mut writes = ParamWrites::apply([("RTL_ALT".to_owned(), 1501.0)], 0);
         let mut sets = 0;
         let (said, written) = run(&mut writes, &telemetry, &mut vehicle, |vehicle, message| {
             if let MavMessage::ParamSet(set) = message {
@@ -2095,13 +2059,17 @@ mod tests {
         });
 
         assert_eq!(traffic(&vehicle), ["set RTL_ALT", "set RTL_ALT"]);
-        assert_eq!(said, ["RTL_ALT = 1501"]);
+        assert_eq!(
+            said,
+            ["writing 1 of 1: RTL_ALT", "1 parameters successfully saved."]
+        );
         let [written] = written.as_slice() else {
             panic!("one write: {written:?}");
         };
         assert_eq!(written.name, "RTL_ALT");
         assert_eq!(written.outcome_word(), "accepted");
         assert_eq!(written.sends, 2);
+        assert_eq!(written.value.to_bits(), 1501_f64.to_bits(), "the value asked for");
     }
 
     /// A file's differences go one at a time: the second `PARAM_SET` waits until the first has
@@ -2160,6 +2128,9 @@ mod tests {
             outcomes,
             [("RTL_ALT", "timed out", 4), ("WPNAV_SPEED", "accepted", 1)]
         );
+        // Each says the value it asked for, timed out or not: what `_changes` is matched with.
+        let asked: Vec<u64> = written.iter().map(|w| w.value.to_bits()).collect();
+        assert_eq!(asked, [2000_f64.to_bits(), 750_f64.to_bits()]);
     }
 
     /// EXPERIMENTAL's Param Restore: the "enable"s first; then each parameter in its turn - left

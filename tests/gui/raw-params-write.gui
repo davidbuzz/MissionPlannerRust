@@ -1,0 +1,151 @@
+# The Full Parameter List's edits wait for Write Params, the owner's reports of 2026-10-14: no way
+# to "send to drone"; a Value cell that could not be seen being typed into; an Options drop-down
+# that looked usable and could not be used.
+#
+# The claims, each the C#'s (GCSViews/ConfigurationView/ConfigRawParams.cs) unless marked:
+# * An edit of a Value cell that passes its checks is _changes[name] = newvalue, the cell green
+#   (:518-524); nothing is written until Write Params, BUT_writePIDS (:257-394), which the .resx
+#   puts in row 3 of the right-hand column, before Commit Params and the presaved files - first of
+#   the controls above the grid here - enabled with the port open (:58).
+# * Write Params asks first, each change as NAME: previous -> new (:270-310); No writes nothing;
+#   Yes writes each, a value the vehicle already holds not sent (MAVLinkInterface.cs:1644-1648),
+#   takes each out of _changes once its setParam returns (:342-357), and says "N parameters
+#   successfully saved." (:368-369, on the status line here).
+# * The owner's report: one click on a Value cell opens its box with the caret in it (the C#'s
+#   grid opens it on a click of its current cell, F2 or a key); a click in the box keeps the row
+#   and the box; no cell shows its tooltip while the box is open; Escape drops the typing, and a
+#   box left as it was is no edit, as EndEdit commits a dirty cell only.
+# * The entered row's Options control for documented values is a drop-down list (:1206-1267): its
+#   click no longer lets the row go, so the list stays down; a value chosen is
+#   SelectedIndexChanged, the Value cell's edit (:1262-1266), waiting in _changes like any other.
+# * The editor's step (this port's own panel) is an edit of the Value cell too: a second step goes
+#   on from the value the first left waiting. Activate clears _changes (:56), so leaving the screen
+#   and coming back drops what was never written.
+#
+# Needs SITL copter on tcp:127.0.0.1:5760 started from tools/sitl/params/copter.parm, with
+# RTL_ALT_TYPE 0 and RTL_LOIT_TIME 5000, its defaults; the script leaves them so. Run as
+#
+#   tools/gui-test.sh tests/gui/raw-params-write.gui -- tcp:127.0.0.1:5760
+
+env MP_CONFIG_XML $WORK/config.xml
+
+screen params
+window 1600x1200
+budget 37
+
+# RawParamWarning, on Activate (:92): "Show me again?" unticked, so no later visit asks, and OK.
+# The vehicle first: a click before its first heartbeat is a click the screen may forget.
+expect vehicle.count > 0
+click raw-param-warning-again
+click raw-param-warning-ok
+
+expect vehicle.connected true
+expect params.held > 1000
+# The whole list: Write Params' end compares the count held with the vehicle's (:379-393).
+expect params.fetch ~ over
+expect params.active true
+expect params.changes 0
+expect param-write left-of param-load-presaved
+
+# The tree lists every group; RTL lies below a 1200-pixel window: wheeled into view.
+reveal params-tree param-group-RTL
+click param-group-RTL
+
+# One click on the Value cell: its box, holding the value, and no tooltip over the grid.
+click param-value-RTL_LOIT_TIME
+expect params.editing RTL_LOIT_TIME
+expect params.editing.text 5000
+expect params.tips false
+# A click in the box keeps the box and the row.
+click param-value-edit
+expect params.editing RTL_LOIT_TIME
+expect params.control range
+# Escape drops it; the box opened and left by a click elsewhere changes nothing.
+key Escape
+expect params.editing none
+expect params.tips true
+click param-value-RTL_LOIT_TIME
+expect params.editing RTL_LOIT_TIME
+click param-desc-RTL_LOIT_TIME
+expect params.editing none
+expect params.changes 0
+
+# Typed in: 6000 waits, green, in _changes; nothing is written.
+click param-value-RTL_LOIT_TIME
+key ctrl+u
+type 6000
+key Return
+expect params.editing none
+expect params.selected.value 6000
+expect params.changes 1
+expect params.changes.names RTL_LOIT_TIME
+expect params.write.name none
+
+# The drop-down of documented values: the click on its box leaves the row chosen and the list
+# down; Terrain chosen waits too.
+click param-desc-RTL_ALT_TYPE
+expect params.control values
+expect params.control.text Relative to Home
+click param-options-combo
+expect params.control.open true
+expect params.control values
+click param-options-combo-1
+expect params.control.open false
+expect params.control.text Terrain
+expect params.selected.value 1
+expect params.changes 2
+expect params.changes.names RTL_ALT_TYPE,RTL_LOIT_TIME
+expect params.write.name none
+
+# Write Params asks, listing both; No writes nothing.
+click param-write
+expect params.box Confirm Parameter Changes
+expect params.box.text ~ RTL_ALT_TYPE: 0 -> 1
+expect params.box.text ~ RTL_LOIT_TIME: 5000 -> 6000
+click param-box-no
+expect params.box none
+expect params.changes 2
+expect params.write.name none
+
+# RTL_ALT_TYPE chosen back to Relative to Home, still a change; Yes writes both - the vehicle's
+# own 0 not sent, 6000 heard back - and _changes is empty.
+click param-options-combo
+click param-options-combo-0
+expect params.control.text Relative to Home
+expect params.selected.value 0
+expect params.changes 2
+click param-write
+expect params.box Confirm Parameter Changes
+click param-box-yes
+expect params.write.name RTL_LOIT_TIME
+expect params.write.outcome accepted
+expect params.changes 0
+expect status ~ 2 parameters successfully saved.
+
+# RTL_LOIT_TIME back to 5000: typed, and Ctrl+S from the grid, which is Write Params too.
+click param-value-RTL_LOIT_TIME
+expect params.editing.text 6000
+key ctrl+u
+type 5000
+key Return
+expect params.changes 1
+key ctrl+s
+expect params.box Confirm Parameter Changes
+click param-box-yes
+expect params.changes 0
+expect params.selected.value 5000
+expect params.box none
+
+# The editor's +, twice, in steps of 1000: 6000 waiting, then 7000 from it. Nothing is written,
+# and leaving the screen and coming back drops it.
+click param-step-+
+expect params.selected.value 6000
+click param-step-+
+expect params.selected.value 7000
+expect params.changes 1
+click tab-fly
+expect params.active false
+click tab-params
+expect params.active true
+expect params.changes 0
+expect params.selected.value 5000
