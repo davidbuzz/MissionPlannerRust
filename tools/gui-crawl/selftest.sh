@@ -5,7 +5,8 @@
 # 2026-10-14 an audit's SITL failed to bind 5760 and its planners drove the owner's own SITL for
 # an hour). Then HELP crawled alone, and the verdicts it already knows checked - Show Console
 # Window changes itself, Change Log hands a link to the desktop, the welcome text is no control.
-# Display :90.
+# Then the Full Parameter List reached as verify.py reaches a control the screen shows at once:
+# its opening warning answered, its search box typed into. Display :90.
 set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
 OUT="$(mktemp -d)"
@@ -45,5 +46,33 @@ report = open(sys.argv[1] + "/report.md").read()
 if "help-text" in report:
     bad.append("help-text, the welcome text, reported as a dead control")
 print("selftest: " + ("passed" if not bad else "FAILED: " + "; ".join(bad)))
+sys.exit(1 if bad else 0)
+PY
+# A box a page opens with is answered on arrival as well as after each step: verify.py replays a
+# control the screen shows at once with no step before it, and the Full Parameter List's warning
+# left over the screen took every such click (2026-10-15). Its search box, reached so, takes typing.
+python3 - "$HERE" "$OUT" "$@" <<'PY'
+import sys, time
+sys.path.insert(0, sys.argv[1])
+import crawl
+args = sys.argv[3:]
+binary = args[args.index("--binary") + 1] if "--binary" in args else None
+crawler = crawl.Crawler("selftest-boxes", ":90", [], sys.argv[2], binary)
+app = crawler.launch("params", [])
+try:
+    left = "raw-param-warning-ok" in app.probe()
+    app.click("param-search")
+    time.sleep(0.4)
+    app.key(crawl.TYPED)
+    time.sleep(0.8)
+    typed = app.facts().get("params.search")
+finally:
+    app.close()
+bad = []
+if left:
+    bad.append("the Full Parameter List's warning still over the screen on arrival")
+if typed != crawl.TYPED:
+    bad.append(f"param-search took no typing: {typed!r}")
+print("boxes: " + ("passed" if not bad else "FAILED: " + "; ".join(bad)))
 sys.exit(1 if bad else 0)
 PY

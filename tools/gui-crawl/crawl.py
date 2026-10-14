@@ -181,17 +181,25 @@ class Crawler:
         return False
 
     def replay(self, app, steps):
+        # On arrival too: a control the screen shows at once has no step before it, and a box
+        # left over the screen would take its click - every such control of the Full Parameter
+        # List was reported dead under its warning (2026-10-15).
+        self.answer_boxes(app)
         for step in steps:
             if step[0] != "key" and step[1] not in app.probe():
                 self.reveal(app, step[1])
             self.perform(app, step)
             time.sleep(0.9)
-            for ok in BOX_OKS:
-                if ok in app.probe():
-                    app.click(ok)
-                    time.sleep(0.8)
+            self.answer_boxes(app)
         app.park()
         time.sleep(0.5)
+
+    def answer_boxes(self, app):
+        """A box a page opens with (BOX_OKS), answered while it shows."""
+        for ok in BOX_OKS:
+            if ok in app.probe():
+                app.click(ok)
+                time.sleep(0.8)
 
     def reveal(self, app, name, rounds=15):
         """A control laid out out of sight, scrolled into it with the wheel over its list."""
