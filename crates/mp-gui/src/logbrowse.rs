@@ -3117,10 +3117,7 @@ fn file_panel(
                         px(320.0),
                         cx.listener(|this, event: &gpui::KeyDownEvent, _window, cx| {
                             match this.log_name.key(event) {
-                                crate::textfield::KeyOutcome::Submitted => {
-                                    this.log_browse.use_imagery_of(&this.map.borrow());
-                                    this.open_log();
-                                }
+                                crate::textfield::KeyOutcome::Submitted => this.open_log(),
                                 crate::textfield::KeyOutcome::Cancelled => this.log_name.clear(),
                                 crate::textfield::KeyOutcome::Ignored => return,
                                 crate::textfield::KeyOutcome::Changed => {}
@@ -3212,7 +3209,7 @@ impl MissionPlanner {
         self.open_log_file(&path);
     }
 
-    /// A log opened in the browser as a name typed in the box opens one (`open_log`): the flight
+    /// A log opened in the browser - chosen, or a name typed in the box (`open_log`): the flight
     /// map's imagery, the log, its fields' tips from the connected vehicle's parameters, and the
     /// strip's remembered boxes - from wherever it is.
     /// `// C#: Log/LogBrowse.cs:359-401, 444-449, 685`

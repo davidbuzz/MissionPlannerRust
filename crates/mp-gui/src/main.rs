@@ -2052,19 +2052,7 @@ impl MissionPlanner {
             return;
         };
         let path = Self::plan_directory().join(leaf);
-        self.log_browse.open(&path);
-        // `add_field_node`'s tooltips, from the connected vehicle's parameters.
-        // `// C#: Log/LogBrowse.cs:685`
-        let parameters = self.telemetry.view().parameters;
-        self.log_browse
-            .add_field_tips(&parameters, crate::metadata::lookup);
-        // `LoadLog2` sets six of the strip's boxes from config.xml once the log is read.
-        // `// C#: Log/LogBrowse.cs:444-449`
-        if self.log_browse.is_open() {
-            let persisted = &self.persisted;
-            self.log_browse
-                .apply_remembered(|key| persisted.get(key).map(str::to_owned));
-        }
+        self.open_log_file(&path);
     }
 
     /// Commands a guided move to a position, holding the current height.
