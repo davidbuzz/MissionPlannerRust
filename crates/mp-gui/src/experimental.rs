@@ -225,6 +225,13 @@ const ANON_LOG_RULED: &str = "out of scope, the owner's ruling (PLAN.md section 
 const NO_GDAL: &str =
     "not available: this application has no GDAL (NOT_DONE_YET_MATRIX.md, the GDAL row)";
 const NOT_PORTED: &str = "not ported yet (NOT_DONE_YET_MATRIX.md, the EXPERIMENTAL row)";
+/// Bootloader Upgrade, withheld: the owner's word of 2026-10-14, "this is a dangerous button ...
+/// the code behind it is untested, dangerous, and i think, for now, it needs to be canged to 'this
+/// button isnt tested yet, sorry'". Its port (`Act::BootloaderUpgrade`: the two questions, then
+/// `FLASH_BOOTLOADER`) stays for when it is tested.
+const NOT_TESTED_YET: &str = "this button isn't tested yet, sorry";
+/// Whether Bootloader Upgrade runs its port: not until it is tested ([`NOT_TESTED_YET`]).
+const BOOTLOADER_UPGRADE_TESTED: bool = false;
 
 /// What a button does here.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -256,7 +263,8 @@ pub(crate) fn tool(name: &str) -> Tool {
         // `BUT_outputMavlink_Click`: `new SerialOutputPass().Show()`.
         "BUT_outputMavlink" => Tool::Advanced("BUT_outputMavlink"),
         "but_mavinspector" => Tool::Advanced("but_mavinspector"),
-        "BUT_paramgen" => Tool::Advanced("BUT_paramgen"),
+        // Withheld, the owner's word of 2026-10-14, as on the Advanced page.
+        "BUT_paramgen" => Tool::Unavailable(crate::config::advanced::NOT_IMPLEMENTED_YET),
         // `BUT_fft_Click`: `new fftui().Show()`, Advanced's `but_fft`.
         "BUT_fft" => Tool::Advanced("but_fft"),
         "but_signkey" => Tool::Advanced("but_signkey"),
@@ -274,7 +282,13 @@ pub(crate) fn tool(name: &str) -> Tool {
         "BUT_QNH" => Tool::Act(Act::Qnh),
         "but_lockup" => Tool::Act(Act::Lockup),
         "but_hwids" => Tool::Act(Act::DecodeHwids),
-        "but_blupdate" => Tool::Act(Act::BootloaderUpgrade),
+        "but_blupdate" => {
+            if BOOTLOADER_UPGRADE_TESTED {
+                Tool::Act(Act::BootloaderUpgrade)
+            } else {
+                Tool::Unavailable(NOT_TESTED_YET)
+            }
+        }
         "but_disablearmswitch" => Tool::Act(Act::ToggleSafety),
         "BUT_magfit2" => Tool::Act(Act::MagCalLog),
         "myButton1" => Tool::Act(Act::SplitDfLog),
@@ -2032,7 +2046,7 @@ mod tests {
                 Tool::Unavailable(why) => assert!(!why.is_empty()),
             }
         }
-        assert_eq!(opens, 34);
+        assert_eq!(opens, 32);
         assert_eq!(tool("but_paramrestore"), Tool::Act(Act::ParamRestore));
         assert_eq!(tool("BUT_magfit2"), Tool::Act(Act::MagCalLog));
         assert_eq!(tool("myButton1"), Tool::Act(Act::SplitDfLog));
@@ -2046,7 +2060,11 @@ mod tests {
         assert_eq!(tool("BUT_sorttlogs"), Tool::Act(Act::SortTlogs));
         assert_eq!(tool("but_sortlogs"), Tool::Act(Act::ResortAllLogs));
         assert_eq!(tool("but_maplogs"), Tool::Act(Act::MapLogs));
-        assert_eq!(tool("but_blupdate"), Tool::Act(Act::BootloaderUpgrade));
+        assert_eq!(tool("but_blupdate"), Tool::Unavailable(NOT_TESTED_YET));
+        assert_eq!(
+            tool("BUT_paramgen"),
+            Tool::Unavailable(crate::config::advanced::NOT_IMPLEMENTED_YET)
+        );
         assert_eq!(tool("but_disablearmswitch"), Tool::Act(Act::ToggleSafety));
         assert_eq!(tool("but_messageinterval"), Tool::MessageInterval);
         assert_eq!(tool("butlogindex"), Tool::LogIndex);

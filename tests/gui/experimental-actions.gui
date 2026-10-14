@@ -2,12 +2,13 @@
 # 2026-10-04: Ctrl+F's temp form as a tab).
 #
 # temp.cs's reboot pixhawk asks "Are you sure?" (temp.cs:662-666), Lockup MAV asks twice
-# (temp.cs:1230-1239), Bootloader Upgrade asks its two "BL Update" questions (temp.cs:969-993), Toggle
-# Safety Switch asks "Are you sure?" (temp.cs:1105-1118); No sends nothing; with no link what the C#
+# (temp.cs:1230-1239), Toggle Safety Switch asks "Are you sure?" (temp.cs:1105-1118); No sends
+# nothing; Bootloader Upgrade, withheld by the owner's word of 2026-10-14, only says "this button
+# isn't tested yet, sorry" and asks nothing (temp.cs:969-993 is its port); with no link what the C#
 # meets as an exception is said on the status line (the owner's ruling: no box for it), but Toggle
 # Safety Switch's sysid 0 is only logged. QNH (temp.cs:668-682), Force Accel Cal
-# (temp.cs:1404-1416) and arm and takeoff (temp.cs:614-634) need a vehicle: "Please Connect First". Bootloader Upgrade and Toggle Safety
-# Switch against SITL are experimental-sitl.gui.
+# (temp.cs:1404-1416) and arm and takeoff (temp.cs:614-634) need a vehicle: "Please Connect
+# First". Bootloader Upgrade and Toggle Safety Switch against SITL are experimental-sitl.gui.
 screen fly
 window 1600x1200
 budget 20
@@ -17,7 +18,7 @@ env MP_CONFIG_XML $WORK/config.xml
 setup printf '<?xml version="1.0" encoding="utf-8"?><Config><tabcontrolactions>tabQuick;</tabcontrolactions></Config>' > "$WORK/config.xml"
 key ctrl+f
 expect screen experimental
-expect experimental.working 29
+expect experimental.working 32
 # reboot pixhawk: asked; No sends nothing.
 click experimental-but_reboot
 expect experimental.asking Are you sure?
@@ -60,19 +61,10 @@ expect experimental.asking Are you sure?
 click experimental-question-yes
 expect experimental.asking none
 expect status ~ Swarm: out of scope
-# Bootloader Upgrade: asked twice, No at the second sends nothing; Yes to both with no vehicle, said.
+# Bootloader Upgrade, withheld by the owner's word of 2026-10-14: the words, no question, nothing sent.
 click experimental-but_blupdate
-expect experimental.asking Are you sure you want to upgrade the bootloader? This can brick your board
-click experimental-question-yes
-expect experimental.asking Are you sure you want to upgrade the bootloader? This can brick your board, Please allow 5 mins for this process
-click experimental-question-no
+expect status Bootloader Upgrade: this button isn't tested yet, sorry
 expect experimental.asking none
-expect status ~ Swarm: out of scope
-click experimental-but_blupdate
-click experimental-question-yes
-click experimental-question-yes
-expect experimental.asking none
-expect status Error: Please Connect First
 # arm and takeoff with no vehicle: what the C#'s catch meets, said; nothing under way.
 click experimental-BUT_swarm
 expect status ~ Swarm: out of scope

@@ -9,7 +9,8 @@
 # The claim: Ctrl+F shows the tab; the 63 buttons are there, sixteen working - nine opening
 # windows this application has, seven tools of its own (experimental-actions.gui); NMEA opens
 # the NMEA output window as CONFIG > Advanced's NMEA does; a ruled-out tool says why on the status
-# line, and one not yet ported says so.
+# line, and one not yet ported says so; Param gen and Bootloader Upgrade, withheld by the owner's
+# word of 2026-10-14, say only his words.
 screen fly
 # Smaller than the owner's Mac window, where rows ran off the bottom (2026-10-04): the run's
 # end checks the table is wholly on screen (layout_guard's EXPERIMENTAL entry).
@@ -22,7 +23,7 @@ expect screen fly
 key ctrl+f
 expect screen experimental
 expect experimental.buttons 63
-expect experimental.working 29
+expect experimental.working 32
 # A window this application has: the NMEA output, as Advanced's NMEA opens it.
 click experimental-BUT_outputnmea
 expect experimental.last BUT_outputnmea
@@ -39,6 +40,13 @@ expect status ~ Anon Log: out of scope, the owner's ruling (PLAN.md section 12 D
 # Not ported yet: structtest says so.
 click experimental-but_structtest
 expect status ~ structtest: not ported yet
+# Withheld: Param gen opens no "Downloading updated data", Bootloader Upgrade asks nothing.
+click experimental-BUT_paramgen
+expect status Param gen: not implemented yet
+expect config.paramgen.started 0
+click experimental-but_blupdate
+expect status Bootloader Upgrade: this button isn't tested yet, sorry
+expect experimental.asking none
 # The tab itself, from another screen.
 click tab-fly
 expect screen fly

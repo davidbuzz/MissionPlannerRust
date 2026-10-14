@@ -140,17 +140,38 @@ pub struct Row {
     pub port: Option<&'static str>,
 }
 
+/// What Param gen says in place of its window: the owner's word of 2026-10-14, "this need to be
+/// re-labled as 'no implemented yet', and hide the rest" - no "Downloading updated data" and no
+/// run. EXPERIMENTAL's Param gen says the same (`experimental.rs`).
+pub const NOT_IMPLEMENTED_YET: &str = "not implemented yet";
+
+/// Buttons whose window is ported but withheld by the owner's word, and what each says instead.
+/// The port stays, tested by its own module's tests.
+const WITHHELD: [(&str, &str); 1] = [("BUT_paramgen", NOT_IMPLEMENTED_YET)];
+
+/// What `button` says in place of its window, if it is withheld.
+fn withheld(button: &str) -> Option<&'static str> {
+    WITHHELD
+        .iter()
+        .find(|(name, _)| *name == button)
+        .map(|&(_, why)| why)
+}
+
 impl Row {
-    /// Whether the button does anything here.
+    /// Whether the button does anything here: its window ported, and not withheld.
     #[must_use]
-    pub const fn enabled(&self) -> bool {
-        self.port.is_some()
+    pub fn enabled(&self) -> bool {
+        self.port.is_some() && withheld(self.button).is_none()
     }
 
-    /// Why a dimmed button is dimmed.
+    /// Why a dimmed button is dimmed: the owner's words for a withheld one, else what is not
+    /// ported.
     #[must_use]
     pub fn reason(&self) -> String {
-        format!("{} is not ported", self.opens)
+        withheld(self.button).map_or_else(
+            || format!("{} is not ported", self.opens),
+            str::to_owned,
+        )
     }
 }
 
@@ -348,7 +369,7 @@ pub fn click_keys_or_proximity(
 /// the user data directory. True when it did something.
 /// `// C#: GCSViews/ConfigurationView/ConfigAdvanced.cs:57-78`
 pub fn click_paramgen(button: &str, run: &mut ParamGen, data_dir: &std::path::Path) -> bool {
-    if button == "BUT_paramgen" {
+    if button == "BUT_paramgen" && withheld(button).is_none() {
         run.start(data_dir);
         return true;
     }
@@ -442,8 +463,17 @@ fn button(row: Row, y: f32, cx: &mut Context<MissionPlanner>) -> AnyElement {
             }))
             .into_any_element()
     } else {
-        base.bg(rgb(theme::PANEL))
+        // Dimmed, and why said when it is clicked anyway: a button that answers nothing looks
+        // broken (the owner's bugs of 2026-10-14), so its reason goes on the status line, as
+        // EXPERIMENTAL's dimmed buttons say theirs.
+        base.id(SharedString::from(id))
+            .bg(rgb(theme::PANEL))
             .text_color(rgb(theme::DIM))
+            .on_click(cx.listener(move |this, _event, window, cx| {
+                window.blur(cx);
+                this.file_status = Some(format!("{}: {}", row.text, row.reason()));
+                cx.notify();
+            }))
             .into_any_element()
     }
 }
@@ -680,14 +710,16 @@ mod tests {
         assert_eq!(activate.trim(), "{");
     }
 
-    /// Every fact the GUI script asserts on is recorded here, and the only button of this page it
-    /// clicks is one that does something - FFT - and it does click it.
+    /// Every fact the GUI script asserts on is recorded here; the only working button of this
+    /// page it clicks is FFT, and it does click it; the dimmed ones it clicks, to see them say
+    /// why, are Param gen (withheld) and Follow Me (not ported).
     #[test]
     fn the_gui_script_names_facts_this_page_has() {
         let script = include_str!("../../../../tests/gui/config-advanced.gui");
         let source = include_str!("advanced.rs");
         let mut facts = 0;
         let mut clicked = Vec::new();
+        let mut dimmed = Vec::new();
         for line in script.lines() {
             let line = line.split('#').next().unwrap_or("");
             let mut words = line.split_whitespace();
@@ -698,9 +730,12 @@ mod tests {
                 }
                 (Some("click"), Some(id)) => {
                     if let Some(button) = id.strip_prefix("advanced-") {
-                        let row = ROWS.iter().find(|row| row.button == button);
-                        assert!(row.is_some_and(Row::enabled), "{id} is dimmed");
-                        clicked.push(button);
+                        let row = ROWS.iter().find(|row| row.button == button).expect("a row");
+                        if row.enabled() {
+                            clicked.push(button);
+                        } else {
+                            dimmed.push(button);
+                        }
                     }
                 }
                 _ => {}
@@ -708,6 +743,7 @@ mod tests {
         }
         assert!(facts >= 5, "{facts} facts");
         assert_eq!(clicked, ["but_fft"]);
+        assert_eq!(dimmed, ["BUT_paramgen", "BUT_follow_me"]);
     }
 
     /// The page's windows, held as the page's button closure holds them.
@@ -793,7 +829,6 @@ mod tests {
             let proxy_row = row.button == "BUT_supportproxy";
             let mirror_row = row.button == "BUT_outputMavlink";
             let nmea_row = row.button == "BUT_outputnmea";
-            let paramgen_row = row.button == "BUT_paramgen";
             assert_eq!(windows.fft.window.is_some(), fft_row, "{}", row.button);
             assert_eq!(windows.fft.opened, usize::from(fft_row));
             assert!(
@@ -847,7 +882,8 @@ mod tests {
             assert_eq!(windows.mirror.opened, usize::from(mirror_row));
             assert_eq!(windows.nmea.window.is_some(), nmea_row, "{}", row.button);
             assert_eq!(windows.nmea.opened, usize::from(nmea_row));
-            assert_eq!(windows.paramgen.started, usize::from(paramgen_row));
+            // Param gen is withheld (WITHHELD): its button starts nothing.
+            assert_eq!(windows.paramgen.started, 0, "{}", row.button);
             // The run started reads GitHub: cancelled here, unseen.
             windows.paramgen.cancel();
             // `click` is the two that need nothing but themselves.
@@ -862,8 +898,7 @@ mod tests {
                     && !spectrogram_row
                     && !proxy_row
                     && !mirror_row
-                    && !nmea_row
-                    && !paramgen_row,
+                    && !nmea_row,
                 "{}",
                 row.button
             );
@@ -948,7 +983,6 @@ mod tests {
                 "but_signkey",
                 "BUT_outputMavlink",
                 "BUT_outputnmea",
-                "BUT_paramgen",
                 "but_fft",
                 "BUT_spect",
                 "BUT_supportproxy"

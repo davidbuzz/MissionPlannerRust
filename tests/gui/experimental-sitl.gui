@@ -38,11 +38,8 @@ click experimental-question-yes
 within 10
 expect vehicle.motor_control true
 
-# Bootloader Upgrade, refused.
+# Bootloader Upgrade, withheld by the owner's word of 2026-10-14: with a vehicle too, the words
+# and nothing sent - no question, no FLASH_BOOTLOADER.
 click experimental-but_blupdate
-expect experimental.asking Are you sure you want to upgrade the bootloader? This can brick your board
-click experimental-question-yes
-click experimental-question-yes
+expect status Bootloader Upgrade: this button isn't tested yet, sorry
 expect experimental.asking none
-within 20
-expect status Failed to upgrade bootloader

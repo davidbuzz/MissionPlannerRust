@@ -48,9 +48,17 @@ expect config.advanced.text The following pages are for advanced configutation o
 expect config.advanced.buttons Warning Manager,MAVLink Inspector,Proximity,Mavlink Signing,Mavlink Mirror,NMEA,Follow Me,Param gen,Moving Base,Anon Log,FFT,Spectrogram,Support Proxy
 expect config.advanced.labels ~ Enable custom warnings based on a set of conditions|View decoded mavlink data
 expect config.advanced.labels ~ |Share connection with support engineer
-expect config.advanced.buttons.enabled Warning Manager,MAVLink Inspector,Proximity,Mavlink Signing,Mavlink Mirror,NMEA,Param gen,FFT,Spectrogram,Support Proxy
+expect config.advanced.buttons.enabled Warning Manager,MAVLink Inspector,Proximity,Mavlink Signing,Mavlink Mirror,NMEA,FFT,Spectrogram,Support Proxy
 expect config.advanced.dimmed ~ BUT_follow_me:
 expect config.advanced.dimmed ~ is not ported; but_anonlog: anonymising a log (ExtLibs/Utilities/Privacy.cs) is not ported
+# Param gen withheld, the owner's word of 2026-10-14 ("re-labled as 'no implemented yet', and hide
+# the rest"), and every dimmed button says why when clicked.
+expect config.advanced.dimmed ~ BUT_paramgen: not implemented yet
+click advanced-BUT_paramgen
+expect status.drawn Param gen: not implemented yet
+expect config.paramgen.started 0
+click advanced-BUT_follow_me
+expect status.drawn ~ Follow Me: the Follow Me window (Controls/FollowMe.cs) is not ported
 expect config.fft.window false
 
 # FFT: the window, as the Designer makes it, with no vehicle and the FFT Setup page never shown.
