@@ -74,6 +74,15 @@ const BETA_UPDATE: (f32, f32, f32, f32) = (275.0, 268.0, 123.0, 29.0);
 const SHOW_CONSOLE: (f32, f32, f32, f32) = (188.0, 303.0, 174.0, 17.0);
 /// `linkLabel1`, anchored to the bottom.
 const CHANGE_LOG: (f32, f32) = (244.0, 323.0);
+/// The guide to Tailscale, on Change Log's line to its right: not in the C#, the owner's plan of
+/// 2026-10-14 ("using_tailscale.md reachable from HELP"), shown while Tailscale is enabled in the
+/// PLUGINS tab (`plugin_manager::TAILSCALE`).
+const TAILSCALE_GUIDE: (f32, f32) = (344.0, 323.0);
+/// Its text.
+pub const TAILSCALE_GUIDE_TEXT: &str = "Using Tailscale";
+/// Where it goes: the guide, as the repository shows it.
+pub const TAILSCALE_GUIDE_URL: &str =
+    "https://github.com/davidbuzz/MissionPlannerRust/blob/main/using_tailscale.md";
 /// The texts. `// C#: GCSViews/Help.resx`
 pub const UPDATE_CHECK_TEXT: &str = "Check for Updates";
 pub const BETA_UPDATE_TEXT: &str = "Check for BETA Updates";
@@ -250,6 +259,10 @@ pub struct Help {
     updates: bool,
     /// How many times a button has been refused, for the facts.
     refused: usize,
+    /// The last address a link of this page handed to the desktop's browser, for the facts.
+    opened: Option<&'static str>,
+    /// Whether the Tailscale guide's link showed in the last frame, for the facts.
+    tailscale_link: std::cell::Cell<bool>,
 }
 
 /// Where the program is, or the harness's door. `// C#: Settings.GetRunningDirectory`
@@ -334,6 +347,8 @@ impl Help {
             install_dir,
             updates: UPDATES_ALLOWED,
             refused: 0,
+            opened: None,
+            tailscale_link: std::cell::Cell::new(false),
         }
     }
 
@@ -713,6 +728,8 @@ impl Help {
         record("help.last", &self.last);
         record("help.written", self.written);
         record("help.refused", self.refused);
+        record("help.opened", self.opened.unwrap_or("none"));
+        record("help.tailscale", self.tailscale_link.get());
         record("help.restart", self.restart.as_deref().unwrap_or("none"));
     }
 }
@@ -907,6 +924,11 @@ pub fn screen(
     // A box as high as the text's line, up from the Designer's bottom edge: a fixed 13 left the
     // 19-high text 3 pixels below a 920-high window (the layout guard on the owner's Mac,
     // 2026-10-04).
+    let tailscale = crate::plugins_ui::native_enabled(
+        &this.persisted,
+        &crate::plugin_manager::TAILSCALE,
+    );
+    help.tailscale_link.set(tailscale);
     let change_log = div()
         .absolute()
         .left(px(0.0))
@@ -920,12 +942,33 @@ pub fn screen(
             true,
             |this, _window, _cx| {
                 // `Process.Start(url)`: the desktop's browser.
-                if let Err(why) = crate::scripts_tab::open_with_shell(Path::new(CHANGE_LOG_URL)) {
-                    this.file_status = Some(format!("could not open the Change Log: {why}"));
+                match crate::scripts_tab::open_with_shell(Path::new(CHANGE_LOG_URL)) {
+                    Ok(()) => this.help.opened = Some(CHANGE_LOG_URL),
+                    Err(why) => {
+                        this.file_status = Some(format!("could not open the Change Log: {why}"));
+                    }
                 }
             },
             cx,
-        ));
+        ))
+        .children(tailscale.then(|| {
+            link_label(
+                "help-tailscale",
+                TAILSCALE_GUIDE_TEXT,
+                (TAILSCALE_GUIDE.0, 0.0),
+                true,
+                |this, _window, _cx| {
+                    match crate::scripts_tab::open_with_shell(Path::new(TAILSCALE_GUIDE_URL)) {
+                        Ok(()) => this.help.opened = Some(TAILSCALE_GUIDE_URL),
+                        Err(why) => {
+                            this.file_status =
+                                Some(format!("could not open the Tailscale guide: {why}"));
+                        }
+                    }
+                },
+                cx,
+            )
+        }));
     let _ = window;
     crate::probe::measured("help-body", div())
         .id("help-body")

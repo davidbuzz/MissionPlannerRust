@@ -29,11 +29,13 @@ key ctrl+p
 expect screen plugins
 expect plugin-manager.open true
 expect plugin-manager.restart-required false
-# The seven running plugins, by file name; the three whose Init said no are not in Plugins.
-expect plugin-manager.rows 7
+# The seven running plugins, by file name; the three whose Init said no are not in Plugins. Last,
+# the owner's native Tailscale (2026-10-14), a row like a plugin's.
+expect plugin-manager.rows 8
 expect plugin-manager.row.0 ~ |anonymizebinlog.wasm|enabled|green
 expect plugin-manager.row.1 Dowding|dowding.wasm|enabled|green
 expect plugin-manager.row.6 ~ |terrainmaker.wasm|enabled|green
+expect plugin-manager.row.7 Tailscale|tailscale.native|enabled|green
 # Show Errors: every plugin loaded or refused by its own Init, so none.
 click plugin-manager-errors
 expect plugin-manager.errors No Errors
@@ -58,8 +60,9 @@ expect plugins.count 9
 expect plugins.FenceDist.state running
 key ctrl+p
 expect screen plugins
-expect plugin-manager.rows 7
+expect plugin-manager.rows 8
 expect plugin-manager.row.6 Not loaded|dowding.wasm|disabled|dark-red
+expect plugin-manager.row.7 Tailscale|tailscale.native|enabled|green
 # Ticked again and saved: enabled for the start after. (A moment first: the restarted planner's
 # controls are written after its facts.)
 settle 1

@@ -120,6 +120,16 @@ fn disabled_list(persisted: &crate::settings::Persisted) -> Vec<String> {
     }
 }
 
+/// Whether one of the plugin manager's native features (`plugin_manager::NATIVE`) is on: not in
+/// `DisabledPlugins` as the settings hold it now, so unticking it and Save && Close take effect at
+/// once, where a plugin waits for the restart.
+pub(crate) fn native_enabled(
+    persisted: &crate::settings::Persisted,
+    feature: &crate::plugin_manager::NativePlugin,
+) -> bool {
+    crate::plugin_manager::native_enabled(feature, &disabled_list(persisted))
+}
+
 /// A disabled list as it is in force: in a page opened with `?demo=0` - the browser build's
 /// checks - the Welcome-Demo-Sitl as well, which then never starts, and the plugin manager does
 /// not list it.

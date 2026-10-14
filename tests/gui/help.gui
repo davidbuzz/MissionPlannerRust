@@ -16,6 +16,7 @@
 
 env XDG_DATA_HOME $WORK
 env MP_UPDATE_DIR $WORK/install
+env MP_OPEN_WITH_SHELL_LOG $WORK/opened.txt
 setup mkdir -p "$WORK/install" "$WORK/MissionPlannerRust" && printf '1.0.0.0\n' > "$WORK/install/version.txt"
 setup python3 tests/gui/update-server.py --work $WORK --port 5793
 setup printf '<?xml version="1.0" encoding="utf-8"?><Config><UpdateLocationVersion>http://127.0.0.1:5793/version.txt</UpdateLocationVersion><UpdateLocationMD5>http://127.0.0.1:5793/checksums.txt</UpdateLocationMD5><UpdateLocation>http://127.0.0.1:5793/files/</UpdateLocation><BetaUpdateLocationVersion>http://127.0.0.1:5793/beta/version.txt</BetaUpdateLocationVersion><BetaUpdateLocationMD5>http://127.0.0.1:5793/beta/checksums.txt</BetaUpdateLocationMD5><BetaUpdateLocationZip>http://127.0.0.1:5793/beta/Beta.zip</BetaUpdateLocationZip><update_check>%s</update_check><beta_updates>True</beta_updates></Config>' "$(date +%-m/%-d/%Y)" > "$WORK/MissionPlannerRust/config.xml"
@@ -53,3 +54,10 @@ expect help.flow idle
 expect help.written 0
 expect help.last none
 expect help.restart none
+
+# The guide to Tailscale, the owner's plan of 2026-10-14, while Tailscale is enabled in PLUGINS (it
+# is until unticked): its link hands the guide's address to the desktop's browser.
+expect help.tailscale true
+expect help.opened none
+click help-tailscale
+expect help.opened https://github.com/davidbuzz/MissionPlannerRust/blob/main/using_tailscale.md

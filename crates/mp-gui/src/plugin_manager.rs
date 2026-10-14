@@ -71,6 +71,44 @@ const HEADERS: [&str; 5] = ["Plugin Name", "Author", "Version", "FileName", "Ena
 const NOT_LOADED: &str = "Not loaded";
 const DASHES: &str = "--";
 
+/// A feature of this application listed among the plugins and ticked or unticked as they are,
+/// but native code, not a wasm plugin: the owner's word of 2026-10-14, "its going to look like a
+/// plugin, smell like a plugin, but not be an actual wasm plugin". A plugin's sandbox gives it no
+/// processes, files or sockets of its own (mp-plugin-host's `plugin.wit`), which these need. Not
+/// in the C#. Its key in `DisabledPlugins` is its `file`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct NativePlugin {
+    /// The Plugin Name column.
+    pub name: &'static str,
+    /// The Author column.
+    pub author: &'static str,
+    /// The Version column.
+    pub version: &'static str,
+    /// The FileName column, and the key `DisabledPlugins` names it by.
+    pub file: &'static str,
+}
+
+/// Tailscale: the connection area's indicator of this computer's tailnet, the first start's offer
+/// of the official client and the status line's reason when a tailnet address fails - the owner's
+/// plan of 2026-10-14. On until it is unticked, as plugins are.
+pub(crate) const TAILSCALE: NativePlugin = NativePlugin {
+    name: "Tailscale",
+    author: "MissionPlannerRust",
+    version: "built in",
+    file: "tailscale.native",
+};
+
+/// The native features the manager lists, after the plugins.
+pub(crate) const NATIVE: &[NativePlugin] = &[TAILSCALE];
+
+/// Whether a native feature is on: not in the disabled list, compared as plugins' files are.
+#[must_use]
+pub(crate) fn native_enabled(feature: &NativePlugin, disabled: &[String]) -> bool {
+    !disabled
+        .iter()
+        .any(|off| off.eq_ignore_ascii_case(feature.file))
+}
+
 /// A row's back colour, `row.DefaultCellStyle.BackColor`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum RowColour {
@@ -121,7 +159,8 @@ pub(crate) struct Row {
 }
 
 /// `PopulateGridView`: the loaded plugins, then the disabled names not loaded whose file is
-/// `present` (in the plugins folder, or built in).
+/// `present` (in the plugins folder, or built in); and last, not the C#'s, the native features
+/// ([`NATIVE`]), so a plugin's row is where it always was.
 /// `// C#: Plugin/PluginUI.cs:27-70`
 pub(crate) fn rows(plugins: &[PluginStatus], disabled: &[String], present: impl Fn(&str) -> bool) -> Vec<Row> {
     let mut out = Vec::new();
@@ -152,6 +191,9 @@ pub(crate) fn rows(plugins: &[PluginStatus], disabled: &[String], present: impl 
         });
     }
     for off in disabled {
+        if NATIVE.iter().any(|feature| feature.file.eq_ignore_ascii_case(off)) {
+            continue;
+        }
         // `if (p.FileName.ToLower().Contains(s)) isLoaded = true;`
         let is_loaded = loaded
             .iter()
@@ -167,6 +209,22 @@ pub(crate) fn rows(plugins: &[PluginStatus], disabled: &[String], present: impl 
                 plugin: None,
             });
         }
+    }
+    for feature in NATIVE {
+        let enabled = native_enabled(feature, disabled);
+        out.push(Row {
+            name: feature.name.to_owned(),
+            author: feature.author.to_owned(),
+            version: feature.version.to_owned(),
+            dll: feature.file.to_owned(),
+            enabled,
+            colour: if enabled {
+                RowColour::Green
+            } else {
+                RowColour::DarkOrange
+            },
+            plugin: None,
+        });
     }
     out
 }
@@ -718,8 +776,46 @@ mod tests {
                     colour: RowColour::DarkRed,
                     plugin: None,
                 },
+                Row {
+                    name: "Tailscale".to_owned(),
+                    author: "MissionPlannerRust".to_owned(),
+                    version: "built in".to_owned(),
+                    dll: "tailscale.native".to_owned(),
+                    enabled: true,
+                    colour: RowColour::Green,
+                    plugin: None,
+                },
             ]
         );
+    }
+
+    /// The owner's native Tailscale row (2026-10-14): last, so a plugin's row is where it was; on
+    /// until unticked; unticked, a disabled row of its own name - not "Not loaded" - and its key
+    /// in what Save writes; with no Try, as it is no plugin.
+    #[test]
+    fn tailscale_is_a_row_like_a_plugins_but_native() {
+        let plugins = [running("Dowding", "Dowding.wasm")];
+        let on = rows(&plugins, &[], |_| true);
+        assert_eq!(on.len(), 2);
+        let last = on.last().expect("a row");
+        assert_eq!((last.name.as_str(), last.enabled, last.plugin), ("Tailscale", true, None));
+        assert!(native_enabled(&TAILSCALE, &[]));
+
+        let disabled = ["Tailscale.Native".to_owned()];
+        assert!(!native_enabled(&TAILSCALE, &disabled));
+        let off = rows(&plugins, &disabled, |_| true);
+        assert_eq!(off.len(), 2, "no Not loaded row for it");
+        let last = off.last().expect("a row");
+        assert_eq!(
+            (last.name.as_str(), last.enabled, last.colour),
+            ("Tailscale", false, RowColour::DarkOrange)
+        );
+
+        let mut ticked = on;
+        if let Some(row) = ticked.last_mut() {
+            row.enabled = false;
+        }
+        assert_eq!(disabled_after(&ticked), ["tailscale.native"]);
     }
 
     /// `UpdateDisabledPlugins`: the rows not ticked, lower-cased; none, an empty list (which the
@@ -811,7 +907,11 @@ mod tests {
     #[test]
     fn columns_fit_their_text() {
         let plugins = [running("A very long plugin name indeed", "x.wasm")];
-        let widths = column_widths(&rows(&plugins, &[], |_| true));
+        let plugin_rows: Vec<Row> = rows(&plugins, &[], |_| true)
+            .into_iter()
+            .filter(|row| row.plugin.is_some())
+            .collect();
+        let widths = column_widths(&plugin_rows);
         // "0.1" and "x.wasm" are narrower than Version's and FileName's designer widths.
         assert_eq!(widths[2], COLUMN_WIDTHS[2]);
         assert_eq!(widths[3], COLUMN_WIDTHS[3]);
