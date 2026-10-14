@@ -422,6 +422,15 @@ enum Takeoff {
 const TAKEOFF_PAUSE: web_time::Duration = web_time::Duration::from_millis(300);
 /// The take-off's height, `doCommand(..., TAKEOFF, 0, 0, 0, 0, 0, 0, 10)`. `// C#: temp.cs:627`
 const TAKEOFF_ALTITUDE: f32 = 10.0;
+/// arm and takeoff's arming refused. The C# says nothing when `doARM` is false, nor when the
+/// take-off is refused; the owner found the button answering nothing he could see (2026-10-14: "it
+/// Arms the [simulated] vehicle for 5 seconds, but doesnt actually take off after"), so a refusal
+/// is said on the status line, red. The vehicle's own reason is its PreArm message, on FLY's HUD.
+const ARM_REFUSED: &str =
+    "Error: arm and takeoff: the vehicle refused to arm (its PreArm message is on FLY's HUD)";
+/// arm and takeoff's take-off refused, said with the mode the vehicle was in: refused in anything
+/// but Guided means Guided was refused first - a copter with no position yet refuses it.
+const TAKEOFF_REFUSED: &str = "Error: arm and takeoff: the vehicle refused the take-off in";
 
 /// Param Restore's first box.
 /// `// C#: temp.cs:1269`
@@ -1313,10 +1322,11 @@ fn takeoff_tick(this: &mut MissionPlanner) {
             };
             this.experimental.takeoff = None;
             if !matches!(outcome, RequestOutcome::Accepted { .. }) {
-                // `doARM` false, or its throw, which the report has said.
+                // `doARM` false, said here (ARM_REFUSED), or its throw, which the report has said.
                 this.experimental.takeoff_last = Some(if outcome == RequestOutcome::TimedOut {
                     "arm: timed out"
                 } else {
+                    this.file_status = Some(ARM_REFUSED.to_owned());
                     "arm: refused"
                 });
                 return;
@@ -1351,7 +1361,15 @@ fn takeoff_tick(this: &mut MissionPlanner) {
             this.experimental.takeoff_last = Some(match outcome {
                 RequestOutcome::Accepted { .. } => "takeoff: accepted",
                 RequestOutcome::TimedOut => "takeoff: timed out",
-                _ => "takeoff: refused",
+                _ => {
+                    let view = this.telemetry.view();
+                    let mode = view.state.as_deref().and_then(crate::fly::mode_name);
+                    this.file_status = Some(format!(
+                        "{TAKEOFF_REFUSED} {}",
+                        mode.unwrap_or("its mode")
+                    ));
+                    "takeoff: refused"
+                }
             });
         }
     }

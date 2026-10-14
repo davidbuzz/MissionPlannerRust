@@ -2,12 +2,19 @@
 # doARM(true) waited for, then - armed - setMode("GUIDED"), 300 ms, and doCommand(TAKEOFF) to 10 m.
 # With no question asked, as the C# asks none.
 #
+# Clicked first as soon as the vehicle shows, before SITL is ready: the C# says nothing when the
+# arming or the take-off is refused, and the owner found the button answering nothing he could see
+# (2026-10-14), so the refusal is said on the status line - "refused to arm" from a fresh SITL, or,
+# had it armed in Stabilize without a position, "refused the take-off in Stabilize". Then, ready,
+# the take-off is accepted and the copter climbs: the Quick tab's altitude passes 5 m.
+#
 # THIS FLIES SITL: it arms, climbs and lands. Needs a copter SITL:
 #   tools/gui-test.sh tests/gui/experimental-takeoff.gui -- tcp:127.0.0.1:5760
 screen fly
 window 1600x1200
-budget 60
-# 60: one run took 41.5 s (2026-10-06), most of it SITL readying to arm.
+budget 100
+# 100: one run took 41.5 s (2026-10-06), most of it SITL readying to arm; then the early click's
+# refusal and the climb.
 env XDG_DATA_HOME $WORK
 env MP_CONFIG_XML $WORK/config.xml
 setup printf '<?xml version="1.0" encoding="utf-8"?><Config><tabcontrolactions>tabQuick;tabActions;</tabcontrolactions></Config>' > "$WORK/config.xml"
@@ -15,6 +22,17 @@ setup printf '<?xml version="1.0" encoding="utf-8"?><Config><tabcontrolactions>t
 within 30
 expect vehicle.count > 0
 expect vehicle.armed false
+
+# Too early: refused, and said.
+key ctrl+f
+expect screen experimental
+click experimental-but_armandtakeoff
+within 15
+expect status ~ Error: arm and takeoff: the vehicle refused
+within 15
+expect vehicle.armed false
+click tab-fly
+expect screen fly
 # SITL passes its pre-arm checks once its EKF and GPS are ready (fly-takeoff.gui), and Guided
 # wants an absolute position once armed.
 within 60
@@ -24,7 +42,7 @@ expect fly.ekf.flags ~ pos_horiz_abs On
 
 key ctrl+f
 expect screen experimental
-expect experimental.takeoff none
+expect experimental.takeoff ~ refused
 click experimental-but_armandtakeoff
 within 15
 expect vehicle.armed true
@@ -32,10 +50,13 @@ within 10
 expect vehicle.mode Guided
 within 10
 expect experimental.takeoff takeoff: accepted
-
-# Down again, and left in Stabilize, as the next test finds a fresh SITL.
+# And it climbs, which "accepted" alone did not show: the Quick tab's first view is the altitude.
 click tab-fly
 expect screen fly
+within 30
+expect fly.quick.1.value > 5
+
+# Down again, and left in Stabilize, as the next test finds a fresh SITL.
 click fly-tab-actions
 expect fly.tab tabActions
 click land
