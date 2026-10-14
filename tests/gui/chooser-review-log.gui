@@ -1,0 +1,65 @@
+# LOGS' Review a Log: open is the log browser's Load A Log, whose OpenFileDialog lists the dataflash
+# logs, "Log Files|*.log;*.bin;*.BIN;*.LOG", opening in lastLogDir, else the log directory
+# (Log/LogBrowse.cs:269-311, 2810-2818). The owner's report of 2026-10-14: "logs tab -> 'Review a
+# log' -> 'open' - doesnt do anything ... it should be a filesystem chooser". Here it is the
+# window's file dialog over LOGS, its list the folder's logs (crates/mp-gui/src/file_list.rs): a
+# log clicked and OK opens it in the browser, from wherever it is; the dialog opens next in that
+# log's folder, and a log double-clicked there opens by itself. The box beside open still opens
+# the name typed in it (log-browse.gui).
+#
+# Self-contained: a log directory of its own holding the healthy fixture, a telemetry log beside
+# it and a folder, and a data directory holding ArduPilot's LogMessages.xml.
+#
+# Run as: tools/gui-test.sh tests/gui/chooser-review-log.gui
+env MP_LOG_DIR $WORK/logs
+env MP_CONFIG_XML $WORK/config.xml
+env XDG_DATA_HOME $WORK
+env MP_OFFLINE 1
+setup mkdir -p $WORK/logs/older && cp testdata/dataflash.bin $WORK/logs/flight.bin && cp testdata/mavlink/autotest.tlog $WORK/logs/flight.tlog
+setup mkdir -p $WORK/MissionPlannerRust && cp testdata/logbrowse/LogMessagesCopter.xml $WORK/MissionPlannerRust/
+
+screen logs
+# The log browser's scripts' window, a log open in it; the dialog's fit at 1280x800 is
+# chooser-loadlog.gui's, the same dialog.
+window 1600x1200
+budget 20
+# A first budget, set by hand until a passing run records one: the log read twice, a field plotted.
+
+expect logs.page review
+expect log.open false
+
+# open, with the box empty: the dialog, in the log directory.
+click log-open
+expect fly.prompt Log Files
+expect fly.prompt.value ~ logs
+expect chooser.id fly-prompt
+expect chooser.type Log Files
+# Its folders, then its dataflash logs: the telemetry log is not one LogBrowse reads.
+expect chooser.files ../,older/,flight.bin
+expect layout.hidden 0
+click chooser-file-2
+expect fly.prompt.value ~ flight.bin
+click fly-prompt-ok
+expect fly.prompt none
+expect log.open true
+expect log.fields 643
+
+# A field plotted, then the log opened again by a double click in the dialog, which opens in the
+# log's folder: opening a log clears the chart. A name of nothing first: refused, the dialog
+# still asking, as the platform's does, and said on the status line.
+reveal log-fields logfield-ATT.Roll
+click logfield-ATT.Roll
+expect log.plotted 1
+click log-open
+expect fly.prompt Log Files
+type nothere.bin
+expect fly.prompt.value ~ nothere.bin
+key Return
+expect status ~ there is no such file
+expect fly.prompt Log Files
+expect log.plotted 1
+expect chooser.files ../,older/,flight.bin
+doubleclick chooser-file-2
+expect fly.prompt none
+expect log.open true
+expect log.plotted 0

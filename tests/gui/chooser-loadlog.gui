@@ -1,0 +1,35 @@
+# FLIGHT DATA's Load Log, on LOGS' Telemetry Logs page: its OpenFileDialog, "Telemetry log
+# (*.tlog)|*.tlog;*.tlog.*|Mavlink Log (*.mavlog)|*.mavlog", opening in tlogdir
+# (GCSViews/FlightData.cs:1278-1304), lists the folder by its filter, as the platform dialog does
+# (crates/mp-gui/src/file_list.rs): the telemetry logs, or with Mavlink Log chosen under the list
+# the .mavlog files - never the dataflash log beside them. A log double-clicked plays, as OK on it
+# does (logs-dialogs.gui).
+#
+# Run as: tools/gui-test.sh tests/gui/chooser-loadlog.gui
+env MP_LOG_DIR $WORK/logs
+env MP_CONFIG_XML $WORK/config.xml
+setup mkdir -p $WORK/logs/2026-10-14 && cp testdata/mavlink/autotest.tlog $WORK/logs/flight.tlog && cp testdata/dataflash.bin $WORK/logs/ && printf 'mavlog\n' > $WORK/logs/old.mavlog
+
+screen logs
+window 1280x800
+budget 12
+# A first budget, set by hand until a passing run records one.
+
+click logs-tab-tlogs
+expect logs.page tlogs
+click fly-loadtelem
+expect fly.prompt Telemetry log (*.tlog)
+expect chooser.id fly-prompt
+expect chooser.type Telemetry log (*.tlog)
+expect chooser.files ../,2026-10-14/,flight.tlog
+
+click chooser-type-1
+expect chooser.type Mavlink Log (*.mavlog)
+expect chooser.files ../,2026-10-14/,old.mavlog
+click chooser-type-0
+expect chooser.files ../,2026-10-14/,flight.tlog
+expect layout.hidden 0
+
+doubleclick chooser-file-2
+expect fly.prompt none
+expect fly.playback.file flight.tlog

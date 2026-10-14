@@ -22,12 +22,17 @@ click experimental-but_dem
 expect status.drawn DEM: not ported yet (NOT_DONE_YET_MATRIX.md, the EXPERIMENTAL row)
 expect status-bar below tab-fly
 
-# LOGS > Review a log: Open with no name asks for one.
+# LOGS > Review a log: Open's file chooser, and a name that is not there.
 click tab-logs
 click logs-tab-review
 click log-open
-expect status.drawn type the name of a log to open
+expect fly.prompt Log Files
+type nothere.bin
+key Return
+expect status.drawn ~ there is no such file
 expect status-bar below tab-fly
+key Escape
+expect fly.prompt none
 
 # CONFIG > Planner: the video's Start with no device chosen.
 click tab-config

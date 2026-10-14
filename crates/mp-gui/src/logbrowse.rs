@@ -663,6 +663,9 @@ pub struct LogBrowse {
     /// The field nodes expanded to show their bits, by the field's name (`MSG.Field` or
     /// `MSG[i].Field`): none when the tree is built, as a `TreeView`'s nodes start collapsed.
     expanded: std::collections::BTreeSet<String>,
+    /// `lastLogDir`: the folder of the log Load A Log's dialog last opened, where it opens next.
+    /// `// C#: Log/LogBrowse.cs:43, 276, 280`
+    last_dir: Option<std::path::PathBuf>,
 }
 
 /// Pixels a wheel notch is taken as, over the chart.
@@ -788,6 +791,7 @@ impl LogBrowse {
             tips: BTreeMap::new(),
             bits: BTreeMap::new(),
             expanded: std::collections::BTreeSet::new(),
+            last_dir: None,
         }
     }
 
@@ -2763,8 +2767,8 @@ const TRACE_COLOURS: &[u32] = &[
 /// So: the chart, with the map beside it taking half the width once the Map box shows it; under
 /// both, the strip of buttons and check boxes, and then the grid once the Data Table box shows
 /// it; the field list down the right-hand side. The log's name and open button sit above it all,
-/// where a single window has room for them and the C# has a Load A Log button in the strip and a
-/// file dialog.
+/// where a single window has room for them and the C# has a Load A Log button in the strip; open
+/// is that button, and shows its file dialog.
 ///
 /// Not ported from the strip: Remove Item (which the resx hides anyway), Show Params, and the
 /// preselected graphs. The boxes start as the C# starts them but are not remembered between
@@ -3085,7 +3089,8 @@ fn params_panel(view: &ParamsView, cx: &mut Context<MissionPlanner>) -> AnyEleme
     .into_any_element()
 }
 
-/// Opening a log.
+/// Opening a log: a name typed in the box, or open - the C#'s Load A Log - and its file dialog,
+/// whose list browses for the log ([`MissionPlanner::ask_review_log`]).
 fn file_panel(
     browse: &LogBrowse,
     name: &crate::textfield::TextField,
@@ -3123,14 +3128,14 @@ fn file_panel(
                             cx.notify();
                         }),
                     ))
+                    // `BUT_loadlog_Click`: Load A Log's dialog, whatever the box holds.
                     .child(action(
                         "log-open",
                         "open",
                         theme::ACCENT,
                         true,
-                        cx.listener(|this, _event: &(), _window, cx| {
-                            this.log_browse.use_imagery_of(&this.map.borrow());
-                            this.open_log();
+                        cx.listener(|this, _event: &(), window, cx| {
+                            this.ask_review_log(window, cx);
                             cx.notify();
                         }),
                     ))
@@ -3151,6 +3156,80 @@ fn file_panel(
             })),
     )
     .into_any_element()
+}
+
+impl MissionPlanner {
+    /// Load A Log, the page's open: `BUT_loadlog_Click` empties `logfilename` and `LogBrowse_Load`
+    /// shows its `OpenFileDialog` - the filter "Log Files|*.log;*.bin;*.BIN;*.LOG", opening in
+    /// `lastLogDir ?? Settings.Instance.LogDir` - here the window's file question over LOGS
+    /// ([`crate::fly::prompt_dialog`]), which lists the folder's logs to browse (`file_list.rs`).
+    ///
+    /// The chart is left as it is until a log is chosen, where the C# clears its curves first: the
+    /// C#'s Cancel closes the browser's window, and nothing here is closed by one. The dialog
+    /// takes one log, where `Multiselect` lets the C#'s take several and opens each after the
+    /// first in a browser window of its own: here the browser is the one tab.
+    /// `// C#: Log/LogBrowse.cs:269-311, 2810-2818`
+    pub(crate) fn ask_review_log(&mut self, window: &mut gpui::Window, cx: &mut Context<Self>) {
+        use mp_os::fs::FsExt as _;
+        let start = self
+            .log_browse
+            .last_dir
+            .clone()
+            .or_else(crate::fly::log_directory)
+            .filter(|folder| folder.os_is_dir())
+            .map_or_else(String::new, |folder| {
+                format!("{}{}", folder.display(), std::path::MAIN_SEPARATOR)
+            });
+        self.fly_actions.ask(crate::fly::Prompt::ReviewLog, &start);
+        self.fly_focus.prompt.focus(window, cx);
+    }
+
+    /// Load A Log's dialog answered OK with `text`: the log opened from wherever the dialog found
+    /// it ([`MissionPlanner::open_log_file`]), and its folder kept as `lastLogDir`. A path that is
+    /// no file leaves the dialog asking, as the platform's refuses one: a folder is listed in it,
+    /// and a file that is not there is said on the status line.
+    /// `// C#: Log/LogBrowse.cs:278-291`
+    pub(crate) fn review_log_answered(
+        &mut self,
+        text: &str,
+        window: &mut gpui::Window,
+        cx: &mut Context<Self>,
+    ) {
+        use mp_os::fs::FsExt as _;
+        let path = std::path::PathBuf::from(text.trim());
+        if !path.os_is_file() {
+            if !text.trim().is_empty() && !path.os_is_dir() {
+                self.file_status = Some(format!(
+                    "could not read {}: there is no such file",
+                    path.display()
+                ));
+            }
+            self.fly_actions.ask(crate::fly::Prompt::ReviewLog, text);
+            self.fly_focus.prompt.focus(window, cx);
+            return;
+        }
+        self.log_browse.last_dir = path.parent().map(std::path::Path::to_path_buf);
+        self.open_log_file(&path);
+    }
+
+    /// A log opened in the browser as a name typed in the box opens one (`open_log`): the flight
+    /// map's imagery, the log, its fields' tips from the connected vehicle's parameters, and the
+    /// strip's remembered boxes - from wherever it is.
+    /// `// C#: Log/LogBrowse.cs:359-401, 444-449, 685`
+    pub(crate) fn open_log_file(&mut self, path: &std::path::Path) {
+        self.log_browse.use_imagery_of(&self.map.borrow());
+        self.log_browse.open(path);
+        // `add_field_node`'s tooltips, from the connected vehicle's parameters.
+        let parameters = self.telemetry.view().parameters;
+        self.log_browse
+            .add_field_tips(&parameters, crate::metadata::lookup);
+        // `LoadLog2` sets six of the strip's boxes from config.xml once the log is read.
+        if self.log_browse.is_open() {
+            let persisted = &self.persisted;
+            self.log_browse
+                .apply_remembered(|key| persisted.get(key).map(str::to_owned));
+        }
+    }
 }
 
 /// Height of the chart's plotting area.

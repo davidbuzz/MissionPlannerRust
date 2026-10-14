@@ -1,0 +1,60 @@
+# EXPERIMENTAL's Shp to Poly and its OpenFileDialog, `Shape file|*.shp` with no folder set
+# (temp.cs:415-421): the owner's report of 2026-10-14, "it opens that dialog that is supposed to be
+# a file chooser that lets you browse the file system and choose a *.shp, but its not". Every
+# typed-path dialog now lists the folder its box names under the box, standing for the platform
+# dialog (crates/mp-gui/src/file_list.rs, config/firmware.rs path_box): `..`, the folders, then
+# the files of the filter - the shapefiles, not the .prj beside them. A folder clicked opens it
+# and `..` goes back up; a file clicked fills the box, and OK converts it; a file double-clicked
+# is OK by itself.
+#
+# Run as: tools/gui-test.sh tests/gui/chooser-shptopoly.gui
+screen fly
+window 1280x800
+budget 20
+# A first budget, set by hand until a passing run records one: two paths typed, two conversions.
+env XDG_DATA_HOME $WORK
+env MP_CONFIG_XML $WORK/config.xml
+setup mkdir -p "$WORK/shp/sub" && cp testdata/planner/field.shp testdata/planner/field.prj testdata/planner/points.shp "$WORK/shp/"
+setup cp testdata/planner/points.shp "$WORK/shp/sub/deep.shp"
+
+key ctrl+f
+expect screen experimental
+
+click experimental-BUT_shptopoly
+expect experimental.asking ~ Open:
+expect chooser.id experimental-path
+# The box names the folder: its folders, then its shapefiles.
+click experimental-path-value
+key ctrl+a
+type $WORK/shp/
+expect chooser.files ../,sub/,field.shp,points.shp
+expect chooser.type Shape file
+# The dialog, its list and its buttons fit the window.
+expect layout.hidden 0
+
+# A folder clicked opens it, the box holding it; `..` goes back up.
+click chooser-file-1
+expect chooser.files ../,deep.shp
+expect experimental.asking ~ sub
+click chooser-file-0
+expect chooser.files ../,sub/,field.shp,points.shp
+
+# A file clicked is put in the box, and OK takes it: the field, one polygon.
+click chooser-file-2
+expect experimental.asking ~ field.shp
+click experimental-path-ok
+expect experimental.asking none
+within 10
+expect experimental.shptopoly wrote 1
+
+# A file double-clicked is OK by itself: the points, three.
+click experimental-BUT_shptopoly
+expect experimental.asking ~ Open:
+click experimental-path-value
+key ctrl+a
+type $WORK/shp/
+expect chooser.files ../,sub/,field.shp,points.shp
+doubleclick chooser-file-3
+expect experimental.asking none
+within 10
+expect experimental.shptopoly wrote 3

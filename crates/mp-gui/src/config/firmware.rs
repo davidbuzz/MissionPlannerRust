@@ -73,8 +73,9 @@
 use mp_os::fs::FsExt as _;
 use std::collections::VecDeque;
 use std::path::{Path, PathBuf};
+use std::rc::Rc;
 use std::sync::Arc;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::mpsc::{Receiver, Sender, TryRecvError, channel};
 use web_time::{Duration, Instant};
 
@@ -798,16 +799,21 @@ impl Machine {
 
 /// Load custom firmware's `OpenFileDialog`, which this application has no platform dialog for:
 /// the path is typed, into a box that starts in the dialog's `InitialDirectory` - the folder last
-/// used, when it exists - with the dialog's filter under it. OK takes a file that exists; any other
-/// path, or Cancel, does nothing, as the C#'s `if (File.Exists(fd.FileName))` does.
+/// used, when it exists - and the folder it names is listed under it to browse, by the dialog's
+/// filter, as the platform dialog lists it ([`crate::file_list`]). OK takes a file that exists;
+/// any other path, or Cancel, does nothing, as the C#'s `if (File.Exists(fd.FileName))` does.
 #[derive(Debug)]
 pub struct PathBox {
     /// The path being typed.
     pub field: TextField,
-    /// The dialog's filter, shown under the box.
+    /// The dialog's filter, which the list under the box lists by.
     pub filter: &'static str,
     /// The dialog's caption: [`OPEN_FILE`], or "Save As" for a `SaveFileDialog`.
     pub caption: &'static str,
+    /// The filter's entry the list shows, `FilterIndex` less one: the first as the dialog opens.
+    /// Shared with the list's "Files of type" buttons, which change it from the dialog drawn of a
+    /// borrowed box ([`path_box`]).
+    pub filter_index: Arc<AtomicUsize>,
 }
 
 impl PathBox {
@@ -826,6 +832,7 @@ impl PathBox {
             field,
             filter,
             caption: OPEN_FILE,
+            filter_index: Arc::new(AtomicUsize::new(0)),
         }
     }
 
@@ -2772,7 +2779,12 @@ pub fn message_box(
     )
 }
 
-/// The file dialog: its caption, the path box with the keyboard, the filter, OK and Cancel.
+/// The file dialog: its caption, the path box with the keyboard, the folder it names listed to
+/// browse with the filter's entries to list by ([`crate::file_list`]), OK and Cancel.
+///
+/// The box is the caller's, borrowed here, so a row clicked reaches it as typing does: through
+/// `on_key`, as the keys that put the row's path in place of what the box held
+/// ([`crate::file_list::typing`]); a file double-clicked is OK, through `on_done`.
 #[allow(clippy::too_many_arguments)]
 pub fn path_box(
     ids: BoxIds,
@@ -2784,7 +2796,9 @@ pub fn path_box(
     cx: &mut Context<MissionPlanner>,
 ) -> AnyElement {
     let focused = handle.is_focused(window);
+    let on_key = Rc::new(on_key);
     let on_ok = on_done.clone();
+    let on_open = on_done.clone();
     let buttons = vec![
         action(
             ids.path_ok,
@@ -2807,6 +2821,53 @@ pub fn path_box(
             }),
         ),
     ];
+    // In a page, a file from the computer too: the browser's picker (page_files.rs), its file put
+    // in the folder the box shows.
+    let browse = (path.caption == OPEN_FILE)
+        .then(|| {
+            crate::page_files::browse_button(
+                format!("{}-browse", ids.path),
+                crate::page_files::accept_filter(path.filter),
+                crate::page_files::folder_of(
+                    path.field.value(),
+                    &mp_settings::data_directory().unwrap_or_default(),
+                ),
+                handle,
+            )
+        })
+        .flatten();
+    let chooser = crate::file_list::Chooser::new(
+        ids.path,
+        path.field.value(),
+        path.filter,
+        path.filter_index.load(Ordering::Relaxed),
+    );
+    let list = {
+        let on_key = Rc::clone(&on_key);
+        let handle = handle.clone();
+        let filter_index = Arc::clone(&path.filter_index);
+        crate::file_list::view(
+            &chooser,
+            browse,
+            move |this, choice, window, cx| {
+                handle.focus(window, cx);
+                match choice {
+                    crate::file_list::Choice::Row { text, open } => {
+                        for key in crate::file_list::typing(&text) {
+                            on_key(this, &key);
+                        }
+                        if open {
+                            on_open(this, true);
+                        }
+                    }
+                    crate::file_list::Choice::Type(index) => {
+                        filter_index.store(index, Ordering::Relaxed);
+                    }
+                }
+            },
+            cx,
+        )
+    };
     let dialog = crate::probe::measured(ids.path, div())
         .flex()
         .flex_col()
@@ -2835,33 +2896,7 @@ pub fn path_box(
                 }
             }),
         ))
-        .child(
-            div()
-                .flex()
-                .items_center()
-                .justify_between()
-                .gap_2()
-                .child(
-                    div()
-                        .min_w(px(0.0))
-                        .text_xs()
-                        .text_color(rgb(theme::DIM))
-                        .child(path.filter),
-                )
-                // In a page, a file from the computer too: the browser's picker (page_files.rs),
-                // its file put in the folder the box shows.
-                .children((path.caption == OPEN_FILE).then(|| {
-                    crate::page_files::browse_button(
-                        format!("{}-browse", ids.path),
-                        crate::page_files::accept_filter(path.filter),
-                        crate::page_files::folder_of(
-                            path.field.value(),
-                            &mp_settings::data_directory().unwrap_or_default(),
-                        ),
-                        handle,
-                    )
-                }).flatten()),
-        )
+        .child(list)
         .child(div().flex().justify_end().gap_2().children(buttons));
     let size = window.viewport_size();
     gpui::deferred(

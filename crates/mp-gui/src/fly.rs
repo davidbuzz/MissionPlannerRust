@@ -1013,6 +1013,10 @@ pub enum Prompt {
     /// is, titled with the button and worded with the dialog's first filter.
     /// `// C#: GCSViews/FlightData.cs:1086-1091, 1139-1153, 1315-1319, Log/MatLabForms.cs:45-59`
     Convert(Conversion),
+    /// The log browser's Load A Log - Review a Log's open - and its `OpenFileDialog`, opening in
+    /// `lastLogDir ?? Settings.Instance.LogDir`: titled with the button and worded with the
+    /// dialog's filter, as the conversions' are. `// C#: Log/LogBrowse.cs:269-277, 2810-2818`
+    ReviewLog,
     /// `InputBox.Show("Jump to Tag", "Tag Id:", ref tag_str)`. `// C#: GCSViews/FlightData.cs:6618-6623`
     JumpToTag,
     /// `InputBox.Show("Hud Header", "Please enter your item prefix", ref prefix)`, for a User
@@ -1082,6 +1086,8 @@ impl Prompt {
             Self::PoiCoords => crate::poi::COORDS_TITLE,
             Self::LoadLog => "Load Log",
             Self::Convert(kind) => kind.text(),
+            // `BUT_loadlog.Text`. `// C#: Log/LogBrowse.resx (BUT_loadlog.Text)`
+            Self::ReviewLog => "Load A Log",
             Self::JumpToTag => "Jump to Tag",
             Self::HudHeader => "Hud Header",
             Self::SetHome => "Are you sure?",
@@ -1123,6 +1129,7 @@ impl Prompt {
             Self::PoiCoords => crate::poi::COORDS_TEXT.to_owned(),
             Self::LoadLog => "Telemetry log (*.tlog)".to_owned(),
             Self::Convert(kind) => kind.filter().to_owned(),
+            Self::ReviewLog => "Log Files".to_owned(),
             Self::JumpToTag => "Tag Id:".to_owned(),
             Self::HudHeader => "Please enter your item prefix".to_owned(),
             Self::SetHome => {
@@ -1166,6 +1173,7 @@ impl Prompt {
                 | Self::PoiCoords
                 | Self::LoadLog
                 | Self::Convert(_)
+                | Self::ReviewLog
                 | Self::JumpToTag
                 | Self::HudHeader
                 | Self::SendMessage
@@ -2318,6 +2326,9 @@ pub struct Actions {
     pub prompt: Option<Prompt>,
     /// Its text box.
     pub prompt_field: TextField,
+    /// A file question's filter entry its list shows, `FilterIndex` less one: the first as each
+    /// dialog opens (`file_list.rs`).
+    pub prompt_filter: usize,
     /// `MAV.GuidedMode`.
     pub guided: GuidedMode,
     /// The take-off altitude the operator gave this session, asked for no second time: TakeOff
@@ -2366,6 +2377,7 @@ impl Default for Actions {
             loiter_rad: ModifyAndSet::loiter_rad(),
             prompt: None,
             prompt_field: TextField::new(""),
+            prompt_filter: 0,
             guided: GuidedMode::default(),
             guided_alt_setting: None,
             guided_frame_setting: None,
@@ -2400,10 +2412,12 @@ impl Actions {
         }
     }
 
-    /// Opens a question, with its box holding `text`.
+    /// Opens a question, with its box holding `text` - and a file question's list showing its
+    /// filter's first entry.
     pub fn ask(&mut self, prompt: Prompt, text: &str) {
         self.prompt = Some(prompt);
         self.prompt_field.set(text);
+        self.prompt_filter = 0;
     }
 
     /// What the question's box holds while a question with a box is open, and "none" otherwise:
@@ -3063,22 +3077,38 @@ impl Prompt {
                 Some("Log Files|*.log;*.bin;*.BIN;*.LOG")
             }
             Self::Convert(Conversion::LogAnalysis) => Some("*.log;*.bin|*.log;*.bin;*.BIN;*.LOG"),
+            Self::ReviewLog => Some(REVIEW_LOG_FILTER),
             Self::PoiLoad => Some("Poi File|*.txt"),
             Self::SelectScript => Some("Python Files|*.py|All files|*.*"),
             _ => None,
         }
     }
 
+    /// For a dialog standing for an `OpenFileDialog` or a `SaveFileDialog`, the C#'s `Filter`,
+    /// which the list of its folder lists by (file_list.rs): an `OpenFileDialog`'s
+    /// [`Prompt::opens_file`], POI's Save File's, and RAW Sensor's Save CSV's, which sets none and
+    /// so lists every file. None for any other.
+    /// `// C#: Utilities/POI.cs:147; Controls/RAW_Sensor.cs:280-284`
+    #[must_use]
+    pub const fn file_filter(self) -> Option<&'static str> {
+        match self {
+            Self::PoiSave => Some("Poi File|*.txt"),
+            Self::RawSensorCsv => Some(""),
+            _ => self.opens_file(),
+        }
+    }
+
     /// Whether this stands for an `OpenFileDialog` or a `SaveFileDialog`: its answer is a path,
-    /// typed, and the box is drawn wider for it.
+    /// typed or picked from the list of its folder, and the dialog is drawn wider for both.
     #[must_use]
     pub const fn is_file_dialog(self) -> bool {
-        matches!(
-            self,
-            Self::LoadLog | Self::PoiSave | Self::PoiLoad | Self::SelectScript | Self::RawSensorCsv
-        )
+        self.file_filter().is_some()
     }
 }
+
+/// Load A Log's `OpenFileDialog`'s filter, which lists the dataflash logs `LogBrowse` reads.
+/// `// C#: Log/LogBrowse.cs:273`
+pub const REVIEW_LOG_FILTER: &str = "Log Files|*.log;*.bin;*.BIN;*.LOG";
 
 /// What a key does to a question with no box: Enter is the dialog's accept button and Escape its
 /// cancel button, as on the C#'s message boxes, and nothing else is anything.
@@ -3093,8 +3123,10 @@ pub fn answer_key(event: &KeyDownEvent) -> KeyOutcome {
 }
 
 /// The question being asked, as the C#'s dialog: centred over the window with everything behind
-/// it inert, as `ShowDialog` makes it, with its title, its words, its box if it has one, and its
-/// two buttons. Enter answers yes and Escape no, as the dialogs' accept and cancel buttons do.
+/// it inert, as `ShowDialog` makes it, with its title, its words, its box if it has one - a file
+/// question's with the list of the folder it names under it, standing for the platform dialog's
+/// (`file_list.rs`) - and its two buttons. Enter answers yes and Escape no, as the dialogs'
+/// accept and cancel buttons do.
 ///
 /// A dialog rather than a strip in the Actions page, because a strip grew the page by the height
 /// of the question and pushed the mode list off the bottom of the column. The planning screen's
@@ -3171,8 +3203,8 @@ pub fn prompt_dialog(
     }
     // In a page, a file from the computer too: the browser's picker (page_files.rs), its file put
     // in the folder the box shows.
-    if let Some(filter) = prompt.opens_file() {
-        dialog = dialog.children(crate::page_files::browse_button(
+    let browse = prompt.opens_file().and_then(|filter| {
+        crate::page_files::browse_button(
             "fly-prompt-browse",
             crate::page_files::accept_filter(filter),
             crate::page_files::folder_of(
@@ -3180,6 +3212,36 @@ pub fn prompt_dialog(
                 &mp_settings::data_directory().unwrap_or_default(),
             ),
             &focus.prompt,
+        )
+    });
+    // A file question's list of the folder its box names, to browse as the platform dialog's
+    // (file_list.rs), the browser's picker beside the folder: a row clicked fills the box, a file
+    // double-clicked is OK.
+    if let Some(filter) = prompt.file_filter() {
+        let chooser = crate::file_list::Chooser::new(
+            "fly-prompt",
+            tab.prompt_field.value(),
+            filter,
+            tab.prompt_filter,
+        );
+        dialog = dialog.child(crate::file_list::view(
+            &chooser,
+            browse,
+            |this, choice, window, cx| {
+                this.fly_focus.prompt.focus(window, cx);
+                match choice {
+                    crate::file_list::Choice::Row { text, open } => {
+                        this.fly_actions.prompt_field.set(text);
+                        if open {
+                            this.fly_answer(true, window, cx);
+                        }
+                    }
+                    crate::file_list::Choice::Type(index) => {
+                        this.fly_actions.prompt_filter = index;
+                    }
+                }
+            },
+            cx,
         ));
     }
     if let Prompt::FlyToHereAlt { frame } = prompt {
@@ -4332,6 +4394,13 @@ impl MissionPlanner {
             Prompt::Convert(kind) => {
                 if accepted {
                     self.fly_convert(kind, &text);
+                }
+            }
+            // The C#'s Cancel closes the log browser's window; here the browser stays as it was.
+            // `// C#: Log/LogBrowse.cs:278-311`
+            Prompt::ReviewLog => {
+                if accepted {
+                    self.review_log_answered(&text, window, cx);
                 }
             }
             Prompt::JumpToTag => {
@@ -11495,6 +11564,73 @@ mod tests {
         for prompt in [Prompt::PoiSave, Prompt::RawSensorCsv, Prompt::TakeOff] {
             assert_eq!(prompt.opens_file(), None, "{prompt:?}");
         }
+    }
+
+    /// Every file question lists its folder by its dialog's filter (file_list.rs) - a save's too,
+    /// RAW Sensor's Save CSV every file as it sets none - is drawn wide for it, and opens on the
+    /// filter's first entry; a question that is no file's lists nothing.
+    #[test]
+    fn every_file_question_lists_its_folder_by_its_filter() {
+        let files = [
+            (Prompt::LoadLog, Some("Telemetry log (*.tlog)")),
+            (Prompt::Convert(Conversion::BinToLog), Some("Binary Log")),
+            (Prompt::Convert(Conversion::LogAnalysis), Some("*.log;*.bin")),
+            (Prompt::ReviewLog, Some("Log Files")),
+            (Prompt::PoiSave, Some("Poi File")),
+            (Prompt::PoiLoad, Some("Poi File")),
+            (Prompt::SelectScript, Some("Python Files")),
+            (Prompt::RawSensorCsv, None),
+        ];
+        for (prompt, first) in files {
+            let filter = prompt.file_filter().expect("a file question's filter");
+            let parsed = crate::file_list::Filter::parse(filter);
+            assert_eq!(
+                parsed.entry(0).map(|entry| entry.description.as_str()),
+                first,
+                "{prompt:?}"
+            );
+            assert!(prompt.is_file_dialog(), "{prompt:?}");
+            assert!(prompt.takes_text(), "{prompt:?}");
+        }
+        assert!(crate::file_list::Filter::parse("").admits(0, "samples.csv"));
+        for prompt in [Prompt::TakeOff, Prompt::JumpToTag, Prompt::SetHome] {
+            assert_eq!(prompt.file_filter(), None, "{prompt:?}");
+            assert!(!prompt.is_file_dialog(), "{prompt:?}");
+        }
+        let mut actions = Actions::default();
+        actions.ask(Prompt::SelectScript, "");
+        actions.prompt_filter = 1;
+        actions.ask(Prompt::LoadLog, "");
+        assert_eq!(actions.prompt_filter, 0, "a dialog opens on its first entry");
+    }
+
+    /// Review a Log's open is the log browser's Load A Log and its `OpenFileDialog`: the button's
+    /// words for a title, the filter's for its words, and the filter it lists by.
+    #[test]
+    fn review_a_logs_open_is_load_a_logs_dialog() {
+        let prompt = Prompt::ReviewLog;
+        assert_eq!(prompt.title(), "Load A Log");
+        assert_eq!(prompt.text(), "Log Files");
+        assert_eq!(prompt.opens_file(), Some(REVIEW_LOG_FILTER));
+        assert_eq!(prompt.file_filter(), Some(REVIEW_LOG_FILTER));
+        let filter = crate::file_list::Filter::parse(REVIEW_LOG_FILTER);
+        assert!(filter.admits(0, "00000042.BIN"));
+        assert!(filter.admits(0, "flight.log"));
+        assert!(!filter.admits(0, "flight.tlog"), "LogBrowse reads dataflash logs");
+        let (Some(source), Some(resx)) = (csharp("Log/LogBrowse.cs"), csharp("Log/LogBrowse.resx"))
+        else {
+            eprintln!("skipped: MP_SRC does not name a clone of https://github.com/ArduPilot/MissionPlanner");
+            return;
+        };
+        assert!(source.contains(&format!(
+            "openFileDialog1.Filter = \"{REVIEW_LOG_FILTER}\";"
+        )));
+        assert_eq!(
+            crate::config_coverage::source::resx(&resx)
+                .get("BUT_loadlog.Text")
+                .map(String::as_str),
+            Some(prompt.title())
+        );
     }
 
     // --- The DataFlash Logs page's conversions ------------------------------------------------

@@ -1,0 +1,40 @@
+# A typed-path dialog whose filter has more than one entry lists by the one chosen under its
+# list, as the platform dialog's "Files of type" box picks one, the first as it opens
+# (crates/mp-gui/src/file_list.rs): EXPERIMENTAL's Param Restore asks for its file with
+# ParamFile.FileMask, "Parameter File|*.param;*.parm|All Files|*.*" (temp.cs:1269-1281,
+# ExtLibs/Utilities/ParamFile.cs:15) - the parameter files, then with All Files every file.
+#
+# Offline: the dialog is cancelled, so nothing is restored.
+#
+# Run as: tools/gui-test.sh tests/gui/chooser-filter-types.gui
+screen fly
+window 1280x800
+budget 12
+# A first budget, set by hand until a passing run records one.
+env XDG_DATA_HOME $WORK
+env MP_CONFIG_XML $WORK/config.xml
+setup mkdir -p "$WORK/params" && printf 'LOIT_BRK_DELAY,1\n' > "$WORK/params/a.param" && printf 'LOIT_BRK_DELAY,2\n' > "$WORK/params/b.parm" && printf 'notes\n' > "$WORK/params/notes.txt"
+
+key ctrl+f
+expect screen experimental
+
+click experimental-but_paramrestore
+expect experimental.asking This process make take a some time
+click experimental-message-ok
+expect experimental.asking ~ Open:
+click experimental-path-value
+key ctrl+a
+type $WORK/params/
+expect chooser.type Parameter File
+expect chooser.files ../,a.param,b.parm
+
+click chooser-type-1
+expect chooser.type All Files
+expect chooser.files ../,a.param,b.parm,notes.txt
+expect layout.hidden 0
+click chooser-type-0
+expect chooser.type Parameter File
+expect chooser.files ../,a.param,b.parm
+
+click experimental-path-cancel
+expect experimental.asking none

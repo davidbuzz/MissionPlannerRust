@@ -47,6 +47,7 @@ mod crash;
 mod display_view;
 // ---- end Display view ----
 mod facts;
+mod file_list;
 mod fly;
 mod gauge;
 // The flight map's Gimbal Video: GimbalVideoControl and its forms.

@@ -114,6 +114,8 @@ pub const MAY_SCROLL: &[&str] = &[
     "plan-row-",
     // A file dialog's list of its folder, as the dialog's own list scrolls.
     "plan-file-",
+    // Every other file dialog's list (file_list.rs), the platform dialog's list it stands for.
+    "chooser-file-",
     // FLIGHT DATA's page strip, `tabControlactions`: one line, as the C#'s, its other tabs
     // reached with the strip's arrows.
     // `// C#: GCSViews/FlightData.Designer.cs (tabControlactions)`
