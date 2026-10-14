@@ -99,7 +99,8 @@ const UPDATER: &str = "headless-planner";
 /// touch (2026-10-04). The C#'s "Main Developer: Michael Oborne" is two lines, the owner's words
 /// (2026-10-14): this port's developer, and Mission Planner's as its honorary one. The libraries
 /// are this port's, not the C#'s twelve, none of which it uses (the owner, 2026-10-14): the
-/// notable crates, GStreamer for video, and the count `THIRD_PARTY_LICENSES` lists.
+/// notable crates, GStreamer for video, and the count `THIRD_PARTY_LICENSES` lists. The
+/// contributions are this port's: none yet, as with the companies (the owner, 2026-10-14).
 /// `// C#: Properties/Resources.resx (help_text)`
 pub const HELP_TEXT: &str = "\n\
     \tWelcome to the MissionPlannerRust, mission planning for Unmanned Aerial Vehicles (UAV).\n\
@@ -112,7 +113,7 @@ pub const HELP_TEXT: &str = "\n\
     \tMain Developer:David Buzz  <davidbuzz@gmail.com>\n\
     \tHonourary Developer:Michael Oborne , the OG that this is inspired by/ripped off from.\n\
     \tDesign: Samantha Nelson\n\
-    \tContributions from: Andrew Radford,  Marooned, Ryan Beall, Tom Pittenger and https://github.com/ArduPilot/MissionPlanner/graphs/contributors\n\
+    \tContributions to MissionPlannerRust from: none yet, pls get in touch - https://github.com/davidbuzz/MissionPlannerRust\n\
     \tArduCopter Illustrations: Max Levine\n\
     Libraries: gpui (Zed Industries), RustPython, wasmtime, serialport, ureq, image, tiny-skia, nalgebra, rustfft, dxf, roxmltree, flate2, ring, GStreamer - 1,002 crates in all, listed in THIRD_PARTY_LICENSES\n\
     \n\
@@ -961,6 +962,11 @@ mod tests {
             !HELP_TEXT.contains("Main Developer: Michael Oborne"),
             "{HELP_TEXT}"
         );
+        // This port's contributors: none yet, the owner's words of 2026-10-14.
+        assert!(HELP_TEXT.contains(
+            "\tContributions to MissionPlannerRust from: none yet, pls get in touch - https://github.com/davidbuzz/MissionPlannerRust\n"
+        ));
+        assert!(!HELP_TEXT.contains("Contributions from:"), "{HELP_TEXT}");
     }
 
     /// The libraries line names crates this port is built from - each a row of
