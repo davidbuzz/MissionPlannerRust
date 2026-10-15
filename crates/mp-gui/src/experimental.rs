@@ -232,7 +232,7 @@ const NOT_PORTED: &str = "not ported yet (NOT_DONE_YET_MATRIX.md, the EXPERIMENT
 /// the code behind it is untested, dangerous, and i think, for now, it needs to be canged to 'this
 /// button isnt tested yet, sorry'". Its port (`Act::BootloaderUpgrade`: the two questions, then
 /// `FLASH_BOOTLOADER`) stays for when it is tested.
-const NOT_TESTED_YET: &str = "this button isn't tested yet, sorry";
+pub(crate) const NOT_TESTED_YET: &str = "this button isn't tested yet, sorry";
 /// Whether Bootloader Upgrade runs its port: not until it is tested ([`NOT_TESTED_YET`]).
 const BOOTLOADER_UPGRADE_TESTED: bool = false;
 

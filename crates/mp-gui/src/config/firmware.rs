@@ -44,7 +44,9 @@
 //! custom firmware opens a file and hands it to `UploadFlash` by its extension
 //! (`mp_firmware::flow::custom_manifest`). Force Bootloader opens the window's link and reboots
 //! the board into its bootloader - the legacy page's handler too, so both pages hold the one in
-//! `force_bootloader.rs`; Bootloader Update opens a link of its own, asks twice, and sends
+//! `force_bootloader.rs`; Bootloader Update - withheld on both pages, saying only "this button
+//! isn't tested yet, sorry" ([`BOOTLOADER_UPDATE_TESTED`], the owner's word of 2026-10-16, as
+//! EXPERIMENTAL's Bootloader Upgrade is) - opens a link of its own, asks twice, and sends
 //! `MAV_CMD_FLASH_BOOTLOADER`.
 //!
 //! All of it runs as the C# runs it - the flows on a thread, with their questions and messages as
@@ -162,6 +164,12 @@ pub const BL_QUESTIONS: [&str; 2] = [
 ];
 
 /// Their caption. `// C#: GCSViews/ConfigurationView/ConfigFirmwareDisabled.cs:27`
+/// Whether Bootloader Update, on the manifest page and the connected page, runs its port: not
+/// until it is tested on a board - the owner's word of 2026-10-16, as EXPERIMENTAL's Bootloader
+/// Upgrade is withheld (`crate::experimental::NOT_TESTED_YET`, his of 2026-10-14). Its port - the
+/// link, the two "BL Update" questions, `FLASH_BOOTLOADER` - stays, and its unit tests with it.
+pub const BOOTLOADER_UPDATE_TESTED: bool = false;
+
 pub const BL_UPDATE: &str = "BL Update";
 
 /// `Strings.TrunkWarning`: Ctrl+Q's box, before the `DEV` release.
@@ -2422,13 +2430,19 @@ pub fn page(
                 |this, _window, _cx| this.force_bootloader_clicked(ForcePage::Manifest),
                 cx,
             ),
-            // `fw-bootloaderupdate`.
+            // `fw-bootloaderupdate`, withheld until it is tested ([`BOOTLOADER_UPDATE_TESTED`]).
             _ => link_label(
                 id,
                 text,
                 (x, y),
                 live,
-                |this, window, cx| this.manifest_bootloader_update(window, cx),
+                |this, window, cx| {
+                    if BOOTLOADER_UPDATE_TESTED {
+                        this.manifest_bootloader_update(window, cx);
+                    } else {
+                        this.file_status = Some(crate::experimental::NOT_TESTED_YET.to_owned());
+                    }
+                },
                 cx,
             ),
         };
@@ -2647,8 +2661,13 @@ fn disabled_page(firmware: &InstallFirmware, cx: &mut Context<MissionPlanner>) -
             theme::ACCENT,
             firmware.bootloader.is_none(),
             cx.listener(|this, _event: &(), _window, cx| {
-                let open = this.telemetry.view().connected;
-                this.install_firmware.bootloader_update(open);
+                // Withheld until it is tested ([`BOOTLOADER_UPDATE_TESTED`]).
+                if BOOTLOADER_UPDATE_TESTED {
+                    let open = this.telemetry.view().connected;
+                    this.install_firmware.bootloader_update(open);
+                } else {
+                    this.file_status = Some(crate::experimental::NOT_TESTED_YET.to_owned());
+                }
                 cx.notify();
             }),
         )))

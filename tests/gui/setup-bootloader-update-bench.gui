@@ -3,6 +3,11 @@
 # (PLAN.md §13.6 row 79: the bench CubeOrange carried an experimental Zephyr bootloader that
 # presented no USB device, and the owner ruled it replaced.)
 #
+# Bootloader Update is withheld since 2026-10-16 (crates/mp-gui/src/config/firmware.rs,
+# BOOTLOADER_UPDATE_TESTED false: a press says only "this button isn't tested yet, sorry"), so
+# this script needs that switched on to run; the bench run itself is set aside by the owner's
+# word of the same day.
+#
 # `ConfigFirmwareDisabled` (GCSViews/ConfigurationView/ConfigFirmwareDisabled.cs:18-44): the
 # Install Firmware entry while a vehicle is connected, with Bootloader Update - two "Are you sure
 # ..." questions under "BL Update", then `doCommand(MAV_CMD.FLASH_BOOTLOADER, 0, 0, 0, 0, 290876,

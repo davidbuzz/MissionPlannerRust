@@ -1,22 +1,18 @@
-# Install Firmware's Force Bootloader failing, and Bootloader Update, on the manifest page.
+# Install Firmware's Force Bootloader failing, and Bootloader Update withheld, on the manifest page.
 #
-# Bootloader Update (ConfigFirmwareManifest.cs:535-562): a
-# MAVLinkInterface of its own, connected by doConnect from the port box and the baud box - TCP's
-# transport asks its host and port first (ExtLibs/Comms/CommsTCPSerial.cs:112-125), through the
-# window's prompts - then, once Open has heard the copter, the two "BL Update" questions, then
-# doCommand(FLASH_BOOTLOADER, 0, 0, 0, 0, 290876, 0, 0), whose answer is said on the status line
-# (a box in the C#; the owner's ruling of 2026-09-25) and the link closed. SITL has no bootloader
-# to rewrite and refuses the command: "Failed to upgrade bootloader". The window's own link is
-# never opened, so the page stays the manifest page and CONNECT stays CONNECT.
+# Bootloader Update (ConfigFirmwareManifest.cs:535-562) - a MAVLinkInterface of its own, the two
+# "BL Update" questions, then doCommand(FLASH_BOOTLOADER, 0, 0, 0, 0, 290876, 0, 0) - is withheld
+# until it has been tested on a board, the owner's word of 2026-10-16, as EXPERIMENTAL's
+# Bootloader Upgrade is: a press says only "this button isn't tested yet, sorry" and opens
+# nothing (crates/mp-gui/src/config/firmware.rs, BOOTLOADER_UPDATE_TESTED). Its port stays, held
+# to the C# by the unit tests (firmware.rs manifest_link_tests).
 #
-# Divergences, written at their sites in crates/mp-gui/src/config/firmware.rs: doConnect's side
-# effects on the window (the port boxes dimmed, the button's image, the saved baud, the title bar,
-# the new-firmware check, SETUP shown again) are not done for this link - SETUP shown again would
-# close the page and the link it holds; Force Bootloader opens the port the port box shows.
+# Divergence, written at its site in crates/mp-gui/src/config/firmware.rs: Force Bootloader opens
+# the port the port box shows.
 #
-# Needs SITL copter on tcp:127.0.0.1:5760. Offline otherwise: the catalogue is the test fixture,
-# and the one USB device a CubeOrange by name, so nothing probes this machine's ports; the
-# settings are scratch ones, so nothing is opened at start-up. Run as
+# Offline: the catalogue is the test fixture, and the one USB device a CubeOrange by name, so
+# nothing probes this machine's ports; the settings are scratch ones, so nothing is opened at
+# start-up; no vehicle. Run as
 #
 #   tools/gui-test.sh tests/gui/config-firmware-blupdate.gui
 
@@ -60,32 +56,13 @@ expect vehicle.connected false
 expect link.button CONNECT
 expect config.firmware.page manifest
 
-# doConnect(mav, "TCP", ...): TcpSerial.Open's two questions, for Bootloader Update's link.
+# Bootloader Update, withheld: its words on the status line, no link of its own opened, no
+# question, the window's link untouched.
 click fw-bootloaderupdate
-expect config.firmware.bl connecting
-expect link.prompt remote host
-key ctrl+u
-type 127.0.0.1
-key Return
-expect link.prompt remote Port
-key ctrl+u
-type 5760
-key Return
-expect link.prompt none
-
-# Open: the copter heard twice, then the first question; the second after its Yes.
-expect config.firmware.question Are you sure you want to upgrade the bootloader? This can brick your board
-expect config.firmware.bl asking
-expect vehicle.connected false
-click fw-question-yes
-expect config.firmware.question Are you sure you want to upgrade the bootloader? This can brick your board, Please allow 5 mins for this process
-click fw-question-yes
-expect config.firmware.question none
-
-# FLASH_BOOTLOADER refused, said on the status line, and the link closed.
-expect status Failed to upgrade bootloader
+expect status this button isn't tested yet, sorry
 expect config.firmware.bl none
-expect config.firmware.message none
+expect link.prompt none
+expect config.firmware.question none
 expect vehicle.connected false
 expect link.button CONNECT
 expect config.firmware.page manifest
