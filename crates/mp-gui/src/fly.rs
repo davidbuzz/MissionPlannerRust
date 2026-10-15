@@ -5887,8 +5887,9 @@ pub fn playback_page(playback: &Playback, cx: &mut Context<MissionPlanner>) -> A
             theme::ACCENT,
             true,
             cx.listener(|this, _event: &(), _window, cx| {
-                if let Err(refusal) = this.fly_data.playback.play_pressed(&mut this.tuning) {
-                    this.file_status = Some(refusal.text().to_owned());
+                match this.fly_data.playback.play_pressed(&mut this.tuning) {
+                    Ok(()) => this.watch_playback_where_it_shows(),
+                    Err(refusal) => this.file_status = Some(refusal.text().to_owned()),
                 }
                 cx.notify();
             }),
@@ -8649,6 +8650,20 @@ impl MissionPlanner {
         }
     }
 
+    /// A log set playing from LOGS > Telemetry Logs - loaded, or Play pressed - plays where the
+    /// C#'s plays it: FLIGHT DATA, whose HUD, map and quick view show it, on its Telemetry Logs
+    /// page with the controls (the owner's word of 2026-10-16; LOGS, which holds the flight
+    /// screen's log pages, is the owner's own, 2026-10-04). Pausing stays where it is.
+    pub(crate) fn watch_playback_where_it_shows(&mut self) {
+        if self.screen != crate::Screen::Logs || !self.fly_data.playback.playing() {
+            return;
+        }
+        if self.fly_pages.shown().contains(&Page::TLogs) {
+            self.fly_pages.select(Page::TLogs);
+        }
+        self.choose_screen(crate::Screen::Fly);
+    }
+
     /// Load Log, once a path is given: the link given over to playing it - or, with a port
     /// open, only its name shown, as the C#'s main loop closes the file straight away.
     /// `// C#: GCSViews/FlightData.cs:671-703, 1278-1304, 3553-3567`
@@ -8665,6 +8680,7 @@ impl MissionPlanner {
             Ok((telemetry, control)) => {
                 self.telemetry = telemetry;
                 self.fly_data.playback.load(path, control);
+                self.watch_playback_where_it_shows();
             }
             Err(_) => {
                 self.file_status = Some(error_box("Please load a valid file"));

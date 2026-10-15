@@ -26,6 +26,13 @@ expect fly.prompt.value ~ /logs/flight.tlog
 click fly-prompt-ok
 expect fly.prompt none
 expect fly.playback.file flight.tlog
+# It plays where the C#'s plays it - FLIGHT DATA, whose HUD, map and quick view show it - on that
+# screen's Telemetry Logs page (the owner's word of 2026-10-16). Back to LOGS for the next page.
+expect screen fly
+expect fly.tab tabTLogs
+expect fly.playback.playing true
+click tab-logs
+expect screen logs
 
 click logs-tab-dataflash
 expect logs.page dataflash
