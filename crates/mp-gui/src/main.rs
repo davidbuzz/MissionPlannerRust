@@ -172,6 +172,10 @@ impl Docking {
 /// The status row's height, in pixels: fixed, so no screen moves when a message comes or goes.
 const STATUS_ROW_HEIGHT: f32 = 20.0;
 
+/// How long the status line is lit when a message is set again with the words already showing
+/// ([`MissionPlanner::note_status`]).
+const STATUS_FLASH: std::time::Duration = std::time::Duration::from_millis(600);
+
 /// The status line's colour: an error's, as `error_box` makes one, in the alert colour; anything
 /// else in the text colour.
 fn status_colour(text: &str) -> u32 {
@@ -433,6 +437,9 @@ struct MissionPlanner {
     /// again with the same words changes nothing on screen, and a script or the click crawler
     /// must still tell a repeated answer from none (the owner's click audit, 2026-10-14).
     status_seen: (Option<usize>, u64),
+    /// The status message the last frame drew - its text's address and its words - and when one
+    /// was last set again with the same words, which lights the line ([`Self::note_status`]).
+    status_flash: (Option<usize>, Option<String>, Option<web_time::Instant>),
     /// This computer's Tailscale: the poller asking the official client (tailscale.rs), started
     /// while Tailscale is enabled in the PLUGINS tab and let go when it is not.
     tailnet: Option<tailscale::Poller>,
@@ -947,6 +954,7 @@ impl MissionPlanner {
             // In a page, the logs past what a visit loads, said once.
             file_status: mp_os::fs::left_in_page().map(left_in_page_note),
             status_seen: (None, 0),
+            status_flash: (None, None, None),
             tailnet: None,
             tailnet_offer: None,
             tailnet_explained: None,
@@ -3165,21 +3173,58 @@ impl MissionPlanner {
             return None;
         };
         facts::record("status.drawn", text);
+        let lit = self.status_lit();
+        facts::record("status.flash", lit);
         let whole = SharedString::from(text.to_owned());
+        let line = probe::measured("status-bar", div())
+            .id("status-bar")
+            .flex_1()
+            .min_w(px(0.0))
+            .text_sm()
+            .text_color(rgb(status_colour(text)));
+        // Set again with the words already showing: lit a moment, so the press is seen to
+        // answer.
+        let line = if lit {
+            line.px_1().rounded_sm().bg(rgb(theme::SELECTION))
+        } else {
+            line
+        };
         Some(
-            probe::measured("status-bar", div())
-                .id("status-bar")
-                .flex_1()
-                .min_w(px(0.0))
-                .text_sm()
-                .text_color(rgb(status_colour(text)))
-                .truncate()
+            line.truncate()
                 .child(text.to_owned())
                 .tooltip(move |_window, cx| -> gpui::AnyView {
                     cx.new(|_| config::rover_tuning::Tip(whole.clone())).into()
                 })
                 .into_any_element(),
         )
+    }
+
+    /// Once a frame: a status message set again with the words already showing - a string made
+    /// new, the same text - lights the status line for [`STATUS_FLASH`], so a repeated press is
+    /// seen to answer where nothing on screen would change (the owner's word of 2026-10-16; the
+    /// click audit's repeated answers, 2026-10-14). New words show themselves and are not lit.
+    fn note_status(&mut self) {
+        let address = self
+            .file_status
+            .as_ref()
+            .filter(|text| !text.is_empty())
+            .map(|text| text.as_ptr().addr());
+        if address == self.status_flash.0 {
+            return;
+        }
+        if address.is_some() && self.file_status == self.status_flash.1 {
+            self.status_flash.2 = Some(web_time::Instant::now());
+            repaint::again_in(STATUS_FLASH);
+        }
+        self.status_flash.0 = address;
+        self.status_flash.1.clone_from(&self.file_status);
+    }
+
+    /// Whether the status line is lit ([`Self::note_status`]).
+    fn status_lit(&self) -> bool {
+        self.status_flash
+            .2
+            .is_some_and(|at| at.elapsed() < STATUS_FLASH)
     }
 
     /// The status row ([`Self::status_row`]): the header's last line, across the window under
@@ -3434,6 +3479,7 @@ impl Render for MissionPlanner {
         }
         // EXPERIMENTAL's mag calb log, its answer handed to the Compass page's SaveOffsets.
         experimental::tick(self);
+        self.note_status();
         // Tailscale: its poller, the first start's offer, a failed tailnet link explained.
         self.tailnet_tick(&view);
         // The Servo Output, Serial Ports and ESC Calibration pages: each page object disposed

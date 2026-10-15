@@ -8,7 +8,7 @@
 env MP_CONFIG_XML $WORK/config.xml
 screen logs
 window 1600x1200
-budget 8
+budget 9
 
 expect screen logs
 expect logs.page review
@@ -26,6 +26,14 @@ click fly-playlog
 expect fly.playback.playing false
 expect fly.playback.button Play
 expect status no log loaded
+expect status.flash false
+# Pressed again, the same words: the status line is lit a moment, so the press is seen to answer
+# (the owner's word of 2026-10-16), and goes back to plain after 600 ms.
+click fly-playlog
+expect status no log loaded
+expect status.flash true
+settle 1
+expect status.flash false
 
 click logs-tab-dataflash
 expect logs.page dataflash
