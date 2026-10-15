@@ -387,20 +387,13 @@ pub fn panel_for(tuning: &Tuning, cx: &mut Context<MissionPlanner>) -> AnyElemen
                             .text_color(rgb(theme::DIM))
                             .child(format!("{from:.0}s to {to:.0}s")),
                     )
+                    // No Clear: the C#'s graph has none - it is emptied as playback starts
+                    // (`clear`) - and the one this graph had is gone (the owner's word of
+                    // 2026-10-16).
                     .child(
                         div()
                             .flex()
                             .gap_2()
-                            .child(action(
-                                "tuning-clear",
-                                "clear",
-                                theme::ACCENT,
-                                true,
-                                cx.listener(|this, _event: &(), _window, cx| {
-                                    this.tuning.clear();
-                                    cx.notify();
-                                }),
-                            ))
                             .child(action(
                                 "tuning-hide",
                                 "hide",
@@ -504,6 +497,15 @@ mod tests {
             );
         }
         assert_ne!(drawn[0].colour, drawn[1].colour);
+    }
+
+    /// No Clear button: the C#'s graph has none - playback starting empties it - and this one's
+    /// is gone (the owner's word of 2026-10-16). The id is put together here so that this test's
+    /// own text is not what it looks for.
+    #[test]
+    fn the_graph_has_no_clear_button() {
+        let id = ["tuning", "clear"].join("-");
+        assert!(!include_str!("tuning.rs").contains(&format!("\"{id}\"")));
     }
 
     /// Clearing - as Play does when it starts a log - empties every series and takes the clock
