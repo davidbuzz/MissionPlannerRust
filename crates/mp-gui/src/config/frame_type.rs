@@ -718,33 +718,38 @@ impl FrameType {
     }
 
     /// A class button pressed: `radioButtonClass_CheckedChanged`. The one already down raises
-    /// no `CheckedChanged`, so pressing it again does nothing.
+    /// no `CheckedChanged`, so pressing it again does nothing - and says so, quietly, for the
+    /// status line ("already Quad"; the owner's word of 2026-10-16, his rule for a press that
+    /// shows nothing).
     /// `// C#: GCSViews/ConfigurationView/ConfigFrameClassType.cs:318-336`
-    pub fn click_class(&mut self, frame_class: i32) {
-        if !self.takes_clicks()
-            || self.checked_class == Some(frame_class)
-            || !CLASSES.iter().any(|button| button.class == frame_class)
-        {
-            return;
+    pub fn click_class(&mut self, frame_class: i32) -> Option<String> {
+        if !self.takes_clicks() || !CLASSES.iter().any(|button| button.class == frame_class) {
+            return None;
+        }
+        if self.checked_class == Some(frame_class) {
+            return self.class_text().map(already);
         }
         self.do_class(frame_class);
+        None
     }
 
     /// A type radio button clicked: `radioButtonType_CheckedChanged`. A disabled one, or one in
-    /// a disabled group, takes no click; the checked one raises no `CheckedChanged`.
+    /// a disabled group, takes no click; the checked one raises no `CheckedChanged`, and says so,
+    /// quietly, as a class button does ("already Plus").
     /// `// C#: GCSViews/ConfigurationView/ConfigFrameClassType.cs:302-316`
-    pub fn click_radio(&mut self, frame_type: i32) {
-        let Some(index) = type_index(frame_type) else {
-            return;
-        };
+    pub fn click_radio(&mut self, frame_type: i32) -> Option<String> {
+        let index = type_index(frame_type)?;
         if !self.takes_clicks()
             || !self.types_enabled
             || !self.radios.get(index).copied().unwrap_or(false)
-            || self.checked_type == Some(TypeRadio::Type(frame_type))
         {
-            return;
+            return None;
+        }
+        if self.checked_type == Some(TypeRadio::Type(frame_type)) {
+            return self.type_text().map(already);
         }
         self.do_type(frame_type);
+        None
     }
 
     /// A picture clicked: the same handler, from `Click`. A picture is only ever faded, never
@@ -780,6 +785,11 @@ impl FrameType {
                 .map(|option| option.name),
         }
     }
+}
+
+/// What a press on the class or type already chosen says: "already Plus", "already Quad".
+fn already(name: &str) -> String {
+    format!("already {name}")
 }
 
 /// Facts for a test: what the page read and shows, how its writes went, and the vehicle's
@@ -951,7 +961,9 @@ fn class_button(
         body.cursor_pointer()
             .hover(|style| style.bg(rgb(theme::BORDER)))
             .on_click(cx.listener(move |this, _event, _window, cx| {
-                this.frame_type.click_class(class);
+                if let Some(words) = this.frame_type.click_class(class) {
+                    this.file_status = Some(words);
+                }
                 cx.notify();
             }))
             .into_any_element()
@@ -1019,7 +1031,9 @@ fn type_row(
         button
             .cursor_pointer()
             .on_click(cx.listener(move |this, _event, _window, cx| {
-                this.frame_type.click_radio(value);
+                if let Some(words) = this.frame_type.click_radio(value) {
+                    this.file_status = Some(words);
+                }
                 cx.notify();
             }))
             .into_any_element()
@@ -1346,8 +1360,8 @@ mod tests {
         );
         assert_eq!(frame.checked_type, Some(TypeRadio::Type(1)));
         assert_eq!(frame.bright, [false, true, false, false, false, false]);
-        // The checked one again raises no CheckedChanged.
-        frame.click_radio(1);
+        // The checked one again raises no CheckedChanged: nothing written, and it says so.
+        assert_eq!(frame.click_radio(1), Some("already X".to_owned()));
         assert_eq!(frame.writes.queued().len(), 2);
         // Y6B is not a quad's, so its radio is disabled; its picture still takes the click.
         frame.click_radio(10);
@@ -1383,8 +1397,8 @@ mod tests {
         assert_eq!(frame.radios, [true, true, false, false, false, false]);
         assert_eq!(frame.bright, [true, true, false, false, false, false]);
         assert_eq!(frame.checked_type, Some(TypeRadio::Type(1)));
-        // The class that is down again does nothing.
-        frame.click_class(2);
+        // The class that is down again does nothing, and says so.
+        assert_eq!(frame.click_class(2), Some("already Hexa".to_owned()));
         assert_eq!(frame.writes.queued().len(), 2);
         // Y6 takes X and Y6B.
         frame.click_class(5);
