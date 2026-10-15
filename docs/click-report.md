@@ -79,19 +79,17 @@ EXPERIMENTAL's ReSort All logs ("N logs sorted"), and Force Accel Cal and Force 
   boxes, which scroll in their list as the C#'s do, and lay over the list's rows. They may scroll
   now (`layout_guard.rs`).
 
-## For the owner to decide
+## Decided by the owner (2026-10-16)
 
-1. **Dimmed controls** (45 rows, listed below). A dimmed control takes no click, as anywhere;
-   Mission Planner seldom dims - its buttons take the click and return without a word, which the
-   port now says. Should a dimmed control say why when it is clicked, as the Advanced page's
-   withheld buttons do ("Param gen: not implemented yet")?
-2. **FLIGHT DATA's tuning graph, its Clear button**: not in the C#, whose graph has none. Keep it -
-   with "nothing to clear" when the graph is empty - or remove it?
-3. **Confirmations of a silent success** (above): keep them, or say only what is missing?
-4. **CONFIG > Planner > Browse** opens the desktop's own folder dialog; every other file dialog is
-   the planner's own chooser (a typed path with its folder listed). The same here?
-5. **SETUP > Frame Type**: clicking the frame the vehicle already has shows nothing, as in the C#.
-   A quiet "already Plus"?
+1. **Dimmed controls** (45 rows, listed below): a click on a dimmed control says why on the status
+   line, quietly, as the Advanced page's withheld buttons do - being made.
+2. **FLIGHT DATA's tuning graph, its Clear button**: removed (bc2b1cf); the graph is emptied as
+   playback starts, as the C#'s is.
+3. **Confirmations of a silent success** (above): kept.
+4. **CONFIG > Planner > Browse**: the planner's own chooser, as every other file dialog is - being
+   made.
+5. **SETUP > Frame Type**: the class or type the vehicle has, clicked, says "already Quad" or
+   "already Plus" (a665094).
 
 ## The real gaps, ported since (4f538d7)
 
