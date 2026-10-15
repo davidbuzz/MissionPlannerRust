@@ -118,7 +118,10 @@ const UPDATER: &str = "headless-planner";
 /// (2026-10-14): this port's developer, and Mission Planner's as its honorary one. The libraries
 /// are this port's, not the C#'s twelve, none of which it uses (the owner, 2026-10-14): the
 /// notable crates, GStreamer for video, and the count `THIRD_PARTY_LICENSES` lists. The
-/// contributions are this port's: none yet, as with the companies (the owner, 2026-10-14).
+/// contributions are this port's: none yet, as with the companies (the owner, 2026-10-14). Where
+/// to find more is this port's page, where the C#'s points at Mission Planner's manual,
+/// ardupilot.org/planner (the owner's bug of 2026-10-14; the fix proposed then, his word of
+/// 2026-10-16), and with the C#'s missing "for" put back.
 /// `// C#: Properties/Resources.resx (help_text)`
 pub const HELP_TEXT: &str = "\n\
     \tWelcome to the MissionPlannerRust, mission planning for Unmanned Aerial Vehicles (UAV).\n\
@@ -127,7 +130,7 @@ pub const HELP_TEXT: &str = "\n\
     ArduCopter: http://ardupilot.org/copter\n\
     ArduRover: http://ardupilot.org/rover\n\
     \n\
-    \tPlease visit http://ardupilot.org/planner  further information.\n\
+    \tPlease visit https://github.com/davidbuzz/MissionPlannerRust for further information.\n\
     \tMain Developer:David Buzz  <davidbuzz@gmail.com>\n\
     \tHonourary Developer:Michael Oborne , the OG that this is inspired by/ripped off from.\n\
     \tDesign: Samantha Nelson\n\
@@ -1067,6 +1070,12 @@ mod tests {
             "\tContributions to MissionPlannerRust from: none yet, pls get in touch - https://github.com/davidbuzz/MissionPlannerRust\n"
         ));
         assert!(!HELP_TEXT.contains("Contributions from:"), "{HELP_TEXT}");
+        // Further information is this port's page, not Mission Planner's manual (the owner,
+        // 2026-10-16).
+        assert!(HELP_TEXT.contains(
+            "\tPlease visit https://github.com/davidbuzz/MissionPlannerRust for further information.\n"
+        ));
+        assert!(!HELP_TEXT.contains("ardupilot.org/planner"), "{HELP_TEXT}");
     }
 
     /// The libraries line names crates this port is built from - each a row of
