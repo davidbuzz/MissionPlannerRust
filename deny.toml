@@ -25,6 +25,10 @@ allow = [
     "bzip2-1.0.6",
     "CDLA-Permissive-2.0",
     "BSD-2-Clause-Views",
+    # The BSD Zero Clause License, which asks nothing: smoltcp's and managed's, the network stack
+    # of the built-in Tailscale node (mp-tailnet, behind mp-gui's tailnet-node feature) - the
+    # owner's word of 2026-10-16.
+    "0BSD",
     # malachite: the LGPL version 3 is the GPL version 3 with additional permissions, which the
     # GPL's section 7 lets this work remove, so it is conveyed here under the GPL.
     "LGPL-3.0-only",
