@@ -4,8 +4,10 @@ resolver = "3"
 # they type-check and test natively.
 members = ["crates/*", "crates/mp-plugin-host/plugins", "xtask"]
 # `fuzz` is deliberately excluded: it needs a nightly toolchain and cargo-fuzz, and a normal
-# `cargo build --workspace` must not require either.
-exclude = ["fuzz"]
+# `cargo build --workspace` must not require either. `third_party` holds others' code - the
+# vendored tailscale-rs crates [patch.crates-io] points at, below - kept as published: no member,
+# so the workspace's lints, clippy and tests are not run over it.
+exclude = ["fuzz", "third_party"]
 
 [workspace.package]
 version = "0.0.0"
@@ -46,6 +48,7 @@ mp-plugin-host = { path = "crates/mp-plugin-host" }
 mp-dronecan = { path = "crates/mp-dronecan" }
 mp-sikradio = { path = "crates/mp-sikradio" }
 mp-update = { path = "crates/mp-update" }
+mp-tailnet = { path = "crates/mp-tailnet" }
 thiserror = "2"
 sha2 = "0.10"
 criterion = { version = "0.5", default-features = false, features = ["cargo_bench_support"] }
@@ -135,6 +138,14 @@ rustpython-sre_engine = { git = "https://github.com/davidbuzz/RustPython", rev =
 rustpython-stdlib = { git = "https://github.com/davidbuzz/RustPython", rev = "e7bba0258304314fda176754f1e93e1496bb150c" }
 rustpython-vm = { git = "https://github.com/davidbuzz/RustPython", rev = "e7bba0258304314fda176754f1e93e1496bb150c" }
 rustpython-wtf8 = { git = "https://github.com/davidbuzz/RustPython", rev = "e7bba0258304314fda176754f1e93e1496bb150c" }
+
+# tailscale-rs 0.6.1 (BSD-3-Clause) as published on crates.io, with MagicDNS name lookup added for
+# the built-in Tailscale node (crates/mp-tailnet; the owner's feature of 2026-10-14): the two of its
+# crates that change, vendored under third_party/tailscale-rs, whose README lists every change and
+# how to take a newer release. Upstream takes no outside code contributions (its CONTRIBUTING.md).
+# Only built with mp-gui's `tailnet-node` feature.
+tailscale = { path = "third_party/tailscale-rs/tailscale" }
+ts_runtime = { path = "third_party/tailscale-rs/ts_runtime" }
 
 # Telemetry and render paths must stay allocation- and panic-free; release builds are
 # optimised hard because "extreme performance" is a stated goal (see DELIVERABLES.md).

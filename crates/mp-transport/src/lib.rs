@@ -47,6 +47,10 @@ pub mod serial;
 #[cfg(all(windows, feature = "serial"))]
 mod win32;
 pub mod socket;
+// The planner's built-in Tailscale node's way into the links (mp-tailnet): not in a web page,
+// whose tailnet is the page's own.
+#[cfg(not(target_family = "wasm"))]
+pub mod tailnet;
 pub mod testing;
 pub mod udp_client;
 pub mod url;
@@ -185,8 +189,13 @@ pub fn open_url(url: &LinkUrl) -> Result<Box<dyn Transport>, OpenError> {
         LinkUrl::Tcp { host, port } => Ok(Box::new(page::PageTransport::open(&format!(
             "tcp:{host}:{port}"
         ))?)),
+        // A host on the tailnet through the planner's built-in node while it is in use, every
+        // other through the operating system (tailnet.rs; the owner's, 2026-10-14).
         #[cfg(not(target_family = "wasm"))]
-        LinkUrl::Tcp { host, port } => Ok(Box::new(TcpTransport::connect(host, *port)?)),
+        LinkUrl::Tcp { host, port } => match tailnet::open_tcp(host, *port) {
+            Some(opened) => Ok(Box::new(opened?)),
+            None => Ok(Box::new(TcpTransport::connect(host, *port)?)),
+        },
         LinkUrl::TcpListen { port } => Ok(Box::new(TcpTransport::listen(*port)?)),
         // In a web page, on the page's own tailnet address (web/www/link.js), answering whoever
         // sent last as the desktop's does.
@@ -202,8 +211,12 @@ pub fn open_url(url: &LinkUrl) -> Result<Box<dyn Transport>, OpenError> {
         LinkUrl::UdpClient { host, port } => Ok(Box::new(page::PageTransport::open(&format!(
             "udpcl:{host}:{port}"
         ))?)),
+        // As `tcp:`: the tailnet's hosts through the built-in node while it is in use.
         #[cfg(not(target_family = "wasm"))]
-        LinkUrl::UdpClient { host, port } => Ok(Box::new(UdpClientTransport::open(host, *port)?)),
+        LinkUrl::UdpClient { host, port } => match tailnet::open_udp_client(host, *port) {
+            Some(opened) => Ok(Box::new(opened?)),
+            None => Ok(Box::new(UdpClientTransport::open(host, *port)?)),
+        },
         #[cfg(target_family = "wasm")]
         LinkUrl::WebSocket { url } => Ok(Box::new(page::PageTransport::open(url)?)),
         #[cfg(not(target_family = "wasm"))]

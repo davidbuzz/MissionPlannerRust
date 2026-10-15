@@ -133,7 +133,7 @@ pub const HELP_TEXT: &str = "\n\
     \tDesign: Samantha Nelson\n\
     \tContributions to MissionPlannerRust from: none yet, pls get in touch - https://github.com/davidbuzz/MissionPlannerRust\n\
     \tArduCopter Illustrations: Max Levine\n\
-    Libraries: gpui (Zed Industries), RustPython, wasmtime, serialport, ureq, image, tiny-skia, nalgebra, rustfft, dxf, roxmltree, flate2, ring, GStreamer - 1,002 crates in all, listed in THIRD_PARTY_LICENSES\n\
+    Libraries: gpui (Zed Industries), RustPython, wasmtime, serialport, ureq, image, tiny-skia, nalgebra, rustfft, dxf, roxmltree, flate2, ring, GStreamer - 1,126 crates in all, listed in THIRD_PARTY_LICENSES\n\
     \n\
     Companies that have contributed to MissionPlannerRust's development: none yet, pls get in touch\n\
     \n\

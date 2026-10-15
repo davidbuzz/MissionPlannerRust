@@ -1,0 +1,29 @@
+#!/usr/bin/env bash
+#
+# This script is a convenience to run the same checks as CI (or `nix flake check`)
+# from your local devenv.
+#
+# Additional arguments are assumed to be setting the scope of the check, e.g. calling:
+#
+#     $ check -p ts_control
+#
+# overrides the default `--workspace` and runs the checks just against `ts_control`.
+
+set -euo pipefail
+
+SCOPE_NO_WS=${SCOPE:-}
+readonly SCOPE=${@:---workspace}
+
+set -x
+
+cargo +nightly fmt --check
+cargo run -p checks
+cargo clippy      $SCOPE --lib                               --no-deps --all-features -- -D warnings
+cargo clippy      $SCOPE --bins --tests --benches --examples --no-deps --all-features -- -D warnings -A missing_docs
+cargo doc         $SCOPE                                     --no-deps --all-features
+cargo deny        $SCOPE                                               --all-features check all
+cargo machete     $SCOPE_NO_WS  --with-metadata
+cargo vet         $SCOPE_NO_WS || true
+cargo nextest run $SCOPE                                               --all-features --no-tests=pass
+cargo test        $SCOPE --doc                                         --all-features
+cargo build       $SCOPE --all-targets                                 --all-features

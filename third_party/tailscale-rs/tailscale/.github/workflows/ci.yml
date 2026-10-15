@@ -1,0 +1,231 @@
+name: rust
+
+on:
+  push:
+    branches:
+      - main
+    tags:
+      - "v*"
+  pull_request:
+  schedule:
+    # Nightly run; execute daily at 06:37 AM UTC on main (default branch).
+    - cron: "37 6 * * *"
+
+  workflow_dispatch:
+    inputs:
+      # It doesn't currently make sense to publish to staging.crates.io because this
+      # requires all our dependencies to be present for the push to succeed, so this is
+      # disabled for now.
+      crates_repo:
+        description: "crates.io repo to publish to"
+        default: prod
+        required: true
+        options:
+          # - staging
+          - prod
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_TERM_VERBOSE: true
+  RUST_BACKTRACE: full
+
+  crates_environment: &crates_environment ${{ case(inputs.crates_repo == 'prod', 'crates.io', startsWith(github.ref, 'refs/tags/'), 'crates.io', 'staging.crates.io') }}
+
+  is_tag_push: ${{ startsWith(github.ref, 'refs/tags/') }}
+  is_dispatch: ${{ github.event_name == 'workflow_dispatch' }}
+
+  prev_rust: &prev_rust 1.97.1
+  latest_rust: &latest_rust 1.98.1
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  build_test:
+    strategy:
+      fail-fast: false
+      matrix:
+        is_pr_or_push:
+          - ${{github.event_name == 'pull_request' || github.event_name == 'push'}}
+        target:
+          # `msrv_on_pr: false` drops this target's MSRV job from PR/push runs; see the
+          # exclude rule below. The nightly workflow ignores the field and builds MSRV
+          # everywhere.
+          - triple: x86_64-unknown-linux-gnu
+            runner: linux-x86_64-16cpu
+            msrv_on_pr: true
+          - triple: aarch64-unknown-linux-gnu
+            runner: linux-arm64-16cpu
+            msrv_on_pr: false
+          - triple: aarch64-apple-darwin
+            runner: macos-26
+            msrv_on_pr: false
+          - triple: x86_64-pc-windows-gnu
+            runner: windows-8vcpu
+            msrv_on_pr: false
+          - triple: x86_64-pc-windows-msvc
+            runner: windows-8vcpu
+            msrv_on_pr: false
+        toolchain:
+          - version: *prev_rust
+            label: prev
+          - version: *latest_rust
+            label: latest
+        exclude:
+          # Don't run macOS builds on PR/push workflows; only on the nightly workflow.
+          - is_pr_or_push: true
+            target:
+              triple: aarch64-apple-darwin
+          # Same for `*-windows-gnu`
+          - is_pr_or_push: true
+            target:
+              triple: x86_64-pc-windows-gnu
+          # Same for the MSRV toolchain, except on the targets flagged `msrv_on_pr` above.
+          - is_pr_or_push: true
+            toolchain:
+              label: prev
+            target:
+              msrv_on_pr: false
+    # The name needs to remain stable for the "Require status checks to pass" feature of our branch
+    # protection rules to work, thus the "toolchain.label" field in the matrix. Unfortunately the
+    # status check matching on job name doesn't support regexes, just an exact job name match.
+    name: test (rust ${{ matrix.toolchain.label }}, ${{ matrix.target.triple }})
+    runs-on: ${{ matrix.target.runner }}
+
+    env:
+      COMMON_FLAGS: --all-features --workspace
+      CARGO_BUILD_TARGET: ${{ matrix.target.triple }}
+      is_windows_gnu: ${{ endsWith(matrix.target.triple, '-windows-gnu') }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Setup rust
+        id: setup-rust
+        uses: ./.github/actions/setup-rust
+        with:
+          toolchain-version: ${{ matrix.toolchain.version }}
+          builder-triple: ${{ matrix.target.triple }}
+          components: clippy
+      - name: Lint lib targets (cargo clippy)
+        run: |-
+          cargo clippy \
+            $COMMON_FLAGS \
+            --no-deps \
+            --lib \
+            -- -D warnings
+      # These are separated from `--lib` to avoid enforcing missing docs in targets that
+      # can't become part of public API
+      - name: Lint other targets (cargo clippy)
+        run: |-
+          cargo clippy \
+            $COMMON_FLAGS \
+            --no-deps \
+            --bins --tests --benches --examples \
+            -- -D warnings -A missing_docs
+      - name: Build (cargo build)
+        run: cargo build $COMMON_FLAGS --all-targets
+
+      # `ts_python` has the same lib name as the `tailscale` root crate, which again appears
+      # to just be an issue on `*-windows-gnu` targets, so don't test it here (depend on
+      # python tests instead).
+      - name: Test (cargo test), --all-features
+        run: |-
+          cargo test \
+              $COMMON_FLAGS \
+              ${{ case(env.is_windows_gnu == 'true', '--exclude ts_python', '') }}
+
+      - name: Release build (cargo build --release)
+        if: ${{ github.event_name != 'pull_request' }}
+        run: cargo build $COMMON_FLAGS --release --all-targets
+
+      - name: Docs (cargo doc)
+        run: cargo doc $COMMON_FLAGS --no-deps
+
+  arch_independent:
+    name: arch-independent checks
+    runs-on: linux-x86_64-16cpu
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Setup rust
+        id: setup-rust
+        uses: ./.github/actions/setup-rust
+        with:
+          toolchain-version: nightly
+          builder-triple: x86_64-unknown-linux-gnu
+          components: rustfmt
+      - &binstall
+        name: binstall
+        uses: cargo-bins/cargo-binstall@75b4bfae1b2c753a6806bbce6e6cb89b602de33c # v1.22.0
+      - name: Install cargo-deny
+        run: command -v cargo-deny || cargo binstall --no-confirm --force cargo-deny
+      - &cargo_ws
+        name: Install cargo-workspaces
+        run: command -v cargo-workspaces || cargo binstall --no-confirm --force cargo-workspaces
+      - name: Check for unused dependencies (cargo machete)
+        uses: bnjbvr/cargo-machete@ac30a525c0a8d163a92d727b3ff079ee3f6ecb08 # v0.9.2
+        with:
+          args: "--with-metadata"
+      - name: Dependency audit (cargo deny)
+        run: cargo deny --workspace --all-features check all
+      - name: Check formatting (cargo fmt)
+        run: cargo fmt --check
+      - name: Custom workspace checks
+        run: cargo run -p checks
+      - &dry_publish
+        name: Publish (Dry run)
+        run: cargo ws publish --dry-run --publish-as-is
+
+  publish:
+    name: publish
+    runs-on: linux-x86_64-16cpu
+
+    if: startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch'
+    needs:
+      - build_test
+      - arch_independent
+
+    environment: *crates_environment
+
+    # `id-token` is used to grab the cargo registry token.
+    permissions:
+      id-token: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: rust-lang/crates-io-auth-action@c6f97d42243bad5fab37ca0427f495c86d5b1a18 # v1.0.5
+        id: auth
+        with:
+          url: ${{ case(inputs.crates_repo == 'prod', 'https://crates.io', startsWith(github.ref, 'refs/tags/'), 'https://crates.io', 'https://staging.crates.io') }}
+
+      - name: Setup rust
+        id: setup-rust
+        uses: ./.github/actions/setup-rust
+        with:
+          toolchain-version: *latest_rust
+          builder-triple: x86_64-unknown-linux-gnu
+
+      - *binstall
+      - *cargo_ws
+
+      - name: Configure staging registry
+        if: inputs.crates_repo == 'staging'
+        run: |-
+          echo CARGO_REGISTRIES_STAGING_INDEX=https://staging.crates.io/index >> $GITHUB_ENV
+          echo CARGO_REGISTRY_DEFAULT=staging >> $GITHUB_ENV
+
+      - *dry_publish
+
+      - name: Publish
+        run: cargo ws publish --publish-as-is
+        env:
+          TS_FFI_BUILDRS_STRICT: 1
+          CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}

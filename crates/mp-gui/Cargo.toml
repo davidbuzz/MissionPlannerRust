@@ -14,6 +14,15 @@ path = "src/main.rs"
 [lints]
 workspace = true
 
+[features]
+# The owner's built-in Tailscale node (2026-10-14), experimental: tailscale-rs - vendored in
+# third_party/tailscale-rs with MagicDNS added - on a tokio runtime, started and stopped by the
+# PLUGINS tab's "Tailscale node (experimental)" row, and the links to the tailnet's hosts dialled
+# through it. Off by default: some 115 crates more, among them aws-lc-sys, C that needs cmake and a
+# C compiler, and tailscale-rs is built and tested upstream for Linux and macOS only. Without it
+# the row is listed, and ticked says this build has no node.
+tailnet-node = ["mp-tailnet/node"]
+
 [dependencies]
 # The std calls that panic in a web page, std's on the desktop (web/tools/port_os.py).
 mp-os.workspace = true
@@ -111,6 +120,12 @@ flate2.workspace = true
 # The screens' words (i18n.rs): the .ftl files under assets/i18n, embedded, formatted per culture.
 fluent-bundle.workspace = true
 unic-langid.workspace = true
+
+# The built-in Tailscale node (plugins_ui.rs, plugin_manager.rs): mp-tailnet, whose node is the
+# `tailnet-node` feature above; without it, the same calls saying there is none. A web page has
+# a tailnet of its own (web/www).
+[target.'cfg(not(target_family = "wasm"))'.dependencies]
+mp-tailnet.workspace = true
 
 # The backend crate per platform, mirroring what gpui_platform does. Selecting it here rather
 # than depending on gpui_platform avoids an inherited-dependency resolution problem: consumed as

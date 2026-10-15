@@ -71,8 +71,9 @@ const LAYERS: &[(u8, &[&str])] = &[
         // L1. Not yet: mp-gnss, mp-adsb, mp-cot.
     (1, &["mp-mavlink", "mp-mavlink-dialects", "mp-dronecan"]),
     // L2. Not yet: mp-transport-ble, mp-platform, mp-platform-linux, mp-platform-windows,
-    // mp-platform-macos.
-    (2, &["mp-transport"]),
+    // mp-platform-macos. mp-tailnet: the built-in Tailscale node the transports dial through (the
+    // owner's, 2026-10-14), a transport of a kind, beside them.
+    (2, &["mp-transport", "mp-tailnet"]),
     // L3. Not yet: mp-joystick (mp-input, below, is what it will be), mp-swarm, mp-antenna,
     // mp-hil.
     (

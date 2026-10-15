@@ -86,6 +86,10 @@ pub(crate) struct NativePlugin {
     pub version: &'static str,
     /// The FileName column, and the key `DisabledPlugins` names it by.
     pub file: &'static str,
+    /// Off until a user ticks it and saves, where the others are on until unticked: an
+    /// experimental feature, which a `DisabledPlugins` saved before it existed must not turn on
+    /// (`plugins_ui`'s `EnabledNativePlugins`).
+    pub opt_in: bool,
 }
 
 /// Tailscale: the connection area's indicator of this computer's tailnet, the first start's offer
@@ -96,6 +100,23 @@ pub(crate) const TAILSCALE: NativePlugin = NativePlugin {
     author: "MissionPlannerRust",
     version: "built in",
     file: "tailscale.native",
+    opt_in: false,
+};
+
+/// The built-in Tailscale node, experimental - the owner's of 2026-10-14: tailscale-rs on the
+/// planner's own thread, a node of its own on a tailnet with no Tailscale client installed, which
+/// the links to the tailnet's hosts dial through, its names (`white`, `buzz55`) as well as its
+/// addresses (mp-tailnet; mp-transport's `tailnet`). Off until it is ticked and saved; saving it
+/// ticked starts it at once, unticked stops it. A build without mp-gui's `tailnet-node` feature
+/// lists it, and once it is ticked says it has no node. Not in a web page, whose tailnet is the
+/// page's own.
+#[cfg(not(target_family = "wasm"))]
+pub(crate) const TAILSCALE_NODE: NativePlugin = NativePlugin {
+    name: "Tailscale node (experimental)",
+    author: "MissionPlannerRust",
+    version: "built in",
+    file: "tailscale-node.native",
+    opt_in: true,
 };
 
 /// Import from Mission Planner: the first start's offer of Mission Planner's settings and logs
@@ -107,10 +128,21 @@ pub(crate) const MP_IMPORT: NativePlugin = NativePlugin {
     author: "MissionPlannerRust",
     version: "built in",
     file: "mpimport.native",
+    opt_in: false,
 };
 
-/// The native features the manager lists, after the plugins.
-pub(crate) const NATIVE: &[NativePlugin] = &[TAILSCALE, MP_IMPORT];
+/// The native features the manager lists, after the plugins: Tailscale, the import from Mission
+/// Planner, and the experimental node last.
+#[cfg(not(target_family = "wasm"))]
+pub(crate) const NATIVE: &[NativePlugin] = &[TAILSCALE, MP_IMPORT, TAILSCALE_NODE];
+/// The native features the manager lists, after the plugins: in a web page Tailscale alone - a
+/// page has no Mission Planner folder to import from, and no built-in node.
+#[cfg(target_family = "wasm")]
+pub(crate) const NATIVE: &[NativePlugin] = &[TAILSCALE];
+
+/// What the built-in node's sign-in link says, under the grid.
+#[cfg(not(target_family = "wasm"))]
+const SIGN_IN_TEXT: &str = "Sign in to the tailnet (opens the browser)";
 
 /// Whether a native feature is on: not in the disabled list, compared as plugins' files are.
 #[must_use]
@@ -591,6 +623,13 @@ fn panel(this: &MissionPlanner, cx: &mut Context<MissionPlanner>) -> Option<AnyE
     ));
     let mut client = div().flex().flex_col().gap_3().p(px(9.0)).child(top).child(grid);
 
+    // The built-in Tailscale node, while its row is on: how it stands, and the page to sign in at
+    // (the owner's, 2026-10-14).
+    #[cfg(not(target_family = "wasm"))]
+    if let Some(state) = this.plugins.tailnet_state() {
+        client = client.child(tailnet_node_line(&state, cx));
+    }
+
     // The owner's Exercise: the plugin's map menu entries, each run as the map's menu runs it.
     if let Some((name, plugin)) = manager.exercised() {
         let entries = this.plugins.entries_of(plugin);
@@ -702,6 +741,54 @@ fn panel(this: &MissionPlanner, cx: &mut Context<MissionPlanner>) -> Option<AnyE
     Some(body.into_any_element())
 }
 
+/// The built-in Tailscale node's line under the grid, while its row is on: its row's name, how
+/// it stands, and while it waits for a sign-in, the page as a link to the desktop's browser -
+/// opened as HELP's links are, and a failure said on the status line.
+#[cfg(not(target_family = "wasm"))]
+fn tailnet_node_line(state: &mp_tailnet::State, cx: &mut Context<MissionPlanner>) -> AnyElement {
+    let mut line = crate::probe::measured("plugin-manager-tailnet-node", div())
+        .flex()
+        .flex_col()
+        .gap_1()
+        .p_2()
+        .border_1()
+        .border_color(rgb(theme::BORDER))
+        .rounded_sm()
+        .child(
+            div()
+                .text_xs()
+                .text_color(rgb(theme::DIM))
+                .child(TAILSCALE_NODE.name),
+        )
+        .child(
+            div()
+                .text_sm()
+                .text_color(rgb(theme::TEXT))
+                .child(state.to_string()),
+        );
+    if let mp_tailnet::State::NeedsSignIn { url } = state {
+        let url = url.clone();
+        line = line.child(
+            crate::probe::measured("plugin-manager-tailnet-sign-in", div())
+                .id("plugin-manager-tailnet-sign-in")
+                .text_sm()
+                .text_color(rgb(theme::ACCENT))
+                .cursor_pointer()
+                .child(SIGN_IN_TEXT)
+                .on_click(cx.listener(move |this, _event, _window, cx| {
+                    if let Err(why) =
+                        crate::scripts_tab::open_with_shell(std::path::Path::new(&url))
+                    {
+                        this.file_status =
+                            Some(format!("could not open the Tailscale sign-in page: {why}"));
+                    }
+                    cx.notify();
+                })),
+        );
+    }
+    line.into_any_element()
+}
+
 /// The PLUGINS tab: the plugin manager in the screen (the owner's addition, 2026-10-04).
 pub(crate) fn screen(this: &MissionPlanner, cx: &mut Context<MissionPlanner>) -> AnyElement {
     div()
@@ -743,7 +830,8 @@ mod tests {
     /// Green for a loaded plugin; dark orange for one loaded and on the disabled list (matched
     /// without regard to case); a plugin whose Init or Loaded said no is not in `Plugins`, so not
     /// a row; dark red "Not loaded" for a disabled name with a file and no loaded plugin; nothing
-    /// for a disabled name with no file.
+    /// for a disabled name with no file. Last the native rows, the built-in node off as the
+    /// disabled list in force has it until it is ticked - and no "Not loaded" row for its key.
     #[test]
     fn the_rows_are_populate_grid_views() {
         let plugins = [
@@ -755,6 +843,7 @@ mod tests {
             "fencedist.wasm".to_owned(),
             "menu.wasm".to_owned(),
             "gone.wasm".to_owned(),
+            "tailscale-node.native".to_owned(),
         ];
         let rows = rows(&plugins, &disabled, |name| name != "gone.wasm");
         assert_eq!(
@@ -805,37 +894,94 @@ mod tests {
                     colour: RowColour::Green,
                     plugin: None,
                 },
+                Row {
+                    name: "Tailscale node (experimental)".to_owned(),
+                    author: "MissionPlannerRust".to_owned(),
+                    version: "built in".to_owned(),
+                    dll: "tailscale-node.native".to_owned(),
+                    enabled: false,
+                    colour: RowColour::DarkOrange,
+                    plugin: None,
+                },
             ]
         );
     }
 
-    /// The owner's native Tailscale row (2026-10-14): last, so a plugin's row is where it was; on
-    /// until unticked; unticked, a disabled row of its own name - not "Not loaded" - and its key
-    /// in what Save writes; with no Try, as it is no plugin.
+    /// A native row of the grid, by its key.
+    fn native_row<'a>(rows: &'a [Row], file: &str) -> &'a Row {
+        rows.iter()
+            .find(|row| row.dll == file)
+            .unwrap_or_else(|| panic!("no row for {file}"))
+    }
+
+    /// The owner's native Tailscale row (2026-10-14): after the plugins, so a plugin's row is
+    /// where it was; on until unticked; unticked, a disabled row of its own name - not "Not
+    /// loaded" - and its key in what Save writes; with no Try, as it is no plugin.
     #[test]
     fn tailscale_is_a_row_like_a_plugins_but_native() {
         let plugins = [running("Dowding", "Dowding.wasm")];
         let on = rows(&plugins, &[], |_| true);
-        assert_eq!(on.len(), 3, "the plugin, then Tailscale and Import from Mission Planner");
-        let tailscale = on.iter().position(|row| row.name == "Tailscale").expect("its row");
-        assert_eq!(tailscale, 1);
-        assert_eq!((on[tailscale].enabled, on[tailscale].plugin), (true, None));
+        assert_eq!(on.len(), 1 + NATIVE.len());
+        assert_eq!(on.first().map(|row| row.dll.as_str()), Some("dowding.wasm"));
+        let tailscale = native_row(&on, TAILSCALE.file);
+        assert_eq!(
+            (tailscale.name.as_str(), tailscale.enabled, tailscale.plugin),
+            ("Tailscale", true, None)
+        );
         assert!(native_enabled(&TAILSCALE, &[]));
+        const { assert!(!TAILSCALE.opt_in, "on until unticked") };
+        // Import from Mission Planner, the other row on until unticked.
         assert!(native_enabled(&MP_IMPORT, &[]));
+        const { assert!(!MP_IMPORT.opt_in) };
+        assert_eq!(native_row(&on, MP_IMPORT.file).name, "Import from Mission Planner");
 
         let disabled = ["Tailscale.Native".to_owned()];
         assert!(!native_enabled(&TAILSCALE, &disabled));
         assert!(native_enabled(&MP_IMPORT, &disabled));
         let off = rows(&plugins, &disabled, |_| true);
-        assert_eq!(off.len(), 3, "no Not loaded row for it");
+        assert_eq!(off.len(), 1 + NATIVE.len(), "no Not loaded row for it");
+        let tailscale = native_row(&off, TAILSCALE.file);
         assert_eq!(
-            (off[1].name.as_str(), off[1].enabled, off[1].colour),
+            (tailscale.name.as_str(), tailscale.enabled, tailscale.colour),
             ("Tailscale", false, RowColour::DarkOrange)
         );
 
         let mut ticked = on;
-        ticked[1].enabled = false;
+        for row in &mut ticked {
+            row.enabled = row.dll != TAILSCALE.file;
+        }
         assert_eq!(disabled_after(&ticked), ["tailscale.native"]);
+    }
+
+    /// The owner's built-in Tailscale node (2026-10-14): a second native row, last, opt-in where
+    /// the first is not; off - dark orange, no "Not loaded" row - while the disabled list in
+    /// force names it, as it does until it is ticked and saved (`plugins_ui`); ticked, out of what
+    /// Save writes, so that it is on.
+    #[test]
+    fn the_tailscale_node_is_a_native_row_off_until_ticked() {
+        assert_eq!(NATIVE, [TAILSCALE, MP_IMPORT, TAILSCALE_NODE]);
+        const { assert!(TAILSCALE_NODE.opt_in) };
+        assert_eq!(TAILSCALE_NODE.name, "Tailscale node (experimental)");
+        assert_eq!(TAILSCALE_NODE.file, "tailscale-node.native");
+
+        let plugins = [running("Dowding", "Dowding.wasm")];
+        let disabled = [TAILSCALE_NODE.file.to_owned()];
+        assert!(!native_enabled(&TAILSCALE_NODE, &disabled));
+        let off = rows(&plugins, &disabled, |_| true);
+        assert_eq!(off.len(), 1 + NATIVE.len(), "no Not loaded row for it");
+        let node = off.last().expect("a row");
+        assert_eq!(
+            (node.dll.as_str(), node.enabled, node.colour, node.plugin),
+            ("tailscale-node.native", false, RowColour::DarkOrange, None)
+        );
+        assert_eq!(disabled_after(&off), ["tailscale-node.native"]);
+
+        let mut ticked = off;
+        if let Some(row) = ticked.last_mut() {
+            row.enabled = true;
+        }
+        assert!(disabled_after(&ticked).is_empty());
+        assert!(native_enabled(&TAILSCALE_NODE, &disabled_after(&ticked)));
     }
 
     /// `UpdateDisabledPlugins`: the rows not ticked, lower-cased; none, an empty list (which the

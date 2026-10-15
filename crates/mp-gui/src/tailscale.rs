@@ -33,6 +33,12 @@
 //! terminal, and the planner sees it at its next look. A web page runs no programs: there the
 //! page's own Tailscale node has the state (web/www/tailscale.js), and nothing here is started.
 //!
+//! On the desktop, while the planner's built-in node is in use - the PLUGINS tab's "Tailscale node
+//! (experimental)" row (mp-tailnet): starting, waiting for its sign-in, or running - the links to
+//! the tailnet go through it rather than through this computer's Tailscale (mp-transport's
+//! `tailnet::route`), and the indicator and the status line's reason speak for it ([`shown`],
+//! [`node_failure_reason`]); stopped or failed, it leaves them to this computer's Tailscale again.
+//!
 //! `MP_TAILSCALE_CLI` is the harness's door ([`CLI_ENV`]): the CLI to run in place of the one
 //! found - a GUI script's tests/gui/fake-tailscale.sh, which answers as the real one does in a
 //! state of the script's choosing - or `none` for a computer without Tailscale.
@@ -515,6 +521,92 @@ pub fn failure_reason(host: &str, state: &TailnetState) -> Option<String> {
              {HELP_PAGE}",
             host.trim(),
             state.text()
+        )
+    })
+}
+
+/// What the indicator shows: its dot's colour, its words and the hover's longer account.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Shown {
+    /// The dot: the OK colour on the tailnet, the dim one on the way there, the warning one else.
+    pub colour: u32,
+    /// The words beside it.
+    pub text: String,
+    /// The hover's account.
+    pub details: String,
+}
+
+impl Shown {
+    /// This computer's Tailscale - the page's node in a web page - as `state` has it.
+    fn of_state(state: &TailnetState) -> Self {
+        let colour = if state.is_on_tailnet() {
+            crate::theme::OK
+        } else if matches!(
+            state,
+            TailnetState::Unchecked | TailnetState::Starting | TailnetState::NotStarted
+        ) {
+            crate::theme::DIM
+        } else {
+            crate::theme::WARN
+        };
+        Self {
+            colour,
+            text: state.text(),
+            details: state.details(),
+        }
+    }
+
+    /// The planner's built-in node as `node` has it: "Tailscale node: starting", "Tailscale
+    /// node: needs a sign-in", "Tailscale node: on tailnet as mpr-buzz55, 100.101.102.103"; the
+    /// hover its state said whole, with its row's name.
+    #[cfg(not(target_family = "wasm"))]
+    fn of_node(node: &mp_tailnet::State) -> Self {
+        use mp_tailnet::State;
+        let (colour, words) = match node {
+            State::Stopped => (crate::theme::WARN, "stopped".to_owned()),
+            State::Starting => (crate::theme::DIM, "starting".to_owned()),
+            State::NeedsSignIn { .. } => (crate::theme::WARN, "needs a sign-in".to_owned()),
+            State::Running { name, ipv4, .. } => {
+                let name = first_label(name).unwrap_or_else(|| name.clone());
+                (crate::theme::OK, format!("on tailnet as {name}, {ipv4}"))
+            }
+            State::Failed { .. } => (crate::theme::WARN, "failed".to_owned()),
+        };
+        Self {
+            colour,
+            text: format!("Tailscale node: {words}"),
+            details: format!(
+                "The planner's own node, PLUGINS' {}: {node}",
+                crate::plugin_manager::TAILSCALE_NODE.name
+            ),
+        }
+    }
+}
+
+/// What the indicator shows: the built-in node's state while it is in use - starting, waiting for
+/// its sign-in or running, when the links to the tailnet go through it (mp-transport's
+/// `tailnet::route`) - else this computer's Tailscale, `state`.
+#[cfg(not(target_family = "wasm"))]
+#[must_use]
+pub fn shown(node: Option<&mp_tailnet::State>, state: &TailnetState) -> Shown {
+    match node.filter(|node| node.in_use()) {
+        Some(node) => Shown::of_node(node),
+        None => Shown::of_state(state),
+    }
+}
+
+/// The status line's reason when a link to `host` fails while the built-in node is in use: the
+/// node not on the tailnet yet, and where to see to it. None while it runs - the link's own
+/// error says why then - and none for a host that is not the tailnet's.
+#[cfg(not(target_family = "wasm"))]
+#[must_use]
+pub fn node_failure_reason(host: &str, node: &mp_tailnet::State) -> Option<String> {
+    let kind = tailnet_host_kind(host)?;
+    (!node.is_running()).then(|| {
+        format!(
+            "{} is a Tailscale {kind}, and the planner's Tailscale node is not on the tailnet yet \
+             ({node}) - see the PLUGINS tab",
+            host.trim()
         )
     })
 }
@@ -1145,6 +1237,15 @@ impl crate::MissionPlanner {
         let Some(host) = link_host(&view.target).filter(|host| is_tailnet_host(host)) else {
             return;
         };
+        // The built-in node in use carried the link, and says why it could not.
+        #[cfg(not(target_family = "wasm"))]
+        if let Some(node) = self.tailnet_node() {
+            self.tailnet_explained = Some(view.target.clone());
+            if let Some(reason) = node_failure_reason(host, &node) {
+                self.file_status = Some(reason);
+            }
+            return;
+        }
         // Said once a known state has come: unchecked or unknown says nothing either way.
         if matches!(state, TailnetState::Unchecked | TailnetState::Unknown { .. }) {
             return;
@@ -1174,18 +1275,8 @@ impl crate::MissionPlanner {
         if !self.tailnet_enabled() {
             return None;
         }
-        let state = self.tailnet_state();
-        let colour = if state.is_on_tailnet() {
-            crate::theme::OK
-        } else if matches!(
-            state,
-            TailnetState::Unchecked | TailnetState::Starting | TailnetState::NotStarted
-        ) {
-            crate::theme::DIM
-        } else {
-            crate::theme::WARN
-        };
-        let details = gpui::SharedString::from(state.details());
+        let shown = self.tailnet_shown();
+        let details = gpui::SharedString::from(shown.details);
         Some(
             crate::probe::measured("tailscale-indicator", div())
                 .id("tailscale-indicator")
@@ -1193,12 +1284,12 @@ impl crate::MissionPlanner {
                 .items_center()
                 .gap_1()
                 .cursor_pointer()
-                .child(div().size_2().rounded_full().bg(rgb(colour)))
+                .child(div().size_2().rounded_full().bg(rgb(shown.colour)))
                 .child(
                     div()
                         .text_xs()
                         .text_color(rgb(crate::theme::DIM))
-                        .child(state.text()),
+                        .child(shown.text),
                 )
                 .tooltip(move |_window, cx| -> gpui::AnyView {
                     cx.new(|_| crate::config::rover_tuning::Tip(details.clone()))
@@ -1212,8 +1303,40 @@ impl crate::MissionPlanner {
         )
     }
 
-    /// The indicator clicked.
+    /// The built-in Tailscale node while it is in use - starting, waiting for its sign-in or
+    /// running - when the links to the tailnet go through it; none while its row is off or it has
+    /// stopped or failed.
+    #[cfg(not(target_family = "wasm"))]
+    fn tailnet_node(&self) -> Option<mp_tailnet::State> {
+        self.plugins
+            .tailnet_state()
+            .filter(mp_tailnet::State::in_use)
+    }
+
+    /// What the indicator shows now ([`shown`]).
+    fn tailnet_shown(&self) -> Shown {
+        #[cfg(not(target_family = "wasm"))]
+        {
+            shown(self.plugins.tailnet_state().as_ref(), &self.tailnet_state())
+        }
+        #[cfg(target_family = "wasm")]
+        {
+            Shown::of_state(&self.tailnet_state())
+        }
+    }
+
+    /// The indicator clicked. For the built-in node in use: its sign-in page while it waits for
+    /// one, else its state on the status line.
     fn tailnet_clicked(&mut self) {
+        #[cfg(not(target_family = "wasm"))]
+        if let Some(node) = self.tailnet_node() {
+            if let mp_tailnet::State::NeedsSignIn { url } = &node {
+                self.tailnet_open(url);
+            } else {
+                self.file_status = Some(Shown::of_node(&node).details);
+            }
+            return;
+        }
         let state = self.tailnet_state();
         match &state {
             TailnetState::NotInstalled => match offer(Platform::current(), &state) {
@@ -1295,16 +1418,15 @@ impl crate::MissionPlanner {
         ))
     }
 
-    /// The facts: the state's (`record_facts`), whether the indicator shows (`tailscale.shown`),
-    /// its words (`tailscale.text`), the offer (`tailscale.offer`) and the last page handed to the
-    /// browser (`tailscale.opened`).
+    /// The facts: this computer's state (`record_facts`), whether the indicator shows
+    /// (`tailscale.shown`), its words (`tailscale.text`, the built-in node's while it is in use),
+    /// the offer (`tailscale.offer`) and the last page handed to the browser (`tailscale.opened`).
     pub(crate) fn tailnet_record_facts(&self) {
         let enabled = self.tailnet_enabled();
         crate::facts::record("tailscale.shown", enabled);
         if enabled {
-            let state = self.tailnet_state();
-            record_facts(&state);
-            crate::facts::record("tailscale.text", state.text());
+            record_facts(&self.tailnet_state());
+            crate::facts::record("tailscale.text", self.tailnet_shown().text);
         } else {
             crate::facts::record("tailscale.state", "off");
         }
@@ -1971,6 +2093,97 @@ mod tests {
             reason: "tailscale status gave no answer in time".to_owned(),
         };
         assert_eq!(failure_reason("100.101.102.103", &unknown), None);
+    }
+
+    /// The built-in node running as `mpr-buzz55`.
+    fn node_running() -> mp_tailnet::State {
+        mp_tailnet::State::Running {
+            name: "mpr-buzz55.tail1234.ts.net".to_owned(),
+            ipv4: Ipv4Addr::new(100, 101, 102, 104),
+            ipv6: "fd7a:115c:a1e0::4".parse().expect("the test's own address"),
+        }
+    }
+
+    #[test]
+    fn the_built_in_node_in_use_speaks_for_the_indicator() {
+        // This computer has no Tailscale; the node carries the links, and the indicator says so.
+        let computer = TailnetState::NotInstalled;
+        let running = shown(Some(&node_running()), &computer);
+        assert_eq!(
+            running.text,
+            "Tailscale node: on tailnet as mpr-buzz55, 100.101.102.104"
+        );
+        assert_eq!(running.colour, crate::theme::OK);
+        assert_eq!(
+            running.details,
+            "The planner's own node, PLUGINS' Tailscale node (experimental): running as \
+             mpr-buzz55.tail1234.ts.net (100.101.102.104, fd7a:115c:a1e0::4)"
+        );
+        let sign_in = mp_tailnet::State::NeedsSignIn {
+            url: LOGIN_URL.to_owned(),
+        };
+        // Over this computer's own tailnet too: the links to the tailnet go through the node.
+        let waiting = shown(Some(&sign_in), &TailnetState::OnTailnet(buzz_laptop()));
+        assert_eq!(waiting.text, "Tailscale node: needs a sign-in");
+        assert_eq!(waiting.colour, crate::theme::WARN);
+        assert!(waiting.details.contains(LOGIN_URL), "{}", waiting.details);
+        let starting = shown(Some(&mp_tailnet::State::Starting), &computer);
+        assert_eq!(starting.text, "Tailscale node: starting");
+        assert_eq!(starting.colour, crate::theme::DIM);
+    }
+
+    #[test]
+    fn a_node_stopped_failed_or_off_leaves_the_indicator_to_this_computer() {
+        let computer = TailnetState::OnTailnet(buzz_laptop());
+        let own = shown(None, &computer);
+        assert_eq!(own.text, computer.text());
+        assert_eq!(own.details, computer.details());
+        assert_eq!(own.colour, crate::theme::OK);
+        for node in [
+            mp_tailnet::State::Stopped,
+            mp_tailnet::State::Failed {
+                why: mp_tailnet::NO_NODE.to_owned(),
+            },
+        ] {
+            assert_eq!(shown(Some(&node), &computer), own, "{node}");
+        }
+        assert_eq!(
+            shown(None, &TailnetState::NotInstalled).colour,
+            crate::theme::WARN
+        );
+        assert_eq!(
+            shown(None, &TailnetState::Unchecked).colour,
+            crate::theme::DIM
+        );
+    }
+
+    #[test]
+    fn a_failed_link_through_the_node_is_the_nodes_to_explain() {
+        let sign_in = mp_tailnet::State::NeedsSignIn {
+            url: LOGIN_URL.to_owned(),
+        };
+        assert_eq!(
+            node_failure_reason("100.101.102.103", &sign_in).as_deref(),
+            Some(
+                format!(
+                    "100.101.102.103 is a Tailscale address, and the planner's Tailscale node is \
+                     not on the tailnet yet (needs a sign-in at {LOGIN_URL}) - see the PLUGINS tab"
+                )
+                .as_str()
+            )
+        );
+        let starting = node_failure_reason("my-pi.tail1234.ts.net", &mp_tailnet::State::Starting)
+            .expect("the test's own value");
+        assert!(
+            starting.starts_with("my-pi.tail1234.ts.net is a Tailscale name"),
+            "{starting}"
+        );
+        // Running, the link's own error says why; and a host off the tailnet is not the node's.
+        assert_eq!(
+            node_failure_reason("100.101.102.103", &node_running()),
+            None
+        );
+        assert_eq!(node_failure_reason("192.168.1.20", &sign_in), None);
     }
 
     #[test]

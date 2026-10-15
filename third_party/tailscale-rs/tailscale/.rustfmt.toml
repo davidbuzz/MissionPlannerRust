@@ -1,0 +1,22 @@
+# versions
+edition = "2024"
+style_edition = "2024"
+unstable_features = true
+
+# basic config
+newline_style = "Unix"
+
+# imports
+imports_granularity = "Crate"
+group_imports = "StdExternalCrate"
+condense_wildcard_suffixes = true
+
+# widths
+max_width = 100
+
+# formatting enablement
+format_generated_files = false
+format_macro_matchers = true
+
+# structs
+use_field_init_shorthand = true

@@ -1,0 +1,35 @@
+[advisories]
+ignore = [
+    { id = "RUSTSEC-2024-0436", reason = "archived crate depended on by netlink-packet-utils. Already fixed upstream, just hasn't bubbled through the dependency stack yet" },
+]
+
+[licenses]
+allow = [
+    "Apache-2.0",
+    "Apache-2.0 WITH LLVM-exception",
+    "BSD-3-Clause",
+    "BSD-2-Clause",
+    "0BSD",
+    "CDLA-Permissive-2.0",
+    "ISC",
+    "MIT",
+    "MPL-2.0",
+    "Unicode-3.0",
+    "Unlicense",
+    "Zlib",
+]
+private = { ignore = true }
+
+[bans]
+multiple-versions = "allow"
+wildcards = "allow"
+
+[graph]
+# Ensure that cargo deny runs with all features enabled, so we check the licenses/advisories/etc
+# for all dependencies, not just the deps enabled by the default features.
+all-features = true
+
+[sources]
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]
+unknown-git = "deny"
+unknown-registry = "deny"

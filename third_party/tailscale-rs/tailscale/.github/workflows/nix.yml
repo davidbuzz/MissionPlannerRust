@@ -1,0 +1,39 @@
+name: nix
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    name: nix flake check
+    runs-on: linux-x86_64-16cpu
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: cachix/install-nix-action@13d8dd58da0234aa297dedd986986ccb8e7f3e24 # v31.11.1
+      - run: nix flake check -L
+
+  build:
+    strategy:
+      matrix:
+        include:
+          - target: x86_64-linux
+            runner: linux-x86_64-16cpu
+          - target: aarch64-linux
+            runner: linux-arm64-16cpu
+
+    name: nix build ${{ matrix.target }}
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: cachix/install-nix-action@13d8dd58da0234aa297dedd986986ccb8e7f3e24 # v31.11.1
+
+      - name: nix build
+        run: |-
+          exec nix build -L .

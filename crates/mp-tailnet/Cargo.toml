@@ -1,0 +1,49 @@
+[package]
+name = "mp-tailnet"
+description = "The built-in Tailscale node: tailscale-rs with MagicDNS, behind blocking calls"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[lints]
+workspace = true
+
+[features]
+# The node itself (src/node.rs): tailscale-rs (third_party/tailscale-rs, which the root Cargo.toml
+# patches in) on a tokio runtime. Off by default: some 115 crates more, among them aws-lc-sys, C
+# that needs cmake and a C compiler. Without it the same calls each say this build has no node
+# (src/stub.rs).
+node = [
+    "dep:tailscale",
+    "dep:tokio",
+    "dep:bytes",
+    "dep:rustls",
+    "dep:mp-os",
+    "dep:web-time",
+    "dep:wasm_thread",
+]
+
+# Nothing at all in a web page, whose tailnet is the page's own (web/www).
+[target.'cfg(not(target_family = "wasm"))'.dependencies]
+thiserror.workspace = true
+# This machine's name, which the node's is made from. Already built (x11rb, under gpui).
+gethostname = "1.1"
+# tailscale-rs at the release the vendored copy is (third_party/tailscale-rs/README.md); the
+# patch in the root Cargo.toml puts the copy in its place.
+tailscale = { version = "=0.6.1", optional = true }
+# The node's runtime: tailscale-rs runs on tokio, and tokio only.
+tokio = { version = "1", optional = true, default-features = false, features = ["rt-multi-thread", "time", "sync", "macros"] }
+# What tailscale-rs's sockets hand over.
+bytes = { version = "1", optional = true }
+# The process's TLS provider, named before tailscale-rs needs one (src/node.rs's `run`): the
+# rustls ureq already builds, which tailscale-rs builds with aws-lc-rs as well.
+rustls = { version = "0.23", optional = true, default-features = false, features = ["std", "aws_lc_rs"] }
+# The node's locks and waits as every crate of the planner makes them (web/tools/port_locks.py),
+# and its files (web/tools/port_fs.py).
+mp-os = { workspace = true, optional = true }
+# Its clock, as every crate of the planner names it (web/tools/port_clock.py).
+web-time = { version = "1", optional = true }
+# Its thread, as every crate of the planner names them (web/tools/port_threads.py).
+wasm_thread = { git = "https://github.com/zed-industries/wasm_thread", rev = "0cf96c7708dfb97ccf3da50347e25edcf75d6937", optional = true }

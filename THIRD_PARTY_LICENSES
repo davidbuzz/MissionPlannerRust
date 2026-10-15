@@ -305,8 +305,17 @@ standard library it carries (`rustpython-pylib`) and its documentation strings
 1997-2002). The four `malachite` crates are under the GNU LGPL version 3, whose additional
 permissions the GPL's section 7 lets this work remove.
 
+**tailscale-rs** (`tailscale`, `ts_runtime` and the other `ts_*` crates), Tailscale's Rust
+library (<https://github.com/tailscale/tailscale-rs>), is Copyright (c) 2026 Tailscale Inc &
+contributors, under the BSD 3-Clause License with Tailscale's patent grant (`PATENTS`), and is
+built in only with mp-gui's `tailnet-node` feature. Two of its crates, `tailscale` and
+`ts_runtime`, are carried in `third_party/tailscale-rs/` with this work's changes for MagicDNS
+names, each marked `// MissionPlannerRust:` and listed in that directory's `README.md`; their
+`LICENSE` files are the licence's text. Its network stack, `smoltcp` and `managed`, is under the
+BSD Zero Clause License (0BSD).
+
 <!-- BEGIN crates: written by `cargo xtask licences` from `cargo metadata`; not edited by hand -->
-1002 crates, every target's, from `cargo metadata` over Cargo.lock; each licence is one `deny.toml` admits (`xtask/tests/licences.rs` holds both).
+1126 crates, every target's and every feature's, from `cargo metadata` over Cargo.lock; each licence is one `deny.toml` admits (`xtask/tests/licences.rs` holds both).
 
 | Crate | Version | Licence | Source |
 |---|---|---|---|
@@ -320,6 +329,7 @@ permissions the GPL's section 7 lets this work remove.
 | addr2line | 0.26.1 | Apache-2.0 OR MIT | crates.io |
 | adler2 | 2.0.1 | 0BSD OR MIT OR Apache-2.0 | crates.io |
 | adler32 | 1.2.0 | Zlib | crates.io |
+| aead | 0.5.2 | MIT OR Apache-2.0 | crates.io |
 | aes | 0.8.4 | MIT OR Apache-2.0 | crates.io |
 | ahash | 0.8.12 | MIT OR Apache-2.0 | crates.io |
 | aho-corasick | 1.1.5 | Unlicense OR MIT | crates.io |
@@ -371,6 +381,8 @@ permissions the GPL's section 7 lets this work remove.
 | av-scenechange | 0.14.1 | MIT | crates.io |
 | av1-grain | 0.2.5 | BSD-2-Clause | crates.io |
 | avif-serialize | 0.8.9 | BSD-3-Clause | crates.io |
+| aws-lc-rs | 1.18.2 | ISC AND (Apache-2.0 OR ISC) | crates.io |
+| aws-lc-sys | 0.46.0 | ISC AND (Apache-2.0 OR ISC) AND Apache-2.0 AND MIT AND BSD-3-Clause AND (Apache-2.0 OR ISC OR MIT) AND (Apache-2.0 OR ISC OR MIT-0) | crates.io |
 | backtrace | 0.3.76 | MIT OR Apache-2.0 | crates.io |
 | base64 | 0.22.1 | MIT OR Apache-2.0 | crates.io |
 | base64 | 0.23.1 | MIT OR Apache-2.0 | crates.io |
@@ -384,6 +396,8 @@ permissions the GPL's section 7 lets this work remove.
 | bitflags | 1.3.2 | MIT/Apache-2.0 | crates.io |
 | bitflags | 2.13.2 | MIT OR Apache-2.0 | crates.io |
 | bitflagset | 0.0.3 | MIT | crates.io |
+| bitrs | 0.11.0 | MIT | crates.io |
+| bitrs-macro | 0.11.0 | MIT | crates.io |
 | bitstream-io | 4.10.0 | MIT/Apache-2.0 | crates.io |
 | blake2 | 0.10.6 | MIT OR Apache-2.0 | crates.io |
 | block | 0.1.6 | MIT | crates.io |
@@ -393,6 +407,8 @@ permissions the GPL's section 7 lets this work remove.
 | block2 | 0.6.2 | MIT | crates.io |
 | blocking | 1.7.0 | Apache-2.0 OR MIT | crates.io |
 | borsh | 1.8.1 | MIT OR Apache-2.0 | crates.io |
+| bounded-integer | 0.5.8 | ISC | crates.io |
+| bs58 | 0.5.1 | MIT/Apache-2.0 | crates.io |
 | bstr | 1.13.1 | MIT OR Apache-2.0 | crates.io |
 | built | 0.8.1 | MIT | crates.io |
 | bumpalo | 3.20.3 | MIT OR Apache-2.0 | crates.io |
@@ -414,6 +430,9 @@ permissions the GPL's section 7 lets this work remove.
 | cfg-if | 1.0.5 | MIT OR Apache-2.0 | crates.io |
 | cfg_aliases | 0.2.2 | MIT | crates.io |
 | cgl | 0.3.2 | MIT / Apache-2.0 | crates.io |
+| chacha20 | 0.10.2 | MIT OR Apache-2.0 | crates.io |
+| chacha20 | 0.9.1 | Apache-2.0 OR MIT | crates.io |
+| chacha20poly1305 | 0.10.1 | Apache-2.0 OR MIT | crates.io |
 | chrono | 0.4.45 | MIT OR Apache-2.0 | crates.io |
 | ciborium | 0.2.2 | Apache-2.0 | crates.io |
 | ciborium-io | 0.2.2 | Apache-2.0 | crates.io |
@@ -424,6 +443,7 @@ permissions the GPL's section 7 lets this work remove.
 | clap_builder | 4.6.7 | MIT OR Apache-2.0 | crates.io |
 | clap_lex | 1.1.1 | MIT OR Apache-2.0 | crates.io |
 | clipboard-win | 5.4.1 | BSL-1.0 | crates.io |
+| cmake | 0.1.58 | MIT OR Apache-2.0 | crates.io |
 | cobs | 0.3.0 | MIT OR Apache-2.0 | crates.io |
 | cocoa | 0.25.0 | MIT OR Apache-2.0 | crates.io |
 | cocoa | 0.26.0 | MIT OR Apache-2.0 | crates.io |
@@ -459,6 +479,7 @@ permissions the GPL's section 7 lets this work remove.
 | cosmic-text | 0.19.0 | MIT OR Apache-2.0 | crates.io |
 | cpp_demangle | 0.5.1 | MIT OR Apache-2.0 | crates.io |
 | cpufeatures | 0.2.17 | MIT OR Apache-2.0 | crates.io |
+| cpufeatures | 0.3.1 | MIT OR Apache-2.0 | crates.io |
 | cranelift-assembler-x64 | 0.135.5 | Apache-2.0 WITH LLVM-exception | crates.io |
 | cranelift-assembler-x64-meta | 0.135.5 | Apache-2.0 WITH LLVM-exception | crates.io |
 | cranelift-bforest | 0.135.4 | Apache-2.0 WITH LLVM-exception | crates.io |
@@ -483,9 +504,19 @@ permissions the GPL's section 7 lets this work remove.
 | crossbeam-utils | 0.8.23 | MIT OR Apache-2.0 | crates.io |
 | crunchy | 0.2.4 | MIT | crates.io |
 | crypto-common | 0.1.7 | MIT OR Apache-2.0 | crates.io |
+| crypto_box | 0.9.1 | Apache-2.0 OR MIT | crates.io |
+| crypto_secretbox | 0.1.1 | Apache-2.0 OR MIT | crates.io |
 | csv-core | 0.1.13 | Unlicense/MIT | crates.io |
 | ctor | 1.0.13 | Apache-2.0 OR MIT | crates.io |
+| curve25519-dalek | 4.1.3 | BSD-3-Clause | crates.io |
+| curve25519-dalek | 5.0.0 | BSD-3-Clause | crates.io |
+| curve25519-dalek-derive | 0.1.1 | MIT/Apache-2.0 | crates.io |
+| darling | 0.24.1 | MIT | crates.io |
+| darling_core | 0.24.1 | MIT | crates.io |
+| darling_macro | 0.24.1 | MIT | crates.io |
+| dashmap | 6.2.1 | MIT | crates.io |
 | data-url | 0.3.2 | MIT OR Apache-2.0 | crates.io |
+| defmt | 0.3.100 | MIT OR Apache-2.0 | crates.io |
 | defmt | 1.1.1 | MIT OR Apache-2.0 | crates.io |
 | defmt-macros | 1.1.1 | MIT OR Apache-2.0 | crates.io |
 | defmt-parser | 1.0.0 | MIT OR Apache-2.0 | crates.io |
@@ -506,10 +537,13 @@ permissions the GPL's section 7 lets this work remove.
 | dns-lookup | 3.0.1 | MIT/Apache-2.0 | crates.io |
 | document-features | 0.2.12 | MIT OR Apache-2.0 | crates.io |
 | downcast-rs | 1.2.1 | MIT/Apache-2.0 | crates.io |
+| downcast-rs | 2.0.2 | MIT OR Apache-2.0 | crates.io |
 | dunce | 1.0.5 | CC0-1.0 OR MIT-0 OR Apache-2.0 | crates.io |
 | dwrote | 0.11.5 | MPL-2.0 | crates.io |
 | dxf | 0.6.2 | MIT | crates.io |
 | dyn-clone | 1.0.20 | MIT OR Apache-2.0 | crates.io |
+| dyn-eq | 0.1.3 | MPL-2.0 | crates.io |
+| dyn-hash | 1.0.0 | MIT OR Apache-2.0 | crates.io |
 | either | 1.18.0 | MIT OR Apache-2.0 | crates.io |
 | embed-resource | 3.0.11 | MIT | crates.io |
 | embedded-io | 0.4.0 | MIT OR Apache-2.0 | crates.io |
@@ -530,15 +564,19 @@ permissions the GPL's section 7 lets this work remove.
 | errno | 0.3.14 | MIT OR Apache-2.0 | crates.io |
 | error-code | 3.4.0 | BSL-1.0 | crates.io |
 | etagere | 0.2.15 | MIT/Apache-2.0 | crates.io |
+| etherparse | 0.19.0 | MIT OR Apache-2.0 | crates.io |
 | euclid | 0.22.14 | MIT OR Apache-2.0 | crates.io |
 | event-listener | 5.4.2 | Apache-2.0 OR MIT | crates.io |
 | event-listener-strategy | 0.5.4 | Apache-2.0 OR MIT | crates.io |
 | exitcode | 1.1.2 | Apache-2.0 | crates.io |
 | exr | 1.74.2 | BSD-3-Clause | crates.io |
+| fallible-iterator | 0.3.0 | MIT/Apache-2.0 | crates.io |
 | fastrand | 2.5.0 | Apache-2.0 OR MIT | crates.io |
 | fax | 0.2.7 | MIT | crates.io |
 | fd-lock | 4.0.4 | MIT OR Apache-2.0 | crates.io |
 | fdeflate | 0.3.7 | MIT OR Apache-2.0 | crates.io |
+| fiat-crypto | 0.2.9 | MIT OR Apache-2.0 OR BSD-1-Clause | crates.io |
+| fiat-crypto | 0.3.0 | MIT OR Apache-2.0 OR BSD-1-Clause | crates.io |
 | filedescriptor | 0.8.3 | MIT | crates.io |
 | find-msvc-tools | 0.1.13 | MIT OR Apache-2.0 | crates.io |
 | fixedbitset | 0.5.7 | MIT OR Apache-2.0 | crates.io |
@@ -562,6 +600,7 @@ permissions the GPL's section 7 lets this work remove.
 | foreign-types-shared | 0.3.1 | MIT/Apache-2.0 | crates.io |
 | form_urlencoded | 1.2.2 | MIT OR Apache-2.0 | crates.io |
 | freetype-sys | 0.20.1 | MIT | crates.io |
+| fs_extra | 1.3.0 | MIT | crates.io |
 | futures | 0.3.34 | MIT OR Apache-2.0 | crates.io |
 | futures-channel | 0.3.34 | MIT OR Apache-2.0 | crates.io |
 | futures-concurrency | 7.7.1 | MIT OR Apache-2.0 | crates.io |
@@ -619,9 +658,11 @@ permissions the GPL's section 7 lets this work remove.
 | gpui_web | 0.1.0 | Apache-2.0 | git https://github.com/zed-industries/zed @ 62e5991 |
 | gpui_wgpu | 0.1.0 | Apache-2.0 | git https://github.com/zed-industries/zed @ 62e5991 |
 | gpui_windows | 0.1.0 | Apache-2.0 | git https://github.com/zed-industries/zed @ 62e5991 |
+| h2 | 0.4.20 | MIT | crates.io |
 | half | 2.7.1 | MIT OR Apache-2.0 | crates.io |
 | harfrust | 0.5.2 | MIT | crates.io |
 | hash32 | 0.3.1 | MIT OR Apache-2.0 | crates.io |
+| hashbrown | 0.12.3 | MIT OR Apache-2.0 | crates.io |
 | hashbrown | 0.14.5 | MIT OR Apache-2.0 | crates.io |
 | hashbrown | 0.15.5 | MIT OR Apache-2.0 | crates.io |
 | hashbrown | 0.16.1 | MIT OR Apache-2.0 | crates.io |
@@ -634,11 +675,17 @@ permissions the GPL's section 7 lets this work remove.
 | hexf-parse | 0.2.1 | CC0-1.0 | crates.io |
 | hkdf | 0.12.4 | MIT OR Apache-2.0 | crates.io |
 | hmac | 0.12.1 | MIT OR Apache-2.0 | crates.io |
+| hmac-sha1 | 0.2.2 | BSD-3-Clause | crates.io |
+| hmac-sha256 | 1.1.15 | ISC | crates.io |
 | home | 0.5.12 | MIT OR Apache-2.0 | crates.io |
+| hostname-validator | 1.1.1 | MIT | crates.io |
 | http | 1.5.0 | MIT OR Apache-2.0 | crates.io |
 | http-body | 1.1.0 | MIT | crates.io |
+| http-body-util | 0.1.5 | MIT | crates.io |
 | http_client | 0.1.0 | Apache-2.0 | git https://github.com/zed-industries/zed @ 62e5991 |
 | httparse | 1.10.1 | MIT OR Apache-2.0 | crates.io |
+| hyper | 1.12.0 | MIT | crates.io |
+| hyper-util | 0.1.21 | MIT | crates.io |
 | iana-time-zone | 0.1.65 | MIT OR Apache-2.0 | crates.io |
 | iana-time-zone-haiku | 0.1.2 | MIT OR Apache-2.0 | crates.io |
 | icu_collections | 2.3.0 | Unicode-3.0 | crates.io |
@@ -649,12 +696,14 @@ permissions the GPL's section 7 lets this work remove.
 | icu_properties_data | 2.3.0 | Unicode-3.0 | crates.io |
 | icu_provider | 2.3.1 | Unicode-3.0 | crates.io |
 | id-arena | 2.3.0 | MIT/Apache-2.0 | crates.io |
+| ident_case | 1.0.1 | MIT/Apache-2.0 | crates.io |
 | idna | 1.1.0 | MIT OR Apache-2.0 | crates.io |
 | idna_adapter | 1.2.2 | Apache-2.0 OR MIT | crates.io |
 | image | 0.25.10 | MIT OR Apache-2.0 | crates.io |
 | image-webp | 0.2.4 | MIT OR Apache-2.0 | crates.io |
 | imagesize | 0.14.0 | MIT | crates.io |
 | imgref | 1.12.3 | CC0-1.0 OR Apache-2.0 | crates.io |
+| indexmap | 1.9.3 | Apache-2.0 OR MIT | crates.io |
 | indexmap | 2.14.2 | Apache-2.0 OR MIT | crates.io |
 | inout | 0.1.4 | MIT OR Apache-2.0 | crates.io |
 | interpolate_name | 0.2.4 | MIT | crates.io |
@@ -664,6 +713,7 @@ permissions the GPL's section 7 lets this work remove.
 | inventory | 0.3.24 | MIT OR Apache-2.0 | crates.io |
 | io-kit-sys | 0.4.1 | MIT / Apache-2.0 | crates.io |
 | io-surface | 0.16.1 | MIT OR Apache-2.0 | crates.io |
+| ipnet | 2.12.2 | MIT OR Apache-2.0 | crates.io |
 | is-docker | 0.2.0 | MIT | crates.io |
 | is-macro | 0.3.8 | Apache-2.0 | crates.io |
 | is-terminal | 0.4.17 | MIT | crates.io |
@@ -675,12 +725,17 @@ permissions the GPL's section 7 lets this work remove.
 | jiff | 0.2.37 | Unlicense OR MIT | crates.io |
 | jiff-core | 0.1.1 | Unlicense OR MIT | crates.io |
 | jiff-static | 0.2.37 | Unlicense OR MIT | crates.io |
+| jiff-tzdb | 0.1.9 | Unlicense OR MIT | crates.io |
+| jiff-tzdb-platform | 0.1.3 | Unlicense OR MIT | crates.io |
 | jni-sys | 0.3.1 | MIT OR Apache-2.0 | crates.io |
 | jni-sys | 0.4.1 | MIT OR Apache-2.0 | crates.io |
 | jni-sys-macros | 0.4.1 | MIT OR Apache-2.0 | crates.io |
 | jobserver | 0.1.35 | MIT OR Apache-2.0 | crates.io |
 | js-sys | 0.3.105 | MIT OR Apache-2.0 | crates.io |
 | junction | 1.4.2 | MIT | crates.io |
+| kameo | 0.21.1 | MIT OR Apache-2.0 | crates.io |
+| kameo_actors | 0.6.1 | MIT OR Apache-2.0 | crates.io |
+| kameo_macros | 0.21.1 | MIT OR Apache-2.0 | crates.io |
 | keccak | 0.1.6 | Apache-2.0 OR MIT | crates.io |
 | khronos-egl | 6.0.0 | MIT/Apache-2.0 | crates.io |
 | khronos_api | 3.1.0 | Apache-2.0 | crates.io |
@@ -737,6 +792,7 @@ permissions the GPL's section 7 lets this work remove.
 | malachite-nz | 0.9.2 | LGPL-3.0-only | crates.io |
 | malachite-q | 0.9.2 | LGPL-3.0-only | crates.io |
 | malloc_buf | 0.0.6 | MIT | crates.io |
+| managed | 0.8.0 | 0BSD | crates.io |
 | manyhow | 0.11.4 | MIT OR Apache-2.0 | crates.io |
 | manyhow-macros | 0.11.4 | MIT OR Apache-2.0 | crates.io |
 | maplit | 1.0.2 | MIT/Apache-2.0 | crates.io |
@@ -744,6 +800,7 @@ permissions the GPL's section 7 lets this work remove.
 | matrixmultiply | 0.3.11 | MIT/Apache-2.0 | crates.io |
 | maybe-rayon | 0.1.1 | MIT | crates.io |
 | md-5 | 0.10.6 | MIT OR Apache-2.0 | crates.io |
+| md5 | 0.7.0 | Apache-2.0/MIT | crates.io |
 | memchr | 2.8.3 | Unlicense OR MIT | crates.io |
 | memfd | 0.6.6 | MIT OR Apache-2.0 | crates.io |
 | memmap2 | 0.9.11 | MIT OR Apache-2.0 | crates.io |
@@ -752,6 +809,7 @@ permissions the GPL's section 7 lets this work remove.
 | minimal-lexical | 0.2.1 | MIT/Apache-2.0 | crates.io |
 | miniz_oxide | 0.8.9 | MIT OR Zlib OR Apache-2.0 | crates.io |
 | miniz_oxide | 0.9.1 | MIT OR Zlib OR Apache-2.0 | crates.io |
+| mio | 1.2.4 | MIT | crates.io |
 | moxcms | 0.8.1 | BSD-3-Clause OR Apache-2.0 | crates.io |
 | mt19937 | 3.2.0 | BSD-3-Clause | crates.io |
 | multiversion | 0.9.0 | MIT OR Apache-2.0 | crates.io |
@@ -760,6 +818,10 @@ permissions the GPL's section 7 lets this work remove.
 | naga | 29.0.4 | MIT OR Apache-2.0 | crates.io |
 | nalgebra | 0.34.2 | Apache-2.0 | crates.io |
 | ndk-sys | 0.6.0+11769913 | MIT OR Apache-2.0 | crates.io |
+| netlink-packet-core | 0.8.2 | MIT | crates.io |
+| netlink-packet-route | 0.30.0 | MIT | crates.io |
+| netlink-proto | 0.12.2 | MIT | crates.io |
+| netlink-sys | 0.8.8 | MIT | crates.io |
 | new_debug_unreachable | 1.0.6 | MIT | crates.io |
 | nibble_vec | 0.1.0 | MIT | crates.io |
 | nix | 0.26.4 | MIT | crates.io |
@@ -820,6 +882,7 @@ permissions the GPL's section 7 lets this work remove.
 | once_cell_polyfill | 1.70.2 | MIT OR Apache-2.0 | crates.io |
 | oo7 | 0.6.0 | MIT | crates.io |
 | oorandom | 11.1.5 | MIT | crates.io |
+| opaque-debug | 0.3.1 | MIT OR Apache-2.0 | crates.io |
 | open | 5.4.4 | MIT | crates.io |
 | option-ext | 0.2.0 | MPL-2.0 | crates.io |
 | optional | 0.5.0 | MIT OR Apache-2.0 | crates.io |
@@ -838,6 +901,10 @@ permissions the GPL's section 7 lets this work remove.
 | peeking_take_while | 0.1.2 | Apache-2.0/MIT | crates.io |
 | percent-encoding | 2.3.2 | MIT OR Apache-2.0 | crates.io |
 | perf | 0.1.0 | Apache-2.0 | git https://github.com/zed-industries/zed @ 62e5991 |
+| pest | 2.9.2 | MIT OR Apache-2.0 | crates.io |
+| pest_derive | 2.9.2 | MIT OR Apache-2.0 | crates.io |
+| pest_generator | 2.9.2 | MIT OR Apache-2.0 | crates.io |
+| pest_meta | 2.9.2 | MIT OR Apache-2.0 | crates.io |
 | phf | 0.11.3 | MIT | crates.io |
 | phf | 0.13.1 | MIT | crates.io |
 | phf_codegen | 0.11.3 | MIT | crates.io |
@@ -858,6 +925,7 @@ permissions the GPL's section 7 lets this work remove.
 | polling | 3.11.0 | Apache-2.0 OR MIT | crates.io |
 | pollster | 0.2.5 | Apache-2.0/MIT | crates.io |
 | pollster | 0.4.0 | Apache-2.0/MIT | crates.io |
+| poly1305 | 0.8.0 | Apache-2.0 OR MIT | crates.io |
 | polycool | 0.4.0 | MIT OR Apache-2.0 | crates.io |
 | portable-atomic | 1.15.0 | Apache-2.0 OR MIT | crates.io |
 | portable-atomic-util | 0.2.8 | Apache-2.0 OR MIT | crates.io |
@@ -866,6 +934,9 @@ permissions the GPL's section 7 lets this work remove.
 | potential_utf | 0.1.6 | Unicode-3.0 | crates.io |
 | powerfmt | 0.2.0 | MIT OR Apache-2.0 | crates.io |
 | ppv-lite86 | 0.2.21 | MIT OR Apache-2.0 | crates.io |
+| precis-core | 0.1.11 | MIT/Apache-2.0 | crates.io |
+| precis-profiles | 0.1.13 | MIT/Apache-2.0 | crates.io |
+| precis-tools | 0.1.10 | MIT/Apache-2.0 | crates.io |
 | presser | 0.3.1 | MIT OR Apache-2.0 | crates.io |
 | prettyplease | 0.2.37 | MIT OR Apache-2.0 | crates.io |
 | primal-check | 0.3.4 | MIT OR Apache-2.0 | crates.io |
@@ -889,14 +960,17 @@ permissions the GPL's section 7 lets this work remove.
 | quote | 1.0.47 | MIT OR Apache-2.0 | crates.io |
 | quote-use | 0.8.4 | MIT | crates.io |
 | quote-use-macros | 0.8.4 | MIT | crates.io |
+| quoted-string-parser | 0.1.0 | MIT/Apache-2.0 | crates.io |
 | r-efi | 5.3.0 | MIT OR Apache-2.0 OR LGPL-2.1-or-later | crates.io |
 | r-efi | 6.0.0 | MIT OR Apache-2.0 OR LGPL-2.1-or-later | crates.io |
 | radium | 1.1.1 | MIT | crates.io |
 | radix_trie | 0.2.1 | MIT | crates.io |
+| rand | 0.10.3 | MIT OR Apache-2.0 | crates.io |
 | rand | 0.8.8 | MIT OR Apache-2.0 | crates.io |
 | rand | 0.9.5 | MIT OR Apache-2.0 | crates.io |
 | rand_chacha | 0.3.1 | MIT OR Apache-2.0 | crates.io |
 | rand_chacha | 0.9.0 | MIT OR Apache-2.0 | crates.io |
+| rand_core | 0.10.1 | MIT OR Apache-2.0 | crates.io |
 | rand_core | 0.6.4 | MIT OR Apache-2.0 | crates.io |
 | rand_core | 0.9.5 | MIT OR Apache-2.0 | crates.io |
 | rand_xorshift | 0.4.0 | MIT OR Apache-2.0 | crates.io |
@@ -922,6 +996,7 @@ permissions the GPL's section 7 lets this work remove.
 | regalloc2 | 0.15.2 | Apache-2.0 WITH LLVM-exception | crates.io |
 | regex | 1.13.1 | MIT OR Apache-2.0 | crates.io |
 | regex-automata | 0.4.18 | MIT OR Apache-2.0 | crates.io |
+| regex-lite | 0.1.9 | MIT OR Apache-2.0 | crates.io |
 | regex-syntax | 0.8.11 | MIT OR Apache-2.0 | crates.io |
 | renderdoc-sys | 1.1.0 | MIT OR Apache-2.0 | crates.io |
 | result-like | 0.5.1 | BSD-2-Clause-Views | crates.io |
@@ -931,6 +1006,7 @@ permissions the GPL's section 7 lets this work remove.
 | ring | 0.17.14 | Apache-2.0 AND ISC | crates.io |
 | roxmltree | 0.20.0 | MIT OR Apache-2.0 | crates.io |
 | roxmltree | 0.21.1 | MIT OR Apache-2.0 | crates.io |
+| rtnetlink | 0.21.0 | MIT | crates.io |
 | rustc-demangle | 0.1.28 | MIT/Apache-2.0 | crates.io |
 | rustc-hash | 1.1.0 | Apache-2.0/MIT | crates.io |
 | rustc-hash | 2.1.3 | Apache-2.0 OR MIT | crates.io |
@@ -967,9 +1043,11 @@ permissions the GPL's section 7 lets this work remove.
 | ryu | 1.0.23 | Apache-2.0 OR BSL-1.0 | crates.io |
 | safe_arch | 0.7.4 | Zlib OR Apache-2.0 OR MIT | crates.io |
 | safe_arch | 1.2.0 | Zlib OR Apache-2.0 OR MIT | crates.io |
+| salsa20 | 0.10.2 | MIT OR Apache-2.0 | crates.io |
 | same-file | 1.0.6 | Unlicense/MIT | crates.io |
 | schannel | 0.1.29 | MIT | crates.io |
 | scheduler | 0.1.0 | Apache-2.0 | git https://github.com/zed-industries/zed @ 62e5991 |
+| schemars | 0.9.0 | MIT | crates.io |
 | schemars | 1.2.2 | MIT | crates.io |
 | schemars_derive | 1.2.2 | MIT | crates.io |
 | scoped-tls | 1.0.1 | MIT/Apache-2.0 | crates.io |
@@ -990,8 +1068,11 @@ permissions the GPL's section 7 lets this work remove.
 | serde_spanned | 0.6.9 | MIT OR Apache-2.0 | crates.io |
 | serde_spanned | 1.1.1 | MIT OR Apache-2.0 | crates.io |
 | serde_urlencoded | 0.7.1 | MIT/Apache-2.0 | crates.io |
+| serde_with | 3.24.0 | MIT OR Apache-2.0 | crates.io |
+| serde_with_macros | 3.24.0 | MIT OR Apache-2.0 | crates.io |
 | serialport | 4.10.1 | MPL-2.0 | crates.io |
 | sha-1 | 0.10.1 | MIT OR Apache-2.0 | crates.io |
+| sha1 | 0.10.7 | MIT OR Apache-2.0 | crates.io |
 | sha1_smol | 1.0.1 | BSD-3-Clause | crates.io |
 | sha2 | 0.10.9 | MIT OR Apache-2.0 | crates.io |
 | sha3 | 0.10.9 | MIT OR Apache-2.0 | crates.io |
@@ -1009,9 +1090,11 @@ permissions the GPL's section 7 lets this work remove.
 | skrifa | 0.44.0 | MIT OR Apache-2.0 | crates.io |
 | slab | 0.4.12 | MIT | crates.io |
 | slotmap | 1.1.1 | Zlib | crates.io |
+| smallbox | 0.8.8 | MIT | crates.io |
 | smallvec | 1.16.1 | MIT OR Apache-2.0 | crates.io |
 | smol | 2.0.2 | Apache-2.0 OR MIT | crates.io |
 | smol_str | 0.3.6 | MIT OR Apache-2.0 | crates.io |
+| smoltcp | 0.13.1 | 0BSD | crates.io |
 | socket2 | 0.6.5 | MIT OR Apache-2.0 | crates.io |
 | spin | 0.10.1 | MIT | crates.io |
 | spin | 0.9.9 | MIT | crates.io |
@@ -1020,8 +1103,10 @@ permissions the GPL's section 7 lets this work remove.
 | static_assertions | 1.1.0 | MIT OR Apache-2.0 | crates.io |
 | strength_reduce | 0.2.4 | MIT OR Apache-2.0 | crates.io |
 | strict-num | 0.1.1 | MIT | crates.io |
+| strsim | 0.11.1 | MIT | crates.io |
 | strum | 0.28.0 | MIT | crates.io |
 | strum_macros | 0.28.0 | MIT | crates.io |
+| stun-rs | 0.1.11 | MIT/Apache-2.0 | crates.io |
 | subtle | 2.6.1 | BSD-3-Clause | crates.io |
 | sum_tree | 0.1.0 | Apache-2.0 | git https://github.com/zed-industries/zed @ 62e5991 |
 | sval | 2.22.0 | Apache-2.0 OR MIT | crates.io |
@@ -1044,6 +1129,7 @@ permissions the GPL's section 7 lets this work remove.
 | system-configuration | 0.7.0 | MIT OR Apache-2.0 | crates.io |
 | system-configuration-sys | 0.6.0 | MIT OR Apache-2.0 | crates.io |
 | taffy | 0.13.0 | MIT | crates.io |
+| tailscale | 0.6.1 | BSD-3-Clause | path |
 | tao-core-video-sys | 0.2.0 | MIT | crates.io |
 | target-lexicon | 0.13.5 | Apache-2.0 WITH LLVM-exception | crates.io |
 | tauri-winrt-notification | 0.7.3 | MIT OR Apache-2.0 | crates.io |
@@ -1059,6 +1145,7 @@ permissions the GPL's section 7 lets this work remove.
 | tiff | 0.11.3 | MIT | crates.io |
 | time | 0.3.55 | MIT OR Apache-2.0 | crates.io |
 | time-core | 0.1.9 | MIT OR Apache-2.0 | crates.io |
+| time-macros | 0.2.32 | MIT OR Apache-2.0 | crates.io |
 | timsort | 0.1.3 | MIT/Apache-2.0 | crates.io |
 | tiny-keccak | 2.0.2 | CC0-1.0 | crates.io |
 | tiny-skia | 0.11.4 | BSD-3-Clause | crates.io |
@@ -1066,6 +1153,11 @@ permissions the GPL's section 7 lets this work remove.
 | tinystr | 0.8.4 | Unicode-3.0 | crates.io |
 | tinytemplate | 1.2.1 | Apache-2.0 OR MIT | crates.io |
 | tinyvec | 1.13.3 | Zlib OR Apache-2.0 OR MIT | crates.io |
+| tokio | 1.53.3 | MIT | crates.io |
+| tokio-macros | 2.7.2 | MIT | crates.io |
+| tokio-rustls | 0.26.6 | MIT OR Apache-2.0 | crates.io |
+| tokio-stream | 0.1.19 | MIT | crates.io |
+| tokio-util | 0.7.20 | MIT | crates.io |
 | toml | 0.8.23 | MIT OR Apache-2.0 | crates.io |
 | toml | 1.1.6+spec-1.1.0 | MIT OR Apache-2.0 | crates.io |
 | toml_datetime | 0.6.11 | MIT OR Apache-2.0 | crates.io |
@@ -1081,12 +1173,50 @@ permissions the GPL's section 7 lets this work remove.
 | tracing-log | 0.2.0 | MIT | crates.io |
 | tracing-subscriber | 0.3.23 | MIT | crates.io |
 | transpose | 0.2.3 | MIT OR Apache-2.0 | crates.io |
+| try-lock | 0.2.5 | MIT | crates.io |
+| ts_array256 | 0.6.1 | BSD-3-Clause | crates.io |
+| ts_bart | 0.6.1 | BSD-3-Clause | crates.io |
+| ts_bart_packetfilter | 0.6.1 | BSD-3-Clause | crates.io |
+| ts_bitset | 0.6.1 | BSD-3-Clause | crates.io |
+| ts_capabilityversion | 0.6.1 | BSD-3-Clause | crates.io |
+| ts_control | 0.6.1 | BSD-3-Clause | crates.io |
+| ts_control_noise | 0.6.1 | BSD-3-Clause | crates.io |
+| ts_control_serde | 0.6.1 | BSD-3-Clause | crates.io |
+| ts_dataplane | 0.6.1 | BSD-3-Clause | crates.io |
+| ts_derp | 0.6.1 | BSD-3-Clause | crates.io |
+| ts_disco_protocol | 0.6.1 | BSD-3-Clause | crates.io |
+| ts_dynbitset | 0.6.1 | BSD-3-Clause | crates.io |
+| ts_future_util | 0.6.1 | BSD-3-Clause | crates.io |
+| ts_hexdump | 0.6.1 | BSD-3-Clause | crates.io |
+| ts_http_util | 0.6.1 | BSD-3-Clause | crates.io |
+| ts_keys | 0.6.1 | BSD-3-Clause | crates.io |
+| ts_netcheck | 0.6.1 | BSD-3-Clause | crates.io |
+| ts_netmon | 0.6.1 | BSD-3-Clause | crates.io |
+| ts_netstack_smoltcp | 0.6.1 | BSD-3-Clause | crates.io |
+| ts_netstack_smoltcp_core | 0.6.1 | BSD-3-Clause | crates.io |
+| ts_netstack_smoltcp_socket | 0.6.1 | BSD-3-Clause | crates.io |
+| ts_nodecapability | 0.6.1 | BSD-3-Clause | crates.io |
+| ts_noise | 0.6.1 | BSD-3-Clause | crates.io |
+| ts_overlay_router | 0.6.1 | BSD-3-Clause | crates.io |
+| ts_packet | 0.6.1 | BSD-3-Clause | crates.io |
+| ts_packetfilter | 0.6.1 | BSD-3-Clause | crates.io |
+| ts_packetfilter_serde | 0.6.1 | BSD-3-Clause | crates.io |
+| ts_packetfilter_state | 0.6.1 | BSD-3-Clause | crates.io |
+| ts_peercapability | 0.6.1 | BSD-3-Clause | crates.io |
+| ts_runtime | 0.6.1 | BSD-3-Clause | path |
+| ts_time | 0.6.1 | BSD-3-Clause | crates.io |
+| ts_tls_util | 0.6.1 | BSD-3-Clause | crates.io |
+| ts_transport | 0.6.1 | BSD-3-Clause | crates.io |
+| ts_tunnel | 0.6.1 | BSD-3-Clause | crates.io |
+| ts_underlay_router | 0.6.1 | BSD-3-Clause | crates.io |
 | ttf-parser | 0.25.1 | MIT OR Apache-2.0 | crates.io |
 | twox-hash | 2.1.4 | MIT | crates.io |
 | type-map | 0.5.1 | MIT/Apache-2.0 | crates.io |
 | typeid | 1.0.3 | MIT OR Apache-2.0 | crates.io |
 | typenum | 1.20.1 | MIT OR Apache-2.0 | crates.io |
 | ucd | 0.1.1 | MIT | crates.io |
+| ucd-parse | 0.1.13 | MIT OR Apache-2.0 | crates.io |
+| ucd-trie | 0.1.7 | MIT OR Apache-2.0 | crates.io |
 | uds_windows | 1.2.1 | MIT | crates.io |
 | uname | 0.1.1 | MIT/Apache-2.0 | crates.io |
 | unarray | 0.1.4 | MIT OR Apache-2.0 | crates.io |
@@ -1121,6 +1251,7 @@ permissions the GPL's section 7 lets this work remove.
 | unicode_names2 | 2.0.0 | (MIT OR Apache-2.0) AND Unicode-DFS-2016 | crates.io |
 | unicode_names2_generator | 1.3.0 | MIT OR Apache-2.0 | crates.io |
 | unicode_names2_generator | 2.0.0 | MIT OR Apache-2.0 | crates.io |
+| universal-hash | 0.5.1 | MIT OR Apache-2.0 | crates.io |
 | untrusted | 0.9.0 | ISC | crates.io |
 | ureq | 3.4.2 | MIT OR Apache-2.0 | crates.io |
 | ureq-proto | 0.6.4 | MIT OR Apache-2.0 | crates.io |
@@ -1144,6 +1275,7 @@ permissions the GPL's section 7 lets this work remove.
 | wait-timeout | 0.2.1 | MIT/Apache-2.0 | crates.io |
 | waker-fn | 1.2.0 | Apache-2.0 OR MIT | crates.io |
 | walkdir | 2.5.0 | Unlicense/MIT | crates.io |
+| want | 0.3.2 | MIT | crates.io |
 | wasi | 0.11.1+wasi-snapshot-preview1 | Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT | crates.io |
 | wasip2 | 1.0.4+wasi-0.2.12 | Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT | crates.io |
 | wasm-bindgen | 0.2.128 | MIT OR Apache-2.0 | crates.io |
@@ -1265,6 +1397,7 @@ permissions the GPL's section 7 lets this work remove.
 | x11-clipboard | 0.9.3 | MIT | crates.io |
 | x11rb | 0.13.2 | MIT OR Apache-2.0 | crates.io |
 | x11rb-protocol | 0.13.2 | MIT OR Apache-2.0 | crates.io |
+| x25519-dalek | 3.0.0 | BSD-3-Clause | crates.io |
 | xcb | 1.7.1 | MIT | crates.io |
 | xcursor | 0.3.11 | MIT | crates.io |
 | xim-ctext | 0.3.0 | MIT | git https://github.com/zed-industries/xim-rs.git @ 16f35a2 |

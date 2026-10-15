@@ -30,13 +30,18 @@ expect screen plugins
 expect plugin-manager.open true
 expect plugin-manager.restart-required false
 # The seven running plugins, by file name; the three whose Init said no are not in Plugins. Last,
-# the owner's native Tailscale and Import from Mission Planner (2026-10-14), rows like a plugin's.
-expect plugin-manager.rows 9
+# the owner's native rows (2026-10-14), like a plugin's: Tailscale and Import from Mission Planner,
+# on until unticked, and the built-in Tailscale node, experimental, off until it is ticked whatever
+# DisabledPlugins says - and, off, no node: never ticked here, as a node would reach the internet
+# from a test.
+expect plugin-manager.rows 10
 expect plugin-manager.row.0 ~ |anonymizebinlog.wasm|enabled|green
 expect plugin-manager.row.1 Dowding|dowding.wasm|enabled|green
 expect plugin-manager.row.6 ~ |terrainmaker.wasm|enabled|green
 expect plugin-manager.row.7 Tailscale|tailscale.native|enabled|green
 expect plugin-manager.row.8 Import from Mission Planner|mpimport.native|enabled|green
+expect plugin-manager.row.9 Tailscale node (experimental)|tailscale-node.native|disabled|dark-orange
+expect tailnet-node.state stopped
 # Show Errors: every plugin loaded or refused by its own Init, so none.
 click plugin-manager-errors
 expect plugin-manager.errors No Errors
@@ -61,10 +66,12 @@ expect plugins.count 9
 expect plugins.FenceDist.state running
 key ctrl+p
 expect screen plugins
-expect plugin-manager.rows 9
+expect plugin-manager.rows 10
 expect plugin-manager.row.6 Not loaded|dowding.wasm|disabled|dark-red
 expect plugin-manager.row.7 Tailscale|tailscale.native|enabled|green
 expect plugin-manager.row.8 Import from Mission Planner|mpimport.native|enabled|green
+expect plugin-manager.row.9 Tailscale node (experimental)|tailscale-node.native|disabled|dark-orange
+expect tailnet-node.state stopped
 # Ticked again and saved: enabled for the start after. (A moment first: the restarted planner's
 # controls are written after its facts.)
 settle 1

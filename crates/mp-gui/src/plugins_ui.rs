@@ -105,11 +105,19 @@ const DEMO_FILE: &str = "welcomedemositl.wasm";
 /// (`plugin_manager_save` keeps it, empty, where the C# removes it).
 const DISABLED_BY_DEFAULT: &[&str] = &["opendroneid.wasm"];
 
+/// The opt-in native features (`plugin_manager::NativePlugin::opt_in`) a user has ticked and
+/// saved: the setting that turns them on, where every other row is on until `DisabledPlugins`
+/// names it. Not the C#'s. Kept apart from `DisabledPlugins` because a list saved before such a
+/// feature existed does not name it, and would turn it on: the owner's built-in Tailscale node
+/// (2026-10-14), experimental, is off for everyone until they turn it on.
+const ENABLED_NATIVE: &str = "EnabledNativePlugins";
+
 /// `PluginLoader.DisabledPluginNames` as the settings give it: `DisabledPlugins`, or with that
-/// never saved, [`DISABLED_BY_DEFAULT`].
+/// never saved, [`DISABLED_BY_DEFAULT`] - and, not the C#'s, every opt-in native feature that
+/// [`ENABLED_NATIVE`] does not name, whatever `DisabledPlugins` says.
 /// `// C#: MainV2.cs:3199-3201`
 fn disabled_list(persisted: &crate::settings::Persisted) -> Vec<String> {
-    match persisted.get(DISABLED) {
+    let mut list: Vec<String> = match persisted.get(DISABLED) {
         Some(value) => crate::raw_params_grid::get_list(Some(value))
             .into_iter()
             .filter(|name| !name.is_empty())
@@ -118,7 +126,35 @@ fn disabled_list(persisted: &crate::settings::Persisted) -> Vec<String> {
             .iter()
             .map(|name| (*name).to_owned())
             .collect(),
+    };
+    let opted_in = crate::raw_params_grid::get_list(persisted.get(ENABLED_NATIVE));
+    for feature in crate::plugin_manager::NATIVE
+        .iter()
+        .filter(|feature| feature.opt_in)
+    {
+        let on = opted_in
+            .iter()
+            .any(|name| name.eq_ignore_ascii_case(feature.file));
+        let listed = list
+            .iter()
+            .any(|name| name.eq_ignore_ascii_case(feature.file));
+        if !on && !listed {
+            list.push(feature.file.to_owned());
+        }
     }
+    list
+}
+
+/// The opt-in native features a disabled list leaves on: the ones whose rows were ticked when it
+/// was saved, for [`ENABLED_NATIVE`].
+fn opted_in(disabled: &[String]) -> Vec<String> {
+    crate::plugin_manager::NATIVE
+        .iter()
+        .filter(|feature| {
+            feature.opt_in && crate::plugin_manager::native_enabled(feature, disabled)
+        })
+        .map(|feature| feature.file.to_owned())
+        .collect()
 }
 
 /// Whether one of the plugin manager's native features (`plugin_manager::NATIVE`) is on: not in
@@ -139,6 +175,19 @@ fn in_force(mut disabled: Vec<String>) -> Vec<String> {
         disabled.push(DEMO_FILE.to_owned());
     }
     disabled
+}
+
+/// How the built-in Tailscale node starts: its keys in this application's folder under the user's
+/// local application data - `$XDG_DATA_HOME/MissionPlannerRust` (`~/.local/share/...`) on Linux,
+/// `%LOCALAPPDATA%\MissionPlannerRust` on Windows, never Documents, which Windows may sync to the
+/// cloud - and its name and control server mp-tailnet's defaults. With no home folder to find,
+/// none: the node says it has nowhere for its keys.
+#[cfg(not(target_family = "wasm"))]
+fn tailnet_settings() -> mp_tailnet::Settings {
+    let folder = mp_settings::Folders::from_environment()
+        .map(|folders| folders.local_application_data.join(mp_settings::APP_CONFIG_NAME))
+        .unwrap_or_default();
+    mp_tailnet::Settings::new(folder)
 }
 
 /// Where the plugins are: `MP_PLUGINS`, else `plugins` beside the executable.
@@ -262,6 +311,11 @@ pub struct Plugins {
     pub manager: crate::plugin_manager::PluginManager,
     /// The demo pointer plugins drive (the owner's Welcome-Demo-Sitl): its cursor and clicks.
     pub demo: crate::demo_pointer::DemoPointer,
+    /// The built-in Tailscale node, while its row is on (`plugin_manager::TAILSCALE_NODE`; the
+    /// owner's, 2026-10-14): the links dial the tailnet's hosts through it (mp-transport's
+    /// `tailnet`).
+    #[cfg(not(target_family = "wasm"))]
+    tailnet: Option<mp_tailnet::Node>,
 }
 
 impl std::fmt::Debug for Plugins {
@@ -305,7 +359,8 @@ impl Plugins {
                 })
             });
         });
-        Self {
+        #[cfg_attr(target_family = "wasm", allow(unused_mut))]
+        let mut plugins = Self {
             host,
             entries: Vec::new(),
             disabled,
@@ -317,7 +372,41 @@ impl Plugins {
             status: None,
             manager: crate::plugin_manager::PluginManager::default(),
             demo: crate::demo_pointer::DemoPointer::default(),
+            #[cfg(not(target_family = "wasm"))]
+            tailnet: None,
+        };
+        // The built-in Tailscale node, started with the planner when its row is on.
+        #[cfg(not(target_family = "wasm"))]
+        plugins.follow_tailnet_node(persisted);
+        plugins
+    }
+
+    /// The built-in Tailscale node to its row (`plugin_manager::TAILSCALE_NODE`; the owner's,
+    /// 2026-10-14): started when the row is on and it is not, and the links told to dial the
+    /// tailnet through it; stopped when the row is off, the links told first. A native feature's
+    /// tick takes effect at once, where a plugin's waits for the restart.
+    #[cfg(not(target_family = "wasm"))]
+    pub(crate) fn follow_tailnet_node(&mut self, persisted: &crate::settings::Persisted) {
+        let wanted = native_enabled(persisted, &crate::plugin_manager::TAILSCALE_NODE);
+        match (wanted, self.tailnet.take()) {
+            (true, None) => {
+                let node = mp_tailnet::Node::start(tailnet_settings());
+                mp_transport::tailnet::use_node(Some(node.clone()));
+                self.tailnet = Some(node);
+            }
+            (false, Some(node)) => {
+                mp_transport::tailnet::use_node(None);
+                node.stop();
+            }
+            (_, kept) => self.tailnet = kept,
         }
+    }
+
+    /// How the built-in Tailscale node stands, while its row is on.
+    #[cfg(not(target_family = "wasm"))]
+    #[must_use]
+    pub(crate) fn tailnet_state(&self) -> Option<mp_tailnet::State> {
+        self.tailnet.as_ref().map(mp_tailnet::Node::state)
     }
 
     /// The PLUGINS tab's form (Ctrl+P's), `new PluginUI()`: the plugins as they are now and the
@@ -453,6 +542,14 @@ impl Plugins {
     fn record_facts(&self) {
         facts::record("plugins.count", self.host.plugins().len());
         self.manager.record_facts();
+        // The built-in Tailscale node (the owner's, 2026-10-14): how it stands - `stopped` while
+        // its row is off - and that said whole, its sign-in page or its name and addresses.
+        #[cfg(not(target_family = "wasm"))]
+        {
+            let state = self.tailnet_state().unwrap_or_default();
+            facts::record("tailnet-node.state", state.word());
+            facts::record("tailnet-node.said", &state);
+        }
         // The plugin manager's Exercise list: the entries its open Try shows.
         if let Some((_, plugin)) = self.manager.exercised() {
             let entries: Vec<String> = self
@@ -607,13 +704,21 @@ fn fence_point(item: &mp_vehicle::FenceItem) -> FencePoint {
 impl MissionPlanner {
     /// The plugin manager's Save && Close: `DisabledPlugins` set to the rows not ticked, for the
     /// next start's `LoadAll`. With none, the C# removes the setting; here it is kept, empty, so
-    /// a plugin off by default ([`DISABLED_BY_DEFAULT`]) that was ticked stays on.
+    /// a plugin off by default ([`DISABLED_BY_DEFAULT`]) that was ticked stays on. Not the C#'s:
+    /// the opt-in native rows ticked are [`ENABLED_NATIVE`], and the built-in Tailscale node
+    /// follows its row at once.
     /// `// C#: Plugin/PluginUI.cs:73-91`
     pub(crate) fn plugin_manager_save(&mut self) {
         if let Some(list) = self.plugins.manager.save() {
             let value = crate::raw_params_grid::set_list(&list).unwrap_or_default();
             self.persisted.set(DISABLED, value);
+            match crate::raw_params_grid::set_list(&opted_in(&list)) {
+                Some(value) => self.persisted.set(ENABLED_NATIVE, value),
+                None => self.persisted.remove(ENABLED_NATIVE),
+            }
             self.plugins.disabled = in_force(list);
+            #[cfg(not(target_family = "wasm"))]
+            self.plugins.follow_tailnet_node(&self.persisted);
         }
     }
 
@@ -1473,24 +1578,62 @@ mod tests {
 
     /// Open Drone ID is off until a user turns it on (the owner, 2026-10-05): with
     /// `DisabledPlugins` never saved, the disabled list is it; saved - empty, as Save leaves it
-    /// with every row ticked, through config.xml and back - the list is the user's.
+    /// with every row ticked, through config.xml and back - the list is the user's. The built-in
+    /// Tailscale node, off until it is ticked whatever was saved, is on every one of them.
     #[test]
     fn open_drone_id_is_off_until_a_user_turns_it_on() {
+        let node = crate::plugin_manager::TAILSCALE_NODE.file;
         let dir = mp_os::temp_dir().join(format!("plugins-default-off-{}", mp_os::process_id()));
         mp_os::fs::create_dir_all(&dir).expect("a scratch folder");
         let path = dir.join("config.xml");
         let mut persisted = crate::settings::Persisted::at(Some(path.clone()));
-        assert_eq!(disabled_list(&persisted), ["opendroneid.wasm"]);
+        assert_eq!(disabled_list(&persisted), ["opendroneid.wasm", node]);
         persisted.set(DISABLED, "");
         persisted
             .save_config(crate::settings::SaveEvent::Plugin)
             .expect("saved");
         let read_back = crate::settings::Persisted::at(Some(path));
         assert_eq!(read_back.get(DISABLED), Some(""));
-        assert!(disabled_list(&read_back).is_empty());
+        assert_eq!(disabled_list(&read_back), [node]);
         persisted.set(DISABLED, "dowding.wasm");
-        assert_eq!(disabled_list(&persisted), ["dowding.wasm"]);
+        assert_eq!(disabled_list(&persisted), ["dowding.wasm", node]);
         let _ = mp_os::fs::remove_dir_all(&dir);
+    }
+
+    /// The built-in Tailscale node (the owner's, 2026-10-14) is off until a user ticks it and
+    /// saves: off with nothing saved, and off with a `DisabledPlugins` saved before it existed,
+    /// which does not name it; on once `EnabledNativePlugins` names it, as Save && Close writes it
+    /// from a form with its row ticked; off again, and in the disabled list, once saved unticked.
+    /// The first Tailscale row, on until unticked, is untouched by it all.
+    #[test]
+    fn the_tailscale_node_is_off_until_ticked_and_saved() {
+        let node = &crate::plugin_manager::TAILSCALE_NODE;
+        let tailscale = &crate::plugin_manager::TAILSCALE;
+        let mut persisted = crate::settings::Persisted::at(None);
+        assert!(!native_enabled(&persisted, node));
+        assert!(native_enabled(&persisted, tailscale));
+        persisted.set(DISABLED, "dowding.wasm");
+        assert!(!native_enabled(&persisted, node), "an old list does not turn it on");
+
+        // Save && Close with its row ticked: not in the disabled list, so opted in.
+        let saved = vec!["dowding.wasm".to_owned()];
+        assert_eq!(opted_in(&saved), [node.file]);
+        let enabled = crate::raw_params_grid::set_list(&opted_in(&saved)).unwrap_or_default();
+        persisted.set(ENABLED_NATIVE, enabled);
+        assert!(native_enabled(&persisted, node));
+        assert_eq!(disabled_list(&persisted), ["dowding.wasm"]);
+
+        // And unticked: in the disabled list, opted in no more.
+        let saved = vec!["dowding.wasm".to_owned(), node.file.to_owned()];
+        assert!(opted_in(&saved).is_empty());
+        persisted.remove(ENABLED_NATIVE);
+        persisted.set(
+            DISABLED,
+            crate::raw_params_grid::set_list(&saved).unwrap_or_default(),
+        );
+        assert!(!native_enabled(&persisted, node));
+        assert_eq!(disabled_list(&persisted), ["dowding.wasm", node.file]);
+        assert!(native_enabled(&persisted, tailscale));
     }
 
     /// The planner carries the plugins Mission Planner ships, so a plain start loads them with

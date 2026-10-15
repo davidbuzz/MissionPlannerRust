@@ -141,6 +141,33 @@ planner never installs anything itself. If a link to a tailnet address or machin
 while this computer is not on your tailnet, the status line under the tabs says so. Unticking
 Tailscale in the PLUGINS tab turns all of this off.
 
+### In the desktop app, without the Tailscale app (experimental)
+
+The planner can join your tailnet as a device of its own, with nothing else installed: the PLUGINS
+tab's **Tailscale node (experimental)** row, off until you tick it. It is in builds made with the
+node (`cargo build -p mp-gui --bin planner --features tailnet-node`); the released builds do not
+carry it yet, and ticking the row there says "this build has no built-in Tailscale node".
+
+1. In the PLUGINS tab, tick **Tailscale node (experimental)** and click **Save & Close**.
+2. Under the list of plugins, the node's line says it *needs a sign-in*. Click **Sign in to the
+   tailnet (opens the browser)** and sign in with your account. The Tailscale indicator at the top
+   says *Tailscale node: needs a sign-in* until you do, and a click on it opens the same page.
+3. The line then says *running as* the node's name, and the indicator *Tailscale node: on tailnet
+   as* that name and its tailnet address, with a green dot. The name is `mpr-` and this
+   computer's name (`mpr-my-laptop`); the admin console lists it as a device of its own.
+4. Connect as above, by **TCP** or **UDPCl**, to a device's machine name (`my-pi`), its full name
+   (`my-pi.tail1234.ts.net`) or its tailnet address. The node knows your tailnet's names itself
+   (MagicDNS), so the computer needs no Tailscale settings of its own.
+
+While the node is on, links to your tailnet's addresses and names go through it, and every other
+link goes through the computer as before; stopped or failed, it leaves the tailnet to the
+computer's own Tailscale again, and so does the indicator. The node keeps its keys in
+`tailscale-node.json` in this application's folder (`~/.local/share/MissionPlannerRust` on Linux,
+`%LOCALAPPDATA%\MissionPlannerRust` on Windows), so it is the same device at every start: delete
+that file, and remove the device in the admin console, to start afresh. Unticking the row stops
+the node. It is a preview: tailscale-rs, the Rust library from Tailscale it is built on, is not
+yet audited, by its authors' own account.
+
 ### In a web browser
 
 1. Open the planner's page, https://davidbuzz.github.io/MissionPlannerRust/, on any computer. You

@@ -94,9 +94,20 @@ pub const TABLE_BEGIN: &str =
 /// The line that closes it.
 pub const TABLE_END: &str = "<!-- END crates -->";
 
-/// Every `.rs` file git tracks under `root`, as git lists them.
+/// Where others' code is kept as its authors published it: the vendored tailscale-rs crates
+/// (`third_party/tailscale-rs/README.md`). Their files are not this work's, so they open with
+/// their authors' headers or none, never [`HEADER`]; their licences travel in their own `LICENSE`
+/// files and in [`THIRD_PARTY`]'s crate table.
+pub const VENDORED: &str = "third_party";
+
+/// Every `.rs` file of this work's own that git tracks under `root`, as git lists them: all but
+/// those under [`VENDORED`].
 pub fn rust_files(root: &Path) -> Result<Vec<PathBuf>> {
-    tracked(root, "*.rs")
+    let vendored = root.join(VENDORED);
+    Ok(tracked(root, "*.rs")?
+        .into_iter()
+        .filter(|file| !file.starts_with(&vendored))
+        .collect())
 }
 
 /// Every file git tracks under `root` that matches `pattern`.
@@ -167,11 +178,19 @@ pub const CLARIFIED: [(&str, &str); 4] = [
     ("syn-ext", "BSD-2-Clause"),
 ];
 
-/// Every crate the workspace depends on, for every target, from `cargo metadata` over the lock
-/// file; the workspace's own crates left out; sorted by name and version.
+/// Every crate the workspace depends on, for every target and with every feature on, from `cargo
+/// metadata` over the lock file; the workspace's own crates left out; sorted by name and version.
+/// Every feature, because a build with one on ships what it brings: mp-gui's `tailnet-node`, off
+/// by default, brings tailscale-rs (the vendored two, source `path`) and the crates under it.
 pub fn dependencies(root: &Path) -> Result<Vec<Dependency>> {
     let output = Command::new("cargo")
-        .args(["metadata", "--format-version", "1", "--locked"])
+        .args([
+            "metadata",
+            "--format-version",
+            "1",
+            "--locked",
+            "--all-features",
+        ])
         .current_dir(root)
         .output()
         .context("running cargo metadata")?;
@@ -267,8 +286,9 @@ pub fn table(dependencies: &[Dependency]) -> String {
 /// The crate table [`THIRD_PARTY`] should hold today.
 fn fresh_table(dependencies: &[Dependency]) -> String {
     format!(
-        "{TABLE_BEGIN}\n{} crates, every target's, from `cargo metadata` over Cargo.lock; each \
-         licence is one `deny.toml` admits (`xtask/tests/licences.rs` holds both).\n\n{}{TABLE_END}",
+        "{TABLE_BEGIN}\n{} crates, every target's and every feature's, from `cargo metadata` over \
+         Cargo.lock; each licence is one `deny.toml` admits (`xtask/tests/licences.rs` holds \
+         both).\n\n{}{TABLE_END}",
         dependencies.len(),
         table(dependencies)
     )

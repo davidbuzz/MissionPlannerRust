@@ -1,0 +1,67 @@
+name: c
+on:
+  push:
+    branches:
+      - main
+    tags:
+      - v*
+  pull_request:
+  schedule:
+    # Nightly run; execute daily at 06:37 AM UTC on main (default branch).
+    - cron: "37 6 * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  build_test:
+    name: build (rust ${{ matrix.rust_toolchain.label }}, ${{ matrix.build.runner }})
+    runs-on: ${{ matrix.build.runner }}
+
+    strategy:
+      matrix:
+        is_pr_or_push:
+          - ${{github.event_name == 'pull_request' || github.event_name == 'push'}}
+
+        rust_toolchain:
+          - version: 1.98.1
+            label: latest
+
+        build:
+          - triple: x86_64-unknown-linux-gnu
+            runner: linux-x86_64-16cpu
+          - triple: aarch64-unknown-linux-gnu
+            runner: linux-arm64-16cpu
+          - triple: x86_64-pc-windows-gnu
+            runner: windows-8vcpu
+          # macos uses clang, not working yet
+          # - triple: aarch64-apple-darwin
+          #        runner: macos-26
+
+        exclude:
+          - is_pr_or_push: true
+            build:
+              triple: x86_64-pc-windows-gnu
+
+    defaults:
+      run:
+        working-directory: ts_ffi
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Setup rust
+        id: setup-rust
+        uses: ./.github/actions/setup-rust
+        with:
+          toolchain-version: ${{ matrix.rust_toolchain.version }}
+          builder-triple: ${{ matrix.build.triple }}
+
+      - name: Build examples
+        run: make -C examples
