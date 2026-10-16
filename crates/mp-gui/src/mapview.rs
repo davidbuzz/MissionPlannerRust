@@ -386,6 +386,11 @@ pub struct MapViewport {
     auto_pan: bool,
     /// When Auto Pan last looked: Mission Planner's `mapupdate`, three seconds apart.
     panned_at: Option<Instant>,
+    /// Whether the first fix is still owed its framing (`route.Points.Count == 1`): the C#'s
+    /// loop adds its first point after the form has shown, so it meets the load zoom; here the
+    /// fixes may come before the first paint - a link opened at start - and the framing waits for
+    /// it. Set again when the track is cleared, as the route's count is.
+    first_fix_owed: bool,
     /// Where the map starts, from the settings' `maplast_lat`, `maplast_lng` and `maplast_zoom`
     /// (`FlightData.cs:526-550`): a place and a zoom, made a camera on the first paint, when the
     /// viewport's width is known. `None` once used or when the settings had none.
@@ -558,6 +563,7 @@ impl MapViewport {
             camera: None,
             auto_pan: true,
             panned_at: None,
+            first_fix_owed: true,
             start: None,
             drag_from: None,
             last_viewport: (1.0, 1.0),
@@ -776,6 +782,7 @@ impl MapViewport {
     #[allow(dead_code)] // the flight screen's Actions grid has no Clear Track button to call it yet
     pub fn clear_track(&mut self) {
         self.path.clear();
+        self.first_fix_owed = true;
     }
 
     /// Replaces the planned mission shown on the map.
@@ -938,9 +945,30 @@ impl MapViewport {
         else {
             return;
         };
-        if self.path.len() == 1 && self.zoom_level().is_some_and(|zoom| zoom == 3.0) {
-            self.centre_on(at);
-            self.set_zoom(17.0);
+        // `route.Points.Count == 1 && gMapControl1.Zoom == 3` - "3 is the default load zoom". Until
+        // a paint has given the view its size nothing is framed or panned: a camera made before it
+        // takes the fallback span, which read back as zoom 20 at the first paint (tiles-startup.gui,
+        // 2026-10-17: a link opened at start, every tile missing), and `Zoom == 3` is the map at
+        // its load view - no view chosen and no remembered start, or one at 3.
+        if self.first_fix_owed {
+            if self.last_view.is_none() {
+                return;
+            }
+            self.first_fix_owed = false;
+            let at_load_zoom = (self.camera.is_none()
+                && self.start.is_none_or(|(_, zoom)| zoom == 3.0))
+                || self.zoom_level().is_some_and(|zoom| zoom == 3.0);
+            if at_load_zoom {
+                self.centre_on(at);
+                self.set_zoom(17.0);
+            } else if self.camera.is_none()
+                && let Some((_, zoom)) = self.start
+            {
+                // `Zoomlevel.Value = maplast_zoom` with `CHK_autopan`'s pan: the remembered zoom
+                // held and the vehicle under it, not the idle fit of its track.
+                self.centre_on(at);
+                self.set_zoom(zoom);
+            }
         }
         if !self.auto_pan
             || self
@@ -4715,6 +4743,54 @@ mod tests {
         assert_eq!(map.zoom_level(), Some(17.0));
         let centre = map.camera().expect("a view").centre;
         assert!((centre.x - fix.to_web_mercator().x).abs() < 1e-9);
+    }
+
+    /// A link opened at start brings fixes before the window's first paint: nothing is framed
+    /// until the paint, and the first look after it frames the vehicle at 17 as the C#'s first
+    /// route point does - not at the fallback span, which read back as zoom 20 (2026-10-17).
+    #[test]
+    fn fixes_before_the_first_paint_wait_for_it_and_then_frame_at_zoom_17() {
+        let mut map = MapViewport::new(0, 0);
+        let fix = LatLon::new(-35.30, 149.10).expect("valid position");
+        let heading = Bearing(mp_units::Degrees(0.0));
+        map.observe(fix, heading);
+        map.auto_pan(Instant::now());
+        assert_eq!(map.camera(), None, "not painted: nothing framed");
+        let moved = LatLon::new(-35.3001, 149.1001).expect("valid position");
+        map.observe(moved, heading);
+        map.auto_pan(Instant::now());
+        assert_eq!(map.camera(), None, "still not painted");
+        assert!(map.path.len() > 1, "the fixes outran the paint");
+        // The first paint, at the load view: an 800 by 600 pane at zoom 3.
+        map.last_viewport = (800.0, 600.0);
+        map.last_origin = (0.0, 0.0);
+        let (x, y, width, height) = map.idle_view(800.0, 600.0);
+        map.last_view = Some((x, y, width, height));
+        map.auto_pan(Instant::now());
+        assert_eq!(map.zoom_level(), Some(17.0));
+        let centre = map.camera().expect("framed").centre;
+        assert!((centre.x - moved.to_web_mercator().x).abs() < 1e-9);
+        // Framed once: a later fix pans at the zoom it has.
+        map.set_zoom(15.0);
+        map.observe(fix, heading);
+        map.auto_pan(Instant::now() + Duration::from_secs(4));
+        assert_eq!(map.zoom_level(), Some(15.0));
+    }
+
+    /// A remembered start at another zoom is not the load zoom: the first fix pans there and
+    /// keeps it, as `gMapControl1.Zoom == 3` fails in the C#.
+    #[test]
+    fn a_remembered_start_zoom_keeps_the_first_fix_from_zoom_17() {
+        let mut map = MapViewport::new(0, 0);
+        let canberra = LatLon::new(-35.3632621, 149.1652374).expect("Canberra");
+        map.start_at(canberra, 16.0);
+        map.observe(canberra, Bearing(mp_units::Degrees(0.0)));
+        map.last_viewport = (800.0, 600.0);
+        map.last_origin = (0.0, 0.0);
+        let (x, y, width, height) = map.idle_view(800.0, 600.0);
+        map.last_view = Some((x, y, width, height));
+        map.auto_pan(Instant::now());
+        assert_eq!(map.zoom_level(), Some(16.0));
     }
 
     #[test]
