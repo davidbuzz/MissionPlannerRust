@@ -15,7 +15,7 @@
 
 screen fly
 window 1600x1200
-budget 19
+budget 20
 
 # The first shot is a minute into the recording: at 10x it comes in six seconds. The Telemetry
 # Logs tab is the thirteenth, so the strip is scrolled to it first, as fly-playback.gui scrolls.

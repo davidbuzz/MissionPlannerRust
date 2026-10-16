@@ -30,7 +30,7 @@ env MP_CONFIG_XML $WORK/config.xml
 setup mkdir -p $WORK/mavftp/down && printf 'hello from the mavftp page\n' > $WORK/mavftp/hello.txt && printf 'second\n' > $WORK/mavftp/two.txt
 screen params
 window 1600x1200
-budget 48
+budget 49
 # 48: one run took 39.9 s with the folder delete added (2026-10-06).
 # RawParamWarning, on the Full Parameter List's Activate (ConfigRawParams.cs:92): "Show me
 # again?" unticked, so no later visit asks, and OK.

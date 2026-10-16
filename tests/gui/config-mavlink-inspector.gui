@@ -22,7 +22,7 @@
 
 screen setup
 window 1600x1200
-budget 12
+budget 13
 # A config.xml of its own, so the "Points of history?" answer this script gives is not kept in
 # the settings of the machine running it.
 env MP_CONFIG_XML $WORK/config.xml

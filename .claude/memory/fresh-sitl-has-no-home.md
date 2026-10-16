@@ -17,3 +17,14 @@ in a batch, or after a wait; a failing `vehicle.home`/`plan.home` on a fresh SIT
 not the port, until a settled run says otherwise. The planner's default home in those runs is the
 config's -27.5097083, 153.0153894. Related: [[test-sitls-own-their-ports]],
 [[signing-script-keys-the-sitl]].
+
+**Revised 2026-10-17:** the age of the SITL is not the whole story. In three batch runs on my own
+SITL (instance 3) plan-tracker-home.gui found `vehicle.home` none at 5, 20 and 25 minutes of SITL
+life, while the suite's own order passes it. The difference is what ran before: the suite runs
+experimental-takeoff.gui (which arms and flies the copter) and fly-messages.gui before plan-*, my
+batches left both out as fresh-SITL-dependent. Likely home reaches the planner only once the
+vehicle has armed (ArduPilot sets home on arming) or when the mission is read (the C# asks
+GET_HOME_POSITION in getWPs; mp-link's requests.rs:683 has the command) - to be checked, not
+assumed. Until then: run plan-tracker-home after a script that arms the SITL, or read the mission
+first; and never read a failing `vehicle.home` as the day's code without that check.
+

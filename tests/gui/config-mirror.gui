@@ -59,3 +59,6 @@ expect config.mirror.opened 2
 expect config.mirror.rows 1
 expect config.mirror.row.0 ["UDP","Outbound","14560","127.0.0.1","False","Started"]
 click mirror-close
+# Closed before the run ends: the guard judges the last frame, and the window's grid must not be
+# in it half-drawn (a close still painting gave a cut-off cell once, 2026-10-17).
+expect config.mirror.window false

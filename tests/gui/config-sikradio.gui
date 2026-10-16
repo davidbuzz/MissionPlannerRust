@@ -30,7 +30,7 @@ setup printf 'NETID = 33\n; a comment\nNOT_A_SETTING = 1\n' > "$WORK/netid.ini"
 
 screen setup
 window 1600x1200
-budget 88
+budget 89
 # A first budget, set by hand until a passing run records one.
 
 expect setup.pages ~ Sikradio

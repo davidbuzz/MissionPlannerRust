@@ -80,13 +80,16 @@ pub const CLIENT: (f32, f32) = (452.0, 228.0);
 /// `myDataGridView1`.
 pub const GRID_AT: (f32, f32, f32, f32) = (12.0, 69.0, 428.0, 150.0);
 /// The columns: `HeaderText` and `Width`. `// C#: Controls/SerialOutputPass.resx`
+///
+/// Go is 48 where the resx has 40: "Started" is 41 px at this font and the layout guard counted
+/// the cell cut off (config-mirror.gui, 2026-10-17); the C#'s 8.25 pt font fits it in 40.
 pub const COLUMNS: [(&str, f32); 6] = [
     ("Type", 55.0),
     ("Direction", 80.0),
     ("Port", 60.0),
     ("Host/Baud", 80.0),
     ("Write", 40.0),
-    ("Go", 40.0),
+    ("Go", 48.0),
 ];
 /// `Type.Items` and `Direction.Items`. `// C#: Controls/SerialOutputPass.Designer.cs:103-116`
 pub const TYPES: [&str; 3] = ["Serial", "TCP", "UDP"];
@@ -631,7 +634,8 @@ fn cell(
         .overflow_hidden()
         // Text wider than its column ends in an ellipsis rather than mid-letter: "Started" in the
         // C#'s 40-wide Go column (SerialOutputPass.cs:184) is 41 at this size, and was cut
-        // (config-mirror.gui, 2026-10-06).
+        // (config-mirror.gui, 2026-10-06); the column is 48 now (`COLUMNS`), the ellipsis kept
+        // for a host typed longer than its column.
         .text_ellipsis()
         .text_color(rgb(theme::TEXT));
     if editing {

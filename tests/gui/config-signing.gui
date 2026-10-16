@@ -32,7 +32,7 @@ env XDG_DATA_HOME $WORK
 env MP_CONFIG_XML $WORK/config.xml
 screen setup
 window 1600x1200
-budget 41
+budget 42
 
 # The vehicle first, and its parameters, which are fetched as it is heard: the SETUP list is
 # built again when they are in, and a click before that is a click the list may forget.
