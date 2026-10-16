@@ -262,7 +262,7 @@ pub mod keys {
     }
 
     /// `ClickBindingButton.GetClickBindingString`: the modifiers and "Left Click", or "None".
-    /// `// C#: ExtLibs/Controls/ClickBindingButton.cs:415-430`
+    /// `// C#: ExtLibs/Controls/ClickBindingButton.cs:168-183`
     #[must_use]
     pub fn click_string(binding: (u32, u32)) -> String {
         let button = match binding.1 {
@@ -1269,7 +1269,7 @@ impl SettingsForm {
     /// A key down while a button listens: Escape cancels; a modifier alone only shows; a
     /// modifiers-only button takes the modifiers on Enter; any other key is the binding with its
     /// modifiers. A click button takes the modifiers as they are pressed.
-    /// `// C#: ExtLibs/Controls/KeyBindingButton.cs:126-163; ClickBindingButton.cs:361-376`
+    /// `// C#: ExtLibs/Controls/KeyBindingButton.cs:126-163; ClickBindingButton.cs:114-129`
     pub fn listening_key(&mut self, key: u32, modifiers: u32) {
         let Some(listening) = self.listening else {
             return;
