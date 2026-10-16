@@ -4007,7 +4007,8 @@ fn legacy_page(compass: &Compass, focus: &Focus, cx: &mut Context<MissionPlanner
     crate::ui::panel(TITLE, body).into_any_element()
 }
 
-/// The focus handles: the boxes', and the older page's two declination text boxes'.
+/// The focus handles: the boxes', the older page's two declination text boxes', and Live
+/// Calibration's three spheres'.
 pub struct Focus {
     /// The modal box's, and its text field's.
     pub dialog: FocusHandle,
@@ -4015,6 +4016,8 @@ pub struct Focus {
     pub degrees: FocusHandle,
     /// `TXT_declination_min`'s.
     pub minutes: FocusHandle,
+    /// `sphere1` to `sphere3`'s, which take the arrow keys (`live_magcal.rs`).
+    pub spheres: [FocusHandle; 3],
 }
 
 impl Focus {
@@ -4024,6 +4027,7 @@ impl Focus {
             dialog: cx.focus_handle(),
             degrees: cx.focus_handle(),
             minutes: cx.focus_handle(),
+            spheres: [cx.focus_handle(), cx.focus_handle(), cx.focus_handle()],
         }
     }
 
@@ -4060,9 +4064,10 @@ pub fn overlay(
     window: &Window,
     cx: &mut Context<MissionPlanner>,
 ) -> Vec<AnyElement> {
-    let mut out: Vec<AnyElement> = super::live_magcal::window(&compass.live, window, cx)
-        .into_iter()
-        .collect();
+    let mut out: Vec<AnyElement> =
+        super::live_magcal::window(&compass.live, &focus.spheres, window, cx)
+            .into_iter()
+            .collect();
     if let Some(dialog) = dialog_box(compass, focus, window, cx) {
         out.push(dialog);
     }

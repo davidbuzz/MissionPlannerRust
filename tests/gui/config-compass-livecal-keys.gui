@@ -1,0 +1,86 @@
+# Live Calibration's spheres and their arrow keys: Sphere.ProcessCmdKey (ExtLibs/Controls/
+# Sphere.cs:83-113) on the window MagCalib.DoGUIMagCalib shows (ProgressReporterSphere),
+# ported in crates/mp-gui/src/config/live_magcal.rs.
+#
+# The claims: a sphere clicked takes the keyboard, as the UserControl it is takes the focus, and
+# only that sphere turns. Left and Right add 5 degrees either way to the turn about z its next
+# paint makes and Up and Down to pitch, which OnPaint sets back to zero unread; the paint each
+# asks for turns the view 5 degrees more while "Rotate with each data point" is ticked
+# (Sphere.cs:116-160). So, ticked, Left leaves the view where it was, Right turns it 10 degrees
+# and Up 5; unticked - which the handler does for the first two spheres alone
+# (ProgressReporterSphere.cs:111-115) - Left and Right turn it 5 and Down not at all.
+# config.compass.livecal.viewN is the eye's bearing about z, Math.Atan2(eye.Y, eye.X), which
+# OnPaint writes to the console (Sphere.cs:272), in degrees: 45 from the eye's (1, 1, 1).
+#
+# Against tests/gui/legacy-vehicle.py: a copter as ArduPilot before 4.0 was, without
+# COMPASS_PRIO1_ID, so Initial Setup lists the older Compass page (InitialSetup.cs:200-207), and
+# without the COMPASS_CALIBRATION capability, so the page shows its Mission Planner group and
+# Live Calibration (ConfigHWCompass.cs:51-70). It sends no magnetometer readings: the window's
+# loop keeps no sample, adds no point, and the views move for the keys alone.
+#
+# Run as: tools/gui-test.sh tests/gui/config-compass-livecal-keys.gui -- tcp:127.0.0.1:5790
+
+env MP_CONFIG_XML $WORK/config.xml
+env XDG_DATA_HOME $WORK
+setup python3 tests/gui/legacy-vehicle.py --work $WORK --port 5790 --compass
+
+screen params
+window 1600x1200
+# A first budget, set by hand until a passing run records one.
+budget 14
+# 14: 12.3 s measured headless on lavapipe (2026-10-16), the rule's ceiling plus one.
+expect vehicle.count > 0
+# RawParamWarning, on the Full Parameter List's Activate (ConfigRawParams.cs:92).
+click raw-param-warning-again
+click raw-param-warning-ok
+click param-download
+expect params.held 18
+
+click tab-setup
+click setup-page-ConfigMandatory
+click setup-page-ConfigHWCompass
+expect setup.page ConfigHWCompass
+expect config.compass.active true
+expect config.compass.class ConfigHWCompass
+expect config.compass.legacy.enabled true
+expect config.compass.legacy.mpcalib true
+expect config.compass.livecal.open false
+
+# The button: Strings.MagCalibMsg, then the window, its spheres seen along (1, 1, 1).
+click compass-livecal
+expect config.compass.dialog Please click ok and move the autopilot around all axises in a circular motion
+click compass-dialog-ok
+expect config.compass.dialog none
+expect config.compass.livecal.open true
+expect config.compass.livecal.view1 45.0
+expect config.compass.livecal.view2 45.0
+expect config.compass.livecal.view3 45.0
+
+# The first sphere clicked, "Rotate with each data point" ticked: Right 5 and the paint's 5.
+click magcal-sphere1
+key Right
+expect config.compass.livecal.view1 55.0
+# Left's 5 back and the paint's 5 on: where it was. Up then turns it the paint's 5 alone, which
+# says Left's key went through.
+key Left
+key Up
+expect config.compass.livecal.view1 60.0
+# The others did not move.
+expect config.compass.livecal.view2 45.0
+expect config.compass.livecal.view3 45.0
+
+# Unticked: the first two spheres' paints no longer turn them, the third's still do.
+click magcal-rotate
+click magcal-sphere1
+key Left
+expect config.compass.livecal.view1 55.0
+key Down
+key Right
+expect config.compass.livecal.view1 60.0
+click magcal-sphere2
+key Right
+expect config.compass.livecal.view2 50.0
+click magcal-sphere3
+key Right
+expect config.compass.livecal.view3 55.0
+expect config.compass.livecal.view1 60.0

@@ -1,0 +1,62 @@
+# The zero altitude warning's link: a box's [link;url;text] drawn as a link, and its click.
+#
+# Write WPs on a plane asks checkZeroAlts' question of a WAYPOINT at 0 m, Strings.ZeroAltWarningPlane
+# through Common.MessageShowAgain (GCSViews/FlightPlanner.cs:8531-8571). Its text ends in
+# "[link;https://ardupilot.org/plane/docs/common-mavlink-mission-command-messages-mav_cmd.html;
+# Command Documentation]", which CreateMessageShowAgainForm takes out of the words and shows as a
+# LinkLabel under them, whose click is OpenUrl's (Common.cs:347-373, 455-490); CustomMessageBox
+# reads the same markup the same way (ExtLibs/Controls/CustomMessageBox.cs:83-93, 161-201). The
+# port's box text goes through crates/mp-gui/src/ui.rs's box_text: the link is plan-prompt-link,
+# and its click hands the address to the desktop's browser - here MP_OPEN_WITH_SHELL_LOG's file,
+# so none comes up - and ui.link.opened says which address went. The box stays up, as the C#'s
+# does, and Cancel ends the write.
+#
+# Against tests/gui/legacy-vehicle.py --plane, whose heartbeat is a fixed wing: the bundled SITL is
+# a copter, whose warning (ZeroAltWarningCopter) has no link. Home is the config.xml's, as Write
+# needs one. The waypoint a click on the map makes is at Default Alt, 100 - setfromMap gives no
+# row 0 (:1164-1208) - and Modify Alt's -100 brings it to 0 (:4921-4952).
+#
+# Run as: tools/gui-test.sh tests/gui/plan-zero-alt-link.gui -- tcp:127.0.0.1:5790
+
+env XDG_DATA_HOME $WORK
+env MP_PLAN_DIR $WORK
+env MP_OPEN_WITH_SHELL_LOG $WORK/opened.txt
+setup mkdir -p "$WORK/MissionPlannerRust" && printf '<?xml version="1.0" encoding="utf-8"?><Config><TXT_homelat>-35.3632621</TXT_homelat><TXT_homelng>149.1652374</TXT_homelng><TXT_homealt>584.1</TXT_homealt></Config>' > "$WORK/MissionPlannerRust/config.xml"
+setup python3 tests/gui/legacy-vehicle.py --work $WORK --port 5790 --plane
+
+screen plan
+window 1600x1200
+# A first budget, set by hand until a passing run records one.
+budget 12
+# The vehicle first: a click before its first heartbeat is a click the screen may forget.
+expect vehicle.count > 0
+
+# One waypoint, at 0 m.
+# The map first: a press before its first paint records nothing.
+expect map.ready true
+click map@0.45x0.40
+expect mission.items 1
+expect mission.last.alt 100
+click map@0.30x0.70:right
+click menu-modifyAlt
+expect plan.prompt Alt Change
+key ctrl+u
+key minus
+type 100
+expect plan.prompt.value -100
+key Return
+expect plan.prompt none
+expect mission.last.alt 0
+
+# Write: the plane's warning, its words without the markup and the markup its link.
+click plan-write
+expect plan.prompt Zero Altitude Warning
+expect plan.prompt.text ~ (use a simulator to be sure).
+click plan-prompt-link
+expect ui.link.opened https://ardupilot.org/plane/docs/common-mavlink-mission-command-messages-mav_cmd.html
+expect plan.prompt Zero Altitude Warning
+
+# Cancel: no upload.
+click plan-prompt-cancel
+expect plan.prompt none
+expect mission.items 1

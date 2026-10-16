@@ -308,6 +308,157 @@ pub fn action_sized(
     }
 }
 
+/// What opens a box's link markup, `[link;`, its letters in any case.
+const LINK_OPEN: &[u8] = b"[link;";
+
+/// The `[link;url;text]` a message box's words may carry: a `LinkLabel` under the words, showing
+/// `text`, whose click opens `url`.
+/// `// C#: ExtLibs/Controls/CustomMessageBox.cs:83-93, 161-201; Common.cs:347-373`
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct BoxLink {
+    /// `link`, the address: the regex's second group.
+    pub url: String,
+    /// `linktext`, what the label shows: its third.
+    pub text: String,
+}
+
+/// A box's words as `CustomMessageBox.ShowUI` and `Common.CreateMessageShowAgainForm` read them,
+/// with `new Regex(@"(\[link;([^\]]+);([^\]]+)\])", RegexOptions.IgnoreCase).Match(text)`: the
+/// words with the first markup found taken out - wherever that same markup appears, as
+/// `text.Replace(match.Groups[1].Value, "")` takes it - and the link it names; or the words as
+/// they are and no link.
+///
+/// The markup is `[link;`, then everything up to the first `]` after it, split at the last `;`
+/// that leaves something either side: the second group is greedy, and backtracks only as far as
+/// a `;` with a character after it. Newlines are taken like any other character, since only `]`
+/// is outside the groups' class. An opening that cannot match - no `]` after it, or no such `;`
+/// before the `]` - stays in the words as it is written, as the C# shows it, and the search goes
+/// on after it; so does any markup after the first that matched. `link`'s letters are matched
+/// without regard to their case, as ASCII folds them.
+/// `// C#: ExtLibs/Controls/CustomMessageBox.cs:83-93; Common.cs:347-359`
+#[must_use]
+pub fn split_link(text: &str) -> (String, Option<BoxLink>) {
+    let bytes = text.as_bytes();
+    let mut from = 0;
+    while let Some(at) = (from..bytes.len()).find(|&start| {
+        bytes
+            .get(start..start + LINK_OPEN.len())
+            .is_some_and(|opening| opening.eq_ignore_ascii_case(LINK_OPEN))
+    }) {
+        let body_at = at + LINK_OPEN.len();
+        // Neither group passes a `]`: with none after this opening there is none after a later one.
+        let Some((body, _)) = text.get(body_at..).and_then(|rest| rest.split_once(']')) else {
+            break;
+        };
+        let split = body
+            .char_indices()
+            .rev()
+            .find(|&(index, c)| c == ';' && index > 0 && index + 1 < body.len())
+            .and_then(|(index, _)| Some((body.get(..index)?, body.get(index + 1..)?)));
+        // The markup as it is written, `link` in its own case, to its `]`.
+        if let (Some((url, label)), Some(whole)) = (split, text.get(at..=body_at + body.len())) {
+            let link = BoxLink {
+                url: url.to_owned(),
+                text: label.to_owned(),
+            };
+            return (text.replace(whole, ""), Some(link));
+        }
+        from = at + 1;
+    }
+    (text.to_owned(), None)
+}
+
+/// A box's words as they are drawn: a line each, held to the box's width, then - when the words
+/// carry a `[link;url;text]` ([`split_link`]) - the link on a line of its own beneath them, at
+/// their left, where `CustomMessageBox` puts its `LinkLabel` (`Left = FORM_X_MARGIN, Top =
+/// lblMessage.Bottom`) and `MessageShowAgain` its row between the words and the buttons. The link
+/// is drawn as this application's links are, the link blue, underlined and lighter under the
+/// pointer, and is named `{id}-link` for a test script; a click on it is [`follow_link`]'s.
+/// `// C#: ExtLibs/Controls/CustomMessageBox.cs:83-93, 161-201; Common.cs:347-373`
+pub fn box_text(id: &str, text: &str) -> Vec<AnyElement> {
+    let (words, link) = split_link(text);
+    // Each line held to the box's width: a flex item's minimum width is its content's, and a long
+    // line let the box's rows grow past its border (servo_output::modal, the owner, 2026-09-25).
+    let mut lines: Vec<AnyElement> = words
+        .lines()
+        .map(|line| {
+            div()
+                .w_full()
+                .min_w_0()
+                .text_sm()
+                .text_color(rgb(theme::TEXT))
+                .child(line.to_owned())
+                .into_any_element()
+        })
+        .collect();
+    if let Some(BoxLink { url, text }) = link {
+        let name = format!("{id}-link");
+        // In a row of its own, so it is as wide as its text: a column stretches what it holds
+        // across itself, and the box's whole width would take the click.
+        lines.push(
+            div()
+                .flex()
+                .child(
+                    crate::probe::measured(name.clone(), div())
+                        .id(SharedString::from(name))
+                        .text_sm()
+                        .text_color(rgb(theme::LINK))
+                        .underline()
+                        .cursor_pointer()
+                        .hover(|style| style.text_color(rgb(theme::LINK_HOVER)))
+                        .child(text)
+                        .on_click(move |_event, window, cx| follow_link(&url, window, cx)),
+                )
+                .into_any_element(),
+        );
+    }
+    lines
+}
+
+/// A click on a box's link: `linklbl.Click` in `CustomMessageBox`, `OpenUrl` in `MessageShowAgain`.
+/// The address goes to the desktop's browser as `OpenUrl`'s fallbacks hand it on - `xdg-open`,
+/// `open`, `start` ([`crate::scripts_tab::open_with_shell`]) - when [`open_link`] allows it; its
+/// words, when there are any, go on the main window's status line, found from the window as
+/// [`says_why`] finds it. `ui.link.opened` is the address last opened, for a test script.
+/// `// C#: ExtLibs/Controls/CustomMessageBox.cs:175-197; Common.cs:367-370, 455-490`
+pub fn follow_link(url: &str, window: &mut Window, cx: &mut App) {
+    let said = open_link(url, |url| {
+        crate::scripts_tab::open_with_shell(std::path::Path::new(url))
+    });
+    let Some(said) = said else {
+        crate::facts::record("ui.link.opened", url);
+        return;
+    };
+    let Some(Some(planner)) = window.root::<MissionPlanner>() else {
+        return;
+    };
+    planner.update(cx, |this, cx| {
+        this.file_status = Some(said);
+        cx.notify();
+    });
+}
+
+/// What a click on a box's link to `url` does, `open` handing an address to the desktop: `None`
+/// once it is opened, else what is said. Only an address that starts `http://` or `https://`, in
+/// any case, is opened - the markup can come from the wire, a vehicle's `STATUSTEXT` in a box's
+/// words, and `Process.Start` would run whatever else it names - and any other is refused
+/// unopened, "Refusing to open link ..."; one the desktop cannot open is "Failed to open link
+/// ...". The C#'s words, on the status line where `CustomMessageBox` shows each in a box of its
+/// own - the owner's rule of 2026-09-25, no box for an error the main window can show - and where
+/// `OpenUrl`, `MessageShowAgain`'s, writes its refusal to the log alone.
+/// `// C#: ExtLibs/Controls/CustomMessageBox.cs:175-197; Common.cs:455-490`
+#[must_use]
+pub fn open_link(url: &str, open: impl FnOnce(&str) -> Result<(), String>) -> Option<String> {
+    let web = |scheme: &str| {
+        url.get(..scheme.len())
+            .is_some_and(|start| start.eq_ignore_ascii_case(scheme))
+    };
+    if !web("http://") && !web("https://") {
+        return Some(format!("Refusing to open link {url}"));
+    }
+    open(url).err().map(|_| format!("Failed to open link {url}"))
+}
+
 /// A horizontal progress bar with a caption.
 pub fn progress(fraction: f32, colour: u32) -> impl IntoElement {
     let fraction = fraction.clamp(0.0, 1.0);
@@ -440,5 +591,136 @@ mod tests {
         // between pages to look like a web page's (2026-10-14). Checked at compile time, because
         // both sides are constants.
         const _: () = assert!(theme::LINK_HOVER != theme::LINK);
+    }
+
+    fn link(url: &str, text: &str) -> Option<BoxLink> {
+        Some(BoxLink {
+            url: url.to_owned(),
+            text: text.to_owned(),
+        })
+    }
+
+    /// A box's `[link;url;text]` taken out of its words, and its link: the Update Found question
+    /// as `Update.CheckForUpdate` writes it, and the zero-altitude plane warning as plan.rs holds
+    /// `Strings.ZeroAltWarningPlane`, its words ending at the sentence the markup follows.
+    /// `// C#: ExtLibs/Controls/CustomMessageBox.cs:87-94; Common.cs:351-359;
+    /// Utilities/Update.cs:194; ExtLibs/Strings/Strings.resx (ZeroAltWarningPlane)`
+    #[test]
+    fn a_boxs_link_is_taken_out_of_its_words() {
+        let (words, found) = split_link("Update Found [link;https://x/ChangeLog.txt;ChangeLog]");
+        assert_eq!(words, "Update Found ");
+        assert_eq!(found, link("https://x/ChangeLog.txt", "ChangeLog"));
+
+        let (words, found) = split_link(crate::plan::ZERO_ALT_PLANE);
+        assert!(words.ends_with("IN YOUR CASE (use a simulator to be sure)."));
+        assert!(!words.contains("[link;") && !words.contains("Command Documentation"));
+        assert_eq!(
+            found,
+            link(
+                concat!(
+                    "https://ardupilot.org/plane/docs/",
+                    "common-mavlink-mission-command-messages-mav_cmd.html"
+                ),
+                "Command Documentation"
+            )
+        );
+
+        // No markup: the words as they are.
+        assert_eq!(split_link("No link here"), ("No link here".to_owned(), None));
+        assert_eq!(split_link(""), (String::new(), None));
+        // `link` in any case opens it, and it goes as it is written.
+        assert_eq!(
+            split_link("[LINK;https://a;A] and [Link;https://b;B]"),
+            (" and [Link;https://b;B]".to_owned(), link("https://a", "A"))
+        );
+        // A newline is a character like any other inside it; the words around it keep theirs.
+        assert_eq!(
+            split_link("é\n[link;https://a;two\nlines]ü"),
+            ("é\nü".to_owned(), link("https://a", "two\nlines"))
+        );
+    }
+
+    /// Several links: `Match` finds the first, the words lose it wherever that same markup is
+    /// written, and a different one stays as it is - shown raw, as the C# shows it.
+    /// `// C#: ExtLibs/Controls/CustomMessageBox.cs:87-94; Common.cs:351-359`
+    #[test]
+    fn only_a_boxs_first_link_is_a_link() {
+        assert_eq!(
+            split_link("A [link;https://a;one] B [link;https://b;two]"),
+            ("A  B [link;https://b;two]".to_owned(), link("https://a", "one"))
+        );
+        assert_eq!(
+            split_link("[link;https://a;one]x[link;https://a;one]"),
+            ("x".to_owned(), link("https://a", "one"))
+        );
+    }
+
+    /// Markup the regex cannot match stays in the words, and the search goes on past it: no
+    /// second `;`, nothing after the last `;`, nothing before it, no `]`. The second group is
+    /// greedy, so a `;` in the address is the address's and the last `;` with a character after it
+    /// ends it; an opening inside a failed one's text can still match.
+    /// `// C#: ExtLibs/Controls/CustomMessageBox.cs:87-94`
+    #[test]
+    fn malformed_link_markup_is_shown_as_it_is_written() {
+        for text in [
+            "see [link;https://a]",
+            "see [link;https://a;]",
+            "see [link;;text]",
+            "see [link;https://a;text",
+            "see [link https://a;text]",
+            "see link;https://a;text]",
+        ] {
+            assert_eq!(split_link(text), (text.to_owned(), None), "{text}");
+        }
+        assert_eq!(
+            split_link("[link;x] [link;https://a;b]"),
+            ("[link;x] ".to_owned(), link("https://a", "b"))
+        );
+        assert_eq!(
+            split_link("[link;https://a/?x=1;y=2;Text]").1,
+            link("https://a/?x=1;y=2", "Text")
+        );
+        assert_eq!(
+            split_link("[link;https://a;Text;]").1,
+            link("https://a", "Text;")
+        );
+        assert_eq!(
+            split_link("[link;[link;https://a;b]"),
+            (String::new(), link("[link;https://a", "b"))
+        );
+    }
+
+    /// A link's click: an `http://` or `https://` address, in any case, is handed to the desktop
+    /// and nothing is said; anything else is refused unopened, and a desktop that cannot open one
+    /// is said, each in the C#'s words.
+    /// `// C#: ExtLibs/Controls/CustomMessageBox.cs:175-197; Common.cs:455-490`
+    #[test]
+    fn only_a_web_address_is_opened() {
+        let mut opened = Vec::new();
+        for url in ["https://ardupilot.org/x", "HTTP://a"] {
+            let said = open_link(url, |url| {
+                opened.push(url.to_owned());
+                Ok(())
+            });
+            assert_eq!(said, None);
+        }
+        assert_eq!(opened, ["https://ardupilot.org/x", "HTTP://a"]);
+        for url in [
+            "file:///etc/passwd",
+            "\\\\server\\share",
+            "C:\\Windows\\notepad.exe",
+            "ftp://a",
+            "http:/a",
+            "",
+        ] {
+            assert_eq!(
+                open_link(url, |_| panic!("{url} opened")),
+                Some(format!("Refusing to open link {url}"))
+            );
+        }
+        assert_eq!(
+            open_link("https://a", |_| Err("no browser".to_owned())),
+            Some("Failed to open link https://a".to_owned())
+        );
     }
 }

@@ -1774,7 +1774,9 @@ where
 }
 
 /// A modal box drawn over the whole window, as `CustomMessageBox.Show` is: its caption, its
-/// text and its buttons.
+/// text - with the `[link;url;text]` it may carry drawn as a link under it, as `ShowUI` draws one
+/// ([`crate::ui::box_text`]) - and its buttons.
+/// `// C#: ExtLibs/Controls/CustomMessageBox.cs:73-240`
 pub fn modal(
     id: &'static str,
     title: &str,
@@ -1803,14 +1805,7 @@ pub fn modal(
         // Each line and the button row are held to the box's width: a flex item's minimum
         // width is its content's, and a long line let the row grow past the border, which put
         // Raw Param Warning's OK 140 px outside the box (the owner, 2026-09-25).
-        .children(text.lines().map(|line| {
-            div()
-                .w_full()
-                .min_w_0()
-                .text_sm()
-                .text_color(rgb(theme::TEXT))
-                .child(line.to_owned())
-        }))
+        .children(crate::ui::box_text(id, text))
         .child(
             div()
                 .w_full()

@@ -28,12 +28,12 @@
 //! lines.
 //!
 //! Divergences, each at its site: the check's and the update's failures go on the status line
-//! (the owner's ruling of 2026-09-25; the C# boxes them); the question's ChangeLog link is a line
-//! of the question; "Show Console Window" writes its setting and nothing more (the console
-//! window is Windows', allocated at the next start); the updater is `headless-planner
-//! update-apply`, which ships beside the planner as `Updater.exe` ships beside Mission Planner;
-//! and `MP_UPDATE_DIR` is the harness's door - the directory the update is written to, in place
-//! of the program's own, and with it the updater is named rather than started.
+//! (the owner's ruling of 2026-09-25; the C# boxes them); "Show Console Window" writes its
+//! setting and nothing more (the console window is Windows', allocated at the next start); the
+//! updater is `headless-planner update-apply`, which ships beside the planner as `Updater.exe`
+//! ships beside Mission Planner; and `MP_UPDATE_DIR` is the harness's door - the directory the
+//! update is written to, in place of the program's own, and with it the updater is named rather
+//! than started.
 //! `// C#: GCSViews/Help.cs; GCSViews/Help.Designer.cs; GCSViews/Help.resx; Utilities/Update.cs;
 //! MainV2.cs:823, 3668-3678, 4037-4051; Program.cs:189-205, 616-628`
 
@@ -201,7 +201,8 @@ pub enum Flow {
     Checking,
     /// "Update Found" - "Update Now", Yes or No. `// C#: Utilities/Update.cs:181-199`
     Question {
-        /// The box's text, the ChangeLog link a line of it.
+        /// The box's text, the C#'s, with its `[link;...;ChangeLog]`, which the box draws as a
+        /// link under the words (`crate::ui::box_text`).
         text: String,
     },
     /// `DoUpdate`'s progress dialog, its worker running. `// C#: Utilities/Update.cs:199-215`
@@ -626,8 +627,11 @@ impl Help {
                     ""
                 };
                 self.last = "update found".to_owned();
+                // `extra + Strings.UpdateFound + " [link;" + ... + ";ChangeLog]"`: the box draws
+                // the markup as `CustomMessageBox` does, a link under the words.
+                // `// C#: Utilities/Update.cs:192-195`
                 self.flow = Flow::Question {
-                    text: format!("{extra}{UPDATE_FOUND}\nChangeLog: {changelog_url}"),
+                    text: format!("{extra}{UPDATE_FOUND} [link;{changelog_url};ChangeLog]"),
                 };
                 None
             }
@@ -1211,12 +1215,24 @@ mod tests {
         help.update_check_clicked(&persisted);
         assert_eq!(help.flow, Flow::Checking);
         assert!(wait(&mut help).is_none());
+        // The C#'s words, the ChangeLog its box's link (crate::ui::split_link).
         assert_eq!(
             help.flow,
             Flow::Question {
-                text: "Update Found\nChangeLog: https://x/ChangeLog.txt".to_owned()
+                text: "Update Found [link;https://x/ChangeLog.txt;ChangeLog]".to_owned()
             }
         );
+        if let Flow::Question { text } = &help.flow {
+            let (words, link) = crate::ui::split_link(text);
+            assert_eq!(words, "Update Found ");
+            assert_eq!(
+                link,
+                Some(crate::ui::BoxLink {
+                    url: "https://x/ChangeLog.txt".to_owned(),
+                    text: "ChangeLog".to_owned(),
+                })
+            );
+        }
         help.answer(false, &persisted);
         assert_eq!(help.flow, Flow::Idle);
 

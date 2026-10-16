@@ -11874,7 +11874,8 @@ fn prompt_dialog(
                 .flex_col()
                 .text_sm()
                 .text_color(rgb(theme::TEXT))
-                .children(prompt.text.lines().map(ToOwned::to_owned)),
+                // The words, and a [link;url;text] of them as its own row (Common.cs:347-373).
+                    .children(crate::ui::box_text("plan-prompt", &prompt.text)),
         );
     let body = match &prompt.field {
         Some(field) => {

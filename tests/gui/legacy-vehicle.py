@@ -2,19 +2,24 @@
 """A copter that speaks the legacy fence and rally protocols, for the GUI scripts of the planner's
 Geo-Fence and Rally Points menus.
 
-usage: legacy-vehicle.py --work DIR [--port 5790]
+usage: legacy-vehicle.py --work DIR [--port 5790] [--plane] [--compass]
 
 Mission Planner hides those two menus over a vehicle that reports
 MAV_PROTOCOL_CAPABILITY_MISSION_FENCE (FlightPlanner.cs:2680-2691) - every ArduPilot 4.x, the SITL
 among them - so they are driven against this instead: an ArduCopter as firmware before 4.0 was,
 whose AUTOPILOT_VERSION carries MISSION_FLOAT, PARAM_FLOAT, MISSION_INT, COMMAND_INT and MAVLINK2
-and neither MISSION_FENCE nor MISSION_RALLY nor FTP. It answers:
+and neither MISSION_FENCE nor MISSION_RALLY nor FTP. Without COMPASS_PRIO1_ID or the
+COMPASS_CALIBRATION capability it is also the vehicle Initial Setup gives the older Compass page
+with its Live Calibration (InitialSetup.cs:200-207, ConfigHWCompass.cs:51-70). With --plane its
+heartbeat says a fixed wing instead of a quad, for a script that needs a plane the bundled copter
+SITL is not (the zero altitude warning's plane text, FlightPlanner.cs:8530-8570). It answers:
 
-  HEARTBEAT at 1 Hz (a quad in Stabilize, disarmed), AUTOPILOT_VERSION when asked and once at
-  connect; the parameters (PARAM_REQUEST_LIST, _READ, PARAM_SET echoed); FENCE_POINT kept and
-  FENCE_FETCH_POINT answered, RALLY_POINT kept and RALLY_FETCH_POINT answered; the mission
-  protocol for every list type (MISSION_COUNT and the items it asks for, MISSION_REQUEST_LIST and
-  the items asked of it, MISSION_CLEAR_ALL); SET_MODE; any other COMMAND_LONG with UNSUPPORTED.
+  HEARTBEAT at 1 Hz (a quad in Stabilize, or with --plane a plane in Manual, disarmed),
+  AUTOPILOT_VERSION when asked and once at connect; the parameters (PARAM_REQUEST_LIST, _READ,
+  PARAM_SET echoed); FENCE_POINT kept and FENCE_FETCH_POINT answered, RALLY_POINT kept and
+  RALLY_FETCH_POINT answered; the mission protocol for every list type (MISSION_COUNT and the
+  items it asks for, MISSION_REQUEST_LIST and the items asked of it, MISSION_CLEAR_ALL); SET_MODE;
+  any other COMMAND_LONG with UNSUPPORTED.
 
 Listens on 127.0.0.1:PORT, one client at a time, and returns once listening, leaving itself
 serving in the background. It goes when DIR does, which the harness removes after the run, or
@@ -52,6 +57,20 @@ PARAMS = [
     ("SYSID_THISMAV", 1.0, INT16),
     ("FRAME_CLASS", 1.0, INT8),
 ]
+# With --compass: the first compass's parameters the older Compass page reads before it enables
+# itself and its Live Calibration (ConfigHWCompass.cs:31-243 - COMPASS_OFS_X decides, compass.rs's
+# activate_legacy), as a pre-4.0 vehicle has them.
+COMPASS_PARAMS = [
+    ("COMPASS_USE", 1.0, INT8),
+    ("COMPASS_EXTERNAL", 0.0, INT8),
+    ("COMPASS_ORIENT", 0.0, INT8),
+    ("COMPASS_OFS_X", 0.0, REAL32),
+    ("COMPASS_OFS_Y", 0.0, REAL32),
+    ("COMPASS_OFS_Z", 0.0, REAL32),
+    ("COMPASS_LEARN", 0.0, INT8),
+    ("COMPASS_DEC", 0.0, REAL32),
+    ("COMPASS_AUTODEC", 0.0, INT8),
+]
 
 
 class Writer:
@@ -67,8 +86,9 @@ class Writer:
 
 
 class Vehicle:
-    def __init__(self):
-        self.params = [list(p) for p in PARAMS]
+    def __init__(self, plane=False, compass=False):
+        self.mav_type = mavlink.MAV_TYPE_FIXED_WING if plane else mavlink.MAV_TYPE_QUADROTOR
+        self.params = [list(p) for p in PARAMS + (COMPASS_PARAMS if compass else [])]
         self.fence = {}
         self.rally = {}
         self.lists = {}
@@ -184,7 +204,7 @@ def serve_client(client, vehicle, work, started):
         try:
             if now - last_beat >= 1.0:
                 mav.heartbeat_send(
-                    mavlink.MAV_TYPE_QUADROTOR, mavlink.MAV_AUTOPILOT_ARDUPILOTMEGA,
+                    vehicle.mav_type, mavlink.MAV_AUTOPILOT_ARDUPILOTMEGA,
                     mavlink.MAV_MODE_FLAG_CUSTOM_MODE_ENABLED | 80, vehicle.custom_mode,
                     mavlink.MAV_STATE_STANDBY,
                 )
@@ -204,10 +224,10 @@ def serve_client(client, vehicle, work, started):
             return
 
 
-def run(listener, work):
+def run(listener, work, plane=False, compass=False):
     """The vehicle, answering one client at a time until its directory goes or LIFETIME ends."""
     started = time.monotonic()
-    vehicle = Vehicle()
+    vehicle = Vehicle(plane, compass)
     listener.settimeout(0.5)
     while os.path.isdir(work) and time.monotonic() - started < LIFETIME:
         try:
@@ -223,9 +243,11 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--work", required=True)
     parser.add_argument("--port", type=int, default=5790)
+    parser.add_argument("--plane", action="store_true")
+    parser.add_argument("--compass", action="store_true")
     args = parser.parse_args()
     if child is not None:
-        run(child, args.work)
+        run(child, args.work, args.plane, args.compass)
         return 0
 
     listener = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -245,7 +267,9 @@ def main():
 
     # Into the background: the harness waits for this command, and the vehicle must outlive it.
     gui_background.serve_in_background(
-        listener, f"legacy vehicle on {args.port}", lambda held: run(held, args.work)
+        listener,
+        f"legacy vehicle on {args.port}",
+        lambda held: run(held, args.work, args.plane, args.compass),
     )
     return 0
 

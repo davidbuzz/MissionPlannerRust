@@ -41,6 +41,14 @@
 //! 825 x 446 client area. The colours are this application's, but for the spheres', which are
 //! `Sphere.cs`'s.
 //!
+//! A sphere clicked takes the keyboard, as the `UserControl` it is takes the focus, and the arrow
+//! keys reach its `ProcessCmdKey`: Left and Right add 5 degrees either way to the turn about z the
+//! next paint makes, Up and Down to `pitch`, which the paint sets back to zero without reading;
+//! each asks for the paint. A paint turns the view 5 degrees more while "Rotate with each data
+//! point" is ticked, whatever asked for it - so while it is, Left leaves the view where it was,
+//! Right turns it 10 degrees and Up or Down 5, and once it is unticked Left and Right turn it 5
+//! and Up and Down not at all (`Sphere::key`).
+//!
 //! Where this differs from the C#, and why:
 //!
 //! * **The spheres are drawn flat.** `Sphere` is an OpenTK `GLControl`; this port has no OpenGL.
@@ -49,6 +57,13 @@
 //!   time a point is added while "Rotate with each data point" is ticked, looking at the origin
 //!   with z up, the far plane at 5000 - and painted on a 2D canvas: the six axes, the points in
 //!   `OnPaint`'s colours, the aim points white and the newest point red, in its order.
+//! * **Each repaint asked for is a paint.** A point added and a key pressed each turn the view as
+//!   its own paint would. WinForms gathers the repaints asked for before it paints, so in the C#
+//!   points and keys that come faster than the window paints share a paint and one 5 degrees.
+//! * **The check boxes and Done take no focus.** In the C# a click on one takes the focus from a
+//!   sphere, and the arrows then move it between the window's controls; here a sphere keeps the
+//!   keyboard until another is clicked or a box comes up over the window. No sphere has it when
+//!   the window opens, in either.
 //! * **Samples are read from the vehicle's state, once a frame.** The C# subscribes to every
 //!   `RAW_IMU`, `SCALED_IMU2` and `SCALED_IMU3` packet; this application's screens read the link
 //!   through its state snapshots, which keep each message's latest magnetometer reading
@@ -70,8 +85,8 @@ use std::sync::Arc;
 use web_time::{Duration, Instant};
 
 use gpui::{
-    AnyElement, Bounds, ContentMask, Context, Hsla, PathBuilder, Pixels, Point, Window, canvas,
-    div, point, prelude::*, px, rgb, size,
+    AnyElement, Bounds, ContentMask, Context, FocusHandle, Hsla, KeyDownEvent, Keystroke,
+    PathBuilder, Pixels, Point, Window, canvas, div, point, prelude::*, px, rgb, size,
 };
 use mp_calibration::CalibrationError;
 use mp_calibration::live_magcal::{
@@ -175,6 +190,39 @@ impl Phase {
     }
 }
 
+/// An arrow key `Sphere.ProcessCmdKey` takes. `// C#: ExtLibs/Controls/Sphere.cs:83-113`
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Arrow {
+    /// `Keys.Left`.
+    Left,
+    /// `Keys.Right`.
+    Right,
+    /// `Keys.Up`.
+    Up,
+    /// `Keys.Down`.
+    Down,
+}
+
+impl Arrow {
+    /// The arrow `keystroke` is, with neither Shift, Control nor Alt held: `keyData ==
+    /// Keys.Left` compares the key with the modifiers `keyData` carries, so Shift with Left is not
+    /// Left, and goes on to `base.ProcessCmdKey`. `// C#: ExtLibs/Controls/Sphere.cs:83-113`
+    #[must_use]
+    pub fn of(keystroke: &Keystroke) -> Option<Self> {
+        let held = keystroke.modifiers;
+        if held.shift || held.control || held.alt {
+            return None;
+        }
+        match keystroke.key.as_str() {
+            "left" => Some(Self::Left),
+            "right" => Some(Self::Right),
+            "up" => Some(Self::Up),
+            "down" => Some(Self::Down),
+            _ => None,
+        }
+    }
+}
+
 /// One `Sphere` control: its points, aim points and centre, and the eye it is seen from.
 /// `// C#: ExtLibs/Controls/Sphere.cs:11-80`
 #[derive(Debug, Clone, PartialEq)]
@@ -232,20 +280,51 @@ impl Sphere {
         self.points.clear();
     }
 
-    /// `AddPoint`, and the repaint it causes: the extremes widened, the point kept, and the view
-    /// turned 5 degrees about z while `rotatewithdata`. `// C#: ExtLibs/Controls/Sphere.cs:61-80,
-    /// 125-130, 150-157`
+    /// `AddPoint`, and the repaint it asks for: the extremes widened, the point kept, and the
+    /// paint's turn of the view ([`Self::paint`]). `// C#: ExtLibs/Controls/Sphere.cs:61-80`
     pub fn add(&mut self, point: Sample) {
         for ((value, min), max) in point.iter().zip(&mut self.min).zip(&mut self.max) {
             *min = min.min(*value);
             *max = max.max(*value);
         }
         self.points.push(point);
-        if self.rotate {
-            let (sin, cos) = (5.0 * DEG2RAD).sin_cos();
-            let [x, y, z] = self.eye;
-            self.eye = [x * cos - y * sin, x * sin + y * cos, z];
-        }
+        self.paint(0.0);
+    }
+
+    /// `ProcessCmdKey`, while the sphere holds the keyboard: Left and Right add 5 degrees either
+    /// way to `yaw`, Up and Down to `pitch`, and each asks for the repaint, which turns the view by
+    /// `yaw` ([`Self::paint`]) and sets `pitch` back to zero without reading it.
+    /// `// C#: ExtLibs/Controls/Sphere.cs:83-113, 157-160`
+    pub fn key(&mut self, arrow: Arrow) {
+        let yaw = match arrow {
+            Arrow::Left => -5.0 * DEG2RAD,
+            Arrow::Right => 5.0 * DEG2RAD,
+            Arrow::Up | Arrow::Down => 0.0,
+        };
+        self.paint(yaw);
+    }
+
+    /// `OnPaint`'s turn of the eye about z, `Vector3.TransformPosition(eye,
+    /// Matrix4.CreateRotationZ(yaw))`: by `yaw`, what a key added since the last paint, and 5
+    /// degrees more while `rotatewithdata`; then `yaw` and `pitch` are zero again, as a paint
+    /// leaves them for the next. `// C#: ExtLibs/Controls/Sphere.cs:116-160`
+    fn paint(&mut self, yaw: f64) {
+        let yaw = if self.rotate {
+            yaw + 5.0 * DEG2RAD
+        } else {
+            yaw
+        };
+        let (sin, cos) = yaw.sin_cos();
+        let [x, y, z] = self.eye;
+        self.eye = [x * cos - y * sin, x * sin + y * cos, z];
+    }
+
+    /// Where the eye is about z, in degrees from x towards y: `Math.Atan2(eye.Y, eye.X)`, which
+    /// each paint writes to the console, in radians there. `// C#: ExtLibs/Controls/Sphere.cs:272`
+    #[must_use]
+    pub fn view(&self) -> f64 {
+        let [x, y, _] = self.eye;
+        y.atan2(x).to_degrees()
     }
 
     /// `OnPaint`'s projection into a `side`-pixel square. `// C#: ExtLibs/Controls/Sphere.cs:115-253`
@@ -584,6 +663,21 @@ impl LiveMagCal {
         }
     }
 
+    /// An arrow key while sphere `index` (0 to 2) holds the keyboard: its `ProcessCmdKey`. Whether
+    /// the key was taken - every arrow is, while the window shows.
+    /// `// C#: ExtLibs/Controls/Sphere.cs:83-113`
+    pub fn sphere_key(&mut self, index: usize, arrow: Arrow) -> bool {
+        let Some(sphere) = self
+            .form
+            .as_mut()
+            .and_then(|form| form.spheres.get_mut(index))
+        else {
+            return false;
+        };
+        sphere.key(arrow);
+        true
+    }
+
     /// "Use Auto Accept". `// C#: ExtLibs/Controls/ProgressReporterSphere.cs:117-120`
     pub fn toggle_auto(&mut self) {
         if let Some(form) = self.form.as_mut() {
@@ -840,7 +934,8 @@ fn finish(live: &mut Live, form: &mut Form, parameters: &[(String, f64)]) {
 // ---------------------------------------------------------------------------------------------
 
 /// Facts a UI test asserts on: whether the window shows and where its work is, each compass's
-/// samples, error and answer, the label, the coverage test's hits and the spheres' points.
+/// samples, error and answer, the label, the coverage test's hits, and the spheres' points and
+/// views.
 pub fn record_facts(live: &LiveMagCal) {
     use crate::facts::record;
     let key = |name: &str| format!("config.compass.livecal.{name}");
@@ -882,10 +977,18 @@ pub fn record_facts(live: &LiveMagCal) {
             .map_or(0, |pass| pass.hits),
     );
     for index in 0..3 {
+        let sphere = form.and_then(|form| form.spheres.get(index));
         record(
             key(&format!("points{}", index + 1)),
-            form.and_then(|form| form.spheres.get(index))
-                .map_or(0, |sphere| sphere.points.len()),
+            sphere.map_or(0, |sphere| sphere.points.len()),
+        );
+        // Where each sphere's eye is about z, in degrees to a tenth ([`Sphere::view`]).
+        record(
+            key(&format!("view{}", index + 1)),
+            sphere.map_or_else(
+                || "none".to_owned(),
+                |sphere| format!("{:.1}", sphere.view()),
+            ),
         );
     }
     record(
@@ -903,9 +1006,17 @@ pub fn record_facts(live: &LiveMagCal) {
 /// `Sphere`'s size on the form. `// C#: ExtLibs/Controls/ProgressReporterSphere.resx (sphere1.Size)`
 const SPHERE_SIDE: f32 = 263.0;
 
-/// A sphere's canvas: black, the axes, the points, the aim points, the newest point.
-/// `// C#: ExtLibs/Controls/Sphere.cs:115-253`
-fn sphere_canvas(id: &'static str, sphere: &Sphere) -> AnyElement {
+/// A sphere's canvas: black, the axes, the points, the aim points, the newest point. A click
+/// gives it the keyboard - gpui focuses an element that tracks a handle when it is pressed, as
+/// WinForms focuses the `UserControl` - and its arrows are `ProcessCmdKey`'s
+/// ([`LiveMagCal::sphere_key`]); any other key goes on, as `base.ProcessCmdKey` passes it.
+/// `// C#: ExtLibs/Controls/Sphere.cs:83-113, 116-279`
+fn sphere_canvas(
+    (index, id): (usize, &'static str),
+    sphere: &Sphere,
+    handle: &FocusHandle,
+    cx: &mut Context<MissionPlanner>,
+) -> AnyElement {
     let projected = sphere.project(SPHERE_SIDE);
     let body = canvas(
         |_bounds, _window, _cx| (),
@@ -918,7 +1029,17 @@ fn sphere_canvas(id: &'static str, sphere: &Sphere) -> AnyElement {
     )
     .size_full();
     crate::probe::measured(id, div())
+        .id(id)
         .size(px(SPHERE_SIDE))
+        .track_focus(handle)
+        .on_key_down(cx.listener(move |this, event: &KeyDownEvent, _window, cx| {
+            if let Some(arrow) = Arrow::of(&event.keystroke)
+                && this.compass.live_mut().sphere_key(index, arrow)
+            {
+                cx.stop_propagation();
+                cx.notify();
+            }
+        }))
         .child(body)
         .into_any_element()
 }
@@ -981,9 +1102,11 @@ fn progress_bar(full: bool) -> AnyElement {
     bar.child(fill).into_any_element()
 }
 
-/// The window, while it shows: the caption, then the client area as the `.resx` places it.
+/// The window, while it shows: the caption, then the client area as the `.resx` places it, each
+/// sphere taking the keyboard through its handle in `spheres`.
 pub fn window(
     live: &LiveMagCal,
+    spheres: &[FocusHandle; 3],
     window: &Window,
     cx: &mut Context<MissionPlanner>,
 ) -> Option<AnyElement> {
@@ -1030,13 +1153,16 @@ pub fn window(
     } else {
         client = client.child(progress_bar(form.full));
     }
-    for ((sphere, x), id) in form
+    for (index, (((sphere, x), id), handle)) in form
         .spheres
         .iter()
         .zip([11.0, 280.0, 549.0])
         .zip(["magcal-sphere1", "magcal-sphere2", "magcal-sphere3"])
+        .zip(spheres)
+        .enumerate()
     {
-        client = client.child(at(x, 141.0, SPHERE_SIDE, SPHERE_SIDE).child(sphere_canvas(id, sphere)));
+        let drawn = sphere_canvas((index, id), sphere, handle, cx);
+        client = client.child(at(x, 141.0, SPHERE_SIDE, SPHERE_SIDE).child(drawn));
     }
     let checked = |on: bool| {
         if on {
@@ -1145,4 +1271,131 @@ pub fn window(
         .with_priority(1)
         .into_any_element(),
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use gpui::Modifiers;
+
+    use super::*;
+
+    fn keystroke(key: &str, modifiers: Modifiers) -> Keystroke {
+        Keystroke {
+            modifiers,
+            key: key.to_owned(),
+            key_char: None,
+        }
+    }
+
+    /// Whether the sphere is seen from `degrees` about z, from x towards y.
+    fn seen_from(sphere: &Sphere, degrees: f64) -> bool {
+        (sphere.view() - degrees).abs() < 1e-9
+    }
+
+    /// The four arrows, and only with neither Shift, Control nor Alt: `keyData == Keys.Left`
+    /// compares the modifiers too, and any other key goes on to `base.ProcessCmdKey`.
+    /// `// C#: ExtLibs/Controls/Sphere.cs:83-113`
+    #[test]
+    fn the_four_arrows_are_the_spheres_keys() {
+        let plain = Modifiers::default();
+        assert_eq!(Arrow::of(&keystroke("left", plain)), Some(Arrow::Left));
+        assert_eq!(Arrow::of(&keystroke("right", plain)), Some(Arrow::Right));
+        assert_eq!(Arrow::of(&keystroke("up", plain)), Some(Arrow::Up));
+        assert_eq!(Arrow::of(&keystroke("down", plain)), Some(Arrow::Down));
+        for key in ["a", "enter", "escape", "pageup", "home", "space", "tab"] {
+            assert_eq!(Arrow::of(&keystroke(key, plain)), None, "{key}");
+        }
+        for held in [
+            Modifiers {
+                shift: true,
+                ..Modifiers::default()
+            },
+            Modifiers {
+                control: true,
+                ..Modifiers::default()
+            },
+            Modifiers {
+                alt: true,
+                ..Modifiers::default()
+            },
+        ] {
+            for key in ["left", "right", "up", "down"] {
+                assert_eq!(Arrow::of(&keystroke(key, held)), None, "{key} {held:?}");
+            }
+        }
+    }
+
+    /// Each arrow as `ProcessCmdKey` takes it, and the paint it asks for. Ticked, "Rotate with
+    /// each data point" turns every paint 5 degrees more: Left leaves the view where it was, Right
+    /// turns it 10 degrees, Up and Down 5 each - `pitch` is never read. Unticked, Left and Right
+    /// turn it 5 degrees either way and Up and Down not at all. The turn is about z, so the eye's
+    /// height is kept; and a point's paint turns the view only while ticked, as before.
+    /// `// C#: ExtLibs/Controls/Sphere.cs:83-113, 116-160, 272`
+    #[test]
+    fn an_arrow_turns_the_spheres_view_as_its_paint_does() {
+        let mut sphere = Sphere::default();
+        assert!(sphere.rotate);
+        // `eye = new Vector3(1, 1, 1)`.
+        assert!(seen_from(&sphere, 45.0));
+        sphere.key(Arrow::Left);
+        assert!(seen_from(&sphere, 45.0));
+        assert_eq!(sphere.eye, [1.0, 1.0, 1.0]);
+        sphere.key(Arrow::Right);
+        assert!(seen_from(&sphere, 55.0));
+        sphere.key(Arrow::Up);
+        assert!(seen_from(&sphere, 60.0));
+        sphere.key(Arrow::Down);
+        assert!(seen_from(&sphere, 65.0));
+
+        sphere.rotate = false;
+        sphere.key(Arrow::Right);
+        assert!(seen_from(&sphere, 70.0));
+        sphere.key(Arrow::Left);
+        sphere.key(Arrow::Left);
+        assert!(seen_from(&sphere, 60.0));
+        sphere.key(Arrow::Up);
+        sphere.key(Arrow::Down);
+        assert!(seen_from(&sphere, 60.0));
+        let [x, y, z] = sphere.eye;
+        assert!((x.hypot(y) - 2.0_f64.sqrt()).abs() < 1e-12);
+        assert_eq!(z, 1.0);
+
+        sphere.add([100.0, 200.0, 300.0]);
+        assert!(seen_from(&sphere, 60.0));
+        sphere.rotate = true;
+        sphere.add([100.0, 200.0, 300.0]);
+        assert!(seen_from(&sphere, 65.0));
+    }
+
+    /// The window's arrows turn the sphere that has the keyboard and no other, and with the window
+    /// closed nothing takes them. "Rotate with each data point" unticked stops the first two
+    /// spheres' turns alone, as its handler sets theirs and leaves the third's.
+    /// `// C#: ExtLibs/Controls/Sphere.cs:83-113;
+    /// ExtLibs/Controls/ProgressReporterSphere.cs:111-115`
+    #[test]
+    fn a_key_turns_the_sphere_that_has_the_keyboard() {
+        let view = |live: &LiveMagCal, index: usize| {
+            live.spheres()
+                .and_then(|spheres| spheres.get(index))
+                .map(Sphere::view)
+        };
+        let near = |got: Option<f64>, want: f64| got.is_some_and(|got| (got - want).abs() < 1e-9);
+
+        let mut live = LiveMagCal::default();
+        assert!(!live.sphere_key(0, Arrow::Right));
+        live.open();
+        assert!(live.sphere_key(0, Arrow::Right));
+        assert!(near(view(&live, 0), 55.0));
+        assert!(near(view(&live, 1), 45.0));
+        assert!(near(view(&live, 2), 45.0));
+        assert!(!live.sphere_key(3, Arrow::Right));
+
+        live.toggle_rotate();
+        assert!(live.sphere_key(1, Arrow::Right));
+        assert!(live.sphere_key(2, Arrow::Right));
+        assert!(near(view(&live, 1), 50.0));
+        assert!(near(view(&live, 2), 55.0));
+        assert!(live.sphere_key(0, Arrow::Left));
+        assert!(near(view(&live, 0), 50.0));
+    }
 }
