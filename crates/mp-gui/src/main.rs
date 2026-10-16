@@ -3148,9 +3148,11 @@ impl MissionPlanner {
         // whenever a number grew a digit, and the map viewport resized with it - 744px to 755px
         // between frames - which invalidated cached geometry every frame and made the renderer
         // look four times slower than it is. In the status row it is held to half the row, so a
-        // message keeps the rest.
+        // message keeps the rest - and it is no flex box itself: as one, its text was a flex child
+        // with its content's minimum width, and at a 1600-wide window the line ran 807, 814, 821 px
+        // in its 784 (the owner's reports of 2026-10-16, FLIGHT DATA and FLIGHT PLAN); a block with
+        // `truncate` ends it with an ellipsis inside its box.
         probe::measured("map-status", div())
-            .flex()
             .ml_auto()
             .min_w(px(0.0))
             .max_w(gpui::relative(0.5))

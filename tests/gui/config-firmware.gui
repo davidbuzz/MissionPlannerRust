@@ -31,7 +31,7 @@ setup mkdir -p "$WORK/web/firmware.ardupilot.org/Copter/stable/CubeOrange" && cp
 
 screen setup
 window 1600x1200
-budget 19
+budget 18
 
 expect config.firmware.active false
 # Install Firmware is the first entry of InitialSetup's list, outside any heading; disconnected,
@@ -43,6 +43,16 @@ expect config.firmware.manifest loaded
 expect config.firmware.manifest.records 240
 expect config.firmware.manifest.fetches 1
 expect config.firmware.release OFFICIAL
+# The title bar's note is gone once the catalogue is in (the owner's word of 2026-10-16: "Please
+# wait, we're downloading version info..." while it comes), and the five links sit at least 20 px
+# apart (his report of the same day: at the C#'s positions the first three ran into each other at
+# this font).
+expect config.firmware.downloading false
+expect config.firmware.title-note none
+expect fw-alloptions left-of fw-bootloaderupdate 20
+expect fw-bootloaderupdate left-of fw-px4bl 20
+expect fw-px4bl left-of fw-custom 20
+expect fw-custom left-of fw-beta 20
 expect config.firmware.enabled true
 expect config.firmware.label.quad Copter V4.7.1 OFFICIAL
 expect config.firmware.label.plane Plane V4.7.1 OFFICIAL

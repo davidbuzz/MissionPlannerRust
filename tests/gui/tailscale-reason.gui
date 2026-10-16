@@ -6,7 +6,7 @@
 # Needs no link: tools/gui-headless.sh tailscale-reason
 screen fly
 window 1600x1200
-budget 15
+budget 8
 env XDG_DATA_HOME $WORK
 env MP_CONFIG_XML $WORK/config.xml
 env FAKE_TAILSCALE_STATE needslogin
@@ -26,7 +26,7 @@ type my-pi.tail1234.ts.net
 key Return
 expect link.prompt remote Port
 key ctrl+u
-type 5760
+type $LINK_PORT
 key Return
 within 20
 expect status ~ my-pi.tail1234.ts.net is a Tailscale name, and this computer is not on a tailnet (Tailscale: signed out)

@@ -56,10 +56,31 @@ pub fn list_ports() -> Vec<PortInfo> {
     }
     #[cfg(not(target_family = "wasm"))]
     {
+        if let Some(listed) = harness_ports() {
+            return listed;
+        }
         let known = usb_ports();
         let names = port_names(&known);
         enumerate::with_usb_metadata(names, device_node, &known)
     }
+}
+
+/// [`PORTS_ENV`]'s names, bare, in place of the whole list - the `/dev` globs and the crate's
+/// metadata both - so a script sees its ports and none of the machine's own.
+#[cfg(not(target_family = "wasm"))]
+fn harness_ports() -> Option<Vec<PortInfo>> {
+    let listed = std::env::var_os(PORTS_ENV)?;
+    Some(harness_list(&listed.to_string_lossy()))
+}
+
+/// [`PORTS_ENV`]'s value as ports: comma-separated names, trimmed, empties dropped, each bare.
+fn harness_list(listed: &str) -> Vec<PortInfo> {
+    listed
+        .split(',')
+        .map(str::trim)
+        .filter(|name| !name.is_empty())
+        .map(|name| PortInfo::bare(name.to_owned()))
+        .collect()
 }
 
 /// What the `serialport` crate knows about each device node, for its USB ids - on Windows with
@@ -73,6 +94,11 @@ fn usb_ports() -> Vec<PortInfo> {
     let ports = crate::enumerate::with_windows_devices(ports, &crate::win32::com_ports());
     ports
 }
+
+/// The harness's door: `MP_SERIAL_PORTS`, a comma-separated list of port names, stands in for
+/// the computer's own - a GUI script lists forty to see the port box's list scroll (the owner's
+/// report of 2026-10-16: his ttyS0-3 pushed the kinds past the thirtieth row).
+pub const PORTS_ENV: &str = "MP_SERIAL_PORTS";
 
 /// The `serialport` crate's list, as the crate reports it.
 #[cfg(not(target_family = "wasm"))]
@@ -353,5 +379,24 @@ impl Transport for SerialTransport {
 
     fn close(&mut self) {
         self.link.close();
+    }
+}
+
+#[cfg(test)]
+mod harness_tests {
+    use super::*;
+
+    /// The harness's door: its names stand in for the whole list, bare, trimmed, empties dropped.
+    #[test]
+    fn the_harness_names_are_the_list_bare() {
+        let ports = harness_list(" /dev/ttyUSB0, /dev/ttyACM0 ,,COM4,");
+        let names: Vec<&str> = ports.iter().map(|port| port.name.as_str()).collect();
+        assert_eq!(names, ["/dev/ttyUSB0", "/dev/ttyACM0", "COM4"]);
+        assert!(
+            ports
+                .iter()
+                .all(|port| port.vid.is_none() && port.description.is_none())
+        );
+        assert!(harness_list("").is_empty());
     }
 }

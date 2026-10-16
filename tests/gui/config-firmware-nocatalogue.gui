@@ -1,0 +1,29 @@
+# Install Firmware with no catalogue to be had: MP_FIRMWARE_MANIFEST names a file that is not
+# there, standing in for a network that is down. Activate disables every picture and the All
+# Options and Beta links until its task has GetList (ConfigFirmwareManifest.cs:50-67, 96-122), and
+# in the C# the task's failure goes unobserved: the pictures stay dim with no word of why. The
+# owner's word of 2026-10-16 - "it needs to start that page with a message on the title bar saying
+# 'Please wait, we're downloading version info...'" - puts the wait on the page's title bar and,
+# here, its end: "Could not download version info: ..." in the fetch's own words, and a dim
+# picture clicked says the same on the status line (ui::dimmed_click). The download is over in a
+# frame here, so the wait itself is held by the page's unit test; this script sees its end.
+
+env XDG_DATA_HOME $WORK
+env TMPDIR $WORK
+env MP_FIRMWARE_MANIFEST $WORK/no-such-manifest.json.gz
+env MP_FIRMWARE_DEVICE CubeOrange-BL
+
+screen setup
+window 1600x1200
+budget 3
+
+click setup-page-ConfigFirmwareManifest
+expect config.firmware.page manifest
+within 10 expect config.firmware.manifest failed
+expect config.firmware.downloading false
+expect config.firmware.title-note ~ Could not download version info
+expect config.firmware.enabled false
+# A dim picture's click: nothing opens, the status line says why.
+click fw-quad
+expect config.firmware.manifest failed
+expect status ~ Could not download version info

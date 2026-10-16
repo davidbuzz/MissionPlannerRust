@@ -30,7 +30,7 @@ setup mkdir -p "$WORK/MissionPlannerRust" && printf '<?xml version="1.0" encodin
 
 screen fly
 window 1600x1200
-budget 13
+budget 9
 
 expect vehicle.connected false
 expect link.button CONNECT
@@ -59,13 +59,13 @@ key Return
 expect config.InputBoxremotehostEnterhostnameipensureremoteendisalreadystarted 127.0.0.1
 expect link.prompt remote Port
 key ctrl+u
-type 5760
+type $LINK_PORT
 key Return
 expect link.prompt none
-expect config.InputBoxremotePortEnterremoteport 5760
+expect config.InputBoxremotePortEnterremoteport $LINK_PORT
 expect vehicle.connected true
 expect link.button DISCONNECT
-expect status ~ connected to tcp:127.0.0.1:5760
+expect status ~ connected to tcp:$LINK_HOST:$LINK_PORT
 
 # `doDisconnect`, without the "still moving" question: SITL sits on the ground.
 click main-connect

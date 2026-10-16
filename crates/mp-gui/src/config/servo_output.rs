@@ -1804,8 +1804,24 @@ pub fn modal(
         )
         // Each line and the button row are held to the box's width: a flex item's minimum
         // width is its content's, and a long line let the row grow past the border, which put
-        // Raw Param Warning's OK 140 px outside the box (the owner, 2026-09-25).
-        .children(crate::ui::box_text(id, text))
+        // Raw Param Warning's OK 140 px outside the box (the owner, 2026-09-25). The text is held
+        // to 500 px and scrolls past them (`modal-text-<id>`), as ShowUI's read-only text box is
+        // (CustomMessageBox.cs:143-153, Math.Min(textSize.Height + 10, 500) with a vertical scroll bar): "Missing N
+        // params" with hundreds of names made a box 10,169 px tall, its OK 4,500 px below the
+        // window (the owner's report of 2026-10-16). The C#'s label path has no such bound; this
+        // box always has, so the window shows its OK.
+        .child(
+            div()
+                .id(SharedString::from(format!("modal-text-{id}")))
+                .w_full()
+                .min_w_0()
+                .max_h(px(500.0))
+                .overflow_y_scroll()
+                .flex()
+                .flex_col()
+                .gap_2()
+                .children(crate::ui::box_text(id, text)),
+        )
         .child(
             div()
                 .w_full()

@@ -66,6 +66,8 @@
 #   expect map.tiles.disk > 0   assert a fact is an integer greater than a value
 #   expect map.tiles.drawn >= 4 ... or at least a value
 #   expect frame.p99 < 8        ... or less than a value
+#   expect fw-custom left-of fw-beta 20   assert a measured control sits left of another (below,
+#                               above, right-of), by at least the px named, none by default
 #   expect log.open true
 #   restart                     close the window by its close box and start the application again
 #
@@ -87,6 +89,12 @@
 # lays out survives it or collides with a concurrent run. A `#` starts a comment anywhere on a
 # line, commands included.
 #
+# `$LINK_HOST` and `$LINK_PORT` on a step are the host and port of the link the binary was given
+# after `--` (`tcp:127.0.0.1:5790` is 127.0.0.1 and 5790), or in MP_GUI_LINK for a script whose
+# binary starts with no link (127.0.0.1 and 5760 without either): a script that types the SITL's
+# address into the connection prompt dials this run's SITL, never a fixed port - on the owner's
+# machine 5760 is his own SITL, and a test owns its ports.
+#
 # The facts come from the application itself: set MP_FACTS and it writes what it believes after
 # every frame. `crates/mp-gui/src/facts.rs` lists them, and an unknown key is an error rather than
 # a silent pass - a test asserting on a fact that no longer exists must fail, not succeed. With
@@ -101,6 +109,21 @@ set -f
 SCRIPT="${1:?usage: gui-test.sh <script.gui> [-- <binary args>]}"
 shift
 [ "${1:-}" = "--" ] && shift
+# The link the binary is given, `tcp:HOST:PORT` or `udp:HOST:PORT` as the first argument after
+# `--`, is `$LINK_HOST` and `$LINK_PORT` on every script line - so a script that types the SITL's
+# address into the connection prompt dials the SITL this run was given, never a fixed 5760, which
+# on this machine is the owner's own SITL (tests own their ports). A script that starts with no
+# link and connects by hand takes its SITL from MP_GUI_LINK instead, which names the link without
+# giving it to the binary. Without either, the SITL's defaults.
+LINK_HOST=127.0.0.1
+LINK_PORT=5760
+LINK="${MP_GUI_LINK:-${1:-}}"
+case "$LINK" in
+    tcp:*:*|udp:*:*|udpcl:*:*)
+        LINK_HOST="${LINK#*:}"; LINK_HOST="${LINK_HOST%%:*}"
+        LINK_PORT="${LINK##*:}"
+        ;;
+esac
 
 [ -r "$SCRIPT" ] || { echo "cannot read $SCRIPT" >&2; exit 2; }
 
@@ -361,6 +384,18 @@ if [ -z "${MP_CONFIG_XML:-}" ]; then
             export MP_CONFIG_XML="$WORK/config.xml"
             if [ -f "$DATA_DIR/config.xml" ]; then
                 cp "$DATA_DIR/config.xml" "$MP_CONFIG_XML"
+                # Less the remembered link: the application reopens it at start (main.rs's
+                # `target`, from config.xml's comport and its baud), and on the owner's machine
+                # that is his bench board over USB or his own SITL - eleven scripts with no link
+                # of their own were opening his CubeOrange at every run (found 2026-10-16). A
+                # test's link is the one after `--`, or none.
+                python3 - "$MP_CONFIG_XML" <<'PY'
+import re, sys
+path = sys.argv[1]
+text = open(path, encoding="utf-8-sig").read()
+text = re.sub(r"[ \t]*<comport>[^<]*</comport>[ \t]*\n?", "", text, count=1)
+open(path, "w", encoding="utf-8-sig").write(text)
+PY
             fi
             ;;
     esac
@@ -629,19 +664,23 @@ expect_once() {
         return 1
     elif [ "$OP" = "below" ] || [ "$OP" = "above" ] || [ "$OP" = "left-of" ] || [ "$OP" = "right-of" ]; then
         # `expect a below b` (above, left-of, right-of): where two measured controls sit
-        # relative to each other, from the positions the application reports.
+        # relative to each other, from the positions the application reports. A number after
+        # the other control is the least gap between them in px (`expect a left-of b 20`): the
+        # Install Firmware links the owner found too close (2026-10-16) are held apart by one.
         OTHER="${4:?expect $OP needs another control}"
-        VERDICT=$(python3 - "$PROBE_FILE" "$KEY" "$OTHER" "$OP" <<'PY'
+        GAP="${5:-0}"
+        VERDICT=$(python3 - "$PROBE_FILE" "$KEY" "$OTHER" "$OP" "$GAP" <<'PY'
 import json, sys
 probe = json.load(open(sys.argv[1]))
 a, b, op = probe.get(sys.argv[2]), probe.get(sys.argv[3]), sys.argv[4]
+gap = float(sys.argv[5])
 if a is None or b is None:
     print("missing " + (sys.argv[2] if a is None else sys.argv[3])); sys.exit(0)
 holds = {
-    "below": a["y"] >= b["y"] + b["height"],
-    "above": a["y"] + a["height"] <= b["y"],
-    "left-of": a["x"] + a["width"] <= b["x"],
-    "right-of": a["x"] >= b["x"] + b["width"],
+    "below": a["y"] >= b["y"] + b["height"] + gap,
+    "above": a["y"] + a["height"] + gap <= b["y"],
+    "left-of": a["x"] + a["width"] + gap <= b["x"],
+    "right-of": a["x"] >= b["x"] + b["width"] + gap,
 }[op]
 print("ok" if holds else "no (%s at %d,%d %dx%d; %s at %d,%d %dx%d)" % (
     sys.argv[2], a["x"], a["y"], a["width"], a["height"],
@@ -652,7 +691,8 @@ PY
             [ -z "$QUIET" ] && echo "  ok   $KEY $OP $OTHER"
             return 0
         fi
-        [ -z "$QUIET" ] && echo "FAIL line $LINE_NO: $KEY is not $OP $OTHER: $VERDICT" >&2
+        BY=""; [ "$GAP" != 0 ] && BY=" by $GAP px"
+        [ -z "$QUIET" ] && echo "FAIL line $LINE_NO: $KEY is not $OP $OTHER$BY: $VERDICT" >&2
         return 1
     else
         shift 2
@@ -684,6 +724,8 @@ while IFS= read -r RAW; do
     # a box or expected back is the run's own, on every platform - not a fixed /tmp, which the
     # Windows planner reads as C:\tmp where the setup wrote to the temporary folder.
     LINE="${LINE//\$WORK/$WORK}"
+    LINE="${LINE//\$LINK_HOST/$LINK_HOST}"
+    LINE="${LINE//\$LINK_PORT/$LINK_PORT}"
     LINE=$(for_this_platform "$LINE") || continue
     # shellcheck disable=SC2086 # deliberate word splitting into positional parameters
     set -- $LINE

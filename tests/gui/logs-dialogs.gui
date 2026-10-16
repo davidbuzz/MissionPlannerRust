@@ -14,7 +14,7 @@ setup mkdir -p $WORK/logs && cp testdata/mavlink/autotest.tlog $WORK/logs/flight
 
 screen logs
 window 1600x1200
-budget 20
+budget 10
 
 click logs-tab-tlogs
 expect logs.page tlogs

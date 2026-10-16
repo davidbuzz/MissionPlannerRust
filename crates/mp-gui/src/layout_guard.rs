@@ -181,6 +181,15 @@ pub const MAY_SCROLL: &[&str] = &[
     // Prefetch's lines, one a zoom level, in a 200 px list (prefetch_ui.rs): an area box-selected
     // at a low zoom lists more levels than fit, and the list scrolls (2026-10-16).
     "plan-prefetch-lines",
+    // The port box's list, `cmb_Connection`'s rows (main.rs's dropdown: thirty rows, then it
+    // scrolls): a computer with its motherboard's ttyS0-3 and a few adapters lists the kinds
+    // past the thirtieth row (the owner's report of 2026-10-16, "CUT OFF on plugins").
+    "main-port-",
+    // A message box's text (servo_output::modal's `modal-text-<id>`): held to 500 px and
+    // scrolling past them, as CustomMessageBox's text box is - "Missing N params" with hundreds
+    // of names stood 10,169 px tall (the owner's report of 2026-10-16). The box and its buttons
+    // may not be cut off; the lines past the 500 px may.
+    "modal-text-",
 ];
 
 /// The rows of the lists that scroll and are named by what they hold - a parameter's name, an
@@ -217,13 +226,21 @@ const NUMBERED_ROWS: &[&str] = &[
     "loggrid-head-",
 ];
 
+/// Controls that carry a scrolling list's prefix and are not its rows: the list's own box, which
+/// must show whole however many rows it holds.
+const SHOWN_WHOLE: &[&str] = &[
+    // The port box's list (`main-port-list`), whose rows are `main-port-<name>`.
+    "main-port-list",
+];
+
 /// Whether a control must be wholly on screen whenever it is measured: all but a scrolling
 /// list's rows.
 #[must_use]
 pub fn must_show(name: &str) -> bool {
-    !MAY_SCROLL.iter().any(|prefix| name.starts_with(prefix))
-        && !is_named_row(name)
-        && !is_numbered_row(name)
+    SHOWN_WHOLE.contains(&name)
+        || (!MAY_SCROLL.iter().any(|prefix| name.starts_with(prefix))
+            && !is_named_row(name)
+            && !is_numbered_row(name))
 }
 
 /// Whether a control is a cell of one of [`NUMBERED_ROWS`]' grids: its prefix, then a number.
@@ -484,6 +501,29 @@ mod tests {
         }
         assert!(!must_show("dronecan-filter-all"));
         for control in ["dronecan-filter-close", "dronecan-filter-form"] {
+            assert!(must_show(control), "{control}");
+        }
+    }
+
+    /// A message box's text scrolls past 500 px; the box and its OK may not be cut off (the
+    /// owner's report of 2026-10-16: "Missing N params" 10,169 px tall).
+    #[test]
+    fn a_boxs_text_scrolls_but_not_the_box() {
+        assert!(!must_show("modal-text-param-box"));
+        for control in ["param-box", "param-box-ok", "failsafe-message-ok"] {
+            assert!(must_show(control), "{control}");
+        }
+    }
+
+    /// The port box's rows scroll in their list of thirty; the box, the baud box and CONNECT may
+    /// not be cut off (the owner's report of 2026-10-16: /dev/ttyS0-3 and the kinds past the
+    /// thirtieth row).
+    #[test]
+    fn the_port_lists_rows_scroll() {
+        for row in ["main-port--dev-ttyS3", "main-port-TCP", "main-port-WS"] {
+            assert!(!must_show(row), "{row}");
+        }
+        for control in ["main-port", "main-port-list", "main-baud", "main-connect"] {
             assert!(must_show(control), "{control}");
         }
     }

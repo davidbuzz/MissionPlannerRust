@@ -1,0 +1,28 @@
+# The status row at the owner's window, 1600x1179, with no vehicle: the map's statistics line
+# ("waiting for a position fix - paint N ms avg over M frames", the tiles' words before it) is
+# held to its half of the row and ends with an ellipsis, on FLIGHT DATA's Quick page and on
+# FLIGHT PLAN, where it ran 807 to 821 px in its 784 and the layout guard called it cut off (the
+# owner's reports of 2026-10-16). The run ends on FLIGHT PLAN after a long look at FLIGHT DATA, and
+# the guard judges both screens as the frames mount.
+#
+# No link needed. Run as
+#
+#   tools/gui-test.sh tests/gui/fly-status-row-narrow.gui
+
+screen fly
+window 1600x1179
+budget 6
+# 8: to be measured (2026-10-16).
+env XDG_DATA_HOME $WORK
+env MP_SETTINGS $WORK/settings.conf
+setup mkdir -p "$WORK/MissionPlannerRust" && printf '<?xml version="1.0" encoding="utf-8"?><Config><tabcontrolactions>tabQuick;</tabcontrolactions></Config>' > "$WORK/MissionPlannerRust/config.xml"
+
+expect screen fly
+expect map.ready true
+settle 2
+expect layout.hidden 0
+click tab-plan
+expect screen plan
+expect map.ready true
+settle 2
+expect layout.hidden 0

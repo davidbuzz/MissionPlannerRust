@@ -97,7 +97,7 @@ use crate::MissionPlanner;
 use crate::settings::Persisted;
 use crate::telemetry::{Report, Telemetry, TelemetryView};
 use crate::textfield::{KeyOutcome, TextField};
-use crate::ui::{action, panel, theme};
+use crate::ui::{Live, action, dimmed_click, panel, panel_with_corner, theme};
 
 /// Test scaffolding: the device list is this one device - its USB product string, and optionally
 /// `|` and a hardware id - instead of the machine's ports.
@@ -142,6 +142,34 @@ pub const MANIFEST_FILTER: &str = "Firmware (*.hex;*.px4;*.vrx;*.apj)|*.hex;*.px
 /// The setting both pages keep Load custom firmware's folder in.
 /// `// C#: GCSViews/ConfigurationView/ConfigFirmwareManifest.cs:410, 424`
 pub const FIRMWARE_FILE_DIRECTORY: &str = "FirmwareFileDirectory";
+
+/// The words on the page's title bar while the firmware catalogue downloads. `Activate` disables
+/// the pictures and the All Options and Beta links until its task has `GetList` and labels them
+/// again, and says nothing meanwhile (ConfigFirmwareManifest.cs:50-67, 96-122): the pictures sat
+/// dim with no word while the manifest came over the network. The owner's word of 2026-10-16 -
+/// "it needs to start that page with a message on the title bar" - beyond the C#.
+/// `// C#: GCSViews/ConfigurationView/ConfigFirmwareManifest.cs:50-67`
+pub const DOWNLOADING: &str = "Please wait, we're downloading version info...";
+
+/// The title bar's words once a download brought no catalogue, before the errors: the C#'s task
+/// throws unobserved and the pictures stay disabled for good, with no word of why
+/// (ConfigFirmwareManifest.cs:65-92). The wait's end, by the same word of the owner's.
+pub const COULD_NOT_DOWNLOAD: &str = "Could not download version info: ";
+
+/// Why a picture is dimmed once the catalogue is in: its vehicle has no firmware there - the
+/// C#'s `options.First` throws for it, leaving it and the pictures after it disabled.
+/// `// C#: GCSViews/ConfigurationView/ConfigFirmwareManifest.cs:76-91`
+pub const NOT_IN_CATALOGUE: &str = "no firmware for this vehicle in the catalogue";
+
+/// The links' row: the gap between each pair and the right edge of the last. The C# places them
+/// at 459, 522, 624, 736 and 867 (6 to 24 px apart at its 13 px font); at this font the words
+/// are wider and the first three ran into each other (the owner's report of 2026-10-16: "too
+/// close to each other"), so the row is laid from the C#'s right edge - `lbl_devfw` at 867, 76
+/// wide - with its larger gap between every pair, and grows leftward as the font needs.
+/// `// C#: GCSViews/ConfigurationView/ConfigFirmwareManifest.Designer.cs:75-77, 87-89, 99, 109, 265`
+pub const LINK_GAP: f32 = 24.0;
+/// See [`LINK_GAP`].
+pub const LINKS_RIGHT: f32 = 867.0 + 76.0;
 
 /// `ConfigFirmwareDisabled.resx`'s `label1.Text`.
 /// `// C#: GCSViews/ConfigurationView/ConfigFirmwareDisabled.resx:134-137`
@@ -1982,6 +2010,41 @@ impl InstallFirmware {
         }
     }
 
+    /// Whether the catalogue is still downloading: `Activate`'s task has not returned.
+    #[must_use]
+    pub fn downloading(&self) -> bool {
+        self.receiver.is_some()
+    }
+
+    /// The words on the page's title bar: [`DOWNLOADING`] while the catalogue downloads, the
+    /// failure once a download brought no catalogue, nothing otherwise (the owner's word of
+    /// 2026-10-16). A catalogue loaded with an error beside it - the peripheral manifest's, say -
+    /// is loaded: the errors stay in the facts alone, as the C# logs them.
+    #[must_use]
+    pub fn title_note(&self) -> Option<String> {
+        if self.receiver.is_some() {
+            Some(DOWNLOADING.to_owned())
+        } else if self.manifest.is_none() && !self.errors.is_empty() {
+            Some(format!("{COULD_NOT_DOWNLOAD}{}", self.errors.join("; ")))
+        } else {
+            None
+        }
+    }
+
+    /// Why a picture not yet enabled takes no click - said on the status line when it is clicked
+    /// ([`dimmed_click`]): the download under way, its failure, or a vehicle the catalogue has no
+    /// firmware for.
+    #[must_use]
+    pub fn dimmed_why(&self) -> String {
+        self.title_note().unwrap_or_else(|| {
+            if self.manifest.is_some() {
+                NOT_IN_CATALOGUE.to_owned()
+            } else {
+                "the firmware catalogue has not been fetched".to_owned()
+            }
+        })
+    }
+
     /// Whether the path dialog is open, for its focus.
     #[must_use]
     pub const fn path_open(&self) -> bool {
@@ -2150,6 +2213,11 @@ pub fn record_facts(page: &InstallFirmware, settings: &Persisted) {
     record("config.firmware.manifest.errors", page.errors.join("; "));
     record("config.firmware.release", page.release.name());
     record("config.firmware.enabled", page.links_enabled);
+    record("config.firmware.downloading", page.downloading());
+    record(
+        "config.firmware.title-note",
+        page.title_note().unwrap_or_else(|| "none".to_owned()),
+    );
     for (picture, label) in PICTURES.iter().zip(&page.labels) {
         let key = picture.id.trim_start_matches("fw-");
         record(format!("config.firmware.label.{key}"), label);
@@ -2326,10 +2394,26 @@ pub fn link_label(
     on_click: impl Fn(&mut MissionPlanner, &mut Window, &mut Context<MissionPlanner>) + 'static,
     cx: &mut Context<MissionPlanner>,
 ) -> AnyElement {
+    div()
+        .absolute()
+        .left(px(x))
+        .top(px(y))
+        .child(link_text(id, text, live, on_click, cx))
+        .into_any_element()
+}
+
+/// A link's words alone, for a row that places them ([`LINK_GAP`]) or [`link_label`]'s place.
+pub fn link_text(
+    id: &'static str,
+    text: &'static str,
+    live: bool,
+    on_click: impl Fn(&mut MissionPlanner, &mut Window, &mut Context<MissionPlanner>) + 'static,
+    cx: &mut Context<MissionPlanner>,
+) -> AnyElement {
     // Sized by its text rather than the label's box: the text does not fit that box at this
     // font, wrapped below it, and a click on the text then landed outside the hitbox -
     // tests/gui/config-firmware.gui found the link dead.
-    let label = crate::probe::measured(id, div().absolute().left(px(x)).top(px(y)))
+    let label = crate::probe::measured(id, div())
         .id(id)
         .whitespace_nowrap()
         .text_xs()
@@ -2393,20 +2477,19 @@ pub fn page(
             .child(firmware.progress.status.clone()),
     );
     let live = firmware.live();
-    for (_, id, text, (x, y, _, _), _) in LINKS {
+    let mut links = Vec::with_capacity(LINKS.len());
+    for (_, id, text, _, _) in LINKS {
         let element = match id {
-            "fw-alloptions" => link_label(
+            "fw-alloptions" => link_text(
                 id,
                 text,
-                (x, y),
                 live && firmware.links_enabled,
                 |this, _window, _cx| this.install_firmware.all_options(&this.persisted),
                 cx,
             ),
-            "fw-custom" => link_label(
+            "fw-custom" => link_text(
                 id,
                 text,
-                (x, y),
                 live,
                 |this, window, cx| {
                     this.install_firmware.custom(&this.persisted);
@@ -2414,27 +2497,24 @@ pub fn page(
                 },
                 cx,
             ),
-            "fw-beta" => link_label(
+            "fw-beta" => link_text(
                 id,
                 text,
-                (x, y),
                 live && firmware.links_enabled,
                 |this, _window, _cx| this.install_firmware.beta(),
                 cx,
             ),
-            "fw-px4bl" => link_label(
+            "fw-px4bl" => link_text(
                 id,
                 text,
-                (x, y),
                 live,
                 |this, _window, _cx| this.force_bootloader_clicked(ForcePage::Manifest),
                 cx,
             ),
             // `fw-bootloaderupdate`, withheld until it is tested ([`BOOTLOADER_UPDATE_TESTED`]).
-            _ => link_label(
+            _ => link_text(
                 id,
                 text,
-                (x, y),
                 live,
                 |this, window, cx| {
                     if BOOTLOADER_UPDATE_TESTED {
@@ -2446,11 +2526,41 @@ pub fn page(
                 cx,
             ),
         };
-        body = body.child(element);
+        links.push(element);
     }
+    // The five in one row at the C#'s 341, laid from its right edge with the wider gap
+    // ([`LINK_GAP`]), over the status label's empty right end.
+    let (_, _, _, (_, links_y, _, _), _) = LINKS[0];
+    body = body.child(
+        div()
+            .absolute()
+            .top(px(links_y))
+            .right(px(PAGE.0 - LINKS_RIGHT))
+            .flex()
+            .gap(px(LINK_GAP))
+            .children(links),
+    );
 
-    panel(
+    // The title bar's note: the download under way, or its failure (the owner's word of
+    // 2026-10-16; [`DOWNLOADING`]).
+    // The rest of the title row, the words cut with an ellipsis where a long failure outruns
+    // it (config-firmware-nocatalogue.gui's two errors ran 1,754 px); the status line carries
+    // them whole when a dim picture is clicked.
+    let note = crate::probe::measured("fw-title-note", div())
+        .flex_1()
+        .min_w_0()
+        .ml_4()
+        .truncate()
+        .text_xs()
+        .text_color(rgb(if firmware.downloading() {
+            theme::ACCENT
+        } else {
+            theme::WARN
+        }))
+        .child(firmware.title_note().unwrap_or_default());
+    panel_with_corner(
         "install firmware",
+        note,
         div()
             .id("fw-page")
             .track_focus(focus)
@@ -2523,7 +2633,9 @@ fn image_label(
             }))
             .into_any_element()
     } else {
-        body.into_any_element()
+        // Dimmed for a reason its click says on the status line (the owner's word of 2026-10-16):
+        // the catalogue downloading, its failure, or no firmware for the vehicle.
+        dimmed_click(body, &Live::dimmed(firmware.dimmed_why())).into_any_element()
     }
 }
 
@@ -4089,6 +4201,78 @@ mod tests {
         assert_eq!(page.errors.len(), 1, "{:?}", page.errors);
         assert!(page.links_enabled);
         assert_eq!(page.labels[index_of("fw-rover")], "Rover V4.7.1 OFFICIAL");
+        // Loaded, with the peripheral manifest's error beside it: the title bar says nothing.
+        assert_eq!(page.title_note(), None);
+        assert!(!page.downloading());
+        assert_eq!(page.dimmed_why(), NOT_IN_CATALOGUE);
+    }
+
+    /// The owner's word of 2026-10-16: while the catalogue downloads the title bar says so and a
+    /// picture clicked says why it took none; a download that brings no catalogue says so too, in
+    /// the fetch's own words, and the pictures stay dim with that reason.
+    #[test]
+    fn the_title_bar_says_please_wait_while_the_catalogue_downloads_and_why_it_failed() {
+        use std::sync::Mutex;
+        use std::sync::mpsc::{Receiver, channel};
+        /// A fetch held until the test lets it go, which then fails.
+        struct Held(Mutex<Option<Receiver<()>>>);
+        impl manifest::Fetch for Held {
+            fn get(&self, _url: &str) -> Result<Vec<u8>, String> {
+                let gate = self.0.lock().unwrap().take();
+                if let Some(gate) = gate {
+                    let _ = gate.recv();
+                }
+                Err("no network in this test".to_owned())
+            }
+        }
+        let (release, gate) = channel::<()>();
+        // `page` here is the element; the page object is built as the fetch test builds it.
+        let mut page = InstallFirmware {
+            open: true,
+            ..InstallFirmware::default()
+        };
+        assert_eq!(page.title_note(), None);
+        assert!(!page.downloading());
+        page.fetch_from(Box::new(Held(Mutex::new(Some(gate)))));
+        assert!(page.downloading());
+        assert_eq!(page.manifest_state(), "fetching");
+        assert_eq!(page.title_note().as_deref(), Some(DOWNLOADING));
+        assert_eq!(page.dimmed_why(), DOWNLOADING);
+        page.tick(true);
+        assert!(
+            page.downloading(),
+            "a tick with nothing received keeps waiting"
+        );
+        drop(release);
+        let deadline = web_time::Instant::now() + std::time::Duration::from_secs(20);
+        while page.receiver.is_some() && web_time::Instant::now() < deadline {
+            wasm_thread::sleep(std::time::Duration::from_millis(10));
+            page.tick(true);
+        }
+        assert!(!page.downloading());
+        assert_eq!(page.manifest_state(), "failed");
+        let note = page.title_note().expect("the failure is said");
+        assert!(note.starts_with(COULD_NOT_DOWNLOAD), "{note}");
+        assert!(note.contains("no network in this test"), "{note}");
+        assert_eq!(page.dimmed_why(), note);
+        assert!(page.enabled.iter().all(|enabled| !enabled));
+        assert!(!page.links_enabled);
+    }
+
+    /// The links' row (the owner's report of 2026-10-16): its gap is the C#'s widest - Force
+    /// Bootloader's right edge to Load custom firmware - and it ends where `lbl_devfw` does, on
+    /// the page.
+    #[test]
+    fn the_links_row_keeps_the_csharps_widest_gap_and_its_right_edge() {
+        let gaps: Vec<f32> = LINKS
+            .windows(2)
+            .map(|pair| pair[1].3.0 - (pair[0].3.0 + pair[0].3.2))
+            .collect();
+        assert_eq!(gaps, [6.0, 6.0, 24.0, 21.0]);
+        assert_eq!(LINK_GAP, gaps.iter().copied().fold(0.0, f32::max));
+        let last = LINKS[LINKS.len() - 1].3;
+        assert_eq!(LINKS_RIGHT, last.0 + last.2);
+        assert!(LINKS_RIGHT <= PAGE.0);
     }
 
     #[test]
