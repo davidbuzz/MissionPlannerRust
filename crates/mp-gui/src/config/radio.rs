@@ -30,7 +30,9 @@
 //! `RCn_TRIM` written, forced, for every channel that moved. A Reverse box writes `RCn_REV`
 //! (-1/1) or `RCn_REVERSED` (1/0), whichever the vehicle has, and mirrors its bar; on a copter
 //! the four are hidden. The elevon boxes show on a plane only. Each bind button sends
-//! `MAV_CMD_START_RX_PAIR` with the Spektrum protocol in its second parameter.
+//! `MAV_CMD_START_RX_PAIR` with the Spektrum protocol in its second parameter. The bars and the
+//! boxes are the shared `HorizontalProgressBar2` and `MavlinkCheckBox` of
+//! [`crate::config::mavlink_controls`].
 //!
 //! What the C# does on the UI thread - blocking `setParam` and `doCommand` calls, modal message
 //! boxes between them, and a `while (run)` loop pumping `Application.DoEvents` - is a queue of
@@ -79,6 +81,9 @@ use mp_vehicle::rc::CHANNELS;
 
 use crate::MissionPlanner;
 use crate::config::flight_modes::{Firmware, firmware_of};
+use crate::config::mavlink_controls::{Check, CheckState, ProgressBar, Write, value_of};
+// The bars' direction, the shared `HorizontalProgressBar2`'s and `VerticalProgressBar2`'s.
+pub use crate::config::mavlink_controls::Orientation;
 use crate::telemetry::{Lookup, Report, Telemetry, TelemetryView};
 use crate::ui::{action, action_sized, panel, theme};
 
@@ -163,15 +168,6 @@ pub const BAR_MAXIMUM: i32 = 2200;
 /// `$this.Size`.
 /// `// C#: GCSViews/ConfigurationView/ConfigRadioInput.resx ($this.Size)`
 const PAGE: (f32, f32) = (628.0, 406.0);
-
-/// A bar's direction.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Orientation {
-    /// `HorizontalProgressBar2`: filled from the left.
-    Horizontal,
-    /// `VerticalProgressBar2`: filled from the bottom.
-    Vertical,
-}
 
 /// One bar as the Designer and the `.resx` make it.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -319,234 +315,17 @@ const BIND: [(Spektrum, &str, &str, f32, f32); 3] = [
     (Spektrum::Dsm8, "radio-bind-dsm8", "Bind DSM8", 138.0, 65.0),
 ];
 
-/// A parameter's value, if the vehicle has listed it.
-fn value_of(parameters: &[(String, f64)], name: &str) -> Option<f64> {
-    parameters
-        .iter()
-        .find(|(held, _)| held == name)
-        .map(|(_, value)| *value)
-}
-
-/// One bar: `HorizontalProgressBar2`'s state.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Bar {
-    /// `Label`.
-    pub label: String,
-    /// `_value`: what the setter stored, mirrored when the bar is reversed.
-    value: i32,
-    /// `reverse`.
-    pub reverse: bool,
-    /// `minline`: a red line, drawn with `maxline` when neither is zero.
-    pub minline: i32,
-    /// `maxline`.
-    pub maxline: i32,
-}
-
-impl Bar {
-    /// As `InitializeComponent` leaves it: its label, and its designer value set.
-    fn designer(spec: &BarSpec) -> Self {
-        let mut bar = Self {
-            label: spec.label.to_owned(),
-            value: 0,
-            reverse: false,
-            minline: 0,
-            maxline: 0,
-        };
-        bar.set(spec.value);
-        bar
-    }
-
-    /// `Value`'s setter: nothing when the value is the one stored - which, on a reversed bar, is
-    /// the mirrored one - and otherwise the value, mirrored about the scale when reversed.
-    /// `// C#: ExtLibs/Controls/HorizontalProgressBar2.cs:85-117`
-    pub const fn set(&mut self, value: i32) {
-        if self.value == value {
-            return;
-        }
-        self.value = value;
-        if self.reverse {
-            let dif = value - BAR_MINIMUM;
-            self.value = BAR_MAXIMUM - dif;
-        }
-    }
-
-    /// `Value`'s getter, which is what the bar draws and writes in its text.
-    #[must_use]
-    pub const fn value(&self) -> i32 {
-        self.value
-    }
-
-    /// The text drawn in the bar: `(Label + "  " + Value).Trim()`.
-    /// `// C#: ExtLibs/Controls/HorizontalProgressBar2.cs:185`
-    #[must_use]
-    pub fn text(&self) -> String {
-        format!("{}  {}", self.label, self.value).trim().to_owned()
-    }
-
-    /// How full the bar is drawn: the base bar's value, one above the minimum at the bottom and
-    /// the maximum at the top.
-    /// `// C#: ExtLibs/Controls/HorizontalProgressBar2.cs:101-111`
-    #[must_use]
-    pub fn fraction(&self) -> f32 {
-        let ans = if self.value <= BAR_MINIMUM {
-            BAR_MINIMUM + 1
-        } else if self.value >= BAR_MAXIMUM {
-            BAR_MAXIMUM
-        } else {
-            self.value
-        };
-        #[allow(clippy::cast_precision_loss)] // pulse widths are small integers
-        let fraction = (ans - BAR_MINIMUM) as f32 / (BAR_MAXIMUM - BAR_MINIMUM) as f32;
-        fraction
-    }
-
-    /// Where the red lines are drawn along a bar `length` long, `minline`'s first, or `None` when
-    /// they are not drawn. A vertical bar's are offsets from its top, the second six pixels
-    /// further down; a reversed bar's run the other way.
-    /// `// C#: ExtLibs/Controls/HorizontalProgressBar2.cs:189-233`
-    #[must_use]
-    pub fn lines(&self, orientation: Orientation, length: f32) -> Option<(f32, f32)> {
-        if self.minline == 0 || self.maxline == 0 {
-            return None;
-        }
-        #[allow(clippy::cast_precision_loss)] // pulse widths are small integers
-        let along = |from: i32, to: i32| (to - from) as f32 / (BAR_MAXIMUM - BAR_MINIMUM) as f32;
-        let (min, max) = (self.minline, self.maxline);
-        Some(match (orientation, self.reverse) {
-            (Orientation::Vertical, true) => (
-                along(BAR_MINIMUM, min) * length + 6.0,
-                along(BAR_MINIMUM, max) * length,
-            ),
-            (Orientation::Vertical, false) => (
-                along(min, BAR_MAXIMUM) * length,
-                along(max, BAR_MAXIMUM) * length + 6.0,
-            ),
-            (Orientation::Horizontal, true) => (
-                along(min, BAR_MAXIMUM) * length,
-                along(max, BAR_MAXIMUM) * length,
-            ),
-            (Orientation::Horizontal, false) => (
-                along(BAR_MINIMUM, min) * length,
-                along(BAR_MINIMUM, max) * length,
-            ),
-        })
-    }
-}
-
-/// A check box's three states.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum CheckState {
-    /// Off.
-    Unchecked,
-    /// On.
-    Checked,
-    /// The vehicle holds neither the on value nor the off value.
-    Indeterminate,
-}
-
-impl CheckState {
-    /// The word a fact carries.
-    #[must_use]
-    pub const fn key(self) -> &'static str {
-        match self {
-            Self::Unchecked => "unchecked",
-            Self::Checked => "checked",
-            Self::Indeterminate => "indeterminate",
-        }
-    }
-}
-
-/// A `MavlinkCheckBox`.
-/// `// C#: Controls/MavlinkCheckBox.cs`
-#[derive(Debug, Clone, PartialEq)]
-pub struct CheckBox {
-    /// `ParamName`: none until `setup` finds a parameter the vehicle has.
-    pub param: Option<String>,
-    /// `OnValue`.
-    on: f64,
-    /// `OffValue`.
-    off: f64,
-    /// What it shows.
-    pub state: CheckState,
-    /// `Enabled`: false from the constructor, true once bound to a parameter the vehicle has.
-    pub enabled: bool,
-    /// `Visible`.
-    pub visible: bool,
-}
-
-impl CheckBox {
-    /// As the constructor leaves it: disabled, on 1 and off 0.
-    /// `// C#: Controls/MavlinkCheckBox.cs:24-30`
-    const fn new() -> Self {
-        Self {
-            param: None,
-            on: 1.0,
-            off: 0.0,
-            state: CheckState::Unchecked,
-            enabled: false,
-            visible: true,
-        }
-    }
-
-    /// `setup(OnValue, OffValue, paramname, paramlist)`: bound and shown for a parameter the
-    /// vehicle has, checked for the on value, unchecked for the off value, indeterminate for
-    /// anything else; disabled, and otherwise untouched, for one it lacks.
-    /// `// C#: Controls/MavlinkCheckBox.cs:60-98`
-    fn setup(&mut self, on: f64, off: f64, param: &str, parameters: &[(String, f64)]) {
-        self.on = on;
-        self.off = off;
-        self.param = Some(param.to_owned());
-        match value_of(parameters, param) {
-            Some(value) => {
-                self.enabled = true;
-                self.visible = true;
-                // `paramlist[paramname].Value == OnValue`: an exact comparison, as the C# makes.
-                #[allow(clippy::float_cmp)]
-                let state = if value == on {
-                    CheckState::Checked
-                } else if value == off {
-                    CheckState::Unchecked
-                } else {
-                    CheckState::Indeterminate
-                };
-                self.state = state;
-            }
-            None => self.enabled = false,
-        }
-    }
-
-    /// `setup(double[] OnValue, double[] OffValue, string[] paramname, paramlist)`: the first name
-    /// the vehicle has, with its own on and off values; nothing at all when it has none.
-    /// `// C#: Controls/MavlinkCheckBox.cs:32-45`
-    fn setup_first(&mut self, choices: &[(f64, f64, String)], parameters: &[(String, f64)]) {
-        if let Some((on, off, param)) = choices
-            .iter()
-            .find(|(_, _, name)| value_of(parameters, name).is_some())
-        {
-            self.setup(*on, *off, param, parameters);
-        }
-    }
-
-    /// A click. A two-state box goes from checked or indeterminate to unchecked and from
-    /// unchecked to checked, and every one of those changes `Checked`, so every click writes:
-    /// `OnValue` when it ends checked, `OffValue` otherwise.
-    /// `// C#: Controls/MavlinkCheckBox.cs:106-143`
-    fn click(&mut self) -> Option<(String, f64)> {
-        if !self.enabled || !self.visible {
-            return None;
-        }
-        self.state = match self.state {
-            CheckState::Unchecked => CheckState::Checked,
-            CheckState::Checked | CheckState::Indeterminate => CheckState::Unchecked,
-        };
-        let value = if self.state == CheckState::Checked {
-            self.on
-        } else {
-            self.off
-        };
-        // `ParamName` is null only for a box never set up, which is never enabled.
-        Some((self.param.clone()?, value))
-    }
+/// One bar as `InitializeComponent` leaves it: a `HorizontalProgressBar2` - or its
+/// `VerticalProgressBar2` - given its `Label`, `Maximum`, `Minimum` and `Value` in the Designer's
+/// order.
+/// `// C#: GCSViews/ConfigurationView/ConfigRadioInput.Designer.cs:136-400`
+fn designer_bar(spec: &BarSpec) -> ProgressBar {
+    let mut bar = ProgressBar::new2();
+    spec.label.clone_into(&mut bar.label);
+    bar.set_maximum(BAR_MAXIMUM);
+    bar.set_minimum(BAR_MINIMUM);
+    bar.set_value(spec.value);
+    bar
 }
 
 /// A modal message box, `CustomMessageBox.Show(text, caption)`.
@@ -663,11 +442,11 @@ pub struct RadioInput {
     map: [i32; 4],
     /// The channel each bar is bound to, from one; `None` unbound.
     bindings: [Option<usize>; CHANNELS],
-    bars: [Bar; CHANNELS],
+    bars: [ProgressBar; CHANNELS],
     /// `CHK_revch1` to `CHK_revch4`, beside roll, pitch, throttle and yaw.
-    reverse: [CheckBox; 4],
+    reverse: [Check; 4],
     /// `CHK_mixmode`, `CHK_elevonrev`, `CHK_elevonch1rev`, `CHK_elevonch2rev`.
-    elevons: [CheckBox; 4],
+    elevons: [Check; 4],
     /// `groupBoxElevons.Visible`: hidden by the first `Activate` on anything but a plane.
     elevons_visible: bool,
     /// `rcmin`, `rcmax`, `rctrim`.
@@ -703,18 +482,18 @@ impl Default for RadioInput {
             firmware: Firmware::default(),
             map: [-1; 4],
             bindings: [None; CHANNELS],
-            bars: BARS.map(|spec| Bar::designer(&spec)),
+            bars: BARS.map(|spec| designer_bar(&spec)),
             reverse: [
-                CheckBox::new(),
-                CheckBox::new(),
-                CheckBox::new(),
-                CheckBox::new(),
+                Check::default(),
+                Check::default(),
+                Check::default(),
+                Check::default(),
             ],
             elevons: [
-                CheckBox::new(),
-                CheckBox::new(),
-                CheckBox::new(),
-                CheckBox::new(),
+                Check::default(),
+                Check::default(),
+                Check::default(),
+                Check::default(),
             ],
             elevons_visible: true,
             calibration: RadioCalibration::new(),
@@ -824,7 +603,7 @@ impl RadioInput {
 
         // "this controls the direction of the output, not the input."
         for (check, channel) in self.reverse.iter_mut().zip(map) {
-            check.setup_first(
+            check.setup_choices(
                 &[
                     (-1.0, 1.0, format!("RC{channel}_REV")),
                     (1.0, 0.0, format!("RC{channel}_REVERSED")),
@@ -885,7 +664,7 @@ impl RadioInput {
                 if let Some(reading) = binding.and_then(|channel| inputs.get(channel - 1)) {
                     // A formatted binding's float to int: pulse widths are whole.
                     #[allow(clippy::cast_possible_truncation)]
-                    bar.set(*reading as i32);
+                    bar.set_value(*reading as i32);
                 }
             }
         }
@@ -963,7 +742,8 @@ impl RadioInput {
         if !self.takes_clicks() {
             return;
         }
-        let Some((param, value)) = self.reverse.get_mut(index).and_then(CheckBox::click) else {
+        let Some(Write { param, value, .. }) = self.reverse.get_mut(index).and_then(Check::click)
+        else {
             return;
         };
         let checked = self
@@ -997,7 +777,10 @@ impl RadioInput {
         if !self.takes_clicks() || !self.elevons_visible {
             return;
         }
-        if let Some((name, value)) = self.elevons.get_mut(index).and_then(CheckBox::click) {
+        if let Some(Write {
+            param: name, value, ..
+        }) = self.elevons.get_mut(index).and_then(Check::click)
+        {
             self.tasks.push_back(Task::Set {
                 name,
                 value,
@@ -1337,10 +1120,10 @@ pub fn record_facts(radio: &RadioInput, view: &TelemetryView) {
             binding.map_or_else(|| "none".to_owned(), |channel| channel.to_string()),
         );
     }
-    let check = |key: String, boxed: &CheckBox| {
+    let check = |key: String, boxed: &Check| {
         record(
             format!("{key}.param"),
-            boxed.param.as_deref().unwrap_or("none"),
+            boxed.param_name().unwrap_or("none"),
         );
         record(key.clone(), boxed.state.key());
         record(format!("{key}.enabled"), boxed.enabled);
@@ -1455,7 +1238,7 @@ fn group(x: f32, y: f32, width: f32, height: f32, title: &'static str, enabled: 
 
 /// One bar: its background, its value from the left or the bottom, its text in the middle, and
 /// the red lines once a calibration has moved them.
-fn bar_element(spec: &BarSpec, bar: &Bar) -> AnyElement {
+fn bar_element(spec: &BarSpec, bar: &ProgressBar) -> AnyElement {
     let (x, y, width, height) = spec.at;
     // `reverseChannel` swaps the two: green background and dark value when reversed.
     let (background, value) = if bar.reverse {
@@ -1546,7 +1329,7 @@ fn bar_element(spec: &BarSpec, bar: &Bar) -> AnyElement {
 fn check_box(
     id: &'static str,
     text: &'static str,
-    check: &CheckBox,
+    check: &Check,
     clickable: bool,
     on_click: impl Fn(&gpui::ClickEvent, &mut Window, &mut gpui::App) + 'static,
 ) -> gpui::Stateful<Div> {
@@ -1984,33 +1767,33 @@ mod tests {
 
     #[test]
     fn a_bar_mirrors_its_value_when_reversed_and_skips_a_value_it_already_holds() {
-        let mut bar = Bar::designer(&BARS[0]);
+        let mut bar = designer_bar(&BARS[0]);
         assert_eq!(bar.value(), 1500);
         assert_eq!(bar.text(), "Roll  1500");
-        bar.set(1100);
+        bar.set_value(1100);
         assert_eq!(bar.value(), 1100);
         bar.reverse = true;
         // The setter compares with what it stored, so the same reading again changes nothing -
         // not even to mirror it.
-        bar.set(1100);
+        bar.set_value(1100);
         assert_eq!(bar.value(), 1100);
-        bar.set(1200);
+        bar.set_value(1200);
         assert_eq!(bar.value(), 1800, "2200 - (1200 - 800)");
         // Then 1800 read from the receiver equals what is stored, and is skipped.
-        bar.set(1800);
+        bar.set_value(1800);
         assert_eq!(bar.value(), 1800);
         // The fill's clamp: one above the minimum at the bottom.
         bar.reverse = false;
-        bar.set(0);
+        bar.set_value(0);
         assert_eq!(bar.value(), 0);
         assert!((bar.fraction() - 1.0 / 1400.0).abs() < 1e-6);
-        bar.set(2500);
+        bar.set_value(2500);
         assert!((bar.fraction() - 1.0).abs() < 1e-6);
     }
 
     #[test]
     fn the_red_lines_are_drawn_once_both_are_set() {
-        let mut bar = Bar::designer(&BARS[0]);
+        let mut bar = designer_bar(&BARS[0]);
         assert_eq!(bar.lines(Orientation::Horizontal, 280.0), None);
         bar.minline = 1100;
         bar.maxline = 1900;
@@ -2052,7 +1835,7 @@ mod tests {
         assert_eq!(radio.bars[0].label, "Roll (rc2)");
         assert_eq!(radio.bars[1].label, "Pitch (rc1)");
         radio.observe(&sitl());
-        let values: Vec<_> = radio.bars.iter().map(Bar::value).collect();
+        let values: Vec<_> = radio.bars.iter().map(ProgressBar::value).collect();
         assert_eq!(
             values,
             [
@@ -2113,7 +1896,7 @@ mod tests {
             assert!(check.enabled);
             assert_eq!(check.state, CheckState::Unchecked);
         }
-        assert_eq!(radio.reverse[2].param.as_deref(), Some("RC3_REVERSED"));
+        assert_eq!(radio.reverse[2].param_name(), Some("RC3_REVERSED"));
         // And not on a copter, the elevons: the group is hidden.
         assert!(!radio.elevons_visible);
         // A hidden box takes no click.
@@ -2132,12 +1915,12 @@ mod tests {
         ]);
         let mut radio = RadioInput::default();
         radio.activate(&parameters, Firmware::ArduPlane);
-        assert_eq!(radio.reverse[0].param.as_deref(), Some("RC1_REV"));
+        assert_eq!(radio.reverse[0].param_name(), Some("RC1_REV"));
         assert_eq!(radio.reverse[0].state, CheckState::Checked);
         assert_eq!(radio.reverse[1].state, CheckState::Checked);
         assert_eq!(radio.reverse[2].state, CheckState::Indeterminate);
         // Channel 4 has neither: left unbound and disabled, but shown.
-        assert_eq!(radio.reverse[3].param, None);
+        assert_eq!(radio.reverse[3].param_name(), None);
         assert!(!radio.reverse[3].enabled);
         assert!(radio.reverse[3].visible);
         // Only RCn_REVERSED at 1 mirrors a bar when the page opens - not RC1_REV at -1.

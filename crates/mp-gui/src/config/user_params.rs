@@ -61,12 +61,12 @@ use gpui::{
     AnyElement, Context, FocusHandle, KeyDownEvent, SharedString, Window, div, prelude::*, px, rgb,
 };
 
-use super::optional::{Job, SetQueue, at, button, label, message_box, remember_answer};
+use super::optional::{Job, SetQueue, at, button, label, message_box};
 use crate::MissionPlanner;
 use crate::config::extra_setup::{link_error, take_link_errors};
-use crate::config::failsafe::{Lookup, options};
 use crate::config::flight_modes::ParamWriter;
-use crate::config::servo_output::{Combo, Message, combo_box, dropdown, value_of};
+use crate::config::mavlink_controls::{Combo, InputBox, Lookup, options, value_of};
+use crate::config::servo_output::{Message, combo_box, dropdown};
 use crate::setup::Key;
 use crate::telemetry::{Telemetry, TelemetryView};
 use crate::textfield::{KeyOutcome, TextField};
@@ -162,8 +162,8 @@ pub struct UserParams<H = mp_link::RequestId> {
     rows: Vec<Row>,
     /// The row whose combo's list is down.
     dropdown: Option<usize>,
-    /// The `InputBox` showing: its text box, and the text it opened with.
-    input: Option<(TextField, String)>,
+    /// The `InputBox` showing, of several lines: its text box, and the text it opened with.
+    input: Option<InputBox>,
     /// Message boxes, the first showing.
     messages: VecDeque<Message>,
     /// The last link failure the C# boxes, for the status line (the owner's ruling of
@@ -235,13 +235,13 @@ impl<H: Copy> UserParams<H> {
     /// The `InputBox`'s text, while it shows.
     #[must_use]
     pub fn input(&self) -> Option<&str> {
-        self.input.as_ref().map(|(field, _)| field.value())
+        self.input.as_ref().map(|input| input.field.value())
     }
 
     /// The `InputBox`'s text box, while it shows.
     #[must_use]
     pub fn input_field(&self) -> Option<&TextField> {
-        self.input.as_ref().map(|(field, _)| field)
+        self.input.as_ref().map(|input| &input.field)
     }
 
     /// The message box showing.
@@ -392,33 +392,17 @@ impl<H: Copy> UserParams<H> {
         let text = rest
             .iter()
             .fold(first.clone(), |total, name| format!("{total}\r\n{name}"));
-        let mut field = TextField::new("");
-        field.set_multiline(true);
-        field.set(text.clone());
-        self.input = Some((field, text));
+        self.input = Some(InputBox::multiline(INPUT.0, INPUT.1, &text));
     }
 
     /// A key for the `InputBox`'s text box: multiline, so Enter is a new line and Tab a tab
     /// (`AcceptsReturn`, `AcceptsTab`), each at the caret; Escape is Cancel. Returns whether the
-    /// box closed.
-    /// `// C#: ExtLibs/Controls/InputBox.cs:84-91, 145-146`
+    /// box closed - `Some(false)`, the one way a key closes it.
+    /// `// C#: ExtLibs/Controls/InputBox.cs:86-93, 151-152`
     pub fn input_key(&mut self, event: &KeyDownEvent) -> Option<bool> {
-        let (field, _) = self.input.as_mut()?;
-        let keystroke = &event.keystroke;
-        let plain = !keystroke.modifiers.control && !keystroke.modifiers.platform;
-        match keystroke.key.as_str() {
-            "enter" if plain => {
-                field.insert("\r\n");
-                None
-            }
-            "tab" if plain => {
-                field.insert("\t");
-                None
-            }
-            _ => match field.key(event) {
-                KeyOutcome::Cancelled => Some(false),
-                KeyOutcome::Changed | KeyOutcome::Submitted | KeyOutcome::Ignored => None,
-            },
+        match self.input.as_mut()?.key(event) {
+            KeyOutcome::Cancelled => Some(false),
+            KeyOutcome::Changed | KeyOutcome::Submitted | KeyOutcome::Ignored => None,
         }
     }
 
@@ -435,13 +419,7 @@ impl<H: Copy> UserParams<H> {
         lookup: Lookup,
         settings: &mut crate::settings::Persisted,
     ) -> Option<String> {
-        let (field, opened_with) = self.input.take()?;
-        let text = if ok {
-            remember_answer(settings, INPUT.0, INPUT.1, field.value());
-            field.value().to_owned()
-        } else {
-            opened_with
-        };
+        let text = self.input.take()?.answer(ok, settings);
         self.options = split(&text);
         let setting = joined(&self.options)?;
         self.load_options(parameters, lookup);

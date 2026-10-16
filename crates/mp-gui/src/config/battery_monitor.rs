@@ -88,7 +88,8 @@ use mp_params::param_file::invariant_double;
 
 use super::failsafe::{Lookup, Message, options};
 use super::flight_modes::{ParamWriter, Progress};
-use super::optional::{picture, remember_answer};
+use super::mavlink_controls::{InputBox, value_of};
+use super::optional::picture;
 use super::servo_output::{Combo, dropdown};
 use crate::MissionPlanner;
 use crate::settings::Persisted;
@@ -474,14 +475,6 @@ pub fn detect_hw(volt_pin: f64, curr_pin: Option<f64>) -> HwDetect {
     HwDetect::Index(index)
 }
 
-/// A parameter's value in the vehicle's table.
-fn value_of(parameters: &[(String, f64)], name: &str) -> Option<f64> {
-    parameters
-        .iter()
-        .find(|(held, _)| held == name)
-        .map(|(_, value)| *value)
-}
-
 // ---------------------------------------------------------------------------------------------
 // The writes.
 // ---------------------------------------------------------------------------------------------
@@ -834,26 +827,25 @@ fn get_boolean(settings: &Persisted, key: &str) -> bool {
 pub struct Prompt {
     /// Which question, 0 to 2.
     stage: usize,
-    /// The answer box.
-    pub field: TextField,
+    /// The box.
+    pub input: InputBox,
 }
 
 impl Prompt {
     /// The `stage`th question, its box holding the setting or the handler's literal.
     /// `// C#: GCSViews/ConfigurationView/ConfigBatteryMonitoring.cs:577-599`
     fn at(stage: usize, settings: &Persisted) -> Option<Self> {
-        let (_, _, key, default) = SPEECH_PROMPTS.get(stage)?;
-        let mut field = TextField::new("");
-        field.set(settings.get(key).unwrap_or(*default));
-        Some(Self { stage, field })
+        let (title, question, key, default) = SPEECH_PROMPTS.get(stage)?;
+        Some(Self {
+            stage,
+            input: InputBox::new(title, question, settings.get(key).unwrap_or(*default)),
+        })
     }
 
     /// The caption and the question.
     #[must_use]
-    pub fn text(&self) -> (&'static str, &'static str) {
-        SPEECH_PROMPTS
-            .get(self.stage)
-            .map_or(("", ""), |(title, question, _, _)| (*title, *question))
+    pub const fn text(&self) -> (&'static str, &'static str) {
+        (self.input.title, self.input.prompt)
     }
 }
 
@@ -1691,10 +1683,9 @@ impl BatteryMonitor {
         let Some(prompt) = self.prompt.take() else {
             return;
         };
-        let (title, question) = prompt.text();
-        remember_answer(settings, title, question, prompt.field.value());
+        let answer = prompt.input.answer(true, settings);
         if let Some((_, _, key, _)) = SPEECH_PROMPTS.get(prompt.stage) {
-            settings.set(key, prompt.field.value());
+            settings.set(key, answer);
         }
         self.prompt = Prompt::at(prompt.stage + 1, settings);
     }
@@ -1709,7 +1700,7 @@ impl BatteryMonitor {
         let Some(prompt) = self.prompt.as_mut() else {
             return false;
         };
-        match prompt.field.key(event) {
+        match prompt.input.key(event) {
             KeyOutcome::Submitted => self.answer(settings),
             KeyOutcome::Cancelled => self.cancel(),
             KeyOutcome::Changed => {}
@@ -2468,7 +2459,7 @@ pub fn overlay(
             .child(div().text_sm().text_color(rgb(theme::TEXT)).child(question))
             .child(crate::textfield::text_field(
                 "battery-prompt-value",
-                &prompt.field,
+                &prompt.input.field,
                 &focus.prompt,
                 focused,
                 px(310.0),
@@ -3543,7 +3534,7 @@ mod tests {
             ("Notification", "What do you want it to say?")
         );
         assert_eq!(
-            prompt.field.value(),
+            prompt.input.field.value(),
             "WARNING, Battery at {batv} Volt, {batp} percent"
         );
         battery.answer(&mut settings);
@@ -3555,7 +3546,7 @@ mod tests {
         let prompt = battery.prompt().unwrap();
         assert_eq!(prompt.text().1, "What Voltage do you want to warn at?");
         assert_eq!(
-            prompt.field.value(),
+            prompt.input.field.value(),
             "10.5",
             "the setting, over the default"
         );
@@ -3588,7 +3579,7 @@ mod tests {
 
         battery.click_speech(&mut settings);
         for answer in ["LOW {batv}", "11.1", "30"] {
-            battery.prompt_mut().unwrap().field.set(answer);
+            battery.prompt_mut().unwrap().input.field.set(answer);
             battery.answer(&mut settings);
         }
         assert!(battery.prompt().is_none(), "three questions");
@@ -3618,7 +3609,7 @@ mod tests {
         again.click_speech(&mut restarted);
         again.click_speech(&mut restarted);
         assert_eq!(
-            again.prompt().map(|prompt| prompt.field.value().to_owned()),
+            again.prompt().map(|prompt| prompt.input.field.value().to_owned()),
             Some("LOW {batv}".to_owned())
         );
         let _ = mp_os::fs::remove_dir_all(&dir);

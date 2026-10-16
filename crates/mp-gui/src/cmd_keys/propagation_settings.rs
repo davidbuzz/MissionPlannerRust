@@ -546,13 +546,11 @@ impl Form {
         self.set_state(check, state, settings);
     }
 
-    /// A click: an unticked box ticked, any other unticked (`ThreeState` is false).
+    /// A click: an unticked box ticked, any other unticked (`ThreeState` is false), as every
+    /// check box here takes one ([`CheckState::clicked`]).
     pub fn click(&mut self, check: Check, settings: &mut Persisted) {
         self.commit(settings);
-        let state = match self.check(check) {
-            CheckState::Unchecked => CheckState::Checked,
-            CheckState::Checked | CheckState::Indeterminate => CheckState::Unchecked,
-        };
+        let state = self.check(check).clicked();
         self.set_state(check, state, settings);
     }
 

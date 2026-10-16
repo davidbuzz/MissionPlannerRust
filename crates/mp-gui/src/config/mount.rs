@@ -1014,13 +1014,13 @@ impl Mount {
         self.setup_number(first + 3, max_setup, &angmax, table, lookup);
         // `setup(new double[] { -1, 1 }, new double[] { 1, 0 }, new[] { X_REV, X_REVERSED })`:
         // the first name the vehicle has, with its values; neither, and the box is untouched.
-        let reverse = [
-            (format!("{text}_REV"), -1.0, 1.0),
-            (format!("{text}_REVERSED"), 1.0, 0.0),
-        ];
-        if let Some((name, on, off)) = reverse.iter().find(|(name, _, _)| has(table, name)) {
-            self.tick_mut(tick).setup(*on, *off, name, table);
-        }
+        self.tick_mut(tick).setup_choices(
+            &[
+                (-1.0, 1.0, format!("{text}_REV")),
+                (1.0, 0.0, format!("{text}_REVERSED")),
+            ],
+            table,
+        );
         let param = match channel {
             Channel::Tilt => format!("{HEAD}RC_IN_TILT"),
             Channel::Roll => format!("{HEAD}RC_IN_ROLL"),
@@ -1122,11 +1122,7 @@ impl Mount {
         }
         let write = match input {
             Input::Type => combo.choose(key),
-            _ => combo.select(key).then(|| {
-                #[allow(clippy::cast_precision_loss)]
-                let value = key as f64;
-                Write::other(&combo.param, value)
-            }),
+            _ => combo.choose_named(key),
         };
         write.map(Job::control).into_iter().collect()
     }

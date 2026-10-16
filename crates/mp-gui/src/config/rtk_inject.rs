@@ -96,6 +96,7 @@ use mp_units::LatLon;
 use mp_vehicle::LatLngAlt;
 
 use crate::MissionPlanner;
+use crate::config::mavlink_controls::{InputBox, ProgressBar};
 use crate::config::optional::{at, button, group, label, message_box, text_box};
 use crate::config::servo_output::{
     Check, CheckState, Combo, Message, check_box, combo_box, dropdown,
@@ -3458,12 +3459,8 @@ pub enum Dropdown {
 /// A question `Open` or a handler asks: `InputBox.Show(title, prompt, ref value)`.
 #[derive(Debug)]
 pub struct Prompt {
-    /// The caption.
-    pub title: &'static str,
-    /// The question.
-    pub prompt: &'static str,
-    /// The answer box.
-    pub field: TextField,
+    /// The box: its caption, its question and its answer box.
+    pub input: InputBox,
     /// What the answer is for.
     pub purpose: Purpose,
 }
@@ -3986,10 +3983,7 @@ impl RtkInject {
         let Some(prompt) = self.prompt.take() else {
             return;
         };
-        let text = prompt.field.value().to_owned();
-        if ok {
-            super::optional::remember_answer(persisted, prompt.title, prompt.prompt, &text);
-        }
+        let text = prompt.input.answer(ok, persisted);
         if prompt.purpose == Purpose::Location {
             if ok && let Some(page) = self.page.as_mut() {
                 page.save_base_pos(&text, cs_base, persisted);
@@ -4225,9 +4219,7 @@ fn prompt(title: &'static str, question: &'static str, value: &str, purpose: Pur
 
 fn prompt_of(title: &'static str, question: &'static str, value: &str, purpose: Purpose) -> Prompt {
     Prompt {
-        title,
-        prompt: question,
-        field: field(value),
+        input: InputBox::new(title, question, value),
         purpose,
     }
 }
@@ -4677,13 +4669,13 @@ pub fn record_facts(rtk: &RtkInject, view: &TelemetryView, persisted: &Persisted
     record("config.rtk.running", rtk.is_running());
     record(
         "config.rtk.prompt",
-        rtk.prompt.as_ref().map_or("none", |prompt| prompt.title),
+        rtk.prompt.as_ref().map_or("none", |prompt| prompt.input.title),
     );
     record(
         "config.rtk.prompt.value",
         rtk.prompt
             .as_ref()
-            .map_or_else(none, |prompt| prompt.field.value().to_owned()),
+            .map_or_else(none, |prompt| prompt.input.field.value().to_owned()),
     );
     record(
         "config.rtk.message",
@@ -5459,12 +5451,12 @@ fn grid_element(
 fn bars_element(page: &Page, (x, y, width, height): Place) -> AnyElement {
     let (minimum, maximum) = BAR_RANGE;
     let bar_height = height - 30.0;
-    #[allow(clippy::cast_precision_loss)]
-    let fraction = |value: i32| {
-        // `HorizontalProgressBar2.Value`: kept above the minimum, and at most the maximum.
-        let value = value.clamp(minimum + 1, maximum);
-        (value - minimum) as f32 / (maximum - minimum) as f32
-    };
+    // `new VerticalProgressBar2() { Minimum = 25, Maximum = 55 }`: a value kept one above the
+    // minimum, and at most the maximum.
+    let mut scale = ProgressBar::new2();
+    scale.set_minimum(minimum);
+    scale.set_maximum(maximum);
+    let fraction = |value: i32| scale.fraction_at(value);
     let mut panel = crate::probe::measured("rtk-panel1", at(x, y, width, height));
     for bar in &page.bars {
         #[allow(clippy::cast_precision_loss)]
@@ -5597,17 +5589,17 @@ pub fn overlay(
             div()
                 .text_xs()
                 .text_color(rgb(theme::DIM))
-                .child(prompt.title),
+                .child(prompt.input.title),
         )
         .child(
             div()
                 .text_sm()
                 .text_color(rgb(theme::TEXT))
-                .child(prompt.prompt),
+                .child(prompt.input.prompt),
         )
         .child(crate::textfield::text_field(
             "rtk-prompt-value",
-            &prompt.field,
+            &prompt.input.field,
             &focus.prompt,
             focused,
             px(310.0),
@@ -5616,7 +5608,7 @@ pub fn overlay(
                     .rtk_inject
                     .prompt
                     .as_mut()
-                    .map(|prompt| prompt.field.key(event));
+                    .map(|prompt| prompt.input.key(event));
                 match outcome {
                     Some(KeyOutcome::Submitted) => this.rtk_answer(true),
                     Some(KeyOutcome::Cancelled) => this.rtk_answer(false),
@@ -6969,9 +6961,9 @@ mod tests {
         let mut rtk = page_on(&mut persisted, dir.join("list.xml"));
         rtk.connect_click(&mut persisted, (-35.0, 149.0, 500.0));
         let prompt = rtk.prompt.as_ref().expect("the question");
-        assert_eq!(prompt.title, "remote host");
+        assert_eq!(prompt.input.title, "remote host");
         assert_eq!(
-            prompt.field.value(),
+            prompt.input.field.value(),
             "ntrip://user:pass@127.0.0.1:2101/MOUNT"
         );
         assert_eq!(rtk.pending.as_ref().map(|spec| spec.ntrip.lat), Some(-35.0));
@@ -6997,7 +6989,7 @@ mod tests {
         }
         rtk.connect_click(&mut persisted, (0.0, 0.0, 0.0));
         assert_eq!(
-            rtk.prompt.as_ref().map(|p| p.field.value()),
+            rtk.prompt.as_ref().map(|p| p.input.field.value()),
             Some("127.0.0.1")
         );
         rtk.answer(true, &mut persisted, LatLngAlt::ZERO);
@@ -7006,8 +6998,8 @@ mod tests {
             persisted.get("InputBoxremotehostEnterhostnameipensureremoteendisalreadystarted"),
             Some("127.0.0.1")
         );
-        assert_eq!(rtk.prompt.as_ref().map(|p| p.title), Some("remote Port"));
-        assert_eq!(rtk.prompt.as_ref().map(|p| p.field.value()), Some("5760"));
+        assert_eq!(rtk.prompt.as_ref().map(|p| p.input.title), Some("remote Port"));
+        assert_eq!(rtk.prompt.as_ref().map(|p| p.input.field.value()), Some("5760"));
         rtk.answer(false, &mut persisted, LatLngAlt::ZERO);
         assert_eq!(
             rtk.messages.pop_front().map(|m| m.text),
@@ -7025,7 +7017,7 @@ mod tests {
             select_text(&mut page.ports, "UDP Host");
         }
         rtk.connect_click(&mut persisted, (0.0, 0.0, 0.0));
-        assert_eq!(rtk.prompt.as_ref().map(|p| p.title), Some("Listern Port"));
+        assert_eq!(rtk.prompt.as_ref().map(|p| p.input.title), Some("Listern Port"));
         rtk.answer(false, &mut persisted, LatLngAlt::ZERO);
         until("the loop", || rtk.is_running());
         assert!(!rtk.is_open());
@@ -7108,7 +7100,7 @@ mod tests {
         assert_eq!(persisted.get(questions[4].2), None, "Cancel keeps nothing");
         rtk.save_click();
         if let Some(prompt) = rtk.prompt.as_mut() {
-            prompt.field.set("a, b");
+            prompt.input.field.set("a, b");
         }
         rtk.answer(true, &mut persisted, LatLngAlt::ZERO);
         assert_eq!(persisted.get(questions[4].2), Some("a%2C+b"));
@@ -7125,9 +7117,9 @@ mod tests {
         let mut persisted = Persisted::at(None);
         let mut rtk = page_on(&mut persisted, list.clone());
         rtk.save_click();
-        assert_eq!(rtk.prompt.as_ref().map(|p| p.title), Some("Enter Location"));
+        assert_eq!(rtk.prompt.as_ref().map(|p| p.input.title), Some("Enter Location"));
         if let Some(prompt) = rtk.prompt.as_mut() {
-            prompt.field.set("roof");
+            prompt.input.field.set("roof");
         }
         let base = LatLngAlt {
             lat: -35.363_261,

@@ -39,6 +39,7 @@ use gpui::{
 
 use super::{BUTTON_ROWS, Editing, List, Sticks, forms};
 use crate::MissionPlanner;
+use crate::config::mavlink_controls::ProgressBar;
 use crate::ui::{action, theme};
 
 /// A place: x, y, width, height.
@@ -270,13 +271,7 @@ fn check(
 /// and at its maximum; with its label, the value at a red line where it lies (`maxline`).
 /// `// C#: ExtLibs/Controls/HorizontalProgressBar.cs:74-116, 166-205; Joystick/JoystickAxis.cs:215-222`
 fn bar(id: String, place: Place, value: i32, (min, max): (i32, i32), labelled: bool) -> AnyElement {
-    let shown = if value <= min {
-        min + 1
-    } else {
-        value.min(max)
-    };
-    #[allow(clippy::cast_precision_loss)] // PWM values
-    let fraction = (shown - min) as f32 / (max - min).max(1) as f32;
+    let fraction = ProgressBar::ranged(min, max).fraction_at(value);
     let mut body = crate::probe::measured(id, div())
         .relative()
         .size_full()

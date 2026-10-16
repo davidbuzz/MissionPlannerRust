@@ -734,19 +734,6 @@ pub fn at_least_47(banner: Option<&str>) -> bool {
         })
 }
 
-/// `MavlinkNumericUpDown.setup`'s choice of name: "default to first item", then the first the
-/// vehicle has.
-/// `// C#: Controls/MavlinkNumericUpDown.cs:54-64`
-#[must_use]
-pub fn chosen(names: &[&'static str], parameters: &[(String, f64)]) -> &'static str {
-    names
-        .iter()
-        .copied()
-        .find(|name| has(parameters, name))
-        .or_else(|| names.first().copied())
-        .unwrap_or_default()
-}
-
 /// `double.ToString()` for a parameter's value, as Write Params' restore types it back into a box:
 /// fifteen significant digits, and the exponent form below 1E-04 and from 1E+15.
 /// `// C#: GCSViews/ConfigurationView/ConfigArducopter.cs:373`
@@ -1165,17 +1152,13 @@ impl<H: Copy> ExtendedTuning<H> {
         for (combo, spec) in self.combos.iter_mut().zip(COMBOS) {
             match spec.bind {
                 ComboBind::Options(name) => combo.setup(options(name, lookup), name, parameters),
-                ComboBind::Names(names) => {
-                    if let Some(name) = names.iter().find(|name| has(parameters, name)) {
-                        combo.setup(options(name, lookup), name, parameters);
-                    }
-                }
+                ComboBind::Names(names) => combo.setup_names(names, parameters, lookup),
             }
         }
         // `// C#: :60-166`
         for ((number, scale), spec) in self.numbers.iter_mut().zip(&mut self.scales).zip(NUMBERS) {
             let (how, names) = spec.bind.call(parameters);
-            number.setup(how, chosen(names, parameters), parameters, lookup);
+            number.setup_names(how, names, parameters, lookup);
             *scale = how.scale;
         }
         // "unlock entries if they differ": `Value`s compared as the C# compares them.
@@ -2884,6 +2867,7 @@ mod tests {
         let page = opened(&table(&[]));
         assert_eq!(param_of(&page, "RATE_RLL_P"), "RATE_RLL_P");
         assert!(!page.number(at("RATE_RLL_P")).unwrap().enabled);
+        let chosen = crate::config::mavlink_controls::bound_name;
         assert_eq!(chosen(&["A", "B"], &table(&[("B", 1.0)])), "B");
         assert_eq!(chosen(&["A", "B"], &[]), "A");
         // A combo with a names list: the first the vehicle has.

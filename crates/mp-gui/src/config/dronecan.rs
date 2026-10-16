@@ -152,6 +152,7 @@ use crate::config::failsafe::CheckState;
 use crate::config::servo_output::{Check, Combo, ERROR_TITLE, Message, check_box, combo_box};
 use crate::setup::Key;
 use crate::telemetry::{Lookup, Telemetry, TelemetryView};
+use crate::config::mavlink_controls::InputBox;
 use crate::textfield::{KeyOutcome, TextField};
 use crate::ui::{action, panel, theme};
 
@@ -695,11 +696,10 @@ enum PathFor {
     SaveParams,
 }
 
-/// An `InputBox`: what it asks, and for what.
+/// An `InputBox`, and what it is for.
 #[derive(Debug)]
 struct Input {
-    title: &'static str,
-    field: TextField,
+    input: InputBox,
     for_: InputFor,
 }
 
@@ -2507,23 +2507,33 @@ impl DroneCan {
         );
     }
 
-    /// An `InputBox` up.
+    /// An `InputBox` up: `InputBox.Show(title, title, ref value)`, the question its caption.
+    /// `// C#: GCSViews/ConfigurationView/ConfigDroneCAN.cs:752, 1007, 1012`
     fn ask(&mut self, title: &'static str, value: &str, for_: InputFor) {
-        let mut field = TextField::new("");
-        field.set(value);
-        self.input = Some(Input { title, field, for_ });
+        self.input = Some(Input {
+            input: InputBox::new(title, title, value),
+            for_,
+        });
     }
 
-    /// An `InputBox` answered: its number, and the next step.
-    pub fn answer_input(&mut self, ok: bool, now: Instant) {
+    /// An `InputBox` answered: its OK's text kept in `settings`, as `InputBox` keeps every titled
+    /// answer, then its number and the next step.
+    /// `// C#: GCSViews/ConfigurationView/ConfigDroneCAN.cs:752-753, 1007-1016; ExtLibs/Controls/InputBox.cs:178-184`
+    pub fn answer_input(
+        &mut self,
+        ok: bool,
+        now: Instant,
+        settings: &mut crate::settings::Persisted,
+    ) {
         let Some(input) = self.input.take() else {
             return;
         };
+        let answer = input.input.answer(ok, settings);
         if !ok {
             return;
         }
         // `InputBox.Show(..., ref int)`: a value that is not a number leaves it as it was.
-        let value = |default: u32| input.field.value().trim().parse::<u32>().unwrap_or(default);
+        let value = |default: u32| answer.trim().parse::<u32>().unwrap_or(default);
         match input.for_ {
             InputFor::Here3Port => {
                 let port = u16::try_from(value(500)).unwrap_or(500);
@@ -3509,17 +3519,22 @@ impl DroneCan {
     }
 
     /// A key in the `InputBox`.
-    pub fn input_key(&mut self, event: &KeyDownEvent, now: Instant) -> bool {
+    pub fn input_key(
+        &mut self,
+        event: &KeyDownEvent,
+        now: Instant,
+        settings: &mut crate::settings::Persisted,
+    ) -> bool {
         let Some(input) = self.input.as_mut() else {
             return false;
         };
-        match input.field.key(event) {
+        match input.input.key(event) {
             KeyOutcome::Submitted => {
-                self.answer_input(true, now);
+                self.answer_input(true, now, settings);
                 true
             }
             KeyOutcome::Cancelled => {
-                self.answer_input(false, now);
+                self.answer_input(false, now, settings);
                 true
             }
             KeyOutcome::Changed => true,
@@ -3983,7 +3998,7 @@ pub fn record_facts(page: &DroneCan) {
     record("config.dronecan.passthrough", page.passthrough.is_some());
     record(
         "config.dronecan.input",
-        page.input.as_ref().map_or("none", |input| input.title),
+        page.input.as_ref().map_or("none", |input| input.input.title),
     );
 }
 
@@ -5166,7 +5181,9 @@ fn input_dialog(
             theme::ACCENT,
             true,
             cx.listener(|this, _event: &(), _window, cx| {
-                this.extra.dronecan.answer_input(true, Instant::now());
+                this.extra
+                    .dronecan
+                    .answer_input(true, Instant::now(), &mut this.persisted);
                 cx.notify();
             }),
         ),
@@ -5176,7 +5193,9 @@ fn input_dialog(
             theme::DIM,
             true,
             cx.listener(|this, _event: &(), _window, cx| {
-                this.extra.dronecan.answer_input(false, Instant::now());
+                this.extra
+                    .dronecan
+                    .answer_input(false, Instant::now(), &mut this.persisted);
                 cx.notify();
             }),
         ),
@@ -5195,22 +5214,26 @@ fn input_dialog(
             div()
                 .text_xs()
                 .text_color(rgb(theme::DIM))
-                .child(input.title),
+                .child(input.input.title),
         )
         .child(
             div()
                 .text_sm()
                 .text_color(rgb(theme::TEXT))
-                .child(input.title),
+                .child(input.input.prompt),
         )
         .child(crate::textfield::text_field(
             "dronecan-input-value",
-            &input.field,
+            &input.input.field,
             handle,
             focused,
             px(310.0),
             cx.listener(|this, event: &KeyDownEvent, _window, cx| {
-                if this.extra.dronecan.input_key(event, Instant::now()) {
+                if this
+                    .extra
+                    .dronecan
+                    .input_key(event, Instant::now(), &mut this.persisted)
+                {
                     cx.notify();
                 }
             }),

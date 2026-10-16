@@ -118,6 +118,7 @@ wrote).
   (mended 2026-10-16: every section bundled, the shown vehicle's read.)
 - `pdef.rs`'s `from_banner`: for a banner with one letter, "V4.5a", the C# reads an empty group,
   throws and gives no version; the Rust's test pins 4.5.49.
+- (Mended 2026-10-16: one module, `config/mavlink_controls.rs`.)
 - Shared controls (`MavlinkCheckBox`, `MavlinkComboBox`, `MavlinkNumericUpDown`, `InputBox`, the
   two `HorizontalProgressBar`s) are re-implemented per screen, not as one module - `tested` at
   medium confidence.

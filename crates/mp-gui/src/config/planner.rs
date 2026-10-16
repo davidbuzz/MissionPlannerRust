@@ -112,6 +112,7 @@ use gpui::{
 use mp_mavlink_dialects::all::{MavDataStream, MavMessage, RequestDataStream};
 use mp_vehicle::units::DisplayUnits;
 
+use super::mavlink_controls::InputBox;
 use super::servo_output::Combo;
 use crate::MissionPlanner;
 use crate::display_view::{DisplayName, DisplayView};
@@ -1119,13 +1120,14 @@ fn steps(name: &str) -> &'static [Step] {
     }
 }
 
-/// The `InputBox` showing: the step, and the text in its box.
+/// The `InputBox` showing: the step, and the box.
 #[derive(Debug)]
 pub struct Prompt {
     /// What it asks.
     pub step: Step,
-    /// The box's text, which starts as the key's value or the step's default.
-    pub field: TextField,
+    /// The box, asking the step's question under its title; its text starts as the key's value
+    /// or the step's default.
+    pub input: InputBox,
 }
 
 /// A message box: its caption and its text.
@@ -2067,10 +2069,13 @@ impl Planner {
 
     /// Shows the next `InputBox`, its box holding the key's value or the handler's literal.
     fn next_prompt(&mut self, settings: &Persisted) {
-        self.prompt = self.queued.pop_front().map(|step| {
-            let mut field = TextField::new("");
-            field.set(settings.get(step.key).unwrap_or(step.default));
-            Prompt { step, field }
+        self.prompt = self.queued.pop_front().map(|step| Prompt {
+            step,
+            input: InputBox::new(
+                step.title,
+                step.question,
+                settings.get(step.key).unwrap_or(step.default),
+            ),
         });
     }
 
@@ -2082,13 +2087,7 @@ impl Planner {
         let Some(prompt) = self.prompt.take() else {
             return;
         };
-        let answer = prompt.field.value().to_owned();
-        super::optional::remember_answer(
-            settings,
-            prompt.step.title,
-            prompt.step.question,
-            &answer,
-        );
+        let answer = prompt.input.answer(true, settings);
         match prompt.step.store {
             Store::Text => settings.set(prompt.step.key, answer),
             // C#: ConfigPlanner.cs:684 - saved in metres.
@@ -2127,7 +2126,7 @@ impl Planner {
         let Some(prompt) = self.prompt.as_mut() else {
             return false;
         };
-        match prompt.field.key(event) {
+        match prompt.input.key(event) {
             KeyOutcome::Submitted => self.answer(settings),
             KeyOutcome::Cancelled => self.cancel(),
             KeyOutcome::Changed => {}
@@ -3282,7 +3281,7 @@ fn dialog(
             )
             .child(crate::textfield::text_field(
                 "planner-prompt-value",
-                &prompt.field,
+                &prompt.input.field,
                 &focus.prompt,
                 focused,
                 px(372.0),
@@ -3580,7 +3579,7 @@ fn facts(planner: &Planner, settings: &Persisted, read_mission_on_connect: bool)
         "config.planner.prompt.text",
         planner
             .prompt()
-            .map_or_else(String::new, |prompt| prompt.field.value().to_owned()),
+            .map_or_else(String::new, |prompt| prompt.input.field.value().to_owned()),
     );
     facts.record(
         "config.planner.message",
@@ -4283,7 +4282,7 @@ mod tests {
         let prompt = planner.prompt().expect("the InputBox");
         assert_eq!(prompt.step.title, "Notification");
         assert_eq!(prompt.step.question, "What do you want it to say?");
-        assert_eq!(prompt.field.value(), "Heading to Waypoint {wpn}");
+        assert_eq!(prompt.input.field.value(), "Heading to Waypoint {wpn}");
         // Typing, then Enter.
         assert!(planner.prompt_key(&key("backspace", None), &mut settings));
         assert!(planner.prompt_key(&key("x", Some("x")), &mut settings));
@@ -4300,7 +4299,7 @@ mod tests {
         // Ticked again, the box starts from what was saved.
         planner.click("CHK_speechwaypoint", &mut settings);
         assert_eq!(
-            planner.prompt().map(|prompt| prompt.field.value()),
+            planner.prompt().map(|prompt| prompt.input.field.value()),
             Some("Heading to Waypoint {wpnx")
         );
     }
@@ -4318,7 +4317,7 @@ mod tests {
         );
         let prompt = planner.prompt().expect("the voltage");
         assert_eq!(prompt.step.title, "Battery Level");
-        assert_eq!(prompt.field.value(), "9.6");
+        assert_eq!(prompt.input.field.value(), "9.6");
         planner.cancel();
         assert!(planner.prompt().is_none());
         assert_eq!(settings.get("speechbatteryvolt"), None);
@@ -4380,7 +4379,7 @@ mod tests {
             for (key, default) in answers {
                 let prompt = planner.prompt().expect("a box");
                 assert_eq!(prompt.step.key, *key, "{name}");
-                assert_eq!(prompt.field.value(), *default, "{name}");
+                assert_eq!(prompt.input.field.value(), *default, "{name}");
                 planner.answer(&mut settings);
                 assert_eq!(settings.get(key), Some(*default), "{name}");
             }
@@ -4397,7 +4396,7 @@ mod tests {
         planner.click("CHK_speechaltwarning", &mut settings);
         planner.answer(&mut settings);
         let prompt = planner.prompt.as_mut().expect("the altitude");
-        prompt.field.set("10");
+        prompt.input.field.set("10");
         planner.answer(&mut settings);
         // C#: ConfigPlanner.cs:684 - 10 / 3.2808399f, as `double.ToString()` writes it.
         let expected = mp_log::netfmt::double(10.0 / f64::from(3.280_84_f32));
@@ -4411,6 +4410,7 @@ mod tests {
             .prompt
             .as_mut()
             .expect("the altitude")
+            .input
             .field
             .set("low");
         planner.answer(&mut settings);
@@ -4511,7 +4511,7 @@ mod tests {
         // OK on both: each kept under its own caption.
         planner.click("CHK_speecharmdisarm", &mut settings);
         planner.click("CHK_speecharmdisarm", &mut settings);
-        planner.prompt.as_mut().expect("Arm").field.set("Armed, go");
+        planner.prompt.as_mut().expect("Arm").input.field.set("Armed, go");
         planner.answer(&mut settings);
         planner.answer(&mut settings);
         assert_eq!(
@@ -4529,7 +4529,7 @@ mod tests {
             settings.get("InputBoxNotificationWhatdoyouwantittosay"),
             Some("WARNING%2C+low+altitude+%7Balt%7D")
         );
-        planner.prompt.as_mut().expect("Min Alt").field.set("low");
+        planner.prompt.as_mut().expect("Min Alt").input.field.set("low");
         planner.answer(&mut settings);
         assert!(planner.message().is_some(), "the FormatException's box");
         assert_eq!(
@@ -4547,11 +4547,11 @@ mod tests {
         let prompt = planner.prompt().expect("the description");
         assert_eq!(prompt.step.title, "Description");
         assert_eq!(
-            prompt.field.value(),
+            prompt.input.field.value(),
             "{alt}{altunit} {airspeed}{speedunit} id:{sysid} Sats:{satcount} HDOP:{gpshdop} \
              Volts:{battery_voltage}"
         );
-        planner.prompt.as_mut().expect("open").field.set("{alt}");
+        planner.prompt.as_mut().expect("open").input.field.set("{alt}");
         planner.answer(&mut settings);
         assert_eq!(settings.get("mapicondesc"), Some("{alt}"));
         assert_eq!(settings.get("mapicondesc_default"), Some("{alt}"));

@@ -101,7 +101,9 @@ use mp_calibration::MagCalLog;
 use mp_link::requests::RequestOutcome;
 
 use super::battery_monitor::{float_text, param_text, parse_float};
-use super::failsafe::{Lookup, options};
+use super::mavlink_controls::{
+    Check, CheckState, Combo, InputBox, Lookup, ProgressBar, Write, options, value_of,
+};
 use super::flight_modes::{Firmware, Progress, firmware_of};
 use super::live_magcal::LiveMagCal;
 use crate::MissionPlanner;
@@ -297,14 +299,6 @@ pub fn compass_type_name(kind: u32) -> String {
         other => return other.to_string(),
     }
     .to_owned()
-}
-
-/// A parameter's value, if the vehicle has listed it.
-fn value_of(parameters: &[(String, f64)], name: &str) -> Option<f64> {
-    parameters
-        .iter()
-        .find(|(held, _)| held == name)
-        .map(|(_, value)| *value)
 }
 
 /// `MAVLinkParamList[string[] names]`: the one of the names the vehicle lists, or nothing when it
@@ -503,189 +497,35 @@ pub fn first3_writes(rows: &[DeviceRow]) -> Vec<PriorityWrite> {
 }
 
 // ---------------------------------------------------------------------------------------------
-// The bound controls: `Controls/MavlinkCheckBox.cs` and `Controls/MavlinkComboBox.cs`.
+// The bound controls: `Controls/MavlinkCheckBox.cs` and `Controls/MavlinkComboBox.cs`, the shared
+// ones of `mavlink_controls`.
 // ---------------------------------------------------------------------------------------------
 
-/// A check box's three states.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-pub enum CheckState {
-    /// Off.
-    #[default]
-    Unchecked,
-    /// On.
-    Checked,
-    /// The vehicle holds neither the on value nor the off value.
-    Indeterminate,
+/// A Use box: `setup(1, 0, new[] { names }, paramlist)`, bound to the first name the vehicle
+/// lists, and left as the designer has it - disabled and unchecked - when it lists none.
+/// `// C#: GCSViews/ConfigurationView/ConfigHWCompass2.cs:124-126; Controls/MavlinkCheckBox.cs:47-58`
+fn use_box(names: &[&str], parameters: &[(String, f64)]) -> Check {
+    let mut check = Check::default();
+    check.setup_names(1.0, 0.0, names, parameters);
+    check
 }
 
-impl CheckState {
-    /// The word a fact carries.
-    #[must_use]
-    pub const fn key(self) -> &'static str {
-        match self {
-            Self::Unchecked => "unchecked",
-            Self::Checked => "checked",
-            Self::Indeterminate => "indeterminate",
-        }
-    }
+/// A box set up with one name: `setup(1, 0, paramname, paramlist)`, the name taken whether or
+/// not the vehicle has it.
+/// `// C#: GCSViews/ConfigurationView/ConfigHWCompass.cs:74, 92-93; Controls/MavlinkCheckBox.cs:60-98`
+fn named_box(name: &str, parameters: &[(String, f64)]) -> Check {
+    let mut check = Check::default();
+    check.setup(1.0, 0.0, name, parameters);
+    check
 }
 
-/// A `MavlinkCheckBox` set up with `OnValue` 1 and `OffValue` 0, as every one on this page is.
-/// `// C#: Controls/MavlinkCheckBox.cs:24-98`
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-pub struct Check {
-    /// `ParamName`, once `setup` found one the vehicle lists.
-    pub param: Option<&'static str>,
-    /// What the box shows.
-    pub state: CheckState,
-    /// `Enabled`: false in the designer, true once bound.
-    pub enabled: bool,
-}
-
-impl Check {
-    /// `setup(1, 0, names, paramlist)`: bound to the first name the vehicle lists, checked for 1,
-    /// unchecked for 0 and indeterminate otherwise; left as the designer has it - disabled and
-    /// unchecked - when it lists none.
-    /// `// C#: Controls/MavlinkCheckBox.cs:47-98`
-    fn setup(names: &[&'static str], parameters: &[(String, f64)]) -> Self {
-        let Some((param, value)) = names
-            .iter()
-            .find_map(|name| value_of(parameters, name).map(|value| (*name, value)))
-        else {
-            return Self::default();
-        };
-        #[allow(clippy::float_cmp)] // `paramlist[paramname].Value == OnValue`
-        let state = if value == 1.0 {
-            CheckState::Checked
-        } else if value == 0.0 {
-            CheckState::Unchecked
-        } else {
-            CheckState::Indeterminate
-        };
-        Self {
-            param: Some(param),
-            state,
-            enabled: true,
-        }
-    }
-
-    /// A click. WinForms takes a two-state box from checked or indeterminate to unchecked and from
-    /// unchecked to checked, each a change of `Checked`, so each writes: 1 when it ends checked, 0
-    /// otherwise. A disabled box takes no click.
-    /// `// C#: Controls/MavlinkCheckBox.cs:106-143`
-    fn click(&mut self) -> Option<Job> {
-        let param = self.param.filter(|_| self.enabled)?;
-        self.state = match self.state {
-            CheckState::Unchecked => CheckState::Checked,
-            CheckState::Checked | CheckState::Indeterminate => CheckState::Unchecked,
-        };
-        let value = if self.state == CheckState::Checked {
-            1.0
-        } else {
-            0.0
-        };
-        // `String.Format(Strings.ErrorSetValueFailed, ParamName)`, for a `false` and a throw alike.
-        Some(Job::bound(param, value, format!("Set {param} Failed")))
-    }
-
-    /// `Checked`: on, or indeterminate.
-    #[must_use]
-    pub const fn checked(self) -> bool {
-        !matches!(self.state, CheckState::Unchecked)
-    }
-}
-
-/// A `MavlinkComboBox` set up with an option list.
-/// `// C#: Controls/MavlinkComboBox.cs:31-99`
-#[derive(Debug, Clone, PartialEq, Eq, Default)]
-pub struct Combo {
-    /// `ParamName`.
-    pub param: &'static str,
-    /// `DataSource`: the documented values and their text.
-    pub options: Vec<(i64, String)>,
-    /// The selected option; `None` is `SelectedIndex` -1.
-    pub selected: Option<i64>,
-    /// `Enabled`: false in the designer, true once bound.
-    pub enabled: bool,
-}
-
-impl Combo {
-    /// `setup(source, paramname, paramlist)`. Setting `DataSource` selects the first option; a
-    /// parameter the vehicle lists then sets `SelectedValue` to its `(int)` value, which selects
-    /// nothing if the list does not hold it.
-    /// `// C#: Controls/MavlinkComboBox.cs:73-99`
-    fn setup(param: &'static str, parameters: &[(String, f64)], lookup: Lookup) -> Self {
-        let options = options(param, lookup);
-        let first = options.first().map(|(key, _)| *key);
-        match value_of(parameters, param) {
-            Some(value) => {
-                #[allow(clippy::cast_possible_truncation)] // `(int)paramlist[paramname].Value`
-                let value = value as i64;
-                let selected = options
-                    .iter()
-                    .any(|(key, _)| *key == value)
-                    .then_some(value);
-                Self {
-                    param,
-                    options,
-                    selected,
-                    enabled: true,
-                }
-            }
-            None => Self {
-                param,
-                options,
-                selected: first,
-                enabled: false,
-            },
-        }
-    }
-
-    /// The selected option's text, blank when nothing is selected.
-    #[must_use]
-    pub fn text(&self) -> &str {
-        self.selected
-            .and_then(|selected| self.options.iter().find(|(key, _)| *key == selected))
-            .map_or("", |(_, text)| text.as_str())
-    }
-
-    /// Chooses an option: a write when the selection changed, `(float)(int)SelectedValue`, whose
-    /// failure is "Set {name} Failed!".
-    /// `// C#: Controls/MavlinkComboBox.cs:133-199`
-    fn choose(&mut self, key: i64) -> Option<Job> {
-        if !self.enabled || self.selected == Some(key) {
-            return None;
-        }
-        if !self.options.iter().any(|(option, _)| *option == key) {
-            return None;
-        }
-        self.selected = Some(key);
-        #[allow(clippy::cast_precision_loss)] // option values are small integers
-        let value = f64::from(key as f32);
-        Some(Job::bound(
-            self.param,
-            value,
-            format!("Set {} Failed!", self.param),
-        ))
-    }
-
-    /// `SelectedIndex = index`: the option at that place, and its write if that changed the
-    /// selection. The handler runs whether or not the box is enabled.
-    /// `// C#: GCSViews/ConfigurationView/ConfigHWCompass.cs:639, 643, 664, 691`
-    fn select_index(&mut self, index: usize) -> Option<Job> {
-        let key = self.options.get(index).map(|(key, _)| *key)?;
-        if self.selected == Some(key) {
-            return None;
-        }
-        self.selected = Some(key);
-        #[allow(clippy::cast_precision_loss)] // option values are small integers
-        let value = f64::from(key as f32);
-        Some(Job::bound(
-            self.param,
-            value,
-            format!("Set {} Failed!", self.param),
-        ))
-    }
+/// A combo box set up with the parameter's documented values: `setup(GetParameterOptionsInt(...),
+/// paramname, paramlist)`.
+/// `// C#: GCSViews/ConfigurationView/ConfigHWCompass.cs:94-95; Controls/MavlinkComboBox.cs:73-99`
+fn listed(param: &str, parameters: &[(String, f64)], lookup: Lookup) -> Combo {
+    let mut combo = Combo::default();
+    combo.setup(options(param, lookup), param, parameters);
+    combo
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -715,6 +555,9 @@ pub fn one_place(value: f32) -> String {
 pub struct Onboard {
     /// `horizontalProgressBar1` to `3`'s `Value`.
     pub bars: [u8; 3],
+    /// The three bars as `HorizontalProgressBar` draws them, each set with its `Value`: 0 to 100,
+    /// a value back at 0 drawn one above it once it has moved off it.
+    drawn: [ProgressBar; 3],
     /// `pictureBox1` to `3`, green once their compass reports.
     pub green: [bool; 3],
     /// `lbl_obmagresult`'s text.
@@ -735,6 +578,7 @@ impl Default for Onboard {
     fn default() -> Self {
         Self {
             bars: [0; 3],
+            drawn: [ProgressBar::new(), ProgressBar::new(), ProgressBar::new()],
             green: [false; 3],
             text: String::new(),
             accept_enabled: false,
@@ -757,6 +601,20 @@ pub struct TickCount {
 }
 
 impl Onboard {
+    /// `horizontalProgressBarN.Value = value`, for the bar of the compass at `index`.
+    /// `// C#: GCSViews/ConfigurationView/ConfigHWCompass.cs:468-470, 538-542, 579-583; ExtLibs/Controls/HorizontalProgressBar.cs:74-115`
+    fn set_bar(&mut self, index: usize, value: u8) {
+        if let (Some(bar), Some(drawn)) = (self.bars.get_mut(index), self.drawn.get_mut(index)) {
+            *bar = value;
+            drawn.set_value(i32::from(value));
+        }
+    }
+
+    /// How full the bar of the compass at `index` is drawn.
+    fn bar_fraction(&self, index: usize) -> f32 {
+        self.drawn.get(index).map_or(0.0, ProgressBar::fraction)
+    }
+
     /// `timer1.Start()`: the first tick one interval from now.
     fn start_timer(&mut self, now: Instant) {
         self.timer = true;
@@ -783,9 +641,7 @@ impl Onboard {
         };
         let mut message = String::new();
         for progress in &log.progress {
-            if let Some(bar) = self.bars.get_mut(usize::from(progress.compass_id)) {
-                *bar = progress.percent;
-            }
+            self.set_bar(usize::from(progress.compass_id), progress.percent);
             message.push_str(&format!(
                 "id:{} {}% ",
                 progress.compass_id, progress.percent
@@ -807,9 +663,7 @@ impl Onboard {
                 mp_calibration::mag_cal_status_name(report.status),
             ));
             let index = usize::from(report.compass_id);
-            if let Some(bar) = self.bars.get_mut(index) {
-                *bar = 100;
-            }
+            self.set_bar(index, 100);
             if let Some(light) = self.green.get_mut(index) {
                 *light = true;
             }
@@ -867,8 +721,8 @@ pub enum Dialog {
     },
     /// `but_reboot_Click`'s "Reboot?", OK; Cancel stands for the box's close button.
     RebootQuestion,
-    /// Large Vehicle MagCal's `InputBox`: the heading typed so far.
-    MagCalYaw(TextField),
+    /// Large Vehicle MagCal's `InputBox`, the heading typed so far in its box.
+    MagCalYaw(InputBox),
     /// `buttonQuickPixhawk_Click`'s Yes/No question about the firmware.
     QuickFirmware,
     /// Live Calibration's "run the calibration anyway?", asked after Done while the coverage test
@@ -893,7 +747,7 @@ impl Dialog {
             Self::Message { title, text, .. } => (title, text.as_str()),
             Self::RebootRequired { .. } => (REBOOT_TITLE, REBOOT_REQUIRED),
             Self::RebootQuestion => ("", REBOOT_QUESTION),
-            Self::MagCalYaw(_) => (MAGCAL_YAW_TITLE, MAGCAL_YAW_PROMPT),
+            Self::MagCalYaw(input) => (input.title, input.prompt),
             Self::QuickFirmware => ("", QUICK_FIRMWARE),
             Self::LiveMissing => (
                 mp_calibration::live_magcal::RUN_ANYWAY,
@@ -923,7 +777,7 @@ pub enum Step {
     /// (the rest of its `try`).
     Set {
         /// The parameter.
-        param: &'static str,
+        param: String,
         /// The value.
         value: f64,
         /// Shown for a `false`.
@@ -1007,13 +861,14 @@ impl Job {
         }
     }
 
-    /// A bound control's own `setParam`: `failure` for a `false` and for a throw alike.
-    fn bound(param: &'static str, value: f64, failure: String) -> Self {
+    /// A bound control's own `setParam`: its failure for a `false` and for a throw alike.
+    /// `// C#: Controls/MavlinkCheckBox.cs:114-141; Controls/MavlinkComboBox.cs:149-198`
+    fn bound(write: Write) -> Self {
         Self::of([Step::Set {
-            param,
-            value,
-            refused: Some((ERROR_TITLE, failure.clone())),
-            threw: Some((ERROR_TITLE, failure)),
+            param: write.param,
+            value: write.value,
+            refused: Some((ERROR_TITLE, write.failure.clone())),
+            threw: Some((ERROR_TITLE, write.failure)),
             abort: false,
         }])
     }
@@ -1465,7 +1320,7 @@ pub fn mot_label(mot: [f64; 3]) -> String {
 }
 
 /// One of the older page's three compass group boxes.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct LegacyCompass {
     /// The group box shows: `Hide()` for a vehicle without its `EXTERN` parameter.
     pub visible: bool,
@@ -1755,7 +1610,7 @@ impl<H> Default for Compass<H> {
             orientations: Vec::new(),
             fitness: Combo::default(),
             open: None,
-            uses: [Check::default(); 3],
+            uses: [Check::default(), Check::default(), Check::default()],
             learn: Check::default(),
             reboot_required: false,
             onboard: Onboard::default(),
@@ -1856,13 +1711,13 @@ impl<H: Copy> Compass<H> {
     fn activate_priority(&mut self, parameters: &[(String, f64)], lookup: Lookup) {
         let (rows, any_missing) = device_list(parameters);
         self.rows = rows;
-        self.fitness = Combo::setup("COMPASS_CAL_FIT", parameters, lookup);
+        self.fitness = listed("COMPASS_CAL_FIT", parameters, lookup);
         self.uses = [
-            Check::setup(&["COMPASS_USE", "COMPASS1_USE"], parameters),
-            Check::setup(&["COMPASS_USE2", "COMPASS2_USE"], parameters),
-            Check::setup(&["COMPASS_USE3", "COMPASS3_USE"], parameters),
+            use_box(&["COMPASS_USE", "COMPASS1_USE"], parameters),
+            use_box(&["COMPASS_USE2", "COMPASS2_USE"], parameters),
+            use_box(&["COMPASS_USE3", "COMPASS3_USE"], parameters),
         ];
-        self.learn = Check::setup(&["COMPASS_LEARN"], parameters);
+        self.learn = named_box("COMPASS_LEARN", parameters);
         let Some((orient, _)) = one_of(parameters, &["COMPASS_ORIENT", "COMPASS1_ORIENT"]) else {
             return;
         };
@@ -1909,7 +1764,7 @@ impl<H: Copy> Compass<H> {
         }
 
         // `// C#: :74-88`
-        self.learn = Check::setup(&["COMPASS_LEARN"], parameters);
+        self.learn = named_box("COMPASS_LEARN", parameters);
         if let Some(value) = value_of(parameters, "COMPASS_DEC") {
             let dec = value * RAD2DEG;
             #[allow(clippy::cast_possible_truncation)] // `(int)dec`
@@ -1929,9 +1784,9 @@ impl<H: Copy> Compass<H> {
         // `// C#: :91-134`
         let [first, second, third] = &mut legacy.compasses;
         let [names, names2, names3] = LEGACY_NAMES;
-        first.use_check = Check::setup(&[names.use_name], parameters);
-        first.external = Check::setup(&[names.extern_name], parameters);
-        first.orient = Combo::setup(names.orient_name, parameters, lookup);
+        first.use_check = named_box(names.use_name, parameters);
+        first.external = named_box(names.extern_name, parameters);
+        first.orient = listed(names.orient_name, parameters, lookup);
         if value_of(parameters, "COMPASS_OFS_X").is_none() {
             legacy.enabled = false;
             return;
@@ -1954,9 +1809,9 @@ impl<H: Copy> Compass<H> {
                 compass.visible = false;
                 continue;
             }
-            compass.use_check = Check::setup(&[names.use_name], parameters);
-            compass.external = Check::setup(&[names.extern_name], parameters);
-            compass.orient = Combo::setup(names.orient_name, parameters, lookup);
+            compass.use_check = named_box(names.use_name, parameters);
+            compass.external = named_box(names.extern_name, parameters);
+            compass.orient = listed(names.orient_name, parameters, lookup);
             if index == 1 {
                 // `setup(typeof(CompassNumber), "COMPASS_PRIMARY", ...)`: its name as the text,
                 // which a number past the enum's selects nothing.
@@ -1983,7 +1838,7 @@ impl<H: Copy> Compass<H> {
         }
 
         // `// C#: :230-242`
-        self.fitness = Combo::setup("COMPASS_CAL_FIT", parameters, lookup);
+        self.fitness = listed("COMPASS_CAL_FIT", parameters, lookup);
         legacy.show_relevant_fields(parameters);
         legacy.startup = false;
     }
@@ -2055,7 +1910,7 @@ impl<H: Copy> Compass<H> {
         let mut steps: Vec<Step> = first3_writes(&self.rows)
             .into_iter()
             .map(|write| Step::Set {
-                param: write.param,
+                param: write.param.to_owned(),
                 value: write.value,
                 refused: write
                     .checked
@@ -2084,7 +1939,7 @@ impl<H: Copy> Compass<H> {
             3 => Some(&mut self.learn),
             _ => None,
         };
-        let Some(mut job) = check.and_then(Check::click) else {
+        let Some(mut job) = check.and_then(Check::click).map(Job::bound) else {
             return;
         };
         if legacy
@@ -2122,8 +1977,8 @@ impl<H: Copy> Compass<H> {
         } else {
             &mut group.use_check
         };
-        if let Some(job) = check.click() {
-            self.jobs.push_back(job);
+        if let Some(write) = check.click() {
+            self.jobs.push_back(Job::bound(write));
         }
         self.legacy.show_relevant_fields(parameters);
     }
@@ -2148,7 +2003,7 @@ impl<H: Copy> Compass<H> {
             return;
         }
         self.jobs.push_back(Job::of([Step::Set {
-            param: "COMPASS_AUTODEC",
+            param: "COMPASS_AUTODEC".to_owned(),
             value: if self.legacy.autodec { 1.0 } else { 0.0 },
             refused: None,
             threw: Some(("", "Set COMPASS_AUTODEC Failed".to_owned())),
@@ -2195,7 +2050,7 @@ impl<H: Copy> Compass<H> {
             dec += minutes / 60.0;
         }
         self.jobs.push_back(Job::of([Step::Set {
-            param: "COMPASS_DEC",
+            param: "COMPASS_DEC".to_owned(),
             value: f64::from(dec) * DEG2RAD,
             refused: None,
             threw: Some((ERROR_TITLE, "Set COMPASS_DEC Failed".to_owned())),
@@ -2221,12 +2076,13 @@ impl<H: Copy> Compass<H> {
     pub fn choose(&mut self, combo: ComboId, key: i64) {
         self.open = None;
         let job = match combo {
-            ComboId::Fitness => self.fitness.choose(key),
+            ComboId::Fitness => self.fitness.choose(key).map(Job::bound),
             ComboId::Orient(index) => self
                 .legacy
                 .compasses
                 .get_mut(index)
-                .and_then(|group| group.orient.choose(key)),
+                .and_then(|group| group.orient.choose(key))
+                .map(Job::bound),
             // `(float)(Int32)Enum.Parse(_source, this.Text)`, failing with
             // `Strings.ErrorSetValueFailed`. `// C#: Controls/MavlinkComboBox.cs:138-168`
             ComboId::Primary => {
@@ -2238,11 +2094,7 @@ impl<H: Copy> Compass<H> {
                         self.legacy.primary = Some(index);
                         #[allow(clippy::cast_precision_loss)]
                         let value = index as f64;
-                        Some(Job::bound(
-                            "COMPASS_PRIMARY",
-                            value,
-                            "Set COMPASS_PRIMARY Failed".to_owned(),
-                        ))
+                        Some(Job::bound(Write::other("COMPASS_PRIMARY", value)))
                     }
                     _ => None,
                 }
@@ -2267,8 +2119,8 @@ impl<H: Copy> Compass<H> {
                 .push_back(Dialog::message("", ERROR_NOT_CONNECTED));
             return;
         }
-        let quiet = |param: &'static str, value: f64| Step::Set {
-            param,
+        let quiet = |param: &str, value: f64| Step::Set {
+            param: param.to_owned(),
             value,
             refused: None,
             threw: Some((ERROR_TITLE, ERROR_SETTING_PARAMETER.to_owned())),
@@ -2326,6 +2178,7 @@ impl<H: Copy> Compass<H> {
                 .compasses
                 .first_mut()
                 .and_then(|group| group.orient.select_index(index))
+                .map(Job::bound)
         {
             steps.extend(job.steps);
         }
@@ -2412,9 +2265,11 @@ impl<H: Copy> Compass<H> {
         if self.class == Class::Legacy && !self.legacy.enabled {
             return;
         }
-        let mut field = TextField::new("");
-        field.set("0");
-        self.dialogs.push_back(Dialog::MagCalYaw(field));
+        self.dialogs.push_back(Dialog::MagCalYaw(InputBox::new(
+            MAGCAL_YAW_TITLE,
+            MAGCAL_YAW_PROMPT,
+            "0",
+        )));
     }
 
     /// Large Vehicle MagCal's heading as its OK closed the box, once: the answer `InputBox` keeps
@@ -2432,7 +2287,7 @@ impl<H: Copy> Compass<H> {
         autopilot: &mut A,
     ) -> bool {
         let outcome = match self.dialogs.front_mut() {
-            Some(Dialog::MagCalYaw(field)) => field.key(event),
+            Some(Dialog::MagCalYaw(input)) => input.key(event),
             Some(_) => crate::fly::answer_key(event),
             None => return false,
         };
@@ -2498,10 +2353,10 @@ impl<H: Copy> Compass<H> {
             // keeps - and a heading that does not parse throws out of the handler.
             // `// C#: GCSViews/ConfigurationView/ConfigHWCompass2.cs:478-481; ExtLibs/Controls/InputBox.cs:29-35, 185-192`
             // OK keeps the text, as `InputBox` keeps every titled answer, before the parse.
-            Dialog::MagCalYaw(field) => {
+            Dialog::MagCalYaw(input) => {
                 if yes {
-                    self.answered = Some(field.value().to_owned());
-                    if let Some(yaw) = parse_float(field.value()) {
+                    self.answered = Some(input.field.value().to_owned());
+                    if let Some(yaw) = parse_float(input.field.value()) {
                         self.jobs.push_back(Job::of([Step::FixedYaw(yaw)]));
                     }
                 }
@@ -2520,11 +2375,11 @@ impl<H: Copy> Compass<H> {
                     .compasses
                     .first_mut()
                     .and_then(|group| group.orient.select_index(index))
-                    .map(|job| job.steps())
+                    .map(|write| Job::bound(write).steps())
                     .unwrap_or_default();
                 if !yes {
                     steps.push(Step::Set {
-                        param: "COMPASS_EXTERNAL",
+                        param: "COMPASS_EXTERNAL".to_owned(),
                         value: 0.0,
                         refused: None,
                         threw: Some((ERROR_TITLE, ERROR_SETTING_PARAMETER.to_owned())),
@@ -2776,7 +2631,9 @@ impl<H: Copy> Compass<H> {
                     return false;
                 }
                 autopilot.clear_mag_cal();
-                self.onboard.bars = [0; 3];
+                for index in 0..3 {
+                    self.onboard.set_bar(index, 0);
+                }
                 self.onboard.accept_enabled = true;
                 self.onboard.cancel_enabled = true;
                 self.onboard.start_timer(now);
@@ -3463,7 +3320,7 @@ fn onboard_group(
                         .left_0()
                         .top_0()
                         .h_full()
-                        .w(px((bar_width - 2.0) * f32::from(value) / 100.0))
+                        .w(px((bar_width - 2.0) * onboard.bar_fraction(index)))
                         .bg(rgb(theme::ACCENT)),
                 )
                 .child(
@@ -3576,7 +3433,7 @@ pub fn page(compass: &Compass, focus: &Focus, cx: &mut Context<MissionPlanner>) 
 /// `// C#: GCSViews/ConfigurationView/ConfigHWCompass2.Designer.cs:84-571`
 fn priority_page(compass: &Compass, cx: &mut Context<MissionPlanner>) -> AnyElement {
     let use_box = |index: usize, x: f32, text: &'static str, cx: &mut Context<MissionPlanner>| {
-        let check = compass.uses.get(index).copied().unwrap_or_default();
+        let check = compass.uses.get(index).cloned().unwrap_or_default();
         check_box(
             (x, 277.0, 100.0, 17.0),
             SharedString::from(format!("compass-use{}", index + 1)),
@@ -4047,7 +3904,7 @@ impl Focus {
 /// `// C#: GCSViews/ConfigurationView/ConfigHWCompass2.cs:479; ExtLibs/Controls/InputBox.cs:178-184`
 fn keep_magcal_answer(this: &mut MissionPlanner) {
     if let Some(answer) = this.compass.take_answered() {
-        super::optional::remember_answer(
+        super::mavlink_controls::remember_answer(
             &mut this.persisted,
             MAGCAL_YAW_TITLE,
             MAGCAL_YAW_PROMPT,
@@ -4116,12 +3973,12 @@ fn dialog_box(
         )
         .child(words);
     let mut on_key = Some(on_key);
-    if let Dialog::MagCalYaw(field) = dialog
+    if let Dialog::MagCalYaw(input) = dialog
         && let Some(on_key) = on_key.take()
     {
         body = body.child(crate::textfield::text_field(
             "compass-dialog-value",
-            field,
+            &input.field,
             &focus.dialog,
             focus.dialog.is_focused(window),
             px(372.0),
@@ -4528,7 +4385,7 @@ mod tests {
     fn a_use_box_reads_and_writes_its_parameter() {
         let mut compass = priority(&sitl());
         assert_eq!(compass.uses[0].state, CheckState::Checked);
-        assert_eq!(compass.uses[0].param, Some("COMPASS_USE"));
+        assert_eq!(compass.uses[0].param_name(), Some("COMPASS_USE"));
         assert_eq!(compass.learn.state, CheckState::Unchecked);
 
         let mut fake = Fake::default();
@@ -4541,18 +4398,18 @@ mod tests {
         run(&mut compass, &mut fake, Instant::now());
         assert_eq!(fake.names(), ["COMPASS_USE=0", "COMPASS_USE=1"]);
 
-        let odd = Check::setup(&["X"], &params(&[("X", 2.0)]));
+        let odd = use_box(&["X"], &params(&[("X", 2.0)]));
         assert_eq!(odd.state, CheckState::Indeterminate);
         assert!(odd.checked());
-        let absent = Check::setup(&["COMPASS_USE3"], &[]);
+        let absent = use_box(&["COMPASS_USE3"], &[]);
         assert!(!absent.enabled);
         let mut absent_copy = absent;
         assert!(absent_copy.click().is_none());
-        let old_name = Check::setup(
+        let old_name = use_box(
             &["COMPASS_USE", "COMPASS1_USE"],
             &params(&[("COMPASS1_USE", 0.0)]),
         );
-        assert_eq!(old_name.param, Some("COMPASS1_USE"));
+        assert_eq!(old_name.param_name(), Some("COMPASS1_USE"));
     }
 
     /// A refused write shows `Strings.ErrorSetValueFailed` for the box's parameter.
@@ -4601,7 +4458,7 @@ mod tests {
         assert_eq!(compass.pending(), 0);
 
         // A vehicle without it: disabled, showing the first option as `DataSource` leaves it.
-        let absent = Combo::setup("COMPASS_CAL_FIT", &[], bundled);
+        let absent = listed("COMPASS_CAL_FIT", &[], bundled);
         assert!(!absent.enabled);
         assert_eq!(absent.text(), "Very Strict");
     }
@@ -4926,16 +4783,16 @@ mod tests {
         let mut compass = priority(&sitl());
         let mut fake = Fake::default();
         compass.click_large_magcal();
-        let Some(Dialog::MagCalYaw(field)) = compass.dialog() else {
+        let Some(Dialog::MagCalYaw(input)) = compass.dialog() else {
             panic!("the InputBox");
         };
-        assert_eq!(field.value(), "0");
+        assert_eq!(input.field.value(), "0");
         assert_eq!(
             compass.dialog().map(Dialog::words).unwrap().0,
             MAGCAL_YAW_TITLE
         );
-        if let Some(Dialog::MagCalYaw(field)) = compass.dialogs.front_mut() {
-            field.set("272.5");
+        if let Some(Dialog::MagCalYaw(input)) = compass.dialogs.front_mut() {
+            input.field.set("272.5");
         }
         compass.answer(true, &mut fake);
         run(&mut compass, &mut fake, Instant::now());
@@ -4960,8 +4817,8 @@ mod tests {
         compass.click_large_magcal();
         compass.answer(false, &mut fake);
         compass.click_large_magcal();
-        if let Some(Dialog::MagCalYaw(field)) = compass.dialogs.front_mut() {
-            field.set("north");
+        if let Some(Dialog::MagCalYaw(input)) = compass.dialogs.front_mut() {
+            input.field.set("north");
         }
         compass.answer(true, &mut fake);
         run(&mut compass, &mut fake, Instant::now());
@@ -4986,8 +4843,8 @@ mod tests {
         compass.answer(false, &mut fake);
         assert!(compass.take_answered().is_none(), "Cancel keeps nothing");
         compass.click_large_magcal();
-        if let Some(Dialog::MagCalYaw(field)) = compass.dialogs.front_mut() {
-            field.set("north");
+        if let Some(Dialog::MagCalYaw(input)) = compass.dialogs.front_mut() {
+            input.field.set("north");
         }
         compass.answer(true, &mut fake);
         assert_eq!(compass.take_answered().as_deref(), Some("north"));

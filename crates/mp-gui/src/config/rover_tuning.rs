@@ -67,7 +67,7 @@ use gpui::{
 use super::optional::{Job, SetQueue, button, group, label, message_box};
 use crate::MissionPlanner;
 use crate::config::extra_setup::{link_error, take_link_errors};
-use crate::config::failsafe::{Lookup, options};
+use crate::config::mavlink_controls::Lookup;
 use crate::config::flight_modes::{Firmware, ParamWriter};
 use crate::config::servo_output::{
     Combo, Designer, Message, NUMERIC_DEFAULTS, Number, NumberHandlers, OUT_OF_RANGE_TITLE,
@@ -250,13 +250,6 @@ pub const BUTTONS: [ButtonSpec; 2] = [
 /// The hidden button, for the Designer test.
 #[cfg(test)]
 const HIDDEN_BUTTON: &str = "BUT_rerequestparams";
-
-/// The name `setup` binds: the first of `names` the vehicle has, else the first.
-/// `// C#: Controls/MavlinkNumericUpDown.cs:54-64`
-#[must_use]
-pub fn bound_name(names: &[&'static str], parameters: &[(String, f64)]) -> &'static str {
-    crate::config::basic_tuning::bound_name(names, parameters)
-}
 
 /// The page object.
 #[derive(Debug)]
@@ -457,22 +450,11 @@ impl<H: Copy> RoverTuning<H> {
         // `setup(new[] { names }, MAV.param)`: the first name the vehicle has, or nothing - the
         // combo keeps what it had. `// C#: :45-51; Controls/MavlinkComboBox.cs:37-71`
         for (combo, spec) in self.combos.iter_mut().zip(COMBOS) {
-            if let Some(name) = spec
-                .params
-                .iter()
-                .find(|name| value_of(parameters, name).is_some())
-            {
-                combo.setup(options(name, lookup), name, parameters);
-            }
+            combo.setup_names(spec.params, parameters, lookup);
         }
         // `// C#: :53-77, 84-87`
         for (number, spec) in self.numbers.iter_mut().zip(NUMBERS) {
-            number.setup(
-                spec.setup,
-                bound_name(spec.params, parameters),
-                parameters,
-                lookup,
-            );
+            number.setup_names(spec.setup, spec.params, parameters, lookup);
         }
         // `MAV.param[name] == null` for both: the list's indexer gives null for a name it lacks.
         // Nothing shows the group again. `// C#: :79-82; ExtLibs/Mavlink/MAVLinkParamList.cs:20-40`

@@ -32,6 +32,9 @@ pub mod force_bootloader;
 pub mod flight_modes;
 pub mod frame_type;
 pub mod frame_type_legacy;
+// The shared controls: MavlinkCheckBox, MavlinkComboBox, MavlinkNumericUpDown, InputBox and the
+// two HorizontalProgressBars, once each.
+pub mod mavlink_controls;
 pub mod motor_test;
 pub mod planner;
 pub mod radio;

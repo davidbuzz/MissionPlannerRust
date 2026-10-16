@@ -68,11 +68,13 @@ use gpui::{
 use super::optional::{Job, Set, SetQueue, message_box};
 use super::rover_tuning::Tip;
 use crate::MissionPlanner;
-use crate::config::failsafe::{Lookup, options};
 use crate::config::flight_modes::ParamWriter;
+use crate::config::mavlink_controls::{
+    Combo, Lookup, NUMERIC_DEFAULTS, Number, OUT_OF_RANGE_TITLE, Question, Setup, Write,
+};
 use crate::config::servo_output::{
-    Column, Combo, Message, NUMERIC_DEFAULTS, Number, NumberHandlers, OUT_OF_RANGE_TITLE, Question,
-    ServoRow, Setup, Write, check_box, combo_box, dropdown, label, modal, number_box, value_of,
+    Column, Message, NumberHandlers, ServoRow, check_box, combo_box, dropdown, label, modal,
+    number_box,
 };
 use crate::setup::Key;
 use crate::telemetry::{Telemetry, TelemetryView};
@@ -279,12 +281,13 @@ pub fn populate(item: ItemInfo, parameters: &[(String, f64)], lookup: Lookup) ->
     }
     let control = match ui {
         // `setup(new[] { a.name }, paramlist)`: nothing at all for a name the vehicle lacks - no
-        // list, no name, the constructor's disabled box. `// C#: Controls/MavlinkComboBox.cs:37-71`
+        // list, the constructor's disabled box. `// C#: Controls/MavlinkComboBox.cs:37-71`
         Ui::Combo => {
             let mut combo = Combo::default();
-            if value_of(parameters, name).is_some() {
-                combo.setup(options(name, lookup), name, parameters);
-            } else {
+            combo.setup_names(&[name], parameters, lookup);
+            // The row names its box by the parameter whether or not `setup` did: its id and its
+            // facts.
+            if combo.param.is_empty() {
                 name.clone_into(&mut combo.param);
             }
             Control::Combo(combo)

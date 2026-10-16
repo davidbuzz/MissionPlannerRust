@@ -96,7 +96,8 @@ use mp_calibration::live_magcal::{
 use mp_calibration::magcalib::Sample;
 use mp_vehicle::{StreamRates, VehicleState};
 
-use super::compass::{Autopilot, CheckState, at, button, check_box};
+use super::compass::{Autopilot, at, button, check_box};
+use super::mavlink_controls::CheckState;
 use crate::MissionPlanner;
 use crate::telemetry::TelemetryView;
 use crate::ui::theme;

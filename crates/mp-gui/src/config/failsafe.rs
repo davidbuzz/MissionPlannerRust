@@ -32,9 +32,12 @@
 //! whose parameter the vehicle does not have stays hidden, which is how one page serves a copter
 //! (`FS_THR_ENABLE`, `FS_GCS_ENABLE`) and a plane (`THR_FAILSAFE`, `FS_SHORT_ACTN`, ...) at once.
 //!
-//! The numbers are the shared `MavlinkNumericUpDown` ([`Number`]): typed into or stepped by their
+//! The controls are the shared ones of [`crate::config::mavlink_controls`]: the combo boxes and
+//! check boxes [`Combo`] and [`Check`], the numbers [`Number`] - typed into or stepped by their
 //! arrows, the typed text read when the box is left, on Enter and before an arrow, and a typed
 //! value above the maximum asking "Out of range" first (`Controls/MavlinkNumericUpDown.cs:133-161`).
+//! The `.resx` hides the combo boxes, the check boxes and the two throttle numbers until `setup`
+//! finds their parameter, which shows and enables them together.
 //! The `.resx`'s tooltips are on the controls that have one.
 //!
 //! The geometry is the `.resx`'s: every control at its `Location` and `Size` inside a 688 x 482
@@ -62,23 +65,21 @@ use gpui::{
     AnyElement, AnyView, Context, Div, FocusHandle, KeyDownEvent, SharedString, Window, div,
     prelude::*, px, rgb,
 };
-use mp_params::ParamMeta;
 use mp_vehicle::{VehicleFamily, VehicleState};
 
 use crate::MissionPlanner;
 use crate::config::basic_tuning::Tip;
 use crate::config::extra_setup::{link_error, status_words};
-use crate::config::servo_output::{
-    Designer, ERROR_TITLE, NUMERIC_DEFAULTS, Number, NumberHandlers, OUT_OF_RANGE_TITLE, Question,
-    Setup, Writes, modal, number_box,
+use crate::config::mavlink_controls::{
+    Check, Combo, Designer, NUMERIC_DEFAULTS, Number, OUT_OF_RANGE_TITLE, ProgressBar, Question,
+    Setup, value_of,
 };
-pub use crate::config::servo_output::{Message, Write};
+// The shared controls' pieces, under the names pages have long imported them by from here.
+pub use crate::config::mavlink_controls::{CheckState, Lookup, Write, decimal_of, options};
+pub use crate::config::servo_output::Message;
+use crate::config::servo_output::{ERROR_TITLE, NumberHandlers, Writes, modal, number_box};
 use crate::telemetry::{Telemetry, TelemetryView};
 use crate::ui::{action, panel, theme};
-
-/// Where parameter documentation comes from: [`crate::metadata::lookup`] on screen, the bundled
-/// table in the tests.
-pub type Lookup = fn(&str) -> Option<&'static ParamMeta>;
 
 /// The message `Activate` shows every time the page opens.
 /// `// C#: GCSViews/ConfigurationView/ConfigFailSafe.cs:91-92`
@@ -91,11 +92,11 @@ const PROPS_TITLE: &str = "FailSafe";
 /// `// C#: GCSViews/ConfigurationView/ConfigFailSafe.resx lbl_currentmode.Text`
 const DESIGNER_MODE: &str = "Manual";
 
-/// The bars' scale: every one is `Minimum = 1000`, `Maximum = 2000`.
+/// The bars' scale: every one is `Maximum = 2000`, `Minimum = 1000`.
 /// `// C#: GCSViews/ConfigurationView/ConfigFailSafe.Designer.cs:328-330`
-const BAR_MINIMUM: i64 = 1000;
+const BAR_MINIMUM: i32 = 1000;
 /// The top of that scale.
-const BAR_MAXIMUM: i64 = 2000;
+const BAR_MAXIMUM: i32 = 2000;
 
 /// The rows the eight bars of each column sit on, from the `.resx`'s `Location`s.
 /// `// C#: GCSViews/ConfigurationView/ConfigFailSafe.resx horizontalProgressBar1-16.Location`
@@ -134,198 +135,10 @@ pub mod tips {
     pub const THROTTLE_MODE: &str = "Failsafe mode on low pwm";
 }
 
-/// A `MavlinkComboBox` set up with an option list: `setup(List<KeyValuePair<int, string>>, ...)`.
-/// `// C#: Controls/MavlinkComboBox.cs:73-99`
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Combo {
-    /// `ParamName`, which `setup` also makes the control's `Name`.
-    pub param: &'static str,
-    /// `DataSource`: the values the documentation lists and their text,
-    /// `ParameterMetaDataRepository.GetParameterOptionsInt`.
-    pub options: Vec<(i64, String)>,
-    /// `SelectedValue`. `None` is `SelectedIndex` -1: the vehicle holds a value that is not one
-    /// of the options, and the box is blank.
-    pub selected: Option<i64>,
-    /// `Visible` and `Enabled`, which `setup` sets together and only for a parameter the vehicle
-    /// has. Both start false in the `.resx`.
-    pub shown: bool,
-}
-
-impl Combo {
-    /// Sets the box up from the vehicle's parameters.
-    fn setup(param: &'static str, parameters: &[(String, f64)], lookup: Lookup) -> Self {
-        let value = value_of(parameters, param);
-        let options = options(param, lookup);
-        // `this.SelectedValue = (int)paramlist[paramname].Value`: a cast, so truncated, and a
-        // value the list does not hold selects nothing.
-        #[allow(clippy::cast_possible_truncation)]
-        let selected = value
-            .map(|value| value as i64)
-            .filter(|value| options.iter().any(|(key, _)| key == value));
-        Self {
-            param,
-            options,
-            selected,
-            shown: value.is_some(),
-        }
-    }
-
-    /// The selected option's text, blank when nothing is selected.
-    #[must_use]
-    pub fn text(&self) -> &str {
-        self.selected
-            .and_then(|selected| self.options.iter().find(|(key, _)| *key == selected))
-            .map_or("", |(_, text)| text.as_str())
-    }
-
-    /// Chooses an option. A write only when the selection changed, because that is when WinForms
-    /// raises `SelectedIndexChanged`; the value is `(float)(int)SelectedValue`.
-    /// `// C#: Controls/MavlinkComboBox.cs:169-199`
-    fn choose(&mut self, key: i64) -> Option<Write> {
-        if !self.shown || self.selected == Some(key) {
-            return None;
-        }
-        if !self.options.iter().any(|(option, _)| *option == key) {
-            return None;
-        }
-        self.selected = Some(key);
-        #[allow(clippy::cast_precision_loss)] // option values are small integers
-        let value = f64::from(key as f32);
-        Some(Write::combo(self.param, value))
-    }
-}
-
-/// The options a parameter's documentation lists, trimmed as the C# trims them.
-/// `// C#: ExtLibs/Utilities/ParameterMetaDataRepository.cs:76-102`
-#[must_use]
-pub fn options(param: &str, lookup: Lookup) -> Vec<(i64, String)> {
-    lookup(param).map_or_else(Vec::new, |meta| {
-        meta.values
-            .iter()
-            .map(|(key, text)| (*key, text.trim().to_owned()))
-            .collect()
-    })
-}
-
-/// A check box's three states.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum CheckState {
-    /// Off.
-    Unchecked,
-    /// On.
-    Checked,
-    /// The vehicle holds neither the on value nor the off value.
-    Indeterminate,
-}
-
-impl CheckState {
-    /// The word a fact carries.
-    #[must_use]
-    pub const fn key(self) -> &'static str {
-        match self {
-            Self::Unchecked => "unchecked",
-            Self::Checked => "checked",
-            Self::Indeterminate => "indeterminate",
-        }
-    }
-}
-
-/// A `MavlinkCheckBox`: `setup(OnValue, OffValue, paramname, paramlist)`.
-/// `// C#: Controls/MavlinkCheckBox.cs:60-98`
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub struct Check {
-    /// `ParamName`.
-    pub param: &'static str,
-    /// What the box shows.
-    pub state: CheckState,
-    /// `Visible` and `Enabled`: set for a parameter the vehicle has. The `.resx` hides every
-    /// check box on this page until then.
-    pub shown: bool,
-    /// `OnValue`.
-    on: f64,
-    /// `OffValue`.
-    off: f64,
-}
-
-impl Check {
-    /// Sets the box up: checked for the on value, unchecked for the off value, indeterminate for
-    /// anything else.
-    fn setup(on: f64, off: f64, param: &'static str, parameters: &[(String, f64)]) -> Self {
-        let value = value_of(parameters, param);
-        // `paramlist[paramname].Value == OnValue`: an exact comparison, as the C# makes it, of
-        // the same float reading on both sides.
-        #[allow(clippy::float_cmp)]
-        let state = match value {
-            Some(value) if value == on => CheckState::Checked,
-            Some(value) if value == off => CheckState::Unchecked,
-            Some(_) => CheckState::Indeterminate,
-            None => CheckState::Unchecked,
-        };
-        Self {
-            param,
-            state,
-            shown: value.is_some(),
-            on,
-            off,
-        }
-    }
-
-    /// A click. WinForms takes a two-state box from checked or indeterminate to unchecked and
-    /// from unchecked to checked, and every one of those changes `Checked`, so every click writes:
-    /// `OnValue` when it ends checked, `OffValue` otherwise.
-    /// `// C#: Controls/MavlinkCheckBox.cs:106-143`
-    fn click(&mut self) -> Option<Write> {
-        if !self.shown {
-            return None;
-        }
-        self.state = match self.state {
-            CheckState::Unchecked => CheckState::Checked,
-            CheckState::Checked | CheckState::Indeterminate => CheckState::Unchecked,
-        };
-        let value = if self.state == CheckState::Checked {
-            self.on
-        } else {
-            self.off
-        };
-        Some(Write::other(self.param, value))
-    }
-}
-
-/// A decimal as .NET's `(decimal)float` makes one: seven significant digits, trailing zeros
-/// dropped. Returned as a mantissa and the number of places after the point, which is what
-/// `decimal.GetBits(...)[3]`'s scale byte reads back.
-/// `// C#: Controls/MavlinkNumericUpDown.cs:90, 101-103`
-#[must_use]
-pub fn decimal_of(value: f32) -> (i64, u32) {
-    if value == 0.0 || !value.is_finite() {
-        return (0, 0);
-    }
-    let text = format!("{:.6e}", value.abs());
-    let Some((mantissa, exponent)) = text.split_once('e') else {
-        return (0, 0);
-    };
-    let exponent: i64 = exponent.parse().unwrap_or(0);
-    let digits: String = mantissa.chars().filter(char::is_ascii_digit).collect();
-    let digits = digits.trim_end_matches('0');
-    let mut mantissa: i64 = digits.parse().unwrap_or(0);
-    // The number of places: digits after the first, less the power of ten.
-    let places = i64::try_from(digits.len()).unwrap_or(0) - 1 - exponent;
-    let scale = if places < 0 {
-        mantissa =
-            mantissa.saturating_mul(10_i64.saturating_pow(u32::try_from(-places).unwrap_or(0)));
-        0
-    } else {
-        u32::try_from(places).unwrap_or(0)
-    };
-    if value < 0.0 {
-        mantissa = -mantissa;
-    }
-    (mantissa, scale)
-}
-
-/// One of the page's `MavlinkNumericUpDown`s: the shared control, which types, steps, asks
-/// "Out of range" and writes on its timer, and its `Visible` - which the `.resx` sets false for
-/// the two throttle numbers until `setup` finds their parameter.
+/// One of the page's `MavlinkNumericUpDown`s - the shared control, which types, steps, asks
+/// "Out of range", writes on its timer, and shows as the `.resx` has it (hidden, for the two
+/// throttle numbers) until `setup` finds its parameter - and whether `setup` found it, which the
+/// facts report on.
 /// `// C#: Controls/MavlinkNumericUpDown.cs:43-181`
 #[derive(Debug)]
 pub struct Numeric {
@@ -333,24 +146,26 @@ pub struct Numeric {
     pub number: Number,
     /// Whether the vehicle has the parameter, so `setup` bound the box to it.
     pub bound: bool,
-    /// `Visible`.
-    pub shown: bool,
 }
 
 impl Numeric {
-    /// The box as the Designer leaves it, named for its parameter but never set up: what
-    /// `BATT_LOW_TIMER`'s box is on a vehicle without it (`ConfigFailSafe.cs:70-73`).
+    /// The box as the Designer leaves it - shown, or hidden by the `.resx` - named for its
+    /// parameter but never set up: what `BATT_LOW_TIMER`'s box is on a vehicle without it
+    /// (`ConfigFailSafe.cs:70-73`).
     fn designer(designer: Designer, designer_shown: bool, param: &'static str) -> Self {
-        let mut number = Number::new(designer);
+        let mut number = if designer_shown {
+            Number::new(designer)
+        } else {
+            Number::hidden(designer)
+        };
         param.clone_into(&mut number.param);
         Self {
             number,
             bound: false,
-            shown: designer_shown,
         }
     }
 
-    /// `setup(Min, Max, Scale, Increment, paramname, paramlist)` on the box the Designer made. A
+    /// `setup(Min, Max, Scale, Increment, paramname, paramlist)` on the box the Designer made: a
     /// parameter the vehicle has makes it visible and enabled; one it lacks leaves `Visible` as
     /// the `.resx` has it and disables it.
     /// `// C#: Controls/MavlinkNumericUpDown.cs:49-122`
@@ -365,8 +180,13 @@ impl Numeric {
         let mut numeric = Self::designer(designer, designer_shown, param);
         numeric.number.setup(how, param, parameters, lookup);
         numeric.bound = value_of(parameters, param).is_some();
-        numeric.shown = numeric.bound || designer_shown;
         numeric
+    }
+
+    /// `Visible`.
+    #[must_use]
+    pub const fn shown(&self) -> bool {
+        self.number.visible
     }
 
     /// `ParamName`.
@@ -496,9 +316,9 @@ impl Controls {
         let has = |name: &str| value_of(parameters, name).is_some();
 
         // `// C#: :26-28`
-        let throttle = Combo::setup("FS_THR_ENABLE", parameters, lookup);
+        let throttle = combo("FS_THR_ENABLE", parameters, lookup);
         // Copter's newer name first. `// C#: :30-42`
-        let battery = Combo::setup(
+        let battery = combo(
             if has("BATT_FS_LOW_ACT") {
                 "BATT_FS_LOW_ACT"
             } else {
@@ -596,12 +416,12 @@ impl Controls {
             }
         };
         // `// C#: :77`
-        let gcs = Check::setup(1.0, 0.0, "FS_GCS_ENABLE", parameters);
+        let gcs = check("FS_GCS_ENABLE", parameters);
 
         // Plane. `THR_FAILSAFE` enables `THR_FS_VALUE`'s box when checked, and `THR_FS_VALUE`'s
         // own setup, which comes after, enables it again whenever the vehicle has the parameter.
         // `// C#: :79-85`
-        let plane_throttle = Check::setup(1.0, 0.0, "THR_FAILSAFE", parameters);
+        let plane_throttle = check("THR_FAILSAFE", parameters);
         let plane_throttle_pwm = Numeric::setup(
             NUMERIC_DEFAULTS,
             false,
@@ -615,10 +435,10 @@ impl Controls {
             parameters,
             lookup,
         );
-        let plane_throttle_action = Check::setup(1.0, 0.0, "THR_FS_ACTION", parameters);
-        let plane_gcs = Check::setup(1.0, 0.0, "FS_GCS_ENABL", parameters);
-        let plane_short = Check::setup(1.0, 0.0, "FS_SHORT_ACTN", parameters);
-        let plane_long = Check::setup(1.0, 0.0, "FS_LONG_ACTN", parameters);
+        let plane_throttle_action = check("THR_FS_ACTION", parameters);
+        let plane_gcs = check("FS_GCS_ENABL", parameters);
+        let plane_short = check("FS_SHORT_ACTN", parameters);
+        let plane_long = check("FS_LONG_ACTN", parameters);
 
         Self {
             low_voltage,
@@ -709,7 +529,7 @@ impl Controls {
             NumberId::ThrottlePwm | NumberId::PlaneThrottlePwm => true,
         };
         let number = self.number(id);
-        row_shown && number.shown && number.enabled()
+        row_shown && number.shown() && number.enabled()
     }
 
     /// Every number, for the timers.
@@ -726,9 +546,9 @@ impl Controls {
     /// The Radio box's number that shows: `FS_THR_VALUE` on a copter, `THR_FS_VALUE` on a plane.
     #[must_use]
     pub const fn pwm(&self) -> Option<&Numeric> {
-        if self.throttle_pwm.shown {
+        if self.throttle_pwm.shown() {
             Some(&self.throttle_pwm)
-        } else if self.plane_throttle_pwm.shown {
+        } else if self.plane_throttle_pwm.shown() {
             Some(&self.plane_throttle_pwm)
         } else {
             None
@@ -736,12 +556,23 @@ impl Controls {
     }
 }
 
-/// A parameter's value in the vehicle's table.
-fn value_of(parameters: &[(String, f64)], name: &str) -> Option<f64> {
-    parameters
-        .iter()
-        .find(|(held, _)| held == name)
-        .map(|(_, value)| *value)
+/// A combo box as `Activate` sets one up: hidden by the `.resx`, then `setup(source, paramname,
+/// paramlist)` with the parameter's documented values, which shows it and enables it together
+/// for a parameter the vehicle has - so it shows while it is enabled.
+/// `// C#: GCSViews/ConfigurationView/ConfigFailSafe.cs:26-42; Controls/MavlinkComboBox.cs:73-99`
+fn combo(param: &str, parameters: &[(String, f64)], lookup: Lookup) -> Combo {
+    let mut combo = Combo::default();
+    combo.setup(options(param, lookup), param, parameters);
+    combo
+}
+
+/// A check box as `Activate` sets one up: hidden by the `.resx`, then `setup(1, 0, paramname,
+/// paramlist)`.
+/// `// C#: GCSViews/ConfigurationView/ConfigFailSafe.cs:77-85; Controls/MavlinkCheckBox.cs:60-98`
+fn check(param: &str, parameters: &[(String, f64)]) -> Check {
+    let mut check = Check::hidden();
+    check.setup(1.0, 0.0, param, parameters);
+    check
 }
 
 /// Whether Initial Setup lists the page: connected, and every parameter the vehicle reported
@@ -812,21 +643,15 @@ pub fn servo_out(state: &VehicleState, channel: usize) -> i64 {
         .map_or(0, |value| i64::from(*value))
 }
 
-/// How full a bar is drawn: `HorizontalProgressBar.Value`'s clamp, one above the minimum at the
-/// bottom and the maximum at the top, over the bar's 1000 to 2000.
-/// `// C#: ExtLibs/Controls/HorizontalProgressBar.cs:74-115`
+/// How full a bar is drawn: the Designer's `HorizontalProgressBar`, 1000 to 2000, holding the
+/// value one above the minimum at the bottom and at the maximum at the top
+/// ([`ProgressBar::fraction_at`]).
+/// `// C#: GCSViews/ConfigurationView/ConfigFailSafe.Designer.cs:328-330; ExtLibs/Controls/HorizontalProgressBar.cs:74-145`
 #[must_use]
 pub fn bar_fraction(value: i64) -> f32 {
-    let shown = if value <= BAR_MINIMUM {
-        BAR_MINIMUM + 1
-    } else if value >= BAR_MAXIMUM {
-        BAR_MAXIMUM
-    } else {
-        value
-    };
-    #[allow(clippy::cast_precision_loss)]
-    let fraction = (shown - BAR_MINIMUM) as f32 / (BAR_MAXIMUM - BAR_MINIMUM) as f32;
-    fraction
+    let value = value.clamp(i64::from(i32::MIN), i64::from(i32::MAX));
+    ProgressBar::ranged(BAR_MINIMUM, BAR_MAXIMUM)
+        .fraction_at(i32::try_from(value).unwrap_or_default())
 }
 
 /// Where `LNK_wiki` goes: the copter failsafe page for a copter, the plane page for anything
@@ -1008,7 +833,7 @@ impl FailSafe {
         let write = controls.check_mut(id).click()?;
         if id == CheckId::PlaneThrottle {
             controls.plane_throttle_pwm.number.enabled =
-                controls.plane_throttle.state == CheckState::Checked;
+                controls.plane_throttle.background_enabled();
         }
         Some(write)
     }
@@ -1221,10 +1046,10 @@ pub fn record_facts(failsafe: &FailSafe, view: &TelemetryView) {
     };
     let controls = failsafe.controls();
     let combo = |key: &str, combo: Option<&Combo>| {
-        let shown = combo.filter(|combo| combo.shown);
+        let shown = combo.filter(|combo| combo.enabled);
         record(
             format!("config.failsafe.{key}.param"),
-            shown.map_or("none", |combo| combo.param),
+            shown.map_or("none", |combo| combo.param.as_str()),
         );
         record(
             format!("config.failsafe.{key}"),
@@ -1242,7 +1067,7 @@ pub fn record_facts(failsafe: &FailSafe, view: &TelemetryView) {
         );
         record(
             format!("config.failsafe.{key}.vehicle"),
-            shown.map_or_else(|| "none".to_owned(), |combo| vehicle(combo.param)),
+            shown.map_or_else(|| "none".to_owned(), |combo| vehicle(&combo.param)),
         );
     };
     combo("throttle", controls.map(|controls| &controls.throttle));
@@ -1297,10 +1122,10 @@ pub fn record_facts(failsafe: &FailSafe, view: &TelemetryView) {
 
     let gcs = controls
         .map(|controls| &controls.gcs)
-        .filter(|check| check.shown);
+        .filter(|check| check.visible);
     record(
         "config.failsafe.gcs.param",
-        gcs.map_or("none", |check| check.param),
+        gcs.map_or("none", |check| check.param.as_str()),
     );
     record(
         "config.failsafe.gcs",
@@ -1308,20 +1133,20 @@ pub fn record_facts(failsafe: &FailSafe, view: &TelemetryView) {
     );
     record(
         "config.failsafe.gcs.vehicle",
-        gcs.map_or_else(|| "none".to_owned(), |check| vehicle(check.param)),
+        gcs.map_or_else(|| "none".to_owned(), |check| vehicle(&check.param)),
     );
     record(
         "config.failsafe.plane.shown",
         controls.map_or(0, |controls| {
             [
-                controls.plane_throttle,
-                controls.plane_throttle_action,
-                controls.plane_gcs,
-                controls.plane_short,
-                controls.plane_long,
+                &controls.plane_throttle,
+                &controls.plane_throttle_action,
+                &controls.plane_gcs,
+                &controls.plane_short,
+                &controls.plane_long,
             ]
             .iter()
-            .filter(|check| check.shown)
+            .filter(|check| check.visible)
             .count()
         }),
     );
@@ -1443,7 +1268,7 @@ fn combo_box(
     tip: Option<&'static str>,
     cx: &mut Context<MissionPlanner>,
 ) -> Option<AnyElement> {
-    if !combo.shown {
+    if !combo.enabled {
         return None;
     }
     let base = crate::probe::measured(format!("failsafe-{}", combo.param), div())
@@ -1482,16 +1307,9 @@ fn dropdown(
     (x, y): (f32, f32),
     cx: &mut Context<MissionPlanner>,
 ) -> AnyElement {
-    let shared = crate::config::servo_output::Combo {
-        param: combo.param.to_owned(),
-        options: combo.options.clone(),
-        selected: combo.selected,
-        enabled: combo.shown,
-        top_index: 0,
-    };
     crate::config::servo_output::dropdown(
         &format!("failsafe-{}", combo.param),
-        &shared,
+        combo,
         (x, y, 199.0),
         move |this, key| {
             if let Some(write) = this.failsafe.choose(id, key) {
@@ -1512,7 +1330,7 @@ fn check_box(
     tip: Option<&'static str>,
     cx: &mut Context<MissionPlanner>,
 ) -> Option<AnyElement> {
-    if !check.shown {
+    if !check.visible {
         return None;
     }
     let mark = match check.state {
@@ -1573,7 +1391,7 @@ impl Numbers<'_> {
         cx: &mut Context<MissionPlanner>,
     ) -> Option<AnyElement> {
         let numeric = self.failsafe.controls()?.number(id);
-        if !numeric.shown {
+        if !numeric.shown() {
             return None;
         }
         let name = format!("failsafe-{}", numeric.param());
@@ -1868,7 +1686,7 @@ pub fn page(
             ComboId::Battery => (477.0 + 6.0, 146.0 + 92.0 + 20.0),
             ComboId::Throttle => (477.0 + 6.0, 273.0 + 13.0 + 20.0),
         };
-        if combo.shown {
+        if combo.enabled {
             body = body.child(dropdown(id, combo, at, cx));
         }
     }
@@ -1939,7 +1757,8 @@ pub fn overlay(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::config::servo_output::WRITE_DELAY;
+    use crate::config::mavlink_controls::WRITE_DELAY;
+    use mp_params::ParamMeta;
 
     /// The bundled documentation, so no test depends on what another has installed.
     fn bundled(name: &str) -> Option<&'static ParamMeta> {
@@ -1997,27 +1816,27 @@ mod tests {
     fn a_current_copter_binds_the_battery_failsafe_names_it_has() {
         let controls = Controls::activate(&copter(), bundled);
         assert_eq!(controls.throttle.param, "FS_THR_ENABLE");
-        assert!(controls.throttle.shown);
+        assert!(controls.throttle.enabled);
         assert_eq!(controls.battery.param, "BATT_FS_LOW_ACT");
-        assert!(controls.battery.shown);
+        assert!(controls.battery.enabled);
         assert_eq!(controls.low_voltage.number.param(), "BATT_LOW_VOLT");
         assert_eq!(controls.reserved_mah.number.param(), "BATT_LOW_MAH");
         assert_eq!(controls.low_timer.number.param(), "BATT_LOW_TIMER");
         assert!(controls.low_timer.shown, "BATT_LOW_TIMER's row shows");
         assert_eq!(controls.gcs.param, "FS_GCS_ENABLE");
-        assert!(controls.gcs.shown);
+        assert!(controls.gcs.visible);
         assert_eq!(controls.pwm().map(Numeric::param), Some("FS_THR_VALUE"));
         // None of a plane's controls.
         for check in [
-            controls.plane_throttle,
-            controls.plane_throttle_action,
-            controls.plane_gcs,
-            controls.plane_short,
-            controls.plane_long,
+            &controls.plane_throttle,
+            &controls.plane_throttle_action,
+            &controls.plane_gcs,
+            &controls.plane_short,
+            &controls.plane_long,
         ] {
-            assert!(!check.shown, "{} shows on a copter", check.param);
+            assert!(!check.visible, "{} shows on a copter", check.param);
         }
-        assert!(!controls.plane_throttle_pwm.shown);
+        assert!(!controls.plane_throttle_pwm.shown());
     }
 
     /// The whole of a real SITL copter's parameters, as `headless-planner param save` wrote them: the page
@@ -2079,15 +1898,15 @@ mod tests {
         assert!(!controls.low_voltage.number.enabled());
         // The combo boxes stay hidden without their parameter.
         assert_eq!(controls.battery.param, "FS_BATT_ENABLE");
-        assert!(!controls.battery.shown);
+        assert!(!controls.battery.enabled);
         assert!(controls.pwm().is_none());
     }
 
     #[test]
     fn a_plane_binds_its_own_names() {
         let controls = Controls::activate(&plane(), bundled);
-        assert!(!controls.throttle.shown, "no FS_THR_ENABLE on a plane");
-        assert!(!controls.gcs.shown, "no FS_GCS_ENABLE on a plane");
+        assert!(!controls.throttle.enabled, "no FS_THR_ENABLE on a plane");
+        assert!(!controls.gcs.visible, "no FS_GCS_ENABLE on a plane");
         assert_eq!(controls.pwm().map(Numeric::param), Some("THR_FS_VALUE"));
         assert_eq!(controls.plane_throttle.state, CheckState::Checked);
         assert_eq!(controls.plane_throttle_action.state, CheckState::Unchecked);
@@ -2122,7 +1941,7 @@ mod tests {
     fn a_value_that_is_not_an_option_selects_nothing() {
         // SelectedValue = 42 finds no row, so SelectedIndex is -1 and the box is blank.
         let controls = Controls::activate(&table(&[("FS_THR_ENABLE", 42.0)]), bundled);
-        assert!(controls.throttle.shown);
+        assert!(controls.throttle.enabled);
         assert_eq!(controls.throttle.selected, None);
         assert_eq!(controls.throttle.text(), "");
     }
@@ -2140,7 +1959,7 @@ mod tests {
             None
         }
         let controls = Controls::activate(&copter(), nothing);
-        assert!(controls.throttle.shown);
+        assert!(controls.throttle.enabled);
         assert!(controls.throttle.options.is_empty());
         assert_eq!(controls.throttle.selected, None);
     }
@@ -2253,7 +2072,7 @@ mod tests {
         assert!((pwm.number.maximum - 1100.0).abs() < f64::EPSILON);
         assert_eq!(pwm.number.decimals, 0);
         assert_eq!(pwm.text(), "975");
-        assert!(pwm.shown && pwm.enabled());
+        assert!(pwm.shown() && pwm.enabled());
     }
 
     #[test]

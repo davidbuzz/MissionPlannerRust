@@ -378,18 +378,6 @@ impl<H> Default for BasicTuning<H> {
     }
 }
 
-/// The name `setup` binds: the first of `names` the vehicle has, else the first.
-/// `// C#: Controls/MavlinkNumericUpDown.cs:54-64`
-#[must_use]
-pub fn bound_name(names: &[&'static str], parameters: &[(String, f64)]) -> &'static str {
-    names
-        .iter()
-        .find(|name| value_of(parameters, name).is_some())
-        .or_else(|| names.first())
-        .copied()
-        .unwrap_or("")
-}
-
 impl<H: Copy> BasicTuning<H> {
     /// Whether the page is showing.
     #[must_use]
@@ -514,12 +502,7 @@ impl<H: Copy> BasicTuning<H> {
         self.enabled = true;
         // `// C#: :45-99`
         for (number, spec) in self.numbers.iter_mut().zip(BOXES) {
-            number.setup(
-                spec.setup,
-                bound_name(spec.params, parameters),
-                parameters,
-                lookup,
-            );
+            number.setup_names(spec.setup, spec.params, parameters, lookup);
         }
         // `// C#: :101`
         self.changes.clear();

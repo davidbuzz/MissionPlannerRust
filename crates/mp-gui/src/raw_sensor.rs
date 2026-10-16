@@ -56,6 +56,7 @@ use mp_chart::{Series, auto_range};
 use mp_vehicle::VehicleState;
 
 use crate::MissionPlanner;
+use crate::config::mavlink_controls::ProgressBar;
 use crate::gauge::Dial;
 use crate::telemetry::TelemetryView;
 use crate::ui::{action, theme};
@@ -890,18 +891,11 @@ fn radio_page(state: &VehicleState) -> gpui::Div {
 }
 
 /// One `HorizontalProgressBar`, 170 by 25: filled from the left by the value held to one above
-/// the minimum and the maximum (`Value`'s setter), its `Label` centred 2 below it and the value
-/// as set 15 below. `// C#: ExtLibs/Controls/HorizontalProgressBar.cs:74-115, 160-175`
+/// the minimum and the maximum (`Value`'s setter, [`ProgressBar::fraction_at`]), its `Label`
+/// centred 2 below it and the value as set 15 below.
+/// `// C#: ExtLibs/Controls/HorizontalProgressBar.cs:74-115, 160-175`
 fn bar(id: String, x: f32, y: f32, label: &str, value: i32) -> AnyElement {
-    let ans = if value <= BAR_MIN {
-        BAR_MIN + 1
-    } else if value >= BAR_MAX {
-        BAR_MAX
-    } else {
-        value
-    };
-    #[allow(clippy::cast_precision_loss)] // pulse widths
-    let fraction = (ans - BAR_MIN) as f32 / (BAR_MAX - BAR_MIN) as f32;
+    let fraction = ProgressBar::ranged(BAR_MIN, BAR_MAX).fraction_at(value);
     let caption = |top: f32, text: String| {
         div()
             .absolute()

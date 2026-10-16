@@ -85,6 +85,7 @@ use mp_mavlink_dialects::all::MavCmd;
 
 use crate::MissionPlanner;
 use crate::config::failsafe::{Lookup, options};
+use crate::config::mavlink_controls::InputBox;
 use crate::telemetry::{self, Telemetry, TelemetryView};
 use crate::textfield::{KeyOutcome, TextField};
 use crate::ui::theme;
@@ -321,8 +322,8 @@ impl Spin {
 pub struct Prompt {
     /// Which handler.
     pub spin: Spin,
-    /// The answer box.
-    pub field: TextField,
+    /// The box: `Strings.ChangeThrottle`, the handler's question, the percentage offered.
+    pub input: InputBox,
 }
 
 /// A message box: its caption and text.
@@ -612,9 +613,10 @@ impl MotorTest {
                 Spin::Arm => self.throttle.value() as i32 + 2,
                 Spin::Min => current as i32 + 3,
             };
-            let mut field = TextField::new("");
-            field.set(value.to_string());
-            self.prompt = Some(Prompt { spin, field });
+            self.prompt = Some(Prompt {
+                spin,
+                input: InputBox::new(CHANGE_THROTTLE, spin.question(), &value.to_string()),
+            });
         } else {
             self.messages.push_back(Message {
                 title: ERROR_TITLE,
@@ -634,13 +636,8 @@ impl MotorTest {
         let Some(prompt) = self.prompt.take() else {
             return;
         };
-        super::optional::remember_answer(
-            settings,
-            CHANGE_THROTTLE,
-            prompt.spin.question(),
-            prompt.field.value(),
-        );
-        let Some(percent) = int_parse(prompt.field.value()) else {
+        let answer = prompt.input.answer(true, settings);
+        let Some(percent) = int_parse(&answer) else {
             self.messages.push_back(Message {
                 title: UNHANDLED.0,
                 text: format!(
@@ -677,7 +674,7 @@ impl MotorTest {
         let Some(prompt) = self.prompt.as_mut() else {
             return false;
         };
-        match prompt.field.key(event) {
+        match prompt.input.key(event) {
             KeyOutcome::Submitted => self.answer(telemetry, settings),
             KeyOutcome::Cancelled => self.cancel(),
             KeyOutcome::Changed => {}
@@ -967,7 +964,7 @@ pub fn record_facts(test: &MotorTest, view: &TelemetryView) {
     );
     record(
         "config.motortest.prompt.value",
-        test.prompt().map_or("none", |prompt| prompt.field.value()),
+        test.prompt().map_or("none", |prompt| prompt.input.field.value()),
     );
     record(
         "config.motortest.spin",
@@ -1387,17 +1384,17 @@ fn dialog(
                 div()
                     .text_xs()
                     .text_color(rgb(theme::DIM))
-                    .child(CHANGE_THROTTLE),
+                    .child(prompt.input.title),
             )
             .child(
                 div()
                     .text_sm()
                     .text_color(rgb(theme::TEXT))
-                    .child(prompt.spin.question()),
+                    .child(prompt.input.prompt),
             )
             .child(crate::textfield::text_field(
                 "motortest-prompt-value",
-                &prompt.field,
+                &prompt.input.field,
                 &focus.prompt,
                 focused,
                 px(310.0),
@@ -1624,7 +1621,7 @@ mod tests {
         test.click_spin(Spin::Arm, &sitl());
         assert!(!test.enabled(), "the handler disables the page");
         let prompt = test.prompt().expect("the InputBox");
-        assert_eq!(prompt.field.value(), "7");
+        assert_eq!(prompt.input.field.value(), "7");
         assert_eq!(
             prompt.spin.question(),
             "Enter arm throttle % (deadzone + 2%)"
@@ -1654,7 +1651,7 @@ mod tests {
         test.cancel();
         assert_eq!(settings.get(&arm), None, "Cancel keeps nothing");
         test.click_spin(Spin::Arm, &sitl());
-        test.prompt.as_mut().expect("the InputBox").field.set("7.5");
+        test.prompt.as_mut().expect("the InputBox").input.field.set("7.5");
         test.answer(&Telemetry::idle(), &mut settings);
         assert_eq!(settings.get(&arm), Some("7.5"), "kept before int.Parse");
         let mut test = MotorTest::default();
@@ -1670,7 +1667,7 @@ mod tests {
         let mut test = MotorTest::default();
         test.activate(&sitl(), bundled);
         test.click_spin(Spin::Min, &sitl());
-        assert_eq!(test.prompt().map(|p| p.field.value()), Some("3"));
+        assert_eq!(test.prompt().map(|p| p.input.field.value()), Some("3"));
     }
 
     #[test]
@@ -1711,7 +1708,7 @@ mod tests {
         let mut test = MotorTest::default();
         test.activate(&sitl(), bundled);
         test.click_spin(Spin::Arm, &sitl());
-        test.prompt.as_mut().unwrap().field.set("7.5");
+        test.prompt.as_mut().unwrap().input.field.set("7.5");
         test.answer(
             &Telemetry::idle(),
             &mut crate::settings::Persisted::at(None),

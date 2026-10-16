@@ -88,6 +88,7 @@ use mp_units::LatLon;
 
 use crate::MissionPlanner;
 use crate::config::firmware::{BoxIds, PathBox};
+use crate::config::mavlink_controls::InputBox;
 use crate::fly::error_box;
 use crate::plan::{AltitudeFrame, Plan};
 use crate::textfield::{KeyOutcome, TextField};
@@ -194,14 +195,18 @@ impl Combo {
     }
 }
 
+/// `CMB_startfrom`'s `InputBox`: its caption and question.
+/// `// C#: Grid/GridUI.cs:1928`
+const POINT_QUESTION: (&str, &str) = ("Enter point #", "Please enter a boundary point number");
+
 /// A box over the dialog.
 enum Prompt {
     /// `InputBox.Show("Enter point #", "Please enter a boundary point number", ref pnt)`.
-    Point(TextField),
+    Point(InputBox),
     /// `CustomMessageBox.Show(text, caption)`.
     Message(String, &'static str),
     /// `InputBox.Show("Camera Name", "Please and a camera name", ref camname)`: `BUT_save`'s.
-    CameraName(TextField),
+    CameraName(InputBox),
     /// `CustomMessageBox.Show("No polygon defined. Load a file?", "Load File", YesNo)`:
     /// `GridPlugin.but_Click`'s, before the dialog shows.
     LoadFile,
@@ -538,9 +543,11 @@ fn accept(this: &mut MissionPlanner) {
 fn ask_camera_name(open: &mut Open) {
     commit_edit(open);
     open.dropdown = None;
-    let mut field = TextField::new("");
-    field.set(gridui::CAMERA_NAME_DEFAULT);
-    open.prompt = Some(Prompt::CameraName(field));
+    open.prompt = Some(Prompt::CameraName(InputBox::new(
+        gridui::CAMERA_NAME_TITLE,
+        gridui::CAMERA_NAME_PROMPT,
+        gridui::CAMERA_NAME_DEFAULT,
+    )));
 }
 
 /// OK or Yes (`ok` true), or Cancel or No, on the box showing: "No polygon defined. Load a
@@ -554,21 +561,27 @@ fn answer(this: &mut MissionPlanner, ok: bool) {
         open.prompt = None;
         load_file_answered(this, ok);
     } else {
-        answer_prompt(open, ok);
+        answer_prompt(open, ok, &mut this.persisted);
     }
 }
 
 /// OK (`ok` true) or Cancel on the box showing: "Enter point #" goes to the dialog; the camera
 /// name, on OK, saves the camera ([`save_camera`]); a message just goes. A message over a dialog
 /// not yet shown is `xmlcamera`'s, from the constructor, after which `but_Click` asks "No polygon
-/// defined. Load a file?".
-fn answer_prompt(open: &mut Open, ok: bool) {
+/// defined. Load a file?". An `InputBox`'s OK keeps its text in `settings`, as it keeps every
+/// titled answer.
+/// `// C#: Grid/GridUI.cs:1573, 1928; ExtLibs/Controls/InputBox.cs:178-184`
+fn answer_prompt(open: &mut Open, ok: bool, settings: &mut crate::settings::Persisted) {
     match open.prompt.take() {
-        Some(Prompt::Point(field)) => open.dialog.answer_point(ok.then_some(field.value())),
-        Some(Prompt::CameraName(field)) if ok => {
+        Some(Prompt::Point(input)) => {
+            let answer = input.answer(ok, settings);
+            open.dialog.answer_point(ok.then_some(answer.as_str()));
+        }
+        Some(Prompt::CameraName(input)) if ok => {
+            let name = input.answer(ok, settings);
             save_camera(
                 open,
-                field.value(),
+                &name,
                 mp_settings::user_data_directory().as_deref(),
             );
         }
@@ -895,10 +908,10 @@ fn key(
     let Some(open) = this.survey.open.as_mut() else {
         return;
     };
-    if let Some(Prompt::Point(field) | Prompt::CameraName(field)) = open.prompt.as_mut() {
-        match field.key(event) {
-            KeyOutcome::Submitted => answer_prompt(open, true),
-            KeyOutcome::Cancelled => answer_prompt(open, false),
+    if let Some(Prompt::Point(input) | Prompt::CameraName(input)) = open.prompt.as_mut() {
+        match input.key(event) {
+            KeyOutcome::Submitted => answer_prompt(open, true, &mut this.persisted),
+            KeyOutcome::Cancelled => answer_prompt(open, false, &mut this.persisted),
             KeyOutcome::Changed | KeyOutcome::Ignored => {}
         }
         changed(this, window, cx);
@@ -1411,9 +1424,9 @@ fn dropdown(
                             if let Some(start) = StartPosition::from_name(&name)
                                 && open.dialog.select_startfrom(start)
                             {
-                                let mut field = TextField::new("");
-                                field.set("1");
-                                open.prompt = Some(Prompt::Point(field));
+                                let (title, question) = POINT_QUESTION;
+                                open.prompt =
+                                    Some(Prompt::Point(InputBox::new(title, question, "1")));
                                 this.survey.focus.focus(window, cx);
                             }
                         }
@@ -1928,16 +1941,9 @@ fn prompt_box(
 ) -> Option<AnyElement> {
     let prompt = open.prompt.as_ref()?;
     let (title, text, field) = match prompt {
-        Prompt::Point(field) => (
-            "Enter point #",
-            "Please enter a boundary point number".to_owned(),
-            Some(field),
-        ),
-        Prompt::CameraName(field) => (
-            gridui::CAMERA_NAME_TITLE,
-            gridui::CAMERA_NAME_PROMPT.to_owned(),
-            Some(field),
-        ),
+        Prompt::Point(input) | Prompt::CameraName(input) => {
+            (input.title, input.prompt.to_owned(), Some(&input.field))
+        }
         Prompt::Message(text, caption) => (*caption, text.clone(), None),
         Prompt::LoadFile => (LOAD_FILE_CAPTION, LOAD_FILE_TEXT.to_owned(), None),
     };
@@ -2287,8 +2293,9 @@ pub fn record_facts(survey: &SurveyUi) {
     );
     let (prompt, text) = match &open.prompt {
         None => ("none", String::new()),
-        Some(Prompt::Point(field)) => ("Enter point #", field.value().to_owned()),
-        Some(Prompt::CameraName(field)) => (gridui::CAMERA_NAME_TITLE, field.value().to_owned()),
+        Some(Prompt::Point(input) | Prompt::CameraName(input)) => {
+            (input.title, input.field.value().to_owned())
+        }
         Some(Prompt::Message(text, caption)) => (
             if caption.is_empty() {
                 "message"
@@ -2393,10 +2400,10 @@ mod tests {
         let mut open = opened(gui_dialog());
         open.dialog.type_num(Num::FocalLength, "8.8");
         ask_camera_name(&mut open);
-        let Some(Prompt::CameraName(field)) = &open.prompt else {
+        let Some(Prompt::CameraName(input)) = &open.prompt else {
             panic!("the InputBox");
         };
-        assert_eq!(field.value(), "Default");
+        assert_eq!(input.field.value(), "Default");
         open.prompt = None;
         save_camera(&mut open, "Default", Some(&dir));
         assert!(open.prompt.is_none());

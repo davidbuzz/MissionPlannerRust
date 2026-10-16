@@ -33,7 +33,8 @@
 //!   handlers ran, through the link's retrying set; what a `catch` or a `false` shows is carried
 //!   with each call.
 //! * The drawing the pages share: a picture where the C# has one ([`crate::pictures`]), the
-//!   five-pixel group boxes that draw as rules, the 12-point headings, a text box.
+//!   five-pixel group boxes that draw as rules, the 12-point headings, a text box, and the shared
+//!   `InputBox` ([`crate::config::mavlink_controls::InputBox`]) drawn over the window.
 //! * [`Optional`], the six page objects, and [`Focus`], their keyboard focus; the arms of
 //!   `setup.rs` and the lines of `main.rs` call into `impl MissionPlanner` here.
 
@@ -51,10 +52,15 @@ use mp_link::requests::RequestOutcome;
 
 use crate::MissionPlanner;
 use crate::config::flight_modes::{ParamWriter, Progress};
+// The shared controls' pieces the pages have long imported from here: `InputBox` and what it
+// keeps, and the parameter list's lookups and the controls' failure text.
+pub use crate::config::mavlink_controls::{InputBox, has, remember_answer, set_failed, value_of};
+// The pages' tests name an answer's key and encode a URL under this path.
+#[cfg(test)]
+pub use crate::config::mavlink_controls::{answers_key, url_encode};
 use crate::config::servo_output::{ERROR_TITLE, Message, Write};
 use crate::setup::Key;
 use crate::telemetry::TelemetryView;
-use crate::textfield::TextField;
 use crate::ui::{action, theme};
 
 use super::{adsb, airspeed, battery_monitor2, mount, optical_flow, rangefinder};
@@ -62,13 +68,6 @@ use super::{adsb, airspeed, battery_monitor2, mount, optical_flow, rangefinder};
 // ---------------------------------------------------------------------------------------------
 // The handlers' setParam calls.
 // ---------------------------------------------------------------------------------------------
-
-/// `Strings.ErrorSetValueFailed`, "Set {0} Failed".
-/// `// C#: ExtLibs/Strings/Strings.resx:171-173`
-#[must_use]
-pub fn set_failed(param: &str) -> String {
-    format!("Set {param} Failed")
-}
 
 /// `Strings.ErrorFeatureNotEnabled`.
 /// `// C#: ExtLibs/Strings/Strings.resx:143-145`
@@ -405,18 +404,6 @@ impl<H: Copy> SetQueue<H> {
     }
 }
 
-/// A parameter's value in the vehicle's table.
-#[must_use]
-pub fn value_of(parameters: &[(String, f64)], name: &str) -> Option<f64> {
-    crate::config::servo_output::value_of(parameters, name)
-}
-
-/// `MAV.param.ContainsKey(name)`.
-#[must_use]
-pub fn has(parameters: &[(String, f64)], name: &str) -> bool {
-    value_of(parameters, name).is_some()
-}
-
 /// The status line's words for the last of the link failures [`SetQueue::advance_split`] sorted
 /// out, as `extra_setup` words its pages' - the C#'s box's text on one line.
 #[must_use]
@@ -619,112 +606,6 @@ pub fn text_box(
             .text_color(rgb(if enabled { theme::TEXT } else { theme::DIM })),
     };
     at(x, y, width, height).child(base).into_any_element()
-}
-
-/// An `InputBox`: a caption, a question and an answer box, with OK and Cancel.
-/// `// C#: ExtLibs/Controls/InputBox.cs:62-190`
-#[derive(Debug)]
-pub struct InputBox {
-    /// The caption.
-    pub title: &'static str,
-    /// The question.
-    pub prompt: &'static str,
-    /// The answer box, holding the value passed in.
-    pub field: TextField,
-}
-
-impl InputBox {
-    /// `InputBox.Show(title, prompt, ref value)`.
-    #[must_use]
-    pub fn new(title: &'static str, prompt: &'static str, value: &str) -> Self {
-        let mut field = TextField::new("");
-        field.set(value);
-        Self {
-            title,
-            prompt,
-            field,
-        }
-    }
-
-    /// OK: the answer kept in `Settings.Instance`, as [`remember_answer`] keeps it.
-    pub fn remember(&self, settings: &mut crate::settings::Persisted) {
-        remember_answer(settings, self.title, self.prompt, self.field.value());
-    }
-}
-
-/// The key `InputBox` keeps a question's answers under: `"InputBox" + title.CleanString() +
-/// promptText.CleanString()`, `CleanString` keeping the letters and digits.
-/// `// C#: ExtLibs/Controls/InputBox.cs:75, 183; ExtLibs/Utilities/Extensions.cs:495-498`
-#[must_use]
-pub fn answers_key(title: &str, prompt: &str) -> String {
-    // `Char.IsLetterOrDigit`; Rust's `is_alphanumeric` also takes letter-numbers and marks some
-    // scripts class as alphabetic, which no question here holds.
-    let clean = |text: &str| {
-        text.chars()
-            .filter(|c| c.is_alphanumeric())
-            .collect::<String>()
-    };
-    format!("InputBox{}{}", clean(title), clean(prompt))
-}
-
-/// `WebUtility.UrlEncode`: letters, digits and `-_.!*()` as they are, a space `+`, every other
-/// UTF-8 byte `%XX` in capitals.
-#[must_use]
-pub fn url_encode(text: &str) -> String {
-    let mut out = String::with_capacity(text.len());
-    for byte in text.bytes() {
-        match byte {
-            b'a'..=b'z'
-            | b'A'..=b'Z'
-            | b'0'..=b'9'
-            | b'-'
-            | b'_'
-            | b'.'
-            | b'!'
-            | b'*'
-            | b'('
-            | b')' => out.push(char::from(byte)),
-            b' ' => out.push('+'),
-            _ => {
-                use std::fmt::Write as _;
-                let _ = write!(out, "%{byte:02X}");
-            }
-        }
-    }
-    out
-}
-
-/// What `InputBox.Show` keeps when its OK is pressed: the box's autocomplete list with the answer
-/// added, `SetList` into `Settings.Instance` - distinct, URL-encoded, `;`-joined. The list it
-/// started from is `GetList` of the key filtered to its null or empty entries (`Where(a => a ==
-/// null || a == "")`), so the list kept is an empty entry, if the setting had one, then the
-/// answer; and the suggestions the box offers are only ever empty. Nothing on the pages that ask
-/// reads the list back.
-/// `// C#: ExtLibs/Controls/InputBox.cs:73-84, 178-184; ExtLibs/Utilities/Settings.cs:164-176`
-pub fn remember_answer(
-    settings: &mut crate::settings::Persisted,
-    title: &str,
-    prompt: &str,
-    answer: &str,
-) {
-    // `if (title != "")`: an untitled box has no list, and `AutoCompleteCustomSource` stays null.
-    if title.is_empty() {
-        return;
-    }
-    let key = answers_key(title, prompt);
-    // `GetList`: split on `;`, each URL-decoded; an entry decodes to "" only when it is "".
-    let had_empty = settings
-        .get(&key)
-        .is_some_and(|list| list.split(';').any(str::is_empty));
-    let mut list: Vec<&str> = Vec::new();
-    if had_empty {
-        list.push("");
-    }
-    if !list.contains(&answer) {
-        list.push(answer);
-    }
-    let encoded: Vec<String> = list.iter().map(|entry| url_encode(entry)).collect();
-    settings.set(&key, encoded.join(";"));
 }
 
 /// An `InputBox` drawn over the window, modal as the C#'s is.
