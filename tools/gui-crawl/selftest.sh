@@ -7,7 +7,8 @@
 # Window changes itself, Change Log hands a link to the desktop, the welcome text is no control.
 # Then the Full Parameter List reached as verify.py reaches a control the screen shows at once:
 # its opening warning answered, its search box typed into; and a dimmed control told from a live
-# one by its colours. Display :90.
+# one by its colours. Last, a display whose server died: its socket file is not taken for a
+# server, and a new one is started over it (display :88). Display :90.
 set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
 OUT="$(mktemp -d)"
@@ -102,4 +103,42 @@ if looks["fly-rawsensor"] != "live":
     bad.append(f"fly-rawsensor looks {looks['fly-rawsensor']}, not live")
 print("look: " + ("passed" if not bad else "FAILED: " + "; ".join(bad)))
 sys.exit(1 if bad else 0)
+PY
+
+# A dead display's socket and lock (an Xvfb killed with the session that started it) are not a
+# server: ensure_display starts one over them, and a client then connects (2026-10-16, four crawl
+# workers were sent to displays that had died).
+python3 - "$HERE" <<'PY'
+import os, socket, subprocess, sys
+sys.path.insert(0, sys.argv[1])
+import driver
+display = ":88"
+path, lock = driver.display_files(display)
+bad = []
+if driver.display_answers(display):
+    bad.append("something answers on :88 already; the check needs it free")
+else:
+    for stale in (path, lock):
+        if os.path.exists(stale):
+            os.remove(stale)
+    with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as dead:
+        dead.bind(path)          # the file stays when the socket closes: a dead server's
+    with open(lock, "w") as f:
+        f.write("    4194304\n")  # a pid nothing has
+    if driver.display_answers(display):
+        bad.append("a dead socket file answered")
+    driver.ensure_display(display)
+    if not driver.display_answers(display):
+        bad.append("no server answers on :88 after ensure_display")
+    try:
+        pid = int(open(lock).read())
+        subprocess.run(["kill", str(pid)], check=False)
+    except (OSError, ValueError) as e:
+        bad.append(f"the new server left no lock to find it by: {e}")
+    for stale in (path, lock):
+        if os.path.exists(stale):
+            os.remove(stale)
+print("display: " + ("passed" if not bad else "FAILED: " + "; ".join(bad)))
+if bad:
+    sys.exit(1)
 PY

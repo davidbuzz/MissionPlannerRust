@@ -27,6 +27,7 @@ here touches the desktop's display.
 import json
 import os
 import shutil
+import socket
 import struct
 import subprocess
 import tempfile
@@ -41,17 +42,42 @@ ICD = "/usr/share/vulkan/icd.d/lvp_icd.json"
 OPENERS = ["xdg-open", "gio", "open", "firefox", "sensible-browser", "x-www-browser", "nautilus"]
 
 
+def display_files(display):
+    """The socket and the lock file an X server on `display` (":99") owns."""
+    number = display.lstrip(":")
+    return f"/tmp/.X11-unix/X{number}", f"/tmp/.X{number}-lock"
+
+
+def display_answers(display):
+    """Whether an X server accepts a connection on `display`. Its socket file alone says nothing:
+    an Xvfb killed with the session that started it leaves its socket and lock behind, and a
+    client sent there fails ("Unknown connection error") - four crawl workers did, 2026-10-16."""
+    path, _ = display_files(display)
+    try:
+        with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as probe:
+            probe.settimeout(1)
+            probe.connect(path)
+    except OSError:
+        return False
+    return True
+
+
 def ensure_display(display):
-    """An Xvfb on `display` (":99"), started when nothing listens there."""
-    socket = f"/tmp/.X11-unix/X{display.lstrip(':')}"
-    if os.path.exists(socket):
+    """An Xvfb on `display`, started when no server answers there - a dead server's socket and
+    lock file removed first, since Xvfb refuses a display whose lock names a living process."""
+    if display_answers(display):
         return
+    for stale in display_files(display):
+        try:
+            os.remove(stale)
+        except FileNotFoundError:
+            pass
     subprocess.Popen(
         ["setsid", "Xvfb", display, "-screen", "0", "2560x1440x24", "+extension", "GLX",
          "+extension", "RANDR", "+render", "-noreset"],
         stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     for _ in range(50):
-        if os.path.exists(socket):
+        if display_answers(display):
             return
         time.sleep(0.1)
     raise RuntimeError(f"Xvfb {display} did not start")

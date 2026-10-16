@@ -21,13 +21,17 @@ set -u
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 DISPLAY_NO="${HEADLESS_DISPLAY:-:99}"
 SOCKET="/tmp/.X11-unix/X${DISPLAY_NO#:}"
-if [ ! -S "$SOCKET" ]; then
+# A server answers, not merely a socket file: an Xvfb killed with the session that started it
+# leaves its socket and lock behind, and a planner sent there fails to connect (2026-10-16).
+display_answers() { xdpyinfo -display "$DISPLAY_NO" > /dev/null 2>&1; }
+if ! display_answers; then
+    rm -f "$SOCKET" "/tmp/.X${DISPLAY_NO#:}-lock"
     # With every inherited descriptor closed: run under `flock`, the display server inherited the
     # lock's descriptor and held the machine's build lock for as long as it lived (2026-10-02).
     nohup setsid Xvfb "$DISPLAY_NO" -screen 0 2560x1440x24 +extension GLX +extension RANDR +render -noreset \
         > "${TMPDIR:-/tmp}/xvfb-${DISPLAY_NO#:}.log" 2>&1 < /dev/null 3>&- 4>&- 5>&- 6>&- 7>&- 8>&- 9>&- &
-    for _ in $(seq 1 50); do [ -S "$SOCKET" ] && break; sleep 0.1; done
-    [ -S "$SOCKET" ] || { echo "Xvfb $DISPLAY_NO did not start" >&2; exit 2; }
+    for _ in $(seq 1 50); do display_answers && break; sleep 0.1; done
+    display_answers || { echo "Xvfb $DISPLAY_NO did not start" >&2; exit 2; }
 fi
 ICD=/usr/share/vulkan/icd.d/lvp_icd.json
 [ -f "$ICD" ] || { echo "no lavapipe ($ICD): install mesa-vulkan-drivers" >&2; exit 2; }
