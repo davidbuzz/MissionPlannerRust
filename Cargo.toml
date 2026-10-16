@@ -125,19 +125,19 @@ calloop = { git = "https://github.com/zed-industries/calloop" }
 # holds the toolchain at 1.95.0 while on crates.io gpui, so the fixes are carried on the release
 # here and this block goes when the toolchain moves. The whole workspace is patched, not the VM
 # crate alone, so that one source provides every rustpython crate and no type is defined twice.
-rustpython = { git = "https://github.com/davidbuzz/RustPython", rev = "e7bba0258304314fda176754f1e93e1496bb150c" }
-rustpython-codegen = { git = "https://github.com/davidbuzz/RustPython", rev = "e7bba0258304314fda176754f1e93e1496bb150c" }
-rustpython-common = { git = "https://github.com/davidbuzz/RustPython", rev = "e7bba0258304314fda176754f1e93e1496bb150c" }
-rustpython-compiler = { git = "https://github.com/davidbuzz/RustPython", rev = "e7bba0258304314fda176754f1e93e1496bb150c" }
-rustpython-compiler-core = { git = "https://github.com/davidbuzz/RustPython", rev = "e7bba0258304314fda176754f1e93e1496bb150c" }
-rustpython-derive = { git = "https://github.com/davidbuzz/RustPython", rev = "e7bba0258304314fda176754f1e93e1496bb150c" }
-rustpython-derive-impl = { git = "https://github.com/davidbuzz/RustPython", rev = "e7bba0258304314fda176754f1e93e1496bb150c" }
-rustpython-literal = { git = "https://github.com/davidbuzz/RustPython", rev = "e7bba0258304314fda176754f1e93e1496bb150c" }
-rustpython-pylib = { git = "https://github.com/davidbuzz/RustPython", rev = "e7bba0258304314fda176754f1e93e1496bb150c" }
-rustpython-sre_engine = { git = "https://github.com/davidbuzz/RustPython", rev = "e7bba0258304314fda176754f1e93e1496bb150c" }
-rustpython-stdlib = { git = "https://github.com/davidbuzz/RustPython", rev = "e7bba0258304314fda176754f1e93e1496bb150c" }
-rustpython-vm = { git = "https://github.com/davidbuzz/RustPython", rev = "e7bba0258304314fda176754f1e93e1496bb150c" }
-rustpython-wtf8 = { git = "https://github.com/davidbuzz/RustPython", rev = "e7bba0258304314fda176754f1e93e1496bb150c" }
+rustpython = { git = "https://github.com/davidbuzz/RustPython", rev = "dfe089827d8da6bd7b9e6d836268e9ac93ce06fd" }
+rustpython-codegen = { git = "https://github.com/davidbuzz/RustPython", rev = "dfe089827d8da6bd7b9e6d836268e9ac93ce06fd" }
+rustpython-common = { git = "https://github.com/davidbuzz/RustPython", rev = "dfe089827d8da6bd7b9e6d836268e9ac93ce06fd" }
+rustpython-compiler = { git = "https://github.com/davidbuzz/RustPython", rev = "dfe089827d8da6bd7b9e6d836268e9ac93ce06fd" }
+rustpython-compiler-core = { git = "https://github.com/davidbuzz/RustPython", rev = "dfe089827d8da6bd7b9e6d836268e9ac93ce06fd" }
+rustpython-derive = { git = "https://github.com/davidbuzz/RustPython", rev = "dfe089827d8da6bd7b9e6d836268e9ac93ce06fd" }
+rustpython-derive-impl = { git = "https://github.com/davidbuzz/RustPython", rev = "dfe089827d8da6bd7b9e6d836268e9ac93ce06fd" }
+rustpython-literal = { git = "https://github.com/davidbuzz/RustPython", rev = "dfe089827d8da6bd7b9e6d836268e9ac93ce06fd" }
+rustpython-pylib = { git = "https://github.com/davidbuzz/RustPython", rev = "dfe089827d8da6bd7b9e6d836268e9ac93ce06fd" }
+rustpython-sre_engine = { git = "https://github.com/davidbuzz/RustPython", rev = "dfe089827d8da6bd7b9e6d836268e9ac93ce06fd" }
+rustpython-stdlib = { git = "https://github.com/davidbuzz/RustPython", rev = "dfe089827d8da6bd7b9e6d836268e9ac93ce06fd" }
+rustpython-vm = { git = "https://github.com/davidbuzz/RustPython", rev = "dfe089827d8da6bd7b9e6d836268e9ac93ce06fd" }
+rustpython-wtf8 = { git = "https://github.com/davidbuzz/RustPython", rev = "dfe089827d8da6bd7b9e6d836268e9ac93ce06fd" }
 
 # tailscale-rs 0.6.1 (BSD-3-Clause) as published on crates.io, with MagicDNS name lookup added for
 # the built-in Tailscale node (crates/mp-tailnet; the owner's feature of 2026-10-14): the two of its
