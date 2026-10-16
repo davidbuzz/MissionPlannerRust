@@ -93,7 +93,8 @@ wrote).
 - The UDP transport sends to the last peer heard; the C# sends every write to each endpoint it has
   heard from (`CommsUdpSerial.EndPointList`) - several sources on one port.
 - `RoundToSignificantDigits` rounds an exact half away from zero; the C# rounds to even.
-- The OpenStreetMap geocoder's results are not cached: every Zoom To search asks the server.
+- The OpenStreetMap geocoder's results are not cached: every Zoom To search asks the server
+  (mended 2026-10-16: kept 88 days under gmapcache/GeocoderCache, as the C#'s Cache keeps them).
 - The OpenStreetMap provider stops at zoom 19; the C# sets no limit.
 - `getFilefromNet` always downloads; the C# skips a file on disk matching the server's date and
   length.

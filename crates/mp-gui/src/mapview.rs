@@ -45,6 +45,7 @@ use gpui::{
 };
 use mp_mission::MissionItem;
 use mp_tiles::store::{TileAnswer, TileStore};
+use mp_tiles::urlcache::{self, CacheType};
 use mp_units::{Bearing, LatLon, TileId, WebMercator, tiles};
 
 /// Which of Mission Planner's vehicle markers the flight map draws: `Common.getMAVMarker`'s choice
@@ -2961,20 +2962,58 @@ fn xml_unescape(value: &str) -> String {
     out
 }
 
-/// `OpenStreetMapProvider.GetPoint(keywords, out status)`: the first place the geocoder finds,
-/// fetched through `fetch` - which is `GetContentUsingHttp`, and whose failure is the exception
-/// `GetLatLngFromGeocoderUrl` turns into `ExceptionInCode`. (GMap's geocoder cache is not kept:
-/// every search goes to the geocoder.)
-/// `// C#: ExtLibs/GMap.NET.Core/GMap.NET.MapProviders/OpenStreetMap/OpenStreetMapProvider.cs:164-185, 286-367`
+/// `OpenStreetMapProvider.GetPoint(keywords, out status)`: the first place the geocoder finds.
+///
+/// The page is looked for first in GMap's geocoder cache under `cache`, the `gmapcache` root:
+/// `GeocoderCache/<SHA-1 of the URL>.txt`, keyed by the URL (so by the keywords as
+/// `MakeGeocoderUrl` writes them) and trusted for 88 days from its download, read only once this
+/// run has saved a page of either kind, as in the C# ([`urlcache`]). Only a page not found there
+/// is fetched, through `fetch` - which is `GetContentUsingHttp`, and whose failure is the exception
+/// `GetLatLngFromGeocoderUrl` turns into `ExceptionInCode`.
+///
+/// A fetched page is kept when it starts `<?xml` and has a `<place` in it, and is kept before it
+/// is read, as the C# keeps it: a failed request, an empty page and a page with no place in it are
+/// not kept, and are asked for again by the next search; a page with a place in it that then does
+/// not read is kept, and answers `ExceptionInCode` from the cache until its 88 days are up.
+///
+/// `cache` is `GMaps.Instance.UseGeocoderCache` and the location together: `None`, no cache, is
+/// what the C# falls back to when it has no location at all (`Cache.cs:49-57`). The planner always
+/// has one; only tests leave it out.
+/// `// C#: ExtLibs/GMap.NET.Core/GMap.NET.MapProviders/OpenStreetMap/OpenStreetMapProvider.cs:164-185, 286-367;
+/// GMap.NET/GMaps.cs:43; GMap.NET.Internals/Cache.cs:182-254`
 pub fn geocode<E>(
     keywords: &str,
+    cache: Option<&std::path::Path>,
     fetch: impl FnOnce(&str) -> Result<String, E>,
 ) -> (GeocoderStatus, Option<LatLon>) {
-    let Ok(page) = fetch(&geocoder_url(keywords)) else {
-        return (GeocoderStatus::ExceptionInCode, None);
+    let url = geocoder_url(keywords);
+    let kept = cache
+        .and_then(|root| {
+            urlcache::get_content(
+                root,
+                CacheType::GeocoderCache,
+                &url,
+                urlcache::DEFAULT_STAY_IN_CACHE,
+            )
+        })
+        .unwrap_or_default();
+    let (page, fetched) = if kept.is_empty() {
+        let Ok(page) = fetch(&url) else {
+            return (GeocoderStatus::ExceptionInCode, None);
+        };
+        (page, true)
+    } else {
+        (kept, false)
     };
     if page.is_empty() {
         return (GeocoderStatus::Unknow, None);
+    }
+    if fetched
+        && let Some(root) = cache
+        && page.starts_with("<?xml")
+        && page.contains("<place")
+    {
+        urlcache::save_content(root, CacheType::GeocoderCache, &url, &page);
     }
     let (status, points) = parse_geocoder(&page);
     (status, points.first().copied())
@@ -5885,7 +5924,7 @@ mod tests {
     #[test]
     fn geocoding_asks_for_the_url_and_takes_the_first_place() {
         let mut asked = String::new();
-        let (status, found) = geocode("lithuania vilnius", |url| {
+        let (status, found) = geocode("lithuania vilnius", None, |url| {
             asked = url.to_owned();
             Ok::<_, ()>(NOMINATIM.to_owned())
         });
@@ -5896,11 +5935,11 @@ mod tests {
         assert_eq!(status, GeocoderStatus::Success);
         assert!((found.expect("a place").latitude() - 54.687_363_348_602_8).abs() < 1e-12);
         assert_eq!(
-            geocode("x", |_| Err::<String, _>("offline")),
+            geocode("x", None, |_| Err::<String, _>("offline")),
             (GeocoderStatus::ExceptionInCode, None)
         );
         assert_eq!(
-            geocode("x", |_| Ok::<_, ()>(String::new())),
+            geocode("x", None, |_| Ok::<_, ()>(String::new())),
             (GeocoderStatus::Unknow, None)
         );
         assert_eq!(GeocoderStatus::Unknow.to_string(), "Unknow");
@@ -5908,6 +5947,172 @@ mod tests {
             GeocoderStatus::ExceptionInCode.to_string(),
             "ExceptionInCode"
         );
+    }
+
+    /// A `gmapcache` root of a test's own, removed when dropped.
+    struct ScratchCache(std::path::PathBuf);
+
+    impl ScratchCache {
+        fn new(name: &str) -> Self {
+            let root =
+                mp_os::temp_dir().join(format!("mp-geocoder-{name}-{}", mp_os::process_id()));
+            let _ = mp_os::fs::remove_dir_all(&root);
+            Self(root)
+        }
+
+        /// Where the C# keeps a geocoder page under this root, by the page's file name.
+        fn kept(&self, file: &str) -> std::path::PathBuf {
+            self.0.join("GeocoderCache").join(file)
+        }
+    }
+
+    impl Drop for ScratchCache {
+        fn drop(&mut self) {
+            let _ = mp_os::fs::remove_dir_all(&self.0);
+        }
+    }
+
+    /// The file the C# keeps the search for "lithuania vilnius" in: the SHA-1 of its URL's
+    /// UTF-16 bytes in upper-case pairs, as Python's `hashlib.sha1(url.encode('utf-16-le'))`
+    /// gives it.
+    const VILNIUS_FILE: &str = "DE-62-1B-BD-FD-31-F1-D4-63-60-BC-0C-CD-2A-10-89-93-03-AA-25.txt";
+
+    /// One place, Canberra.
+    const CANBERRA: &str = "<?xml version=\"1.0\" encoding=\"UTF-8\" ?>\n<searchresults><place place_rank=\"16\" lat=\"-35.2975906\" lon=\"149.1012676\"/></searchresults>";
+
+    /// A search's page is kept under its URL's name in `GeocoderCache`, UTF-8 after a byte-order
+    /// mark, and the same words again are answered from it without asking; other words ask, and
+    /// so do the same words written otherwise, the key being the URL.
+    #[test]
+    fn the_same_words_are_answered_from_the_geocoder_cache() {
+        let scratch = ScratchCache::new("same");
+        let root = scratch.0.as_path();
+        let asked = std::cell::Cell::new(0_usize);
+        let fetch = |url: &str| {
+            asked.set(asked.get() + 1);
+            Ok::<_, ()>(if url.contains("vilnius") { NOMINATIM } else { CANBERRA }.to_owned())
+        };
+        let first = geocode("lithuania vilnius", Some(root), fetch);
+        assert_eq!(first.0, GeocoderStatus::Success);
+        assert_eq!(asked.get(), 1);
+        assert_eq!(
+            mp_os::fs::read(scratch.kept(VILNIUS_FILE)).expect("the page kept"),
+            format!("\u{feff}{NOMINATIM}").into_bytes()
+        );
+        assert_eq!(geocode("lithuania vilnius", Some(root), fetch), first);
+        assert_eq!(asked.get(), 1, "the same words ask nothing");
+        let canberra = geocode("Canberra ACT", Some(root), fetch);
+        assert_eq!(canberra.1, Some(at(-35.297_590_6, 149.101_267_6)));
+        assert_eq!(asked.get(), 2, "other words ask");
+        assert_eq!(geocode("Canberra ACT", Some(root), fetch), canberra);
+        assert_eq!(asked.get(), 2);
+        let _ = geocode("Lithuania Vilnius", Some(root), fetch);
+        assert_eq!(asked.get(), 3, "the key is the URL, as written");
+    }
+
+    /// What the C# does not keep is asked for again: a request that failed, an empty page, and a
+    /// page with no place in it (Nominatim's answer to words it does not know; its
+    /// `exclude_place_ids` is not a `<place`). A page with a place in it is kept before it is
+    /// read, so one that then does not read answers `ExceptionInCode` from the cache.
+    #[test]
+    fn only_a_fetched_page_with_a_place_in_it_is_kept() {
+        let scratch = ScratchCache::new("failures");
+        let root = scratch.0.as_path();
+        let asked = std::cell::Cell::new(0_usize);
+        let count = &asked;
+        let answering = move |page: &'static str| {
+            move |_: &str| {
+                count.set(count.get() + 1);
+                Ok::<_, ()>(page.to_owned())
+            }
+        };
+        let offline = move |_: &str| {
+            count.set(count.get() + 1);
+            Err::<String, _>("offline")
+        };
+        let failed = (GeocoderStatus::ExceptionInCode, None);
+        assert_eq!(geocode("Atlantis", Some(root), offline), failed);
+        assert_eq!(geocode("Atlantis", Some(root), offline), failed);
+        assert_eq!(asked.get(), 2, "a failed request is not kept");
+        let nothing = (GeocoderStatus::Unknow, None);
+        assert_eq!(geocode("Atlantis", Some(root), answering("")), nothing);
+        assert_eq!(geocode("Atlantis", Some(root), answering("")), nothing);
+        assert_eq!(asked.get(), 4, "nor an empty page");
+        let no_places = "<?xml version=\"1.0\" encoding=\"UTF-8\" ?>\n<searchresults timestamp=\"Thu, 16 Oct 26 08:00:00 +00:00\" querystring=\"Atlantis\" exclude_place_ids=\"\" more_url=\"https://nominatim.openstreetmap.org/search?q=Atlantis&amp;format=xml\"></searchresults>";
+        assert_eq!(geocode("Atlantis", Some(root), answering(no_places)), nothing);
+        assert_eq!(geocode("Atlantis", Some(root), answering(no_places)), nothing);
+        assert_eq!(asked.get(), 6, "nor a page with no place in it");
+        assert!(!scratch.0.join("GeocoderCache").exists(), "nothing kept");
+        let unreadable = "<?xml version=\"1.0\"?><searchresults><place lat=\"1\"";
+        assert_eq!(geocode("broken", Some(root), answering(unreadable)), failed);
+        assert_eq!(geocode("broken", Some(root), answering(unreadable)), failed);
+        assert_eq!(asked.get(), 7, "a page with a place in it is kept before it is read");
+    }
+
+    /// A kept page is trusted for 88 days from its download: one 87 days old is read, and
+    /// reading it leaves its age alone; one 89 days old is deleted, asked for again, and kept
+    /// anew.
+    #[test]
+    fn a_kept_page_lasts_88_days_from_its_download() {
+        let scratch = ScratchCache::new("expiry");
+        let root = scratch.0.as_path();
+        let asked = std::cell::Cell::new(0_usize);
+        let fetch = |_: &str| {
+            asked.set(asked.get() + 1);
+            Ok::<_, ()>(NOMINATIM.to_owned())
+        };
+        let first = geocode("lithuania vilnius", Some(root), fetch);
+        let file = scratch.kept(VILNIUS_FILE);
+        let day = std::time::Duration::from_secs(24 * 60 * 60);
+        let age = |days: u32| {
+            mp_os::fs::File::options()
+                .write(true)
+                .open(&file)
+                .expect("the page kept")
+                .set_modified(std::time::SystemTime::now() - day * days)
+                .expect("aged");
+        };
+        let written = || {
+            mp_os::fs::metadata(&file)
+                .and_then(|meta| meta.modified())
+                .expect("the page kept")
+        };
+        age(87);
+        assert_eq!(geocode("lithuania vilnius", Some(root), fetch), first);
+        assert_eq!(asked.get(), 1, "87 days old is still kept");
+        assert!(
+            written() < std::time::SystemTime::now() - day * 86,
+            "a read does not renew it"
+        );
+        age(89);
+        assert_eq!(geocode("lithuania vilnius", Some(root), fetch), first);
+        assert_eq!(asked.get(), 2, "89 days old is asked for again");
+        assert!(
+            written() > std::time::SystemTime::now() - day,
+            "and kept anew"
+        );
+    }
+
+    /// A page another run kept, exactly where and as the C# keeps it, is read as this run's are -
+    /// once this run has saved a page, as in the C# (`Cache.cs:188-189, 220-221`).
+    #[test]
+    fn a_page_another_run_kept_is_read() {
+        let scratch = ScratchCache::new("another-run");
+        let root = scratch.0.as_path();
+        let asked = std::cell::Cell::new(0_usize);
+        let fetch = |_: &str| {
+            asked.set(asked.get() + 1);
+            Ok::<_, ()>(CANBERRA.to_owned())
+        };
+        // This run's first page, which makes the cache's location known.
+        let _ = geocode("Canberra ACT", Some(root), fetch);
+        assert_eq!(asked.get(), 1);
+        let file = scratch.kept(VILNIUS_FILE);
+        mp_os::fs::write(&file, format!("\u{feff}{NOMINATIM}")).expect("a page left");
+        let (status, found) = geocode("lithuania vilnius", Some(root), fetch);
+        assert_eq!(asked.get(), 1, "read, not asked");
+        assert_eq!(status, GeocoderStatus::Success);
+        assert!((found.expect("a place").latitude() - 54.687_363_348_602_8).abs() < 1e-12);
     }
 
     /// The facts a script reads: zoom and centre, circles, hover.

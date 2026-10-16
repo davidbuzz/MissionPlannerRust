@@ -8961,6 +8961,10 @@ pub struct PlanMenus {
     /// What a test puts in the geocoder's place, so Zoom To runs its whole course offline.
     #[cfg(test)]
     fake_geocoder: Option<GeocoderFetch>,
+    /// The `gmapcache` root a test keeps the geocoder's answers under in place of the tile
+    /// cache's; none keeps none, so a test reads nothing a real search left.
+    #[cfg(test)]
+    geocoder_cache: Option<PathBuf>,
     /// Yes to KML Overlay's "Zoom to the center or the loaded file?", until the screen zooms.
     zoom_to_kml: bool,
     /// Create Circle Survey's answers so far, as typed (or as offered, when a box was cancelled).
@@ -9519,17 +9523,28 @@ impl PlanMenus {
     }
 
     /// Sends Zoom To's place to the geocoder, on a thread of its own.
+    ///
+    /// Its answers are kept in GMap's geocoder cache, which is under the tile cache's root
+    /// because the C#'s `CacheLocator.Location` is the planning map's `CacheLocation`,
+    /// `gmapcache`: so the same words again are answered from `gmapcache/GeocoderCache/`
+    /// without asking the server.
+    /// `// C#: GCSViews/FlightPlanner.cs:151-152; ExtLibs/GMap.NET.WindowsForms/GMap.NET.WindowsForms/GMapControl.cs:2775-2791;
+    /// ExtLibs/GMap.NET.Core/GMap.NET.Internals/Cache.cs:188-191`
     fn start_geocode(&mut self, place: String) {
         #[cfg(test)]
         let fetch: GeocoderFetch = self.fake_geocoder.unwrap_or(geocoder_fetch);
         #[cfg(not(test))]
         let fetch: GeocoderFetch = geocoder_fetch;
+        #[cfg(test)]
+        let cache: Option<PathBuf> = self.geocoder_cache.clone();
+        #[cfg(not(test))]
+        let cache: Option<PathBuf> = Some(mp_tiles::TileCache::default_root());
         let (send, answer) = std::sync::mpsc::channel();
         let keywords = place.clone();
         let spawned = wasm_thread::Builder::new()
             .name("geocoder".to_owned())
             .spawn(move || {
-                let outcome = mapview::geocode(&keywords, fetch);
+                let outcome = mapview::geocode(&keywords, cache.as_deref(), fetch);
                 // The screen may have gone; nobody is waiting then.
                 let _ = send.send(outcome);
             });
@@ -16034,6 +16049,91 @@ mod tests {
         assert_eq!(zoom_to_answer(&mut map, "Nowhere", none), None);
         assert!(close(map.centre().expect("centre"), canberra()));
         assert!((zoom_of(&map) - 15.0).abs() < 1e-9);
+    }
+
+    /// Zoom To keeps the geocoder's answers as GMap keeps them, in `gmapcache/GeocoderCache/`
+    /// under the SHA-1 of the URL's UTF-16 bytes: the same words again ask the server nothing,
+    /// from this screen or from one built again over the same directory (the planner restarted,
+    /// as far as one process can show it); other words ask; and a failed answer is not kept.
+    #[test]
+    fn zoom_to_asks_the_server_once_for_the_same_words() {
+        use std::sync::atomic::{AtomicUsize, Ordering};
+        static ASKED: AtomicUsize = AtomicUsize::new(0);
+        const PERTH_PAGE: &str = "<?xml version=\"1.0\" encoding=\"UTF-8\" ?>\n<searchresults><place place_rank=\"30\" lat=\"-31.9406\" lon=\"115.9669\" display_name=\"Perth Airport\"/></searchresults>";
+        /// The file "Canberra ACT"'s page is kept in: Python's
+        /// `hashlib.sha1(url.encode('utf-16-le'))` of its URL, in upper-case pairs.
+        const CANBERRA_FILE: &str =
+            "78-FE-77-2E-4E-4A-20-59-5D-6B-3D-ED-A5-60-4A-A5-36-14-17-A7.txt";
+        fn search(
+            menus: &mut PlanMenus,
+            place: &str,
+        ) -> (mapview::GeocoderStatus, Option<LatLon>) {
+            let mut plan = Plan::default();
+            choose(&mut plan, menus, MenuAction::ZoomTo, None);
+            answer(&mut plan, menus, place);
+            geocoded(menus).1
+        }
+        let fake: GeocoderFetch = |url| {
+            ASKED.fetch_add(1, Ordering::SeqCst);
+            match url {
+                "https://nominatim.openstreetmap.org/search?q=Canberra+ACT&format=xml" => {
+                    Ok(CANBERRA_PAGE.to_owned())
+                }
+                "https://nominatim.openstreetmap.org/search?q=Perth+Airport,+Australia&format=xml" => {
+                    Ok(PERTH_PAGE.to_owned())
+                }
+                _ => Err(format!("offline for {url}")),
+            }
+        };
+        let asked = || ASKED.load(Ordering::SeqCst);
+        let root = mp_os::temp_dir().join(format!("mp-zoom-to-cache-{}", mp_os::process_id()));
+        let _ = mp_os::fs::remove_dir_all(&root);
+        let screen = || PlanMenus {
+            fake_geocoder: Some(fake),
+            geocoder_cache: Some(root.clone()),
+            ..PlanMenus::default()
+        };
+
+        let mut menus = screen();
+        let first = search(&mut menus, "Canberra ACT");
+        assert_eq!(first.0, mapview::GeocoderStatus::Success);
+        assert!(close(first.1.expect("a place"), at(-35.297_590_6, 149.101_267_6)));
+        assert_eq!(asked(), 1);
+        assert_eq!(search(&mut menus, "Canberra ACT"), first);
+        assert_eq!(asked(), 1, "the same words ask the server nothing");
+
+        // Kept where and as the C# keeps it, the page UTF-8 after a byte-order mark.
+        let kept = root.join("GeocoderCache").join(CANBERRA_FILE);
+        assert_eq!(
+            mp_os::fs::read(&kept).expect("the answer kept"),
+            format!("\u{feff}{CANBERRA_PAGE}").into_bytes()
+        );
+
+        // The screen built again over the same cache reads it back.
+        drop(menus);
+        let mut menus = screen();
+        assert_eq!(search(&mut menus, "Canberra ACT"), first);
+        assert_eq!(asked(), 1, "nor after a restart");
+
+        // Other words ask, and are kept in their turn.
+        let perth = search(&mut menus, "Perth Airport, Australia");
+        assert_eq!(perth.0, mapview::GeocoderStatus::Success);
+        assert_eq!(asked(), 2, "other words ask");
+        assert_eq!(search(&mut menus, "Perth Airport, Australia"), perth);
+        assert_eq!(asked(), 2);
+
+        // A search the server does not answer is kept nowhere, and is asked again.
+        let failed = (mapview::GeocoderStatus::ExceptionInCode, None);
+        assert_eq!(search(&mut menus, "Atlantis"), failed);
+        assert_eq!(search(&mut menus, "Atlantis"), failed);
+        assert_eq!(asked(), 4, "a failed answer is not kept");
+        assert_eq!(
+            mp_os::fs::read_dir(root.join("GeocoderCache"))
+                .expect("the cache")
+                .count(),
+            2
+        );
+        let _ = mp_os::fs::remove_dir_all(&root);
     }
 
     /// `Zoomlevel`: one decimal place, half a zoom an arrow, 0 to 24.
