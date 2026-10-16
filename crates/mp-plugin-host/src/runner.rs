@@ -20,7 +20,7 @@
 
 //! `PluginLoader.LoadAll` and `MainV2.PluginThread`: every `*.wasm` in the plugins folder
 //! loaded, each on a thread of its own that runs its `Loop` at its `loopratehz` and serves its
-//! menu clicks and form events.
+//! menu clicks, form events and the packets it subscribed to.
 //!
 //! The C# runs every plugin's `Loop` on one shared thread and its menu clicks on the window's
 //! thread (`// C#: MainV2.cs:2513-2581`); a plugin that blocks there blocks them all, or the
@@ -39,6 +39,7 @@ use web_time::{Duration, Instant};
 use wasmtime::Engine;
 
 use crate::channel::{ChannelSurface, Request, RequestBody, Snapshot};
+use crate::packets::{Delivery, PacketSink, Subscription, Subscriptions};
 use crate::plugin::{Fault, Info, Limits, Plugin, engine};
 
 /// `Settings.GetRunningDirectory() + "plugins"`: the `plugins` folder beside the executable.
@@ -107,11 +108,13 @@ impl PluginStatus {
     }
 }
 
-/// What the window asks of a plugin's thread.
+/// What the window asks of a plugin's thread, and the packets the link hands it.
 #[derive(Debug)]
-enum Command {
+pub(crate) enum Command {
     MenuClick { id: u32, lat: f64, lng: f64 },
     FormEvent { id: String, value: String },
+    /// A packet one of its subscriptions matched ([`PacketSink::offer`]).
+    Packet(Delivery),
     Exit,
 }
 
@@ -134,6 +137,8 @@ pub struct PluginHost {
     status: Vec<PluginStatus>,
     requests: Receiver<Request>,
     snapshot: Arc<RwLock<Snapshot>>,
+    /// Where the application hands the link's packets, for the plugins' subscriptions.
+    packets: PacketSink,
 }
 
 impl Default for PluginHost {
@@ -144,6 +149,7 @@ impl Default for PluginHost {
             status: Vec::new(),
             requests,
             snapshot: Arc::default(),
+            packets: PacketSink::default(),
         }
     }
 }
@@ -259,14 +265,31 @@ impl PluginHost {
     /// The plugins in `sources`, each loaded on its own thread.
     #[must_use]
     pub fn load_sources(sources: Vec<PluginSource>, limits: Limits) -> Self {
+        Self::load_sources_with(engine(), sources, limits)
+    }
+
+    /// The same on `engine`, made with other settings than [`crate::engine`]'s: for a test of the
+    /// plugins on the interpreter the browser build runs them on ([`crate::web_config`]).
+    #[must_use]
+    pub fn load_sources_on(engine: &Engine, sources: Vec<PluginSource>, limits: Limits) -> Self {
+        Self::load_sources_with(Ok(engine.clone()), sources, limits)
+    }
+
+    /// The plugins in `sources` on `engine`, or each told why there is none.
+    fn load_sources_with(
+        engine: Result<Engine, Fault>,
+        sources: Vec<PluginSource>,
+        limits: Limits,
+    ) -> Self {
         let (tx, requests) = mpsc::channel();
         let snapshot = Arc::new(RwLock::new(Snapshot::default()));
-        let engine = engine();
+        let subscriptions = Subscriptions::default();
         let mut host = Self {
             handles: Vec::new(),
             status: Vec::new(),
             requests,
             snapshot: Arc::clone(&snapshot),
+            packets: PacketSink::default(),
         };
         for (index, source) in sources.into_iter().enumerate() {
             let (commands, inbox) = mpsc::channel();
@@ -276,7 +299,8 @@ impl PluginHost {
                 info: None,
                 state: PluginState::Loading,
             });
-            let surface = ChannelSurface::new(index, tx.clone(), Arc::clone(&snapshot));
+            let surface = ChannelSurface::new(index, tx.clone(), Arc::clone(&snapshot))
+                .with_subscriptions(subscriptions.clone());
             let job = Job {
                 index,
                 source,
@@ -296,6 +320,12 @@ impl PluginHost {
             }
             host.handles.push(Handle { commands, thread });
         }
+        let threads: Vec<Sender<Command>> = host
+            .handles
+            .iter()
+            .map(|handle| handle.commands.clone())
+            .collect();
+        host.packets = PacketSink::new(subscriptions, Arc::from(threads), snapshot);
         host
     }
 
@@ -348,6 +378,27 @@ impl PluginHost {
             out.push(request);
         }
         out
+    }
+
+    /// Where the application hands each packet its link reads, on the link's thread: the
+    /// plugins' `SubscribeToPacketType` handlers, which the C#'s reader calls in
+    /// `PacketReceived`. `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:5346-5347`
+    #[must_use]
+    pub fn packet_sink(&self) -> PacketSink {
+        self.packets.clone()
+    }
+
+    /// Whether any plugin has subscribed to a packet: the application need not hear its link's
+    /// packets until one has.
+    #[must_use]
+    pub fn wants_packets(&self) -> bool {
+        self.packets.subscriptions().any()
+    }
+
+    /// Every plugin's packet subscriptions, in the order made.
+    #[must_use]
+    pub fn subscriptions(&self) -> Vec<Subscription> {
+        self.packets.subscriptions().list()
     }
 
     /// Whether any plugin is still loading.
@@ -484,6 +535,12 @@ impl Job {
             let result = match command {
                 Ok(Command::MenuClick { id, lat, lng }) => plugin.menu_click(id, lat, lng),
                 Ok(Command::FormEvent { id, value }) => plugin.form_event(&id, &value),
+                Ok(Command::Packet(packet)) => plugin.packet_received(
+                    packet.message_id,
+                    packet.sysid,
+                    packet.compid,
+                    &packet.payload,
+                ),
                 Ok(Command::Exit) | Err(RecvTimeoutError::Disconnected) => {
                     if running {
                         match plugin.exit() {

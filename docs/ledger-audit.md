@@ -93,7 +93,8 @@ wrote).
   2026-10-16: the Stats... link and its window; the selector is the picker above the flight map).
 - LOGS: MavlinkLog's "Tlog > Kml or Graph" form (Create KML is `headless-planner kml` alone).
 - Every graph's zoom, pan and context menu (ZedGraph's, reproduced in the log browser alone).
-- The OpenDroneID backend never sends: it waits for `OPEN_DRONE_ID_ARM_STATUS`, and the plugin
+- (Mended 2026-10-16: the plugin world's packet subscription, the plugin subscribing as the C#'s does.)
+  The OpenDroneID backend never sends: it waits for `OPEN_DRONE_ID_ARM_STATUS`, and the plugin
   interface (`wit/plugin.wit`) has no way to subscribe to a packet, so its code and the arm-status
   half of `OpenDroneID_UI.cs` cannot run.
 - CONFIG > Planner's Beta Updates box is dimmed "no updater" while mp-update ports

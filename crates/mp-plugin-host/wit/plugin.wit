@@ -42,6 +42,20 @@ interface host {
     /// payload as the wire carries it; false when the message is unknown or there is no link.
     send-packet: func(message-id: u32, payload: list<u8>) -> bool;
 
+    /// `Host.comPort.sysidcurrent`: the system id of the vehicle the link talks to - the one the
+    /// screens show - 0 before one is heard.
+    sysid-current: func() -> u32;
+
+    /// `Host.comPort.SubscribeToPacketType(msgid, function, sysid, compid)`: from now on every
+    /// packet of message `message-id` the link reads from component `compid` of system `sysid` -
+    /// or, with both 0, from the vehicle the link talks to (`sysidcurrent`, `compidcurrent`) - is
+    /// handed to the plugin's `packet-received`, once for each subscription it matches
+    /// (`PacketReceived`, `MAVLinkInterface.cs:5508-5534`). A subscription lasts as long as the
+    /// plugin, through every link the application opens, as the C#'s lasts as long as its
+    /// `comPort`. The C#'s `exclusive`, which no plugin here passes, and
+    /// `UnSubscribeToPacketType`, which no plugin here calls, are not in the world.
+    subscribe-packet: func(message-id: u32, sysid: u32, compid: u8);
+
     /// The two map menus a plugin adds entries to: `Host.FDMenuMap`, the flight screen's map,
     /// and `Host.FPMenuMap`, the planning screen's.
     enum map-menu {
@@ -247,4 +261,9 @@ world plugin {
     export menu-click: func(id: u32, lat: f64, lng: f64);
     /// A control of the plugin's form changed or was clicked: its id and its value now.
     export form-event: func(id: string, value: string);
+    /// A packet a `subscribe-packet` asked for, as the C#'s function is handed its
+    /// `MAVLinkMessage`: its `msgid`, `sysid` and `compid`, and its payload as `ToStructure`
+    /// reads it - every byte of the message, the zeros a MAVLink 2 packet trims put back. The
+    /// bytes `send-packet` takes, so a plugin reads and writes a message in one form.
+    export packet-received: func(message-id: u32, sysid: u32, compid: u8, payload: list<u8>);
 }

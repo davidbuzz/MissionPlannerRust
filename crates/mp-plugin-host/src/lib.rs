@@ -29,7 +29,8 @@
 //!
 //! * the `Plugin` lifecycle is the world's exports - `name`, `version`, `author`,
 //!   `loop-rate-hz`, `init`, `loaded`, `loop`, `exit` - with a menu entry's click and a form's
-//!   event, which the C# delivers as .NET events;
+//!   event, which the C# delivers as .NET events, and a packet a plugin subscribed to, which the
+//!   C# hands its `SubscribeToPacketType` function ([`PacketSink`]);
 //! * `PluginHost` is the `host` interface the plugin imports, and [`Surface`] is the Rust side of
 //!   it: the application implements it (through [`ChannelSurface`], which carries every call to
 //!   the window's thread as a [`Request`]), a test implements it with a script.
@@ -44,6 +45,7 @@
 //! what the world imports - no file, socket or clock the host did not hand it.
 
 mod channel;
+mod packets;
 mod plugin;
 mod runner;
 // A web page's half of the plugin host: wasmtime's platform functions and loading Pulley bytecode.
@@ -54,6 +56,7 @@ pub use channel::{
     ANSWER_WAIT, ChannelSurface, CsReader, DEMO_ANSWER_WAIT, OptionsReader, Reply, Request,
     RequestBody, Snapshot, TerrainReader,
 };
+pub use packets::{PacketSink, Subscription, Subscriptions};
 pub use plugin::{Fault, Info, Limits, Plugin, engine, web_config};
 #[cfg(not(target_family = "wasm"))]
 pub use plugin::precompile_for_web;
@@ -94,6 +97,11 @@ pub trait Surface: Send + 'static {
     fn set_mode(&mut self, mode: &str) -> bool;
     /// `Host.comPort.sendPacket`.
     fn send_packet(&mut self, message_id: u32, payload: Vec<u8>) -> bool;
+    /// `Host.comPort.sysidcurrent`: 0 before a vehicle is heard.
+    fn sysid_current(&mut self) -> u32;
+    /// `Host.comPort.SubscribeToPacketType(msgid, function, sysid, compid)`, the function being
+    /// the plugin's `packet-received`.
+    fn subscribe_packet(&mut self, message_id: u32, sysid: u32, compid: u8);
     /// `Host.FDMenuMap.Items.Add` / `Host.FPMenuMap.Items.Add`: the new entry's id.
     fn menu_add(&mut self, menu: MapMenu, parent: Option<u32>, text: &str) -> u32;
     /// `CustomMessageBox.Show`.
@@ -173,6 +181,12 @@ impl wit::missionplanner::plugin::host::Host for plugin::State {
     }
     fn send_packet(&mut self, message_id: u32, payload: Vec<u8>) -> bool {
         self.surface.send_packet(message_id, payload)
+    }
+    fn sysid_current(&mut self) -> u32 {
+        self.surface.sysid_current()
+    }
+    fn subscribe_packet(&mut self, message_id: u32, sysid: u32, compid: u8) {
+        self.surface.subscribe_packet(message_id, sysid, compid);
     }
     fn menu_add(&mut self, menu: MapMenu, parent: Option<u32>, text: String) -> u32 {
         self.surface.menu_add(menu, parent, &text)

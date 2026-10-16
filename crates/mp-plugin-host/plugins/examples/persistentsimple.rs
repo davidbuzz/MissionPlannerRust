@@ -96,6 +96,9 @@ impl Guest for PersistentSimpleActions {
             );
         }
     }
+
+    // No packet subscription: `subscribe-packet` is never called, so this never is.
+    fn packet_received(_message_id: u32, _sysid: u32, _compid: u8, _payload: Vec<u8>) {}
 }
 
 mp_plugins::export_plugin!(PersistentSimpleActions);

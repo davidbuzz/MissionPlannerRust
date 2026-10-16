@@ -100,6 +100,8 @@ pub struct Record {
     pub terrain: Option<f64>,
     pub set_param_ok: bool,
     pub set_mode_ok: bool,
+    /// `comPort.sysidcurrent`: 0 until the script says a vehicle is heard.
+    pub sysid: u32,
     // The script's answers, in order.
     pub message_answers: VecDeque<DialogResult>,
     pub input_answers: VecDeque<Option<String>>,
@@ -113,6 +115,8 @@ pub struct Record {
     pub param_writes: Vec<(String, f64)>,
     pub modes: Vec<String>,
     pub packets: Vec<(u32, Vec<u8>)>,
+    /// `SubscribeToPacketType`s: message, system, component.
+    pub subscriptions: Vec<(u32, u32, u8)>,
     pub added: Vec<Waypoint>,
     pub inserted: Vec<(i32, Waypoint)>,
     pub reads: usize,
@@ -184,6 +188,14 @@ impl Surface for Scripted {
     fn send_packet(&mut self, message_id: u32, payload: Vec<u8>) -> bool {
         self.record().packets.push((message_id, payload));
         true
+    }
+    fn sysid_current(&mut self) -> u32 {
+        self.record().sysid
+    }
+    fn subscribe_packet(&mut self, message_id: u32, sysid: u32, compid: u8) {
+        self.record()
+            .subscriptions
+            .push((message_id, sysid, compid));
     }
     fn menu_add(&mut self, menu: MapMenu, parent: Option<u32>, text: &str) -> u32 {
         let mut r = self.record();
@@ -327,11 +339,35 @@ pub fn load(name: &str) -> Option<(Plugin, Scripted)> {
 
 /// Plugin `name` loaded against `scripted` with `limits`.
 pub fn load_with(name: &str, scripted: Scripted, limits: Limits) -> Option<(Plugin, Scripted)> {
+    load_on(&engine().expect("an engine"), name, scripted, limits)
+}
+
+/// The browser build's engine as this machine can run it: [`mp_plugin_host::web_config`]'s
+/// settings - Pulley's bytecode on wasmtime's interpreter, no signal handlers, no memory reserved
+/// or guarded, fuel - at this machine's pointer width, since wasmtime runs Pulley only at its
+/// host's (the page's is 32-bit, `pulley32`).
+pub fn web_engine() -> wasmtime::Engine {
+    let mut config = mp_plugin_host::web_config().expect("a wasmtime with Pulley");
+    let target = if cfg!(target_pointer_width = "64") {
+        "pulley64"
+    } else {
+        "pulley32"
+    };
+    config.target(target).expect("Pulley's target");
+    wasmtime::Engine::new(&config).expect("an engine")
+}
+
+/// Plugin `name` loaded on `engine` against `scripted` with `limits`.
+pub fn load_on(
+    engine: &wasmtime::Engine,
+    name: &str,
+    scripted: Scripted,
+    limits: Limits,
+) -> Option<(Plugin, Scripted)> {
     let path = path(name)?;
     let bytes = std::fs::read(&path).expect("the plugin was built");
-    let engine = engine().expect("an engine");
     let plugin = Plugin::load(
-        &engine,
+        engine,
         &bytes,
         &format!("{name}.wasm"),
         Box::new(scripted.clone()),

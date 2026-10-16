@@ -2,7 +2,7 @@
 """A copter that speaks the legacy fence and rally protocols, for the GUI scripts of the planner's
 Geo-Fence and Rally Points menus.
 
-usage: legacy-vehicle.py --work DIR [--port 5790] [--plane] [--compass]
+usage: legacy-vehicle.py --work DIR [--port 5790] [--plane] [--compass] [--odid]
 
 Mission Planner hides those two menus over a vehicle that reports
 MAV_PROTOCOL_CAPABILITY_MISSION_FENCE (FlightPlanner.cs:2680-2691) - every ArduPilot 4.x, the SITL
@@ -12,7 +12,13 @@ and neither MISSION_FENCE nor MISSION_RALLY nor FTP. Without COMPASS_PRIO1_ID or
 COMPASS_CALIBRATION capability it is also the vehicle Initial Setup gives the older Compass page
 with its Live Calibration (InitialSetup.cs:200-207, ConfigHWCompass.cs:51-70). With --plane its
 heartbeat says a fixed wing instead of a quad, for a script that needs a plane the bundled copter
-SITL is not (the zero altitude warning's plane text, FlightPlanner.cs:8530-8570). It answers:
+SITL is not (the zero altitude warning's plane text, FlightPlanner.cs:8530-8570). With --odid it
+carries a Remote ID transmitter as well, component 236 of its system (MAV_COMP_ID_ODID_TXRX_1, one
+of the four the Open Drone ID plugin subscribes to, OpenDroneID_UI.cs:111-114), for the plugin's
+script: OPEN_DRONE_ID_ARM_STATUS once a second, PRE_ARM_FAIL_GENERIC with the error "SYSTEM not
+received" until an OPEN_DRONE_ID_SYSTEM has come from the ground station, GOOD_TO_ARM with no error
+from then on - this stand-in's own rule, a transmitter waiting on the ground station's messages
+before it lets the vehicle arm. It answers:
 
   HEARTBEAT at 1 Hz (a quad in Stabilize, or with --plane a plane in Manual, disarmed),
   AUTOPILOT_VERSION when asked and once at connect; the parameters (PARAM_REQUEST_LIST, _READ,
@@ -86,8 +92,11 @@ class Writer:
 
 
 class Vehicle:
-    def __init__(self, plane=False, compass=False):
+    def __init__(self, plane=False, compass=False, odid=False):
         self.mav_type = mavlink.MAV_TYPE_FIXED_WING if plane else mavlink.MAV_TYPE_QUADROTOR
+        # With --odid: whether the ground station's OPEN_DRONE_ID_SYSTEM has come.
+        self.odid = odid
+        self.odid_system_heard = False
         self.params = [list(p) for p in PARAMS + (COMPASS_PARAMS if compass else [])]
         self.fence = {}
         self.rally = {}
@@ -185,6 +194,17 @@ class Vehicle:
         elif kind == "MISSION_CLEAR_ALL":
             self.lists[msg.mission_type] = []
             mav.mission_ack_send(*GCS, mavlink.MAV_MISSION_ACCEPTED, msg.mission_type)
+        elif kind == "OPEN_DRONE_ID_SYSTEM" and self.odid:
+            self.odid_system_heard = True
+
+    def arm_status(self, transmitter):
+        """The transmitter's OPEN_DRONE_ID_ARM_STATUS: not ready until the SYSTEM message came."""
+        if self.odid_system_heard:
+            transmitter.open_drone_id_arm_status_send(mavlink.MAV_ODID_ARM_STATUS_GOOD_TO_ARM, b"")
+        else:
+            transmitter.open_drone_id_arm_status_send(
+                mavlink.MAV_ODID_ARM_STATUS_PRE_ARM_FAIL_GENERIC, b"SYSTEM not received"
+            )
 
     def autopilot_version(self, mav):
         mav.autopilot_version_send(
@@ -194,10 +214,18 @@ class Vehicle:
 
 
 def serve_client(client, vehicle, work, started):
-    mav = mavlink.MAVLink(Writer(client), srcSystem=1, srcComponent=1)
+    writer = Writer(client)
+    mav = mavlink.MAVLink(writer, srcSystem=1, srcComponent=1)
     mav.robust_parsing = True
+    # The Remote ID transmitter, its own component on the same link.
+    transmitter = None
+    if vehicle.odid:
+        transmitter = mavlink.MAVLink(
+            writer, srcSystem=1, srcComponent=mavlink.MAV_COMP_ID_ODID_TXRX_1
+        )
     client.settimeout(0.2)
     last_beat = 0.0
+    last_arm_status = 0.0
     greeted = False
     while os.path.isdir(work) and time.monotonic() - started < LIFETIME:
         now = time.monotonic()
@@ -212,6 +240,11 @@ def serve_client(client, vehicle, work, started):
                 if not greeted:
                     vehicle.autopilot_version(mav)
                     greeted = True
+            # After the autopilot's first heartbeat, so the planner takes the autopilot for the
+            # vehicle it shows, not the transmitter.
+            if transmitter is not None and now - last_arm_status >= 1.0:
+                vehicle.arm_status(transmitter)
+                last_arm_status = now
             try:
                 data = client.recv(4096)
             except socket.timeout:
@@ -224,10 +257,10 @@ def serve_client(client, vehicle, work, started):
             return
 
 
-def run(listener, work, plane=False, compass=False):
+def run(listener, work, plane=False, compass=False, odid=False):
     """The vehicle, answering one client at a time until its directory goes or LIFETIME ends."""
     started = time.monotonic()
-    vehicle = Vehicle(plane, compass)
+    vehicle = Vehicle(plane, compass, odid)
     listener.settimeout(0.5)
     while os.path.isdir(work) and time.monotonic() - started < LIFETIME:
         try:
@@ -245,9 +278,10 @@ def main():
     parser.add_argument("--port", type=int, default=5790)
     parser.add_argument("--plane", action="store_true")
     parser.add_argument("--compass", action="store_true")
+    parser.add_argument("--odid", action="store_true")
     args = parser.parse_args()
     if child is not None:
-        run(child, args.work, args.plane, args.compass)
+        run(child, args.work, args.plane, args.compass, args.odid)
         return 0
 
     listener = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -269,7 +303,7 @@ def main():
     gui_background.serve_in_background(
         listener,
         f"legacy vehicle on {args.port}",
-        lambda held: run(held, args.work, args.plane, args.compass),
+        lambda held: run(held, args.work, args.plane, args.compass, args.odid),
     )
     return 0
 

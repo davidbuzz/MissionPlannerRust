@@ -35,10 +35,16 @@
 //!   `example18-externalapi.cs`, `example13-herelink2.cs`, `example4-herelink.cs`: TCP and UDP
 //!   sockets (`TcpListener`, `UdpClient`, `comPort.MirrorStream`). A plugin here has no sockets,
 //!   and the host lends none: unimplementable in this world.
-//! * `example-watchbutton.cs`, `example5-latencytracker.cs`, `example20-multiplepositions.cs`,
-//!   `generator.cs`: `comPort.OnPacketReceived` / `SubscribeToPacketType`, a callback per
-//!   received packet; the world has no packet subscription (the `cs` reads carry what the link
-//!   decoded).
+//! * `example-watchbutton.cs`, `example20-multiplepositions.cs`: `comPort.OnPacketReceived`, a
+//!   callback for every packet of every message the link reads, which the world does not carry -
+//!   it carries `SubscribeToPacketType`'s, one message from one sender (`subscribe-packet`, which
+//!   the OpenDroneID port uses) - and example20's markers, on an overlay of the flight map the
+//!   world has no drawing surface for.
+//! * `example5-latencytracker.cs`, `generator.cs`: their `SubscribeToPacketType`s the world
+//!   carries now, not yet ported for the rest. The latency tracker measures the vehicle's clock
+//!   against `DateTime.UtcNow` - a plugin has no clock - and puts its label on the main form; the
+//!   generator's gauge and labels are a control docked above the flight screen's tabs, and it
+//!   calls `UnSubscribeToPacketType`, which the world does not have while no port calls it.
 //! * `example9-hudonoff.cs`, `example22-fontsize.cs`, `example16-donate.cs`,
 //!   `example17-menuremove.cs`: they change the main window itself (the HUD's items, the form's
 //!   scale, the main menu, the map controls' menus removed); the world reaches the two map menus

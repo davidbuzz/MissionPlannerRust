@@ -42,7 +42,10 @@
 //!   `contextMenuStripMap` entries are the Actions tab's chips here;
 //! * the form a plugin describes, drawn as a panel of labels, text boxes, check boxes, combo boxes
 //!   and buttons, its changes sent back to the plugin;
-//! * the status line, and `Host.config` as `Settings.Instance`.
+//! * the status line, and `Host.config` as `Settings.Instance`;
+//! * the packets a plugin subscribed to (`SubscribeToPacketType`): every packet the link reads,
+//!   handed to the plugins' host on the link's thread, which passes on the ones a subscription
+//!   matches ([`Plugins::follow_packets`]).
 //!
 //! `MP_PLUGINS` names another plugins folder, for a test that must not put a plugin beside the
 //! shared binary.
@@ -305,8 +308,13 @@ pub struct Plugins {
     /// Whether the showing question has been given the focus.
     focused: bool,
     forms: Vec<Form>,
+    /// The forms' text boxes being typed in this frame, by plugin and control id: a form shown
+    /// again leaves them as they are.
+    typing: Vec<(usize, String)>,
     /// The last status line a plugin said.
     status: Option<String>,
+    /// The link's packets, heard for the plugins' subscriptions while any plugin has one.
+    packets: Option<mp_link::inspector::PacketSubscription>,
     /// Ctrl+P's plugin manager (`Plugin/PluginUI.cs`).
     pub manager: crate::plugin_manager::PluginManager,
     /// The demo pointer plugins drive (the owner's Welcome-Demo-Sitl): its cursor and clicks.
@@ -369,7 +377,9 @@ impl Plugins {
             focus: cx.focus_handle(),
             focused: false,
             forms: Vec::new(),
+            typing: Vec::new(),
             status: None,
+            packets: None,
             manager: crate::plugin_manager::PluginManager::default(),
             demo: crate::demo_pointer::DemoPointer::default(),
             #[cfg(not(target_family = "wasm"))]
@@ -506,7 +516,11 @@ impl Plugins {
         }
     }
 
-    /// A plugin's form shown, or replaced with its text boxes' state kept.
+    /// A plugin's form shown, or replaced with its text boxes' state kept. A text box being typed
+    /// in keeps its text: the C#'s plugin sets its controls and the user types into the same
+    /// ones, where here a form shown again carries the plugin's copy of a box's text, which may
+    /// not yet have the last keys typed (Open Drone ID's tab is shown again whenever its arm
+    /// status changes).
     fn show_form(&mut self, plugin: usize, title: String, controls: Vec<Control>) {
         let slot = self.forms.iter().position(|form| form.plugin == plugin);
         let mut form = match slot {
@@ -522,7 +536,11 @@ impl Plugins {
         };
         form.title = title;
         for control in &controls {
-            if control.kind == ControlKind::TextBox {
+            let typing = self
+                .typing
+                .iter()
+                .any(|(owner, id)| *owner == plugin && *id == control.id);
+            if control.kind == ControlKind::TextBox && !typing {
                 form.fields
                     .entry(control.id.clone())
                     .or_insert_with(|| TextField::new(""))
@@ -534,6 +552,34 @@ impl Plugins {
             Some(index) => self.forms.insert(index, form),
             None => self.forms.push(form),
         }
+    }
+
+    /// The link's packets for the plugins that asked for some. The C#'s link reader calls every
+    /// `SubscribeToPacketType` function that a packet it has read matches (`PacketReceived`), so
+    /// the plugins' host is handed every packet the link reads - not the ones it writes - on the
+    /// link's thread, and passes each to the plugins whose subscriptions it matches, its payload
+    /// made only then. Subscribed again when a connect or a reopen puts another link in place,
+    /// as the C#'s one `comPort` keeps its subscribers; not at all while no plugin has subscribed.
+    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:5346-5347, 5508-5534`
+    pub(crate) fn follow_packets(&mut self, telemetry: &crate::telemetry::Telemetry) {
+        if !self.host.wants_packets() {
+            self.packets = None;
+            return;
+        }
+        if self
+            .packets
+            .as_ref()
+            .is_some_and(|held| telemetry.carries(held))
+        {
+            return;
+        }
+        let sink = self.host.packet_sink();
+        self.packets = telemetry.on_packet(move |packet| {
+            if packet.sent {
+                return;
+            }
+            sink.offer(packet.msgid, packet.sysid, packet.compid, || payload_of(&packet.message));
+        });
     }
 
     /// The facts a script asserts on: how many plugin files, each plugin's state and version by
@@ -622,6 +668,43 @@ impl Plugins {
                 forms.join(",")
             },
         );
+        // Each form's values by its plugin's name and the control's id - what the plugin shows
+        // there, Open Drone ID's arm status and status lines among them.
+        for form in &self.forms {
+            let name = self.name(form.plugin).replace(' ', "_");
+            for control in &form.controls {
+                facts::record(
+                    format!("plugins.{name}.form.{}", control.id),
+                    &control.value,
+                );
+            }
+        }
+        // `SubscribeToPacketType`'s table: who asked for which message from which component of
+        // which system, `<name>:<message>@<sysid>:<compid>`, in the order asked; and whether the
+        // link's packets are being heard for them.
+        let subscriptions: Vec<String> = self
+            .host
+            .subscriptions()
+            .iter()
+            .map(|subscription| {
+                format!(
+                    "{}:{}@{}:{}",
+                    self.name(subscription.plugin).replace(' ', "_"),
+                    subscription.message_id,
+                    subscription.sysid,
+                    subscription.compid
+                )
+            })
+            .collect();
+        facts::record(
+            "plugins.subscriptions",
+            if subscriptions.is_empty() {
+                "none".to_owned()
+            } else {
+                subscriptions.join(",")
+            },
+        );
+        facts::record("plugins.packets.heard", self.packets.is_some());
         // Where each is drawn: over the window, or on its plugin's flight screen page.
         let floating: Vec<&str> = self
             .forms
@@ -665,6 +748,16 @@ pub fn cs_value(state: Option<&VehicleState>, connected: bool, name: &str) -> Op
         mp_script::CsValue::Text(text) => CsValue::Text(text),
         mp_script::CsValue::Flag(flag) => CsValue::Flag(flag),
     })
+}
+
+/// A packet's payload as a plugin's `packet-received` is handed it, the bytes `ToStructure` lays
+/// over the C#'s struct: the whole message, a MAVLink 2 packet's trimmed zeros put back, as the
+/// dialect encodes the message the link decoded.
+fn payload_of(message: &mp_mavlink_dialects::MavMessage) -> Vec<u8> {
+    let mut payload = vec![0; message.len()];
+    let written = message.encode(&mut payload);
+    payload.truncate(written);
+    payload
 }
 
 /// `WriteUserData`'s path under the user data directory: relative, and not climbing out of it.
@@ -755,12 +848,29 @@ impl MissionPlanner {
                 right: bottom_right.longitude(),
             });
         let parameters = Arc::clone(&view.parameters);
+        // `sysidcurrent` and `compidcurrent`: the vehicle the screens show.
+        let vehicle = view.vehicle.map(|id| (id.sysid, id.compid));
         self.plugins.host.update_snapshot(move |snapshot| {
             snapshot.cs = Arc::new(move |name| cs_value(state.as_deref(), connected, name));
             snapshot.params = parameters;
             snapshot.fence = Arc::from(fence);
             snapshot.fp_view_area = view_area;
+            snapshot.vehicle = vehicle;
         });
+        self.plugins.follow_packets(&self.telemetry);
+        // The text boxes being typed in, which a form shown again this frame leaves alone.
+        let on: &Window = window;
+        self.plugins.typing = self
+            .plugins
+            .forms
+            .iter()
+            .flat_map(|form| {
+                form.focus
+                    .iter()
+                    .filter(move |(_, handle)| handle.is_focused(on))
+                    .map(move |(id, _)| (form.plugin, id.clone()))
+            })
+            .collect();
         for request in self.plugins.host.drain() {
             self.serve(request.plugin, request.body, view);
         }
@@ -1254,10 +1364,15 @@ fn control_row(
         .text_color(rgb(theme::DIM))
         .child(control.label.clone());
     let widget: AnyElement = match control.kind {
+        // A line each, as the question box draws its text: a plugin's label may hold several
+        // (Open Drone ID's status lines, `TXT_ODID_Status`).
         ControlKind::Label => div()
+            .flex()
+            .flex_col()
+            .min_w_0()
             .text_sm()
             .text_color(rgb(theme::TEXT))
-            .child(control.value.clone())
+            .children(control.value.lines().map(str::to_owned))
             .into_any_element(),
         ControlKind::Button => action(
             probe,
@@ -1729,6 +1844,19 @@ mod tests {
             assert_eq!(folder(), exe.parent().map(|dir| dir.join("plugins")));
         }
         assert!(crate::USAGE.contains(ENV), "usage does not mention {ENV}");
+    }
+
+    /// A packet's payload for a plugin: an `OPEN_DRONE_ID_ARM_STATUS` read from a MAVLink 2
+    /// packet that trimmed its error's zeros is handed over whole, its fifty-one bytes, as the
+    /// Drone ID plugin reads them.
+    #[test]
+    fn a_plugin_is_handed_the_whole_payload() {
+        let trimmed = [1, b'E', b'r', b'r'];
+        let message = mp_mavlink_dialects::MavMessage::decode(12918, &trimmed).expect("known");
+        let payload = payload_of(&message);
+        assert_eq!(payload.len(), 51);
+        assert_eq!(payload.get(..4), Some(&trimmed[..]));
+        assert!(payload.iter().skip(4).all(|&byte| byte == 0));
     }
 
     /// A menu entry's id and label: an entry under a parent is indented.

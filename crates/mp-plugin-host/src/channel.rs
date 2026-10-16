@@ -26,7 +26,8 @@
 //! what it reads is a snapshot (the telemetry view, the parameters, the fence), and what it
 //! writes or asks goes to the window as a request, which the window serves through its own
 //! paths - the link's parameter write, the fly screen's mode command, the plan's list, its
-//! prompts - so a plugin opens no second path to the vehicle.
+//! prompts - so a plugin opens no second path to the vehicle. A packet subscription alone goes
+//! elsewhere: into the host's table ([`Subscriptions`]), which the link's thread reads.
 
 use mp_os::ReadWrite as _;
 use mp_os::RecvTimeout as _;
@@ -36,7 +37,7 @@ use std::time::Duration;
 
 use crate::{
     Area, Control, CsValue, DialogResult, FencePoint, Info, MapMenu, MessageButtons, OpenedFile,
-    Surface, Waypoint,
+    Subscription, Subscriptions, Surface, Waypoint,
 };
 
 /// How long a plugin waits for the window to serve a request that needs no one: a parameter
@@ -77,6 +78,9 @@ pub struct Snapshot {
     pub fp_view_area: Option<Area>,
     /// `srtm.getAltitude`: read on the plugin's thread, which may ask it a million times.
     pub terrain: TerrainReader,
+    /// `comPort.sysidcurrent` and `compidcurrent`: the vehicle the link talks to, none before
+    /// one is heard - for `sysid-current`, and the subscriptions to system 0 component 0.
+    pub vehicle: Option<(u32, u8)>,
 }
 
 impl Default for Snapshot {
@@ -88,6 +92,7 @@ impl Default for Snapshot {
             fence: Arc::from(Vec::new()),
             fp_view_area: None,
             terrain: Arc::new(|_, _| None),
+            vehicle: None,
         }
     }
 }
@@ -98,6 +103,7 @@ impl std::fmt::Debug for Snapshot {
             .field("params", &self.params.len())
             .field("fence", &self.fence.len())
             .field("fp_view_area", &self.fp_view_area)
+            .field("vehicle", &self.vehicle)
             .finish_non_exhaustive()
     }
 }
@@ -340,6 +346,9 @@ pub struct ChannelSurface {
     requests: Sender<Request>,
     snapshot: Arc<RwLock<Snapshot>>,
     next_menu_id: u32,
+    /// The host's packet subscriptions, which `subscribe-packet` adds to; none for a surface on
+    /// its own, whose subscriptions go nowhere.
+    subscriptions: Option<Subscriptions>,
     /// [`ANSWER_WAIT`] and [`DEMO_ANSWER_WAIT`], unless a test shortened them.
     answer_wait: Duration,
     demo_wait: Duration,
@@ -358,9 +367,18 @@ impl ChannelSurface {
             requests,
             snapshot,
             next_menu_id: 0,
+            subscriptions: None,
             answer_wait: ANSWER_WAIT,
             demo_wait: DEMO_ANSWER_WAIT,
         }
+    }
+
+    /// The same with its `subscribe-packet`s added to `subscriptions`, which the host's
+    /// [`crate::PacketSink`] reads.
+    #[must_use]
+    pub fn with_subscriptions(mut self, subscriptions: Subscriptions) -> Self {
+        self.subscriptions = Some(subscriptions);
+        self
     }
 
     /// The same with other waits, for a test that cannot wait seconds.
@@ -454,6 +472,25 @@ impl Surface for ChannelSurface {
             false,
             Some(self.answer_wait),
         )
+    }
+
+    // `sysidcurrent`, as the window last said it.
+    fn sysid_current(&mut self) -> u32 {
+        self.read().vehicle.map_or(0, |(sysid, _)| sysid)
+    }
+
+    // `SubscribeToPacketType`: into the host's table at once, as the C#'s `Subscriptions.Add`
+    // under its lock; the window is not asked.
+    // `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:5547-5577`
+    fn subscribe_packet(&mut self, message_id: u32, sysid: u32, compid: u8) {
+        if let Some(subscriptions) = &self.subscriptions {
+            subscriptions.add(Subscription {
+                plugin: self.plugin,
+                message_id,
+                sysid,
+                compid,
+            });
+        }
     }
 
     fn menu_add(&mut self, menu: MapMenu, parent: Option<u32>, text: &str) -> u32 {

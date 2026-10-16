@@ -1,0 +1,70 @@
+# The Drone ID plugin hears the vehicle's Remote ID transmitter, and its backend sends, as the C#'s
+# OpenDroneID does. Once a second, with a vehicle heard, it subscribes to OPEN_DRONE_ID_ARM_STATUS
+# from that vehicle's three transmitter components and its autopilot (start_sub,
+# Plugins/OpenDroneID2/OpenDroneID_UI.cs:99-121) - plugin.wit's subscribe-packet, into the plugins'
+# host's table (crates/mp-plugin-host/src/packets.rs), which the planner hands every packet its
+# link reads (plugins_ui.rs's follow_packets; PacketReceived, MAVLinkInterface.cs:5508-5534). The
+# first arm status starts the backend (handleODIDArmMSg2, OpenDroneID_UI.cs:123-185, the plugin's
+# packet-received), which sends OPEN_DRONE_ID_SYSTEM_UPDATE every second and the four extended
+# messages one each 2.5 s (OpenDroneID_Backend.cs:75-134); every arm status after it is the tab's
+# RID Armed Status, and a change of its error a status line (status lines without the C#'s time:
+# a plugin has no clock).
+#
+# Against tests/gui/legacy-vehicle.py --odid: its transmitter, component 236 of system 1, says
+# PRE_ARM_FAIL_GENERIC "SYSTEM not received" until the plugin's OPEN_DRONE_ID_SYSTEM - the second
+# extended message, 2.5 s after the basic ID - reaches it, and GOOD_TO_ARM after. So the facts show
+# the four subscriptions, the start, the error said, and then "Arm Stats: Ready": the plugin heard
+# the transmitter, and its messages reached the vehicle. Without a GCS GPS (the C#'s NMEA one is a
+# serial port of the plugin's own) the GPS light is orange and the indicator "GCS GPS Invalid", as
+# the C#'s are without one.
+#
+# The built-in plugins: the runner leaves them out unless a script asks for them. The config's empty
+# DisabledPlugins turns Open Drone ID on (off until a user does, the owner, 2026-10-05), and its saved
+# tabs name tabDroneID, so no restart is asked.
+#
+# Run as: tools/gui-test.sh tests/gui/plugin-opendroneid-arm.gui -- tcp:127.0.0.1:5790
+
+env MP_BUILTIN_PLUGINS 1
+env XDG_DATA_HOME $WORK
+env MP_CONFIG_XML $WORK/config.xml
+setup printf '<?xml version="1.0" encoding="utf-8"?><Config><tabcontrolactions>tabQuick;tabActions;tabDroneID;tabPagemessages;</tabcontrolactions><DisabledPlugins></DisabledPlugins></Config>' > "$WORK/config.xml"
+setup python3 tests/gui/legacy-vehicle.py --work $WORK --port 5790 --odid
+
+screen fly
+window 1600x1200
+# A first budget, set by hand until a passing run records one.
+budget 7
+# 7: 5.5 s measured headless on lavapipe (2026-10-16), the rule's ceiling plus one.
+within 15
+expect plugins.Open_Drone_ID.state running
+expect plugins.question none
+expect vehicle.count > 0
+
+# The subscriptions, at the plugin's next second with the vehicle heard; the link's packets heard
+# for them.
+expect plugins.subscriptions Open_Drone_ID:12918@1:236,Open_Drone_ID:12918@1:237,Open_Drone_ID:12918@1:238,Open_Drone_ID:12918@1:1
+expect plugins.packets.heard true
+expect plugins.Open_Drone_ID.form.log ~ Sub. to ODID ARM_STATUS for SysId: 1
+
+# The transmitter's first arm status: the backend started for system 1.
+expect plugins.Open_Drone_ID.form.log ~ Detected and Starting on System ID: 1
+expect plugins.Open_Drone_ID.form.rid_comms Green
+expect plugins.Open_Drone_ID.form.arm_status Red
+expect plugins.Open_Drone_ID.form.status SYSTEM not received
+expect plugins.Open_Drone_ID.form.gcs_gps Orange
+expect plugins.Open_Drone_ID.form.odid_ok Remote ID Fail
+expect plugins.Open_Drone_ID.form.odid_reason GCS GPS Invalid
+# The next, the error said.
+expect plugins.Open_Drone_ID.form.log ~ Arm Error: SYSTEM not received
+
+# The plugin's OPEN_DRONE_ID_SYSTEM reached the transmitter, which is ready now.
+expect plugins.Open_Drone_ID.form.log ~ Arm Stats: Ready
+expect plugins.Open_Drone_ID.form.status Ready
+expect plugins.Open_Drone_ID.form.arm_status Green
+
+# The tab shows the form; then the first page again.
+click fly-tab-droneid
+expect fly.tab tabDroneID
+expect plugins.forms.paged Drone ID@tabDroneID
+click fly-tab-quick
+expect fly.tab tabQuick

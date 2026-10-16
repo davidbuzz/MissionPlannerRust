@@ -408,4 +408,24 @@ impl Plugin {
             b.call_form_event(s, id, value)
         })
     }
+
+    /// A packet one of the plugin's subscriptions matched: `PacketReceived` calling its
+    /// function with the `MAVLinkMessage` - `message_id` from component `compid` of system
+    /// `sysid`, and its payload's bytes. With a call's fuel: the C#'s handler runs on the link's
+    /// reader, where a long one holds up every packet after it.
+    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:5518-5533`
+    ///
+    /// # Errors
+    /// The plugin's fault.
+    pub fn packet_received(
+        &mut self,
+        message_id: u32,
+        sysid: u32,
+        compid: u8,
+        payload: &[u8],
+    ) -> Result<(), Fault> {
+        self.call(self.limits.fuel_per_call, |b, s| {
+            b.call_packet_received(s, message_id, sysid, compid, payload)
+        })
+    }
 }
