@@ -480,19 +480,19 @@ BSD Zero Clause License (0BSD).
 | cpp_demangle | 0.5.1 | MIT OR Apache-2.0 | crates.io |
 | cpufeatures | 0.2.17 | MIT OR Apache-2.0 | crates.io |
 | cpufeatures | 0.3.1 | MIT OR Apache-2.0 | crates.io |
-| cranelift-assembler-x64 | 0.135.5 | Apache-2.0 WITH LLVM-exception | crates.io |
-| cranelift-assembler-x64-meta | 0.135.5 | Apache-2.0 WITH LLVM-exception | crates.io |
-| cranelift-bforest | 0.135.4 | Apache-2.0 WITH LLVM-exception | crates.io |
-| cranelift-bitset | 0.135.4 | Apache-2.0 WITH LLVM-exception | crates.io |
-| cranelift-codegen | 0.135.4 | Apache-2.0 WITH LLVM-exception | crates.io |
-| cranelift-codegen-meta | 0.135.4 | Apache-2.0 WITH LLVM-exception | crates.io |
-| cranelift-codegen-shared | 0.135.5 | Apache-2.0 WITH LLVM-exception | crates.io |
-| cranelift-control | 0.135.5 | Apache-2.0 WITH LLVM-exception | crates.io |
-| cranelift-entity | 0.135.4 | Apache-2.0 WITH LLVM-exception | crates.io |
-| cranelift-frontend | 0.135.4 | Apache-2.0 WITH LLVM-exception | crates.io |
-| cranelift-isle | 0.135.4 | Apache-2.0 WITH LLVM-exception | crates.io |
-| cranelift-native | 0.135.4 | Apache-2.0 WITH LLVM-exception | crates.io |
-| cranelift-srcgen | 0.135.5 | Apache-2.0 WITH LLVM-exception | crates.io |
+| cranelift-assembler-x64 | 0.135.6 | Apache-2.0 WITH LLVM-exception | crates.io |
+| cranelift-assembler-x64-meta | 0.135.6 | Apache-2.0 WITH LLVM-exception | crates.io |
+| cranelift-bforest | 0.135.6 | Apache-2.0 WITH LLVM-exception | crates.io |
+| cranelift-bitset | 0.135.6 | Apache-2.0 WITH LLVM-exception | crates.io |
+| cranelift-codegen | 0.135.6 | Apache-2.0 WITH LLVM-exception | crates.io |
+| cranelift-codegen-meta | 0.135.6 | Apache-2.0 WITH LLVM-exception | crates.io |
+| cranelift-codegen-shared | 0.135.6 | Apache-2.0 WITH LLVM-exception | crates.io |
+| cranelift-control | 0.135.6 | Apache-2.0 WITH LLVM-exception | crates.io |
+| cranelift-entity | 0.135.6 | Apache-2.0 WITH LLVM-exception | crates.io |
+| cranelift-frontend | 0.135.6 | Apache-2.0 WITH LLVM-exception | crates.io |
+| cranelift-isle | 0.135.6 | Apache-2.0 WITH LLVM-exception | crates.io |
+| cranelift-native | 0.135.6 | Apache-2.0 WITH LLVM-exception | crates.io |
+| cranelift-srcgen | 0.135.6 | Apache-2.0 WITH LLVM-exception | crates.io |
 | crc | 3.4.0 | MIT OR Apache-2.0 | crates.io |
 | crc-catalog | 2.5.0 | MIT OR Apache-2.0 | crates.io |
 | crc32fast | 1.5.2 | MIT OR Apache-2.0 | crates.io |
@@ -947,8 +947,8 @@ BSD Zero Clause License (0BSD).
 | profiling-procmacros | 1.0.18 | MIT OR Apache-2.0 | crates.io |
 | proptest | 1.11.0 | MIT OR Apache-2.0 | crates.io |
 | psm | 0.1.32 | MIT OR Apache-2.0 | crates.io |
-| pulley-interpreter | 48.0.4 | Apache-2.0 WITH LLVM-exception | crates.io |
-| pulley-macros | 48.0.4 | Apache-2.0 WITH LLVM-exception | crates.io |
+| pulley-interpreter | 48.0.6 | Apache-2.0 WITH LLVM-exception | crates.io |
+| pulley-macros | 48.0.6 | Apache-2.0 WITH LLVM-exception | crates.io |
 | pulp | 0.22.3 | MIT | crates.io |
 | pulp-wasm-simd-flag | 0.1.1 | MIT | crates.io |
 | pxfm | 0.1.30 | BSD-3-Clause OR Apache-2.0 | crates.io |
@@ -1017,25 +1017,25 @@ BSD Zero Clause License (0BSD).
 | rustls | 0.23.45 | Apache-2.0 OR ISC OR MIT | crates.io |
 | rustls-pki-types | 1.15.1 | MIT OR Apache-2.0 | crates.io |
 | rustls-webpki | 0.103.15 | ISC | crates.io |
-| rustpython | 0.5.0 | MIT | git https://github.com/davidbuzz/RustPython @ e7bba02 |
-| rustpython-codegen | 0.5.0 | MIT | git https://github.com/davidbuzz/RustPython @ e7bba02 |
-| rustpython-common | 0.5.0 | MIT | git https://github.com/davidbuzz/RustPython @ e7bba02 |
-| rustpython-compiler | 0.5.0 | MIT | git https://github.com/davidbuzz/RustPython @ e7bba02 |
-| rustpython-compiler-core | 0.5.0 | MIT | git https://github.com/davidbuzz/RustPython @ e7bba02 |
-| rustpython-derive | 0.5.0 | MIT | git https://github.com/davidbuzz/RustPython @ e7bba02 |
-| rustpython-derive-impl | 0.5.0 | MIT | git https://github.com/davidbuzz/RustPython @ e7bba02 |
-| rustpython-doc | 0.5.0 | PSF-2.0 | git https://github.com/davidbuzz/RustPython @ e7bba02 |
-| rustpython-literal | 0.5.0 | MIT | git https://github.com/davidbuzz/RustPython @ e7bba02 |
-| rustpython-pylib | 0.5.0 | PSF-2.0 | git https://github.com/davidbuzz/RustPython @ e7bba02 |
+| rustpython | 0.5.0 | MIT | git https://github.com/davidbuzz/RustPython @ dfe0898 |
+| rustpython-codegen | 0.5.0 | MIT | git https://github.com/davidbuzz/RustPython @ dfe0898 |
+| rustpython-common | 0.5.0 | MIT | git https://github.com/davidbuzz/RustPython @ dfe0898 |
+| rustpython-compiler | 0.5.0 | MIT | git https://github.com/davidbuzz/RustPython @ dfe0898 |
+| rustpython-compiler-core | 0.5.0 | MIT | git https://github.com/davidbuzz/RustPython @ dfe0898 |
+| rustpython-derive | 0.5.0 | MIT | git https://github.com/davidbuzz/RustPython @ dfe0898 |
+| rustpython-derive-impl | 0.5.0 | MIT | git https://github.com/davidbuzz/RustPython @ dfe0898 |
+| rustpython-doc | 0.5.0 | PSF-2.0 | git https://github.com/davidbuzz/RustPython @ dfe0898 |
+| rustpython-literal | 0.5.0 | MIT | git https://github.com/davidbuzz/RustPython @ dfe0898 |
+| rustpython-pylib | 0.5.0 | PSF-2.0 | git https://github.com/davidbuzz/RustPython @ dfe0898 |
 | rustpython-ruff_python_ast | 0.15.8 | MIT | crates.io |
 | rustpython-ruff_python_parser | 0.15.8 | MIT | crates.io |
 | rustpython-ruff_python_trivia | 0.15.8 | MIT | crates.io |
 | rustpython-ruff_source_file | 0.15.8 | MIT | crates.io |
 | rustpython-ruff_text_size | 0.15.8 | MIT | crates.io |
-| rustpython-sre_engine | 0.5.0 | MIT | git https://github.com/davidbuzz/RustPython @ e7bba02 |
-| rustpython-stdlib | 0.5.0 | MIT | git https://github.com/davidbuzz/RustPython @ e7bba02 |
-| rustpython-vm | 0.5.0 | MIT | git https://github.com/davidbuzz/RustPython @ e7bba02 |
-| rustpython-wtf8 | 0.5.0 | MIT | git https://github.com/davidbuzz/RustPython @ e7bba02 |
+| rustpython-sre_engine | 0.5.0 | MIT | git https://github.com/davidbuzz/RustPython @ dfe0898 |
+| rustpython-stdlib | 0.5.0 | MIT | git https://github.com/davidbuzz/RustPython @ dfe0898 |
+| rustpython-vm | 0.5.0 | MIT | git https://github.com/davidbuzz/RustPython @ dfe0898 |
+| rustpython-wtf8 | 0.5.0 | MIT | git https://github.com/davidbuzz/RustPython @ dfe0898 |
 | rustversion | 1.0.23 | MIT OR Apache-2.0 | crates.io |
 | rusty-fork | 0.3.1 | MIT/Apache-2.0 | crates.io |
 | rustybuzz | 0.20.1 | MIT | crates.io |
@@ -1288,18 +1288,18 @@ BSD Zero Clause License (0BSD).
 | wasm_thread | 0.3.3 | Apache-2.0 OR MIT | git https://github.com/zed-industries/wasm_thread @ 0cf96c7 |
 | wasmparser | 0.254.2 | Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT | crates.io |
 | wasmprinter | 0.254.2 | Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT | crates.io |
-| wasmtime | 48.0.4 | Apache-2.0 WITH LLVM-exception | crates.io |
-| wasmtime-environ | 48.0.4 | Apache-2.0 WITH LLVM-exception | crates.io |
-| wasmtime-internal-component-macro | 48.0.4 | Apache-2.0 WITH LLVM-exception | crates.io |
-| wasmtime-internal-component-util | 48.0.4 | Apache-2.0 WITH LLVM-exception | crates.io |
-| wasmtime-internal-core | 48.0.4 | Apache-2.0 WITH LLVM-exception | crates.io |
-| wasmtime-internal-cranelift | 48.0.4 | Apache-2.0 WITH LLVM-exception | crates.io |
-| wasmtime-internal-fiber | 48.0.4 | Apache-2.0 WITH LLVM-exception | crates.io |
-| wasmtime-internal-jit-debug | 48.0.4 | Apache-2.0 WITH LLVM-exception | crates.io |
-| wasmtime-internal-jit-icache-coherence | 48.0.4 | Apache-2.0 WITH LLVM-exception | crates.io |
-| wasmtime-internal-unwinder | 48.0.4 | Apache-2.0 WITH LLVM-exception | crates.io |
-| wasmtime-internal-versioned-export-macros | 48.0.4 | Apache-2.0 WITH LLVM-exception | crates.io |
-| wasmtime-internal-wit-bindgen | 48.0.4 | Apache-2.0 WITH LLVM-exception | crates.io |
+| wasmtime | 48.0.6 | Apache-2.0 WITH LLVM-exception | crates.io |
+| wasmtime-environ | 48.0.6 | Apache-2.0 WITH LLVM-exception | crates.io |
+| wasmtime-internal-component-macro | 48.0.6 | Apache-2.0 WITH LLVM-exception | crates.io |
+| wasmtime-internal-component-util | 48.0.6 | Apache-2.0 WITH LLVM-exception | crates.io |
+| wasmtime-internal-core | 48.0.6 | Apache-2.0 WITH LLVM-exception | crates.io |
+| wasmtime-internal-cranelift | 48.0.6 | Apache-2.0 WITH LLVM-exception | crates.io |
+| wasmtime-internal-fiber | 48.0.6 | Apache-2.0 WITH LLVM-exception | crates.io |
+| wasmtime-internal-jit-debug | 48.0.6 | Apache-2.0 WITH LLVM-exception | crates.io |
+| wasmtime-internal-jit-icache-coherence | 48.0.6 | Apache-2.0 WITH LLVM-exception | crates.io |
+| wasmtime-internal-unwinder | 48.0.6 | Apache-2.0 WITH LLVM-exception | crates.io |
+| wasmtime-internal-versioned-export-macros | 48.0.6 | Apache-2.0 WITH LLVM-exception | crates.io |
+| wasmtime-internal-wit-bindgen | 48.0.6 | Apache-2.0 WITH LLVM-exception | crates.io |
 | wayland-backend | 0.3.17 | MIT | crates.io |
 | wayland-client | 0.31.15 | MIT | crates.io |
 | wayland-cursor | 0.31.14 | MIT | crates.io |
