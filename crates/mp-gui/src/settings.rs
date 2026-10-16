@@ -1566,8 +1566,11 @@ mod tests {
 
         assert_eq!(persisted.get("distunits"), Some("Feet"));
         assert_eq!(persisted.get("mpimport_offer"), Some("later"));
-        let ours = home
-            .join(".local/share/MissionPlannerRust/logs")
+        // Built as `rehome` builds it - `\` on Windows - not spelt with `/` (CI's Windows run of
+        // 2026-10-16 failed on the spelling).
+        let ours = folders
+            .user_data_directory()
+            .join("logs")
             .to_string_lossy()
             .into_owned();
         assert_eq!(persisted.get("logdirectory"), Some(ours.as_str()));

@@ -127,13 +127,16 @@ mod tests {
         config.set("other", "/home/pilot/.local/share/Mission Planner");
         config.set("baud", "57600");
         let changed = rehome(&mut config, &folders(home));
+        // The new value is built as the folders build theirs - with `\` on Windows, where the
+        // C#'s own values are so written - so the expectation is built the same way.
+        let ours = folders(home).user_data_directory();
         assert_eq!(
             config.get("logdirectory"),
-            Some("/home/pilot/.local/share/MissionPlannerRust/logs")
+            Some(ours.join("logs").to_string_lossy().as_ref())
         );
         assert_eq!(
             config.get("other"),
-            Some("/home/pilot/.local/share/MissionPlannerRust")
+            Some(ours.to_string_lossy().as_ref())
         );
         assert_eq!(
             config.get("WPFileDirectory"),
