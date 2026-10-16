@@ -45,6 +45,11 @@
 //!   and HELP, and Ctrl+P shows that tab; filled anew each time it is chosen, and again after
 //!   Save && Close. Its buttons are sized to their text, where the designer's 73 by 31 cut theirs
 //!   in half.
+//! * Not in the C#, the owner's complaint of 2026-10-16 - "we appear to have *two* tailscale
+//!   plugins, and i still have NO IDEA HOW TO USE THEM": one native row, Tailscale, and under the
+//!   grid while it is ticked the Tailscale panel - how to use it in three numbered lines and a
+//!   link to the guide, this computer's Tailscale as the connection area's indicator says it, and
+//!   the tick of the planner's built-in node, which had been a row of its own.
 //!
 //! `// C#: Plugin/PluginUI.cs:14-149; Plugin/PluginUI.Designer.cs:31-178; MainV2.cs:4125-4129`
 
@@ -106,13 +111,16 @@ pub(crate) const TAILSCALE: NativePlugin = NativePlugin {
 /// The built-in Tailscale node, experimental - the owner's of 2026-10-14: tailscale-rs on the
 /// planner's own thread, a node of its own on a tailnet with no Tailscale client installed, which
 /// the links to the tailnet's hosts dial through, its names (`white`, `buzz55`) as well as its
-/// addresses (mp-tailnet; mp-transport's `tailnet`). Off until it is ticked and saved; saving it
-/// ticked starts it at once, unticked stops it. A build without mp-gui's `tailnet-node` feature
-/// lists it, and once it is ticked says it has no node. Not in a web page, whose tailnet is the
-/// page's own.
+/// addresses (mp-tailnet; mp-transport's `tailnet`). Since the owner's complaint of 2026-10-16
+/// ("we appear to have *two* tailscale plugins") no row of the grid but the Tailscale panel's
+/// tick, `name` its words; its key in `DisabledPlugins` is the one it had as a row, so a choice
+/// saved then carries over. Off until it is ticked and saved; saving it ticked starts it at once,
+/// unticked stops it - and it runs only while the Tailscale row is on as well (`plugins_ui`). A
+/// build without mp-gui's `tailnet-node` feature has the tick, and once it is ticked and saved
+/// says it has no node. Not in a web page, whose tailnet is the page's own.
 #[cfg(not(target_family = "wasm"))]
 pub(crate) const TAILSCALE_NODE: NativePlugin = NativePlugin {
-    name: "Tailscale node (experimental)",
+    name: "Use the planner's built-in node (experimental)",
     author: "MissionPlannerRust",
     version: "built in",
     file: "tailscale-node.native",
@@ -131,18 +139,47 @@ pub(crate) const MP_IMPORT: NativePlugin = NativePlugin {
     opt_in: false,
 };
 
-/// The native features the manager lists, after the plugins: Tailscale, the import from Mission
-/// Planner, and the experimental node last.
+/// The native features the manager lists as rows, after the plugins: Tailscale and the import
+/// from Mission Planner. The built-in node is none (the owner's complaint of 2026-10-16): its
+/// tick is the Tailscale panel's, under the grid.
 #[cfg(not(target_family = "wasm"))]
-pub(crate) const NATIVE: &[NativePlugin] = &[TAILSCALE, MP_IMPORT, TAILSCALE_NODE];
+pub(crate) const NATIVE: &[NativePlugin] = &[TAILSCALE, MP_IMPORT];
 /// The native features the manager lists, after the plugins: in a web page Tailscale alone - a
 /// page has no Mission Planner folder to import from, and no built-in node.
 #[cfg(target_family = "wasm")]
 pub(crate) const NATIVE: &[NativePlugin] = &[TAILSCALE];
 
-/// What the built-in node's sign-in link says, under the grid.
+/// Every native feature `DisabledPlugins` keys: the grid's rows ([`NATIVE`]) and the built-in
+/// node, whose switch is the Tailscale panel's tick.
+#[cfg(not(target_family = "wasm"))]
+pub(crate) const NATIVE_SWITCHES: &[NativePlugin] = &[TAILSCALE, MP_IMPORT, TAILSCALE_NODE];
+/// Every native feature `DisabledPlugins` keys: in a web page the grid's rows alone.
+#[cfg(target_family = "wasm")]
+pub(crate) const NATIVE_SWITCHES: &[NativePlugin] = NATIVE;
+
+/// What the built-in node's sign-in link says, under its tick.
 #[cfg(not(target_family = "wasm"))]
 const SIGN_IN_TEXT: &str = "Sign in to the tailnet (opens the browser)";
+
+/// The Tailscale panel under the grid, the owner's complaint of 2026-10-16 ("i still have NO IDEA
+/// HOW TO USE THEM"): how to use it, in three numbered lines.
+#[cfg(not(target_family = "wasm"))]
+pub(crate) const TAILSCALE_STEPS: [&str; 3] = [
+    "1. Install Tailscale on this computer and on the vehicle's computer, and sign both into your \
+     tailnet (or tick the built-in node below and open its sign-in link).",
+    "2. In the port box choose Tailscale.",
+    "3. CONNECT and type the vehicle's tailnet name or 100.x address.",
+];
+/// The panel's link to the guide, using_tailscale.md, opened as HELP's "Using Tailscale" opens it.
+#[cfg(not(target_family = "wasm"))]
+const GUIDE_TEXT: &str = "Guide";
+/// What heads the panel's line of this computer's Tailscale.
+#[cfg(not(target_family = "wasm"))]
+const COMPUTER_TEXT: &str = "This computer:";
+/// What the node's line adds while its tick is ticked and no node runs yet: the tick takes effect
+/// at Save && Close, as the grid's do.
+#[cfg(not(target_family = "wasm"))]
+const NODE_AT_SAVE_TEXT: &str = "Save & Close starts it";
 
 /// Whether a native feature is on: not in the disabled list, compared as plugins' files are.
 #[must_use]
@@ -234,7 +271,11 @@ pub(crate) fn rows(plugins: &[PluginStatus], disabled: &[String], present: impl 
         });
     }
     for off in disabled {
-        if NATIVE.iter().any(|feature| feature.file.eq_ignore_ascii_case(off)) {
+        // A native feature's key is no plugin's: the built-in node's included, which has no row.
+        if NATIVE_SWITCHES
+            .iter()
+            .any(|feature| feature.file.eq_ignore_ascii_case(off))
+        {
             continue;
         }
         // `if (p.FileName.ToLower().Contains(s)) isLoaded = true;`
@@ -305,10 +346,28 @@ pub(crate) fn error_text(plugins: &[PluginStatus]) -> String {
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct Form {
     rows: Vec<Row>,
+    /// The Tailscale panel's tick of the built-in node ([`TAILSCALE_NODE`]): as the disabled list
+    /// in force had it when the form opened, and turned by a click as a row's Enabled box is.
+    #[cfg(not(target_family = "wasm"))]
+    node: bool,
     /// Show Errors' message box, while it shows: `CustomMessageBox.Show(msg, "Errors")`.
     errors: Option<String>,
     /// What Show Errors will say, read when the form opened.
     error_text: String,
+}
+
+impl Form {
+    /// What Save && Close writes: the rows not ticked ([`disabled_after`]), and the built-in
+    /// node's key while its tick is not - as its row's was, when it had one.
+    #[cfg_attr(target_family = "wasm", allow(unused_mut))]
+    fn disabled_after(&self) -> Vec<String> {
+        let mut list = disabled_after(&self.rows);
+        #[cfg(not(target_family = "wasm"))]
+        if !self.node {
+            list.push(TAILSCALE_NODE.file.to_owned());
+        }
+        list
+    }
 }
 
 /// Ctrl+P's form and what outlives it.
@@ -321,6 +380,9 @@ pub(crate) struct PluginManager {
     exercising: Option<usize>,
     /// How many times it has been opened.
     pub opened: usize,
+    /// The last page the Tailscale panel handed to the desktop's browser - the guide, or the
+    /// node's sign-in page - for the facts.
+    tailscale_opened: Option<String>,
 }
 
 impl PluginManager {
@@ -336,6 +398,8 @@ impl PluginManager {
         self.exercising = None;
         self.form = Some(Form {
             rows: rows(plugins, disabled, present),
+            #[cfg(not(target_family = "wasm"))]
+            node: native_enabled(&TAILSCALE_NODE, disabled),
             errors: None,
             error_text: error_text(plugins),
         });
@@ -380,13 +444,41 @@ impl PluginManager {
         }
     }
 
+    /// Whether the open form's Tailscale row is ticked: the Tailscale panel shows under the grid
+    /// while it is, and goes as soon as it is unticked, before Save && Close.
+    #[cfg(not(target_family = "wasm"))]
+    #[must_use]
+    pub(crate) fn tailscale_ticked(&self) -> bool {
+        self.form.as_ref().is_some_and(|form| {
+            form.rows
+                .iter()
+                .any(|row| row.enabled && row.dll.eq_ignore_ascii_case(TAILSCALE.file))
+        })
+    }
+
+    /// The Tailscale panel's tick of the built-in node, while the form is open.
+    #[cfg(not(target_family = "wasm"))]
+    #[must_use]
+    pub(crate) fn node_ticked(&self) -> Option<bool> {
+        self.form.as_ref().map(|form| form.node)
+    }
+
+    /// A click on the Tailscale panel's tick of the built-in node.
+    #[cfg(not(target_family = "wasm"))]
+    pub(crate) fn toggle_node(&mut self) {
+        if let Some(form) = self.form.as_mut() {
+            form.node = !form.node;
+        }
+    }
+
     /// `bSave_Click`: the disabled list for `DisabledPlugins` (`None` when the form is not open),
-    /// a restart required, and the form closed.
+    /// a restart required, and the form closed. The list names the built-in node while its tick
+    /// is not ticked, as it named its row.
     /// `// C#: Plugin/PluginUI.cs:86-91`
     pub(crate) fn save(&mut self) -> Option<Vec<String>> {
         let form = self.form.take()?;
         self.restart_required = true;
-        Some(disabled_after(&form.rows))
+        Some(form.disabled_after())
     }
 
     /// `but_errors_Click`.
@@ -404,13 +496,20 @@ impl PluginManager {
     }
 
     /// The facts a script asserts on: whether the form is open, the warning's visibility, each
-    /// row's name, file, Enabled box and colour, and the errors box.
+    /// row's name, file, Enabled box and colour, the built-in node's tick, the errors box, and the
+    /// last page the Tailscale panel opened.
     pub(crate) fn record_facts(&self) {
         facts::record("plugin-manager.open", self.is_open());
         facts::record("plugin-manager.opened", self.opened);
         facts::record("plugin-manager.restart-required", self.restart_required);
+        facts::record(
+            "plugin-manager.tailscale.opened",
+            self.tailscale_opened.as_deref().unwrap_or("none"),
+        );
         let Some(form) = &self.form else { return };
         facts::record("plugin-manager.rows", form.rows.len());
+        #[cfg(not(target_family = "wasm"))]
+        facts::record("plugin-manager.tailnet-node.tick", form.node);
         facts::record(
             "plugin-manager.exercising",
             self.exercised().map_or("none", |(name, _)| name),
@@ -623,14 +722,8 @@ fn panel(this: &MissionPlanner, cx: &mut Context<MissionPlanner>) -> Option<AnyE
     ));
     let mut client = div().flex().flex_col().gap_3().p(px(9.0)).child(top).child(grid);
 
-    // The built-in Tailscale node, while its row is on: how it stands, and the page to sign in at
-    // (the owner's, 2026-10-14).
-    #[cfg(not(target_family = "wasm"))]
-    if let Some(state) = this.plugins.tailnet_state() {
-        client = client.child(tailnet_node_line(&state, cx));
-    }
-
     // The owner's Exercise: the plugin's map menu entries, each run as the map's menu runs it.
+    // Next to the grid whose Try opened it, above the Tailscale panel.
     if let Some((name, plugin)) = manager.exercised() {
         let entries = this.plugins.entries_of(plugin);
         let mut list = crate::probe::measured("plugin-manager-exercise", div())
@@ -675,6 +768,13 @@ fn panel(this: &MissionPlanner, cx: &mut Context<MissionPlanner>) -> Option<AnyE
             );
         }
         client = client.child(list);
+    }
+
+    // The Tailscale panel, while the Tailscale row is ticked (the owner's complaint of
+    // 2026-10-16): as wide as the grid, its lines wrapped to it.
+    #[cfg(not(target_family = "wasm"))]
+    if let Some(tailscale) = this.tailscale_panel() {
+        client = client.child(tailscale_panel_view(tailscale, grid_width, cx));
     }
 
     let caption = div()
@@ -741,52 +841,287 @@ fn panel(this: &MissionPlanner, cx: &mut Context<MissionPlanner>) -> Option<AnyE
     Some(body.into_any_element())
 }
 
-/// The built-in Tailscale node's line under the grid, while its row is on: its row's name, how
-/// it stands, and while it waits for a sign-in, the page as a link to the desktop's browser -
-/// opened as HELP's links are, and a failure said on the status line.
+/// The Tailscale panel's words as they stand: drawn under the grid, and given to the facts.
 #[cfg(not(target_family = "wasm"))]
-fn tailnet_node_line(state: &mp_tailnet::State, cx: &mut Context<MissionPlanner>) -> AnyElement {
-    let mut line = crate::probe::measured("plugin-manager-tailnet-node", div())
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct TailscalePanel {
+    /// This computer's Tailscale - the official client's - as the connection area's indicator
+    /// says it: its dot, its words and its hover's account (`tailscale::shown`). The built-in node
+    /// has a line of its own under its tick, so here it does not speak for this computer.
+    pub computer: crate::tailscale::Shown,
+    /// The built-in node's tick.
+    pub node_ticked: bool,
+    /// Under the tick while it is ticked: how the node stands, as its line under the grid said it
+    /// when it was a row - or, no node running yet, that Save && Close starts it.
+    pub node_line: Option<String>,
+    /// The page the node waits for its sign-in at, while it does and its tick is ticked.
+    pub sign_in: Option<String>,
+}
+
+/// The Tailscale panel's words: from this computer's Tailscale as the indicator's poller has it,
+/// the node's tick, and the node while one runs (`plugins_ui`'s `tailnet_state`).
+#[cfg(not(target_family = "wasm"))]
+#[must_use]
+pub(crate) fn panel_words(
+    computer: &crate::tailscale::TailnetState,
+    node_ticked: bool,
+    node: Option<&mp_tailnet::State>,
+) -> TailscalePanel {
+    let (node_line, sign_in) = match (node_ticked, node) {
+        (false, _) => (None, None),
+        (true, None) => (
+            Some(format!(
+                "{} ({NODE_AT_SAVE_TEXT})",
+                mp_tailnet::State::Stopped
+            )),
+            None,
+        ),
+        (true, Some(state)) => {
+            let sign_in = match state {
+                mp_tailnet::State::NeedsSignIn { url } => Some(url.clone()),
+                _ => None,
+            };
+            (Some(state.to_string()), sign_in)
+        }
+    };
+    TailscalePanel {
+        computer: crate::tailscale::shown(None, computer),
+        node_ticked,
+        node_line,
+        sign_in,
+    }
+}
+
+#[cfg(not(target_family = "wasm"))]
+impl MissionPlanner {
+    /// The Tailscale panel, while the plugin manager is open with its Tailscale row ticked.
+    pub(crate) fn tailscale_panel(&self) -> Option<TailscalePanel> {
+        let manager = &self.plugins.manager;
+        let node_ticked = manager.node_ticked()?;
+        manager.tailscale_ticked().then(|| {
+            panel_words(
+                &self.tailnet_state(),
+                node_ticked,
+                self.plugins.tailnet_state().as_ref(),
+            )
+        })
+    }
+
+    /// A page of the Tailscale panel handed to the desktop's browser, as HELP's links hand
+    /// theirs: kept for the facts once opened; a failure, "could not open `what`: why", on the
+    /// status line.
+    fn tailscale_panel_open(&mut self, url: &str, what: &str) {
+        match crate::scripts_tab::open_with_shell(std::path::Path::new(url)) {
+            Ok(()) => self.plugins.manager.tailscale_opened = Some(url.to_owned()),
+            Err(why) => self.file_status = Some(format!("could not open {what}: {why}")),
+        }
+    }
+
+    /// The Tailscale panel's facts while the plugin manager is open: whether it shows
+    /// (`plugin-manager.tailscale.panel`), and while it does its three lines
+    /// (`plugin-manager.tailscale.step.1` to `.3`), this computer's words and account
+    /// (`plugin-manager.tailscale.computer`, `.computer.details`), the node's line under its tick
+    /// (`plugin-manager.tailnet-node.line`) and its sign-in page
+    /// (`plugin-manager.tailnet-node.sign-in`), each `none` while it is not drawn.
+    pub(crate) fn tailscale_panel_facts(&self) {
+        if !self.plugins.manager.is_open() {
+            return;
+        }
+        let panel = self.tailscale_panel();
+        facts::record("plugin-manager.tailscale.panel", panel.is_some());
+        let Some(panel) = panel else { return };
+        for (index, step) in TAILSCALE_STEPS.iter().enumerate() {
+            facts::record(format!("plugin-manager.tailscale.step.{}", index + 1), step);
+        }
+        facts::record("plugin-manager.tailscale.computer", &panel.computer.text);
+        facts::record(
+            "plugin-manager.tailscale.computer.details",
+            &panel.computer.details,
+        );
+        facts::record(
+            "plugin-manager.tailnet-node.line",
+            panel.node_line.as_deref().unwrap_or("none"),
+        );
+        facts::record(
+            "plugin-manager.tailnet-node.sign-in",
+            panel.sign_in.as_deref().unwrap_or("none"),
+        );
+    }
+}
+
+/// One of the panel's links, drawn as this application's are (`ui::box_text`'s): the link blue,
+/// underlined and lighter under the pointer, in a row of its own so that only its words take the
+/// click.
+#[cfg(not(target_family = "wasm"))]
+fn panel_link(
+    id: &'static str,
+    text: &'static str,
+    on_click: impl Fn(&gpui::ClickEvent, &mut gpui::Window, &mut gpui::App) + 'static,
+) -> gpui::Div {
+    div().flex().child(
+        crate::probe::measured(id, div())
+            .id(id)
+            .text_sm()
+            .text_color(rgb(theme::LINK))
+            .underline()
+            .cursor_pointer()
+            .hover(|style| style.text_color(rgb(theme::LINK_HOVER)))
+            .child(text)
+            .on_click(on_click),
+    )
+}
+
+/// The Tailscale panel under the grid, while the Tailscale row is ticked (the owner's complaint
+/// of 2026-10-16): its name and the guide's link; how to use it, in three numbered lines; this
+/// computer's Tailscale as the connection area's indicator says it, its account beneath; and the
+/// built-in node's tick - saved by Save && Close, as the grid's ticks are - with how the node
+/// stands under it while it is ticked, and its sign-in link while it waits for one. `width` is
+/// the grid's, which the lines wrap to.
+#[cfg(not(target_family = "wasm"))]
+fn tailscale_panel_view(
+    panel: TailscalePanel,
+    width: f32,
+    cx: &mut Context<MissionPlanner>,
+) -> AnyElement {
+    // A line held to the panel's width: a flex item's least width is its content's, and a long
+    // line would widen the form past the grid.
+    let line = |text: String| {
+        div()
+            .w_full()
+            .min_w_0()
+            .text_sm()
+            .text_color(rgb(theme::TEXT))
+            .child(text)
+    };
+    let heading = div()
         .flex()
-        .flex_col()
-        .gap_1()
-        .p_2()
-        .border_1()
-        .border_color(rgb(theme::BORDER))
-        .rounded_sm()
+        .items_center()
+        .justify_between()
         .child(
             div()
                 .text_xs()
                 .text_color(rgb(theme::DIM))
-                .child(TAILSCALE_NODE.name),
+                .child(TAILSCALE.name),
+        )
+        .child(panel_link(
+            "plugin-manager-tailscale-guide",
+            GUIDE_TEXT,
+            cx.listener(|this, _event: &gpui::ClickEvent, _window, cx| {
+                this.tailscale_panel_open(crate::help::TAILSCALE_GUIDE_URL, "the Tailscale guide");
+                cx.notify();
+            }),
+        ));
+    let steps = div()
+        .flex()
+        .flex_col()
+        .gap_1()
+        .children(TAILSCALE_STEPS.iter().map(|step| line((*step).to_owned())));
+    let computer = crate::probe::measured("plugin-manager-tailscale-computer", div())
+        .flex()
+        .flex_col()
+        .gap_1()
+        .child(
+            div()
+                .flex()
+                .items_center()
+                .gap_2()
+                .child(
+                    div()
+                        .text_xs()
+                        .text_color(rgb(theme::DIM))
+                        .child(COMPUTER_TEXT),
+                )
+                .child(
+                    div()
+                        .size_2()
+                        .flex_shrink_0()
+                        .rounded_full()
+                        .bg(rgb(panel.computer.colour)),
+                )
+                .child(
+                    div()
+                        .min_w_0()
+                        .text_sm()
+                        .text_color(rgb(theme::TEXT))
+                        .child(panel.computer.text),
+                ),
+        )
+        .child(
+            div()
+                .w_full()
+                .min_w_0()
+                .text_xs()
+                .text_color(rgb(theme::DIM))
+                .child(panel.computer.details),
+        );
+    // The tick drawn as the grid's Enabled boxes are - its mark always there, in the box's own
+    // colour when not ticked - the box and its words one control.
+    let tick = crate::probe::measured("plugin-manager-tailnet-node-tick", div())
+        .id("plugin-manager-tailnet-node-tick")
+        .flex()
+        .items_center()
+        .gap_2()
+        .cursor_pointer()
+        .child(
+            div()
+                .size(px(13.0))
+                .flex_shrink_0()
+                .flex()
+                .items_center()
+                .justify_center()
+                .border_1()
+                .border_color(rgb(theme::TEXT))
+                .bg(rgb(theme::BG))
+                .child(div().size(px(7.0)).bg(rgb(if panel.node_ticked {
+                    theme::TEXT
+                } else {
+                    theme::BG
+                }))),
         )
         .child(
             div()
                 .text_sm()
                 .text_color(rgb(theme::TEXT))
-                .child(state.to_string()),
-        );
-    if let mp_tailnet::State::NeedsSignIn { url } = state {
-        let url = url.clone();
-        line = line.child(
-            crate::probe::measured("plugin-manager-tailnet-sign-in", div())
-                .id("plugin-manager-tailnet-sign-in")
-                .text_sm()
-                .text_color(rgb(theme::ACCENT))
-                .cursor_pointer()
-                .child(SIGN_IN_TEXT)
-                .on_click(cx.listener(move |this, _event, _window, cx| {
-                    if let Err(why) =
-                        crate::scripts_tab::open_with_shell(std::path::Path::new(&url))
-                    {
-                        this.file_status =
-                            Some(format!("could not open the Tailscale sign-in page: {why}"));
-                    }
+                .child(TAILSCALE_NODE.name),
+        )
+        .on_click(cx.listener(|this, _event: &gpui::ClickEvent, _window, cx| {
+            this.plugins.manager.toggle_node();
+            cx.notify();
+        }));
+    let mut body = crate::probe::measured("plugin-manager-tailscale", div())
+        .w(px(width))
+        .flex()
+        .flex_col()
+        .gap_2()
+        .p_2()
+        .border_1()
+        .border_color(rgb(theme::BORDER))
+        .rounded_sm()
+        .child(heading)
+        .child(steps)
+        .child(computer)
+        .child(div().flex().child(tick));
+    // Under the tick, in line with its words: how the node stands, and its sign-in page.
+    if let Some(state) = panel.node_line {
+        let mut node = crate::probe::measured("plugin-manager-tailnet-node", div())
+            .flex()
+            .flex_col()
+            .gap_1()
+            .pl(px(21.0))
+            .child(line(state));
+        if let Some(url) = panel.sign_in {
+            node = node.child(panel_link(
+                "plugin-manager-tailnet-sign-in",
+                SIGN_IN_TEXT,
+                cx.listener(move |this, _event: &gpui::ClickEvent, _window, cx| {
+                    this.tailscale_panel_open(&url, "the Tailscale sign-in page");
                     cx.notify();
-                })),
-        );
+                }),
+            ));
+        }
+        body = body.child(node);
     }
-    line.into_any_element()
+    body.into_any_element()
 }
 
 /// The PLUGINS tab: the plugin manager in the screen (the owner's addition, 2026-10-04).
@@ -830,8 +1165,9 @@ mod tests {
     /// Green for a loaded plugin; dark orange for one loaded and on the disabled list (matched
     /// without regard to case); a plugin whose Init or Loaded said no is not in `Plugins`, so not
     /// a row; dark red "Not loaded" for a disabled name with a file and no loaded plugin; nothing
-    /// for a disabled name with no file. Last the native rows, the built-in node off as the
-    /// disabled list in force has it until it is ticked - and no "Not loaded" row for its key.
+    /// for a disabled name with no file. Last the two native rows - and none for the built-in
+    /// node's key, in the disabled list as it is until its tick is ticked: neither a row of its
+    /// own (its tick is the Tailscale panel's) nor a "Not loaded" one.
     #[test]
     fn the_rows_are_populate_grid_views() {
         let plugins = [
@@ -894,15 +1230,6 @@ mod tests {
                     colour: RowColour::Green,
                     plugin: None,
                 },
-                Row {
-                    name: "Tailscale node (experimental)".to_owned(),
-                    author: "MissionPlannerRust".to_owned(),
-                    version: "built in".to_owned(),
-                    dll: "tailscale-node.native".to_owned(),
-                    enabled: false,
-                    colour: RowColour::DarkOrange,
-                    plugin: None,
-                },
             ]
         );
     }
@@ -953,35 +1280,232 @@ mod tests {
         assert_eq!(disabled_after(&ticked), ["tailscale.native"]);
     }
 
-    /// The owner's built-in Tailscale node (2026-10-14): a second native row, last, opt-in where
-    /// the first is not; off - dark orange, no "Not loaded" row - while the disabled list in
-    /// force names it, as it does until it is ticked and saved (`plugins_ui`); ticked, out of what
-    /// Save writes, so that it is on.
+    /// The owner's complaint of 2026-10-16, "we appear to have *two* tailscale plugins": the grid
+    /// lists one Tailscale row and the import, two native rows; the built-in node (the owner's of
+    /// 2026-10-14) is no row, whether the disabled list names it or not, and its key no "Not
+    /// loaded" row - but the key is the one it had as a row, opt-in, still read as its switch, so
+    /// a choice saved then carries over.
     #[test]
-    fn the_tailscale_node_is_a_native_row_off_until_ticked() {
-        assert_eq!(NATIVE, [TAILSCALE, MP_IMPORT, TAILSCALE_NODE]);
+    fn the_tailscale_node_is_the_panels_tick_not_a_row() {
+        assert_eq!(NATIVE, [TAILSCALE, MP_IMPORT]);
+        assert_eq!(NATIVE_SWITCHES, [TAILSCALE, MP_IMPORT, TAILSCALE_NODE]);
         const { assert!(TAILSCALE_NODE.opt_in) };
-        assert_eq!(TAILSCALE_NODE.name, "Tailscale node (experimental)");
         assert_eq!(TAILSCALE_NODE.file, "tailscale-node.native");
+        assert_eq!(
+            TAILSCALE_NODE.name,
+            "Use the planner's built-in node (experimental)"
+        );
 
         let plugins = [running("Dowding", "Dowding.wasm")];
-        let disabled = [TAILSCALE_NODE.file.to_owned()];
-        assert!(!native_enabled(&TAILSCALE_NODE, &disabled));
-        let off = rows(&plugins, &disabled, |_| true);
-        assert_eq!(off.len(), 1 + NATIVE.len(), "no Not loaded row for it");
-        let node = off.last().expect("a row");
-        assert_eq!(
-            (node.dll.as_str(), node.enabled, node.colour, node.plugin),
-            ("tailscale-node.native", false, RowColour::DarkOrange, None)
-        );
-        assert_eq!(disabled_after(&off), ["tailscale-node.native"]);
-
-        let mut ticked = off;
-        if let Some(row) = ticked.last_mut() {
-            row.enabled = true;
+        for disabled in [vec![], vec![TAILSCALE_NODE.file.to_owned()]] {
+            let rows = rows(&plugins, &disabled, |_| true);
+            assert_eq!(rows.len(), 1 + 2, "{disabled:?}");
+            assert!(
+                rows.iter().all(|row| row.dll != TAILSCALE_NODE.file),
+                "{disabled:?}"
+            );
+            let tailscale: Vec<&str> = rows
+                .iter()
+                .filter(|row| row.name.contains("Tailscale"))
+                .map(|row| row.dll.as_str())
+                .collect();
+            assert_eq!(tailscale, ["tailscale.native"], "one Tailscale row");
         }
-        assert!(disabled_after(&ticked).is_empty());
-        assert!(native_enabled(&TAILSCALE_NODE, &disabled_after(&ticked)));
+        // The key, read as it was.
+        assert!(!native_enabled(
+            &TAILSCALE_NODE,
+            &["Tailscale-Node.Native".to_owned()]
+        ));
+        assert!(native_enabled(
+            &TAILSCALE_NODE,
+            &["tailscale.native".to_owned()]
+        ));
+    }
+
+    /// The Tailscale panel's tick is the node's key: ticked as the disabled list in force has it
+    /// when the form opens - unticked while the list names the key, as it does until the tick is
+    /// saved (`plugins_ui`); a click turns it, as a row's Enabled box; Save && Close writes the key
+    /// into the list while it is unticked and leaves it out while it is ticked, beside the rows
+    /// not ticked; and a click with no form open does nothing.
+    #[test]
+    fn the_node_tick_is_saved_as_the_nodes_key() {
+        let plugins = [running("Dowding", "dowding.wasm")];
+        let node = TAILSCALE_NODE.file.to_owned();
+        let mut manager = PluginManager::default();
+        assert_eq!(manager.node_ticked(), None);
+        manager.toggle_node();
+        assert_eq!(manager.node_ticked(), None);
+
+        // Never ticked: unticked, and saved so.
+        manager.show(&plugins, std::slice::from_ref(&node), |_| true);
+        assert_eq!(manager.node_ticked(), Some(false));
+        assert_eq!(manager.save(), Some(vec![node.clone()]));
+
+        // Ticked and saved: the key out of the list, so the node is on.
+        manager.show(&plugins, std::slice::from_ref(&node), |_| true);
+        manager.toggle_node();
+        assert_eq!(manager.node_ticked(), Some(true));
+        let saved = manager.save().expect("open");
+        assert!(saved.is_empty());
+        assert!(native_enabled(&TAILSCALE_NODE, &saved));
+
+        // Opened again over that: ticked; unticked with Dowding's row, both in the list.
+        manager.show(&plugins, &saved, |_| true);
+        assert_eq!(manager.node_ticked(), Some(true));
+        manager.toggle_node();
+        manager.toggle(0);
+        let saved = manager.save().expect("open");
+        assert_eq!(saved, ["dowding.wasm".to_owned(), node]);
+        assert!(!native_enabled(&TAILSCALE_NODE, &saved));
+
+        // The close box saves nothing.
+        manager.show(&plugins, &saved, |_| true);
+        manager.toggle_node();
+        manager.close();
+        assert_eq!(manager.save(), None);
+    }
+
+    /// The panel's three lines, word for word (the owner's complaint of 2026-10-16: "i still have
+    /// NO IDEA HOW TO USE THEM"), numbered in order; its Guide link opens the guide HELP's "Using
+    /// Tailscale" opens.
+    #[test]
+    fn the_panel_says_how_to_use_it_in_three_lines() {
+        assert_eq!(
+            TAILSCALE_STEPS,
+            [
+                "1. Install Tailscale on this computer and on the vehicle's computer, and sign \
+                 both into your tailnet (or tick the built-in node below and open its sign-in \
+                 link).",
+                "2. In the port box choose Tailscale.",
+                "3. CONNECT and type the vehicle's tailnet name or 100.x address.",
+            ]
+        );
+        for (index, step) in TAILSCALE_STEPS.iter().enumerate() {
+            assert!(step.starts_with(&format!("{}. ", index + 1)), "{step}");
+        }
+        assert_eq!(GUIDE_TEXT, "Guide");
+        assert!(
+            crate::help::TAILSCALE_GUIDE_URL.ends_with("/using_tailscale.md"),
+            "{}",
+            crate::help::TAILSCALE_GUIDE_URL
+        );
+    }
+
+    /// The guide the Guide link opens starts with the panel's three lines, word for word, in its
+    /// "The short version" before "What Tailscale does here", and names the port box's Tailscale
+    /// kind and its two questions as CONNECT asks them.
+    #[test]
+    fn the_guide_opens_with_the_panels_three_lines() {
+        let guide = include_str!("../../../using_tailscale.md");
+        let short_at = guide
+            .find("\n## The short version\n")
+            .expect("its short version");
+        let what_at = guide
+            .find("\n## What Tailscale does here\n")
+            .expect("its first long section");
+        assert!(short_at < what_at, "the short version first");
+        let short: String = guide
+            .get(short_at..what_at)
+            .unwrap_or_default()
+            .split_whitespace()
+            .collect::<Vec<_>>()
+            .join(" ");
+        for step in TAILSCALE_STEPS {
+            assert!(short.contains(step), "{step}\nnot in\n{short}");
+        }
+        for words in ["**Tailscale**", "**tailnet host**", "**remote Port**"] {
+            assert!(short.contains(words), "{words}");
+        }
+    }
+
+    /// The panel shows while the open form's Tailscale row is ticked, and goes as soon as it is
+    /// unticked, before Save && Close; a form opened with Tailscale off has none; no form, none.
+    #[test]
+    fn the_panel_follows_the_tailscale_rows_tick() {
+        let mut manager = PluginManager::default();
+        assert!(!manager.tailscale_ticked());
+        manager.show(&[], &[], |_| true);
+        assert!(manager.tailscale_ticked());
+        let row = manager
+            .form
+            .as_ref()
+            .and_then(|form| form.rows.iter().position(|row| row.dll == TAILSCALE.file))
+            .expect("its row");
+        manager.toggle(row);
+        assert!(!manager.tailscale_ticked());
+        manager.toggle(row);
+        assert!(manager.tailscale_ticked());
+        manager.show(&[], &[TAILSCALE.file.to_owned()], |_| true);
+        assert!(!manager.tailscale_ticked());
+        // The import's row is not Tailscale's.
+        manager.show(&[], &[MP_IMPORT.file.to_owned()], |_| true);
+        assert!(manager.tailscale_ticked());
+    }
+
+    /// The panel's words: this computer's line is what the connection area's indicator shows for
+    /// the official client - its words, account and dot, `tailscale::shown`'s - whatever the node
+    /// does, as the node has its own line; that line shows only while the node's tick is ticked:
+    /// Save && Close starts it while none runs, then how it stands, with its sign-in page while it
+    /// waits for one; and a build with no node says so once it has been saved ticked.
+    #[test]
+    fn the_panel_says_this_computers_tailscale_and_the_nodes() {
+        use crate::tailscale::TailnetState;
+        const URL: &str = "https://login.tailscale.com/a/1a2b3c";
+        let signed_out = TailnetState::SignedOut { login_url: None };
+        let sign_in = mp_tailnet::State::NeedsSignIn {
+            url: URL.to_owned(),
+        };
+
+        let unticked = panel_words(&signed_out, false, Some(&sign_in));
+        assert_eq!(
+            unticked.computer,
+            crate::tailscale::shown(None, &signed_out)
+        );
+        assert_eq!(unticked.computer.text, "Tailscale: signed out");
+        assert_eq!(unticked.computer.details, signed_out.details());
+        assert!(!unticked.node_ticked);
+        assert_eq!((unticked.node_line, unticked.sign_in), (None, None));
+
+        let before_save = panel_words(&signed_out, true, None);
+        assert_eq!(
+            before_save.node_line.as_deref(),
+            Some("stopped (Save & Close starts it)")
+        );
+        assert_eq!(before_save.sign_in, None);
+
+        let waiting = panel_words(&signed_out, true, Some(&sign_in));
+        assert_eq!(
+            waiting.computer.text, "Tailscale: signed out",
+            "the node in use does not speak for this computer here"
+        );
+        assert_eq!(
+            waiting.node_line.as_deref(),
+            Some(format!("needs a sign-in at {URL}").as_str())
+        );
+        assert_eq!(waiting.sign_in.as_deref(), Some(URL));
+
+        let running = mp_tailnet::State::Running {
+            name: "mpr-buzz55.tail1234.ts.net".to_owned(),
+            ipv4: std::net::Ipv4Addr::new(100, 101, 102, 104),
+            ipv6: "fd7a:115c:a1e0::4".parse().expect("the test's own address"),
+        };
+        let on = panel_words(&TailnetState::NotInstalled, true, Some(&running));
+        assert_eq!(on.computer.text, "Tailscale: not installed");
+        assert_eq!(
+            on.node_line.as_deref(),
+            Some("running as mpr-buzz55.tail1234.ts.net (100.101.102.104, fd7a:115c:a1e0::4)")
+        );
+        assert_eq!(on.sign_in, None);
+
+        let no_node = mp_tailnet::State::Failed {
+            why: mp_tailnet::NO_NODE.to_owned(),
+        };
+        let failed = panel_words(&TailnetState::NotInstalled, true, Some(&no_node));
+        assert_eq!(
+            failed.node_line.as_deref(),
+            Some("failed: this build has no built-in Tailscale node")
+        );
+        assert_eq!(failed.sign_in, None);
     }
 
     /// `UpdateDisabledPlugins`: the rows not ticked, lower-cased; none, an empty list (which the

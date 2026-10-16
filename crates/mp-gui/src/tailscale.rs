@@ -558,7 +558,8 @@ impl Shown {
 
     /// The planner's built-in node as `node` has it: "Tailscale node: starting", "Tailscale
     /// node: needs a sign-in", "Tailscale node: on tailnet as mpr-buzz55, 100.101.102.103"; the
-    /// hover its state said whole, with its row's name.
+    /// hover its state said whole, and where its tick is: under the PLUGINS tab's Tailscale row,
+    /// in its panel, since the owner's complaint of 2026-10-16 made the node's row that tick.
     #[cfg(not(target_family = "wasm"))]
     fn of_node(node: &mp_tailnet::State) -> Self {
         use mp_tailnet::State;
@@ -576,8 +577,8 @@ impl Shown {
             colour,
             text: format!("Tailscale node: {words}"),
             details: format!(
-                "The planner's own node, PLUGINS' {}: {node}",
-                crate::plugin_manager::TAILSCALE_NODE.name
+                "The planner's own node, ticked under PLUGINS' {}: {node}",
+                crate::plugin_manager::TAILSCALE.name
             ),
         }
     }
@@ -2116,7 +2117,7 @@ mod tests {
         assert_eq!(running.colour, crate::theme::OK);
         assert_eq!(
             running.details,
-            "The planner's own node, PLUGINS' Tailscale node (experimental): running as \
+            "The planner's own node, ticked under PLUGINS' Tailscale: running as \
              mpr-buzz55.tail1234.ts.net (100.101.102.104, fd7a:115c:a1e0::4)"
         );
         let sign_in = mp_tailnet::State::NeedsSignIn {

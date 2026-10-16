@@ -19,7 +19,7 @@ workspace, so the workspace's lints, clippy and tests are not run over this code
 ## Why
 
 MissionPlannerRust's built-in Tailscale node (`crates/mp-tailnet`, behind mp-gui's `tailnet-node`
-feature and the PLUGINS tab's "Tailscale node (experimental)" row) is the owner's feature of
+feature and the tick "Use the planner's built-in node (experimental)" under the PLUGINS tab's Tailscale row) is the owner's feature of
 2026-10-14, not Mission Planner's: "we WILL take the existing rust code, and add MagicDNS to it
 enough so that 'white' or 'buzz55' as a hostname works instead of a [100].x ip address."
 

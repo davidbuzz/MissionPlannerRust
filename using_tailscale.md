@@ -4,6 +4,25 @@ This guide is for you if you are new to MissionPlannerRust, new to Tailscale, or
 the planner on one device - a laptop, or just a web browser - will be connected to a vehicle or a
 simulator on another device, wherever each of them is.
 
+## The short version
+
+1. Install Tailscale on this computer and on the vehicle's computer, and sign both into your
+   tailnet (or tick the built-in node below and open its sign-in link).
+2. In the port box choose Tailscale.
+3. CONNECT and type the vehicle's tailnet name or 100.x address.
+
+The desktop app shows these three lines in the PLUGINS tab, in the Tailscale panel under the list
+of plugins, with a **Guide** link to this page. The port box is the box to the left of the CONNECT
+button at the top right, and **Tailscale** is the last way to connect it lists. With it chosen,
+CONNECT asks two questions: **tailnet host**, the vehicle's tailnet name (`my-pi`) or its `100.x`
+address, then **remote Port**, which offers `5760`: a simulator's port, and the one case A below
+shares on your tailnet. "The built-in node below" is the panel's tick **Use the planner's
+built-in node (experimental)**, for a computer without the Tailscale app: see
+[without the Tailscale app](#in-the-desktop-app-without-the-tailscale-app-experimental). In a web
+browser, the page is a Tailscale device of its own: see [In a web browser](#in-a-web-browser).
+
+The rest of this guide is the long version.
+
 ## What Tailscale does here
 
 Normally the planner and the vehicle have to be on the same network, or someone has to open ports
@@ -117,18 +136,25 @@ mavproxy.py --master tcp:127.0.0.1:5760 \
 
 1. Install Tailscale on the planner's computer too, and sign in with the same account (step 2).
 2. Start MissionPlannerRust.
-3. At the top right, the box to the left of the CONNECT button lists the ways to connect.
-   Choose **TCP** for case A, or **UDPCl** for case B.
-4. Click **CONNECT**. At "Enter host name/ip", type the vehicle-side computer's machine name
-   (`my-pi`) or its tailnet address (`100.101.102.103`), then OK.
-5. At "Enter remote port", type `5760` for case A, or one of MAVProxy's ports (`14560`) for
-   case B, then OK.
+3. At the top right, the box to the left of the CONNECT button - the port box - lists the ways to
+   connect. Choose **Tailscale** for case A: a TCP link to a device on your tailnet. (**TCP**
+   does the same for any host.) Choose **UDPCl** for case B.
+4. Click **CONNECT**. With **Tailscale** chosen, the first question, **tailnet host**, asks for
+   the vehicle's tailnet name or 100.x address; with TCP or UDPCl it is "Enter host name/ip".
+   Type the vehicle-side computer's machine name (`my-pi`) or its tailnet address
+   (`100.101.102.103`), then OK.
+5. At **remote Port** ("Enter remote port"), type `5760` for case A - the Tailscale kind offers
+   it - or one of MAVProxy's ports (`14560`) for case B, then OK.
 
 The line under the MissionPlannerRust title now shows the link and a growing count of frames, and
-the vehicle's parameters download. The next time, the boxes offer your last answers.
+the vehicle's parameters download. The next time, the boxes offer your last answers; the
+Tailscale kind keeps its own, apart from TCP's.
 
-This guide is a click away in the desktop app: HELP's **Using Tailscale** link opens it, shown
-while Tailscale's row in the PLUGINS tab is ticked - as it is until you untick it.
+This guide is a click away in the desktop app: HELP's **Using Tailscale** link opens it, and so
+does the **Guide** link in the PLUGINS tab's Tailscale panel, under the list of plugins. Both show
+while Tailscale's row in the PLUGINS tab is ticked - as it is until you untick it. The panel also
+gives the short version's three steps, says where this computer's Tailscale stands in the
+indicator's words (below), and holds the built-in node's tick (the next section).
 
 **The planner shows where your computer stands.** At the top, after the link's state, the
 Tailscale indicator says what the Tailscale app on this computer reports, checked every few
@@ -139,42 +165,47 @@ page when Tailscale is not installed. On Linux and macOS, the first start withou
 installed offers its download page once (and on Linux the two install lines of step 2); the
 planner never installs anything itself. If a link to a tailnet address or machine name fails
 while this computer is not on your tailnet, the status line under the tabs says so. Unticking
-Tailscale in the PLUGINS tab turns all of this off.
+Tailscale in the PLUGINS tab turns all of this off, the built-in node below with it.
 
 ### In the desktop app, without the Tailscale app (experimental)
 
-The planner can join your tailnet as a device of its own, with nothing else installed: the PLUGINS
-tab's **Tailscale node (experimental)** row, off until you tick it. It is in builds made with the
-node (`cargo build -p mp-gui --bin planner --features tailnet-node`); the released builds do not
-carry it yet, and ticking the row there says "this build has no built-in Tailscale node".
+The planner can join your tailnet as a device of its own, with nothing else installed: the tick
+**Use the planner's built-in node (experimental)** in the PLUGINS tab's Tailscale panel, under the
+list of plugins, off until you tick it. It is in builds made with the node
+(`cargo build -p mp-gui --bin planner --features tailnet-node`); the released builds do not carry
+it yet, and ticking it there and saving says "this build has no built-in Tailscale node".
 
-1. In the PLUGINS tab, tick **Tailscale node (experimental)** and click **Save & Close**.
-2. Under the list of plugins, the node's line says it *needs a sign-in*. Click **Sign in to the
-   tailnet (opens the browser)** and sign in with your account. The Tailscale indicator at the top
-   says *Tailscale node: needs a sign-in* until you do, and a click on it opens the same page.
+1. In the PLUGINS tab, tick **Use the planner's built-in node (experimental)** in the Tailscale
+   panel and click **Save & Close**. Until you do, the line under the tick says Save & Close
+   starts it.
+2. Under the tick, the node's line says it *needs a sign-in*. Click **Sign in to the tailnet
+   (opens the browser)** and sign in with your account. The Tailscale indicator at the top says
+   *Tailscale node: needs a sign-in* until you do, and a click on it opens the same page.
 3. The line then says *running as* the node's name, and the indicator *Tailscale node: on tailnet
    as* that name and its tailnet address, with a green dot. The name is `mpr-` and this
    computer's name (`mpr-my-laptop`); the admin console lists it as a device of its own.
-4. Connect as above, by **TCP** or **UDPCl**, to a device's machine name (`my-pi`), its full name
-   (`my-pi.tail1234.ts.net`) or its tailnet address. The node knows your tailnet's names itself
-   (MagicDNS), so the computer needs no Tailscale settings of its own.
+4. Connect as above, by **Tailscale**, **TCP** or **UDPCl**, to a device's machine name (`my-pi`),
+   its full name (`my-pi.tail1234.ts.net`) or its tailnet address. The node knows your tailnet's
+   names itself (MagicDNS), so the computer needs no Tailscale settings of its own.
 
 While the node is on, links to your tailnet's addresses and names go through it, and every other
 link goes through the computer as before; stopped or failed, it leaves the tailnet to the
 computer's own Tailscale again, and so does the indicator. The node keeps its keys in
 `tailscale-node.json` in this application's folder (`~/.local/share/MissionPlannerRust` on Linux,
 `%LOCALAPPDATA%\MissionPlannerRust` on Windows), so it is the same device at every start: delete
-that file, and remove the device in the admin console, to start afresh. Unticking the row stops
-the node. It is a preview: tailscale-rs, the Rust library from Tailscale it is built on, is not
-yet audited, by its authors' own account.
+that file, and remove the device in the admin console, to start afresh. Unticking it and saving
+stops the node, and so does unticking Tailscale's row; ticking the row again starts the node
+again, its tick as you left it. (Earlier builds had the node as a row of its own, "Tailscale node
+(experimental)"; a choice saved there carries over to the tick.) It is a preview: tailscale-rs,
+the Rust library from Tailscale it is built on, is not yet audited, by its authors' own account.
 
 ### In a web browser
 
 1. Open the planner's page, https://davidbuzz.github.io/MissionPlannerRust/, on any computer. You
    install nothing. The first visit plays a short demo of the planner flying a simulated copter;
    to skip it, open https://davidbuzz.github.io/MissionPlannerRust/?demo=0 instead.
-2. Choose **TCP** or **UDPCl**, click **CONNECT**, and answer the host and port as in the desktop
-   app.
+2. Choose **Tailscale** (or **TCP**) or **UDPCl**, click **CONNECT**, and answer the host and
+   port as in the desktop app.
 3. The first time, a box at the bottom right says "The link needs this page on your tailnet:
    **sign in to Tailscale**". Click it. A new tab opens Tailscale's sign-in: sign in with the same
    account, and it says "Login successful", naming the page's new device. Go back to the planner's
@@ -195,6 +226,7 @@ computer on your tailnet (step 2) and use its machine name.
 
 | Choice | What it does | Desktop | Browser |
 |---|---|---|---|
+| Tailscale | TCP to a device on your tailnet: its tailnet name or 100.x address, then the port. Case A. | yes | yes |
 | TCP | The planner connects to a host and port. Case A. | yes | yes |
 | UDPCl | The planner sends first to a host and port, which answers. Case B. | yes | yes |
 | UDP | The planner waits on a port of its own for the vehicle to send first. | yes | not yet |

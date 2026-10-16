@@ -10,6 +10,12 @@
 # the next start and is listed dark red, "Not loaded" - here a shipped plugin, built in, counting
 # as a file in the plugins folder.
 #
+# Not the C#'s, the owner's complaint of 2026-10-16 ("we appear to have *two* tailscale plugins,
+# and i still have NO IDEA HOW TO USE THEM"): one Tailscale row, and under the grid while it is
+# ticked the Tailscale panel - how to use it in three lines, the Guide, this computer's Tailscale
+# (tests/gui/fake-tailscale.sh, which the runner gives every script, on a tailnet) and the tick of
+# the planner's built-in node, which was a row of its own.
+#
 # The config holds `tabcontrolactions`, so the Drone ID plugin's message box does not show.
 # And an empty `DisabledPlugins`: every plugin on, Open Drone ID too, which is off until a user
 # turns it on (the owner, 2026-10-05).
@@ -17,9 +23,10 @@
 env MP_BUILTIN_PLUGINS 1
 screen fly
 window 1600x1200
-budget 30
+budget 16
 env XDG_DATA_HOME $WORK
 env MP_CONFIG_XML $WORK/config.xml
+env MP_OPEN_WITH_SHELL_LOG $WORK/opened.txt
 setup printf '<?xml version="1.0" encoding="utf-8"?><Config><tabcontrolactions>tabQuick;</tabcontrolactions><DisabledPlugins></DisabledPlugins></Config>' > "$WORK/config.xml"
 expect plugins.Dowding.state running
 expect plugins.question none
@@ -31,17 +38,37 @@ expect plugin-manager.open true
 expect plugin-manager.restart-required false
 # The seven running plugins, by file name; the three whose Init said no are not in Plugins. Last,
 # the owner's native rows (2026-10-14), like a plugin's: Tailscale and Import from Mission Planner,
-# on until unticked, and the built-in Tailscale node, experimental, off until it is ticked whatever
-# DisabledPlugins says - and, off, no node: never ticked here, as a node would reach the internet
-# from a test.
-expect plugin-manager.rows 10
+# on until unticked. The built-in node is no row.
+expect plugin-manager.rows 9
 expect plugin-manager.row.0 ~ |anonymizebinlog.wasm|enabled|green
 expect plugin-manager.row.1 Dowding|dowding.wasm|enabled|green
 expect plugin-manager.row.6 ~ |terrainmaker.wasm|enabled|green
 expect plugin-manager.row.7 Tailscale|tailscale.native|enabled|green
 expect plugin-manager.row.8 Import from Mission Planner|mpimport.native|enabled|green
-expect plugin-manager.row.9 Tailscale node (experimental)|tailscale-node.native|disabled|dark-orange
+# The Tailscale panel under the grid: its three lines, this computer's Tailscale in the words the
+# connection area's indicator uses, and the node's tick, unticked - off until it is ticked whatever
+# DisabledPlugins says - with no node and nothing under it.
+expect plugin-manager.tailscale.panel true
+expect plugin-manager-tailscale below plugin-manager-enabled-tailscale.native
+expect plugin-manager.tailscale.step.1 1. Install Tailscale on this computer and on the vehicle's computer, and sign both into your tailnet (or tick the built-in node below and open its sign-in link).
+expect plugin-manager.tailscale.step.2 2. In the port box choose Tailscale.
+expect plugin-manager.tailscale.step.3 3. CONNECT and type the vehicle's tailnet name or 100.x address.
+within 12
+expect plugin-manager.tailscale.computer Tailscale: on tailnet as buzz-laptop, 100.101.102.103
+expect plugin-manager.tailnet-node.tick false
+expect plugin-manager.tailnet-node.line none
 expect tailnet-node.state stopped
+# The Guide hands using_tailscale.md to the desktop's browser, as HELP's Using Tailscale does.
+expect plugin-manager.tailscale.opened none
+click plugin-manager-tailscale-guide
+expect plugin-manager.tailscale.opened https://github.com/davidbuzz/MissionPlannerRust/blob/main/using_tailscale.md
+# Tailscale's row unticked, its panel goes at once, before any Save; ticked again, it is back.
+click plugin-manager-enabled-tailscale.native
+expect plugin-manager.row.7 Tailscale|tailscale.native|disabled|green
+expect plugin-manager.tailscale.panel false
+click plugin-manager-enabled-tailscale.native
+expect plugin-manager.row.7 Tailscale|tailscale.native|enabled|green
+expect plugin-manager.tailscale.panel true
 # Show Errors: every plugin loaded or refused by its own Init, so none.
 click plugin-manager-errors
 expect plugin-manager.errors No Errors
@@ -60,23 +87,48 @@ expect plugin-manager.open false
 click tab-plugins
 expect plugin-manager.open true
 expect plugin-manager.row.1 Dowding|dowding.wasm|disabled|dark-orange
-# The next start loads it no more, and lists it "Not loaded", dark red, after the running six.
+# The node's tick: ticked, Save & Close is what starts it; saved, EnabledNativePlugins names it,
+# the node starts at once, and the tab fills again with the tick ticked and the node's state under
+# it. The runner's planner is built without the node (mp-gui's `tailnet-node` feature off, as in
+# every release), so it fails at once - "this build has no built-in Tailscale node" - and reaches
+# nothing; a build with the node would reach Tailscale's servers from this test.
+click plugin-manager-tailnet-node-tick
+expect plugin-manager.tailnet-node.tick true
+expect plugin-manager.tailnet-node.line stopped (Save & Close starts it)
+click plugin-manager-save
+expect plugins.enabled-native tailscale-node.native
+expect plugins.disabled dowding.wasm
+expect tailnet-node.state failed
+expect tailnet-node.said failed: this build has no built-in Tailscale node
+expect plugin-manager.tailnet-node.tick true
+expect plugin-manager.tailnet-node.line failed: this build has no built-in Tailscale node
+expect plugin-manager.tailnet-node.sign-in none
+# The next start loads Dowding no more, and lists it "Not loaded", dark red, after the running six;
+# the node's tick is kept, and the node started with the planner.
 restart
 expect plugins.count 9
 expect plugins.FenceDist.state running
+expect tailnet-node.state failed
 key ctrl+p
 expect screen plugins
-expect plugin-manager.rows 10
+expect plugin-manager.rows 9
 expect plugin-manager.row.6 Not loaded|dowding.wasm|disabled|dark-red
 expect plugin-manager.row.7 Tailscale|tailscale.native|enabled|green
 expect plugin-manager.row.8 Import from Mission Planner|mpimport.native|enabled|green
-expect plugin-manager.row.9 Tailscale node (experimental)|tailscale-node.native|disabled|dark-orange
-expect tailnet-node.state stopped
-# Ticked again and saved: enabled for the start after. (A moment first: the restarted planner's
+expect plugin-manager.tailnet-node.tick true
+# Dowding ticked again and the node unticked, saved: the node stopped at once and its key back in
+# DisabledPlugins; Dowding enabled for the start after. (A moment first: the restarted planner's
 # controls are written after its facts.)
 settle 1
+click plugin-manager-tailnet-node-tick
+expect plugin-manager.tailnet-node.tick false
+expect plugin-manager.tailnet-node.line none
 click plugin-manager-enabled-6
 click plugin-manager-save
+expect tailnet-node.state stopped
+expect plugins.enabled-native none
+expect plugins.disabled tailscale-node.native
 restart
 expect plugins.Dowding.state running
 expect plugins.count 10
+expect tailnet-node.state stopped
