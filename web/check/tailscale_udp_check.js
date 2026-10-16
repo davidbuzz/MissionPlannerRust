@@ -1,8 +1,8 @@
 // A vehicle that sends first, over UDP, to the planner in a web page (the browser build's
 // odds-and-ends row: "UDP listening (udp:0.0.0.0:14550) over the tailnet"). The port box's UDP and
 // its Listen Port, as a pilot connects: in a page the planner listens on its own tailnet address
-// (www/tailscale.js's listenTailscale, tailscale/main.go's listen) and answers whoever sent last,
-// as Mission Planner's UdpSerial does. Then a vehicle on the tailnet - tailscale/udpvehicle, a
+// (www/tailscale.js's listenTailscale, tailscale/main.go's listen) and answers whoever sent last
+// (Mission Planner's UdpSerial, and the desktop planner, write to every sender heard). Then a vehicle on the tailnet - tailscale/udpvehicle, a
 // SITL's stream relayed as datagrams, as a companion computer's router sends one - sends to that
 // address. Fails unless the page's node reaches Running and listens, the planner hears a vehicle
 // and its answers reach the vehicle, and the page has no fault.

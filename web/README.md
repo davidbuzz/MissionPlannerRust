@@ -101,8 +101,8 @@ localStorage, so the page stays on the tailnet across reloads.
 
 For a vehicle that sends first - a companion computer's MAVLink router, a radio bridge - the port
 box's UDP and its Listen Port (14550) listen on the page's own tailnet address (`tailscale.js`'s
-`listenTailscale`, `main.go`'s `listen`), and the planner answers whoever sent last, as Mission
-Planner's UDP link does: send to the page's `100.x.y.z:14550`. `check/tailscale_udp_check.js`,
+`listenTailscale`, `main.go`'s `listen`), and the planner answers whoever sent last - where Mission
+Planner's UDP link, and the desktop planner's, write to every sender heard: send to the page's `100.x.y.z:14550`. `check/tailscale_udp_check.js`,
 in `tailnet_e2e.sh`, has `tailscale/udpvehicle` relay a SITL to it as datagrams.
 
 Page options: `?tscontrol=<url>` for a coordination server other than Tailscale's (Headscale),

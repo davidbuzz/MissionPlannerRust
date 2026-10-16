@@ -135,13 +135,28 @@ impl Transport for TcpTransport {
     }
 }
 
-/// A UDP link that learns its peer from the first datagram received.
+/// A UDP link that listens on a port and answers every endpoint it has heard from: Mission
+/// Planner's `UdpSerial`.
 ///
 /// This mirrors how ArduPilot and SITL are normally reached: the GCS binds a port and the vehicle
-/// sends to it, after which replies go back to whoever was heard from last.
+/// sends to it. The sender of each datagram read joins the endpoints, in the order first heard and
+/// each once, and none is ever dropped; every write goes to each of them, so several sources on
+/// one port - two SITLs, a vehicle and a GCS - all get the GCS's requests.
+/// `// C#: ExtLibs/Comms/CommsUdpSerial.cs:20, 194-202, 264-276`
+///
+/// Binding returns at once and the first datagram is read like any other, which is what the C#'s
+/// `UdpSerial(UdpClient)` does - AutoConnect's, open from the start, so its `Open` returns at once
+/// (`CommsUdpSerial.cs:48-53, 102-106`; `ExtLibs/Utilities/AutoConnect.cs:397-403`). The C#'s own
+/// `Open` instead waits for the first datagram, takes its sender as the first endpoint and drops
+/// its bytes (`CommsUdpSerial.cs:132-165`); here the port comes in the link URL and the waiting is
+/// the link's reads.
 #[derive(Debug)]
 pub struct UdpTransport {
     socket: UdpSocket,
+    /// `EndPointList`: every endpoint heard from or added, in the order first heard, each once.
+    /// Every write goes to each.
+    endpoints: Vec<SocketAddr>,
+    /// The endpoint heard from or added last, which the description names.
     peer: Option<SocketAddr>,
     local: String,
     /// `udp:<local> <-> <peer>`, or `udp:<local> (no peer yet)`, kept ready for
@@ -155,6 +170,11 @@ pub struct UdpTransport {
 /// ingest path - never allocates, even with two vehicles taking turns on one port.
 const LONGEST_PEER: usize =
     "[ffff:ffff:ffff:ffff:ffff:ffff:255.255.255.255%4294967295]:65535".len();
+
+/// The endpoints room is made for at bind, so hearing a new one - in `read`, on the ingest path -
+/// does not allocate until there are more than this: two SITLs, a vehicle and a GCS are four. The
+/// C#'s list grows without limit, and so does this one past them.
+const ENDPOINTS_RESERVED: usize = 8;
 
 impl UdpTransport {
     /// Binds a local port.
@@ -170,6 +190,7 @@ impl UdpTransport {
         let description = String::with_capacity("udp: <-> ".len() + local.len() + LONGEST_PEER);
         let mut transport = Self {
             socket,
+            endpoints: Vec::with_capacity(ENDPOINTS_RESERVED),
             peer: None,
             local,
             description,
@@ -179,15 +200,24 @@ impl UdpTransport {
         Ok(transport)
     }
 
-    /// Sets the peer explicitly, for the case where we must speak first.
-    pub fn set_peer(&mut self, peer: SocketAddr) {
-        self.learn(peer);
+    /// Adds an endpoint to send to, for the case where the GCS must speak first: the C#'s
+    /// `EndPointList` is public for it ("add to EndPointList if need when injecting"). One
+    /// already there is not added again.
+    /// `// C#: ExtLibs/Comms/CommsUdpSerial.cs:20, 25-28`
+    pub fn add_endpoint(&mut self, endpoint: SocketAddr) {
+        self.hear(endpoint);
     }
 
-    /// Replies go to `peer` from now on, and the description says so.
-    fn learn(&mut self, peer: SocketAddr) {
-        if self.peer != Some(peer) {
-            self.peer = Some(peer);
+    /// A datagram came from `from`, or it was added: it joins the endpoints unless it is one of
+    /// them already, and the description names it.
+    /// `// C#: ExtLibs/Comms/CommsUdpSerial.cs:194-202`
+    fn hear(&mut self, from: SocketAddr) {
+        let known = self.endpoints.iter().any(|e| same_endpoint(e, &from));
+        if !known {
+            self.endpoints.push(from);
+        }
+        if self.peer != Some(from) {
+            self.peer = Some(from);
             self.describe();
         }
     }
@@ -202,18 +232,41 @@ impl UdpTransport {
         };
     }
 
-    /// The peer learned so far, if any.
+    /// `EndPointList`: every endpoint heard from or added, in the order first heard - the order
+    /// each write goes to them in.
+    #[must_use]
+    pub fn endpoints(&self) -> &[SocketAddr] {
+        &self.endpoints
+    }
+
+    /// The endpoint heard from or added last, if any: the one the description names.
     #[must_use]
     pub const fn peer(&self) -> Option<SocketAddr> {
         self.peer
     }
 }
 
+/// Whether two endpoints are one, as `List.Contains` asks `IPEndPoint.Equals`: the same address
+/// family, address and port, and for IPv6 the same scope id. An `IPEndPoint` has no flow label,
+/// so a `SocketAddrV6`'s is not compared, where its own `==` would compare it.
+/// `// C#: ExtLibs/Comms/CommsUdpSerial.cs:201`
+fn same_endpoint(a: &SocketAddr, b: &SocketAddr) -> bool {
+    match (a, b) {
+        (SocketAddr::V4(a), SocketAddr::V4(b)) => a == b,
+        (SocketAddr::V6(a), SocketAddr::V6(b)) => {
+            a.ip() == b.ip() && a.port() == b.port() && a.scope_id() == b.scope_id()
+        }
+        _ => false,
+    }
+}
+
 impl Transport for UdpTransport {
+    /// One datagram, whose sender is heard (`Read`'s `EndPointList.Add`).
+    /// `// C#: ExtLibs/Comms/CommsUdpSerial.cs:192-203`
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
         match self.socket.recv_from(buf) {
             Ok((n, from)) => {
-                self.learn(from);
+                self.hear(from);
                 Ok(n)
             }
             Err(e) if is_timeout(&e) => Ok(0),
@@ -221,13 +274,15 @@ impl Transport for UdpTransport {
         }
     }
 
+    /// `Write`: one datagram to each endpoint, in the order they were first heard; a failed send
+    /// is swallowed and the next endpoint still sent to, as the C# swallows it. Before anyone has
+    /// been heard there is nowhere to send, and nothing is sent or kept for later.
+    /// `// C#: ExtLibs/Comms/CommsUdpSerial.cs:264-276`
     fn write_all(&mut self, buf: &[u8]) -> io::Result<()> {
-        let Some(peer) = self.peer else {
-            // Nothing heard yet and no explicit peer: dropping is correct, erroring would make
-            // every startup log noisy.
-            return Ok(());
-        };
-        self.socket.send_to(buf, peer).map(|_| ())
+        for endpoint in &self.endpoints {
+            let _ = self.socket.send_to(buf, *endpoint);
+        }
+        Ok(())
     }
 
     fn description(&self) -> &str {
@@ -256,4 +311,129 @@ pub(crate) fn is_timeout(e: &io::Error) -> bool {
         e.kind(),
         io::ErrorKind::WouldBlock | io::ErrorKind::TimedOut
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use std::net::{Ipv4Addr, Ipv6Addr, SocketAddrV6};
+
+    use super::*;
+
+    /// How long a test waits for a datagram before it fails rather than hangs.
+    const GUARD: Duration = Duration::from_secs(10);
+
+    /// The GCS: a UDP link listening on 127.0.0.1, and the address it listens on.
+    fn listener() -> (UdpTransport, SocketAddr) {
+        let mut gcs = UdpTransport::bind("127.0.0.1", 0).unwrap();
+        gcs.set_read_timeout(GUARD).unwrap();
+        let address = gcs.socket.local_addr().unwrap();
+        (gcs, address)
+    }
+
+    /// A source sending to it: a vehicle, a SITL, another GCS.
+    fn source() -> UdpSocket {
+        let socket = UdpSocket::bind("127.0.0.1:0").unwrap();
+        socket.set_read_timeout(Some(GUARD)).unwrap();
+        socket
+    }
+
+    /// `from` sends `datagram` to the GCS at `address`, and the GCS reads it.
+    fn heard(gcs: &mut UdpTransport, address: SocketAddr, from: &UdpSocket, datagram: &[u8]) {
+        from.send_to(datagram, address).unwrap();
+        let mut buf = [0u8; 64];
+        let n = gcs.read(&mut buf).unwrap();
+        assert_eq!(&buf[..n], datagram, "the GCS did not hear {datagram:?}");
+    }
+
+    /// The next datagram a source receives.
+    fn next(at: &UdpSocket) -> Vec<u8> {
+        let mut buf = [0u8; 64];
+        let (n, _) = at.recv_from(&mut buf).unwrap();
+        buf[..n].to_vec()
+    }
+
+    /// Two sources on one port - two SITLs, a vehicle and a GCS - both get every write, and a
+    /// write before anyone was heard went nowhere and is not sent later.
+    #[test]
+    fn a_write_reaches_every_endpoint_heard() {
+        let (mut gcs, address) = listener();
+        gcs.write_all(b"to nobody").unwrap();
+        let (first, second) = (source(), source());
+        heard(&mut gcs, address, &first, b"heartbeat one");
+        heard(&mut gcs, address, &second, b"heartbeat two");
+
+        gcs.write_all(b"request").unwrap();
+        assert_eq!(next(&first), b"request");
+        assert_eq!(next(&second), b"request");
+    }
+
+    /// `EndPointList` is a list: endpoints in the order first heard, one heard again not added
+    /// again - so it gets each write once - and none dropped for being quiet.
+    #[test]
+    fn endpoints_are_kept_in_the_order_first_heard_and_each_once() {
+        let (mut gcs, address) = listener();
+        let (first, second) = (source(), source());
+        heard(&mut gcs, address, &first, b"a");
+        heard(&mut gcs, address, &second, b"b");
+        heard(&mut gcs, address, &first, b"c");
+        heard(&mut gcs, address, &first, b"d");
+
+        let first_at = first.local_addr().unwrap();
+        let second_at = second.local_addr().unwrap();
+        assert_eq!(gcs.endpoints(), [first_at, second_at]);
+        // The description names the one heard last.
+        assert_eq!(gcs.peer(), Some(first_at));
+
+        // A source listed twice would get "one" twice before "two".
+        gcs.write_all(b"one").unwrap();
+        gcs.write_all(b"two").unwrap();
+        for each in [&first, &second] {
+            assert_eq!(next(each), b"one");
+            assert_eq!(next(each), b"two");
+        }
+    }
+
+    /// One endpoint whose send fails does not stop the write reaching the rest: the C# catches
+    /// each send's failure on its own. An IPv6 address cannot be sent to from an IPv4 socket.
+    #[test]
+    fn an_endpoint_that_cannot_be_sent_to_does_not_stop_the_others() {
+        let (mut gcs, address) = listener();
+        let unreachable = SocketAddr::from((Ipv6Addr::LOCALHOST, 9));
+        gcs.add_endpoint(unreachable);
+        gcs.add_endpoint(unreachable);
+        let vehicle = source();
+        heard(&mut gcs, address, &vehicle, b"heartbeat");
+        let vehicle_at = vehicle.local_addr().unwrap();
+        assert_eq!(gcs.endpoints(), [unreachable, vehicle_at]);
+
+        gcs.write_all(b"request").unwrap();
+        assert_eq!(next(&vehicle), b"request");
+    }
+
+    /// Endpoints compared as `IPEndPoint.Equals` compares them: family, address and port, and an
+    /// IPv6 address's scope, never its flow label.
+    #[test]
+    fn an_endpoint_is_compared_as_the_csharp_compares_it() {
+        let v4 = SocketAddr::from(([127, 0, 0, 1], 14550));
+        let other_port = SocketAddr::from(([127, 0, 0, 1], 14551));
+        let other_address = SocketAddr::from(([127, 0, 0, 2], 14550));
+        let mapped = SocketAddr::from((Ipv4Addr::LOCALHOST.to_ipv6_mapped(), 14550));
+        assert!(same_endpoint(&v4, &v4));
+        assert!(!same_endpoint(&v4, &other_port));
+        assert!(!same_endpoint(&v4, &other_address));
+        assert!(!same_endpoint(&v4, &mapped), "another address family");
+
+        let plain = SocketAddr::V6(SocketAddrV6::new(Ipv6Addr::LOCALHOST, 14550, 0, 0));
+        let labelled = SocketAddr::V6(SocketAddrV6::new(Ipv6Addr::LOCALHOST, 14550, 7, 0));
+        let scoped = SocketAddr::V6(SocketAddrV6::new(Ipv6Addr::LOCALHOST, 14550, 0, 3));
+        assert!(same_endpoint(&plain, &labelled));
+        assert!(!same_endpoint(&plain, &scoped));
+
+        // So a list holding `plain` takes `scoped` and not `labelled`.
+        let (mut gcs, _) = listener();
+        gcs.add_endpoint(plain);
+        gcs.add_endpoint(labelled);
+        gcs.add_endpoint(scoped);
+        assert_eq!(gcs.endpoints(), [plain, scoped]);
+    }
 }

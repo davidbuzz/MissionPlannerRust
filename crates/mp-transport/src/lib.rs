@@ -198,7 +198,8 @@ pub fn open_url(url: &LinkUrl) -> Result<Box<dyn Transport>, OpenError> {
         },
         LinkUrl::TcpListen { port } => Ok(Box::new(TcpTransport::listen(*port)?)),
         // In a web page, on the page's own tailnet address (web/www/link.js), answering whoever
-        // sent last as the desktop's does.
+        // sent last: the page's listener keeps one sender (web/tailscale/main.go), where the
+        // desktop's answers every endpoint it has heard, as the C#'s `UdpSerial` does (socket.rs).
         #[cfg(target_family = "wasm")]
         LinkUrl::Udp { bind, port } => Ok(Box::new(page::PageTransport::open(&format!(
             "udp:{bind}:{port}"

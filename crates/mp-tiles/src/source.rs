@@ -200,10 +200,19 @@ const UNLIMITED: u8 = mp_units::tiles::MAX_ZOOM;
 /// `fetch.rs`; this is a ground station showing the operator their own surroundings, which is the
 /// use the policy contemplates.
 ///
-/// The C# sets no `MaxZoom` for it (`OpenStreetMapProvider.cs:16`). 19 is kept here from before
-/// the port, because 19 is where OpenStreetMap's servers stop and a deeper request is an error.
-/// The attribution is also this crate's own rather than the C#'s `Copyright`
-/// (`OpenStreetMapProvider.cs:18`); both are for the owner to settle, and neither is changed here.
+/// No `MaxZoom`: its base class sets it to null over `GMapProvider`'s 17, so the C# asks it for
+/// every zoom the map control allows (`Core.cs:896`), and so does this. tile.openstreetmap.org
+/// stops at 19 and answers deeper with an error, and the map draws a coarser tile it already holds
+/// in its place. The C# asks for those tiles too: its `skipOverZoom` would stop it asking deeper
+/// than the deepest zoom that answered, but only after an error whose message holds "(404) Not
+/// Found" (`Core.cs:898, 920-930`), and `GetTileImageUsingHttp`, which every provider here fetches
+/// with, words a 404 "404 Not Found" (`GMapProvider.cs:418`), so it never stops. Here each such
+/// tile is asked for and backed off on its own, as the policy backs off any failure.
+/// `// C#: ExtLibs/GMap.NET.Core/GMap.NET.MapProviders/OpenStreetMap/OpenStreetMapProvider.cs:16;
+/// GMap.NET.MapProviders/GMapProvider.cs:305; GMap.NET.Internals/Core.cs:896`
+///
+/// The attribution is this crate's own rather than the C#'s `Copyright`
+/// (`OpenStreetMapProvider.cs:18`), for the owner to settle, and not changed here.
 pub const OPENSTREETMAP: TileSource = TileSource {
     id: "osm",
     // `readonly string name = "OpenStreetMap"` - the directory the C# has been filing these under.
@@ -219,7 +228,8 @@ pub const OPENSTREETMAP: TileSource = TileSource {
     correction: Correction::None,
     // C#: OpenStreetMapProvider.cs:17
     referer: "https://www.openstreetmap.org/",
-    max_zoom: 19,
+    // C#: OpenStreetMapProvider.cs:16 - `MaxZoom = null`.
+    max_zoom: UNLIMITED,
     attribution: "© OpenStreetMap contributors",
 };
 
@@ -879,13 +889,26 @@ mod tests {
     fn a_zoom_the_provider_does_not_serve_has_no_url() {
         // Better than requesting it and getting a blank tile that then gets cached as if it were
         // real data.
-        assert!(OPENSTREETMAP.url_for(tile(20, 0, 0)).is_none());
-        assert!(OPENSTREETMAP.url_for(tile(19, 0, 0)).is_some());
+        assert!(OPENTOPOMAP.url_for(tile(18, 0, 0)).is_none());
+        assert!(OPENTOPOMAP.url_for(tile(17, 0, 0)).is_some());
         // Google sets no limit, so the whole grid is asked for.
         assert!(
             GOOGLE_SATELLITE_MAP
                 .url_for(tile(mp_units::tiles::MAX_ZOOM, 0, 0))
                 .is_some()
+        );
+    }
+
+    /// OpenStreetMap's provider sets `MaxZoom = null` over `GMapProvider`'s 17, so it is asked for
+    /// the whole grid, as Google's is - not stopped at 19, where its server stops.
+    /// `// C#: OpenStreetMapProvider.cs:14-16; GMapProvider.cs:305`
+    #[test]
+    fn openstreetmap_has_no_zoom_limit_as_the_csharps_has_none() {
+        assert_eq!(OPENSTREETMAP.max_zoom, mp_units::tiles::MAX_ZOOM);
+        let z = mp_units::tiles::MAX_ZOOM;
+        assert_eq!(
+            OPENSTREETMAP.url_for(tile(z, 0, 0)),
+            Some(format!("https://tile.openstreetmap.org/{z}/0/0.png"))
         );
     }
 

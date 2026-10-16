@@ -270,7 +270,7 @@ fn page_get(url: &str) -> Result<Vec<u8>, FetchError> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::source::OPENSTREETMAP;
+    use crate::source::{OPENSTREETMAP, OPENTOPOMAP};
 
     fn tile(z: u8) -> TileId {
         TileId::new(z, 0, 0).expect("a valid tile")
@@ -298,7 +298,7 @@ mod tests {
         // 200 is the thing most likely to end up cached as a tile.
         let fetcher = TileFetcher::new();
         let error = fetcher
-            .fetch(&OPENSTREETMAP, tile(OPENSTREETMAP.max_zoom + 1))
+            .fetch(&OPENTOPOMAP, tile(OPENTOPOMAP.max_zoom + 1))
             .expect_err("should refuse");
         assert!(
             matches!(error, FetchError::UnsupportedZoom { .. }),
@@ -311,10 +311,11 @@ mod tests {
         // A provider claiming the maximum the tile grid allows would never refuse anything, and
         // the refusal is what stops us caching error pages as tiles.
         //
-        // Except where the C# refuses nothing either. Google's and Bing's providers set
-        // `MaxZoom = null` (GoogleMapProvider.cs:24, BingMapProvider.cs:21), leaving the limit to
-        // the map control's 24 (FlightPlanner.cs:188); the grid here stops at 22, so they get all
-        // of it. A missing tile from them is a 404, which the policy backs off like any failure.
+        // Except where the C# refuses nothing either. Google's, Bing's and OpenStreetMap's
+        // providers set `MaxZoom = null` (GoogleMapProvider.cs:24, BingMapProvider.cs:21,
+        // OpenStreetMapProvider.cs:16), leaving the limit to the map control's 24
+        // (FlightPlanner.cs:188); the grid here stops at 22, so they get all of it. A missing tile
+        // from them is a 404, which the policy backs off like any failure.
         //
         // Custom sets `MaxZoom = 22` (Custom.cs:22), the grid's top, and fetches nothing: its
         // tiles are what Inject Custom Map put in the cache.
@@ -323,6 +324,7 @@ mod tests {
             GOOGLE_SATELLITE_MAP, GOOGLE_TERRAIN_MAP,
         };
         let unlimited_in_the_csharp = [
+            &OPENSTREETMAP,
             &BING_MAP,
             &BING_SATELLITE_MAP,
             &BING_HYBRID_MAP,

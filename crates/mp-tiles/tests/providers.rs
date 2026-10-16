@@ -79,14 +79,12 @@ fn every_ported_provider_is_the_csharps_by_name_referer_and_zoom() {
             "{} is not one layer",
             source.id
         );
-        // The C# sets no limit on OpenStreetMap; 19 is kept here, see the note on it.
-        if source.cache_name != "OpenStreetMap" {
-            let expected = match max_zoom {
-                "null" => mp_units::tiles::MAX_ZOOM,
-                limit => limit.parse().unwrap(),
-            };
-            assert_eq!(source.max_zoom, expected, "{}", source.id);
-        }
+        // No limit in the C# is the whole grid here; OpenStreetMap's is one of them.
+        let expected = match max_zoom {
+            "null" => mp_units::tiles::MAX_ZOOM,
+            limit => limit.parse().unwrap(),
+        };
+        assert_eq!(source.max_zoom, expected, "{}", source.id);
     }
     assert_eq!(
         ported, 7,

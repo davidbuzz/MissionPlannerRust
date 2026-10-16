@@ -208,7 +208,7 @@ fn udp_is_named_by_its_own_address_and_then_the_peer_it_last_heard_from() {
         format!("udp:127.0.0.1:{port} <-> {}", second.local_addr().unwrap())
     );
 
-    // A peer set by hand, for the case where the GCS must speak first.
+    // An endpoint added by hand, for the case where the GCS must speak first.
     let mut gcs = UdpTransport::bind("0.0.0.0", 0).unwrap();
     let text = gcs.description().to_owned();
     assert!(
@@ -216,7 +216,7 @@ fn udp_is_named_by_its_own_address_and_then_the_peer_it_last_heard_from() {
         "{text}"
     );
     let bound = &text["udp:".len()..text.len() - " (no peer yet)".len()];
-    gcs.set_peer("127.0.0.1:14551".parse().unwrap());
+    gcs.add_endpoint("127.0.0.1:14551".parse().unwrap());
     assert_eq!(
         gcs.description(),
         format!("udp:{bound} <-> 127.0.0.1:14551")
@@ -257,8 +257,8 @@ fn serial_is_named_by_its_path_and_the_baud_rate_it_runs_at() {
 
 /// The link asks every transport for its description on each publish, 50 times a second, so
 /// asking must cost nothing. A UDP link's text changes as it hears from a new peer, and it hears
-/// in `read`, on the ingest path: that must not allocate either, even with two vehicles taking
-/// turns on one port.
+/// in `read`, on the ingest path, where a new sender also joins the endpoints every write goes
+/// to: that must not allocate either, even with two vehicles taking turns on one port.
 #[test]
 fn asking_for_a_description_allocates_nothing_even_as_a_udp_link_changes_peer() {
     let replay = ReplayTransport::from_bytes("flight.tlog", vec![0; 64]);

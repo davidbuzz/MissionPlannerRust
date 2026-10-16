@@ -22,7 +22,7 @@
 //! from one.
 //!
 //! Ported from `ExtLibs/Comms/CommsUDPSerialConnect.cs` (`UdpSerialConnect`). Where
-//! [`crate::UdpTransport`] binds a port and learns its peer from the first datagram (the C#'s
+//! [`crate::UdpTransport`] binds a port and answers every endpoint it hears from (the C#'s
 //! `UdpSerial`), this one is told the host and port, sends there from a port of its own, and reads
 //! whatever comes back to that port, from anyone.
 //!

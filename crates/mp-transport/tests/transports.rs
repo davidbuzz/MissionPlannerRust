@@ -430,6 +430,40 @@ fn udp_learns_its_peer_from_the_first_datagram() {
     assert_eq!(&buf[..n], b"ack");
 }
 
+#[test]
+fn a_udp_link_sends_each_write_to_every_source_heard_on_its_port() {
+    use std::net::UdpSocket;
+    // Two SITLs on one port, or a vehicle and another GCS: each gets every request the GCS sends,
+    // as each does from the C#'s UdpSerial (CommsUdpSerial.cs:264-276).
+    let mut gcs = mp_transport::open("udp:127.0.0.1:0").unwrap();
+    gcs.set_read_timeout(Duration::from_secs(5)).unwrap();
+    let gcs_port: u16 = gcs
+        .description()
+        .strip_prefix("udp:127.0.0.1:")
+        .and_then(|rest| rest.strip_suffix(" (no peer yet)"))
+        .and_then(|port| port.parse().ok())
+        .unwrap();
+
+    let sitls = [
+        UdpSocket::bind("127.0.0.1:0").unwrap(),
+        UdpSocket::bind("127.0.0.1:0").unwrap(),
+    ];
+    let mut buf = [0u8; 32];
+    for sitl in &sitls {
+        sitl.set_read_timeout(Some(Duration::from_secs(5))).unwrap();
+        sitl.send_to(b"heartbeat", ("127.0.0.1", gcs_port)).unwrap();
+        let n = gcs.read(&mut buf).unwrap();
+        assert_eq!(&buf[..n], b"heartbeat");
+    }
+
+    gcs.write_all(b"request").unwrap();
+    for sitl in &sitls {
+        let (n, from) = sitl.recv_from(&mut buf).unwrap();
+        assert_eq!(&buf[..n], b"request");
+        assert_eq!(from.port(), gcs_port);
+    }
+}
+
 #[cfg(feature = "serial")]
 #[test]
 fn serial_enumeration_is_safe_on_a_machine_with_no_hardware() {

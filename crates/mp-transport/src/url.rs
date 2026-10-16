@@ -49,7 +49,8 @@ pub enum LinkUrl {
         /// Local port.
         port: u16,
     },
-    /// `udp:0.0.0.0:14550` - bind and learn the peer from the first packet.
+    /// `udp:0.0.0.0:14550` - bind, and answer every endpoint a packet has come from (the C#'s
+    /// `UdpSerial`, [`crate::UdpTransport`]).
     Udp {
         /// Local bind address.
         bind: String,
