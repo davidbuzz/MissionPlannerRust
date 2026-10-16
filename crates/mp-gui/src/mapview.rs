@@ -333,6 +333,18 @@ pub struct MapViewport {
     /// The vehicle marker's tooltip - `mapicondesc` through `speechConversion`, FLIGHT DATA's
     /// `vehicle_tooltip` - while the setting is set. `// C#: Common.cs:90-93`
     vehicle_tooltip: Option<String>,
+    /// The planner's `CurentRectMarker`: the `GMapMarkerRect` the pointer's moves last entered,
+    /// until one is left - what a press grabs ([`Self::waypoint_at`]).
+    /// `// C#: GCSViews/FlightPlanner.cs:8065-8134`
+    current_rect: Option<MarkerTag>,
+    /// FLIGHT DATA's "Dist to Home" balloon: where the pointer was at its last move with no
+    /// button down, the text, and when it was made. `// C#: GCSViews/FlightData.cs:3033-3054`
+    dist_to_home: Option<(LatLon, String, Instant)>,
+    /// Measure Distance's `polygonsoverlay` (see [`wp_draw`]).
+    measure: wp_draw::MeasureOverlay,
+    /// The Survey (Grid) dialog's map while it shows, which the planning map draws in place of
+    /// its own overlays (see [`wp_draw`]).
+    survey: Option<wp_draw::SurveyMap>,
     /// The flight screen's Guided Mode marker, while it has one.
     guided: Option<GuidedMarker>,
     /// The planner's "Tracker Home" marker, while the tracker's position is set and not home's.
@@ -543,6 +555,10 @@ impl MapViewport {
             hovered: Hovered::default(),
             tooltips_drawn: Vec::new(),
             vehicle_tooltip: None,
+            current_rect: None,
+            dist_to_home: None,
+            measure: wp_draw::MeasureOverlay::default(),
+            survey: None,
             guided: None,
             tracker: None,
             fence_exclusions: Vec::new(),
@@ -678,6 +694,20 @@ impl MapViewport {
         self.vehicle_tooltip = text;
     }
 
+    /// FLIGHT DATA's "Dist to Home" balloon at the pointer - where it is, and its text - or none;
+    /// whether that is different from before. Each move makes it again, so it is made now. Drawn
+    /// as the C#'s `GMapToolTip` on the flight map until [`dist_to_home_expired`].
+    /// `// C#: GCSViews/FlightData.cs:2992-3005, 3033-3054`
+    pub fn set_dist_to_home(&mut self, balloon: Option<(LatLon, String)>) -> bool {
+        let held = self
+            .dist_to_home
+            .as_ref()
+            .map(|(at, text, _)| (*at, text.clone()));
+        let changed = balloon != held;
+        self.dist_to_home = balloon.map(|(at, text)| (at, text, Instant::now()));
+        changed
+    }
+
     pub fn set_marker(&mut self, details: MarkerDetails, settings: MarkerSettings) {
         self.marker = details;
         self.marker_settings = settings;
@@ -717,6 +747,9 @@ impl MapViewport {
         let home = home.filter(|home| is_fixed(*home));
         if home != self.home_position {
             self.hovered.forget(MarkerTag::Home);
+            if self.current_rect == Some(MarkerTag::Home) {
+                self.current_rect = None;
+            }
         }
         self.home = home.map(LatLon::to_web_mercator);
         self.home_position = home;
@@ -802,7 +835,11 @@ impl MapViewport {
         if overlay != self.overlay {
             // `writeKML` makes new markers, home's included, and none of them is under the
             // pointer until it moves - nor `selected`, though `groupmarkers` keeps their rows.
+            // Nor is any the current rect: the C#'s `CurentRectMarker` goes on naming the rect
+            // `writeKML` has taken off until a rect is left, and a press then drags that row from
+            // anywhere; here the rect goes with its marker.
             self.hovered = Hovered::default();
+            self.current_rect = None;
             self.overlay = overlay;
             self.set_selected_rows(&[]);
         }
@@ -1247,26 +1284,40 @@ impl MapViewport {
         Some(screen)
     }
 
-    /// The mission waypoint under a window coordinate, if one is close enough to have been meant.
+    /// The mission row a press at a window coordinate takes hold of: the planner's
+    /// `CurentRectMarker`, the `GMapMarkerRect` round an item's marker that the pointer's moves
+    /// last entered - 50 by 50, 25 either side of the point and from 45 above it to 5 below, so
+    /// the whole pin standing on the point is in it. `OnMarkerEnter` makes the rect entered the
+    /// current one and any rect's `OnMarkerLeave` clears it, so of overlapping rects the last
+    /// entered is taken, and one left for another it overlaps leaves neither until the pointer
+    /// comes onto one again ([`Self::hover`]). It is what Delete WP deletes and a click in adds
+    /// nothing to. Home's rect, which the C# lets a drag move, is no row: none.
     ///
-    /// Close enough is generous compared with the drawn marker: the marker is six pixels across
-    /// and nobody hits a six pixel target while looking at an aircraft. Nearest wins, so
-    /// overlapping waypoints still resolve to one rather than to whichever was drawn last.
+    /// The press is taken as a move to where it is first - a mouse's last move was there, and
+    /// Windows sends a touch's move before its press - so a press no move came before (a touch, a
+    /// browser's tap) takes the rects at its point as a move onto them would.
+    /// `// C#: GCSViews/FlightPlanner.cs:7378-7408, 7429-7487, 7733-7742, 8065-8134;
+    /// ExtLibs/Maps/GMapMarkerRect.cs:43-52`
     #[must_use]
     pub fn waypoint_at(&self, window_x: f32, window_y: f32) -> Option<u16> {
-        const GRAB_RADIUS_PX: f32 = 14.0;
-
-        let mut best: Option<(f32, u16)> = None;
-        for (world, seq) in &self.mission {
-            let Some((x, y)) = self.screen_position(*world) else {
-                continue;
-            };
-            let distance = (x - window_x).hypot(y - window_y);
-            if distance <= GRAB_RADIUS_PX && best.is_none_or(|(closest, _)| distance < closest) {
-                best = Some((distance, *seq));
-            }
+        let (left, top, width, height) = RECT_AREA;
+        let inside: Vec<MarkerTag> = if self.overlay_mode.is_some() {
+            self.rects_in_order()
+                .filter(|(_, at)| {
+                    self.screen_position(*at).is_some_and(|(x, y)| {
+                        let (dx, dy) = (window_x - x, window_y - y);
+                        dx >= left && dx < left + width && dy >= top && dy < top + height
+                    })
+                })
+                .map(|(tag, _)| tag)
+                .collect()
+        } else {
+            Vec::new()
+        };
+        match self.rect_after_move(&inside)? {
+            MarkerTag::Item(seq) => Some(seq),
+            MarkerTag::Home | MarkerTag::Guided | MarkerTag::Tracker | MarkerTag::Photo(_) => None,
         }
-        best.map(|(_, seq)| seq)
     }
 
     /// Whether the map has painted once with a size, so a window position can become a place:
@@ -2201,6 +2252,33 @@ pub fn rect_diameter(local_x: i64, m2pixelwidth: f64, radius: f64) -> i64 {
 }
 
 impl MapViewport {
+    /// The `GMapMarkerRect`s in the overlay's order, home's first, each with its point: the order
+    /// GMap raises their `OnMarkerEnter` and `OnMarkerLeave` in.
+    fn rects_in_order(&self) -> impl Iterator<Item = (MarkerTag, WebMercator)> + '_ {
+        let home = self.home.map(|at| (MarkerTag::Home, at));
+        home.into_iter()
+            .chain(self.overlay.iter().map(|marker| (marker.tag, marker.at)))
+    }
+
+    /// The planner's `CurentRectMarker` once GMap's `OnMouseMove` has taken the pointer from where
+    /// it last moved to a place inside the rects `inside`, rect by rect in the overlay's order:
+    /// `OnMarkerEnter` makes a rect it is now in and was not the current one, and `OnMarkerLeave`
+    /// of a rect it was in and is not - whichever rect that is - leaves none current.
+    /// `// C#: GCSViews/FlightPlanner.cs:8065-8091, 8128-8136`
+    fn rect_after_move(&self, inside: &[MarkerTag]) -> Option<MarkerTag> {
+        let mut current = self.current_rect;
+        for (tag, _) in self.rects_in_order() {
+            let now = inside.contains(&tag);
+            let was = self.hovered.rects.contains(&tag);
+            if now && !was {
+                current = Some(tag);
+            } else if !now && was {
+                current = None;
+            }
+        }
+        current
+    }
+
     /// GMap's `OnMouseMove` over the markers, the pointer at `pointer` with no button down, or
     /// gone from the map (`None`): every marker whose area holds it is under it. Returns the
     /// rects it has newly entered, which is what the planning screen's `OnMarkerEnter` acts on.
@@ -2246,6 +2324,7 @@ impl MapViewport {
             .filter(|tag| !self.hovered.rects.contains(tag))
             .copied()
             .collect();
+        self.current_rect = self.rect_after_move(&now.rects);
         let changed = now != self.hovered;
         self.hovered = now;
         HoverChange { entered, changed }
@@ -2497,8 +2576,21 @@ impl MapViewport {
             ("map.vehicle.drawn", self.vehicle.is_some().to_string()),
             ("map.following", self.auto_pan.to_string()),
         ];
-        // The routes, pins, vehicle fence and selection (see `wp_draw`).
+        // FLIGHT DATA's "Dist to Home" balloon, and the rect a press on the planning map grabs.
+        facts.push((
+            "map.disttohome",
+            self.dist_to_home
+                .as_ref()
+                .map_or_else(none, |(_, text, _)| text.clone()),
+        ));
+        facts.push((
+            "map.rect",
+            self.current_rect.map_or_else(none, MarkerTag::text),
+        ));
+        // The routes, pins, vehicle fence, selection and Measure Distance's marks, and the
+        // Survey (Grid) dialog's map (see `wp_draw`).
         facts.extend(self.wp_facts());
+        facts.extend(self.survey_facts());
         facts
     }
 }
@@ -2796,6 +2888,98 @@ fn paint_tooltip(window: &mut Window, cx: &mut App, at: Point<Pixels>, text: &st
 /// A tooltip's lines, as `DrawString` breaks them: at each `\n`, a `\r` before it dropped.
 fn tooltip_lines(text: &str) -> impl Iterator<Item = &str> {
     text.lines()
+}
+
+/// How long the flight map's "Dist to Home" balloon outlives the move that made it: the map loop
+/// empties `routes`, the balloon's overlay, every five seconds (`updateClearMissionRouteMarkers`)
+/// and only the next move makes it again. The loop's five seconds are counted here from the
+/// balloon's making, and it goes at the first paint after them.
+/// `// C#: GCSViews/FlightData.cs:3918-3922, 5631-5640`
+pub const DIST_TO_HOME_LIFE: Duration = Duration::from_secs(5);
+
+/// Whether a "Dist to Home" balloon made at `made` has been cleared away by `now`.
+#[must_use]
+pub fn dist_to_home_expired(made: Instant, now: Instant) -> bool {
+    now.saturating_duration_since(made) >= DIST_TO_HOME_LIFE
+}
+
+/// Paints a marker's tooltip as `GMapToolTip` itself does - the square box a `GMapMarkerRect`'s
+/// balloon is given, `marker.ToolTip = new GMapToolTip(marker)`: the text padded 10 in all, the
+/// box placed 14 right of and 44 above the marker's point with its bottom edge there, filled and
+/// outlined as the rounded one is, and a line from the point to the middle of its left edge. The
+/// lines are shaped one at a time, as [`paint_tooltip`] shapes them.
+/// `// C#: ExtLibs/GMap.NET.Drawing/GMap.NET.WindowsForms/GMapToolTip.cs:107-129`
+fn paint_square_tooltip(window: &mut Window, cx: &mut App, at: Point<Pixels>, text: &str) {
+    const OFFSET: (f32, f32) = (14.0, -44.0);
+    const PADDING: f32 = 10.0;
+    let mut font = window.text_style().font();
+    font.weight = gpui::FontWeight::BOLD;
+    let lines: Vec<gpui::ShapedLine> = tooltip_lines(text)
+        .map(|line| {
+            let run = TextRun {
+                len: line.len(),
+                font: font.clone(),
+                color: Hsla::from(rgb(TOOLTIP_TEXT)),
+                background_color: None,
+                underline: None,
+                strikethrough: None,
+            };
+            window.text_system().shape_line(
+                SharedString::from(line.to_owned()),
+                px(TOOLTIP_FONT_SIZE),
+                &[run],
+                None,
+            )
+        })
+        .collect();
+    // `MeasureString(...).ToSize()`: whole pixels, the widest line by the lines' height.
+    let line_height = (TOOLTIP_FONT_SIZE * 1.2).floor();
+    let text_width = lines
+        .iter()
+        .map(|line| f32::from(line.width))
+        .fold(0.0, f32::max)
+        .ceil();
+    let text_height = lines
+        .iter()
+        .map(|_| line_height)
+        .sum::<f32>()
+        .max(line_height);
+    let width = text_width + PADDING;
+    let height = text_height + PADDING;
+    let left = at.x + px(OFFSET.0);
+    let top = at.y - px(text_height) + px(OFFSET.1);
+
+    let mut leader = PathBuilder::stroke(px(2.0));
+    leader.move_to(at);
+    leader.line_to(point(left, top + px(height / 2.0)));
+    if let Ok(path) = leader.build() {
+        window.paint_path(path, Hsla::from(gpui::rgba(TOOLTIP_STROKE)));
+    }
+    window.paint_quad(quad(
+        Bounds {
+            origin: point(left, top),
+            size: size(px(width), px(height)),
+        },
+        Corners::default(),
+        gpui::rgba(TOOLTIP_FILL),
+        gpui::Edges::all(px(2.0)),
+        gpui::rgba(TOOLTIP_STROKE),
+        gpui::BorderStyle::default(),
+    ));
+    // `StringAlignment.Center` both ways: the block centred, each line centred across it.
+    let mut y = top + px((height - text_height) / 2.0);
+    for line in &lines {
+        let x = left + px((width - f32::from(line.width).ceil()) / 2.0);
+        let _ = line.paint(
+            point(x, y),
+            px(line_height),
+            TextAlign::Left,
+            None,
+            window,
+            cx,
+        );
+        y += px(line_height);
+    }
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -3415,6 +3599,27 @@ fn paint_live(map: &mut MapViewport, bounds: Bounds<Pixels>, window: &mut Window
     }
     map.phases[0] = phase_tiles.elapsed();
 
+    // The Survey (Grid) dialog's map, while the dialog shows on the planning screen: GridUI's own
+    // `map`, whose overlays are its `routesOverlay` - none of the planner's: no home, mission,
+    // fence or rally markers - and `kmlpolygonsoverlay`, the flight screen's KML shapes, which
+    // are not drawn here; then the scale `MapScaleInfoEnabled` adds, in the orange `ScalePen`.
+    // `// C#: Grid/GridUI.cs:76-111`
+    if map.draws_survey() {
+        let zoom = gmap_zoom(vw, w);
+        wp_draw::paint_survey(map, origin, &to_screen, zoom, window, cx);
+        let latitude = LatLon::from_web_mercator(WebMercator {
+            x: vx + vw / 2.0,
+            y: vy + vh / 2.0,
+        })
+        .map_or(0.0, |centre| centre.latitude());
+        #[allow(clippy::cast_possible_truncation)] // the control's `Width`, whole pixels
+        let bars = wp_draw::scale_bars(w.round() as i32, zoom, latitude);
+        wp_draw::paint_scale(&bars, origin, window, cx);
+        map.set_survey_scale(bars);
+        map.record(started.elapsed());
+        return;
+    }
+
     // The flown path. Decimated to screen resolution for the reasons measured in ADR 0001, and
     // chunked because a gpui path holds at most 65,535 vertices.
     map.track_paths = 0;
@@ -3716,6 +3921,11 @@ fn paint_live(map: &mut MapViewport, bounds: Bounds<Pixels>, window: &mut Window
         }
     }
 
+    // Measure Distance's `polygonsoverlay`, which `FlightPlanner` adds before `writeKML` adds the
+    // `WPOverlay`: its red markers and, while the distance is shown, the green line.
+    // `// C#: GCSViews/FlightPlanner.cs:203-204, 2625-2661`
+    wp_draw::paint_measure(map, &to_screen, window, cx);
+
     // `WPOverlay`: its routes - the yellow legs to home, dashed while home is near, and the
     // mission's four-pixel yellow line with an arrow on each leg, curved through spline
     // waypoints - then each item's pin: DO_SET_ROI's red, every other's green `GMapMarkerWP` with
@@ -3874,6 +4084,24 @@ fn paint_live(map: &mut MapViewport, bounds: Bounds<Pixels>, window: &mut Window
         }
     }
     map.phases[3] = phase_vehicle.elapsed();
+
+    // FLIGHT DATA's "Dist to Home" balloon, a `GMapMarkerRect` on `routes` at the pointer whose
+    // square `GMapToolTip` always shows; the flight map's alone, and gone once `routes` has been
+    // emptied after it was made.
+    // `// C#: GCSViews/FlightData.cs:3041-3053`
+    if map
+        .dist_to_home
+        .as_ref()
+        .is_some_and(|(_, _, made)| dist_to_home_expired(*made, Instant::now()))
+    {
+        map.dist_to_home = None;
+    }
+    if !map.overlay_mode.is_some_and(|overlay| overlay.planner)
+        && let Some((at, text, _)) = map.dist_to_home.clone()
+    {
+        paint_square_tooltip(window, cx, to_screen(at.to_web_mercator()), &text);
+        map.tooltips_drawn.push(text);
+    }
 
     // `SelectedArea`, over the overlays.
     wp_draw::paint_selected_area(map, &to_screen, window);
@@ -4922,15 +5150,33 @@ mod tests {
         );
     }
 
+    /// A painted planning map at Canberra with its overlay: what a press is tested on.
+    fn planning(map: &mut MapViewport) {
+        painted(map, 0.001);
+        map.set_overlay(Some(Overlay {
+            wp_radius: 30.0,
+            loiter_radius: 45.0,
+            planner: true,
+        }));
+    }
+
+    /// The pointer moved to a point, and a press there: what it grabs.
+    fn press(map: &mut MapViewport, (x, y): (f32, f32)) -> Option<u16> {
+        map.hover(Some((x, y)));
+        map.waypoint_at(x, y)
+    }
+
     #[test]
     fn a_waypoint_under_the_cursor_is_found() {
         let mut map = viewport();
-        painted(&mut map, 0.001);
+        planning(&mut map);
         let at = LatLon::new(-35.363, 149.165).expect("valid");
         map.set_mission(&[waypoint(7, at)]);
 
         // The centre of the viewport, where that position was placed.
-        assert_eq!(map.waypoint_at(400.0, 300.0), Some(7));
+        assert_eq!(press(&mut map, (400.0, 300.0)), Some(7));
+        let facts = map.facts();
+        assert!(facts.contains(&("map.rect", "7".to_owned())), "{facts:?}");
     }
 
     #[test]
@@ -4938,45 +5184,138 @@ mod tests {
         // Otherwise a pan that began near a waypoint would drag it instead, which is the worst
         // kind of editing bug: it looks like the map moved.
         let mut map = viewport();
-        painted(&mut map, 0.001);
-        map.set_mission(&[waypoint(0, LatLon::new(-35.363, 149.165).expect("valid"))]);
-        assert_eq!(map.waypoint_at(100.0, 100.0), None);
+        planning(&mut map);
+        map.set_mission(&[waypoint(1, LatLon::new(-35.363, 149.165).expect("valid"))]);
+        assert_eq!(press(&mut map, (100.0, 100.0)), None);
     }
 
+    /// `GMapMarkerRect`'s 50 by 50 area: 25 either side of the point, from 45 above it to 5
+    /// below - the pin stands in it, its head 22 above the point, where the old 14-pixel circle
+    /// about the point missed it.
+    /// `// C#: ExtLibs/Maps/GMapMarkerRect.cs:43-52`
     #[test]
-    fn the_grab_radius_is_generous_compared_with_the_drawn_marker() {
-        // The marker is six pixels across and nobody hits a six pixel target while looking at an
-        // aircraft.
+    fn the_grab_is_the_rect_the_pin_stands_in() {
         let mut map = viewport();
-        painted(&mut map, 0.001);
+        planning(&mut map);
         map.set_mission(&[waypoint(3, LatLon::new(-35.363, 149.165).expect("valid"))]);
-        assert_eq!(
-            map.waypoint_at(408.0, 308.0),
-            Some(3),
-            "11px away should hit"
-        );
-        assert_eq!(map.waypoint_at(430.0, 330.0), None, "42px away should miss");
+        assert_eq!(press(&mut map, (400.0, 278.0)), Some(3), "the pin's head");
+        assert_eq!(press(&mut map, (400.0, 256.0)), Some(3), "44 above");
+        assert_eq!(press(&mut map, (424.0, 300.0)), Some(3), "24 right");
+        assert_eq!(press(&mut map, (376.0, 304.0)), Some(3), "24 left, 4 below");
+        assert_eq!(press(&mut map, (400.0, 254.0)), None, "46 above");
+        assert_eq!(press(&mut map, (426.0, 300.0)), None, "26 right");
+        assert_eq!(press(&mut map, (374.0, 300.0)), None, "26 left");
+        assert_eq!(press(&mut map, (400.0, 306.0)), None, "6 below");
+        // Back on it from outside: entered again.
+        assert_eq!(press(&mut map, (400.0, 290.0)), Some(3));
+        // A press away from where the pointer last moved is no press on it.
+        assert_eq!(map.waypoint_at(400.0, 360.0), None);
     }
 
+    /// Of two rects that overlap, the one the pointer entered last is taken: coming onto both
+    /// at once, the later in the overlay's order. Leaving one for the other it still overlaps
+    /// clears the current rect, and neither is taken until the pointer enters one again.
+    /// `// C#: GCSViews/FlightPlanner.cs:8065-8091, 8128-8136`
     #[test]
-    fn the_nearest_waypoint_wins_when_two_overlap() {
-        // Otherwise whichever happened to be drawn last would win, which changes with the order
-        // of the mission rather than with what the operator is pointing at.
+    fn the_rect_entered_last_wins_when_two_overlap() {
         let mut map = viewport();
-        painted(&mut map, 0.001);
+        planning(&mut map);
+        // Ten pixels east: 0.001 of the world across 800 pixels is 0.00045 degrees a pixel.
         let centre = LatLon::new(-35.363, 149.165).expect("valid");
-        let nearby = LatLon::new(-35.36305, 149.165).expect("valid");
-        map.set_mission(&[waypoint(1, centre), waypoint(2, nearby)]);
+        let east = LatLon::new(-35.363, 149.1695).expect("valid");
+        map.set_mission(&[waypoint(1, centre), waypoint(2, east)]);
+        let (x, y) = map.screen_of(centre).expect("on the map");
+        assert_eq!(
+            press(&mut map, (x + 5.0, y)),
+            Some(2),
+            "both entered: the later"
+        );
+        // Left of the second's rect, still in the first's: the second left, none current.
+        assert_eq!(press(&mut map, (x - 20.0, y)), None);
+        // Off them both and back onto the first alone.
+        assert_eq!(press(&mut map, (x - 100.0, y)), None);
+        assert_eq!(press(&mut map, (x - 20.0, y)), Some(1));
+        // Then into the second as well: entered, it is current.
+        assert_eq!(press(&mut map, (x + 5.0, y)), Some(2));
+    }
 
-        let found = map.waypoint_at(400.0, 300.0).expect("one of them");
-        assert_eq!(found, 1, "the one actually under the cursor should win");
+    /// A mission the planner has written again - `writeKML`'s new markers - leaves no rect
+    /// current and none under the pointer; a press is taken as a move to its point first, so one
+    /// there with no move before it (a touch) comes onto the new rects - the later of two
+    /// overlapping.
+    #[test]
+    fn a_rebuilt_mission_leaves_no_rect_current() {
+        let mut map = viewport();
+        planning(&mut map);
+        let at = LatLon::new(-35.363, 149.165).expect("valid");
+        map.set_mission(&[waypoint(1, at)]);
+        assert_eq!(press(&mut map, (400.0, 300.0)), Some(1));
+        map.set_mission(&[waypoint(1, at), waypoint(2, at)]);
+        let facts = map.facts();
+        assert!(
+            facts.contains(&("map.rect", "none".to_owned())),
+            "{facts:?}"
+        );
+        assert_eq!(map.waypoint_at(400.0, 300.0), Some(2));
+        // Nor does a press with no move before it make a rect current: only the move does.
+        assert_eq!(map.waypoint_at(100.0, 100.0), None);
+        assert_eq!(press(&mut map, (400.0, 290.0)), Some(2));
+    }
+
+    /// A press with no move before it - a touch - is a move to where it is: on a pin with nothing
+    /// under the pointer before, it takes the pin's row.
+    #[test]
+    fn a_press_with_no_move_before_it_takes_the_rect_it_is_in() {
+        let mut map = viewport();
+        planning(&mut map);
+        map.set_mission(&[waypoint(5, LatLon::new(-35.363, 149.165).expect("valid"))]);
+        assert_eq!(map.waypoint_at(400.0, 280.0), Some(5));
+        assert_eq!(map.waypoint_at(400.0, 340.0), None);
     }
 
     #[test]
     fn hit_testing_before_the_first_paint_finds_nothing() {
         let mut map = viewport();
-        map.set_mission(&[waypoint(0, LatLon::new(-35.363, 149.165).expect("valid"))]);
-        assert_eq!(map.waypoint_at(400.0, 300.0), None);
+        map.set_overlay(Some(Overlay {
+            wp_radius: 30.0,
+            loiter_radius: 45.0,
+            planner: true,
+        }));
+        map.set_mission(&[waypoint(1, LatLon::new(-35.363, 149.165).expect("valid"))]);
+        assert_eq!(press(&mut map, (400.0, 300.0)), None);
+    }
+
+    /// FLIGHT DATA's "Dist to Home" balloon: held where the move left it, published, and a
+    /// change only when its place or its words are different.
+    /// `// C#: GCSViews/FlightData.cs:2992-3005, 3033-3054`
+    #[test]
+    fn the_dist_to_home_balloon_is_held_and_published() {
+        let mut map = viewport();
+        let at = LatLon::new(-35.363, 149.165).expect("valid");
+        let fact = |map: &MapViewport| {
+            map.facts()
+                .into_iter()
+                .find(|(key, _)| *key == "map.disttohome")
+                .map(|(_, value)| value)
+                .expect("the fact")
+        };
+        assert_eq!(fact(&map), "none");
+        let balloon = || Some((at, "Dist to Home: 12".to_owned()));
+        assert!(map.set_dist_to_home(balloon()));
+        assert!(!map.set_dist_to_home(balloon()), "the same balloon");
+        assert_eq!(fact(&map), "Dist to Home: 12");
+        assert!(map.set_dist_to_home(Some((at, "Dist to Home: 13".to_owned()))));
+        assert!(map.set_dist_to_home(None), "the pointer left the map");
+        assert_eq!(fact(&map), "none");
+        // `routes` emptied five seconds on, the balloon with it.
+        let made = Instant::now();
+        assert!(!dist_to_home_expired(made, made));
+        assert!(!dist_to_home_expired(
+            made,
+            made + Duration::from_millis(4_999)
+        ));
+        assert!(dist_to_home_expired(made, made + Duration::from_secs(5)));
+        assert!(!dist_to_home_expired(made + Duration::from_secs(1), made));
     }
 
     #[test]

@@ -68,7 +68,7 @@ wrote).
   "Rally Point / Alt" tooltip; the selected waypoint's red disc and the Ctrl box-select that sets
   it; the `SelectedArea` rubber band (Prefetch takes the whole view without it); the Dist to Home
   and the survey dialog's "Line:" tooltips; marker pins beyond green and red; map rotation and the
-  scale bar. (Mended 2026-10-16, but for the two tooltips, rotation and the scale bar: the route,
+  scale bar. (Mended 2026-10-16 and, the two tooltips, the pin's grab, Measure Distance's markers and the scale bar, 2026-10-17; rotation remains: the route,
   its legs to home and Spline2's curves in mp_mission::wp_overlay and spline2; MAV.fencepoints'
   "fence" overlay with its circles, and the geofence polygon in its pink; the rally tooltip; the
   Ctrl box select, the group drag and Delete WP of a group, with the red discs; SelectedArea from

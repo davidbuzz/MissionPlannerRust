@@ -1,0 +1,44 @@
+# The planning map's grab: a press takes hold of the mission row whose GMapMarkerRect the pointer
+# last came onto, CurentRectMarker - the 50 by 50 rect addpolygonmarker puts round each marker,
+# 25 either side of the point and from 45 above it to 5 below, so the pin standing on the point
+# is in it (ExtLibs/Maps/GMapMarkerRect.cs:43-52; GCSViews/FlightPlanner.cs:7378-7487, 8065-8134).
+# A drag from there moves the row; a click there adds nothing - "cant add WP in existing rect"
+# (FlightPlanner.cs:7733-7742) - where the port's old 14-pixel circle about the point missed the
+# pin's head and added a waypoint on top of it.
+#
+# The map's pixels are not the script's: 0.04 of its height is some 30 pixels on a 1600 by 1200
+# window, above the point and well inside the rect.
+
+env MP_CONFIG_XML $WORK/config.xml
+screen plan
+window 1600x1200
+budget 10
+# A first budget, set by hand until a passing run records one.
+
+# The map first: a press before its first paint records nothing.
+expect map.ready true
+click map@0.45x0.40
+click map@0.60x0.55
+expect mission.items 2
+
+# A click on waypoint 2's pin, above its point: its rect, the row selected and nothing added.
+click map@0.60x0.52
+expect map.rect 2
+expect mission.items 2
+expect mission.selected 2
+
+# A drag from waypoint 1's pin head moves it: no waypoint added where the press was or where it
+# was let go, and the pointer then on its marker at the new place. The pointer leaves waypoint 2's
+# rect first: GMap enters and leaves the rects of one move in the overlay's order, so a jump
+# straight from 2's into 1's would enter 1's and then, leaving 2's, leave none current.
+hover map@0.10x0.10
+expect map.rect none
+drag map@0.45x0.36 map@0.30x0.62
+expect mission.items 2
+expect mission.selected 1
+hover map@0.30x0.61
+expect map.hover 1
+
+# Below a point by more than 5 pixels is off its rect: a click there adds a waypoint.
+click map@0.60x0.58
+expect mission.items 3

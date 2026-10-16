@@ -9027,6 +9027,9 @@ pub struct PlanMenus {
     pub prompt: Option<Prompt>,
     /// Measure Distance's first point, `startmeasure`, once chosen.
     pub measure_from: Option<LatLon>,
+    /// Measure Distance's two points while the second choice's "Distance:" box shows: the line
+    /// and the markers `polygonsoverlay` holds until it is closed.
+    measure_shown: Option<(LatLon, LatLon)>,
     /// Where the press that closed the menu went down. A click off an open menu closes it and
     /// does nothing else, so the map must not take the same press as a click that adds a
     /// waypoint.
@@ -9238,6 +9241,25 @@ impl PlanMenus {
 
     fn tell(&mut self, title: &'static str, text: impl Into<String>) {
         self.prompt = Some(Prompt::message(title, text));
+    }
+
+    /// What `polygonsoverlay` holds for Measure Distance: the first choice's red marker at
+    /// `startmeasure` until the second; from the second, while its "Distance:" box shows, a red
+    /// marker at each end and the green "measure dist" line between them; then nothing, the line
+    /// removed and the markers cleared once the box has closed.
+    /// `// C#: GCSViews/FlightPlanner.cs:2625-2661`
+    #[must_use]
+    pub fn measure_overlay(&self) -> mapview::wp_draw::MeasureOverlay {
+        if let Some((from, to)) = self.measure_shown.filter(|_| self.prompt.is_some()) {
+            return mapview::wp_draw::MeasureOverlay {
+                markers: vec![from, to],
+                line: Some((from, to)),
+            };
+        }
+        mapview::wp_draw::MeasureOverlay {
+            markers: self.measure_from.into_iter().collect(),
+            line: None,
+        }
     }
 
     /// Inject Custom Map's `FolderBrowserDialog`, as the planner's file dialogs are asked: the
@@ -9800,7 +9822,8 @@ impl PlanMenus {
                     });
                 }
             }
-            // The C# also drops a red marker at each end; the map here has no overlay for them.
+            // Each choice also drops a red marker where the menu was opened, and the second draws
+            // the green line from the first while its box shows ([`Self::measure_overlay`]).
             MenuAction::MeasureDistance => match self.measure_from.take() {
                 None => {
                     self.measure_from = Some(position);
@@ -9814,7 +9837,10 @@ impl PlanMenus {
                         .with_show_again(MEASURE_DIST_KEY),
                     );
                 }
-                Some(from) => self.tell("", measure_text(from, position)),
+                Some(from) => {
+                    self.tell("", measure_text(from, position));
+                    self.measure_shown = Some((from, position));
+                }
             },
             // `InputBox.Show("Location", "Enter your location", ref place)`, the place given as
             // Perth Airport.
@@ -10129,6 +10155,8 @@ impl PlanMenus {
     /// with `Strings.InvalidNumberEntered`.
     pub fn submit(&mut self, plan: &mut Plan, context: &MenuContext) -> Option<FileRequest> {
         let prompt = self.prompt.take()?;
+        // Measure Distance's "Distance:" box closed: its line and markers go.
+        self.measure_shown = None;
         let value = prompt.value().to_owned();
         // `InputBox.Show`'s OK keeps the answer before the handler reads it.
         // `// C#: ExtLibs/Controls/InputBox.cs:73-84, 178-184`
@@ -10396,6 +10424,7 @@ impl PlanMenus {
     /// closing says the area all the same (`:1994-1995`).
     pub fn cancel(&mut self, plan: &mut Plan) -> Option<FileRequest> {
         let prompt = self.prompt.take()?;
+        self.measure_shown = None;
         match prompt.kind {
             PromptKind::OffsetPolygon => plan.offset_polygon(0.0),
             PromptKind::ShpLoadFile => return Some(FileRequest::LoadShp(String::new())),
@@ -10474,6 +10503,7 @@ fn sync_everything(this: &MissionPlanner) {
     map.set_kml(this.plan.kml_overlay(), this.plan.kml_on_flight());
     map.set_tracker(tracker_marker(this));
     map.set_grid(this.plan.grid());
+    map.set_measure(this.plan_menus.measure_overlay());
 }
 
 /// What POI > Delete or Edit found under the press, for a test to read: the index, the press,
@@ -11217,7 +11247,29 @@ pub fn map_hover(this: &mut MissionPlanner, planning: bool, pointer: Option<(f32
         rally_tooltips_at(&this.map.borrow(), &markers, pointer)
     });
     let rally_changed = this.map.borrow_mut().set_rally_tooltips(tooltips);
-    change.changed || rally_changed
+    // FLIGHT DATA's "Dist to Home" balloon, which `gMapControl1_MouseMove` makes again at each
+    // move with no button down while CONFIG > Planner's "Display in Flightdata" is ticked - from
+    // the pointer to the shown vehicle's `HomeLocation`, 0,0 while it has none - and
+    // `gMapControl1_MouseLeave` takes off.
+    // `// C#: GCSViews/FlightData.cs:2992-3005, 3033-3054`
+    let balloon = if planning {
+        None
+    } else {
+        let shown =
+            crate::raw_params::get_boolean(this.persisted.get(crate::fly::DIST_TO_HOME_KEY));
+        let home = this
+            .telemetry
+            .view()
+            .state
+            .as_ref()
+            .and_then(|state| state.home);
+        let multiplierdist = this.fly_data.quick.units().dist;
+        pointer
+            .and_then(|(x, y)| this.map.borrow().position_at(x, y))
+            .and_then(|at| crate::fly::dist_to_home_balloon(shown, at, home, multiplierdist))
+    };
+    let balloon_changed = this.map.borrow_mut().set_dist_to_home(balloon);
+    change.changed || rally_changed || balloon_changed
 }
 
 /// `GMapMarkerRallyPt`'s tooltip: `"Rally Point" + "\nAlt: " + (int)(plla.Alt * altmultiplier)`,
@@ -15034,6 +15086,49 @@ mod tests {
             menus.prompt.as_ref().map(|p| p.text.as_str()),
             Some("Distance: 111319.49 m AZ: 90")
         );
+    }
+
+    /// Measure Distance's marks, `polygonsoverlay`: the first choice's red marker, kept when its
+    /// box is closed; at the second, both markers and the green line between them while the
+    /// distance shows; nothing once that box is closed.
+    /// `// C#: GCSViews/FlightPlanner.cs:2625-2661`
+    #[test]
+    fn measure_distance_marks_the_map_while_it_measures() {
+        use crate::mapview::wp_draw::MeasureOverlay;
+        let mut plan = Plan::default();
+        let mut menus = PlanMenus::default();
+        assert_eq!(menus.measure_overlay(), MeasureOverlay::default());
+        let (from, to) = (at(-35.36, 149.16), at(-35.36, 149.17));
+        menus.open_at(CLICK, from, None);
+        menus.choose(&mut plan, MenuAction::MeasureDistance, &context());
+        let first = MeasureOverlay {
+            markers: vec![from],
+            line: None,
+        };
+        assert_eq!(menus.measure_overlay(), first);
+        menus.submit(&mut plan, &context());
+        assert!(menus.prompt.is_none());
+        assert_eq!(menus.measure_overlay(), first, "the marker stays");
+        menus.open_at(CLICK, to, None);
+        menus.choose(&mut plan, MenuAction::MeasureDistance, &context());
+        assert_eq!(
+            menus.measure_overlay(),
+            MeasureOverlay {
+                markers: vec![from, to],
+                line: Some((from, to)),
+            }
+        );
+        menus.submit(&mut plan, &context());
+        assert_eq!(menus.measure_overlay(), MeasureOverlay::default());
+        // Cancelled, the second's box takes them off as well.
+        menus.open_at(CLICK, from, None);
+        menus.choose(&mut plan, MenuAction::MeasureDistance, &context());
+        menus.cancel(&mut plan);
+        menus.open_at(CLICK, to, None);
+        menus.choose(&mut plan, MenuAction::MeasureDistance, &context());
+        assert_eq!(menus.measure_overlay().markers.len(), 2);
+        menus.cancel(&mut plan);
+        assert_eq!(menus.measure_overlay(), MeasureOverlay::default());
     }
 
     /// Measure Dist's first box is `MessageShowAgain`'s: "Show me again?" ticked under the
@@ -20175,11 +20270,13 @@ mod selection_tests {
         assert_eq!(plan.groupmarkers(), &[1, 2, 3]);
     }
 
-    /// A Ctrl press on a waypoint is the screen's: it grabs and drags it.
+    /// A Ctrl press on a waypoint - the pointer having come onto its rect, `CurentRectMarker` -
+    /// is the screen's: it grabs and drags it.
     #[test]
     fn a_ctrl_press_on_a_waypoint_is_left_to_the_screen() {
         let (mut plan, mut map) = planned();
         let one = screen(&map, at(-35.3620, 149.1650));
+        map.hover(Some(one));
         assert!(!selection_press(
             &mut plan,
             &mut map,

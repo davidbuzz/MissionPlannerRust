@@ -1,6 +1,8 @@
 # Map Tool > Measure Distance: ContextMeasure_Click (GCSViews/FlightPlanner.cs:2625). The first
 # choice remembers the point and says to choose again; the second reports "Distance: ... m AZ: ..."
-# and forgets the first point.
+# and forgets the first point. On polygonsoverlay each choice drops a red GMarkerGoogle where the
+# menu was opened, and while the distance shows a green "measure dist" GMapPolygon joins the two;
+# once that box is closed the line is removed and the markers cleared (FlightPlanner.cs:2625-2661).
 
 env MP_CONFIG_XML $WORK/config.xml
 # A home in the config, so the map frames Canberra: two presses on one row of a local view are
@@ -23,8 +25,12 @@ click menu-ContextMeasure
 expect plan.measure true
 expect plan.prompt Measure Dist
 expect plan.prompt.text ~ Click this option again to get the distance.
+expect map.measure.markers 1
+expect map.measure.line none
 key Return
 expect plan.prompt none
+# The first point's marker stays while the map is panned and zoomed.
+expect map.measure.markers 1
 
 click map@0.70x0.30:right
 click menu-mapTool
@@ -33,6 +39,10 @@ expect plan.measure false
 expect plan.prompt message
 expect plan.prompt.text ~ Distance:
 expect plan.prompt.text ~ m AZ: 90
+expect map.measure.markers 2
+expect map.measure.line ~ -35.
 key Return
 expect plan.prompt none
+expect map.measure.markers 0
+expect map.measure.line none
 expect mission.items 1

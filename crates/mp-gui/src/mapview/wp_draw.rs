@@ -23,14 +23,20 @@
 //! pens, the custom arrows `GMapRoute` puts on the mission's legs; each item's pin - the green
 //! `GMapMarkerWP` with its number and, selected, its red disc, or DO_SET_ROI's red `GMarkerGoogle`
 //! with its number always shown; the vehicle's fence as the "fence" `WPOverlay` draws it, its
-//! polygons, circles and blue-dot pins; the rally points' "Rally Point / Alt" tooltip; and
-//! `SelectedArea`, the rubber band the planner's Ctrl box-select and GMap's Alt selection draw.
+//! polygons, circles and blue-dot pins; the rally points' "Rally Point / Alt" tooltip;
+//! `SelectedArea`, the rubber band the planner's Ctrl box-select and GMap's Alt selection draw;
+//! Measure Distance's red markers and green line (`polygonsoverlay`); and the Survey (Grid)
+//! dialog's map - its `routesOverlay` of segments, markers and polygon, the "Line:" balloon a
+//! segment under the pointer gets, and GMap's scale - which takes the planner's map's place while
+//! the dialog shows.
 //!
 //! Ported from `ExtLibs/Maps/WPOverlay.cs`, `ExtLibs/Maps/GMapMarkerWP.cs`,
 //! `ExtLibs/GMap.NET.Drawing/GMap.NET.WindowsForms/GMapRoute.cs` (`OnRender`,
-//! `UpdateGraphicsPath`), `GMapPolygon.cs` (`IsInside`, `OnRender`) and
+//! `UpdateGraphicsPath`, `IsInside`), `GMapPolygon.cs` (`IsInside`, `OnRender`),
 //! `ExtLibs/GMap.NET.WindowsForms/GMap.NET.WindowsForms/GMapControl.cs` (the selected area's
-//! drawing), GPL-3.0-only.
+//! drawing, the routes' hover, the scale), `GCSViews/FlightPlanner.cs` (`ContextMeasure_Click`)
+//! and `Grid/GridUI.cs` (`domainUpDown1_ValueChanged`, `AddDrawPolygon`, `map_OnRouteEnter`),
+//! GPL-3.0-only.
 
 use gpui::{
     App, Bounds, Hsla, PathBuilder, Pixels, Point, SharedString, TextAlign, TextRun, Window, point,
@@ -545,6 +551,23 @@ impl MapViewport {
             ),
             ("map.fence.polygons", drawn.fence_polygons.to_string()),
             ("map.fence.circles", drawn.fence_circles.to_string()),
+            // Measure Distance's `polygonsoverlay`.
+            (
+                "map.measure.markers",
+                self.measure.markers.len().to_string(),
+            ),
+            (
+                "map.measure.line",
+                self.measure.line.map_or_else(none, |(a, b)| {
+                    format!(
+                        "{:.7},{:.7};{:.7},{:.7}",
+                        a.latitude(),
+                        a.longitude(),
+                        b.latitude(),
+                        b.longitude()
+                    )
+                }),
+            ),
         ]
     }
 }
@@ -919,6 +942,666 @@ pub(super) fn paint_selected_area(
     );
 }
 
+// ---------------------------------------------------------------------------------------------
+// Measure Distance's marks: `polygonsoverlay`, which `ContextMeasure_Click` alone draws on.
+// ---------------------------------------------------------------------------------------------
+
+/// `Color.Green`: the measured line's pen, `line.Stroke.Color = Color.Green`.
+/// `// C#: GCSViews/FlightPlanner.cs:2643-2644`
+pub const MEASURE_GREEN: u32 = 0x00_80_00;
+/// `GMapPolygon.DefaultStroke`'s width, five pixels, which the measured line is drawn with.
+/// `// C#: ExtLibs/GMap.NET.Drawing/GMap.NET.WindowsForms/GMapPolygon.cs:231-262`
+pub const MEASURE_WIDTH: f32 = 5.0;
+
+/// What `polygonsoverlay` holds for Measure Distance: the red `GMarkerGoogle` the first choice
+/// drops at `startmeasure`; and, while the second choice's "Distance:" box shows, the green
+/// "measure dist" `GMapPolygon` from there to where the menu was opened, with a red marker there
+/// too - line and markers taken off together once the box is closed.
+/// `// C#: GCSViews/FlightPlanner.cs:2625-2661`
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct MeasureOverlay {
+    /// `polygonsoverlay.Markers`: the red markers, in the order they were added.
+    pub markers: Vec<LatLon>,
+    /// `polygonsoverlay.Polygons`' "measure dist": its two points.
+    pub line: Option<(LatLon, LatLon)>,
+}
+
+impl MapViewport {
+    /// Measure Distance's marks, as `polygonsoverlay` holds them now.
+    pub fn set_measure(&mut self, overlay: MeasureOverlay) {
+        self.measure = overlay;
+    }
+}
+
+/// Measure Distance's marks on the planning map: the line first - `GMapOverlay.OnRender` draws an
+/// overlay's polygons before its markers - as `GMapPolygon` draws its path, closed through its
+/// two points, its fill having no area; then each red marker.
+/// `// C#: GCSViews/FlightPlanner.cs:2625-2661;
+/// ExtLibs/GMap.NET.Drawing/GMap.NET.WindowsForms/GMapOverlay.cs:306-346;
+/// ExtLibs/GMap.NET.Drawing/GMap.NET.WindowsForms/GMapPolygon.cs:174-200`
+pub(super) fn paint_measure(
+    map: &MapViewport,
+    to_screen: &dyn Fn(WebMercator) -> Point<Pixels>,
+    window: &mut Window,
+    cx: &mut App,
+) {
+    if !map.overlay_mode.is_some_and(|overlay| overlay.planner) {
+        return;
+    }
+    if let Some((from, to)) = map.measure.line {
+        let a = to_screen(from.to_web_mercator());
+        let b = to_screen(to.to_web_mercator());
+        super::stroke_through(window, &[a, b, a], MEASURE_WIDTH, MEASURE_GREEN);
+    }
+    for at in &map.measure.markers {
+        super::paint_pin(window, cx, to_screen(at.to_web_mercator()), PIN_RED, None);
+    }
+}
+
+// ---------------------------------------------------------------------------------------------
+// The Survey (Grid) dialog's map: its `routesOverlay` as `domainUpDown1_ValueChanged` fills it -
+// the grid's segments, its markers, the polygon - the "Line:" balloon `map_OnRouteEnter` puts on
+// a segment the pointer comes onto, and the scale `MapScaleInfoEnabled` draws.
+// ---------------------------------------------------------------------------------------------
+
+/// The segments' pen: `seg.Stroke = new Pen(Color.Yellow, 4)` with `DashStyle.Custom`, which
+/// `GMapRoute` draws solid with its arrows.
+/// `// C#: Grid/GridUI.cs:763-767; ExtLibs/GMap.NET.Drawing/GMap.NET.WindowsForms/GMapRoute.cs:161-170`
+pub const SEGMENT_WIDTH: f32 = 4.0;
+/// `AddDrawPolygon`'s pen, `new Pen(Color.Red, 2)`, the polygon's or a corridor's route.
+/// `// C#: Grid/GridUI.cs:934-952`
+pub const BOUNDARY_WIDTH: f32 = 2.0;
+/// `map.ScalePen = new Pen(Color.Orange)`: the dialog's scale, one pixel.
+/// `// C#: Grid/GridUI.cs:110-111`
+pub const SCALE_ORANGE: u32 = 0xff_a5_00;
+/// `GMapControl.ScaleFont`: sans-serif, 5 point, italic - in pixels at 96 dpi.
+/// `// C#: ExtLibs/GMap.NET.WindowsForms/GMap.NET.WindowsForms/GMapControl.cs:473`
+pub const SCALE_FONT_SIZE: f32 = 5.0 * 96.0 / 72.0;
+/// How far inside the map the middle of the part of a segment a script is offered to put the
+/// pointer on must be ([`MapViewport::survey_line_anchor`]), pixels.
+const ANCHOR_MARGIN: f32 = 10.0;
+
+/// Which of the dialog's markers.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum GridMarkerKind {
+    /// A corner of the polygon, with Boundary ticked: `GMarkerGoogle(item, GMarkerGoogleType.red)`.
+    Corner,
+    /// A trigger point, with Internals ticked: `GMarkerGoogle(item, GMarkerGoogleType.green)`.
+    Trigger,
+    /// A lane's start or end, with Markers ticked: `GMapMarkerWP(item, a.ToString())`, which
+    /// writes its number.
+    Waypoint,
+}
+
+/// One of the dialog's markers, and its `ToolTipText`, shown while the pointer is on it
+/// (`MarkerTooltipMode.OnMouseOver`).
+#[derive(Debug, Clone, PartialEq)]
+pub struct GridMarker {
+    /// Where it is.
+    pub position: LatLon,
+    /// Which it is.
+    pub kind: GridMarkerKind,
+    /// `a.ToString()`: its number.
+    pub text: String,
+}
+
+/// What `domainUpDown1_ValueChanged` leaves on the dialog's `routesOverlay`.
+/// `// C#: Grid/GridUI.cs:618-778, 934-962`
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct SurveyGrid {
+    /// `AddDrawPolygon`'s, with Boundary ticked: the polygon's corners, and whether they are a
+    /// `GMapRoute` - with Corridor ticked - rather than a closed `GMapPolygon`.
+    pub boundary: Option<(Vec<LatLon>, bool)>,
+    /// With Grid ticked, each grid point's `GMapRoute` "segment": from the point drawn before it
+    /// to it, and empty for a trigger point Internals leaves out.
+    pub segments: Vec<Vec<LatLon>>,
+    /// The markers, in the overlay's order: the corners, then the grid's.
+    pub markers: Vec<GridMarker>,
+}
+
+/// The dialog's map as the map holds it: the overlay, and what the pointer has done to it.
+#[derive(Debug, Clone, Default)]
+pub struct SurveyMap {
+    grid: SurveyGrid,
+    /// The run of `domainUpDown1_ValueChanged` the overlay is from.
+    generation: u32,
+    /// `GMapRoute.IsMouseOver`, segment by segment.
+    over: Vec<bool>,
+    /// The markers whose bitmap held the pointer at its last move: `GMapMarker.IsMouseOver`.
+    pins: Vec<usize>,
+    /// `marker`, the `GMapMarkerRect` `map_OnRouteEnter` adds: where, and its "Line: " text.
+    line: Option<(LatLon, String)>,
+    /// The arrows the last paint drew.
+    arrows: usize,
+    /// The scale's bars the last paint drew.
+    scale: Vec<ScaleBar>,
+    /// Whether the map has painted this overlay: until it has, its last view is the planning
+    /// map's, not the dialog's.
+    painted: bool,
+}
+
+/// `GMapRoute.IsInside`, `GraphicsPath.IsOutlineVisible` of the route's path for its pen: a
+/// point within half the pen's width of a leg and between its ends, the pen's caps being flat;
+/// a leg of no length holds none. The points and the pointer are whole pixels from the map's
+/// corner, as GMap's `LocalPoints` and the mouse's are.
+/// `// C#: ExtLibs/GMap.NET.Drawing/GMap.NET.WindowsForms/GMapRoute.cs:107-115, 118-146`
+#[must_use]
+pub fn outline_holds(points: &[(f32, f32)], (x, y): (f32, f32), width: f32) -> bool {
+    let half = f64::from(width) / 2.0;
+    points.windows(2).any(|leg| {
+        let [a, b] = leg else {
+            return false;
+        };
+        let (dx, dy) = (f64::from(b.0 - a.0), f64::from(b.1 - a.1));
+        let length2 = dx.mul_add(dx, dy * dy);
+        if length2 <= f64::EPSILON {
+            return false;
+        }
+        let (px, py) = (f64::from(x - a.0), f64::from(y - a.1));
+        let along = px.mul_add(dx, py * dy) / length2;
+        if !(0.0..=1.0).contains(&along) {
+            return false;
+        }
+        px.mul_add(dy, -(py * dx)).abs() / length2.sqrt() <= half
+    })
+}
+
+/// `map_OnRouteEnter`'s words for a segment: "Line: " and `item.Distance` - the route's legs on
+/// GMap's sphere, in kilometres - written `((float)item.Distance * 1000f).ToString("0.##") + " m"`.
+/// (The dialog's feet, under `distunits` "Feet", are not ported: `mp_mission::gridui` is metric.)
+/// `// C#: Grid/GridUI.cs:1141-1152; ExtLibs/GMap.NET.Core/GMap.NET/MapRoute.cs:80-96`
+#[must_use]
+pub fn line_text(points: &[LatLon]) -> String {
+    let kilometres: f64 = points
+        .windows(2)
+        .map(|leg| match leg {
+            [a, b] => super::gmap_distance_km(*a, *b),
+            _ => 0.0,
+        })
+        .sum();
+    #[allow(clippy::cast_possible_truncation)] // the C#'s `(float)`
+    let metres = kilometres as f32 * 1000.0;
+    format!("Line: {} m", mp_mission::dotnet::format_f32(metres, "0.##"))
+}
+
+/// The part of the leg from `a` to `b` inside the rectangle `(left, top, right, bottom)`, as the
+/// fractions of the leg it starts and ends at, if any of it is inside.
+fn clip_leg(
+    a: (f32, f32),
+    b: (f32, f32),
+    (left, top, right, bottom): (f32, f32, f32, f32),
+) -> Option<(f32, f32)> {
+    let (dx, dy) = (b.0 - a.0, b.1 - a.1);
+    let (mut start, mut end) = (0.0_f32, 1.0_f32);
+    for (p, q) in [
+        (-dx, a.0 - left),
+        (dx, right - a.0),
+        (-dy, a.1 - top),
+        (dy, bottom - a.1),
+    ] {
+        if p.abs() <= f32::EPSILON {
+            if q < 0.0 {
+                return None;
+            }
+            continue;
+        }
+        let r = q / p;
+        if p < 0.0 {
+            start = start.max(r);
+        } else {
+            end = end.min(r);
+        }
+        if start > end {
+            return None;
+        }
+    }
+    Some((start, end))
+}
+
+impl MapViewport {
+    /// The Survey (Grid) dialog's map while it shows - `grid` being what the run `generation` of
+    /// `domainUpDown1_ValueChanged` drew - or `None` once it is closed. A new run clears
+    /// `routesOverlay` and fills it again, so its segments and markers are new, none is under the
+    /// pointer, and the "Line:" balloon has gone with the markers; the same run changes nothing.
+    /// `// C#: Grid/GridUI.cs:618-622`
+    pub fn set_survey(&mut self, survey: Option<(SurveyGrid, u32)>) {
+        let Some((grid, generation)) = survey else {
+            self.survey = None;
+            return;
+        };
+        if self
+            .survey
+            .as_ref()
+            .is_some_and(|held| held.generation == generation)
+        {
+            return;
+        }
+        let over = vec![false; grid.segments.len()];
+        self.survey = Some(SurveyMap {
+            grid,
+            generation,
+            over,
+            ..SurveyMap::default()
+        });
+    }
+
+    /// A position as whole pixels from the map's corner, where the last paint put it.
+    fn local_pixel(&self, at: LatLon) -> Option<(f32, f32)> {
+        let (x, y) = self.screen_of(at)?;
+        let (x, y) = self.to_viewport(x, y);
+        Some((x.round(), y.round()))
+    }
+
+    /// The pointer moved over the dialog's map with no button down: GMap's `OnMouseMove` over
+    /// `routesOverlay`. The markers whose bitmap holds it are under it; each segment the 4-pixel
+    /// pen's outline holds it on is entered, and each it was on and is not is left, in the
+    /// overlay's order. Entering one is `map_OnRouteEnter`, the balloon put at the pointer with
+    /// "Line: " and that segment's length; leaving one is `map_OnRouteLeave`, the balloon taken
+    /// off, whichever segment's it was. Leaving the map changes nothing, as GMap's `OnMouseLeave`
+    /// leaves every `IsMouseOver` as it was. Returns whether anything is drawn differently.
+    ///
+    /// The C#'s balloon goes where the pointer was at the move before - `currentMousePosition`,
+    /// which the form's `MouseMove` sets after GMap's tests have run - a pixel away for a hand on
+    /// a mouse; here it goes where the pointer is.
+    /// `// C#: Grid/GridUI.cs:1141-1180, 1253-1258;
+    /// ExtLibs/GMap.NET.WindowsForms/GMap.NET.WindowsForms/GMapControl.cs:2134-2235, 2312, 2359-2363`
+    pub fn survey_hover(&mut self, (x, y): (f32, f32)) -> bool {
+        let Some(position) = self.position_at(x, y) else {
+            return false;
+        };
+        let (pins, hits) = {
+            let Some(survey) = self.survey.as_ref() else {
+                return false;
+            };
+            let (left, top, width, height) = super::PIN_AREA;
+            let pins: Vec<usize> = survey
+                .grid
+                .markers
+                .iter()
+                .enumerate()
+                .filter(|(_, marker)| {
+                    self.screen_of(marker.position).is_some_and(|(sx, sy)| {
+                        let (dx, dy) = (x - sx, y - sy);
+                        dx >= left && dx < left + width && dy >= top && dy < top + height
+                    })
+                })
+                .map(|(index, _)| index)
+                .collect();
+            let (px, py) = self.to_viewport(x, y);
+            let pointer = (px.round(), py.round());
+            let hits: Vec<bool> = survey
+                .grid
+                .segments
+                .iter()
+                .map(|segment| {
+                    let local: Vec<(f32, f32)> = segment
+                        .iter()
+                        .filter_map(|at| self.local_pixel(*at))
+                        .collect();
+                    outline_holds(&local, pointer, SEGMENT_WIDTH)
+                })
+                .collect();
+            (pins, hits)
+        };
+        let Some(survey) = self.survey.as_mut() else {
+            return false;
+        };
+        let before = (survey.pins.clone(), survey.line.clone());
+        survey.pins = pins;
+        for (index, hit) in hits.into_iter().enumerate() {
+            let was = survey.over.get(index).copied().unwrap_or(false);
+            if hit && !was {
+                let text = survey
+                    .grid
+                    .segments
+                    .get(index)
+                    .map_or_else(String::new, |segment| line_text(segment));
+                survey.line = Some((position, text));
+            } else if !hit && was {
+                survey.line = None;
+            }
+            if let Some(over) = survey.over.get_mut(index) {
+                *over = hit;
+            }
+        }
+        before != (survey.pins.clone(), survey.line.clone())
+    }
+
+    /// Where a script can put the pointer on one of the dialog's segments: the middle of the
+    /// longest part of a leg that lies at least ten pixels inside the map at the last paint, in
+    /// the map's own pixels, from the same whole-pixel points the pointer is tested against. None
+    /// until the map has painted the overlay.
+    #[must_use]
+    pub fn survey_line_anchor(&self) -> Option<(f32, f32)> {
+        let survey = self.survey.as_ref().filter(|survey| survey.painted)?;
+        let (width, height) = self.last_viewport;
+        let inside = (
+            ANCHOR_MARGIN,
+            ANCHOR_MARGIN,
+            width - ANCHOR_MARGIN,
+            height - ANCHOR_MARGIN,
+        );
+        let mut best: Option<(f32, (f32, f32))> = None;
+        for segment in &survey.grid.segments {
+            let local: Vec<(f32, f32)> = segment
+                .iter()
+                .filter_map(|at| self.local_pixel(*at))
+                .collect();
+            for leg in local.windows(2) {
+                let [a, b] = leg else {
+                    continue;
+                };
+                let Some((start, end)) = clip_leg(*a, *b, inside) else {
+                    continue;
+                };
+                let length = (end - start) * (b.0 - a.0).hypot(b.1 - a.1);
+                let middle = (start + end) / 2.0;
+                let at = (
+                    (b.0 - a.0).mul_add(middle, a.0),
+                    (b.1 - a.1).mul_add(middle, a.1),
+                );
+                if length > 0.0 && best.is_none_or(|(longest, _)| length > longest) {
+                    best = Some((length, at));
+                }
+            }
+        }
+        best.map(|(_, at)| at)
+    }
+
+    /// Facts for the dialog's map: its segments, markers and boundary, the arrows drawn, the
+    /// "Line:" balloon, and the scale's bars as `label:width`.
+    pub(super) fn survey_facts(&self) -> Vec<(&'static str, String)> {
+        let none = || "none".to_owned();
+        let Some(survey) = self.survey.as_ref() else {
+            return vec![
+                ("map.survey", none()),
+                ("map.survey.segments", "0".to_owned()),
+                ("map.survey.markers", "0".to_owned()),
+                ("map.survey.boundary", none()),
+                ("map.survey.arrows", "0".to_owned()),
+                ("map.survey.line", none()),
+                ("map.scale", none()),
+            ];
+        };
+        let scale: Vec<String> = survey
+            .scale
+            .iter()
+            .map(|bar| format!("{}:{}", bar.label, bar.width))
+            .collect();
+        vec![
+            ("map.survey", "shown".to_owned()),
+            (
+                "map.survey.segments",
+                survey.grid.segments.len().to_string(),
+            ),
+            ("map.survey.markers", survey.grid.markers.len().to_string()),
+            (
+                "map.survey.boundary",
+                match survey.grid.boundary {
+                    Some((_, true)) => "route".to_owned(),
+                    Some((_, false)) => "polygon".to_owned(),
+                    None => none(),
+                },
+            ),
+            ("map.survey.arrows", survey.arrows.to_string()),
+            (
+                "map.survey.line",
+                survey
+                    .line
+                    .as_ref()
+                    .map_or_else(none, |(_, text)| text.clone()),
+            ),
+            (
+                "map.scale",
+                if scale.is_empty() {
+                    none()
+                } else {
+                    scale.join(",")
+                },
+            ),
+        ]
+    }
+}
+
+/// The dialog's map in `routesOverlay`'s order - `GMapOverlay.OnRender` draws its routes, then its
+/// polygons, then its markers, then their tooltips: a Corridor's boundary route and each segment,
+/// the segments four pixels of yellow with an arrow on each leg longer than 20 pixels (solid and
+/// without them past 99,000); the boundary polygon, two pixels of red over no fill; each marker -
+/// a corner's red pin, a trigger point's green, a lane end's `GMapMarkerWP` with its number at
+/// zoom 17 and in or under the pointer; the tooltips of the markers under the pointer; and the
+/// "Line:" balloon, the square `GMapToolTip` its marker was given. `zoom` is the map's.
+/// `// C#: Grid/GridUI.cs:618-778, 934-962, 1141-1165;
+/// ExtLibs/GMap.NET.Drawing/GMap.NET.WindowsForms/GMapOverlay.cs:290-358`
+pub(super) fn paint_survey(
+    map: &mut MapViewport,
+    origin: Point<Pixels>,
+    to_screen: &dyn Fn(WebMercator) -> Point<Pixels>,
+    zoom: f64,
+    window: &mut Window,
+    cx: &mut App,
+) {
+    let Some(survey) = map.survey.as_ref() else {
+        return;
+    };
+    let screen = |points: &[LatLon]| -> Vec<Point<Pixels>> {
+        points
+            .iter()
+            .map(|at| to_screen(at.to_web_mercator()))
+            .collect()
+    };
+    let mut arrows = 0;
+    if let Some((corners, true)) = &survey.grid.boundary {
+        stroke_route(
+            window,
+            &screen(corners.as_slice()),
+            BOUNDARY_WIDTH,
+            FENCE_RED,
+            None,
+        );
+    }
+    for segment in &survey.grid.segments {
+        let points = screen(segment.as_slice());
+        if points.len() < 2 {
+            continue;
+        }
+        // `LocalPoints`, whole pixels from the map's corner.
+        let local: Vec<(f32, f32)> = points
+            .iter()
+            .map(|p| {
+                (
+                    f32::from(p.x - origin.x).round(),
+                    f32::from(p.y - origin.y).round(),
+                )
+            })
+            .collect();
+        stroke_route(window, &points, SEGMENT_WIDTH, ROUTE_YELLOW, None);
+        if !drawn_solid(&local) {
+            let at = |(x, y): (f32, f32)| point(origin.x + px(x), origin.y + px(y));
+            for arrow in route_arrows(&local) {
+                for arm in [arrow.left, arrow.right] {
+                    super::stroke_through(
+                        window,
+                        &[at(arrow.mid), at(arm)],
+                        SEGMENT_WIDTH,
+                        ROUTE_YELLOW,
+                    );
+                }
+                arrows += 1;
+            }
+        }
+    }
+    if let Some((corners, false)) = &survey.grid.boundary {
+        let mut closed = screen(corners.as_slice());
+        let first = closed.first().copied();
+        if let Some(first) = first
+            && closed.len() > 1
+            && f32::from(first.x - origin.x).abs() <= POLYGON_MAX
+            && f32::from(first.y - origin.y).abs() <= POLYGON_MAX
+        {
+            closed.push(first);
+            super::stroke_through(window, &closed, BOUNDARY_WIDTH, FENCE_RED);
+        }
+    }
+    for (index, marker) in survey.grid.markers.iter().enumerate() {
+        let at = to_screen(marker.position.to_web_mercator());
+        match marker.kind {
+            GridMarkerKind::Corner => super::paint_pin(window, cx, at, PIN_RED, None),
+            GridMarkerKind::Trigger => super::paint_pin(window, cx, at, PIN_GREEN, None),
+            GridMarkerKind::Waypoint => {
+                let shown = super::pin_label_shown(zoom) || survey.pins.contains(&index);
+                paint_wp_pin(window, cx, at, shown.then(|| marker.text.clone()));
+            }
+        }
+    }
+    let mut tooltips = Vec::new();
+    for index in &survey.pins {
+        if let Some(marker) = survey.grid.markers.get(*index) {
+            let at = to_screen(marker.position.to_web_mercator());
+            super::paint_tooltip(window, cx, at, &marker.text);
+            tooltips.push(marker.text.clone());
+        }
+    }
+    if let Some((at, text)) = &survey.line {
+        super::paint_square_tooltip(window, cx, to_screen(at.to_web_mercator()), text);
+        tooltips.push(text.clone());
+    }
+    map.tooltips_drawn.extend(tooltips);
+    if let Some(survey) = map.survey.as_mut() {
+        survey.arrows = arrows;
+        survey.painted = true;
+    }
+}
+
+/// One bar of the scale: its width in pixels, its label, and where the label is written from.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ScaleBar {
+    /// The rectangle's width, `(int)(pxRes * transform)`.
+    pub width: i32,
+    /// `"5000Km"` to `"100m"`.
+    pub label: &'static str,
+    /// The label's left edge: ten pixels past the bar's width, nine for "100m".
+    pub label_x: i32,
+}
+
+/// `GMapControl.OnPaintOverlays`' scale while `MapScaleInfoEnabled`: the pixels of 5000 km down to
+/// 100 m as `Core.UpdateGroundResolution` finds them at the map's whole zoom and centre latitude -
+/// `GetGroundResolution`, the equator on the projection's 6378137 m `Axis` times the latitude's
+/// cosine over the map's `256 * 2^zoom` pixels, each `(int)` - and, longest first, a bar for each
+/// the map is wider than and zoomed in far enough for, stretched by `MapRenderTransform`: `2^` the
+/// zoom's fraction under `ScaleModes.Fractional`, a `float`. The bars are drawn one over another
+/// from the same corner. (The C# finds the pixels when a tile load completes; here at each paint.)
+/// `// C#: ExtLibs/GMap.NET.WindowsForms/GMap.NET.WindowsForms/GMapControl.cs:1682-1726, 2686-2706;
+/// ExtLibs/GMap.NET.Core/GMap.NET.Internals/Core.cs:842, 1196-1205;
+/// ExtLibs/GMap.NET.Core/GMap.NET/PureProjection.cs:252-255; Grid/GridUI.Designer.cs:1453`
+#[must_use]
+#[allow(clippy::float_cmp)] // the C#'s `remainder != 0`
+pub fn scale_bars(width: i32, zoom: f64, latitude: f64) -> Vec<ScaleBar> {
+    let remainder = zoom % 1.0;
+    let step = zoom - remainder;
+    #[allow(clippy::cast_possible_truncation)] // `(float) Math.Pow(2d, remainder)`
+    let transform = if remainder == 0.0 {
+        1.0
+    } else {
+        f64::from(2.0_f64.powf(remainder) as f32)
+    };
+    let rez = (latitude * (std::f64::consts::PI / 180.0)).cos()
+        * 2.0
+        * std::f64::consts::PI
+        * 6_378_137.0
+        / (256.0 * 2.0_f64.powf(step));
+    #[allow(clippy::cast_possible_truncation)] // the C#'s `(int)`
+    let pixels = |metres: f64| (metres / rez) as i32;
+    [
+        (5_000_000.0, "5000Km", true, 10),
+        (1_000_000.0, "1000Km", true, 10),
+        (100_000.0, "100Km", zoom > 2.0, 10),
+        (10_000.0, "10Km", zoom > 5.0, 10),
+        (1_000.0, "1000m", zoom >= 10.0, 10),
+        (100.0, "100m", zoom > 11.0, 9),
+    ]
+    .into_iter()
+    .filter_map(|(metres, label, zoomed, gap)| {
+        let resolution = pixels(metres);
+        (width > resolution && zoomed).then(|| {
+            #[allow(clippy::cast_possible_truncation)] // the C#'s `(int)`
+            let drawn = (f64::from(resolution) * transform) as i32;
+            ScaleBar {
+                width: drawn,
+                label,
+                label_x: drawn + gap,
+            }
+        })
+    })
+    .collect()
+}
+
+/// Paints the scale's bars at the map's top left in the scale pen: `DrawRectangle` from (10, 10),
+/// the bar's width across and ten down, and its label from `(label_x, 11)` in `ScaleFont`.
+/// `// C#: ExtLibs/GMap.NET.WindowsForms/GMap.NET.WindowsForms/GMapControl.cs:1684-1726`
+pub(super) fn paint_scale(
+    bars: &[ScaleBar],
+    origin: Point<Pixels>,
+    window: &mut Window,
+    cx: &mut App,
+) {
+    let mut font = window.text_style().font();
+    font.style = gpui::FontStyle::Italic;
+    for bar in bars {
+        // `DrawRectangle` covers its right and bottom edges' pixels too.
+        #[allow(clippy::cast_precision_loss)] // a pixel count
+        let width = bar.width as f32 + 1.0;
+        window.paint_quad(gpui::quad(
+            Bounds {
+                origin: point(origin.x + px(10.0), origin.y + px(10.0)),
+                size: gpui::size(px(width), px(11.0)),
+            },
+            gpui::Corners::default(),
+            gpui::rgba(0x00_00_00_00),
+            gpui::Edges::all(px(1.0)),
+            rgb(SCALE_ORANGE),
+            gpui::BorderStyle::default(),
+        ));
+        let run = TextRun {
+            len: bar.label.len(),
+            font: font.clone(),
+            color: Hsla::from(rgb(SCALE_ORANGE)),
+            background_color: None,
+            underline: None,
+            strikethrough: None,
+        };
+        let line = window.text_system().shape_line(
+            SharedString::from(bar.label),
+            px(SCALE_FONT_SIZE),
+            &[run],
+            None,
+        );
+        #[allow(clippy::cast_precision_loss)] // a pixel count
+        let left = bar.label_x as f32;
+        let _ = line.paint(
+            point(origin.x + px(left), origin.y + px(11.0)),
+            px(SCALE_FONT_SIZE * 1.2),
+            TextAlign::Left,
+            None,
+            window,
+            cx,
+        );
+    }
+}
+
+impl MapViewport {
+    /// The scale's bars the last paint of the dialog's map drew, kept for the facts.
+    pub(super) fn set_survey_scale(&mut self, bars: Vec<ScaleBar>) {
+        if let Some(survey) = self.survey.as_mut() {
+            survey.scale = bars;
+        }
+    }
+
+    /// Whether the dialog's map is what this map draws: its overlay set, on the planning screen.
+    pub(super) fn draws_survey(&self) -> bool {
+        self.survey.is_some() && self.overlay_mode.is_some_and(|overlay| overlay.planner)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1144,5 +1827,207 @@ mod tests {
             selection_rect(at(-35.37, 149.17), at(-35.36, 149.16)).expect("a rect");
         assert_eq!(top_left, at(-35.36, 149.16));
         assert_eq!(bottom_right, at(-35.37, 149.17));
+    }
+
+    /// Measure Distance's `polygonsoverlay` as the facts publish it: its markers and its line.
+    #[test]
+    fn measure_distances_marks_are_published() {
+        let mut map = MapViewport::new(0, 0);
+        assert_eq!(fact(&map, "map.measure.markers"), "0");
+        assert_eq!(fact(&map, "map.measure.line"), "none");
+        let (from, to) = (at(-35.36, 149.16), at(-35.37, 149.17));
+        map.set_measure(MeasureOverlay {
+            markers: vec![from],
+            line: None,
+        });
+        assert_eq!(fact(&map, "map.measure.markers"), "1");
+        assert_eq!(fact(&map, "map.measure.line"), "none");
+        map.set_measure(MeasureOverlay {
+            markers: vec![from, to],
+            line: Some((from, to)),
+        });
+        assert_eq!(fact(&map, "map.measure.markers"), "2");
+        assert_eq!(
+            fact(&map, "map.measure.line"),
+            "-35.3600000,149.1600000;-35.3700000,149.1700000"
+        );
+        map.set_measure(MeasureOverlay::default());
+        assert_eq!(fact(&map, "map.measure.markers"), "0");
+    }
+
+    /// `GMapRoute.IsInside` for a 4-pixel pen: within two pixels of a leg and between its ends,
+    /// the caps being flat; a leg of no length holds nothing.
+    #[test]
+    fn a_route_holds_the_points_within_half_its_pen() {
+        let leg = [(100.0, 100.0), (200.0, 100.0)];
+        assert!(outline_holds(&leg, (150.0, 100.0), 4.0));
+        assert!(outline_holds(&leg, (150.0, 102.0), 4.0));
+        assert!(outline_holds(&leg, (100.0, 98.0), 4.0));
+        assert!(!outline_holds(&leg, (150.0, 103.0), 4.0));
+        assert!(
+            !outline_holds(&leg, (99.0, 100.0), 4.0),
+            "the caps are flat"
+        );
+        assert!(!outline_holds(&leg, (201.0, 100.0), 4.0));
+        let corner = [(0.0, 0.0), (0.0, 50.0), (50.0, 50.0)];
+        assert!(outline_holds(&corner, (25.0, 51.0), 4.0));
+        assert!(outline_holds(&corner, (-1.0, 25.0), 4.0));
+        assert!(!outline_holds(&corner, (25.0, 25.0), 4.0));
+        assert!(!outline_holds(&[(5.0, 5.0), (5.0, 5.0)], (5.0, 5.0), 4.0));
+        assert!(!outline_holds(&[(5.0, 5.0)], (5.0, 5.0), 4.0));
+    }
+
+    /// `map_OnRouteEnter`'s words: the route's length on GMap's sphere as a single in metres,
+    /// `"0.##"` of its seven digits - so a degree of the equator is 111319.5.
+    #[test]
+    fn the_line_balloon_is_the_segments_length_in_metres() {
+        assert_eq!(line_text(&[at(0.0, 0.0), at(0.0, 1.0)]), "Line: 111319.5 m");
+        assert_eq!(
+            line_text(&[
+                at(-35.36, 149.16),
+                at(-35.36, 149.161),
+                at(-35.3605, 149.161)
+            ]),
+            "Line: 146.44 m"
+        );
+        assert_eq!(
+            line_text(&[at(-35.36, 149.16), at(-35.3605, 149.16)]),
+            "Line: 55.66 m"
+        );
+        assert_eq!(line_text(&[]), "Line: 0 m");
+    }
+
+    /// GMap's scale: at the equator at zoom 15 the 1000 m bar is 209 pixels and the 100 m one 20,
+    /// each label ten past its bar (nine for 100 m); half a level in, both stretched by the single
+    /// `2^0.5`; at zoom 11 the 10 km and 1000 m bars, the 100 m one waiting for a zoom past 11; at
+    /// zoom 2 the 5000 and 1000 km ones; none the map is not wider than; and further from the
+    /// equator a metre is more pixels.
+    #[test]
+    fn the_scale_picks_its_bars_by_width_and_zoom() {
+        let bar = |label, width, label_x| ScaleBar {
+            width,
+            label,
+            label_x,
+        };
+        assert_eq!(
+            scale_bars(800, 15.0, 0.0),
+            vec![bar("1000m", 209, 219), bar("100m", 20, 29)]
+        );
+        assert_eq!(
+            scale_bars(800, 15.5, 0.0),
+            vec![bar("1000m", 295, 305), bar("100m", 28, 37)]
+        );
+        assert_eq!(
+            scale_bars(800, 11.0, 0.0),
+            vec![bar("10Km", 130, 140), bar("1000m", 13, 23)]
+        );
+        assert_eq!(
+            scale_bars(800, 2.0, 0.0),
+            vec![bar("5000Km", 127, 137), bar("1000Km", 25, 35)]
+        );
+        assert_eq!(scale_bars(200, 15.0, 0.0), vec![bar("100m", 20, 29)]);
+        assert_eq!(
+            scale_bars(800, 16.0, -35.363_262_1),
+            vec![bar("1000m", 513, 523), bar("100m", 51, 60)]
+        );
+    }
+
+    /// The dialog's map: a segment the pointer comes onto gets the "Line:" balloon with its
+    /// length, a move along it changes nothing and a move off it takes the balloon away; a marker
+    /// under the pointer is noted; the place a script is offered lies on the longest segment; the
+    /// same run of the handler changes nothing and a new one starts the overlay afresh.
+    /// `// C#: Grid/GridUI.cs:618-622, 1141-1180`
+    #[test]
+    fn a_segment_under_the_pointer_gets_its_line_balloon() {
+        let mut map = MapViewport::new(0, 0);
+        map.set_overlay(Some(planner()));
+        map.paint_for_test(at(-35.3610, 149.1650), 2.5e-5, (800.0, 600.0));
+        let (a, b, c) = (
+            at(-35.3615, 149.1640),
+            at(-35.3615, 149.1660),
+            at(-35.3605, 149.1660),
+        );
+        let grid = SurveyGrid {
+            boundary: Some((vec![a, b, c], false)),
+            segments: vec![vec![a, a], vec![a, b], vec![b, c]],
+            markers: vec![GridMarker {
+                position: c,
+                kind: GridMarkerKind::Waypoint,
+                text: "3".to_owned(),
+            }],
+        };
+        map.set_survey(Some((grid.clone(), 1)));
+        assert!(map.draws_survey());
+        let fact = |map: &MapViewport, key: &str| {
+            map.survey_facts()
+                .into_iter()
+                .find(|(name, _)| *name == key)
+                .map(|(_, value)| value)
+                .unwrap_or_else(|| panic!("no fact {key}"))
+        };
+        assert_eq!(fact(&map, "map.survey"), "shown");
+        assert_eq!(fact(&map, "map.survey.segments"), "3");
+        assert_eq!(fact(&map, "map.survey.markers"), "1");
+        assert_eq!(fact(&map, "map.survey.boundary"), "polygon");
+        assert_eq!(fact(&map, "map.survey.line"), "none");
+
+        let (ax, ay) = map.screen_of(a).expect("on the map");
+        let (bx, _) = map.screen_of(b).expect("on the map");
+        let on_ab = (f32::midpoint(ax, bx), ay);
+        assert!(map.survey_hover(on_ab));
+        let words = line_text(&[a, b]);
+        assert_eq!(fact(&map, "map.survey.line"), words);
+        assert!(!map.survey_hover((on_ab.0 + 10.0, on_ab.1)), "along it");
+        assert!(map.survey_hover((on_ab.0, on_ab.1 + 10.0)), "off it");
+        assert_eq!(fact(&map, "map.survey.line"), "none");
+
+        // On the marker's pin, off both segments.
+        let (cx, cy) = map.screen_of(c).expect("on the map");
+        assert!(map.survey_hover((cx + 5.0, cy - 20.0)));
+        assert_eq!(
+            map.survey.as_ref().map(|survey| survey.pins.clone()),
+            Some(vec![0])
+        );
+        assert_eq!(fact(&map, "map.survey.line"), "none");
+
+        // The longest segment's middle, on it - once the map has painted the overlay, its view
+        // until then being the planning map's.
+        assert_eq!(map.survey_line_anchor(), None, "not painted yet");
+        if let Some(survey) = map.survey.as_mut() {
+            survey.painted = true;
+        }
+        let anchor = map.survey_line_anchor().expect("a segment on the map");
+        assert!((anchor.0 - on_ab.0).abs() <= 1.0, "{anchor:?} {on_ab:?}");
+        assert!((anchor.1 - on_ab.1).abs() <= 1.0, "{anchor:?} {on_ab:?}");
+        assert!(map.survey_hover(anchor));
+        assert_eq!(fact(&map, "map.survey.line"), words);
+
+        // The same run: as it was. A new run: nothing under the pointer, no balloon.
+        map.set_survey(Some((grid.clone(), 1)));
+        assert_eq!(fact(&map, "map.survey.line"), words);
+        map.set_survey(Some((grid, 2)));
+        assert_eq!(fact(&map, "map.survey.line"), "none");
+        assert_eq!(map.survey.as_ref().map(|survey| survey.pins.len()), Some(0));
+        // Closed: none of it.
+        map.set_survey(None);
+        assert!(!map.draws_survey());
+        assert_eq!(fact(&map, "map.survey"), "none");
+        assert_eq!(fact(&map, "map.scale"), "none");
+    }
+
+    /// The part of a leg inside a box: from where it comes in to where it goes out.
+    #[test]
+    fn a_leg_is_clipped_to_the_box() {
+        let inside = (10.0, 10.0, 90.0, 90.0);
+        assert_eq!(
+            clip_leg((0.0, 50.0), (100.0, 50.0), inside),
+            Some((0.1, 0.9))
+        );
+        assert_eq!(
+            clip_leg((20.0, 20.0), (80.0, 20.0), inside),
+            Some((0.0, 1.0))
+        );
+        assert_eq!(clip_leg((0.0, 5.0), (100.0, 5.0), inside), None);
+        assert_eq!(clip_leg((95.0, 0.0), (95.0, 100.0), inside), None);
     }
 }

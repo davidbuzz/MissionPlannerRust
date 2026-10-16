@@ -21,7 +21,7 @@ setup printf '%s\n' '-35.3632621 149.1652374' '-35.3600 149.1600' '-35.3600 149.
 
 screen plan
 window 1600x1200
-budget 38
+budget 41
 
 expect survey.dialog closed
 
@@ -127,6 +127,23 @@ expect survey.dialog.lbl_strips 20
 expect survey.dialog.lbl_flighttime 1:32:26 Hours
 expect survey.dialog.lbl_photoevery 0.00 Seconds
 
+# The dialog's map draws its own routesOverlay and none of the planner's overlays: a segment to
+# each of the 80 grid points from the point before, the 80 numbered lane ends after the square's
+# 4 red corners, the square in red - and no route of the mission, nor its legs to home
+# (Grid/GridUI.cs:618-778, 934-962) - with the scale GMap draws at its top left in the orange
+# ScalePen (GridUI.cs:110-111; ExtLibs/GMap.NET.WindowsForms/GMap.NET.WindowsForms/
+# GMapControl.cs:1682-1726). A segment under the pointer gets map_OnRouteEnter's balloon, "Line: "
+# and its length (GridUI.cs:1141-1165).
+expect map.survey shown
+expect map.survey.segments 80
+expect map.survey.markers 84
+expect map.survey.boundary polygon
+expect map.routes none
+expect map.scale ~ m:
+hover survey-map-line
+expect map.survey.line ~ Line:
+expect map.tooltip ~ Line:
+
 # The angle and the altitude typed, each redrawing the grid.
 click survey-NUM_angle
 expect survey.dialog.editing NUM_angle
@@ -142,6 +159,9 @@ key Return
 expect survey.dialog.NUM_altitude 120
 expect survey.dialog.recomputes 3
 expect survey.dialog.grid.points 112
+# Each run of the handler clears routesOverlay, the balloon's marker with it.
+expect map.survey.segments 112
+expect map.survey.line none
 expect survey.dialog.lbl_strips 28
 expect survey.dialog.lbl_distance 23.25 km
 expect survey.dialog.lbl_flighttime 1:36:52 Hours

@@ -9532,6 +9532,51 @@ pub fn vehicle_coords(
     }
 }
 
+/// CONFIG > Planner's "Display in Flightdata" box beside Dist to Home, as `Settings.Instance` keeps
+/// it: "True" or "False", and the balloon shows only for "True" - `GetBoolean`'s false for a
+/// config that has never had the box clicked, whatever the Designer ticks.
+/// `// C#: GCSViews/ConfigurationView/ConfigPlanner.cs:190, 774-777; GCSViews/FlightData.cs:3041`
+pub const DIST_TO_HOME_KEY: &str = "CHK_disttohomeflightdata";
+
+/// The flight map's "Dist to Home" balloon for the pointer at `point`, GMap's distance on its
+/// 6378137 m sphere in kilometres made the display's unit and written whole, with no unit after
+/// it: `"Dist to Home: " + ((GetDistance(point, HomeLocation) * 1000) * multiplierdist)
+/// .ToString("0")`.
+/// `// C#: GCSViews/FlightData.cs:3046-3051; ExtLibs/GMap.NET.Core/GMap.NET/PureProjection.cs:436-448`
+#[must_use]
+pub fn dist_to_home_text(
+    point: mp_units::LatLon,
+    home: mp_units::LatLon,
+    multiplierdist: f32,
+) -> String {
+    let distance =
+        crate::mapview::gmap_distance_km(point, home) * 1000.0 * f64::from(multiplierdist);
+    format!(
+        "Dist to Home: {}",
+        mp_mission::dotnet::format_f64(distance, "0")
+    )
+}
+
+/// `gMapControl1_MouseMove` with no button down: a new `GMapMarkerRect` at the pointer, its
+/// `GMapToolTip` always shown with the distance from there to the shown vehicle's `HomeLocation`
+/// (`new PointLatLngAlt()`, 0,0, while it has none), or nothing while CONFIG > Planner's box is
+/// not ticked (`shown`). The marker is where the pointer is, and its words, for the map.
+/// `// C#: GCSViews/FlightData.cs:3033-3054`
+#[must_use]
+pub fn dist_to_home_balloon(
+    shown: bool,
+    point: mp_units::LatLon,
+    home: Option<mp_units::LatLon>,
+    multiplierdist: f32,
+) -> Option<(mp_units::LatLon, String)> {
+    shown.then(|| {
+        (
+            point,
+            dist_to_home_text(point, home.unwrap_or_default(), multiplierdist),
+        )
+    })
+}
+
 /// `panel1`, `tableMap`'s second row under the flight map, 25 pixels high, with `coords1` at its
 /// left: the system combo - three buttons here, as the planner's read-out has them - and the
 /// vehicle's position in one line beside it (`Vertical = false`, so no `AltSource`). The panel's
@@ -13642,6 +13687,40 @@ mod tests {
     /// `ChangeUnits` with nothing set: metres and metres per second.
     fn metres() -> mp_vehicle::units::DisplayUnits {
         mp_vehicle::units::DisplayUnits::default().change_units(None, None, None)
+    }
+
+    /// FLIGHT DATA's "Dist to Home" balloon: GMap's haversine on its 6378137 m sphere from the
+    /// pointer to home, in the display unit, written whole with no unit; to 0,0 with no home; and
+    /// none while CONFIG > Planner's box is not ticked.
+    /// `// C#: GCSViews/FlightData.cs:3033-3054`
+    #[test]
+    fn the_dist_to_home_balloon_is_gmaps_distance_written_whole() {
+        let at = |lat: f64, lng: f64| mp_units::LatLon::new(lat, lng).expect("a position");
+        let equator = at(0.0, 0.0);
+        // A degree of the equator on the sphere is 111319.49 m.
+        assert_eq!(
+            dist_to_home_text(at(0.0, 1.0), equator, 1.0),
+            "Dist to Home: 111319"
+        );
+        // `multiplierdist` for "Feet", the single 3.2808399 (spelled as its shortest literal),
+        // widened.
+        assert_eq!(
+            dist_to_home_text(at(0.0, 1.0), equator, 3.280_84),
+            "Dist to Home: 365221"
+        );
+        assert_eq!(dist_to_home_text(equator, equator, 1.0), "Dist to Home: 0");
+        // The flight map's start in the scripts, Canberra, and no home: 0,0.
+        let canberra = at(-35.363_262_1, 149.165_237_4);
+        assert_eq!(
+            dist_to_home_balloon(true, canberra, None, 1.0),
+            Some((canberra, "Dist to Home: 14966378".to_owned()))
+        );
+        assert_eq!(
+            dist_to_home_balloon(true, at(0.0, 1.0), Some(equator), 1.0),
+            Some((at(0.0, 1.0), "Dist to Home: 111319".to_owned()))
+        );
+        assert_eq!(dist_to_home_balloon(false, canberra, None, 1.0), None);
+        assert_eq!(DIST_TO_HOME_KEY, "CHK_disttohomeflightdata");
     }
 
     /// FLIGHT DATA's `coords1` is horizontal: GEO's latitude and longitude to seven places, UTM's

@@ -31,9 +31,14 @@
 //!   along the bottom of what is left, 80 pixels tall; the map in the rest. Every group box and
 //!   control sits at its `.resx` location and size. The dialog is modal (`ShowDialog`), so while it
 //!   shows it takes the planning screen, map and all, and the planner's sidebar and menu wait.
-//! - **The map is the planner's own**, showing the dialog's grid as `routesOverlay` does - the
-//!   lanes and their markers (Grid, Markers), the trigger points with Internals, the polygon
-//!   (Boundary) - through the map's mission and polygon layers. Drag pans, the wheel zooms.
+//! - **The map is the planner's own**, drawing in place of its overlays the dialog's
+//!   `routesOverlay` as `domainUpDown1_ValueChanged` fills it ([`map_layer`],
+//!   `mapview::wp_draw`): each grid point's segment from the point before, yellow with its arrows
+//!   (Grid), the lane ends' numbered markers (Markers), the trigger points with Internals, the
+//!   polygon and its red corners (Boundary) - none of the planner's home, mission, fence or rally
+//!   markers, and no legs to home - with GMap's scale at its top left in orange. A segment the
+//!   pointer comes onto gets `map_OnRouteEnter`'s "Line:" balloon, its length. Drag pans, the
+//!   wheel zooms.
 //! - **Accept** puts the rows in the planner as `FlightPlanner.AddCommand` fills them
 //!   (`FillCommand` and `setfromMap`): in the screen's altitude frame, a `WAYPOINT` as a
 //!   `SPLINE_WAYPOINT` while the planner's Spline box is ticked, a waypoint's position to seven
@@ -90,6 +95,7 @@ use crate::MissionPlanner;
 use crate::config::firmware::{BoxIds, PathBox};
 use crate::config::mavlink_controls::InputBox;
 use crate::fly::error_box;
+use crate::mapview::wp_draw::{GridMarker, GridMarkerKind, SurveyGrid};
 use crate::plan::{AltitudeFrame, Plan};
 use crate::textfield::{KeyOutcome, TextField};
 use crate::ui::theme;
@@ -230,47 +236,93 @@ impl SurveyUi {
         self.open.is_some()
     }
 
-    /// What the map shows while the dialog is open: the grid as waypoints, and the boundary - or
-    /// `None` while it is closed.
+    /// What the map shows of the planner's mission and survey area while the dialog is open:
+    /// neither - the dialog's map is its own, `routesOverlay` and nothing of the planner's
+    /// ([`Self::map_layer`]) - or `None` while it is closed, when the map shows the planner's.
     #[must_use]
     pub fn preview(&self) -> Option<(Vec<MissionItem>, Vec<LatLon>)> {
+        self.open.as_ref().map(|_| (Vec::new(), Vec::new()))
+    }
+
+    /// The dialog's map while it is open: `routesOverlay` as the last run of
+    /// `domainUpDown1_ValueChanged` filled it, with the number of that run.
+    #[must_use]
+    pub fn map_layer(&self) -> Option<(SurveyGrid, u32)> {
         let open = self.open.as_ref()?;
-        Some(preview(&open.dialog))
+        Some((map_layer(&open.dialog), open.dialog.recomputes()))
     }
 }
 
-/// `routesOverlay` as `domainUpDown1_ValueChanged` fills it: the lanes' ends and turns with the
-/// route between them (Grid, Markers), the trigger points as well with Internals, and the polygon
-/// with Boundary. The map draws a mission's markers and its path together, so either box shows
-/// both.
-/// `// C#: Grid/GridUI.cs:626-770, 922-955`
-fn preview(dialog: &Dialog) -> (Vec<MissionItem>, Vec<LatLon>) {
-    let route = dialog.check(Check::Grid) || dialog.check(Check::Markers);
+/// `routesOverlay` as `domainUpDown1_ValueChanged` fills it, for the map to draw: nothing for an
+/// empty grid; with Boundary, `AddDrawPolygon`'s polygon - a route with Corridor - and a red
+/// marker at each corner, numbered from 1; then, point by point, a trigger point's green marker
+/// with Internals and a lane end's `GMapMarkerWP` with Markers, numbered by `a` - which a trigger
+/// point drawn, or its footprint, also counts - and with Grid each point's segment from the point
+/// drawn before it, empty for a trigger point Internals leaves out. (The footprints themselves,
+/// and their overlap count, are not drawn.)
+/// `// C#: Grid/GridUI.cs:618-778, 934-962`
+fn map_layer(dialog: &Dialog) -> SurveyGrid {
+    let grid = dialog.grid();
+    let Some(first) = grid.first() else {
+        return SurveyGrid::default();
+    };
+    let position = |point: &mp_mission::grid::GridPoint| LatLon::new(point.lat, point.lng).ok();
+    let mut layer = SurveyGrid::default();
+    if dialog.check(Check::Boundary) {
+        let corners = dialog.polygon().to_vec();
+        layer
+            .markers
+            .extend(corners.iter().zip(1_u32..).map(|(at, a)| GridMarker {
+                position: *at,
+                kind: GridMarkerKind::Corner,
+                text: a.to_string(),
+            }));
+        layer.boundary = Some((corners, dialog.check(Check::Corridor)));
+    }
     let internals = dialog.check(Check::Internals);
-    let items = if route {
-        dialog
-            .grid()
-            .iter()
-            .filter(|point| internals || point.tag != GridTag::Middle)
-            .zip(1_u16..)
-            .map(|(point, seq)| MissionItem {
-                seq,
-                command: cmd::WAYPOINT,
-                x: point.lat,
-                y: point.lng,
-                z: point.alt,
-                ..MissionItem::default()
-            })
-            .collect()
-    } else {
-        Vec::new()
-    };
-    let boundary = if dialog.check(Check::Boundary) {
-        dialog.polygon().to_vec()
-    } else {
-        Vec::new()
-    };
-    (items, boundary)
+    let markers = dialog.check(Check::Markers);
+    // `if (TXT_fovH.Text != "") { ... if (CHK_footprints.Checked) { ... a++; } }`, the box's
+    // numbers `double.Parse`d on the way.
+    let footprints = dialog.check(Check::Footprints)
+        && parse_f64(dialog.text(Text::FovH)).is_some()
+        && parse_f64(dialog.text(Text::FovV)).is_some();
+    let mut a = 1_u32;
+    let mut prevpoint = first;
+    for item in grid {
+        let mut segment = Vec::new();
+        if item.tag == GridTag::Middle {
+            if internals {
+                if let Some(at) = position(item) {
+                    layer.markers.push(GridMarker {
+                        position: at,
+                        kind: GridMarkerKind::Trigger,
+                        text: a.to_string(),
+                    });
+                }
+                a += 1;
+                segment.extend([prevpoint, item].into_iter().filter_map(position));
+                prevpoint = item;
+            }
+            if footprints {
+                a += 1;
+            }
+        } else {
+            if markers && let Some(at) = position(item) {
+                layer.markers.push(GridMarker {
+                    position: at,
+                    kind: GridMarkerKind::Waypoint,
+                    text: a.to_string(),
+                });
+            }
+            segment.extend([prevpoint, item].into_iter().filter_map(position));
+            prevpoint = item;
+            a += 1;
+        }
+        if dialog.check(Check::Grid) {
+            layer.segments.push(segment);
+        }
+    }
+    layer
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -380,8 +432,15 @@ fn close(this: &mut MissionPlanner) {
     if let Some(open) = this.survey.open.take() {
         this.survey.start_point = open.dialog.start_point();
     }
+    sync_map(this);
+}
+
+/// The map after a change of the dialog: the planner's mission and survey area off it while the
+/// dialog shows and back once it has closed, and the dialog's own `routesOverlay`.
+fn sync_map(this: &MissionPlanner) {
     this.sync_map_mission();
     this.sync_map_polygon();
+    this.map.borrow_mut().set_survey(this.survey.map_layer());
 }
 
 /// `cs.firmware == Firmwares.ArduPlane`: a fixed wing, a flapping wing or a VTOL.
@@ -749,8 +808,7 @@ fn file_answered(this: &mut MissionPlanner, ok: bool) {
         GridFile::Load => opened_file(this, path, ok),
         GridFile::Save(data) => saved_file(this, path, data, ok),
     }
-    this.sync_map_mission();
-    this.sync_map_polygon();
+    sync_map(this);
 }
 
 /// `LoadGrid` once its `OpenFileDialog` has answered: `if (File.Exists(ofd.FileName))`, the file
@@ -854,8 +912,7 @@ fn commit_edit(open: &mut Open) {
 /// `domainUpDown1_ValueChanged` ends with `map.Invalidate()`. The dialog gone, its keyboard is
 /// let go, and the window takes it back as it takes a keyboard nothing holds.
 fn changed(this: &mut MissionPlanner, window: &mut Window, cx: &mut Context<MissionPlanner>) {
-    this.sync_map_mission();
-    this.sync_map_polygon();
+    sync_map(this);
     if this.survey.open.is_none() && this.survey.focus.is_focused(window) {
         window.blur(cx);
     }
@@ -2074,6 +2131,7 @@ pub fn form(
     };
 
     let map = this.map.clone();
+    let anchor = line_anchor(&this.map.borrow());
     let map_region = crate::probe::measured("survey-map", div())
         .id("survey-map")
         .relative()
@@ -2098,12 +2156,20 @@ pub fn form(
         )
         .on_mouse_move(
             cx.listener(|this, event: &gpui::MouseMoveEvent, window, _cx| {
+                let (x, y) = (f32::from(event.position.x), f32::from(event.position.y));
+                // With no button down the pointer is passing over `routesOverlay`: GMap's hover
+                // of its markers and segments, and `map_OnRouteEnter`'s "Line:" balloon.
+                // `// C#: Grid/GridUI.cs:91-92, 1141-1180`
+                if event.pressed_button.is_none() {
+                    if this.map.borrow_mut().survey_hover((x, y)) {
+                        window.refresh();
+                    }
+                    return;
+                }
                 if event.pressed_button != Some(MouseButton::Left) {
                     return;
                 }
-                this.map
-                    .borrow_mut()
-                    .drag_to(f32::from(event.position.x), f32::from(event.position.y));
+                this.map.borrow_mut().drag_to(x, y);
                 window.refresh();
             }),
         )
@@ -2123,7 +2189,8 @@ pub fn form(
             );
             window.refresh();
         })
-        .child(crate::mapview::map_element(this.map.clone()));
+        .child(crate::mapview::map_element(this.map.clone()))
+        .children(anchor);
 
     let tab_control = div()
         .flex()
@@ -2220,6 +2287,24 @@ pub fn form(
             .children(prompt_box(open, window, focus, cx))
             .children(file_box(open, window, focus, cx))
             .into_any_element(),
+    )
+}
+
+/// A place on one of the dialog's segments, measured for the harness as `survey-map-line`: four
+/// pixels about the middle of the longest part of a segment well inside the map, where the map
+/// drew it last frame, in the region's own coordinates - so a script can put the pointer on a
+/// segment and see its "Line:" balloon. Nothing listens on it; none while no segment is on the
+/// map, so it is never cut off.
+fn line_anchor(map: &crate::mapview::MapViewport) -> Option<Div> {
+    let (x, y) = map.survey_line_anchor()?;
+    Some(
+        crate::probe::measured("survey-map-line", div())
+            .absolute()
+            .left(px(x - 2.0))
+            .top(px(y - 2.0))
+            .w(px(4.0))
+            .h(px(4.0))
+            .child(div().size_full()),
     )
 }
 
@@ -2741,17 +2826,81 @@ mod tests {
         (facts, clicks)
     }
 
+    /// The dialog's map follows its display boxes as `routesOverlay` does: on the square, a
+    /// segment for each of the 80 grid points - the first from the first point to itself, each
+    /// other from the point before - their 80 numbered markers after the 4 red corners, and the
+    /// boundary polygon; with the boxes unticked, nothing.
+    /// `// C#: Grid/GridUI.cs:618-778, 934-962`
     #[test]
-    fn the_preview_follows_the_display_boxes() {
+    fn the_map_layer_follows_the_display_boxes() {
         let mut dialog = gui_dialog();
-        let (items, boundary) = preview(&dialog);
-        assert_eq!(items.len(), 80);
-        assert_eq!(boundary.len(), 4);
+        let layer = map_layer(&dialog);
+        let grid = dialog.grid();
+        assert_eq!(grid.len(), 80);
+        assert_eq!(layer.segments.len(), 80);
+        let at = |index: usize| {
+            let point = &grid[index];
+            LatLon::new(point.lat, point.lng).expect("a point")
+        };
+        assert_eq!(layer.segments[0], vec![at(0), at(0)]);
+        assert_eq!(layer.segments[1], vec![at(0), at(1)]);
+        assert_eq!(layer.segments[79], vec![at(78), at(79)]);
+        assert_eq!(layer.markers.len(), 84);
+        assert_eq!(layer.markers[0].kind, GridMarkerKind::Corner);
+        assert_eq!(layer.markers[3].text, "4");
+        assert_eq!(layer.markers[4].kind, GridMarkerKind::Waypoint);
+        assert_eq!(layer.markers[4].text, "1");
+        assert_eq!(layer.markers[83].text, "80");
+        assert_eq!(layer.markers[83].position, at(79));
+        assert_eq!(dialog.polygon().len(), 4);
+        assert_eq!(layer.boundary, Some((dialog.polygon().to_vec(), false)));
+        // No trigger points: no picture is taken at a spacing of 0.
+        assert!(grid.iter().all(|point| point.tag != GridTag::Middle));
+
         dialog.click_check(Check::Boundary);
         dialog.click_check(Check::Grid);
         dialog.click_check(Check::Markers);
-        let (items, boundary) = preview(&dialog);
-        assert!(items.is_empty() && boundary.is_empty());
+        assert_eq!(map_layer(&dialog), SurveyGrid::default());
+    }
+
+    /// With Internals, each trigger point has its green marker and its segment, and counts in
+    /// `a`; without, its segment is empty and the next lane end's number follows on.
+    /// `// C#: Grid/GridUI.cs:676-777`
+    #[test]
+    fn trigger_points_are_drawn_with_internals() {
+        let mut dialog = gui_dialog();
+        dialog.type_num(Num::Spacing, "100");
+        let grid = dialog.grid().to_vec();
+        let middle = grid
+            .iter()
+            .position(|point| point.tag == GridTag::Middle)
+            .expect("a trigger point at a spacing of 100 m");
+        let without = map_layer(&dialog);
+        assert!(without.segments[middle].is_empty());
+        assert!(
+            without
+                .markers
+                .iter()
+                .all(|marker| marker.kind != GridMarkerKind::Trigger)
+        );
+        dialog.click_check(Check::Internals);
+        let with = map_layer(&dialog);
+        assert_eq!(with.segments[middle].len(), 2);
+        let triggers = with
+            .markers
+            .iter()
+            .filter(|marker| marker.kind == GridMarkerKind::Trigger)
+            .count();
+        let middles = grid
+            .iter()
+            .filter(|point| point.tag == GridTag::Middle)
+            .count();
+        assert_eq!(triggers, middles);
+        // Every grid point is numbered: the last marker's number is the grid's length.
+        assert_eq!(
+            with.markers.last().map(|marker| marker.text.clone()),
+            Some(grid.len().to_string())
+        );
     }
 
     /// `GridUI.ProcessCmdKey` compares `keyData` whole: Control and O, or Control and S, with

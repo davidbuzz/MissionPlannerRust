@@ -1,0 +1,36 @@
+# FLIGHT DATA's "Dist to Home" balloon: gMapControl1_MouseMove, with no button down and CONFIG >
+# Planner's "Display in Flightdata" ticked (CHK_disttohomeflightdata "True" in Settings), puts a
+# GMapMarkerRect at the pointer whose GMapToolTip always shows "Dist to Home: " and GMap's
+# distance from there to the vehicle's HomeLocation, made the display's unit and written "0";
+# gMapControl1_MouseLeave takes it off (GCSViews/FlightData.cs:2992-3005, 3033-3054;
+# GCSViews/ConfigurationView/ConfigPlanner.cs:774-777).
+#
+# No vehicle, so HomeLocation is a new PointLatLngAlt, 0,0: from Canberra, where maplast_* opens
+# the map at zoom 16, that is 14966378 m on GMap's 6378137 m sphere, a pixel there about 2 m -
+# so the first six digits hold wherever in its pixel the pointer lands.
+#
+# Self-contained: its own data directory, holding the map's place and the setting.
+
+env XDG_DATA_HOME $WORK
+setup mkdir -p "$WORK/MissionPlannerRust" && printf '<?xml version="1.0" encoding="utf-8"?><Config><maplast_lat>-35.3632621</maplast_lat><maplast_lng>149.1652374</maplast_lng><maplast_zoom>16</maplast_zoom><CHK_disttohomeflightdata>True</CHK_disttohomeflightdata></Config>' > "$WORK/MissionPlannerRust/config.xml"
+screen fly
+window 1600x1200
+budget 4
+# A first budget, set by hand until a passing run records one.
+
+expect map.ready true
+expect map.disttohome none
+
+# The pointer on the map: the balloon at it.
+hover map@0.5x0.5
+expect map.disttohome ~ Dist to Home: 149663
+expect map.tooltip ~ Dist to Home: 149663
+
+# Off the map: gone.
+hover main-connect
+expect map.disttohome none
+expect map.tooltip none
+
+# Back on it further west, nearer 0,0 by some hundreds of metres: made again at the pointer.
+hover map@0.2x0.5
+expect map.disttohome ~ Dist to Home: 1496
