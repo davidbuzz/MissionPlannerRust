@@ -1,0 +1,41 @@
+# EXPERIMENTAL's MAVSerial pass against SITL (temp.cs:310-408): pressed, MAVLinkSerialPort is made
+# on GPS1 for the vehicle (MAVLinkSerialPort.cs:53-78) and a TcpListener started on 0.0.0.0:500;
+# pressed again, the port is closed - SERIAL_CONTROL with no flags, the GPS handed back - and the
+# listener with it (crates/mp-gui/src/mav_serial.rs).
+#
+# Port 500 is below 1024: a machine that lets this user listen there (root, or a lowered
+# net.ipv4.ip_unprivileged_port_start) listens, and one that does not refuses, the status line
+# saying why where the C# shows the exception in a box. The script holds on either, by the fact
+# that names the outcome - experimental.mavserial, "listening on 0.0.0.0:500" or "refused:
+# 0.0.0.0:500: <why>" - both of which name the address the listener was asked for, which neither
+# earlier refusal (no link, no vehicle; experimental-actions.gui) reaches. Pressed again, one
+# listening is closed and one refused is refused again: neither is listening. A client's bytes to
+# the GPS and the GPS's back are mav_serial.rs's tests, over a fake link, as this script has no
+# client to connect.
+#
+# Run as: tools/gui-test.sh tests/gui/experimental-mavserial.gui -- tcp:127.0.0.1:5760
+screen fly
+window 1600x1200
+budget 9
+# 9: 7.2 s measured headless on lavapipe (2026-10-16), the rule's ceiling plus one.
+env XDG_DATA_HOME $WORK
+env MP_CONFIG_XML $WORK/config.xml
+setup printf '<?xml version="1.0" encoding="utf-8"?><Config><tabcontrolactions>tabQuick;</tabcontrolactions></Config>' > "$WORK/config.xml"
+
+within 30
+expect vehicle.count > 0
+key ctrl+f
+expect screen experimental
+expect experimental.working 33
+
+# Pressed: listening, or refused with the reason, either naming the address.
+click experimental-but_mavserialport
+expect experimental.last but_mavserialport
+expect experimental.mavserial ~ 0.0.0.0:500
+expect experimental.mavserial !~ Please connect first
+expect experimental.mavserial !~ No valid heartbeats
+expect status ~ 0.0.0.0:500
+
+# Pressed again: nothing listening.
+click experimental-but_mavserialport
+expect experimental.mavserial !~ listening

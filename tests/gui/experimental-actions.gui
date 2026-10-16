@@ -9,6 +9,9 @@
 # Safety Switch's sysid 0 is only logged. QNH (temp.cs:668-682), Force Accel Cal
 # (temp.cs:1404-1416) and arm and takeoff (temp.cs:614-634) need a vehicle: "Please Connect
 # First". Bootloader Upgrade and Toggle Safety Switch against SITL are experimental-sitl.gui.
+# MAVSerial pass (temp.cs:310-347) with no link: MAVLinkSerialPort's constructor throws
+# Strings.PleaseConnect, "Please connect first" (MAVLinkSerialPort.cs:58-61; Strings.resx:205-207);
+# against SITL it is experimental-mavserial.gui.
 screen fly
 window 1600x1200
 budget 20
@@ -18,7 +21,7 @@ env MP_CONFIG_XML $WORK/config.xml
 setup printf '<?xml version="1.0" encoding="utf-8"?><Config><tabcontrolactions>tabQuick;</tabcontrolactions></Config>' > "$WORK/config.xml"
 key ctrl+f
 expect screen experimental
-expect experimental.working 32
+expect experimental.working 33
 # reboot pixhawk: asked; No sends nothing.
 click experimental-but_reboot
 expect experimental.asking Are you sure?
@@ -71,3 +74,11 @@ expect status ~ Swarm: out of scope
 click experimental-but_armandtakeoff
 expect status Error: Please Connect First
 expect experimental.takeoff none
+# MAVSerial pass with no link: the constructor's exception, on the status line where the C#
+# shows it in a box; nothing listening.
+click experimental-BUT_swarm
+expect status ~ Swarm: out of scope
+click experimental-but_mavserialport
+expect experimental.last but_mavserialport
+expect status Error: Please connect first
+expect experimental.mavserial refused: Please connect first

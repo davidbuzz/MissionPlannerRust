@@ -305,6 +305,7 @@ pub(crate) fn tool(name: &str) -> Tool {
         "BUT_sorttlogs" => Tool::Act(Act::SortTlogs),
         "but_sortlogs" => Tool::Act(Act::ResortAllLogs),
         "but_maplogs" => Tool::Act(Act::MapLogs),
+        "but_mavserialport" => Tool::Act(Act::MavSerialPass),
         "BUT_follow_me" | "but_osdvideo" | "BUT_movingbase" | "BUT_swarm" | "BUT_followleader"
         | "but_trimble" | "but_followswarm" => Tool::Unavailable(SECTION_12_D13),
         "but_anonlog" => Tool::Unavailable(ANON_LOG_RULED),
@@ -398,6 +399,9 @@ pub(crate) enum Act {
     /// each `.tlog`, `.bin` and `.log` in and under it flew (log_map.rs's `LogMap`), off the
     /// window's thread. `// C#: temp.cs:529-540`
     MapLogs,
+    /// `but_mavserialport_Click`: the GPS port passed through on TCP port 500, or closed
+    /// (crate::mav_serial). `// C#: temp.cs:310-408`
+    MavSerialPass,
 }
 
 /// arm and takeoff's steps, which the C#'s handler blocks on in turn.
@@ -882,6 +886,7 @@ fn act(
             });
         }
         Act::ArmAndTakeoff => arm_and_takeoff(this),
+        Act::MavSerialPass => crate::mav_serial::press(this),
         // `fbd.SelectedPath = Settings.Instance.LogDir`: the folder typed, as every folder dialog
         // here (Inject Custom Map's).
         Act::SortTlogs => {
@@ -1030,7 +1035,8 @@ fn send(this: &mut MissionPlanner, what: Act) {
         | Act::ArmAndTakeoff
         | Act::SortTlogs
         | Act::ResortAllLogs
-        | Act::MapLogs => true,
+        | Act::MapLogs
+        | Act::MavSerialPass => true,
     };
     if !sent {
         this.file_status = Some(error_box(PLEASE_CONNECT));
@@ -2118,7 +2124,7 @@ mod tests {
                 Tool::Unavailable(why) => assert!(!why.is_empty()),
             }
         }
-        assert_eq!(opens, 32);
+        assert_eq!(opens, 33);
         assert_eq!(tool("but_paramrestore"), Tool::Act(Act::ParamRestore));
         assert_eq!(tool("BUT_magfit2"), Tool::Act(Act::MagCalLog));
         assert_eq!(tool("myButton1"), Tool::Act(Act::SplitDfLog));

@@ -27,8 +27,8 @@
 use mp_mavlink_dialects::all::{
     CommandInt, CommandLong, MavMessage, MissionAck, MissionCount, MissionItem as FloatItem,
     MissionItemInt, MissionRequestInt, MissionRequestList, MissionSetCurrent, ParamRequestList,
-    AutopilotVersionRequest, ParamRequestRead, ParamSet, RcChannelsOverride, SetGpsGlobalOrigin,
-    SetMode, SetPositionTargetGlobalInt, SystemTime,
+    AutopilotVersionRequest, ParamRequestRead, ParamSet, RcChannelsOverride, SerialControl,
+    SetGpsGlobalOrigin, SetMode, SetPositionTargetGlobalInt, SystemTime,
 };
 use mp_mission::MissionItem;
 use mp_vehicle::VehicleId;
@@ -834,6 +834,79 @@ pub fn system_time(time_unix_usec: u64) -> MavMessage {
     })
 }
 
+/// `SERIAL_CONTROL_FLAG.RESPOND`: the vehicle is to answer with a `SERIAL_CONTROL` of its own.
+/// `// C#: ExtLibs/Mavlink/Mavlink.cs:4218-4220`
+pub const SERIAL_CONTROL_FLAG_RESPOND: u8 = 2;
+/// `SERIAL_CONTROL_FLAG.EXCLUSIVE`: the port taken from the driver using it, until a message
+/// without this flag hands it back. `// C#: ExtLibs/Mavlink/Mavlink.cs:4221-4223`
+pub const SERIAL_CONTROL_FLAG_EXCLUSIVE: u8 = 4;
+/// `SERIAL_CONTROL_FLAG.MULTI`: replies until the port is drained.
+/// `// C#: ExtLibs/Mavlink/Mavlink.cs:4227-4229`
+pub const SERIAL_CONTROL_FLAG_MULTI: u8 = 16;
+/// `SERIAL_CONTROL_DEV.GPS1`: the first GPS port. `// C#: ExtLibs/Mavlink/Mavlink.cs:4169-4171`
+pub const SERIAL_CONTROL_DEV_GPS1: u8 = 2;
+/// The bytes one `SERIAL_CONTROL` carries: `data`'s `SizeConst`.
+/// `// C#: ExtLibs/Mavlink/Mavlink.cs:24347-24352`
+pub const SERIAL_CONTROL_DATA_LEN: usize = 70;
+
+/// `SendSerialControl(port, timeoutms, data, baudrate, close)`: the `SERIAL_CONTROL`s it writes,
+/// in order - every message `MAVLinkSerialPort` sends (mp-gui's `mav_serial.rs`).
+///
+/// No data is one message, a request: `EXCLUSIVE | RESPOND | MULTI`, the port taken from its
+/// driver and what it has read sent back until it has no more; with `close`, flags 0, the port
+/// handed back. Data goes 70 bytes a message, `count` saying how many, each `EXCLUSIVE` and the
+/// last `RESPOND` too - but `(len / 70) + 1` counts the messages, one more than there are when
+/// the length is a multiple of 70, and then none is `RESPOND`, as the C#'s none is. One 70-byte
+/// `data` serves every message, each copying its bytes over the front of it, so a short last
+/// message carries the end of the one before it after its own bytes, not zeros. Addressed to
+/// nobody: the C#'s `mavlink_serial_control_t` has no target fields.
+///
+/// The C# sleeps 10 ms before writing each message of data ("dont flood the port"); a caller
+/// sending these does the same.
+/// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:2965-3016`
+#[must_use]
+pub fn serial_control(
+    device: u8,
+    timeout: u16,
+    data: &[u8],
+    baudrate: u32,
+    close: bool,
+) -> Vec<MavMessage> {
+    let mut message = SerialControl {
+        baudrate,
+        timeout,
+        device,
+        flags: if close {
+            0
+        } else {
+            SERIAL_CONTROL_FLAG_EXCLUSIVE
+        },
+        count: 0,
+        data: [0; SERIAL_CONTROL_DATA_LEN],
+    };
+    if data.is_empty() {
+        if !close {
+            message.flags |= SERIAL_CONTROL_FLAG_RESPOND | SERIAL_CONTROL_FLAG_MULTI;
+        }
+        return vec![MavMessage::SerialControl(message)];
+    }
+    let mut packets = data.len() / SERIAL_CONTROL_DATA_LEN + 1;
+    let mut messages = Vec::with_capacity(packets);
+    for piece in data.chunks(SERIAL_CONTROL_DATA_LEN) {
+        if packets == 1 {
+            message.flags |= SERIAL_CONTROL_FLAG_RESPOND;
+        }
+        // A piece is at most 70 bytes.
+        message.count = u8::try_from(piece.len()).unwrap_or(u8::MAX);
+        if let Some(front) = message.data.get_mut(..piece.len()) {
+            front.copy_from_slice(piece);
+        }
+        messages.push(MavMessage::SerialControl(message));
+        packets = packets.saturating_sub(1);
+    }
+    messages
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1303,5 +1376,116 @@ mod tests {
             panic!("log_erase must build a LOG_ERASE");
         };
         assert_eq!((wide.target_system, wide.target_component), (255, 1));
+    }
+
+    /// A `SERIAL_CONTROL`'s 79 bytes as `StructureToByteArray` lays out the C#'s struct:
+    /// `baudrate`, `timeout`, `device`, `flags`, `count`, then the 70 of `data`.
+    /// `// C#: ExtLibs/Mavlink/Mavlink.cs:24284-24353`
+    fn serial_layout(
+        baudrate: u32,
+        timeout: u16,
+        device: u8,
+        flags: u8,
+        count: u8,
+        data: &[u8],
+    ) -> Vec<u8> {
+        let mut bytes = baudrate.to_le_bytes().to_vec();
+        bytes.extend_from_slice(&timeout.to_le_bytes());
+        bytes.extend_from_slice(&[device, flags, count]);
+        let mut padded = [0u8; SERIAL_CONTROL_DATA_LEN];
+        padded[..data.len()].copy_from_slice(data);
+        bytes.extend_from_slice(&padded);
+        bytes
+    }
+
+    /// Each message's payload, all 79 bytes.
+    fn serial_payloads(messages: &[MavMessage]) -> Vec<Vec<u8>> {
+        messages
+            .iter()
+            .map(|message| {
+                assert_eq!((message.id(), message.name()), (126, "SERIAL_CONTROL"));
+                let mut out = [0u8; 255];
+                let len = message.encode(&mut out);
+                out[..len].to_vec()
+            })
+            .collect()
+    }
+
+    /// `SendSerialControl`'s messages byte for byte as the C# builds them: `Open`'s and
+    /// `GetData`'s request (`EXCLUSIVE | RESPOND | MULTI`, 22, with the timeout and the baud rate),
+    /// `Close`'s (flags 0), and `Write`'s data - `EXCLUSIVE`, 4, with `RESPOND`, 6, on the last
+    /// message only, `count` its bytes and the rest of `data` zeros.
+    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:2965-3016; MAVLinkSerialPort.cs:148, 179, 190, 201`
+    #[test]
+    fn serial_control_is_built_as_the_csharp_builds_it() {
+        let gps = SERIAL_CONTROL_DEV_GPS1;
+        assert_eq!(gps, 2);
+        assert_eq!(
+            serial_payloads(&serial_control(gps, 10, &[], 0, false)),
+            [serial_layout(0, 10, 2, 22, 0, &[])]
+        );
+        assert_eq!(
+            serial_payloads(&serial_control(gps, 10, &[], 115_200, false)),
+            [serial_layout(115_200, 10, 2, 22, 0, &[])]
+        );
+        assert_eq!(
+            serial_payloads(&serial_control(gps, 0, &[], 0, true)),
+            [serial_layout(0, 0, 2, 0, 0, &[])]
+        );
+        assert_eq!(
+            serial_payloads(&serial_control(gps, 0, b"$PUBX", 0, false)),
+            [serial_layout(0, 0, 2, 6, 5, b"$PUBX")]
+        );
+        // The wire's bytes are these, the trailing zeros trimmed as MAVLink 2 trims them.
+        let frame = crate::testing::frame(0, &serial_control(gps, 0, b"$PUBX", 0, false)[0]);
+        assert_eq!(frame[1], 14, "four, two, three and five bytes");
+        assert_eq!(
+            &frame[10..24],
+            &serial_layout(0, 0, 2, 6, 5, b"$PUBX")[..14]
+        );
+    }
+
+    /// A write longer than 70 bytes goes 70 a message, the last `RESPOND` and short, padded with
+    /// the end of the message before it, where the C#'s one `data` array still holds it; a write
+    /// of a multiple of 70 counts a message too many and marks none `RESPOND`.
+    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:2986-3008`
+    #[test]
+    fn a_long_write_is_cut_70_bytes_a_message_as_the_csharp_cuts_it() {
+        let gps = SERIAL_CONTROL_DEV_GPS1;
+        let data: Vec<u8> = (0..141).collect();
+
+        let mut stale: Vec<u8> = data[70..75].to_vec();
+        stale.extend_from_slice(&data[5..70]);
+        assert_eq!(
+            serial_payloads(&serial_control(gps, 0, &data[..75], 0, false)),
+            [
+                serial_layout(0, 0, 2, 4, 70, &data[..70]),
+                serial_layout(0, 0, 2, 6, 5, &stale),
+            ]
+        );
+
+        assert_eq!(
+            serial_payloads(&serial_control(gps, 0, &data[..70], 0, false)),
+            [serial_layout(0, 0, 2, 4, 70, &data[..70])]
+        );
+        assert_eq!(
+            serial_payloads(&serial_control(gps, 0, &data[..140], 0, false)),
+            [
+                serial_layout(0, 0, 2, 4, 70, &data[..70]),
+                serial_layout(0, 0, 2, 4, 70, &data[70..140]),
+            ]
+        );
+
+        let mut stale: Vec<u8> = vec![data[140]];
+        stale.extend_from_slice(&data[71..140]);
+        let three = serial_control(gps, 0, &data, 0, false);
+        assert_eq!(
+            serial_payloads(&three),
+            [
+                serial_layout(0, 0, 2, 4, 70, &data[..70]),
+                serial_layout(0, 0, 2, 4, 70, &data[70..140]),
+                serial_layout(0, 0, 2, 6, 1, &stale),
+            ]
+        );
     }
 }

@@ -68,6 +68,7 @@ mod logbrowse;
 mod logdownload;
 mod logs_tab;
 mod mapview;
+mod mav_serial;
 // EXPERIMENTAL's Message Interval form.
 mod message_interval;
 // EXPERIMENTAL's adjust aircraft baro height: its window.
