@@ -63,6 +63,7 @@ mod i18n;
 mod inject_map;
 mod joystick;
 mod layout_guard;
+mod link_stats;
 
 mod logbrowse;
 mod logdownload;
@@ -713,6 +714,8 @@ struct MissionPlanner {
     /// The Geo Reference Images form (`GeoRef/georefimage.cs`) the DataFlash Logs page opens.
     georef: georef_ui::GeorefUi,
     // ---- end Geo Reference ----
+    /// The connection control's Link Stats window (`Controls/ConnectionStats.cs`).
+    link_stats: link_stats::LinkStatsUi,
     /// The forms `ProcessCmdKey`'s Ctrl+X, Ctrl+W and Ctrl+J open, and Ctrl+Z's camera test.
     key_forms: cmd_keys::KeyForms,
     // ---- SITL ----
@@ -1090,6 +1093,7 @@ impl MissionPlanner {
             // ---- Geo Reference ----
             georef: georef_ui::GeorefUi::new(cx),
             // ---- end Geo Reference ----
+            link_stats: link_stats::LinkStatsUi::default(),
             key_forms: cmd_keys::KeyForms::new(cx),
             // ---- SITL ----
             sitl: sitl::Sitl::new(),
@@ -1397,7 +1401,7 @@ impl MissionPlanner {
         let connected = view.connected && !view.target.starts_with("file:");
         let port = self.connect_box.port.clone();
         let baud_on = connect::baud_enabled(&port) && !connected;
-        let mut strip = div().flex().items_center().gap_2().pb_2();
+        let mut strip = div().flex().items_center().gap_2();
         // `cmb_Connection`: the choice, and its list below it when clicked.
         strip = strip.child(
             probe::measured("main-port", div())
@@ -1532,6 +1536,15 @@ impl MissionPlanner {
                         .collect();
                     dropdown("main-baud-list", rows)
                 })),
+        );
+        // The connection control's second row under the boxes: "Stats...", while connected.
+        // `// C#: Controls/ConnectionControl.resx (linkLabel1, $this.Size)`
+        let mut strip = div().flex().items_center().gap_2().pb_2().child(
+            div()
+                .flex()
+                .flex_col()
+                .child(strip)
+                .child(link_stats::stats_link(connected, cx)),
         );
         // `MenuConnect`: CONNECT, or DISCONNECT while the link is open.
         // `// C#: MainV2.cs:2466-2489`
@@ -4622,7 +4635,9 @@ impl Render for MissionPlanner {
                             // The first start's offer of Mission Planner's settings and logs.
                             .children(mp_import::overlay(self, window, cx))
                             // Tailscale's first-start offer, once that one is answered.
-                            .children(self.tailnet_offer_box(window, cx)),
+                            .children(self.tailnet_offer_box(window, cx))
+                            // The connection control's Link Stats, over whatever screen shows.
+                            .children(link_stats::window(self, cx)),
                     )
                     .child(
                         div()

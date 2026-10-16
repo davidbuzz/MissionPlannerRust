@@ -108,6 +108,7 @@ pub mod messages;
 pub mod mirror;
 pub mod mission_points;
 pub mod mission_transfer;
+pub mod packet_stats;
 pub mod param_cache;
 pub mod param_download;
 pub mod param_fetch;
@@ -313,6 +314,19 @@ pub struct LinkStats {
     pub bytes_written: u64,
     /// Frames sent.
     pub frames_sent: u64,
+    /// `WhenPacketReceived`'s count: packets that passed their checksum, their signature and the
+    /// target check, the Link Stats window's packets (see [`packet_stats`]).
+    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:5169`
+    pub packets_received: u64,
+    /// `WhenPacketLost`'s sum: the sequence numbers those packets skipped, vehicle by vehicle.
+    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:5133-5154`
+    pub packets_lost: u64,
+    /// The longest interval between two of those packets since [`LinkStats::interval_since`].
+    /// `// C#: Controls/ConnectionStats.cs:123-132`
+    pub max_packet_interval: Duration,
+    /// When the longest interval started being counted: the link's start, or the last
+    /// [`LinkSender::restart_stats`].
+    pub interval_since: Option<Instant>,
     /// Snapshot publishes performed.
     pub publishes: u64,
     /// Decoder counters.
@@ -382,7 +396,12 @@ struct Shared {
     mission_points: Mutex<mission_points::MissionPoints>,
     /// What the screens write into a vehicle's state, for the link thread to apply.
     state_writes: Mutex<Vec<(VehicleId, StateWrite)>>,
-    stats: Mutex<LinkStats>,
+    /// The link thread's counters, published each pass: shared with every [`LinkSender`], which
+    /// the Link Stats window reads them through.
+    stats: Arc<Mutex<LinkStats>>,
+    /// When the Link Stats window asked for the longest interval between packets to be counted
+    /// again from, for the link thread's next pass ([`LinkSender::restart_stats`]).
+    stats_restart: Arc<Mutex<Option<Instant>>>,
     running: AtomicBool,
     /// Whether the link thread is between transports: the one it had closed under it, the next
     /// not yet open (`reopen_transport`).
@@ -440,6 +459,10 @@ pub struct LinkSender {
     bases: Arc<Mutex<Vec<(VehicleId, LatLngAlt)>>>,
     /// The link's signing.
     signing: Arc<Mutex<signing::Signing>>,
+    /// The link's counters, as its thread last published them.
+    stats: Arc<Mutex<LinkStats>>,
+    /// The link's restart of the longest interval between packets, asked.
+    stats_restart: Arc<Mutex<Option<Instant>>>,
 }
 
 impl LinkSender {
@@ -506,6 +529,56 @@ impl LinkSender {
         self.signing
             .os_lock()
             .map_or(0, |signing| signing.signed_packets())
+    }
+
+    /// The link's counters as its thread last published them: what the Link Stats window counts
+    /// from - bytes, packets, losses and the longest interval (see [`packet_stats`]).
+    #[must_use]
+    pub fn stats(&self) -> LinkStats {
+        self.stats.os_lock().map(|held| *held).unwrap_or_default()
+    }
+
+    /// `ConnectionStats_Load`'s `TimeInterval()` subscribed at `at`, as the window's `Load` and its
+    /// Reset subscribe it: the longest interval between received packets counted again from `at`,
+    /// which the link thread takes on its next pass and then publishes with
+    /// [`LinkStats::interval_since`] `at`.
+    /// `// C#: Controls/ConnectionStats.cs:35-37, 123-132, 186-190`
+    pub fn restart_stats(&self, at: Instant) {
+        if let Ok(mut held) = self.stats_restart.os_lock() {
+            *held = Some(at);
+        }
+    }
+
+    /// `MAVlist[sysid, compid].mavlinkv2`: whether frames to the vehicle are MAVLink 2; `None` for
+    /// one never heard. `// C#: ExtLibs/ArduPilot/Mavlink/MAVState.cs:172`
+    #[must_use]
+    pub fn mavlink2(&self, id: VehicleId) -> Option<bool> {
+        self.signing.os_lock().ok()?.mavlinkv2(id)
+    }
+
+    /// The Link Stats window's "Mavlink 2", `MAV.mavlinkv2 = chk_mavlink2.Checked`: frames to the
+    /// vehicle MAVLink 1 while off, until a MAVLink 2 packet from it turns it on again.
+    /// `// C#: Controls/ConnectionStats.cs:176-179; ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:1303, 5025-5027`
+    pub fn set_mavlink2(&self, id: VehicleId, on: bool) {
+        if let Ok(mut held) = self.signing.os_lock() {
+            held.set_mavlinkv2(id, on);
+        }
+    }
+
+    /// The Link Stats window's "Signing", `MAV.signing = chk_signing.Checked`: frames to the
+    /// vehicle signed while on - with its key, or zeros while it has none - and not while off.
+    /// `// C#: Controls/ConnectionStats.cs:181-184; ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:1353, 1381-1436`
+    pub fn set_signing(&self, id: VehicleId, on: bool) {
+        if let Ok(mut held) = self.signing.os_lock() {
+            held.set_signing(id, on);
+        }
+    }
+
+    /// Whether `other` sends on the same link as this one: false for a handle to a link opened
+    /// since.
+    #[must_use]
+    pub fn same_link(&self, other: &Self) -> bool {
+        Arc::ptr_eq(&self.signing, &other.signing)
     }
 }
 
@@ -1353,6 +1426,8 @@ impl Link {
             inject_seq: Arc::clone(&self.shared.inject_seq),
             bases: Arc::clone(&self.shared.bases),
             signing: Arc::clone(&self.shared.signing),
+            stats: Arc::clone(&self.shared.stats),
+            stats_restart: Arc::clone(&self.shared.stats_restart),
         }
     }
 
@@ -1486,9 +1561,10 @@ fn drain_outbound(
 
 /// Writes one frame, records it, and tells the packet subscribers it went: `generatePacket`'s
 /// write, `SaveToTlog`, then `OnPacketSent`, which the C# raises once the write has not thrown.
-/// A frame for a vehicle being signed to is signed first, so what is written, recorded and told
-/// is the signed frame, as the C#'s is (see [`signing`]).
-/// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:1381-1458`
+/// A frame for a vehicle spoken to in MAVLink 1 is framed so first, and one for a vehicle being
+/// signed to is signed, so what is written, recorded and told is the frame as it goes, as the
+/// C#'s is (see [`signing`]): `generatePacket`'s two branches, the first never signed.
+/// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:1302-1458`
 fn send_frame(
     shared: &Shared,
     transport: &mut dyn Transport,
@@ -1498,12 +1574,20 @@ fn send_frame(
 ) -> bool {
     let widened = with_wide_target(shared, bytes);
     let bytes = widened.as_deref().unwrap_or(bytes);
-    let signed = shared
-        .signing
-        .os_lock()
-        .ok()
-        .and_then(|mut held| held.sign(bytes, signing::timestamp_now));
-    let bytes = signed.as_deref().unwrap_or(bytes);
+    // MAVLink 1 into a buffer of its own, so framing it allocates nothing.
+    let mut mavlink1 = [0u8; mp_mavlink::MAX_FRAME_LEN];
+    let (mavlink1_len, signed) = match shared.signing.os_lock() {
+        Ok(mut held) => match held.mavlink1(bytes, &mut mavlink1) {
+            Some(len) => (Some(len), None),
+            None => (None, held.sign(bytes, signing::timestamp_now)),
+        },
+        Err(_) => (None, None),
+    };
+    let bytes = match (mavlink1_len.and_then(|len| mavlink1.get(..len)), &signed) {
+        (Some(framed), _) => framed,
+        (None, Some(signed)) => signed.as_slice(),
+        (None, None) => bytes,
+    };
     if transport.write_all(bytes).is_err() {
         return false;
     }
@@ -1594,6 +1678,8 @@ fn run_link(
     let mut last_flush = Instant::now();
     let mut buf = [0u8; 4096];
     let mut stats = LinkStats::default();
+    // The Link Stats window's packets, losses and longest interval (see `packet_stats`).
+    let mut counter = packet_stats::Counter::new(Instant::now(), &mut stats);
     let mut tx_seq: u8 = 0;
 
     let mut pending_actions: Vec<(VehicleId, u8, Action)> = Vec::new();
@@ -1619,6 +1705,16 @@ fn run_link(
     let gcs = VehicleId::new(config.sysid, config.compid);
 
     while shared.running.load(Ordering::Acquire) {
+        // The Link Stats window opened or reset since the last pass: the longest interval between
+        // packets counted again from then. C#: Controls/ConnectionStats.cs:35-37, 123-132, 186-190
+        if let Some(at) = shared
+            .stats_restart
+            .os_lock()
+            .ok()
+            .and_then(|mut held| held.take())
+        {
+            counter.restart(at, &mut stats);
+        }
         // Inbound.
         let read_started = Instant::now();
         match transport.read(&mut buf) {
@@ -1655,12 +1751,27 @@ fn run_link(
                 // `logreadmode`: a log's packets are not checked for their signatures. A new
                 // second starts `Mavlink2Signed` again. C#: MAVLinkInterface.cs:4912-4937, 5037
                 let logreadmode = matches!(transport.read_time(), ReadTime::Recorded(_));
+                // Whether any vehicle is spoken to in MAVLink 1, which only then makes a packet's
+                // framing worth looking at (below).
+                let mut mavlink1_somewhere = false;
                 if let Ok(mut held) = shared.signing.os_lock() {
                     held.new_second(signing::utc_second());
+                    mavlink1_somewhere = held.any_mavlink1();
                 }
                 if let Some(chunk) = buf.get(..n) {
                     decoder.push_and_drain(chunk, &DIALECT, |frame| {
                         shared.frames_received.fetch_add(1, Ordering::Relaxed);
+                        // A vehicle's first packet sets the number expected next and how it is
+                        // spoken to; a MAVLink 2 packet from one spoken to in MAVLink 1 turns it to
+                        // MAVLink 2. C#: MAVLinkInterface.cs:5016-5027
+                        let from = VehicleId::new(frame.sysid, frame.compid);
+                        let v2 = matches!(frame.version, mp_mavlink::MavVersion::V2);
+                        if (counter.first_heard(from, frame.seq) || (v2 && mavlink1_somewhere))
+                            && let Ok(mut held) = shared.signing.os_lock()
+                        {
+                            held.heard(from, v2);
+                            mavlink1_somewhere = held.any_mavlink1();
+                        }
                         // A signed packet that passes neither its vehicle's key nor any in the
                         // store is dropped here, before it is recorded or seen by anything.
                         // C#: MAVLinkInterface.cs:5035-5065
@@ -1687,6 +1798,12 @@ fn run_link(
                                 if !is_targeted_to(system, component, gcs) {
                                     return;
                                 }
+                            }
+                            // `WhenPacketReceived` and `WhenPacketLost`: the packet counted, and
+                            // the numbers it skipped - in a log, not the ground station's own.
+                            // C#: MAVLinkInterface.cs:5104-5108, 5124-5169
+                            if !(logreadmode && (frame.sysid == gcs.sysid || frame.sysid == 253)) {
+                                counter.received(from, frame.seq, arrived, &mut stats);
                             }
                             // `OnPacketReceived`, for whoever listens: the MAVLink Inspector.
                             // C#: MAVLinkInterface.cs:5347-5349

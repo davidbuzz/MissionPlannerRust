@@ -83,7 +83,8 @@ wrote).
   (`MAVState.cs`).
   (mended 2026-10-16: mp-link's param_cache, written two seconds after a change; the read behind a
   flag nothing sets, as there.)
-- The connection control's vehicle (sysid) selector and Link Stats label.
+- The connection control's vehicle (sysid) selector and Link Stats label (Link Stats mended
+  2026-10-16: the Stats... link and its window; the selector is the picker above the flight map).
 - LOGS: MavlinkLog's "Tlog > Kml or Graph" form (Create KML is `headless-planner kml` alone).
 - Every graph's zoom, pan and context menu (ZedGraph's, reproduced in the log browser alone).
 - The OpenDroneID backend never sends: it waits for `OPEN_DRONE_ID_ARM_STATUS`, and the plugin

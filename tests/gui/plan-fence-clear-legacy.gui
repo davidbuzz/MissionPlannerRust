@@ -20,8 +20,8 @@ setup python3 tests/gui/legacy-vehicle.py --work $WORK --port 5790
 
 screen params
 window 1600x1200
-budget 10
-# A first budget, set by hand until a passing run records one.
+budget 12
+# 12: 10.1 s measured headless on lavapipe (2026-10-16), the rule's ceiling plus one.
 # RawParamWarning, on the Full Parameter List's Activate (ConfigRawParams.cs:92): "Show me
 # again?" unticked, so no later visit asks, and OK.
 # The vehicle first: a click before its first heartbeat is a click the screen may forget

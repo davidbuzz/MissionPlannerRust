@@ -40,6 +40,14 @@
 //!   queued for the link thread, which sends and switches in that order ([`Signing::queue`]).
 //! * `Mavlink2Signed`, the signed packets read since the start of the current second
 //!   (`:420-424, 4912-4937, 5039`), which the signing window shows.
+//! * `MAVState.mavlinkv2` (`MAVState.cs:172`), whether a vehicle is sent MAVLink 2, kept here
+//!   because `generatePacket` decides a frame's framing and its signing together (`:1302-1437`):
+//!   a vehicle is spoken to as its first packet speaks, and a MAVLink 2 packet from one spoken to
+//!   in MAVLink 1 turns it to MAVLink 2 - "once set it cannot be reverted" (`:5016-5027`) - though
+//!   `disableSigning` and the Link Stats window's "Mavlink 2" turn it off
+//!   (`Controls/ConnectionStats.cs:176-179`), and `enableSigning` on. A frame for a vehicle spoken
+//!   to in MAVLink 1 goes as MAVLink 1 - its base payload, never signed - when its message id fits
+//!   a byte and neither id is wide ([`Signing::mavlink1`]); else as MAVLink 2, signed or not.
 //!
 //! The key store, `MAVAuthKeys.Keys`, is static in the C# - one for the application, read by every
 //! link - and so is [`auth_keys`] here; the application loads `authkeys.xml` and hands its keys
@@ -53,9 +61,12 @@
 //!   signing. The C#'s heartbeat loop sends one heartbeat per kind of vehicle, signed for those
 //!   that sign (`MainV2.cs:2951-2978`); one link here sends one, signed when any vehicle signs,
 //!   which a vehicle that does not sign accepts all the same;
-//! * `enableSigning` and `disableSigning` also set the vehicle's `mavlinkv2`, which decides
-//!   whether the C# frames as MAVLink 1; this link frames everything as MAVLink 2, so it is not
-//!   kept;
+//! * a frame's framing goes by the same vehicle, its target's - the component named if it has
+//!   been heard, else the system's first heard - and a frame that names none (the heartbeat) goes
+//!   as MAVLink 1 only when every vehicle heard is spoken to in MAVLink 1: the C#'s heartbeat loop
+//!   sends a MAVLink 1 heartbeat and a MAVLink 2 one when its vehicles differ, one link here sends
+//!   one, and a vehicle spoken to in MAVLink 1 reads MAVLink 2 all the same. A vehicle never heard
+//!   is sent MAVLink 2, where the C#'s `MAVlist` would make it a state whose `mavlinkv2` is false;
 //! * `signingignore` is not ported: nothing in the C# tree sets it.
 
 use mp_os::ReadWrite as _;
@@ -65,7 +76,8 @@ use std::sync::RwLock;
 use web_time::{Duration, SystemTime, UNIX_EPOCH};
 
 use mp_mavlink::{
-    Dialect as _, FieldValue, Frame, INCOMPAT_FLAG_SIGNED, STX_V2, SigningKey, v2_layout,
+    Dialect as _, FieldValue, Frame, INCOMPAT_FLAG_SIGNED, MAX_PAYLOAD_LEN, STX_V2, SigningKey,
+    encode_v1, v2_layout,
 };
 use mp_mavlink_dialects::all::{DIALECT, MavMessage, SetupSigning};
 use mp_vehicle::VehicleId;
@@ -258,10 +270,13 @@ impl Setup {
 }
 
 /// A link's signing: each vehicle's state, the `setupSigning`s waiting for the link thread, and
-/// `Mavlink2Signed`.
+/// `Mavlink2Signed`; and each vehicle's `mavlinkv2`.
 #[derive(Debug, Default)]
 pub struct Signing {
     vehicles: BTreeMap<VehicleId, MavSigning>,
+    /// `MAVState.mavlinkv2`, for every vehicle heard or switched: whether frames to it are
+    /// MAVLink 2. `// C#: ExtLibs/ArduPilot/Mavlink/MAVState.cs:172`
+    mavlinkv2: BTreeMap<VehicleId, bool>,
     setups: Vec<Setup>,
     /// `_mavlink2signed`.
     signed: u32,
@@ -307,16 +322,101 @@ impl Signing {
         }
     }
 
-    /// `enableSigning`. `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:1583-1589`
+    /// `enableSigning`: signing on, and MAVLink 2 with it.
+    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:1583-1589`
     pub fn enable(&mut self, id: VehicleId) -> bool {
         self.state(id).signing = true;
+        self.mavlinkv2.insert(id, true);
         true
     }
 
-    /// `disableSigning`. `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:1591-1597`
+    /// `disableSigning`: signing off, and MAVLink 2 with it, until the vehicle's next MAVLink 2
+    /// packet ([`Signing::heard`]). `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:1591-1597`
     pub fn disable(&mut self, id: VehicleId) -> bool {
         self.state(id).signing = false;
+        self.mavlinkv2.insert(id, false);
         false
+    }
+
+    /// The Link Stats window's "Signing" ticked or not, `MAV.signing = chk_signing.Checked`: the
+    /// flag alone, the key and the framing as they were. `// C#: Controls/ConnectionStats.cs:181-184`
+    pub fn set_signing(&mut self, id: VehicleId, on: bool) {
+        self.state(id).signing = on;
+    }
+
+    /// `MAVlist[sysid, compid].mavlinkv2`: whether frames to it are MAVLink 2; `None` for a vehicle
+    /// never heard or switched. `// C#: ExtLibs/ArduPilot/Mavlink/MAVState.cs:172`
+    #[must_use]
+    pub fn mavlinkv2(&self, id: VehicleId) -> Option<bool> {
+        self.mavlinkv2.get(&id).copied()
+    }
+
+    /// The Link Stats window's "Mavlink 2" ticked or not, `MAV.mavlinkv2 = chk_mavlink2.Checked`.
+    /// `// C#: Controls/ConnectionStats.cs:176-179`
+    pub fn set_mavlinkv2(&mut self, id: VehicleId, on: bool) {
+        self.mavlinkv2.insert(id, on);
+    }
+
+    /// A packet from `id` that has passed its checksum, MAVLink 2 or not: a vehicle first heard is
+    /// spoken to as it speaks, and one spoken to in MAVLink 1 that speaks MAVLink 2 is spoken to in
+    /// it from then on. Allocates only for a vehicle first heard.
+    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:5016-5027`
+    pub fn heard(&mut self, id: VehicleId, v2: bool) {
+        let held = self.mavlinkv2.entry(id).or_insert(false);
+        if !*held {
+            *held = v2;
+        }
+    }
+
+    /// Whether any vehicle is spoken to in MAVLink 1: the link thread looks at every packet's
+    /// framing only while one is.
+    #[must_use]
+    pub fn any_mavlink1(&self) -> bool {
+        self.mavlinkv2.values().any(|v2| !v2)
+    }
+
+    /// `frame`, written by this link, as MAVLink 1 into `out` - its length - when the vehicle it
+    /// is for is spoken to in MAVLink 1 (see the module documentation for which that is), or
+    /// `None` to send it as it is: `generatePacket`'s first branch, `!mavlinkv2 && messageType <
+    /// 256 && sysid <= 255 && gcssysid <= 255` - here a v2 frame with no flags, neither id wide
+    /// nor signed, whose message id fits a byte. Its payload is the message's base fields,
+    /// `Array.Resize(ref data, info.minlength)`, and it is never signed. Allocates nothing.
+    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:1302-1344`
+    pub fn mavlink1(&self, frame: &[u8], out: &mut [u8]) -> Option<usize> {
+        if !self.any_mavlink1() || frame.first() != Some(&STX_V2) || *frame.get(2)? != 0 {
+            return None;
+        }
+        let (header_len, msgid) = v2_layout(frame)?;
+        if msgid > u32::from(u8::MAX) {
+            return None;
+        }
+        let len = usize::from(*frame.get(1)?);
+        let payload = frame.get(header_len..header_len + len)?;
+        let v2 = match payload_targets(msgid, payload)? {
+            (Some(system), component) if system != 0 => {
+                self.framing_for(u32::from(system), component)?
+            }
+            // For no vehicle in particular: MAVLink 1 only when every vehicle is spoken to in it.
+            _ => self.mavlinkv2.values().any(|v2| *v2),
+        };
+        if v2 {
+            return None;
+        }
+        to_mavlink1(frame, msgid, payload, out)
+    }
+
+    /// `mavlinkv2` of the vehicle a frame for `system` and `component` goes to: the component if it
+    /// has been heard, else the system's first; `None` for a system never heard.
+    fn framing_for(&self, system: u32, component: Option<u8>) -> Option<bool> {
+        if let Some(component) = component
+            && let Some(v2) = self.mavlinkv2.get(&VehicleId::new(system, component))
+        {
+            return Some(*v2);
+        }
+        self.mavlinkv2
+            .iter()
+            .find(|(id, _)| id.sysid == system)
+            .map(|(_, v2)| *v2)
     }
 
     /// `MAVlist[sysid, compid]`, made when first asked for as the C#'s list makes a hidden one.
@@ -356,6 +456,10 @@ impl Signing {
         state.link_id = link_id;
         state.key = Some(key);
         state.signing = true;
+        // `enableSigning`, which turns MAVLink 2 on as well.
+        // `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:1583-1589, 5502`
+        self.mavlinkv2
+            .insert(VehicleId::new(frame.sysid, frame.compid), true);
         true
     }
 
@@ -448,6 +552,56 @@ fn target_of(frame: &[u8]) -> Option<(u32, Option<u8>)> {
             .map(u32::from)
     })?;
     (system != 0).then(|| (system, value("target_component")))
+}
+
+/// A payload's `target_system` - `target` where a message names it so - and `target_component`,
+/// one-byte fields read where the message's fields' wire order puts them, a truncated payload's
+/// missing bytes zeros: what [`target_of`] reads from the fields' list, without making one, so a
+/// frame's framing is decided without allocating. `None` for a message this dialect does not know.
+fn payload_targets(msgid: u32, payload: &[u8]) -> Option<(Option<u8>, Option<u8>)> {
+    let fields = MavMessage::decode(msgid, payload)?.field_info();
+    let byte_at = |at: usize| Some(payload.get(at).copied().unwrap_or(0));
+    let (mut system, mut target, mut component) = (None, None, None);
+    let mut at = 0;
+    for field in fields {
+        if field.array_len == 0 && field.base_type == "uint8_t" {
+            match field.name {
+                "target_system" => system = byte_at(at),
+                "target" => target = byte_at(at),
+                "target_component" => component = byte_at(at),
+                _ => {}
+            }
+        }
+        at += wire_size(field.base_type) * field.array_len.max(1);
+    }
+    Some((system.or(target), component))
+}
+
+/// The bytes one element of a field of XML type `base_type` takes on the wire.
+fn wire_size(base_type: &str) -> usize {
+    match base_type {
+        "uint64_t" | "int64_t" | "double" => 8,
+        "uint32_t" | "int32_t" | "float" => 4,
+        "uint16_t" | "int16_t" => 2,
+        // uint8_t, int8_t, char, uint8_t_mavlink_version.
+        _ => 1,
+    }
+}
+
+/// A v2 frame with no flags - `payload` its payload, `msgid` its message's id - framed again as
+/// MAVLink 1 into `out`, as `generatePacket`'s first branch frames a message: its sequence number
+/// and ids, the payload cut or padded to the message's base length, and the checksum over those.
+/// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:1306-1343`
+fn to_mavlink1(frame: &[u8], msgid: u32, payload: &[u8], out: &mut [u8]) -> Option<usize> {
+    let info = DIALECT.info(msgid)?;
+    let base = usize::from(info.min_len);
+    let mut body = [0u8; MAX_PAYLOAD_LEN];
+    for (slot, byte) in body.iter_mut().zip(payload.iter().take(base)) {
+        *slot = *byte;
+    }
+    // The v2 header without wide fields: STX, length, two flag bytes, sequence, system, component.
+    let (seq, sysid, compid) = (*frame.get(4)?, *frame.get(5)?, *frame.get(6)?);
+    encode_v1(out, seq, sysid, compid, msgid, body.get(..base)?, info.crc_extra).ok()
 }
 
 /// A MAVLink 2 frame from this link signed: the signed flag set in its header, its checksum
@@ -767,6 +921,148 @@ mod tests {
         assert!(!signing.finish(&clear));
         let state = signing.vehicle(id).unwrap();
         assert_eq!((state.signing, state.key), (false, None));
+    }
+
+    /// For every message of the dialect, the target bytes read where the wire order puts them are
+    /// the ones its fields' list names, from a payload whose every byte differs - and from one cut
+    /// short, its missing bytes zeros.
+    #[test]
+    fn the_targets_are_read_where_the_fields_put_them() {
+        let named = |message: &MavMessage, name: &str| {
+            message
+                .fields()
+                .into_iter()
+                .find(|(field, _)| *field == name)
+                .and_then(|(_, value)| match value {
+                    FieldValue::Unsigned(value) => u8::try_from(value).ok(),
+                    _ => None,
+                })
+        };
+        let mut with_targets = 0;
+        for info in DIALECT.messages() {
+            let full: Vec<u8> = (0..info.len).map(|at| at.wrapping_add(1)).collect();
+            for payload in [&full[..], &full[..usize::from(info.min_len) / 2]] {
+                let message = MavMessage::decode(info.id, payload).unwrap();
+                let system = named(&message, "target_system").or_else(|| named(&message, "target"));
+                let expected = (system, named(&message, "target_component"));
+                assert_eq!(
+                    payload_targets(info.id, payload),
+                    Some(expected),
+                    "{} ({})",
+                    info.name,
+                    payload.len()
+                );
+                if expected.0.is_some() {
+                    with_targets += 1;
+                }
+            }
+        }
+        assert!(with_targets > 100, "{with_targets}");
+        assert_eq!(payload_targets(u32::MAX, &[]), None);
+    }
+
+    /// `mavlinkv2` as the C# keeps it: a vehicle spoken to as its first packet speaks, MAVLink 2
+    /// from then on once it speaks it; switched by the window's tick, by `disableSigning` and
+    /// `enableSigning`, and by a signed packet that passes.
+    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:1583-1597, 5016-5027, 5502`
+    #[test]
+    fn mavlinkv2_follows_what_the_vehicle_speaks() {
+        let mut signing = Signing::default();
+        let v1 = VehicleId::new(1, 1);
+        let v2 = VehicleId::new(2, 1);
+        assert_eq!(signing.mavlinkv2(v1), None);
+        assert!(!signing.any_mavlink1());
+        signing.heard(v1, false);
+        signing.heard(v2, true);
+        assert_eq!((signing.mavlinkv2(v1), signing.mavlinkv2(v2)), (Some(false), Some(true)));
+        assert!(signing.any_mavlink1());
+        signing.heard(v2, false);
+        assert_eq!(signing.mavlinkv2(v2), Some(true), "once set it cannot be reverted");
+        signing.heard(v1, true);
+        assert_eq!(signing.mavlinkv2(v1), Some(true));
+        assert!(!signing.any_mavlink1());
+        signing.set_mavlinkv2(v1, false);
+        assert_eq!(signing.mavlinkv2(v1), Some(false));
+        signing.enable(v1);
+        assert_eq!(signing.mavlinkv2(v1), Some(true));
+        signing.disable(v1);
+        assert_eq!(signing.mavlinkv2(v1), Some(false));
+        // The window's "Signing": the flag alone.
+        signing.set_signing(v1, true);
+        assert!(signing.vehicle(v1).unwrap().signing);
+        assert_eq!(signing.mavlinkv2(v1), Some(false));
+        // A signed packet that passes: `enableSigning`.
+        let vehicle = hex("fd0901002a01010000000400000002035103036dd500ff7856341200a3e770ff14d6");
+        frames(&vehicle, |frame| assert!(signing.check(frame, &[KEY])));
+        assert_eq!(signing.mavlinkv2(v1), Some(true));
+    }
+
+    /// What goes as MAVLink 1: a frame to a vehicle spoken to in it - the same sequence number,
+    /// ids and message, the base payload, a checksum the parser accepts - and nothing else: a
+    /// vehicle spoken to in MAVLink 2, a system never heard, a message whose id needs three bytes,
+    /// a wide id; one for no vehicle only when every vehicle is spoken to in MAVLink 1.
+    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:1302-1344`
+    #[test]
+    fn a_frame_to_a_vehicle_spoken_to_in_mavlink_1_is_framed_so() {
+        use mp_mavlink::Message as _;
+        use mp_mavlink_dialects::all::CommandLong;
+        let mut signing = Signing::default();
+        let old = VehicleId::new(1, 1);
+        let new = VehicleId::new(2, 1);
+        let to = |target: VehicleId| {
+            MavMessage::CommandLong(CommandLong {
+                param1: 1.0,
+                param2: 2.0,
+                param3: 0.0,
+                param4: 0.0,
+                param5: 0.0,
+                param6: 0.0,
+                param7: 0.0,
+                command: 520,
+                target_system: target.payload_target(),
+                target_component: target.compid,
+                confirmation: 0,
+            })
+        };
+        let mut out = [0u8; mp_mavlink::MAX_FRAME_LEN];
+        let frame = unsigned(255, 190, 9, &to(old));
+        assert_eq!(signing.mavlink1(&frame, &mut out), None, "no vehicle heard");
+
+        signing.heard(old, false);
+        signing.heard(new, true);
+        let n = signing.mavlink1(&frame, &mut out).expect("MAVLink 1");
+        let mut parsed = 0;
+        frames(&out[..n], |v1| {
+            assert_eq!(v1.version, mp_mavlink::MavVersion::V1);
+            assert_eq!((v1.seq, v1.sysid, v1.compid, v1.msgid), (9, 255, 190, CommandLong::ID));
+            assert_eq!(v1.payload.len(), CommandLong::MIN_LEN);
+            assert_eq!(MavMessage::decode(v1.msgid, v1.payload), Some(to(old)));
+            assert!(!v1.is_signed());
+            parsed += 1;
+        });
+        assert_eq!(parsed, 1);
+
+        assert_eq!(signing.mavlink1(&unsigned(255, 190, 0, &to(new)), &mut out), None);
+        let stranger = VehicleId::new(9, 1);
+        assert_eq!(signing.mavlink1(&unsigned(255, 190, 0, &to(stranger)), &mut out), None);
+        // A component never heard: its system's first.
+        let gimbal = VehicleId::new(1, 154);
+        assert!(signing.mavlink1(&unsigned(255, 190, 0, &to(gimbal)), &mut out).is_some());
+        // The heartbeat names no vehicle: MAVLink 2 while one is spoken to in it.
+        let heartbeat = unsigned(255, 190, 0, &gcs_heartbeat());
+        assert_eq!(signing.mavlink1(&heartbeat, &mut out), None);
+        signing.set_mavlinkv2(new, false);
+        assert!(signing.mavlink1(&heartbeat, &mut out).is_some());
+        // A wide id: MAVLink 2 whatever.
+        let wide = unsigned(0x0001_0000, 190, 0, &to(old));
+        assert_eq!(signing.mavlink1(&wide, &mut out), None);
+        // An id past a byte, to the MAVLink 1 vehicle itself: SETUP_SIGNING, 256 (the dialect has
+        // no PROTOCOL_VERSION).
+        let mut payload = [0u8; 42];
+        payload[8] = u8::try_from(old.sysid).expect("a byte");
+        payload[9] = old.compid;
+        let big = MavMessage::decode(256, &payload).expect("SETUP_SIGNING");
+        assert_eq!(signing.mavlink1(&unsigned(255, 190, 0, &big), &mut out), None);
     }
 
     /// Polls until `check` holds, failing rather than hanging.

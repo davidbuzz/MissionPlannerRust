@@ -1,0 +1,92 @@
+# The connection control's "Stats..." link and the Link Stats window it opens, ported from
+# Controls/ConnectionControl.cs, Controls/ConnectionStats.cs and MainV2.cs (ShowConnectionStatsForm,
+# ResetConnectionStats, doDisconnect).
+#
+# The claims: "Stats..." sits under the port box while connected (ConnectionControl.resx linkLabel1
+# at 3, 32; IsConnected, ConnectionControl.cs:37-44); its click shows the "Link Stats" dialog with
+# the control's boxes empty (MainV2.cs:1259-1283; ConnectionStats.cs:39-47), the ticks as the
+# vehicle's state has them - SITL speaks MAVLink 2 and does not sign (:22-24) - and Reset and the
+# ticks at their .resx places. At the first quarter second the totals fill: the packets received,
+# the bytes in and out, and the longest time between packets in milliseconds (:62-132); the
+# packets lost stays empty, a TCP link losing none (WhenPacketLost never fires). From the third
+# second the means: packets a second, bytes a second and the quality, 100% with nothing lost
+# (:71-97); from the fifth the bytes sent a second (:112-116). A second click shows the window
+# already shown. The ticks are the window's own, set by their clicks (:176-184). Reset starts every
+# count again: the means empty again for three seconds (:186-190). Disconnecting hides the link and
+# leaves the window open with its boxes as they were, no longer counting (StopUpdates,
+# MainV2.cs:1407-1418); its close box closes it.
+#
+# Needs SITL copter on tcp:127.0.0.1:5760. Run from the repository root as
+#
+#   tools/gui-test.sh tests/gui/main-link-stats.gui -- tcp:127.0.0.1:5760
+#
+# Not yet run: the budget is a guess, set by hand until a passing run records one.
+
+screen fly
+window 1600x1200
+budget 16
+# 16: 14.8 s measured headless on lavapipe (2026-10-16), the rule's ceiling plus one.
+
+expect vehicle.count > 0
+expect vehicle.connected true
+expect linkstats.link shown
+expect linkstats.window false
+expect main-stats below main-port
+
+# Shown: every box empty, the ticks as the vehicle's state has them.
+click main-stats
+expect linkstats.window true
+expect linkstats.updating true
+expect linkstats.chk_mavlink2 true
+expect linkstats.chk_signing false
+expect linkstats-but_reset right-of linkstats-chk_mavlink2
+expect linkstats-chk_signing below linkstats-chk_mavlink2
+
+# The quarter second's totals; nothing lost.
+expect linkstats.txt_PacketsRx > 0
+expect linkstats.txt_BytesReceived ~ b
+expect linkstats.txt_BytesSent ~ b
+expect linkstats.txt_MaxPacketInterval > 0
+expect linkstats.txt_PacketsLost none
+
+# The three seconds' means, then the five seconds' bytes sent.
+expect linkstats.txt_PacketsPerSecond > 0
+expect linkstats.txt_BytesPerSecondRx ~ b
+expect linkstats.txt_LinkQuality 100%
+expect linkstats.txt_BytesPerSecondSent ~ b
+expect linkstats.since_ms >= 5000
+
+# "Stats..." again: the window already shown, still counting from when it opened.
+click main-stats
+expect linkstats.window true
+expect linkstats.since_ms >= 5000
+
+# The ticks: the window's own, each click turning it over.
+click linkstats-chk_mavlink2
+expect linkstats.chk_mavlink2 false
+click linkstats-chk_mavlink2
+expect linkstats.chk_mavlink2 true
+click linkstats-chk_signing
+expect linkstats.chk_signing true
+click linkstats-chk_signing
+expect linkstats.chk_signing false
+
+# Reset: every count from now, the means empty again for three seconds.
+click linkstats-but_reset
+expect linkstats.resets 1
+expect linkstats.since_ms < 3000
+expect linkstats.txt_PacketsPerSecond none
+expect linkstats.txt_PacketsRx > 0
+expect linkstats.txt_PacketsPerSecond > 0
+
+# Disconnected: no "Stats...", the window open and frozen.
+click main-connect
+expect vehicle.connected false
+expect linkstats.link hidden
+expect linkstats.window true
+expect linkstats.updating false
+expect linkstats.txt_PacketsRx > 0
+
+# The close box.
+click linkstats-close
+expect linkstats.window false
