@@ -241,6 +241,18 @@ impl ParamValue {
     ///
     /// Saturation matters: a user typing 300 into a `UINT8` parameter should get 255 and a visible
     /// disagreement, not 44.
+    ///
+    /// This is where the port differs from `MAVLinkParam.SetValue`, on purpose. The C# writes the
+    /// number through an unchecked cast to the type - `(byte)input`, `(sbyte)input`,
+    /// `(ushort)input` and on to `(Int32)input` - which drops the fraction toward zero and does not
+    /// stop a value the type cannot hold: 300 into a `UINT8` comes out 44, its low byte, and
+    /// that is what the vehicle is sent. Here the number is rounded to the nearest whole one and
+    /// capped at the type's range, so 300 is 255 and 2.7 is 3 where the C# gives 2. The cap is
+    /// kept over the C#'s wrap (the ledger audit, 2026-10-16): a wrapped value is a wrong setting
+    /// that looks deliberate. It is reached for an autopilot that reads the field by its type; a
+    /// set to ArduPilot, or to a vehicle declaring `PARAM_FLOAT`, goes as a `REAL32`, with no cast
+    /// to wrap (`ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:1665-1674`).
+    /// `// C#: ExtLibs/Mavlink/MAVLinkParam.cs:147-177`
     #[must_use]
     #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
     pub fn from_f64(value: f64, param_type: ParamType) -> Self {
@@ -289,16 +301,40 @@ impl ParamValue {
     }
 }
 
-/// Rounds to a number of significant digits, as `MAVLinkParam.RoundToSignificantDigits` does.
+/// Rounds to a number of significant digits, as `MAVLinkParam.RoundToSignificantDigits` does:
+/// the value divided by `Math.Pow(10, Math.Floor(Math.Log10(Math.Abs(d))) + 1)`, which brings it
+/// to between 0.1 and 1, then `Math.Round(x, digits)` - x times ten to the digits, rounded to a
+/// whole number with an exact half going to the even one, .NET's default - so 2.5 at one digit is
+/// 2, 3.5 is 4 and 0.125 at two is 0.12, where rounding a half away from zero gave 3 and 0.13.
+///
+/// The whole number kept is the C#'s, reached by the C#'s own steps, so a value a hair under a
+/// half that its division leaves under rounds down as it does there (2.675 at three digits is
+/// 2.67). Turning it back into the value is one step here, a division or multiplication by a
+/// power of ten (exact up to 10^22), where the C# divides by ten to the digits and multiplies by
+/// its scale: the same digits, but the C#'s two roundings can leave the last bit off (13.6612 as
+/// a float, widened, comes back 13.661200000000001 there and 13.6612 here), and a value read
+/// back must compare equal to the same value typed. Zero is zero, as there; NaN and the
+/// infinities are returned as they are, where the C# makes an infinity NaN (infinity over its
+/// infinite scale).
+/// `// C#: ExtLibs/Mavlink/MAVLinkParam.cs:138-145`
 #[must_use]
 pub fn round_to_significant_digits(value: f64, digits: i32) -> f64 {
     if value == 0.0 || !value.is_finite() {
         return value;
     }
-    let magnitude = value.abs().log10().floor() + 1.0;
-    let power = f64::from(digits) - magnitude;
-    let scale = 10f64.powf(power);
-    (value * scale).round() / scale
+    // A finite, non-zero double's log10 is within ±324.
+    #[allow(clippy::cast_possible_truncation)]
+    let magnitude = value.abs().log10().floor() as i32 + 1;
+    let ten_to = |power: i32| 10f64.powf(f64::from(power));
+    // `d / scale`, then `Math.Round(x, digits)`: times ten to the digits, half to even.
+    let kept = (value / ten_to(magnitude) * ten_to(digits)).round_ties_even();
+    // `scale * (kept / 10^digits)`, as one operation by a power of ten, exact up to 10^22.
+    let shift = digits - magnitude;
+    if shift >= 0 {
+        kept / ten_to(shift)
+    } else {
+        kept * ten_to(-shift)
+    }
 }
 
 /// Decodes a `param_id`, which is a fixed 16-byte field that is **not** null-terminated when the
@@ -667,6 +703,35 @@ mod tests {
         );
     }
 
+    /// The cap kept over `SetValue`'s wrap (the ledger audit, 2026-10-16): each type's bytes are
+    /// its nearest value, not the C#'s low bytes - 300 into a `UINT8` is 255, where the C# sends
+    /// 44 - and a fraction rounds, where the C#'s cast drops it. A change to either shows here.
+    /// `// C#: ExtLibs/Mavlink/MAVLinkParam.cs:147-177`
+    #[test]
+    fn a_value_past_its_type_is_capped_where_the_csharp_wraps_it() {
+        let raw = |value: f64, param_type: ParamType| ParamValue::from_f64(value, param_type).raw();
+        assert_eq!(
+            raw(300.0, ParamType::Uint8),
+            [255, 0, 0, 0],
+            "the C#'s (byte)300 is 44"
+        );
+        assert_ne!(raw(300.0, ParamType::Uint8), [44, 0, 0, 0]);
+        assert_eq!(raw(300.0, ParamType::Int8), [127, 0, 0, 0]);
+        assert_eq!(raw(-300.0, ParamType::Int8), [0x80, 0, 0, 0]);
+        assert_eq!(raw(70_000.0, ParamType::Uint16), [0xff, 0xff, 0, 0]);
+        assert_eq!(raw(40_000.0, ParamType::Int16), [0xff, 0x7f, 0, 0]);
+        assert_eq!(raw(5e9, ParamType::Uint32), u32::MAX.to_le_bytes());
+        assert_eq!(raw(-3e9, ParamType::Int32), i32::MIN.to_le_bytes());
+        // Rounded, where the C#'s cast truncates toward zero (2 and -2).
+        assert_eq!(raw(2.7, ParamType::Int8), [3, 0, 0, 0]);
+        assert_eq!(
+            raw(-2.7, ParamType::Int8),
+            [(-3_i8).to_le_bytes()[0], 0, 0, 0]
+        );
+        let typed = ParamValue::from_f64(300.0, ParamType::Uint8);
+        assert_eq!(typed.as_f64(), 255.0);
+    }
+
     #[test]
     fn parameter_names_that_fill_the_field_are_not_truncated() {
         // SERVO16_FUNCTION is exactly 16 characters, so there is no terminating NUL to find.
@@ -780,5 +845,57 @@ mod tests {
         assert!((round_to_significant_digits(0.0, 7) - 0.0).abs() < f64::EPSILON);
         assert!(round_to_significant_digits(f64::NAN, 7).is_nan());
         assert!(round_to_significant_digits(f64::INFINITY, 7).is_infinite());
+        // The same values, exactly: the double nearest the digits kept.
+        assert_eq!(round_to_significant_digits(0.800_000_011_920_929, 7), 0.8);
+        assert_eq!(round_to_significant_digits(1_234.567_89, 7), 1_234.568);
+        assert_eq!(round_to_significant_digits(123_456_789.0, 7), 123_456_800.0);
+    }
+
+    /// `Math.Round(x, digits)` rounds an exact half to the even neighbour, as .NET does by
+    /// default: down from 2.5, up from 3.5, and the same for a negative. Rounding away from zero
+    /// gives 3, 0.13 and -3 for three of these.
+    /// `// C#: ExtLibs/Mavlink/MAVLinkParam.cs:138-145`
+    #[test]
+    fn an_exact_half_rounds_to_even_as_math_round_does() {
+        assert_eq!(round_to_significant_digits(2.5, 1), 2.0);
+        assert_eq!(round_to_significant_digits(3.5, 1), 4.0);
+        assert_eq!(round_to_significant_digits(4.5, 1), 4.0);
+        assert_eq!(round_to_significant_digits(1.5, 1), 2.0);
+        assert_eq!(round_to_significant_digits(0.125, 2), 0.12);
+        assert_eq!(round_to_significant_digits(1.25, 2), 1.2);
+        assert_eq!(round_to_significant_digits(125.0, 2), 120.0);
+        assert_eq!(round_to_significant_digits(-2.5, 1), -2.0);
+        assert_eq!(round_to_significant_digits(-3.5, 1), -4.0);
+        assert_eq!(round_to_significant_digits(-0.125, 2), -0.12);
+        // A float parameter that is a half at seven digits: 29/256 exactly, 0.11328125.
+        assert_eq!(f64::from(0.113_281_25_f32), 0.113_281_25);
+        assert_eq!(round_to_significant_digits(0.113_281_25, 7), 0.113_281_2);
+        assert_eq!(round_to_significant_digits(-0.113_281_25, 7), -0.113_281_2);
+        let read = ParamValue::from_param_value_field(0.113_281_25, ParamType::Real32);
+        assert_eq!(
+            read.as_f64(),
+            0.113_281_2,
+            "as the parameter editor reads it"
+        );
+    }
+
+    /// The digits are the ones the C#'s steps keep, and the value the double nearest them: a
+    /// near-half its division leaves under is rounded down (2.675 is a hair under, and the C#
+    /// gives 2.67), and a float read back is the value as typed, not the C#'s
+    /// 13.661200000000001 or 6.6000000000000005.
+    #[test]
+    fn the_digits_are_the_csharps_and_the_value_the_nearest_double() {
+        assert_eq!(round_to_significant_digits(2.675, 3), 2.67);
+        assert_eq!(
+            round_to_significant_digits(f64::from(13.6612_f32), 7),
+            13.6612
+        );
+        assert_eq!(round_to_significant_digits(f64::from(6.6_f32), 7), 6.6);
+        assert_eq!(round_to_significant_digits(f64::from(0.65_f32), 7), 0.65);
+        assert_eq!(
+            round_to_significant_digits(f64::from(3300.0_f32), 7),
+            3300.0
+        );
+        assert_eq!(round_to_significant_digits(f64::from(1e-5_f32), 7), 1e-5);
     }
 }

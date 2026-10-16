@@ -38,7 +38,8 @@
 //!
 //! The version comes from the vehicle's banner - the `STATUSTEXT` that reads
 //! `ArduCopter V4.5.7 (1c0c8d9c)` - parsed by the C#'s regular expression, which is stranger
-//! than it looks: `4.6.0-rc1` becomes 4.6.0.1 and `4.8.0-dev` becomes 4.8.0.255. Ported as it is.
+//! than it looks: `4.6.0-rc1` becomes 4.6.0.1 and `4.0.0dev` 4.0.0.255, while `4.8.0-dev` stays
+//! 4.8.0 and `4.5a` has no version at all. Ported as it is.
 //! `AUTOPILOT_VERSION.flight_sw_version` carries the same numbers packed, and is decoded here
 //! too, for a vehicle that never sends its banner.
 
@@ -72,17 +73,16 @@ pub const VEHICLES: &[&str] = &[
 /// `// C#: ExtLibs/Utilities/ParameterMetaDataRepositoryAPMpdef.cs:125`
 pub const REFRESH_AFTER: Duration = Duration::from_secs(7 * 24 * 60 * 60);
 
-/// A firmware version as `System.Version` holds it: up to four numbers.
+/// A firmware version as `System.Version` holds it: two to four numbers, by position.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Version {
     /// Major.
     pub major: u32,
     /// Minor.
     pub minor: u32,
-    /// Patch, if the banner carried one.
+    /// The third number (`Version.Build`), if there were three.
     pub build: Option<u32>,
-    /// The fourth number the C# derives from a suffix: the `-rcN` number, 255 for a word like
-    /// `dev` or `beta`, or a letter's position for a single-letter suffix.
+    /// The fourth number (`Version.Revision`), if there were four.
     pub revision: Option<u32>,
 }
 
@@ -98,75 +98,135 @@ impl Version {
         }
     }
 
-    /// The version as the C# parses it from a banner such as `ArduCopter V4.5.7 (1c0c8d9c)`.
+    /// The version as the C# reads it from a banner such as `ArduCopter V4.5.7 (1c0c8d9c)`, or
+    /// `None` where the C# throws and so has none.
     ///
-    /// `VersionDetection.GetVersion`: `major.minor`, then `.patch`, then for a suffix
-    /// `-rcN` the number N as a fourth part, for two or more letters (`dev`, `beta`) 255, and
-    /// for a single letter its position in the alphabet - the C# subtracts 0x30 from the
-    /// character, so `a` gives 49; that arithmetic is kept. `None` where the C# throws.
-    /// `// C#: ExtLibs/Utilities/VersionDetection.cs:15-56`
+    /// `VersionDetection.GetVersion` matches
+    /// `([0-9]+)\.([0-9]+)(\.([0-9]+)|-rc([0-9]+)|([a-z]{2,20})|([a-z]))*` - the first
+    /// `major.minor` in the text, then as many of the four alternatives as follow, each tried in
+    /// that order - and reads each group's last capture, as .NET's `Group.Value` is. It builds
+    /// `major.minor`, then `.patch` (group 4), `.N` for `-rcN` (group 5), `.255` for a word of two
+    /// to twenty letters (group 6), and for a single letter (group 7) a part made from group 6,
+    /// not 7: the word's first letter less 0x30, as a character - `a` is `1`, `b` `2`, and from
+    /// `j` on a character that is no digit. With no word captured that is the first character of
+    /// an empty string, which throws: "V4.5a" has no version. Then `new Version(text)`, which
+    /// takes two to four parts, each a whole number up to `int.MaxValue`, and throws for anything
+    /// else - so a banner giving five parts, or a part too big, has none either. The parts go by
+    /// position: `4.6-rc1` is 4.6.1, its third part 1.
+    ///
+    /// A hyphen before anything but `rc` and a number ends the match, so `4.8.0-dev` and
+    /// `4.6.0-beta2` are 4.8.0 and 4.6.0, and `4.0.0dev` is 4.0.0.255.
+    /// `// C#: ExtLibs/Utilities/VersionDetection.cs:15-58`
     #[must_use]
     pub fn from_banner(text: &str) -> Option<Self> {
         let bytes = text.as_bytes();
-        // Find the first `digits.digits`.
+        // How many bytes from `from` on are of a kind.
+        let run = |from: usize, kind: fn(&u8) -> bool| {
+            bytes
+                .get(from..)
+                .map_or(0, |rest| rest.iter().take_while(|&&b| kind(&b)).count())
+        };
+        let digits = |from: usize| run(from, u8::is_ascii_digit);
+
+        // `([0-9]+)\.([0-9]+)` where it first matches. Every start inside a run of digits ends
+        // its major where the run does, so a run that fails is passed whole.
         let mut start = 0;
-        loop {
-            let digits = |from: usize| {
-                let end = bytes.get(from..).map_or(from, |rest| {
-                    from + rest.iter().take_while(|b| b.is_ascii_digit()).count()
-                });
-                (end > from).then_some(end)
-            };
-            let Some(major_end) = digits(start) else {
-                start = bytes.get(start..)?.iter().position(u8::is_ascii_digit)? + start;
-                continue;
-            };
-            if bytes.get(major_end) != Some(&b'.') {
-                start = major_end;
-                continue;
-            }
-            let Some(minor_end) = digits(major_end + 1) else {
-                start = major_end + 1;
-                continue;
-            };
-            let major = text.get(start..major_end)?.parse().ok()?;
-            let minor = text.get(major_end + 1..minor_end)?.parse().ok()?;
-            let mut version = Self {
-                major,
-                minor,
-                build: None,
-                revision: None,
-            };
-            // The repeated group: `.patch`, `-rcN`, a word, or a letter, as many as match.
-            let mut at = minor_end;
-            loop {
-                if bytes.get(at) == Some(&b'.')
-                    && let Some(end) = digits(at + 1)
-                {
-                    version.build = text.get(at + 1..end)?.parse().ok();
-                    at = end;
-                } else if text.get(at..)?.starts_with("-rc")
-                    && let Some(end) = digits(at + 3)
-                {
-                    version.revision = text.get(at + 3..end)?.parse().ok();
-                    at = end;
-                } else {
-                    let letters = bytes.get(at..).map_or(0, |rest| {
-                        rest.iter().take_while(|b| b.is_ascii_lowercase()).count()
-                    });
-                    if letters >= 2 {
-                        version.revision = Some(255);
-                        at += letters.min(20);
-                    } else if letters == 1 {
-                        version.revision = Some(u32::from(*bytes.get(at)?) - 0x30);
-                        at += 1;
-                    } else {
-                        break;
-                    }
+        let (major, minor, mut at) = loop {
+            start += bytes.get(start..)?.iter().position(u8::is_ascii_digit)?;
+            let major_end = start + digits(start);
+            if bytes.get(major_end) == Some(&b'.') {
+                let minor_len = digits(major_end + 1);
+                if minor_len > 0 {
+                    let minor_end = major_end + 1 + minor_len;
+                    break (
+                        text.get(start..major_end)?,
+                        text.get(major_end + 1..minor_end)?,
+                        minor_end,
+                    );
                 }
             }
-            return Some(version);
+            start = major_end;
+        };
+
+        // The repeated group, its alternatives tried in order for as long as one matches: nothing
+        // follows it in the pattern, so the first way through is the match. A group keeps its
+        // last capture when a later turn takes another alternative.
+        let (mut patch, mut rc, mut word, mut letter) = (None, None, None, None);
+        loop {
+            let after_dot = if bytes.get(at) == Some(&b'.') {
+                digits(at + 1)
+            } else {
+                0
+            };
+            let after_rc = if text.get(at..).is_some_and(|rest| rest.starts_with("-rc")) {
+                digits(at + 3)
+            } else {
+                0
+            };
+            let letters = run(at, u8::is_ascii_lowercase);
+            if after_dot > 0 {
+                patch = text.get(at + 1..at + 1 + after_dot);
+                at += 1 + after_dot;
+            } else if after_rc > 0 {
+                rc = text.get(at + 3..at + 3 + after_rc);
+                at += 3 + after_rc;
+            } else if letters >= 2 {
+                let taken = letters.min(20);
+                word = text.get(at..at + taken);
+                at += taken;
+            } else if letters == 1 {
+                letter = text.get(at..=at);
+                at += 1;
+            } else {
+                break;
+            }
         }
+
+        let mut verstring = format!("{major}.{minor}");
+        if let Some(patch) = patch {
+            verstring.push('.');
+            verstring.push_str(patch);
+        }
+        if let Some(rc) = rc {
+            verstring.push('.');
+            verstring.push_str(rc);
+        }
+        if word.is_some() {
+            verstring.push_str(".255");
+        }
+        if letter.is_some() {
+            // `(char)(Groups[6].Value.ToLower()[0] - 0x30)`: group 6's first character, which an
+            // empty group 6 has not got.
+            let first = word?.as_bytes().first()?.to_ascii_lowercase();
+            verstring.push('.');
+            verstring.push(char::from(first.checked_sub(0x30)?));
+        }
+        Self::parse(&verstring)
+    }
+
+    /// `new Version(text)`: two to four parts between dots, each a whole number from 0 to
+    /// `int.MaxValue`, by position major, minor, build and revision; `None` where it throws.
+    fn parse(text: &str) -> Option<Self> {
+        let parts = text
+            .split('.')
+            .map(|part| {
+                part.parse::<i32>()
+                    .ok()
+                    .and_then(|number| u32::try_from(number).ok())
+            })
+            .collect::<Option<Vec<u32>>>()?;
+        let (major, minor, build, revision) = match parts.as_slice() {
+            [major, minor] => (*major, *minor, None, None),
+            [major, minor, build] => (*major, *minor, Some(*build), None),
+            [major, minor, build, revision] => (*major, *minor, Some(*build), Some(*revision)),
+            _ => return None,
+        };
+        Some(Self {
+            major,
+            minor,
+            build,
+            revision,
+        })
     }
 
     /// The version packed in `AUTOPILOT_VERSION.flight_sw_version`: major, minor, patch, type.
@@ -717,7 +777,17 @@ mod tests {
         assert!(matches!(Pdef::parse("nope"), Err(PdefError::Xml(_))));
     }
 
-    /// The banner regex, case by case, as VersionDetection.cs:15-56 reads them.
+    /// `System.Version`'s four numbers, by position.
+    const fn four(major: u32, minor: u32, build: u32, revision: u32) -> Version {
+        Version {
+            major,
+            minor,
+            build: Some(build),
+            revision: Some(revision),
+        }
+    }
+
+    /// The banner regex, case by case, as VersionDetection.cs:15-58 reads them.
     #[test]
     fn versions_parse_from_banners_as_the_csharp_parses_them() {
         assert_eq!(
@@ -725,34 +795,130 @@ mod tests {
             Some(Version::new(4, 5, 7))
         );
         assert_eq!(
-            Version::from_banner("ArduPlane V4.8.0-dev (ca7ee129)").map(|v| v.to_string()),
-            Some("4.8.0".to_owned()),
+            Version::from_banner("ArduPlane V4.8.0-dev (ca7ee129)"),
+            Some(Version::new(4, 8, 0)),
             "a hyphen stops the regex: the word branch needs letters right after the number"
+        );
+        assert_eq!(
+            Version::from_banner("ArduCopter V4.0.0dev"),
+            Some(four(4, 0, 0, 255))
+        );
+        assert_eq!(
+            Version::from_banner("ArduCopter V4.6.0-rc1"),
+            Some(four(4, 6, 0, 1))
+        );
+        assert_eq!(
+            Version::from_banner("ArduCopter V4.6.0-beta2"),
+            Some(Version::new(4, 6, 0)),
+            "a hyphenated word that is not -rc stops the match, as the regex does"
+        );
+        assert_eq!(
+            Version::from_banner("ArduCopter V4.6.0-rc"),
+            Some(Version::new(4, 6, 0)),
+            "-rc with no number after it is no match of that alternative"
+        );
+        assert_eq!(
+            Version::from_banner("APM:Copter V3.6.12 (abc)"),
+            Some(Version::new(3, 6, 12))
+        );
+        assert_eq!(
+            Version::from_banner("ArduCopter V4.5.7RC1"),
+            Some(Version::new(4, 5, 7)),
+            "the letters are lower case only"
+        );
+        assert_eq!(
+            Version::from_banner("ArduCopter V4.5"),
+            Some(Version {
+                major: 4,
+                minor: 5,
+                build: None,
+                revision: None
+            })
         );
         assert_eq!(
             Version::from_banner("ArduCopter V4.0.0dev").map(|v| v.to_string()),
             Some("4.0.0.255".to_owned())
         );
-        assert_eq!(
-            Version::from_banner("ArduCopter V4.6.0-rc1").map(|v| v.to_string()),
-            Some("4.6.0.1".to_owned())
-        );
-        assert_eq!(
-            Version::from_banner("ArduCopter V4.6.0-beta2").map(|v| v.to_string()),
-            Some("4.6.0".to_owned()),
-            "a hyphenated word that is not -rc stops the match, as the regex does"
-        );
-        assert_eq!(
-            Version::from_banner("APM:Copter V3.6.12 (abc)").map(|v| v.to_string()),
-            Some("3.6.12".to_owned())
-        );
-        assert_eq!(
-            Version::from_banner("ArduCopter V4.5a").map(|v| v.to_string()),
-            Some("4.5.49".to_owned()),
-            "the C# turns a single letter into (letter - 0x30): a is 49"
-        );
         assert_eq!(Version::from_banner("no version here"), None);
         assert_eq!(Version::from_banner("ChibiOS: 1234abcd"), None);
+        assert_eq!(
+            Version::from_banner("x1y2.3"),
+            Some(Version {
+                major: 2,
+                minor: 3,
+                build: None,
+                revision: None
+            }),
+            "the first place the pattern matches"
+        );
+    }
+
+    /// A single letter is read from group 6, the word, not group 7: with no word that is the
+    /// first character of an empty string, which throws, and `MainV2`'s catch leaves no version
+    /// and no documentation fetched.
+    /// `// C#: ExtLibs/Utilities/VersionDetection.cs:44-48; MainV2.cs:1695-1728`
+    #[test]
+    fn a_single_letter_with_no_word_before_it_gives_no_version() {
+        assert_eq!(Version::from_banner("ArduCopter V4.5a"), None);
+        assert_eq!(Version::from_banner("ArduCopter V4.5.7a (1c0c8d9c)"), None);
+    }
+
+    /// Where a word was captured, the letter's part is the word's first letter less 0x30, as a
+    /// character: `a` is `1` and `b` `2` (not 49), after the word's `.255`. A word takes twenty
+    /// letters at most, so a 21st is the single letter. From `j` on the character is no digit, and
+    /// `new Version` throws.
+    #[test]
+    fn a_letter_after_a_word_is_the_words_first_letters_place() {
+        assert_eq!(
+            Version::from_banner("V4.5abcdefghijklmnopqrstu"),
+            Some(four(4, 5, 255, 1))
+        );
+        assert_eq!(
+            Version::from_banner("V4.5bcdefghijklmnopqrstuv"),
+            Some(four(4, 5, 255, 2))
+        );
+        assert_eq!(Version::from_banner("V4.5jklmnopqrstuvwxyzabcd"), None);
+        // Twenty-two letters are two words, no letter; forty-one, two words and a letter.
+        assert_eq!(
+            Version::from_banner(&format!("V4.5{}", "a".repeat(22))),
+            Some(Version {
+                major: 4,
+                minor: 5,
+                build: Some(255),
+                revision: None
+            })
+        );
+        assert_eq!(
+            Version::from_banner(&format!("V4.5{}", "a".repeat(41))),
+            Some(four(4, 5, 255, 1))
+        );
+    }
+
+    /// The parts go into `System.Version` by position, each group's last capture counts, and
+    /// `new Version` throws past four parts or past `int.MaxValue`.
+    #[test]
+    fn the_parts_are_systems_versions_by_position() {
+        let three = |major, minor, build| Some(Version::new(major, minor, build));
+        assert_eq!(Version::from_banner("V4.6-rc1"), three(4, 6, 1));
+        assert_eq!(Version::from_banner("V4.5dev"), three(4, 5, 255));
+        assert_eq!(Version::from_banner("V4.5.1.2"), three(4, 5, 2));
+        assert_eq!(
+            Version::from_banner("V4.6.0-rc1-rc2"),
+            Some(four(4, 6, 0, 2))
+        );
+        assert_eq!(Version::from_banner("V4.5.0-rc1dev"), None, "4.5.0.1.255");
+        assert_eq!(Version::from_banner("V4.5dev.1x"), None, "4.5.1.255.4");
+        assert_eq!(Version::from_banner("V2147483648.1"), None);
+        assert_eq!(
+            Version::from_banner("V2147483647.1").map(|v| v.major),
+            Some(2_147_483_647)
+        );
+        // Compared as `System.Version` compares: a missing part is below any.
+        assert!(
+            Version::from_banner("V4.7dev") >= Version::from_banner("V4.7"),
+            "ConfigArducopter's 4.7 test"
+        );
+        assert!(Version::from_banner("V4.6-rc1") < Version::from_banner("V4.7"));
     }
 
     #[test]

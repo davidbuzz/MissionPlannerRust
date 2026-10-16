@@ -1636,6 +1636,38 @@ pub trait Fetch {
         progress(length, Some(length));
         Ok(bytes)
     }
+
+    /// `Download.getFilefromNet`'s GET, sent with `HttpCompletionOption.ResponseHeadersRead`: the
+    /// response's [`Headers`] given to `unchanged` before its body is read, and the body read as
+    /// [`Fetch::get_progress`] reads it only when `unchanged` says the copy already held will not
+    /// do - `None` when it will. A fetcher that cannot see a response's headers reads every body,
+    /// which is what `getFilefromNet` makes of a response without them: a missing
+    /// `Content-Length` is -1 there, which no file's length is.
+    /// `// C#: ExtLibs/Utilities/Download.cs:456-483`
+    ///
+    /// # Errors
+    /// As [`Fetch::get`].
+    fn get_unless(
+        &self,
+        url: &str,
+        unchanged: &mut dyn FnMut(&Headers) -> bool,
+        progress: &mut dyn FnMut(u64, Option<u64>),
+    ) -> Result<Option<Vec<u8>>, String> {
+        let _ = unchanged;
+        self.get_progress(url, progress).map(Some)
+    }
+}
+
+/// What a response says of its body before the body is read, as `getFilefromNet` asks it
+/// (`DownloadExt.LastModified` and `ContentLength`): the `Last-Modified` and `Content-Length`
+/// headers as the server wrote them, `None` for one it did not send.
+/// `// C#: ExtLibs/Utilities/Download.cs:19-31`
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct Headers {
+    /// `Last-Modified`.
+    pub last_modified: Option<String>,
+    /// `Content-Length`.
+    pub content_length: Option<String>,
 }
 
 /// The network, as `HttpClient.GetByteArrayAsync`: a GET that fails on a non-success status.
@@ -1734,13 +1766,28 @@ impl Fetch for Http {
     }
 
     /// Read a kilobyte at a time, as the C#'s loops read, with the thirty-second timeout both
-    /// give their clients.
+    /// give their clients: [`Fetch::get_unless`] with nothing held.
     /// `// C#: ExtLibs/Utilities/Download.cs:450-520; GCSViews/ConfigurationView/ConfigFirmwareManifest.cs:270-313`
     fn get_progress(
         &self,
         url: &str,
         progress: &mut dyn FnMut(u64, Option<u64>),
     ) -> Result<Vec<u8>, String> {
+        self.get_unless(url, &mut |_| false, progress)
+            .map(Option::unwrap_or_default)
+    }
+
+    /// The headers as the response has them before its body is read, which is all
+    /// `ResponseHeadersRead` waits for; when `unchanged` says the file held is the server's, the
+    /// response is dropped with its body unread, as `getFilefromNet` returns without reading it.
+    /// A header that is not text is taken as not sent.
+    /// `// C#: ExtLibs/Utilities/Download.cs:456-483`
+    fn get_unless(
+        &self,
+        url: &str,
+        unchanged: &mut dyn FnMut(&Headers) -> bool,
+        progress: &mut dyn FnMut(u64, Option<u64>),
+    ) -> Result<Option<Vec<u8>>, String> {
         let call = |address: &str| {
             ureq::get(address)
                 .header("User-Agent", USER_AGENT)
@@ -1751,6 +1798,20 @@ impl Fetch for Http {
         };
         let mut response = mp_os::ask_https_first(url, call, |error| matches!(error, ureq::Error::StatusCode(_)))
             .map_err(|err| err.to_string())?;
+        let header = |name: &str| {
+            response
+                .headers()
+                .get(name)
+                .and_then(|value| value.to_str().ok())
+                .map(str::to_owned)
+        };
+        let headers = Headers {
+            last_modified: header("Last-Modified"),
+            content_length: header("Content-Length"),
+        };
+        if unchanged(&headers) {
+            return Ok(None);
+        }
         let length = response.body().content_length();
         let mut reader = response.body_mut().as_reader();
         let mut bytes = Vec::new();
@@ -1766,7 +1827,7 @@ impl Fetch for Http {
             }
             progress(u64::try_from(bytes.len()).unwrap_or(u64::MAX), length);
         }
-        Ok(bytes)
+        Ok(Some(bytes))
     }
 }
 

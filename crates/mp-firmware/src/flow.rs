@@ -43,7 +43,7 @@
 use mp_os::fs::FsExt as _;
 use std::io::{self, Read, Write};
 use std::path::{Path, PathBuf};
-use web_time::{Duration, Instant};
+use web_time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use crate::detect::BOOTLOADER_BAUD;
 use crate::detect::{
@@ -52,7 +52,7 @@ use crate::detect::{
 };
 use crate::firmware::Firmware;
 use crate::legacy::{Software, get_url};
-use crate::manifest::Fetch;
+use crate::manifest::{Fetch, Headers};
 use crate::uploader::{Board, Chip, Uploader, UploaderError};
 
 /// Why a flow stops where it would write to a board: that step is not ported. The manifest
@@ -423,12 +423,16 @@ pub fn format_time_span(seconds: f64) -> String {
     format!("{whole} Seconds")
 }
 
-/// `Download.getFilefromNet(url, saveto, status)`: the file saved as `saveto.new` and moved over
-/// `saveto`, with "Downloading.. ETA: ..." once a second; false for anything that goes wrong,
-/// which it catches. The C# skips the download when the file on disk is newer than the server's
-/// `Last-Modified` and the same length; the fetch here does not see the headers, so it always
-/// downloads.
-/// `// C#: ExtLibs/Utilities/Download.cs:450-554`
+/// `Download.getFilefromNet(url, saveto, status)`: a GET whose headers are read before its body,
+/// and false for a status that is not a success; then, when a file is already at `saveto` that
+/// the headers say is the server's (`unchanged_on_disk`), true with nothing read or written;
+/// else the body saved as `saveto.new` and moved over `saveto`, with "Downloading.. ETA: ..."
+/// once a second, and false for anything that goes wrong, which it catches.
+///
+/// One difference, kept: a response without a `Content-Length` the C# reads none of - its loop
+/// runs while the bytes left, -1 there, are above nought - and so fails as a size mismatch, with
+/// nothing saved. Here its body is read to its end and saved.
+/// `// C#: ExtLibs/Utilities/Download.cs:450-553`
 pub fn get_file_from_net(
     fetch: &dyn Fetch,
     url: &str,
@@ -437,30 +441,37 @@ pub fn get_file_from_net(
 ) -> bool {
     let started = Instant::now();
     let mut last_second = None;
-    let fetched = fetch.get_progress(url, &mut |got, length| {
-        let Some(length) = length.filter(|length| *length > 0) else {
-            return;
-        };
-        let elapsed = started.elapsed().as_secs_f64();
-        let second = started.elapsed().as_secs();
-        if last_second == Some(second) {
-            return;
-        }
-        last_second = Some(second);
-        #[allow(clippy::cast_precision_loss)] // a download's bytes fit an f64 well enough
-        let percent = got as f64 / length as f64 * 100.0;
-        if percent <= 0.0 {
-            return;
-        }
-        let left = elapsed / percent * (100.0 - percent);
-        #[allow(clippy::cast_possible_truncation)] // 0 to 100
-        status(
-            percent as i32,
-            &format!("Downloading.. ETA: {}", format_time_span(left)),
-        );
-    });
-    let Ok(bytes) = fetched else {
-        return false;
+    let fetched = fetch.get_unless(
+        url,
+        &mut |headers| unchanged_on_disk(saveto, headers),
+        &mut |got, length| {
+            let Some(length) = length.filter(|length| *length > 0) else {
+                return;
+            };
+            let elapsed = started.elapsed().as_secs_f64();
+            let second = started.elapsed().as_secs();
+            if last_second == Some(second) {
+                return;
+            }
+            last_second = Some(second);
+            #[allow(clippy::cast_precision_loss)] // a download's bytes fit an f64 well enough
+            let percent = got as f64 / length as f64 * 100.0;
+            if percent <= 0.0 {
+                return;
+            }
+            let left = elapsed / percent * (100.0 - percent);
+            #[allow(clippy::cast_possible_truncation)] // 0 to 100
+            status(
+                percent as i32,
+                &format!("Downloading.. ETA: {}", format_time_span(left)),
+            );
+        },
+    );
+    let bytes = match fetched {
+        Ok(Some(bytes)) => bytes,
+        // "got LastModified": the file held is the server's, and is kept.
+        Ok(None) => return true,
+        Err(_) => return false,
     };
     let staged = PathBuf::from(format!("{}.new", saveto.display()));
     let saved = saveto
@@ -474,6 +485,94 @@ pub fn get_file_from_net(
             mp_os::fs::rename(&staged, saveto)
         });
     saved.is_ok()
+}
+
+/// `getFilefromNet`'s test of a file already at `saveto` against the server's headers, before
+/// the body is read: the file is the server's, and is not fetched again, when the server's
+/// `Last-Modified` is earlier than the file's last write and its `Content-Length` is the file's
+/// length. A `Last-Modified` the server did not send is `DateTime.MinValue`, earlier than any
+/// file, so the length alone decides; a `Content-Length` it did not send is -1, no file's length,
+/// so the file is fetched. The file's time is when it was written here, as the C# leaves it too,
+/// so a file is fetched again once the server's copy is newer than the one held.
+///
+/// Where the C# throws - a date `DateTime.Parse` cannot read, a length past `int.Parse` - its
+/// catch returns false with nothing fetched; here a header that cannot be read proves nothing,
+/// and the file is fetched. The date read is the one servers send, `Sun, 06 Nov 1994 08:49:37
+/// GMT` (RFC 9110's IMF-fixdate).
+/// `// C#: ExtLibs/Utilities/Download.cs:19-31, 468-483`
+fn unchanged_on_disk(saveto: &Path, headers: &Headers) -> bool {
+    let Ok(held) = mp_os::fs::metadata(saveto) else {
+        return false;
+    };
+    // `File.Exists`, which a folder is not.
+    if !held.os_is_file() {
+        return false;
+    }
+    let Ok(written) = held.modified() else {
+        return false;
+    };
+    let older = match headers.last_modified.as_deref() {
+        None => true,
+        Some(text) => http_date(text).is_some_and(|served| served < written),
+    };
+    let length = headers
+        .content_length
+        .as_deref()
+        .and_then(|text| text.trim().parse::<i32>().ok())
+        .and_then(|length| u64::try_from(length).ok());
+    older && length == Some(held.len())
+}
+
+/// An HTTP date as servers write it, `Sun, 06 Nov 1994 08:49:37 GMT`, as a time; `None` for a
+/// text that is not one, or a day the calendar has not got.
+fn http_date(text: &str) -> Option<SystemTime> {
+    const MONTHS: [&str; 12] = [
+        "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
+    ];
+    let (_weekday, rest) = text.trim().split_once(", ")?;
+    let mut fields = rest.split(' ');
+    let day = fields.next()?.parse::<u32>().ok()?;
+    let month_name = fields.next()?;
+    let month = u32::try_from(MONTHS.iter().position(|name| *name == month_name)? + 1).ok()?;
+    let year = fields.next()?.parse::<i64>().ok()?;
+    let mut clock = fields
+        .next()?
+        .split(':')
+        .map(|part| part.parse::<u32>().ok());
+    let (hour, minute, second) = (clock.next()??, clock.next()??, clock.next()??);
+    if clock.next().is_some() || fields.next() != Some("GMT") || fields.next().is_some() {
+        return None;
+    }
+    let leap = year % 4 == 0 && (year % 100 != 0 || year % 400 == 0);
+    let days_in_month = match month {
+        2 if leap => 29,
+        2 => 28,
+        4 | 6 | 9 | 11 => 30,
+        _ => 31,
+    };
+    if !(1..=9999).contains(&year)
+        || !(1..=days_in_month).contains(&day)
+        || hour > 23
+        || minute > 59
+        || second > 59
+    {
+        return None;
+    }
+    // Days since 1970-01-01 in the proleptic Gregorian calendar, counted from a March year so
+    // that February's leap day falls last.
+    let march_year = if month <= 2 { year - 1 } else { year };
+    let era = march_year.div_euclid(400);
+    let year_of_era = march_year - era * 400;
+    let march_month = i64::from(if month > 2 { month - 3 } else { month + 9 });
+    let day_of_year = (153 * march_month + 2) / 5 + i64::from(day) - 1;
+    let day_of_era = year_of_era * 365 + year_of_era / 4 - year_of_era / 100 + day_of_year;
+    let days = era * 146_097 + day_of_era - 719_468;
+    let seconds =
+        days * 86_400 + i64::from(hour) * 3_600 + i64::from(minute) * 60 + i64::from(second);
+    match u64::try_from(seconds) {
+        Ok(after) => UNIX_EPOCH.checked_add(Duration::from_secs(after)),
+        Err(_) => UNIX_EPOCH.checked_sub(Duration::from_secs(seconds.unsigned_abs())),
+    }
 }
 
 /// `Path.GetTempFileName()`: a new, empty file in the temporary directory.
@@ -1462,5 +1561,234 @@ mod tests {
             detect_board("/dev/ttyUSB0", &[], &[], &mut person),
             Ok(Detected::board(Boards::Bebop2))
         );
+    }
+
+    /// A fresh directory for one test.
+    fn scratch(test: &str) -> PathBuf {
+        let dir =
+            mp_os::temp_dir().join(format!("mp-firmware-flow-{test}-{}", mp_os::process_id()));
+        let _ = mp_os::fs::remove_dir_all(&dir);
+        mp_os::fs::create_dir_all(&dir).expect("a scratch directory");
+        dir
+    }
+
+    /// Headers as a server sends them.
+    fn headers(last_modified: Option<&str>, content_length: Option<&str>) -> Headers {
+        Headers {
+            last_modified: last_modified.map(str::to_owned),
+            content_length: content_length.map(str::to_owned),
+        }
+    }
+
+    const LONG_AGO: &str = "Sun, 06 Nov 1994 08:49:37 GMT";
+    const LATER: &str = "Fri, 01 Jan 2100 00:00:00 GMT";
+
+    /// The dates servers send, read as the seconds they are; anything else is no date.
+    #[test]
+    fn http_dates_read_as_the_times_they_name() {
+        let at = |seconds| UNIX_EPOCH.checked_add(Duration::from_secs(seconds));
+        assert_eq!(http_date(LONG_AGO), at(784_111_777));
+        assert_eq!(http_date(LATER), at(4_102_444_800));
+        assert_eq!(http_date("Thu, 01 Jan 1970 00:00:00 GMT"), at(0));
+        assert_eq!(http_date("Tue, 29 Feb 2000 12:00:00 GMT"), at(951_825_600));
+        assert_eq!(
+            http_date("Mon, 29 Feb 2021 00:00:00 GMT"),
+            None,
+            "no such day"
+        );
+        assert_eq!(http_date("Sun, 06 Nov 1994 24:00:00 GMT"), None);
+        assert_eq!(http_date("Sun, 06 Nov 1994 08:49:37 UTC"), None);
+        assert_eq!(http_date("Sunday, 06-Nov-94 08:49:37 GMT"), None);
+        assert_eq!(http_date("yesterday"), None);
+    }
+
+    /// `getFilefromNet`'s test, case by case: kept when the server's date is earlier than the
+    /// file's and the length is the file's; a missing date is the earliest there is, so the length
+    /// alone decides; a missing length is -1, so it never matches.
+    /// `// C#: ExtLibs/Utilities/Download.cs:19-31, 468-483`
+    #[test]
+    fn a_file_is_kept_when_older_on_the_server_and_the_same_length() {
+        let dir = scratch("unchanged-on-disk");
+        let saveto = dir.join("file.bin");
+        let same = headers(Some(LONG_AGO), Some("4"));
+        assert!(
+            !unchanged_on_disk(&saveto, &same),
+            "no file, nothing to keep"
+        );
+        mp_os::fs::write(&saveto, b"AAAA").expect("written");
+        assert!(unchanged_on_disk(&saveto, &same));
+        assert!(!unchanged_on_disk(
+            &saveto,
+            &headers(Some(LONG_AGO), Some("5"))
+        ));
+        assert!(!unchanged_on_disk(
+            &saveto,
+            &headers(Some(LATER), Some("4"))
+        ));
+        assert!(
+            unchanged_on_disk(&saveto, &headers(None, Some("4"))),
+            "DateTime.MinValue"
+        );
+        assert!(
+            !unchanged_on_disk(&saveto, &headers(Some(LONG_AGO), None)),
+            "-1"
+        );
+        assert!(!unchanged_on_disk(&saveto, &headers(None, None)));
+        assert!(
+            !unchanged_on_disk(&saveto, &headers(Some("yesterday"), Some("4"))),
+            "a date that cannot be read proves nothing"
+        );
+        assert!(!unchanged_on_disk(
+            &saveto,
+            &headers(Some(LONG_AGO), Some("x"))
+        ));
+        assert!(!unchanged_on_disk(&dir, &same), "a folder is no file");
+        let _ = mp_os::fs::remove_dir_all(&dir);
+    }
+
+    /// The download against a web server on a loopback port, through the fetch the planner uses.
+    #[cfg(not(target_family = "wasm"))]
+    mod over_http {
+        use super::*;
+        use crate::manifest::Http;
+        use std::sync::Arc;
+        use std::sync::atomic::{AtomicUsize, Ordering};
+
+        /// A server answering every GET with 200, a `Last-Modified` if given, and its next body -
+        /// the last one again once they run out - with its `Content-Length`, or chunked with none.
+        /// The https attempt the fetch makes first opens with a TLS hello, not a request, and its
+        /// connection is closed unanswered, which sends the fetch on to plain http.
+        struct Server {
+            url: String,
+            gets: Arc<AtomicUsize>,
+        }
+
+        impl Server {
+            fn start(
+                last_modified: Option<&'static str>,
+                content_length: bool,
+                bodies: &'static [&'static [u8]],
+            ) -> Self {
+                let listener = std::net::TcpListener::bind("127.0.0.1:0").expect("a port");
+                let port = listener.local_addr().expect("an address").port();
+                let gets = Arc::new(AtomicUsize::new(0));
+                let counted = Arc::clone(&gets);
+                let _ = wasm_thread::spawn(move || {
+                    for stream in listener.incoming() {
+                        let Ok(mut stream) = stream else {
+                            continue;
+                        };
+                        let _ = stream.set_read_timeout(Some(Duration::from_secs(5)));
+                        let mut request = Vec::new();
+                        let mut buffer = [0u8; 1024];
+                        while let Ok(read) = stream.read(&mut buffer) {
+                            if read == 0 {
+                                break;
+                            }
+                            request.extend_from_slice(&buffer[..read]);
+                            if !request[0].is_ascii_uppercase()
+                                || request.windows(4).any(|end| end == b"\r\n\r\n")
+                            {
+                                break;
+                            }
+                        }
+                        if !request.starts_with(b"GET ") {
+                            continue;
+                        }
+                        let index = counted.fetch_add(1, Ordering::SeqCst);
+                        let body = bodies[index.min(bodies.len() - 1)];
+                        let mut head = String::from("HTTP/1.1 200 OK\r\nConnection: close\r\n");
+                        if let Some(date) = last_modified {
+                            head.push_str(&format!("Last-Modified: {date}\r\n"));
+                        }
+                        let mut answer = Vec::new();
+                        if content_length {
+                            head.push_str(&format!("Content-Length: {}\r\n\r\n", body.len()));
+                            answer.extend_from_slice(head.as_bytes());
+                            answer.extend_from_slice(body);
+                        } else {
+                            head.push_str("Transfer-Encoding: chunked\r\n\r\n");
+                            answer.extend_from_slice(head.as_bytes());
+                            answer.extend_from_slice(format!("{:x}\r\n", body.len()).as_bytes());
+                            answer.extend_from_slice(body);
+                            answer.extend_from_slice(b"\r\n0\r\n\r\n");
+                        }
+                        let _ = stream.write_all(&answer);
+                    }
+                });
+                Self {
+                    url: format!("http://127.0.0.1:{port}/file.bin"),
+                    gets,
+                }
+            }
+
+            fn gets(&self) -> usize {
+                self.gets.load(Ordering::SeqCst)
+            }
+        }
+
+        fn fetch(server: &Server, saveto: &Path) -> bool {
+            get_file_from_net(&Http, &server.url, saveto, &mut |_, _| {})
+        }
+
+        fn held(saveto: &Path) -> Vec<u8> {
+            mp_os::fs::read(saveto).expect("a file")
+        }
+
+        /// Fetched once, then kept: the server's second answer, of the same length and still
+        /// dated long ago, is a GET whose body is never read, and the file is the first one.
+        #[test]
+        fn an_unchanged_file_is_not_downloaded_again() {
+            let dir = scratch("http-unchanged");
+            let saveto = dir.join("file.bin");
+            let server = Server::start(Some(LONG_AGO), true, &[b"AAAA", b"BBBB"]);
+            assert!(fetch(&server, &saveto));
+            assert_eq!(held(&saveto), b"AAAA");
+            assert!(fetch(&server, &saveto), "kept is a success");
+            assert_eq!(held(&saveto), b"AAAA", "the second body was not saved");
+            assert_eq!(server.gets(), 2, "one GET a call, as the C#'s");
+            assert!(!PathBuf::from(format!("{}.new", saveto.display())).os_exists());
+            // With no date the length alone decides, as `DateTime.MinValue` does there.
+            let server = Server::start(None, true, &[b"CCCC"]);
+            assert!(fetch(&server, &saveto));
+            assert_eq!(held(&saveto), b"AAAA");
+            let _ = mp_os::fs::remove_dir_all(&dir);
+        }
+
+        #[test]
+        fn a_changed_length_is_downloaded() {
+            let dir = scratch("http-length");
+            let saveto = dir.join("file.bin");
+            mp_os::fs::write(&saveto, b"AAAA").expect("written");
+            let server = Server::start(Some(LONG_AGO), true, &[b"BBBBB"]);
+            assert!(fetch(&server, &saveto));
+            assert_eq!(held(&saveto), b"BBBBB");
+            let _ = mp_os::fs::remove_dir_all(&dir);
+        }
+
+        #[test]
+        fn a_newer_date_on_the_server_is_downloaded() {
+            let dir = scratch("http-date");
+            let saveto = dir.join("file.bin");
+            mp_os::fs::write(&saveto, b"AAAA").expect("written");
+            let server = Server::start(Some(LATER), true, &[b"BBBB"]);
+            assert!(fetch(&server, &saveto));
+            assert_eq!(held(&saveto), b"BBBB");
+            let _ = mp_os::fs::remove_dir_all(&dir);
+        }
+
+        /// No `Content-Length` and no `Last-Modified`: nothing says the file is the server's, and
+        /// the body is read to its end and saved.
+        #[test]
+        fn no_headers_means_a_download() {
+            let dir = scratch("http-none");
+            let saveto = dir.join("file.bin");
+            mp_os::fs::write(&saveto, b"AAAA").expect("written");
+            let server = Server::start(None, false, &[b"BBBB"]);
+            assert!(fetch(&server, &saveto));
+            assert_eq!(held(&saveto), b"BBBB");
+            assert_eq!(server.gets(), 1);
+            let _ = mp_os::fs::remove_dir_all(&dir);
+        }
     }
 }
