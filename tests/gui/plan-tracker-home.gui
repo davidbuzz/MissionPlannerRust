@@ -16,18 +16,24 @@ env MP_PLAN_DIR $WORK
 
 screen plan
 window 1600x1200
-budget 9
+budget 26
+# 26: 24.3 s measured headless on lavapipe (2026-10-16, the wait for the SITL's home within it), the rule's ceiling plus one.
 
 # The vehicle first: a click before its first heartbeat is a click the screen may forget
 # (vehicle.connected only says the link is open).
 expect vehicle.count > 0
 # The map first: a press before its first paint records nothing.
 expect map.ready true
+# Home known first: the prompt offers cs.HomeAlt while no tracker location is set
+# (FlightPlanner.cs:6967-6970), so the value depends on home having arrived - 0 before, the
+# SITL's 584.09 after (2026-10-16).
+within 40
+expect vehicle.home ~ -35.36
 click map@0.40x0.40:right
 click menu-trackerHome
 expect plan.prompt Tracker Alt
 expect plan.prompt.text Enter tracker ASL alt
-expect plan.prompt.value 0
+expect plan.prompt.value ~ 584
 key ctrl+u
 type 600
 key Return

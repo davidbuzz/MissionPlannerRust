@@ -18,20 +18,27 @@
 //
 // SPDX-License-Identifier: GPL-3.0-only
 
-//! The planner's pointer read-out, `coords1`: `ExtLibs/Controls/Coords.cs` @ efb0801
-//! (GPL-3.0-only), a `Coords` control with `Vertical = true` in `panel4` at the top of the
-//! action panel (`FlightPlanner.Designer.cs:406`; `FlightPlanner.resx`: `coords1` at (0, 0),
-//! 127 by 55).
+//! The `Coords` control, `ExtLibs/Controls/Coords.cs` @ efb0801 (GPL-3.0-only), of which Mission
+//! Planner has two:
+//!
+//! - the planner's pointer read-out, `coords1` with `Vertical = true` in `panel4` at the top of
+//!   the action panel (`FlightPlanner.Designer.cs:406`; `FlightPlanner.resx`: `coords1` at
+//!   (0, 0), 127 by 55), which `SetMouseDisplay` feeds on every mouse move over the map
+//!   (`GCSViews/FlightPlanner.cs:2778-2797`), the height from `srtm.getAltitude`;
+//! - the flight screen's, `coords1` with `Vertical = false` in `panel1` under the flight map
+//!   (`FlightData.resx`: at (7, 2), 247 by 21, in `tableMap`'s 25-pixel second row), bound to the
+//!   vehicle's `lat`, `lng` and `alt` through `bindingSource1`
+//!   (`GCSViews/FlightData.Designer.cs:2842-2854`), its `AltUnit` set from `CurrentState.AltUnit`
+//!   (`GCSViews/FlightData.cs:447, 4510`).
 //!
 //! A combo box offers GEO, UTM and MGRS (`CMB_coordsystem`, GEO to begin with), and the control
-//! paints the pointer's position in that system beside it, one number a line, the terrain height
-//! under them in the display unit, and where that height came from (`AltSource`) in a line of its
-//! own. `SetMouseDisplay` feeds it on every mouse move over the map
-//! (`GCSViews/FlightPlanner.cs:2778-2797`), the height from `srtm.getAltitude`.
+//! paints the position in that system beside it and the height in the display unit: vertical,
+//! one number a line, with where the height came from (`AltSource`) in a line of its own under
+//! the combo; horizontal, one line with three spaces before the height and no `AltSource`.
 //!
-//! What is here is the text the control paints; the drawing is `plan::coords_panel`. The numbers
-//! are formatted as .NET formats them: `0.0000000` for degrees, `0.00` for the height, and a
-//! double's own `ToString()` for UTM's metres.
+//! What is here is the text the control paints; the drawing is `plan::coords_panel` and
+//! `fly::coords_strip`. The numbers are formatted as .NET formats them: `0.0000000` for degrees,
+//! `0.00` for the height, and a double's own `ToString()` for UTM's metres.
 
 use mp_mission::dotnet::format_f64;
 use mp_mission::geoutility::{utm_to_mgrs, wgs84_to_utm};
@@ -69,6 +76,16 @@ impl CoordSystem {
             Self::Geo => "plan-coords-geo",
             Self::Utm => "plan-coords-utm",
             Self::Mgrs => "plan-coords-mgrs",
+        }
+    }
+
+    /// The probe id of the entry's button under the flight map.
+    #[must_use]
+    pub(crate) const fn fly_id(self) -> &'static str {
+        match self {
+            Self::Geo => "fly-coords-geo",
+            Self::Utm => "fly-coords-utm",
+            Self::Mgrs => "fly-coords-mgrs",
         }
     }
 }
@@ -110,31 +127,48 @@ impl Coords {
     /// `// C#: ExtLibs/Controls/Coords.cs:100-170`
     #[must_use]
     pub(crate) fn lines(&self) -> Vec<String> {
-        let alt = format!("{}{}", format_f64(self.alt, "0.00"), self.alt_unit);
+        self.position().map_or_else(Vec::new, |mut lines| {
+            lines.push(self.height());
+            lines
+        })
+    }
+
+    /// `OnPaint` without `Vertical`: the one line drawn beside the combo - GEO's latitude, a
+    /// space and the longitude, UTM's `ToString()` or MGRS's - then three spaces and the height.
+    /// Empty where the C# draws nothing, as [`Self::lines`].
+    /// `// C#: ExtLibs/Controls/Coords.cs:108-111, 130-133, 153-156`
+    #[must_use]
+    pub(crate) fn line(&self) -> String {
+        self.position().map_or_else(String::new, |parts| {
+            format!("{}   {}", parts.join(" "), self.height())
+        })
+    }
+
+    /// `Alt.ToString("0.00") + AltUnit`.
+    fn height(&self) -> String {
+        format!("{}{}", format_f64(self.alt, "0.00"), self.alt_unit)
+    }
+
+    /// The position in the chosen system, in the parts the vertical layout puts a line each:
+    /// GEO's two numbers, `utm.ToString().Split(' ')` - zone and band, easting, northing - or the
+    /// one MGRS reference at `Precision = 5`. The horizontal layout joins them with a space, which
+    /// for UTM is `utm.ToString()` again. `None` where `OnPaint` draws nothing.
+    /// `// C#: ExtLibs/Controls/Coords.cs:100-159`
+    fn position(&self) -> Option<Vec<String>> {
         match self.system {
-            CoordSystem::Geo => vec![
+            CoordSystem::Geo => Some(vec![
                 format_f64(self.lat, "0.0000000"),
                 format_f64(self.lng, "0.0000000"),
-                alt,
-            ],
+            ]),
             CoordSystem::Utm | CoordSystem::Mgrs => {
                 if self.lat > 84.0 || self.lat < -80.0 || self.lng >= 180.0 || self.lng <= -180.0 {
-                    return Vec::new();
+                    return None;
                 }
-                let Ok(utm) = wgs84_to_utm(self.lat, self.lng) else {
-                    return Vec::new();
-                };
+                let utm = wgs84_to_utm(self.lat, self.lng).ok()?;
                 if self.system == CoordSystem::Utm {
-                    // `utm.ToString().Split(' ')`: zone and band, easting, northing.
-                    let mut lines: Vec<String> =
-                        utm.text().split(' ').map(ToOwned::to_owned).collect();
-                    lines.push(alt);
-                    lines
+                    Some(utm.text().split(' ').map(ToOwned::to_owned).collect())
                 } else {
-                    let Ok(mgrs) = utm_to_mgrs(&utm) else {
-                        return Vec::new();
-                    };
-                    vec![mgrs.text(), alt]
+                    Some(vec![utm_to_mgrs(&utm).ok()?.text()])
                 }
             }
         }
@@ -205,5 +239,57 @@ mod tests {
             ["GEO", "UTM", "MGRS"]
         );
         assert_eq!(CoordSystem::default(), CoordSystem::Geo);
+        assert_eq!(
+            CoordSystem::ALL.map(CoordSystem::fly_id),
+            ["fly-coords-geo", "fly-coords-utm", "fly-coords-mgrs"]
+        );
+    }
+
+    /// `Vertical = false`, the flight screen's: the position on one line - GEO's two numbers a
+    /// space apart, UTM's `ToString()`, the MGRS reference - then three spaces and the height,
+    /// and no `AltSource`.
+    #[test]
+    fn horizontal_is_one_line_with_three_spaces_before_the_height() {
+        let geo = at_cmac(CoordSystem::Geo);
+        assert_eq!(geo.line(), "-35.3632621 149.1652374   584.00m");
+        assert!(!geo.line().contains("SRTM"));
+        let utm = at_cmac(CoordSystem::Utm);
+        assert_eq!(
+            utm.line(),
+            format!("{}   584.00m", utm.lines()[..3].join(" "))
+        );
+        let mgrs = at_cmac(CoordSystem::Mgrs);
+        assert_eq!(mgrs.line(), format!("{}   584.00m", mgrs.lines()[0]));
+    }
+
+    /// On the equator at zone 31's meridian the transform's numbers are round: 500 km east and 0
+    /// north, which `UTM.ToString()` writes as `500000` and `0`; in MGRS square EA, its digits all
+    /// zeros and so all dropped.
+    #[test]
+    fn on_the_equator_at_a_zones_meridian_the_numbers_are_round() {
+        let mut coords = Coords {
+            system: CoordSystem::Utm,
+            lat: 0.0,
+            lng: 3.0,
+            ..Coords::default()
+        };
+        assert_eq!(coords.line(), "31N 500000 0   0.00m");
+        assert_eq!(coords.lines(), vec!["31N", "500000", "0", "0.00m"]);
+        coords.system = CoordSystem::Mgrs;
+        assert_eq!(coords.line(), "31NEA   0.00m");
+        coords.system = CoordSystem::Geo;
+        assert_eq!(coords.line(), "0.0000000 3.0000000   0.00m");
+    }
+
+    #[test]
+    fn horizontal_draws_nothing_where_on_paint_returns() {
+        let mut polar = at_cmac(CoordSystem::Utm);
+        polar.lat = 85.0;
+        assert_eq!(polar.line(), "");
+        polar.system = CoordSystem::Mgrs;
+        assert_eq!(polar.line(), "");
+        let mut antimeridian = at_cmac(CoordSystem::Utm);
+        antimeridian.lng = 180.0;
+        assert_eq!(antimeridian.line(), "");
     }
 }

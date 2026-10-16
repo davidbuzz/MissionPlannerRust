@@ -1,0 +1,51 @@
+# FLIGHT DATA's position read-out under the map, and the vehicle marker's tooltip.
+#
+# The read-out is coords1, a Coords control with Vertical false in panel1 under the flight map
+# (ExtLibs/Controls/Coords.cs; GCSViews/FlightData.resx), bound to the vehicle's lat, lng and alt
+# (GCSViews/FlightData.Designer.cs:2842-2854): GEO writes latitude and longitude to seven places,
+# UTM the zone and band, easting and northing, MGRS one reference at Precision 5, each followed by
+# three spaces and the altitude in the display unit. Its combo, three buttons here, switches the
+# system (CMB_coordsystem_SelectedIndexChanged, Coords.cs:162-170).
+#
+# The tooltip is Common.getMAVMarker's ToolTipText: ArduPilot.Common.speechConversion of the
+# mapicondesc setting, drawn always while the setting holds something (Common.cs:204-217,
+# ExtLibs/ArduPilot/Common.cs:185-290). SITL's copter has AVD_ENABLE 0, so no AVD_W_DIST_XY or
+# AVD_F_DIST_XY, and is the GMapMarkerQuad that has one. The description is the one CONFIG >
+# Planner offers when its Display tooltip box is ticked (ConfigPlanner.cs:1119-1120); every word
+# in braces is one speechConversion replaces.
+#
+# SITL starts at CMAC, in UTM zone 55H, square FA.
+#
+# Needs SITL copter on tcp:127.0.0.1:5760. Run as
+#
+#   tools/gui-test.sh tests/gui/fly-map-coords.gui -- tcp:127.0.0.1:5760
+
+env MP_CONFIG_XML $WORK/config.xml
+setup printf '<?xml version="1.0" encoding="utf-8"?><Config><mapicondesc>{alt}{altunit} {airspeed}{speedunit} id:{sysid} Sats:{satcount} HDOP:{gpshdop} Volts:{battery_voltage}</mapicondesc></Config>' > "$WORK/config.xml"
+screen fly
+window 1600x1200
+budget 11
+# 11: 9.3 s measured headless on lavapipe (2026-10-16, the first run after the SITL starts waits for its fix; 2.5 s warm), the rule's ceiling plus one.
+
+expect vehicle.count > 0
+expect map.ready true
+expect map.vehicle.drawn true
+
+# The read-out: GEO to begin with, the vehicle at CMAC.
+expect fly.coords.system GEO
+expect fly.coords.line ~ -35.36
+expect fly.coords.line ~ 149.16
+click fly-coords-utm
+expect fly.coords.system UTM
+expect fly.coords.line ~ 55H
+click fly-coords-mgrs
+expect fly.coords.system MGRS
+expect fly.coords.line ~ 55HFA
+click fly-coords-geo
+expect fly.coords.system GEO
+expect fly.coords.line ~ -35.36
+
+# The marker's tooltip, every word replaced, and drawn over the marker.
+expect fly.marker.tooltip ~ m/s id:1 Sats:
+expect fly.marker.tooltip !~ {
+expect map.tooltip ~ m/s id:1 Sats:

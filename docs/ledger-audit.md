@@ -116,6 +116,11 @@ wrote).
 
 ## Set right on the way
 
+- `geoutility::utm_to_mgrs` read the 100 km square's row from the first two digits of the bare
+  northing, where `UTMMGR` reads `NorthString`, padded to seven digits by `UTM.Format`: from the
+  equator to about 9 N the row letter was wrong (row R for A in an odd zone half a degree north).
+  It reads the padded, rounded strings now, and rounds a half metre to the even as `Math.Round`
+  does.
 - The seven DroneCAN rows marked `tested` earlier pointed `target_crate` at mp-gui while their
   notes named mp-dronecan: they point at mp-dronecan.
 - `gimbal_video.rs` cited `ClickBindingButton.cs:415-430` and `:361-376` in a file of 208 lines:

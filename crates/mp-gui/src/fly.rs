@@ -4965,6 +4965,13 @@ pub struct FlightData {
     pub gimbal_video: crate::gimbal_video::GimbalVideo,
     /// `GStreamerUI.DownloadGStreamer`, while the runtime is being fetched.
     pub gst_download: Option<GstDownload>,
+    /// `coords1.System` under the flight map: its combo's choice, GEO to begin with and kept
+    /// for the run only, as nothing in `FlightData` saves it.
+    /// `// C#: ExtLibs/Controls/Coords.Designer.cs:46; GCSViews/FlightData.cs:447, 4510`
+    pub coords_system: crate::coords::CoordSystem,
+    /// The vehicle marker's `ToolTipText`, as each map's loop keeps it between making the marker
+    /// anew.
+    pub marker_tooltip: VehicleTooltip,
 }
 
 /// `GStreamerUI.DownloadGStreamer`'s progress dialog, on the status line: the download's thread,
@@ -5260,6 +5267,8 @@ impl FlightData {
             mjpeg: None,
             gimbal_video: crate::gimbal_video::GimbalVideo::default(),
             gst_download: None,
+            coords_system: crate::coords::CoordSystem::default(),
+            marker_tooltip: VehicleTooltip::default(),
         }
     }
 
@@ -5303,6 +5312,17 @@ impl FlightData {
         self.prearm.record_facts();
         crate::facts::record("fly.camera_overlap", self.camera_overlap);
         self.photos.record_facts();
+        // `coords1` under the map: its system, and the line it paints.
+        crate::facts::record("fly.coords.system", self.coords_system.name());
+        crate::facts::record(
+            "fly.coords.line",
+            vehicle_coords(self.coords_system, view.state.as_deref(), self.quick.units()).line(),
+        );
+        // The vehicle marker's tooltip as the map was last handed it.
+        crate::facts::record(
+            "fly.marker.tooltip",
+            self.marker_tooltip.shown().unwrap_or("none"),
+        );
         let state = view.state.as_deref();
         crate::facts::record(
             "fly.ekf.values",
@@ -9476,6 +9496,410 @@ fn customize_form(
     .into_any_element()
 }
 
+// --- coords1 under the map, and the vehicle marker's tooltip --------------------------------------
+
+/// `coords1` under the flight map as `bindingSource1` binds it to the shown vehicle's
+/// `CurrentState`: `Lat` and `Lng` its `lat` and `lng`, 0 before a position as a new
+/// `CurrentState` holds them, and `Alt` its `alt` - `(_alt - altoffsethome) * multiplieralt`, a
+/// `float` the binding widens to the control's `double` - in `CurrentState.AltUnit`, which
+/// `Activate` and every update set. With no vehicle the binding's `CurrentState` is a new one: 0,
+/// 0 and 0. `AltSource` is the designer's empty text.
+/// `// C#: GCSViews/FlightData.Designer.cs:2842-2854; GCSViews/FlightData.cs:447, 4510; ExtLibs/ArduPilot/CurrentState.cs:315-328`
+#[must_use]
+pub fn vehicle_coords(
+    system: crate::coords::CoordSystem,
+    state: Option<&mp_vehicle::VehicleState>,
+    units: &mp_vehicle::units::DisplayUnits,
+) -> crate::coords::Coords {
+    let (lat, lng, alt) = state.map_or((0.0, 0.0, 0.0), |state| {
+        let (lat, lng) = state
+            .position
+            .map_or((0.0, 0.0), |at| (at.latitude(), at.longitude()));
+        #[allow(clippy::cast_possible_truncation)] // `cs.alt` is a `float`
+        let alt = units.to_alt(displayed_altitude(
+            state.altitude_relative.0,
+            state.alt_offset_home,
+        )) as f32;
+        (lat, lng, f64::from(alt))
+    });
+    crate::coords::Coords {
+        system,
+        lat,
+        lng,
+        alt,
+        alt_unit: units.alt_unit,
+        alt_source: "",
+    }
+}
+
+/// `panel1`, `tableMap`'s second row under the flight map, 25 pixels high, with `coords1` at its
+/// left: the system combo - three buttons here, as the planner's read-out has them - and the
+/// vehicle's position in one line beside it (`Vertical = false`, so no `AltSource`). The panel's
+/// other two controls are elsewhere here: `CB_tuning` is the tuning graph's toggle and
+/// `CHK_autopan` the map's "follow vehicle" button.
+/// `// C#: GCSViews/FlightData.resx (panel1; coords1 at (7, 2), 247 by 21; tableMap's rows); ExtLibs/Controls/Coords.cs:94-111; ExtLibs/Controls/Coords.Designer.cs:31-47`
+pub fn coords_strip(
+    data: &FlightData,
+    state: Option<&mp_vehicle::VehicleState>,
+    cx: &mut Context<MissionPlanner>,
+) -> AnyElement {
+    use crate::coords::CoordSystem;
+    let coords = vehicle_coords(data.coords_system, state, data.quick.units());
+    let mut combo = div().flex().flex_shrink_0().items_center().gap_1();
+    for system in CoordSystem::ALL {
+        let chosen = data.coords_system == system;
+        combo = combo.child(
+            crate::probe::measured(system.fly_id(), div())
+                .id(system.fly_id())
+                .px_1()
+                .py(px(1.0))
+                .rounded_sm()
+                .border_1()
+                .border_color(rgb(if chosen { theme::ACCENT } else { theme::BORDER }))
+                .text_xs()
+                .text_color(rgb(if chosen { theme::ACCENT } else { theme::TEXT }))
+                .cursor_pointer()
+                .hover(|style| style.bg(rgb(theme::BORDER)))
+                .child(system.name())
+                // `CMB_coordsystem_SelectedIndexChanged`: the system chosen, the control painted
+                // again. `// C#: ExtLibs/Controls/Coords.cs:162-170`
+                .on_click(cx.listener(move |this, _event, _window, cx| {
+                    this.fly_data.coords_system = system;
+                    cx.notify();
+                })),
+        );
+    }
+    crate::probe::measured("fly-coords", div())
+        .flex()
+        .flex_shrink_0()
+        .items_center()
+        .h(px(25.0))
+        .pl(px(7.0))
+        .gap(px(3.0))
+        .child(combo)
+        .child(
+            crate::probe::measured("fly-coords-text", div())
+                .min_w(px(0.0))
+                .truncate()
+                .text_xs()
+                .text_color(rgb(theme::TEXT))
+                .child(coords.line()),
+        )
+        .into_any_element()
+}
+
+/// The setting CONFIG > Planner's "Display tooltip" box writes the vehicle marker's description
+/// to, and empties when it is unticked.
+/// `// C#: GCSViews/ConfigurationView/ConfigPlanner.cs:244, 1112-1134`
+pub const MAP_ICON_DESC: &str = "mapicondesc";
+
+/// The C# type of a `CurrentState` member, as `mp_vehicle::coverage` lists it.
+fn property_type(name: &str) -> Option<&'static str> {
+    mp_vehicle::coverage::CURRENTSTATE
+        .iter()
+        .find(|field| field.name == name)
+        .map(|field| field.ty)
+}
+
+/// A property's value as `speechConversion`'s reflection writes it: `((double)fieldValue)
+/// .ToString("F1")` or `((float)fieldValue).ToString("F1")` - "F1" is "0.0" for a finite number,
+/// a zero after rounding losing its sign on the .NET Framework as there - else
+/// `fieldValue.ToInvariantString()`, an integer's digits or a flag's `True` or `False`. `None`
+/// for a type whose value is not a number here (a string, an enum, a date, a position).
+/// `// C#: ExtLibs/ArduPilot/Common.cs:269-281; ExtLibs/Utilities/Extensions.cs:1082-1100`
+#[allow(clippy::cast_possible_truncation, clippy::float_cmp)] // the C#'s `float`; a flag is 0 or 1
+fn property_text(ty: &str, value: f64) -> Option<String> {
+    use mp_mission::dotnet::{format_f32, format_f64};
+    match ty {
+        "double" => Some(format_f64(value, "0.0")),
+        "float" => Some(format_f32(value as f32, "0.0")),
+        "bool" => Some(String::from(if value == 0.0 { "False" } else { "True" })),
+        "int" | "uint" | "short" | "ushort" | "byte" | "ulong" => Some(format_f64(value, "0")),
+        _ => None,
+    }
+}
+
+/// `new TimeSpan(0, 0, 0, seconds).ToString()`: `[-][d.]hh:mm:ss`.
+fn time_span(seconds: i32) -> String {
+    let sign = if seconds < 0 { "-" } else { "" };
+    let total = i64::from(seconds).unsigned_abs();
+    let (days, hours) = (total / 86_400, total % 86_400 / 3_600);
+    let (minutes, seconds) = (total % 3_600 / 60, total % 60);
+    if days > 0 {
+        format!("{sign}{days}.{hours:02}:{minutes:02}:{seconds:02}")
+    } else {
+        format!("{sign}{hours:02}:{minutes:02}:{seconds:02}")
+    }
+}
+
+/// `ArduPilot.Common.speechConversion(MAV, input)`: a template's words in braces replaced by the
+/// vehicle's values. First nineteen by name, in the C#'s order, each in its own format: `{wpn}`
+/// ("Home" at item 0), `{sysid}`, `{compid}`, `{asp}`, `{alt}`, `{wpa}`, `{gsp}`, `{mode}`,
+/// `{batv}`, `{batp}`, `{vsp}`, `{curr}`, `{hdop}`, `{satcount}`, `{rssi}`, `{disthome}`,
+/// `{timeinair}`, `{altunit}` and `{speedunit}`. Then, by reflection, every public property of
+/// `CurrentState` - not its fields, and so none of its statics - whose name is one of the pieces
+/// the text splits into at its braces, each as `property_text` writes it.
+///
+/// The values are the getters': the display units through each property's multiplier, and
+/// `alt` less Set Home Alt's offset, as the HUD and the quick views read them.
+///
+/// Where this is not the C#'s: `{wpa}`, `targetalt`, is the value the C#'s low-pass of
+/// `Math.Round(alt + alt_error)` settles to, as the HUD's mark has it; `{batv}`, `{vsp}` and
+/// `{curr}` are written with a point, where the C# uses the installed culture's separator; and a
+/// property this application does not hold, or whose value is not a number or a flag, is left as
+/// typed. Speech, its other caller, is not ported (NOT_DONE_YET_MATRIX's "Swarm, HIL and speech"
+/// row); the vehicle marker's tooltip ([`marker_tooltip_text`]) is.
+/// `// C#: ExtLibs/ArduPilot/Common.cs:185-290`
+#[must_use]
+#[allow(clippy::cast_possible_truncation)] // the C#'s `float`s
+pub fn speech_conversion(
+    input: &str,
+    state: &mp_vehicle::VehicleState,
+    units: &mp_vehicle::units::DisplayUnits,
+) -> String {
+    use mp_mission::dotnet::{format_f32, format_f64, general_f32, to_int};
+    let mut shown = *state;
+    shown.altitude_relative = mp_units::Metres(displayed_altitude(
+        state.altitude_relative.0,
+        state.alt_offset_home,
+    ));
+    let value = |name: &str| crate::quick::display_value(name, &shown, units).unwrap_or(0.0);
+    // `ToString(format)` on the property's own type: seven significant digits for a `float`,
+    // fifteen for a `double` or an integer.
+    let number = |name: &str, format: &str| {
+        let value = value(name);
+        if property_type(name) == Some("float") {
+            format_f32(value as f32, format)
+        } else {
+            format_f64(value, format)
+        }
+    };
+    let wpno = value("wpno") as f32;
+    #[allow(clippy::float_cmp)] // `MAV.cs.wpno == 0`
+    let wpn = if wpno == 0.0 {
+        "Home".to_owned()
+    } else {
+        general_f32(wpno)
+    };
+    // `targetalt = targetalt * 0.5f + (float)Math.Round(alt + alt_error, 0) * 0.5f`, settled.
+    // `// C#: ExtLibs/ArduPilot/CurrentState.cs:1107`
+    let target = units.to_alt(shown.target_altitude()).round_ties_even() as f32;
+    let named = [
+        ("{wpn}", wpn),
+        ("{sysid}", state.sysid.to_string()),
+        ("{compid}", state.compid.to_string()),
+        ("{asp}", number("airspeed", "0")),
+        ("{alt}", number("alt", "0")),
+        ("{wpa}", format_f32(target, "0")),
+        ("{gsp}", number("groundspeed", "0")),
+        // `ResetInternals` leaves "Unknown" until a heartbeat names a mode.
+        // `// C#: ExtLibs/ArduPilot/CurrentState.cs:4388-4393`
+        ("{mode}", mode_name(state).unwrap_or("Unknown").to_owned()),
+        ("{batv}", number("battery_voltage", "0.00")),
+        ("{batp}", number("battery_remaining", "0")),
+        ("{vsp}", number("verticalspeed", "0.0")),
+        ("{curr}", number("current", "0.0")),
+        ("{hdop}", number("gpshdop", "0.00")),
+        ("{satcount}", number("satcount", "0")),
+        ("{rssi}", number("rssi", "0")),
+        ("{disthome}", number("DistToHome", "0")),
+        (
+            "{timeinair}",
+            time_span(to_int(f64::from(state.time_in_air))),
+        ),
+        ("{altunit}", units.alt_unit.to_owned()),
+        ("{speedunit}", units.speed_unit.to_owned()),
+    ];
+    let mut text = input.to_owned();
+    for (word, with) in &named {
+        text = text.replace(word, with);
+    }
+    // `input.Split(new string[] { "{", "}" }, StringSplitOptions.RemoveEmptyEntries)`, then
+    // `test.GetProperties(Instance | Static | Public)` in the class's order.
+    let pieces: Vec<String> = text
+        .split(['{', '}'])
+        .filter(|piece| !piece.is_empty())
+        .map(ToOwned::to_owned)
+        .collect();
+    for field in mp_vehicle::coverage::CURRENTSTATE {
+        let property = !field.ty.starts_with("static ")
+            && !field.ty.starts_with("event ")
+            && !crate::quick::FIELDS_NOT_PROPERTIES.contains(&field.name);
+        if !property || !pieces.iter().any(|piece| piece == field.name) {
+            continue;
+        }
+        let Some(written) = crate::quick::display_value(field.name, &shown, units)
+            .and_then(|value| property_text(field.ty, value))
+        else {
+            continue;
+        };
+        text = text.replace(&format!("{{{}}}", field.name), &written);
+    }
+    text
+}
+
+/// Whether `getMAVMarker` gives the marker a `ToolTipText`: the plane, the rover, the boat, the
+/// submarine, the helicopter, and the quad without both `AVD_W_DIST_XY` and `AVD_F_DIST_XY`; not
+/// the antenna tracker, the single copter, the quad that draws those two circles, or the dot.
+/// `// C#: Common.cs:77-226`
+#[must_use]
+pub fn marker_has_tooltip(kind: crate::mapview::MarkerKind, parameters: &[(String, f64)]) -> bool {
+    use crate::mapview::MarkerKind;
+    let held = |name: &str| parameters.iter().any(|(have, _)| have == name);
+    match kind {
+        MarkerKind::Plane
+        | MarkerKind::Rover
+        | MarkerKind::Boat
+        | MarkerKind::Sub
+        | MarkerKind::Heli => true,
+        MarkerKind::Quad => !(held("AVD_W_DIST_XY") && held("AVD_F_DIST_XY")),
+        MarkerKind::Tracker | MarkerKind::Single | MarkerKind::Dot => false,
+    }
+}
+
+/// A marker's `ToolTipText` while its `ToolTipMode` is `Always`, which is while the description
+/// ([`MAP_ICON_DESC`]) holds something: [`speech_conversion`] of it. `None` is `Never` - the
+/// setting empty or missing, `"" + Settings.Instance["mapicondesc"]` - a marker made without a
+/// tooltip, or a text that comes out empty, which `GMapOverlay` does not draw.
+/// `// C#: Common.cs:90-93; ExtLibs/GMap.NET.Drawing/GMap.NET.WindowsForms/GMapOverlay.cs:348-358`
+#[must_use]
+pub fn marker_tooltip_text(
+    kind: crate::mapview::MarkerKind,
+    parameters: &[(String, f64)],
+    template: Option<&str>,
+    state: &mp_vehicle::VehicleState,
+    units: &mp_vehicle::units::DisplayUnits,
+) -> Option<String> {
+    let template = template.unwrap_or_default();
+    if template.is_empty() || !marker_has_tooltip(kind, parameters) {
+        return None;
+    }
+    Some(speech_conversion(template, state, units)).filter(|text| !text.is_empty())
+}
+
+/// How far apart FLIGHT DATA's loop empties `routes`: `waypoints.AddSeconds(5) < DateTime.Now`.
+/// `// C#: GCSViews/FlightData.cs:3918-3922, 4061`
+const ROUTES_CLEARED: Duration = Duration::from_secs(5);
+
+/// The clocks that decide when a map's loop makes the vehicle marker anew.
+#[derive(Debug, Clone, Copy)]
+pub struct MarkerClock {
+    /// Whether the map is FLIGHT PLAN's, whose `routesoverlay` goes by the wall clock's second.
+    pub planning: bool,
+    /// Now, for FLIGHT DATA's five seconds.
+    pub now: Instant,
+    /// `DateTime.Now.Second`, 0 to 59.
+    pub second: u32,
+}
+
+impl MarkerClock {
+    /// The clocks now, for the map `planning` says. The second is the UTC clock's, which is the
+    /// local clock's in every time zone (each is whole minutes from it).
+    #[must_use]
+    pub fn now(planning: bool) -> Self {
+        Self {
+            planning,
+            now: Instant::now(),
+            second: u32::try_from(mp_vehicle::DateTime::now().second()).unwrap_or(0),
+        }
+    }
+}
+
+/// A marker as a map's loop made it: its kind, when, and its text.
+#[derive(Debug)]
+struct Made {
+    kind: crate::mapview::MarkerKind,
+    at: Instant,
+    text: Option<String>,
+}
+
+/// The vehicle marker's tooltip as the two maps' loops keep it. `getMAVMarker` sets
+/// `ToolTipText` only when it makes a marker: a plane, quad or rover already on the overlay is
+/// moved and turned and keeps its text, while every other marker is taken off and made anew on
+/// each update. FLIGHT DATA's loop empties `routes` - so its marker is made anew - once five
+/// seconds have passed since it last did (counted here from when the marker was made), FLIGHT
+/// PLAN's empties `routesoverlay` on every update in a second of the clock that is a multiple of
+/// ten, and each overlay has a marker of its own. Without a position no marker is added, so the
+/// first one after a fix is new.
+/// `// C#: Common.cs:24-76; GCSViews/FlightData.cs:962-972, 3918-3922, 4061, 5631-5640; GCSViews/FlightPlanner.cs:6901-6919`
+#[derive(Debug, Default)]
+pub struct VehicleTooltip {
+    /// `routes`' marker.
+    flight: Option<Made>,
+    /// `routesoverlay`'s.
+    plan: Option<Made>,
+    /// What the map was last handed.
+    shown: Option<String>,
+}
+
+impl VehicleTooltip {
+    /// One update of the shown map's loop: the marker kept, or made anew with `make`'s text,
+    /// and the text the map draws. `fixed` is whether the vehicle has a position to put it at.
+    pub fn update(
+        &mut self,
+        clock: MarkerClock,
+        kind: crate::mapview::MarkerKind,
+        fixed: bool,
+        make: impl FnOnce() -> Option<String>,
+    ) -> Option<String> {
+        use crate::mapview::MarkerKind;
+        let slot = if clock.planning {
+            &mut self.plan
+        } else {
+            &mut self.flight
+        };
+        let moved = matches!(kind, MarkerKind::Plane | MarkerKind::Quad | MarkerKind::Rover);
+        let kept = fixed
+            && moved
+            && slot.as_ref().is_some_and(|made| {
+                // The overlay emptied since the marker was made.
+                let cleared = if clock.planning {
+                    clock.second.is_multiple_of(10)
+                } else {
+                    clock.now.saturating_duration_since(made.at) > ROUTES_CLEARED
+                };
+                made.kind == kind && !cleared
+            });
+        if !kept {
+            *slot = fixed.then(|| Made {
+                kind,
+                at: clock.now,
+                text: make(),
+            });
+        }
+        let text = slot.as_ref().and_then(|made| made.text.clone());
+        self.shown.clone_from(&text);
+        text
+    }
+
+    /// What the map was last handed, for the facts.
+    #[must_use]
+    pub fn shown(&self) -> Option<&str> {
+        self.shown.as_deref()
+    }
+}
+
+impl FlightData {
+    /// The vehicle marker's tooltip for this update of the shown map ([`VehicleTooltip`]): from
+    /// CONFIG > Planner's description, `template` ([`MAP_ICON_DESC`]), the shown vehicle's state
+    /// and parameters, in the units the quick views have.
+    pub fn vehicle_tooltip(
+        &mut self,
+        planning: bool,
+        kind: crate::mapview::MarkerKind,
+        parameters: &[(String, f64)],
+        template: Option<&str>,
+        state: &mp_vehicle::VehicleState,
+    ) -> Option<String> {
+        let units = *self.quick.units();
+        let fixed = state.position.is_some_and(crate::mapview::is_fixed);
+        self.marker_tooltip
+            .update(MarkerClock::now(planning), kind, fixed, || {
+                marker_tooltip_text(kind, parameters, template, state, &units)
+            })
+    }
+}
+
 #[cfg(test)]
 mod tests {
 
@@ -13188,5 +13612,247 @@ mod tests {
         assert_eq!(mjpeg_source(&mut data, &mut persisted, false, "x"), None);
         assert!(data.mjpeg.is_none());
         assert_eq!(persisted.get("mjpeg_url"), Some(url.as_str()));
+    }
+
+    // --- coords1 under the map, and the vehicle marker's tooltip ---
+
+    /// A copter in Loiter at CMAC, 12.4 m above home, with its numbers set: the airspeed and the
+    /// ground speed on a half each, which .NET's formats round away from zero.
+    fn copter_at_cmac() -> mp_vehicle::VehicleState {
+        let mut state = mp_vehicle::VehicleState::default();
+        state.sysid = 1;
+        state.compid = 1;
+        state.vehicle_type = 2;
+        state.custom_mode = 5;
+        state.position = mp_units::LatLon::new(-35.363_262_1, 149.165_237_4).ok();
+        state.altitude_relative = mp_units::Metres(12.4);
+        state.nav.alt_error = 2.0;
+        state.air_speed = mp_units::MetresPerSecond(3.25);
+        state.ground_speed = mp_units::MetresPerSecond(4.5);
+        state.battery.voltage = 12.6;
+        state.battery.current = 2.5;
+        state.battery.remaining_percent = 87;
+        state.gps.hdop = 1.21;
+        state.gps.satellites_visible = 10;
+        state.radio.rssi = 200;
+        state.time_in_air = 3725.9;
+        state
+    }
+
+    /// `ChangeUnits` with nothing set: metres and metres per second.
+    fn metres() -> mp_vehicle::units::DisplayUnits {
+        mp_vehicle::units::DisplayUnits::default().change_units(None, None, None)
+    }
+
+    /// FLIGHT DATA's `coords1` is horizontal: GEO's latitude and longitude to seven places, UTM's
+    /// `ToString()` or the MGRS reference, then three spaces and `cs.alt` in the display unit -
+    /// less Set Home Alt's offset, in feet when the Planner page says feet. With no vehicle it
+    /// shows a new `CurrentState`'s zeros.
+    #[test]
+    fn coords1_under_the_map_is_the_vehicles_position_on_one_line() {
+        use crate::coords::CoordSystem;
+        let mut state = copter_at_cmac();
+        state.altitude_relative = mp_units::Metres(584.0);
+        let units = metres();
+        let line = |system, state: &mp_vehicle::VehicleState| {
+            vehicle_coords(system, Some(state), &units).line()
+        };
+        assert_eq!(
+            line(CoordSystem::Geo, &state),
+            "-35.3632621 149.1652374   584.00m"
+        );
+        let utm = line(CoordSystem::Utm, &state);
+        assert!(utm.starts_with("55H "), "{utm}");
+        assert!(utm.ends_with("   584.00m"), "{utm}");
+        assert_eq!(utm.split(' ').filter(|part| !part.is_empty()).count(), 4);
+        let mgrs = line(CoordSystem::Mgrs, &state);
+        assert!(mgrs.starts_with("55HFA"), "{mgrs}");
+        assert!(mgrs.ends_with("   584.00m"), "{mgrs}");
+        let mut offset = state;
+        offset.alt_offset_home = 4.0;
+        assert_eq!(
+            line(CoordSystem::Geo, &offset),
+            "-35.3632621 149.1652374   580.00m"
+        );
+        let feet =
+            mp_vehicle::units::DisplayUnits::default().change_units(None, Some("Feet"), None);
+        assert_eq!(
+            vehicle_coords(CoordSystem::Geo, Some(&state), &feet).line(),
+            "-35.3632621 149.1652374   1916.01ft"
+        );
+        assert_eq!(
+            vehicle_coords(CoordSystem::Geo, None, &units).line(),
+            "0.0000000 0.0000000   0.00m"
+        );
+        // A vehicle before its fix is at 0, 0 too.
+        let mut unfixed = state;
+        unfixed.position = None;
+        assert_eq!(line(CoordSystem::Geo, &unfixed), "0.0000000 0.0000000   584.00m");
+    }
+
+    /// The combo's choice is the screen's, GEO to begin with, and the facts' line follows it.
+    #[test]
+    fn coords1_starts_on_geo_and_its_choice_is_kept() {
+        use crate::coords::CoordSystem;
+        let mut data = FlightData::with_pois(crate::poi::Pois::default());
+        assert_eq!(data.coords_system, CoordSystem::Geo);
+        assert_eq!(
+            CoordSystem::ALL.map(CoordSystem::fly_id),
+            ["fly-coords-geo", "fly-coords-utm", "fly-coords-mgrs"]
+        );
+        data.coords_system = CoordSystem::Mgrs;
+        let state = copter_at_cmac();
+        let line = vehicle_coords(data.coords_system, Some(&state), data.quick.units()).line();
+        assert!(line.starts_with("55HFA"), "{line}");
+    }
+
+    /// `speechConversion`'s nineteen words, each in its own format: "Home" at item 0, the
+    /// speeds and heights to the unit with .NET's halves away from zero (4.5 is 5), the battery
+    /// to two places, the vertical speed and current to one, the HDOP to two, the time in air a
+    /// `TimeSpan`, and the units' names.
+    #[test]
+    fn speech_conversion_writes_its_named_words_as_the_csharp_does() {
+        let state = copter_at_cmac();
+        let units = metres();
+        assert_eq!(
+            speech_conversion(
+                "{wpn}|{sysid}|{compid}|{asp}|{alt}|{wpa}|{gsp}|{mode}|{batv}|{batp}|{vsp}|\
+                 {curr}|{hdop}|{satcount}|{rssi}|{disthome}|{timeinair}|{altunit}|{speedunit}",
+                &state,
+                &units,
+            ),
+            "Home|1|1|3|12|14|5|Loiter|12.60|87|0.0|2.5|1.21|10|200|0|01:02:05|m|m/s"
+        );
+        let mut flying = state;
+        flying.mission_current = 3;
+        flying.time_in_air = 90_061.0;
+        flying.alt_offset_home = 2.4;
+        assert_eq!(
+            speech_conversion("{wpn} {timeinair} {alt}", &flying, &units),
+            "3 1.01:01:01 10"
+        );
+        // No heartbeat's mode: `ResetInternals`' "Unknown".
+        let mut generic = state;
+        generic.vehicle_type = 0;
+        assert_eq!(speech_conversion("{mode}", &generic, &units), "Unknown");
+        assert_eq!(time_span(-5), "-00:00:05");
+    }
+
+    /// CONFIG > Planner's default description: the named words, then `airspeed`, `gpshdop` and
+    /// `battery_voltage` by reflection, a `float` or `double` to one place - 3.25 is 3.3, as
+    /// .NET's "F1" rounds it - and `armed`, a `bool`, as `True`. A field, a static, a property
+    /// not held here and a word that is no property are left as typed.
+    /// `// C#: GCSViews/ConfigurationView/ConfigPlanner.cs:1119-1120`
+    #[test]
+    fn speech_conversion_writes_the_other_properties_by_reflection() {
+        let mut state = copter_at_cmac();
+        state.armed = true;
+        let units = metres();
+        assert_eq!(
+            speech_conversion(
+                "{alt}{altunit} {airspeed}{speedunit} id:{sysid} Sats:{satcount} \
+                 HDOP:{gpshdop} Volts:{battery_voltage}",
+                &state,
+                &units,
+            ),
+            "12m 3.3m/s id:1 Sats:10 HDOP:1.2 Volts:12.6"
+        );
+        assert_eq!(speech_conversion("{armed}", &state, &units), "True");
+        assert_eq!(
+            speech_conversion(
+                "{lastautowp} {multiplierdist} {messageHigh} {nothing} {",
+                &state,
+                &units
+            ),
+            "{lastautowp} {multiplierdist} {messageHigh} {nothing} {"
+        );
+        // In knots: the speed through its multiplier and the unit's name.
+        let knots =
+            mp_vehicle::units::DisplayUnits::default().change_units(None, None, Some("knots"));
+        assert_eq!(speech_conversion("{gsp}{speedunit}", &state, &knots), "9kts");
+    }
+
+    /// `getMAVMarker` gives a tooltip to the plane, rover, boat, sub, helicopter and the quad
+    /// without both avoidance radii, and to no other marker; `mapicondesc` empty or missing is
+    /// `ToolTipMode.Never`.
+    #[test]
+    fn the_marker_has_its_tooltip_as_get_mav_marker_gives_it() {
+        use crate::mapview::MarkerKind;
+        let none: &[(String, f64)] = &[];
+        for kind in MarkerKind::ALL {
+            let expected = !matches!(
+                kind,
+                MarkerKind::Tracker | MarkerKind::Single | MarkerKind::Dot
+            );
+            assert_eq!(marker_has_tooltip(kind, none), expected, "{kind:?}");
+        }
+        let one = [("AVD_W_DIST_XY".to_owned(), 300.0)];
+        assert!(marker_has_tooltip(MarkerKind::Quad, &one));
+        let both = [
+            ("AVD_W_DIST_XY".to_owned(), 300.0),
+            ("AVD_F_DIST_XY".to_owned(), 100.0),
+        ];
+        assert!(!marker_has_tooltip(MarkerKind::Quad, &both));
+        assert!(marker_has_tooltip(MarkerKind::Plane, &both));
+        let state = copter_at_cmac();
+        let units = metres();
+        let text = |template| marker_tooltip_text(MarkerKind::Quad, none, template, &state, &units);
+        assert_eq!(text(None), None);
+        assert_eq!(text(Some("")), None);
+        assert_eq!(text(Some("id:{sysid}")), Some("id:1".to_owned()));
+        assert_eq!(
+            marker_tooltip_text(MarkerKind::Tracker, none, Some("id:{sysid}"), &state, &units),
+            None
+        );
+    }
+
+    /// A plane, quad or rover keeps the text it was made with until its map's loop empties the
+    /// overlay - FLIGHT DATA's after five seconds, FLIGHT PLAN's in a second that is a multiple
+    /// of ten - while any other marker is made anew each update; each map has its own, and with
+    /// no position there is none.
+    #[test]
+    fn the_tooltip_is_made_with_the_marker_and_kept_with_it() {
+        use crate::mapview::MarkerKind;
+        let start = Instant::now();
+        let flight = |seconds: u64| MarkerClock {
+            planning: false,
+            now: start + Duration::from_secs(seconds),
+            second: 1,
+        };
+        let plan = |second: u32| MarkerClock {
+            planning: true,
+            now: start,
+            second,
+        };
+        let says = |text: &'static str| move || Some(text.to_owned());
+        let mut tooltip = VehicleTooltip::default();
+        assert_eq!(tooltip.shown(), None);
+        let quad = MarkerKind::Quad;
+        assert_eq!(tooltip.update(flight(0), quad, true, says("a")), Some("a".to_owned()));
+        assert_eq!(tooltip.update(flight(5), quad, true, says("b")), Some("a".to_owned()));
+        assert_eq!(tooltip.update(flight(6), quad, true, says("c")), Some("c".to_owned()));
+        assert_eq!(tooltip.shown(), Some("c"));
+        // Another kind is another marker.
+        assert_eq!(
+            tooltip.update(flight(7), MarkerKind::Plane, true, says("d")),
+            Some("d".to_owned())
+        );
+        // A boat is made anew every update.
+        let boat = MarkerKind::Boat;
+        assert_eq!(tooltip.update(flight(7), boat, true, says("e")), Some("e".to_owned()));
+        assert_eq!(tooltip.update(flight(7), boat, true, says("f")), Some("f".to_owned()));
+        // The planner's map has its own marker, made anew in seconds 0, 10, 20 ...
+        assert_eq!(tooltip.update(plan(3), quad, true, says("g")), Some("g".to_owned()));
+        assert_eq!(tooltip.update(plan(4), quad, true, says("h")), Some("g".to_owned()));
+        assert_eq!(tooltip.update(plan(20), quad, true, says("i")), Some("i".to_owned()));
+        assert_eq!(tooltip.update(plan(21), quad, true, says("j")), Some("i".to_owned()));
+        // ... and the flight map's is still its boat.
+        assert_eq!(tooltip.update(flight(8), boat, true, says("k")), Some("k".to_owned()));
+        // No position, no marker; the first after the fix is new.
+        assert_eq!(tooltip.update(flight(8), quad, false, says("l")), None);
+        assert_eq!(tooltip.shown(), None);
+        assert_eq!(tooltip.update(flight(8), quad, true, says("m")), Some("m".to_owned()));
+        // A marker made without a tooltip draws none.
+        assert_eq!(tooltip.update(flight(20), quad, true, || None), None);
     }
 }

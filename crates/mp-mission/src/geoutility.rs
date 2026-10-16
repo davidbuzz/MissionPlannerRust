@@ -172,8 +172,9 @@ impl Mgrs {
     #[must_use]
     #[allow(clippy::cast_possible_truncation)] // rounded metres within a 100 km square
     pub fn text(&self) -> String {
-        let mut e = format!("{:05}", self.east.round() as i64);
-        let mut n = format!("{:05}", self.north.round() as i64);
+        // `Math.Round(this.East).ToString().PadLeft(5, '0')`.
+        let mut e = format!("{:05}", self.east.round_ties_even() as i64);
+        let mut n = format!("{:05}", self.north.round_ties_even() as i64);
         while e.ends_with('0') && n.ends_with('0') {
             e.pop();
             n.pop();
@@ -189,6 +190,8 @@ pub enum GeoError {
     OutsideUtm,
     /// `ERROR_UTM_ZONE`: a zone or band MGRS has no letters for.
     OutsideMgrs,
+    /// `int.Parse` refusing the easting's leading character: a minus sign.
+    Parse,
 }
 
 impl std::fmt::Display for GeoError {
@@ -197,6 +200,9 @@ impl std::fmt::Display for GeoError {
             Self::OutsideUtm => f.write_str("GeoUtility.ErrorProvider.GeoException: ERROR_GEO2UTM"),
             Self::OutsideMgrs => {
                 f.write_str("GeoUtility.ErrorProvider.GeoException: ERROR_UTM_ZONE")
+            }
+            Self::Parse => {
+                f.write_str("System.FormatException: Input string was not in a correct format.")
             }
         }
     }
@@ -284,11 +290,13 @@ pub fn wgs84_to_utm(lat: f64, lng: f64) -> Result<Utm, GeoError> {
             + qkhm * cosinus3 * (1.0 - tangens2 + eta) * dlaenge3 / 6.0
             + qkhm * cosinus5 * (5.0 - 18.0 * tangens2 + tangens4) * dlaenge5 / 120.0)
         + FALSE_EASTING;
+    // `Math.Round(north, 3)`: times a thousand, to the nearest whole with a half to the even,
+    // and back, as the runtime does it.
     Ok(Utm {
         zone,
         band,
-        east: (east * 1000.0).round() / 1000.0,
-        north: (north * 1000.0).round() / 1000.0,
+        east: (east * 1000.0).round_ties_even() / 1000.0,
+        north: (north * 1000.0).round_ties_even() / 1000.0,
     })
 }
 
@@ -297,30 +305,37 @@ pub fn wgs84_to_utm(lat: f64, lng: f64) -> Result<Utm, GeoError> {
 ///
 /// # Errors
 ///
-/// A zone outside 1 to 60 or a band outside `C` to `X`.
+/// A zone outside 1 to 60 or a band outside `C` to `X`; an easting written with a minus sign,
+/// whose first character the C#'s `int.Parse` refuses.
 /// `// C#: ExtLibs/GeoUtility/Transformation/UTMMGR.cs:44-105`
 #[allow(clippy::cast_possible_truncation)] // rounded metres, seven digits at most
 pub fn utm_to_mgrs(utm: &Utm) -> Result<Mgrs, GeoError> {
     if !(1..=60).contains(&utm.zone) || !('C'..='X').contains(&utm.band) {
         return Err(GeoError::OutsideMgrs);
     }
-    // The first digit of the easting and the first two of the northing, from the text of the
-    // numbers before their decimal point.
-    let east_whole = format!("{}", utm.east.trunc());
-    let north_whole = format!("{}", utm.north.trunc());
-    let east_plan: i32 = east_whole
-        .get(..1)
-        .and_then(|d| d.parse().ok())
-        .unwrap_or(0);
-    let north_plan: i32 = north_whole
-        .get(..2)
-        .and_then(|d| d.parse().ok())
-        .unwrap_or(0);
-    let mut east = format!("{}", utm.east.round() as i64);
+    // The first digit of the easting and the first two of the northing, from `EastString` and
+    // `NorthString` before any decimal point. `UTM.Format` writes them at the default
+    // `Precision` of 0 as `East.ToString("000000")` and `North.ToString("0000000")`: rounded,
+    // and padded with zeros - so a northing under a thousand kilometres, in the first nine
+    // degrees north of the equator, reads "0" and then its hundred-kilometre digit.
+    // `// C#: ExtLibs/GeoUtility/GeoSystem/UTM.cs:227-237; ExtLibs/GeoUtility/GeoSystem/Base/Geocentric.cs:51, 115-142`
+    let whole =
+        |text: String| -> String { text.split(['.', ',']).next().unwrap_or_default().to_owned() };
+    let east_string = whole(crate::dotnet::format_f64(utm.east, "000000"));
+    let north_string = whole(crate::dotnet::format_f64(utm.north, "0000000"));
+    // `int.Parse(e.Substring(0, 1))`, `int.Parse(n.Substring(0, 2))`.
+    let (Some(east_plan), Some(north_plan)) = (
+        east_string.get(..1).and_then(|d| d.parse::<i32>().ok()),
+        north_string.get(..2).and_then(|d| d.parse::<i32>().ok()),
+    ) else {
+        return Err(GeoError::Parse);
+    };
+    // `((int)Math.Round(utm.East)).ToString()`: to the metre, a half to the even.
+    let mut east = format!("{}", utm.east.round_ties_even() as i64);
     if east.len() > 2 {
         east.remove(0);
     }
-    let mut north = format!("{}", utm.north.round() as i64);
+    let mut north = format!("{}", utm.north.round_ties_even() as i64);
     if north.len() > 5 {
         north = north.split_off(north.len() - 5);
     }
@@ -487,6 +502,86 @@ mod tests {
                 north: 0.0
             }),
             Err(GeoError::OutsideMgrs)
+        );
+    }
+
+    /// Wikipedia, "Military Grid Reference System": "the first row, just north of the equator,
+    /// is A in odd-numbered zones, and F in even-numbered zones", and the columns of zone 1 are
+    /// A to H, of zone 2 J to R. Half a degree north on the meridians of zones 31 and 32 is
+    /// some 55 km north: the C#'s `NorthString` reads "0055...", whose first two digits are 00 -
+    /// where the digits of the bare number, "55", made row R and row A.
+    #[test]
+    fn the_row_north_of_the_equator_is_a_in_odd_zones_and_f_in_even_ones() {
+        for (lng, zone, grid) in [(3.0, 31, "EA"), (9.0, 32, "NF")] {
+            let utm = wgs84_to_utm(0.5, lng).expect("inside UTM");
+            assert_eq!((utm.zone, utm.band), (zone, 'N'));
+            let mgrs = utm_to_mgrs(&utm).expect("an MGRS square");
+            assert_eq!(mgrs.grid, grid, "zone {zone}");
+            // On the zone's meridian, so 500 km east: 0 in the square.
+            assert!(mgrs.east.abs() < 1.0, "{}", mgrs.east);
+            assert!((55_000.0..56_000.0).contains(&mgrs.north), "{}", mgrs.north);
+        }
+        // Zone 1's columns start at A: 300 km east is its third, C (zone 1, `zone % 3 == 1`).
+        let utm = Utm {
+            zone: 1,
+            band: 'N',
+            east: 300_000.0,
+            north: 100_000.0,
+        };
+        assert_eq!(utm_to_mgrs(&utm).expect("1N").grid, "CB");
+        let utm = Utm { zone: 2, ..utm };
+        // Zone 2 starts at J; an even zone's rows at F, one row up is G.
+        assert_eq!(utm_to_mgrs(&utm).expect("2N").grid, "LG");
+    }
+
+    /// Wikipedia, "Military Grid Reference System": Honolulu is in the 10 km square 4QFJ15 (its
+    /// Figure 2), and Honolulu's article puts the city at 21.300 N, 157.850 W.
+    #[test]
+    fn honolulu_is_in_4qfj15() {
+        let utm = wgs84_to_utm(21.300, -157.850).expect("inside UTM");
+        let mgrs = utm_to_mgrs(&utm).expect("an MGRS square");
+        assert_eq!((mgrs.zone, mgrs.band, mgrs.grid.as_str()), (4, 'Q', "FJ"));
+        assert!((10_000.0..20_000.0).contains(&mgrs.east), "{}", mgrs.east);
+        assert!((50_000.0..60_000.0).contains(&mgrs.north), "{}", mgrs.north);
+        assert!(mgrs.text().starts_with("4QFJ1"), "{}", mgrs.text());
+    }
+
+    /// `Math.Round` takes a half to the even, where Rust's `round` takes it away from zero:
+    /// 695400.5 is the metre 695400 and 695401.5 is 695402.
+    #[test]
+    fn a_half_metre_goes_to_the_even_metre_as_math_round_takes_it() {
+        let at = |east: f64, north: f64| {
+            utm_to_mgrs(&Utm {
+                zone: 55,
+                band: 'H',
+                east,
+                north,
+            })
+            .expect("55H")
+        };
+        let mgrs = at(695_400.5, 6_084_101.5);
+        assert!((mgrs.east - 95_400.0).abs() < f64::EPSILON, "{}", mgrs.east);
+        assert!(
+            (mgrs.north - 84_102.0).abs() < f64::EPSILON,
+            "{}",
+            mgrs.north
+        );
+        // `EastString` is `ToString("000000")`, which rounds a half away from zero: half a metre
+        // short of 700 km is in the square east of it, at its western edge.
+        let mgrs = at(699_999.5, 6_084_100.0);
+        assert_eq!(mgrs.grid, "GA");
+        assert!(mgrs.east.abs() < f64::EPSILON, "{}", mgrs.east);
+        // 00000 and 84100, two trailing zeros dropped from both.
+        assert_eq!(mgrs.text(), "55HGA000841");
+        // An easting with a minus sign is `int.Parse("-")`, which throws.
+        assert_eq!(
+            utm_to_mgrs(&Utm {
+                zone: 55,
+                band: 'H',
+                east: -1.0,
+                north: 0.0
+            }),
+            Err(GeoError::Parse)
         );
     }
 

@@ -20,7 +20,8 @@ setup mkdir -p "$WORK/MissionPlannerRust" && printf '<?xml version="1.0" encodin
 
 screen plan
 window 1600x1200
-budget 21
+budget 23
+# 23: 21.9 s measured headless on lavapipe (2026-10-16 over three runs; a fresh SITL's first run overran 24), the rule's ceiling plus one.
 
 expect vehicle.connected true
 

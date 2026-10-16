@@ -325,6 +325,9 @@ pub struct MapViewport {
     hovered: Hovered,
     /// The tooltips the last paint drew, for the facts.
     tooltips_drawn: Vec<String>,
+    /// The vehicle marker's tooltip - `mapicondesc` through `speechConversion`, FLIGHT DATA's
+    /// `vehicle_tooltip` - while the setting is set. `// C#: Common.cs:90-93`
+    vehicle_tooltip: Option<String>,
     /// The flight screen's Guided Mode marker, while it has one.
     guided: Option<GuidedMarker>,
     /// The planner's "Tracker Home" marker, while the tracker's position is set and not home's.
@@ -528,6 +531,7 @@ impl MapViewport {
             home_altitude: None,
             hovered: Hovered::default(),
             tooltips_drawn: Vec::new(),
+            vehicle_tooltip: None,
             guided: None,
             tracker: None,
             fence_exclusions: Vec::new(),
@@ -656,6 +660,12 @@ impl MapViewport {
     /// What the vehicle's marker draws besides where it is and which way it points, and the
     /// Planner page's settings for it; handed over with each snapshot, as `getMAVMarker` reads
     /// them from `MAV.cs` each update.
+    /// The vehicle marker's tooltip, or none: drawn beside the marker as the C#'s
+    /// `GMapRoundedToolTip` is.
+    pub fn set_vehicle_tooltip(&mut self, text: Option<String>) {
+        self.vehicle_tooltip = text;
+    }
+
     pub fn set_marker(&mut self, details: MarkerDetails, settings: MarkerSettings) {
         self.marker = details;
         self.marker_settings = settings;
@@ -3804,6 +3814,11 @@ fn paint_live(map: &mut MapViewport, bounds: Bounds<Pixels>, window: &mut Window
             &map.marker_settings,
             m2pixelwidth,
         );
+        // Its tooltip, `mapicondesc` spoken for the vehicle, while the setting is set.
+        if let Some(text) = map.vehicle_tooltip.clone() {
+            paint_tooltip(window, cx, at, &text);
+            map.tooltips_drawn.push(text);
+        }
     }
     map.phases[3] = phase_vehicle.elapsed();
 

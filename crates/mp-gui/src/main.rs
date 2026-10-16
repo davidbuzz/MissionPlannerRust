@@ -2990,6 +2990,13 @@ impl MissionPlanner {
                             )),
                         )
                     }),
+            )
+            // `panel1` under the flight map: the vehicle's position and altitude in the chosen
+            // system, the Coords control's one-line layout (FlightData.Designer.cs:2842-2854).
+            .children(
+                (!planning).then(|| {
+                    fly::coords_strip(&self.fly_data, self.telemetry.view().state.as_deref(), cx)
+                }),
             );
         let pane = div()
             .flex()
@@ -3964,6 +3971,15 @@ impl Render for MissionPlanner {
             };
             let settings = self.marker_settings();
             let on_flight_screen = self.screen == Screen::Fly;
+            // The marker's tooltip, `mapicondesc` spoken for this vehicle, refreshed as each
+            // map's loop remakes its marker. `// C#: Common.cs:90-93; FlightData.cs:3918-3922`
+            let tooltip = self.fly_data.vehicle_tooltip(
+                !on_flight_screen,
+                details.kind,
+                &view.parameters,
+                self.persisted.get(fly::MAP_ICON_DESC),
+                state,
+            );
             let mut map = self.map.borrow_mut();
                         // A position at 0,0 - a GPS before its fix - draws no marker and no route point,
             // as `addMAVMarker` and the route add none (the owner's report, 2026-10-03).
@@ -3985,6 +4001,7 @@ impl Render for MissionPlanner {
                 None => map.vehicle_unfixed(),
             }
             map.set_marker(details, settings);
+            map.set_vehicle_tooltip(tooltip);
         }
 
         // A completed download replaces the plan only if the operator asked for one. Otherwise it

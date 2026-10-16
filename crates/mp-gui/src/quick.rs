@@ -52,15 +52,15 @@
 // This module is internal to the binary; `pub` here documents intent rather than exporting API.
 #![allow(unreachable_pub)]
 
+use gpui::{div, prelude::*, px, rgb, AnyElement, Context, Window};
 use mp_os::Lock as _;
-use gpui::{AnyElement, Context, Window, div, prelude::*, px, rgb};
 use mp_units::{Metres, MetresPerSecond};
-use mp_vehicle::VehicleState;
-use mp_vehicle::coverage::{CURRENTSTATE, Ours};
+use mp_vehicle::coverage::{Ours, CURRENTSTATE};
 use mp_vehicle::units::DisplayUnits;
+use mp_vehicle::VehicleState;
 
-use crate::MissionPlanner;
 use crate::ui::{action, theme};
+use crate::MissionPlanner;
 
 /// The six views as the Designer makes them: the property each is bound to and its
 /// `numberColor`. `// C#: GCSViews/FlightData.Designer.cs:637-642, 674-679, 687-692, 700-705,
@@ -155,7 +155,11 @@ number_from!(f32, f64, u8, u16, u32, i8, i16, i32);
 
 impl Number for bool {
     fn number(self) -> f64 {
-        if self { 1.0 } else { 0.0 }
+        if self {
+            1.0
+        } else {
+            0.0
+        }
     }
 }
 
@@ -697,8 +701,10 @@ fn dist_to_home(s: &VehicleState) -> f64 {
 }
 
 /// The C# members the chooser leaves out although they are held: public fields, which
-/// `Type.GetProperties` does not return. `// C#: ExtLibs/ArduPilot/CurrentState.cs:119`
-const FIELDS_NOT_PROPERTIES: &[&str] = &["hilch5", "hilch6", "hilch7", "hilch8", "lastautowp"];
+/// `Type.GetProperties` does not return - nor does `speechConversion`'s pass over the properties
+/// (`fly::speech_conversion`). `// C#: ExtLibs/ArduPilot/CurrentState.cs:119`
+pub(crate) const FIELDS_NOT_PROPERTIES: &[&str] =
+    &["hilch5", "hilch6", "hilch7", "hilch8", "lastautowp"];
 
 /// `JsonConvert.SerializeObject(MAV.cs)` as far as this application holds `CurrentState`: every
 /// numeric property with a reader, by its C# name, in the readers' order - the HTTP server's
@@ -1092,13 +1098,11 @@ impl QuickViews {
         self.views
             .iter()
             .map(|view| {
-                view.cell.unwrap_or_else(|| {
-                    loop {
-                        let cell = (next % cols, next / cols);
-                        next += 1;
-                        if !taken.contains(&cell) {
-                            break cell;
-                        }
+                view.cell.unwrap_or_else(|| loop {
+                    let cell = (next % cols, next / cols);
+                    next += 1;
+                    if !taken.contains(&cell) {
+                        break cell;
                     }
                 })
             })
@@ -1561,7 +1565,7 @@ pub fn chooser(
 mod tests {
     use super::*;
 
-        fn csharp(path: &str) -> Option<String> {
+    fn csharp(path: &str) -> Option<String> {
         crate::config_coverage::source::csharp(path)
     }
 
