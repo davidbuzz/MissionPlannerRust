@@ -91,6 +91,34 @@ EXPERIMENTAL's ReSort All logs ("N logs sorted"), and Force Accel Cal and Force 
 5. **SETUP > Frame Type**: the class or type the vehicle has, clicked, says "already Quad" or
    "already Plus" (a665094).
 
+## The second crawl (2026-10-16)
+
+The crawler mended (its BGR read, its dimmed-control test, the boxes it answers on arrival, a dead
+display not taken for a live one) and run again over the same binary (989565e): 8,791 clicks, 94
+with no visible answer on 58 controls, from 257 on the first run - the crawler's own misreadings
+gone. The 58, read one by one:
+
+- **24 not controls**: the Advanced page's thirteen labels, Auth Keys' grid and label, DroneCAN's
+  grid, Geo Ref's map, the telemetry log's file name, the raw sensor's bar, SIMULATION's map, the
+  parameter tree, Parachute's picture, the Mount page's wiki link (handed to the desktop, which the
+  crawl only logs), Proximity's picture.
+- **9 dimmed on purpose**, saying why since the commit that closes this row: CONFIG > Planner's
+  GDI+, Password, MAVLink debug, Temp, ADSB and Analytics boxes (and Beta Updates, live now), the
+  page strip's left arrow, Geo Ref's seconds.
+- **3 fixed since the binary**: the tuning graph's Clear (removed, bc2b1cf), Frame Type's Plus
+  ("already Plus", a665094), the Planner page's Browse (the chooser).
+- **19 the crawler's own doing**: the chooser's filter type already chosen (ten clicks), the HUD
+  prompt's OK and Geo Ref's prompt field and checked radio, the proxy port and the SITL heading at
+  their minimum, Frame Type's types and picture after its own Tri, and seven EXPERIMENTAL buttons
+  reached behind Clear Custom Maps' "Removed 0 images" box, which the crawler did not answer -
+  `experimental-message-ok` is in `BOX_OKS` now, and the self-test holds it.
+- **3 answered as designed**: Geo Ref's Do It (status only), Clear Track and the SITL speed
+  (internal state).
+
+Twenty-one repeated status messages (Motor Test's, the joystick page's Detects, the spectrogram's
+bounds, the update check, Force Mag Cal, the intervals' Set All) light the line a moment since
+fbb5356. Nothing new for the port.
+
 ## The real gaps, ported since (4f538d7)
 
 The four the triage found, each ported from the C# the same day:

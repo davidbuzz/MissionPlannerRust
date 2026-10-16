@@ -7,7 +7,8 @@
 # Window changes itself, Change Log hands a link to the desktop, the welcome text is no control.
 # Then the Full Parameter List reached as verify.py reaches a control the screen shows at once:
 # its opening warning answered, its search box typed into; and a dimmed control told from a live
-# one by its colours. Last, a display whose server died: its socket file is not taken for a
+# one by its colours; a box that comes up late (Clear Custom Maps' "Removed N images", after its
+# thread's work) answered before the next click. Last, a display whose server died: its socket file is not taken for a
 # server, and a new one is started over it (display :88). Display :90.
 set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
@@ -102,6 +103,38 @@ if looks["force-arm"] != "disabled":
 if looks["fly-rawsensor"] != "live":
     bad.append(f"fly-rawsensor looks {looks['fly-rawsensor']}, not live")
 print("look: " + ("passed" if not bad else "FAILED: " + "; ".join(bad)))
+if bad:
+    sys.exit(1)
+PY
+
+# A box that comes up after a click's settle - Clear Custom Maps' "Removed N images", shown when
+# its thread has deleted the (zero) custom tiles - took the next seven EXPERIMENTAL clicks of the
+# second crawl (2026-10-16): the crawler answers a known box before every click.
+python3 - "$HERE" "$OUT" "$@" <<'PY'
+import sys, time
+sys.path.insert(0, sys.argv[1])
+import crawl
+args = sys.argv[3:]
+binary = args[args.index("--binary") + 1] if "--binary" in args else None
+crawler = crawl.Crawler("selftest-latebox", ":90", [], sys.argv[2], binary)
+app = crawler.launch("experimental", [])
+bad = []
+try:
+    app.click("experimental-BUT_clearcustommaps")
+    time.sleep(1.5)
+    if "experimental-message-ok" not in app.probe():
+        bad.append("Clear Custom Maps showed no box to answer")
+    crawler.answer_boxes(app)
+    if "experimental-message-ok" in app.probe():
+        bad.append("the box is still up after answer_boxes")
+    app.click("experimental-BUT_swarm")
+    time.sleep(0.8)
+    status = app.facts().get("status", "")
+    if "Swarm" not in status:
+        bad.append(f"the click after the box did not land: status {status!r}")
+finally:
+    app.close()
+print("late box: " + ("passed" if not bad else "FAILED: " + "; ".join(bad)))
 sys.exit(1 if bad else 0)
 PY
 

@@ -80,7 +80,10 @@ SCREENS = {
 # A box a page opens with: answered before the page is crawled - the Full Parameter List's
 # warning, and FailSafe's "Ensure your props are not on" (ConfigFailSafe.cs:91-92), under which
 # every one of the page's controls was reported dead (2026-10-15).
-BOX_OKS = ("raw-param-warning-ok", "failsafe-message-ok")
+# The Full Parameter List's warning, FailSafe's "Ensure your props are not on", and EXPERIMENTAL's
+# message box - Clear Custom Maps' "Removed N images" comes up after its thread's work, past the
+# click's settle, and took the next seven clicks of the second crawl (2026-10-16).
+BOX_OKS = ("raw-param-warning-ok", "failsafe-message-ok", "experimental-message-ok")
 # Right-clicked, for their menus.
 RIGHT_CLICK = {"fly": ["map", "hud"], "plan": ["map"]}
 # The shortcuts the HELP text lists, on the screen each belongs to.
@@ -328,6 +331,10 @@ class Crawler:
                                         verdict="unreachable")
                             continue
                     rect = app.probe()[target]
+                # A known box a click before this one left up late (its thread's work done after
+                # the click's settle, so it was not among the controls that appeared) would take
+                # this click: answered first.
+                self.answer_boxes(app)
                 before = observe.Before(app, self.opened_count)
                 if not self.perform(app, step):
                     self.record(screen=screen, page=page, id=target, kind=kind, depth=len(prefix),

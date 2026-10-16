@@ -12,7 +12,8 @@ on what a user could see. The plan and its reasons: `docs/click-everything.md`.
 
 * `crawl.py` - the crawl, one worker; `--screens`, `--pages`, `--display`, `-- tcp:...`. A box a
   page opens with (`BOX_OKS`: the Full Parameter List's warning, FailSafe's "Ensure your props
-  are not on") is answered on arriving at the page and after every step.
+  are not on", EXPERIMENTAL's message box) is answered on arriving at the page, after every step
+  and before every click - a box that comes up late, after a click's settle, would take the next.
 * `verify.py` - each fault clicked again alone, with a long wait.
 * `report.py` - `out/report.md`, `out/recipe.txt` (every click as `.gui` lines) and
   `out/dead/*.gui` (a script per fault, for `tools/gui-headless.sh`). A control the source gives
