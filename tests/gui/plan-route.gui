@@ -1,0 +1,70 @@
+# FLIGHT PLAN's route as WPOverlay draws it (NOT_DONE_YET_MATRIX.md, "The ledger audit's gaps with
+# callers", 2026-10-16).
+#
+# writeKML hands WPOverlay.CreateOverlay home and the rows (GCSViews/FlightPlanner.cs:1389-1440).
+# RegenerateWPRoute makes the "wp route", four pixels of yellow with GMapRoute's arrow on each leg
+# longer than 20 pixels, and the "home route" from the last point to home to the first, two
+# pixels, dashed while home is within 5 km of both ends (ExtLibs/Maps/WPOverlay.cs:441-591;
+# ExtLibs/GMap.NET.Drawing/GMap.NET.WindowsForms/GMapRoute.cs:155-246). The legs into and out of
+# a spline waypoint are Spline2's samples (WPOverlay.cs:464-519). DO_SET_ROI is not on the route,
+# and its red pin always shows its number (WPOverlay.cs:112-140). A land with a position ends the
+# run, which is drawn from home with no legs back (WPOverlay.cs:100-111). Every other row's marker
+# is the green GMapMarkerWP (ExtLibs/Maps/GMapMarkerWP.cs:20-23).
+#
+# Self-contained: its own data directory, holding a home, so the map has somewhere to be.
+
+env XDG_DATA_HOME $WORK
+env MP_PLAN_DIR $WORK
+setup mkdir -p "$WORK/MissionPlannerRust" && printf '<?xml version="1.0" encoding="utf-8"?><Config><TXT_homelat>-35.3632621</TXT_homelat><TXT_homelng>149.1652374</TXT_homelng><TXT_homealt>584.1</TXT_homealt></Config>' > "$WORK/MissionPlannerRust/config.xml"
+
+screen plan
+window 1600x1200
+budget 12
+
+# Home alone: no route.
+expect map.ready true
+expect map.routes none
+expect map.route.home none
+
+# One waypoint: the legs to it and back, and a wp route of the one point - no leg, no arrow.
+click map@0.40x0.40
+expect mission.items 1
+expect map.routes home:dashed,mission:1
+expect map.route.segments 0
+expect map.route.arrows 0
+expect map.pins.green 1
+
+# Two more: three points, two legs, an arrow on each.
+click map@0.60x0.40
+click map@0.60x0.60
+expect mission.items 3
+expect map.routes home:dashed,mission:3
+expect map.route.segments 2
+expect map.route.arrows 2
+expect map.route.home dashed
+expect map.pins.green 3
+
+# Spline ticked: the next click is a spline waypoint, and the leg into it is Spline2's samples.
+click plan-spline
+click map@0.40x0.60
+expect mission.commands 16,16,16,82
+expect map.route.segments > 4
+expect map.route.home dashed
+expect map.pins.green 4
+click plan-spline
+
+# Set ROI: a red pin, its number always shown, and not on the route.
+click map@0.50x0.30:right
+click menu-setROI
+expect mission.commands 16,16,16,82,201
+expect map.pins.red 1
+expect map.pins.green 4
+expect map.tooltip ~ 5
+
+# Land: the run ends there, drawn from home with no legs back.
+click map@0.30x0.50:right
+click menu-land
+expect mission.commands 16,16,16,82,201,21
+expect map.route.home none
+expect map.routes ~ mission:
+expect map.pins.green 5

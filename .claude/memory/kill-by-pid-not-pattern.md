@@ -69,3 +69,9 @@ harm came of it, by luck.
   gives the session's PID.
 - Or use `pgrep -x VirtualBoxVM` and check each PID's `/proc/PID/cmdline`.
 - Never pass `pgrep -f` a pattern the calling script's own text contains.
+
+**2026-10-16:** a fourth time, in a background chain: `for p in $(pgrep -f "tests/gui/legacy-vehicle.py")`
+to stop the fake vehicles a hard-stopped script left on port 5790 - the chain's own `bash -c`
+text held the pattern, so it killed itself (exit 144) before the scripts it was there to run. The
+working form: anchor the pattern to the process the pattern names, `pgrep -f "^python3
+tests/gui/legacy-vehicle\.py"` - a `bash -c` line starts with `bash`, so it cannot match.

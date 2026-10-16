@@ -390,6 +390,81 @@ pub struct Plan {
     /// as `GetCommandList()` gave it with home inserted at item 0 - what Control-Z puts back.
     /// `// C#: GCSViews/FlightPlanner.cs:113, 1053-1103`
     history: Vec<Vec<MissionItem>>,
+    /// `groupmarkers`: the rows the Ctrl box has selected, each once, in the order it found them.
+    /// While any are held a left press on the map is the group's - a drag moves them all - and
+    /// Delete WP deletes them.
+    /// `// C#: GCSViews/FlightPlanner.cs:112, 3161-3177, 7362-7376`
+    groupmarkers: Vec<u16>,
+    /// `MainMap.SelectedArea`, top-left and bottom-right: the Ctrl box's, or GMap's own Alt or
+    /// Shift selection, which Prefetch takes. `RectLatLng.Empty` is `None`.
+    selected_area: Option<(LatLon, LatLon)>,
+    /// GMap's `selectionStart` while `isSelected`: where the left press went down when it was off
+    /// every marker, and whether a move with Alt or Shift held has drawn the area from it.
+    /// `// C#: ExtLibs/GMap.NET.WindowsForms/GMap.NET.WindowsForms/GMapControl.cs:1819-1846`
+    selection: Option<(LatLon, bool)>,
+    /// The left press `MainMap_MouseDown` took as its own, while the button is down.
+    press: Option<MapPress>,
+}
+
+/// `Control.ModifierKeys`, compared as the planner compares it: one key alone, or none.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ModifierKeys {
+    /// No key.
+    None,
+    /// `Keys.Control` alone.
+    Control,
+    /// `Keys.Alt` alone.
+    Alt,
+    /// `Keys.Shift` alone.
+    Shift,
+    /// Any other combination.
+    Other,
+}
+
+impl ModifierKeys {
+    /// The keys an event was sent with.
+    #[must_use]
+    pub const fn of(modifiers: gpui::Modifiers) -> Self {
+        match (
+            modifiers.control,
+            modifiers.alt,
+            modifiers.shift,
+            modifiers.platform,
+        ) {
+            (false, false, false, false) => Self::None,
+            (true, false, false, false) => Self::Control,
+            (false, true, false, false) => Self::Alt,
+            (false, false, true, false) => Self::Shift,
+            _ => Self::Other,
+        }
+    }
+}
+
+/// A left press on the planning map that `MainMap_MouseDown` takes as its own: with rows selected
+/// (`groupmarkers.Count > 0`), with Ctrl held, or with Alt held - which sets nothing going, so it
+/// neither pans nor adds.
+/// `// C#: GCSViews/FlightPlanner.cs:7378-7412`
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct MapPress {
+    /// `MouseDownStart`: where the press went down, moved on to each point a group drag reaches.
+    pub start: LatLon,
+    /// Where the press went down, for the group drag's whole move.
+    pub origin: LatLon,
+    /// `isMouseDown`: false for the Alt press.
+    pub down: bool,
+    /// `isMouseDraging`.
+    pub dragged: bool,
+}
+
+/// What a left release on the planning map comes to, once [`selection_release`] has seen it.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum SelectionRelease {
+    /// The press was not the planner's: the screen's own release goes on.
+    NotMine,
+    /// Done with: a selection made, a group moved, or nothing.
+    Done,
+    /// A click with a group selected: `AddWPToMap` where it came up.
+    AddWaypoint(LatLon),
 }
 
 /// A mission transfer over MAVFTP: `saveWPs`' and `getWPs`' `chk_usemavftp.Checked` branches,
@@ -7757,6 +7832,9 @@ pub struct OpenMenu {
     /// The waypoint under the cursor when the menu opened: `CurentRectMarker`, which is what
     /// decides whether Delete WP is enabled (`FlightPlanner.cs:2669-2677`).
     pub marker: Option<u16>,
+    /// Whether rows were selected when the menu opened, `groupmarkers.Count > 0`, which enables
+    /// Delete WP too, and makes it delete them (`FlightPlanner.cs:2671, 3161-3177`).
+    pub group: bool,
     /// Which top-level entry's drop-down is showing, by its index in [`MAP_MENU`].
     pub submenu: Option<usize>,
     /// Whether the vehicle reported `MAV_PROTOCOL_CAPABILITY_MISSION_FENCE` when the menu
@@ -9045,6 +9123,7 @@ impl PlanMenus {
             at,
             position,
             marker,
+            group: false,
             submenu: None,
             mission_fence: false,
         });
@@ -9079,10 +9158,19 @@ impl PlanMenus {
         self.dismissed_at.take() == Some(at)
     }
 
-    /// Whether Delete WP is enabled: only over a marker.
+    /// Whether a press is the one that just closed the menu, leaving it for
+    /// [`PlanMenus::swallows_press`] to consume.
+    #[must_use]
+    pub fn dismissed_here(&self, at: (f32, f32)) -> bool {
+        self.dismissed_at == Some(at)
+    }
+
+    /// Whether Delete WP is enabled: over a marker, or with rows selected.
+    /// `// C#: GCSViews/FlightPlanner.cs:2669-2677`
     #[must_use]
     pub fn delete_enabled(&self) -> bool {
-        self.open.is_some_and(|menu| menu.marker.is_some())
+        self.open
+            .is_some_and(|menu| menu.marker.is_some() || menu.group)
     }
 
     /// Shows a top-level entry's drop-down, or none.
@@ -9601,6 +9689,8 @@ impl PlanMenus {
             MenuAction::DeleteWp => {
                 if let Some(seq) = menu.marker {
                     plan.delete_marker(seq);
+                } else if menu.group {
+                    plan.delete_group();
                 }
             }
             MenuAction::InsertWp | MenuAction::InsertSplineWp => self.ask(Prompt::input(
@@ -11106,7 +11196,370 @@ pub fn map_hover(this: &mut MissionPlanner, planning: bool, pointer: Option<(f32
     if planning && let Some(seq) = entered_row(&change.entered) {
         this.plan.select(Some(seq));
     }
-    change.changed
+    // The rally markers' "Rally Point / Alt", `MarkerTooltipMode.OnMouseOver`: the planner's
+    // markers while it has any, else the vehicle's, as the screen draws them.
+    let markers: Vec<(LatLon, i32)> = if this.plan.rally().is_empty() {
+        this.telemetry
+            .view()
+            .rally_points
+            .iter()
+            .filter_map(|item| {
+                let at = item.position().ok().flatten()?;
+                #[allow(clippy::cast_possible_truncation)] // `(int)(plla.Alt * altmultiplier)`
+                let alt = item.z as i32;
+                Some((at, alt))
+            })
+            .collect()
+    } else {
+        this.plan.rally_markers()
+    };
+    let tooltips = pointer.map_or_else(Vec::new, |pointer| {
+        rally_tooltips_at(&this.map.borrow(), &markers, pointer)
+    });
+    let rally_changed = this.map.borrow_mut().set_rally_tooltips(tooltips);
+    change.changed || rally_changed
+}
+
+/// `GMapMarkerRallyPt`'s tooltip: `"Rally Point" + "\nAlt: " + (int)(plla.Alt * altmultiplier)`,
+/// metres here.
+/// `// C#: ExtLibs/Maps/GMapMarkerRallyPt.cs:32-38; GCSViews/FlightPlanner.cs:952-957`
+#[must_use]
+pub fn rally_tooltip(alt: i32) -> String {
+    format!("Rally Point\nAlt: {alt}")
+}
+
+/// The tooltips of the rally markers whose bitmap holds a window point - `marker_02`, 24 by 45,
+/// standing ten left and forty up of its point - each with its marker's position. A marker at a
+/// latitude or longitude of 0 is not drawn, and has none.
+/// `// C#: ExtLibs/Maps/GMapMarkerRallyPt.cs:17-30; ExtLibs/GMap.NET.WindowsForms/GMap.NET.WindowsForms/GMapControl.cs:2134-2185`
+#[must_use]
+pub fn rally_tooltips_at(
+    map: &MapViewport,
+    markers: &[(LatLon, i32)],
+    (x, y): (f32, f32),
+) -> Vec<(LatLon, String)> {
+    let (left, top, width, height) = mapview::wp_draw::RALLY_AREA;
+    markers
+        .iter()
+        .filter(|(at, _)| mapview::is_fixed(*at))
+        .filter(|(at, _)| {
+            map.screen_of(*at).is_some_and(|(sx, sy)| {
+                let (dx, dy) = (x - sx, y - sy);
+                dx >= left && dx < left + width && dy >= top && dy < top + height
+            })
+        })
+        .map(|(at, alt)| (*at, rally_tooltip(*alt)))
+        .collect()
+}
+
+// ---------------------------------------------------------------------------------------------
+// The planning map's selection: the Ctrl box that selects waypoints (`groupmarkers`), the drag
+// that then moves them all, and `SelectedArea` - the rubber band the box draws, and GMap draws
+// itself for a drag with Alt or Shift held - which Prefetch takes.
+// ---------------------------------------------------------------------------------------------
+
+impl Plan {
+    /// `groupmarkers`, each row once.
+    #[must_use]
+    pub fn groupmarkers(&self) -> &[u16] {
+        &self.groupmarkers
+    }
+
+    /// `groupmarkeradd` for each row a box found, after the rows already held.
+    /// `// C#: GCSViews/FlightPlanner.cs:7362-7376`
+    pub fn add_to_group(&mut self, rows: &[u16]) {
+        for row in rows {
+            if !self.groupmarkers.contains(row) {
+                self.groupmarkers.push(*row);
+            }
+        }
+    }
+
+    /// `MainMap.SelectedArea`: top-left and bottom-right, or `None` for `RectLatLng.Empty`.
+    #[must_use]
+    pub const fn selected_area(&self) -> Option<(LatLon, LatLon)> {
+        self.selected_area
+    }
+
+    /// Delete WP with no marker under the menu and rows selected: from the last row to the first,
+    /// each in `groupmarkers` removed, then `groupmarkers.Clear()`. Returns whether any went.
+    /// `// C#: GCSViews/FlightPlanner.cs:3161-3177`
+    pub fn delete_group(&mut self) -> bool {
+        let rows = std::mem::take(&mut self.groupmarkers);
+        let mut deleted = false;
+        for index in (0..self.items.len()).rev() {
+            let Ok(row) = u16::try_from(index + 1) else {
+                continue;
+            };
+            if !rows.contains(&row) {
+                continue;
+            }
+            if let Some(seq) = self.items.get(index).map(|item| item.seq) {
+                self.remove(seq);
+                deleted = true;
+            }
+        }
+        deleted
+    }
+
+    /// The group dropped after a drag of `delta` degrees of latitude and longitude: each row of
+    /// `groupmarkers` with a marker on the map - `dest`, in the group's order - goes through
+    /// `callMeDrag(tag, lat, lng, -1)`, which keeps the mission for Control-Z, makes the row the
+    /// current one and writes its new position; then `groupmarkers.Clear()`.
+    /// `// C#: GCSViews/FlightPlanner.cs:7756-7795, 739-777`
+    pub fn drop_group(
+        &mut self,
+        markers: &[(u16, LatLon)],
+        delta: (f64, f64),
+        vehicle_home: Option<Home>,
+    ) {
+        let rows = std::mem::take(&mut self.groupmarkers);
+        for row in rows {
+            let Some((_, at)) = markers.iter().find(|(marker, _)| *marker == row) else {
+                continue;
+            };
+            let Ok(dest) = LatLon::new(at.latitude() + delta.0, at.longitude() + delta.1) else {
+                continue;
+            };
+            self.update_undo_buffer(vehicle_home);
+            self.select(Some(row));
+            self.move_to(row, dest);
+        }
+    }
+}
+
+/// A left press on the planning map, before the screen grabs a waypoint or pans: GMap's
+/// `OnMouseDown` - off every marker it starts its selection and empties `SelectedArea` - then
+/// `MainMap_MouseDown`, which takes the press as its own with rows selected, with Ctrl held, or
+/// with Alt held. Returns whether it took it, so the screen does neither.
+///
+/// A Ctrl press on a waypoint is left to the screen, which grabs and drags it; in the C# the drag
+/// moves the waypoint's marker and a Ctrl release then drops the move and selects instead.
+/// `// C#: GCSViews/FlightPlanner.cs:7378-7412;
+/// ExtLibs/GMap.NET.WindowsForms/GMap.NET.WindowsForms/GMapControl.cs:1821-1849`
+pub fn selection_press(
+    plan: &mut Plan,
+    map: &mut MapViewport,
+    (x, y): (f32, f32),
+    keys: ModifierKeys,
+) -> bool {
+    plan.press = None;
+    let Some(at) = map.position_at(x, y) else {
+        plan.selection = None;
+        return false;
+    };
+    if map.is_over_marker() {
+        plan.selection = None;
+    } else {
+        plan.selection = Some((at, false));
+        plan.selected_area = None;
+        map.set_selected_area(None);
+    }
+    let group = !plan.groupmarkers.is_empty();
+    let taken = group
+        || match keys {
+            ModifierKeys::Control => map.waypoint_at(x, y).is_none(),
+            ModifierKeys::Alt => true,
+            ModifierKeys::None | ModifierKeys::Shift | ModifierKeys::Other => false,
+        };
+    if taken {
+        let down = group || keys == ModifierKeys::Control;
+        plan.press = Some(MapPress {
+            start: at,
+            origin: at,
+            down,
+            dragged: false,
+        });
+        // A Ctrl drag let go of Ctrl pans, as a plain one does.
+        if down && !group {
+            map.begin_drag(x, y);
+        }
+    }
+    taken
+}
+
+/// The pointer moved with the left button down: GMap's `OnMouseMove` draws `SelectedArea` from
+/// its selection's start while Alt or Shift is held, and `MainMap_MouseMove`, for a press it took,
+/// moves the group's markers with the pointer - `MouseDownStart` moving on with it - or with Ctrl
+/// held draws the box as `SelectedArea`, or pans. Returns whether the move was the planner's.
+///
+/// The group's markers move on the map and their rows stay until the release, as in the C#; the
+/// circles round them stay where they were until then too.
+/// `// C#: GCSViews/FlightPlanner.cs:7415-7524;
+/// ExtLibs/GMap.NET.WindowsForms/GMap.NET.WindowsForms/GMapControl.cs:2114-2131`
+pub fn selection_move(
+    plan: &mut Plan,
+    map: &mut MapViewport,
+    (x, y): (f32, f32),
+    keys: ModifierKeys,
+) -> bool {
+    let Some(at) = map.position_at(x, y) else {
+        return plan.press.is_some();
+    };
+    if let Some((start, _)) = plan.selection
+        && matches!(keys, ModifierKeys::Alt | ModifierKeys::Shift)
+    {
+        plan.selection = Some((start, true));
+        plan.selected_area = mapview::wp_draw::selection_rect(start, at);
+        map.set_selected_area(plan.selected_area);
+    }
+    let Some(mut press) = plan.press else {
+        return false;
+    };
+    // `if (MouseDownStart == point) return;`, and an Alt press sets nothing going.
+    if !press.down || press.start == at {
+        return true;
+    }
+    press.dragged = true;
+    if !plan.groupmarkers.is_empty() {
+        // group drag
+        press.start = at;
+        let delta = (
+            at.latitude() - press.origin.latitude(),
+            at.longitude() - press.origin.longitude(),
+        );
+        map.set_group_drag(Some((plan.groupmarkers.clone(), delta)));
+    } else if keys == ModifierKeys::Control {
+        // draw selection box
+        plan.selected_area = mapview::wp_draw::selection_rect(press.start, at);
+        map.set_selected_area(plan.selected_area);
+    } else {
+        // left click pan
+        map.drag_to(x, y);
+    }
+    plan.press = Some(press);
+    true
+}
+
+/// The left button let go: GMap's `OnMouseUp` zooms to fit a selection drawn with Shift held, and
+/// `MainMap_MouseUp`, for a press it took: with Ctrl held, the group select - each `WPOverlay`
+/// marker inside the box from `MouseDownStart` to here added to `groupmarkers` and `selected` -
+/// else a click adds a waypoint unless a marker's rect is under it, and a drag of the group drops
+/// it, `SelectedArea` emptied.
+/// `// C#: GCSViews/FlightPlanner.cs:7596-7797;
+/// ExtLibs/GMap.NET.WindowsForms/GMap.NET.WindowsForms/GMapControl.cs:1850-1907`
+pub fn selection_release(
+    plan: &mut Plan,
+    map: &mut MapViewport,
+    (x, y): (f32, f32),
+    keys: ModifierKeys,
+    vehicle_home: Option<Home>,
+) -> SelectionRelease {
+    let at = map.position_at(x, y);
+    if let Some((_, true)) = plan.selection
+        && keys == ModifierKeys::Shift
+        && let Some((top_left, bottom_right)) = plan.selected_area
+    {
+        map.zoom_to_fit(&[top_left, bottom_right]);
+    }
+    plan.selection = None;
+    let Some(press) = plan.press.take() else {
+        return SelectionRelease::NotMine;
+    };
+    map.end_drag();
+    map.set_group_drag(None);
+    if !press.down {
+        return SelectionRelease::Done;
+    }
+    let end = at.unwrap_or(press.start);
+    if keys == ModifierKeys::Control {
+        // group select wps
+        let rows = mapview::wp_draw::box_select(press.start, end, &map.overlay_rows());
+        plan.add_to_group(&rows);
+        map.set_selected_rows(&plan.groupmarkers);
+        return SelectionRelease::Done;
+    }
+    if !press.dragged {
+        // "cant add WP in existing rect"
+        if map.waypoint_at(x, y).is_some() {
+            return SelectionRelease::Done;
+        }
+        return at.map_or(SelectionRelease::Done, SelectionRelease::AddWaypoint);
+    }
+    if !plan.groupmarkers.is_empty() {
+        let delta = (
+            press.start.latitude() - press.origin.latitude(),
+            press.start.longitude() - press.origin.longitude(),
+        );
+        plan.drop_group(&map.overlay_rows(), delta, vehicle_home);
+        plan.selected_area = None;
+        map.set_selected_area(None);
+        map.set_selected_rows(&[]);
+    }
+    SelectionRelease::Done
+}
+
+/// The planning map's selection over the map, a layer the size of the map that sees its left
+/// presses, drags and releases before the map's own handlers: [`selection_press`],
+/// [`selection_move`] and [`selection_release`]. What they take stops there - the map neither
+/// grabs a waypoint with it nor pans nor adds - and what they leave goes on to the map's handlers
+/// as before. A press that closed a menu is left to the map, which swallows it.
+pub fn selection_layer(cx: &mut Context<MissionPlanner>) -> AnyElement {
+    div()
+        .absolute()
+        .top_0()
+        .left_0()
+        .size_full()
+        .on_mouse_down(
+            gpui::MouseButton::Left,
+            cx.listener(|this, event: &gpui::MouseDownEvent, window, cx| {
+                let (x, y) = (f32::from(event.position.x), f32::from(event.position.y));
+                if this.plan_menus.dismissed_here((x, y)) {
+                    return;
+                }
+                let keys = ModifierKeys::of(event.modifiers);
+                let taken =
+                    selection_press(&mut this.plan, &mut this.map.borrow_mut(), (x, y), keys);
+                if taken {
+                    // The map takes the focus in the C#, which is a panel box's Leave.
+                    leave_panel_boxes(this, window, cx);
+                    this.map_press = None;
+                    cx.stop_propagation();
+                    cx.notify();
+                }
+            }),
+        )
+        .on_mouse_move(cx.listener(|this, event: &gpui::MouseMoveEvent, window, cx| {
+            if event.pressed_button != Some(gpui::MouseButton::Left) {
+                return;
+            }
+            let (x, y) = (f32::from(event.position.x), f32::from(event.position.y));
+            let keys = ModifierKeys::of(event.modifiers);
+            if selection_move(&mut this.plan, &mut this.map.borrow_mut(), (x, y), keys) {
+                cx.stop_propagation();
+            }
+            // The band and the moving markers are drawn as the pointer goes.
+            window.refresh();
+        }))
+        .on_mouse_up(
+            gpui::MouseButton::Left,
+            cx.listener(|this, event: &gpui::MouseUpEvent, window, cx| {
+                let (x, y) = (f32::from(event.position.x), f32::from(event.position.y));
+                let keys = ModifierKeys::of(event.modifiers);
+                let home = vehicle_home(&this.telemetry.view());
+                let outcome = selection_release(
+                    &mut this.plan,
+                    &mut this.map.borrow_mut(),
+                    (x, y),
+                    keys,
+                    home,
+                );
+                match outcome {
+                    SelectionRelease::NotMine => return,
+                    SelectionRelease::Done => this.sync_map_mission(),
+                    SelectionRelease::AddWaypoint(position) => {
+                        map_click(this, position, window, cx);
+                        this.sync_map_mission();
+                        this.sync_map_polygon();
+                        this.sync_map_fence();
+                        this.sync_map_rally();
+                    }
+                }
+                cx.stop_propagation();
+                cx.notify();
+            }),
+        )
+        .into_any_element()
 }
 
 /// The row `MainMap_OnMarkerEnter` leaves the grid on after the rects just entered: each one
@@ -11208,6 +11661,9 @@ pub fn open_map_menu(this: &mut MissionPlanner, x: f32, y: f32) {
     this.map.borrow_mut().freeze_view();
     let held = capabilities(&this.telemetry.view());
     this.plan_menus.open_for((x, y), position, marker, held);
+    if let Some(menu) = this.plan_menus.open.as_mut() {
+        menu.group = !this.plan.groupmarkers().is_empty();
+    }
 }
 
 /// Chooses an entry from the open menu, and focuses the dialog if it opened one.
@@ -11295,16 +11751,22 @@ fn choose_entry(
             this.plan_menus.open = None;
             this.toggle_docking();
         }
-        // `MainMap.SelectedArea` is always empty here - this map has no rubber band - so the
-        // question comes every time.
-        // `// C#: GCSViews/FlightPlanner.cs:5032-5043`
+        // `MainMap.SelectedArea`, the area the Ctrl box or a drag with Alt or Shift left on the
+        // map, is taken as it is; with none, "No ripp area defined, ripp displayed on screen?".
+        // `// C#: GCSViews/FlightPlanner.cs:5030-5051`
         MenuAction::Prefetch => {
             this.plan_menus.open = None;
-            this.plan_menus.ask(Prompt::question(
-                crate::prefetch_ui::RIP_TITLE,
-                crate::prefetch_ui::RIP_QUESTION,
-                PromptKind::PrefetchRipArea,
-            ));
+            if let Some((top_left, bottom_right)) = this.plan.selected_area() {
+                this.plan_menus.prefetch_menu = Some(crate::prefetch_ui::PrefetchMenu::new(
+                    mp_tiles::prefetch::Area::between(top_left, bottom_right),
+                ));
+            } else {
+                this.plan_menus.ask(Prompt::question(
+                    crate::prefetch_ui::RIP_TITLE,
+                    crate::prefetch_ui::RIP_QUESTION,
+                    PromptKind::PrefetchRipArea,
+                ));
+            }
         }
         // `// C#: GCSViews/FlightPlanner.cs:3305-3316`
         MenuAction::PrefetchWpPath => {
@@ -12429,6 +12891,19 @@ pub fn record_facts(plan: &Plan, menus: &PlanMenus) {
             .is_some(),
     );
     record("survey.points", plan.polygon().len());
+    // `groupmarkers`: the rows the Ctrl box selected, which a drag moves and Delete WP deletes.
+    record(
+        "plan.groupmarkers",
+        if plan.groupmarkers().is_empty() {
+            "none".to_owned()
+        } else {
+            plan.groupmarkers()
+                .iter()
+                .map(u16::to_string)
+                .collect::<Vec<_>>()
+                .join(",")
+        },
+    );
     // KML Overlay: what is on the planner's map, and whether the flight screen's has it too.
     let kml = plan.kml_overlay();
     record("plan.kml.polygons", kml.map_or(0, |kml| kml.polygons.len()));
@@ -19610,5 +20085,258 @@ mod key_tests {
             assert!(!body.is_empty(), "{name} is in the C#");
             assert!(!body.contains("updateUndoBuffer("), "{name}");
         }
+    }
+}
+
+/// The planning map's selection: the Ctrl box and `groupmarkers`, the group drag, GMap's Alt and
+/// Shift selection (`SelectedArea`), Delete WP of a group, and the rally markers' tooltips.
+#[cfg(test)]
+mod selection_tests {
+    use super::*;
+
+    fn at(lat: f64, lng: f64) -> LatLon {
+        LatLon::new(lat, lng).expect("a position")
+    }
+
+    /// Three waypoints near Canberra on a planning map 800 by 600 about them, nothing under the
+    /// pointer.
+    fn planned() -> (Plan, MapViewport) {
+        let mut plan = Plan::default();
+        for position in [
+            at(-35.3620, 149.1650),
+            at(-35.3610, 149.1660),
+            at(-35.3600, 149.1700),
+        ] {
+            plan.add_waypoint(position, 100.0);
+        }
+        let mut map = MapViewport::new(0, 0);
+        map.paint_for_test(at(-35.3610, 149.1675), 2.5e-5, (800.0, 600.0));
+        map.set_overlay(Some(mapview::Overlay {
+            wp_radius: 30.0,
+            loiter_radius: 45.0,
+            planner: true,
+        }));
+        map.set_mission(plan.items());
+        (plan, map)
+    }
+
+    fn screen(map: &MapViewport, position: LatLon) -> (f32, f32) {
+        map.screen_of(position).expect("on the map")
+    }
+
+    fn fact(map: &MapViewport, key: &str) -> String {
+        map.facts()
+            .into_iter()
+            .find(|(name, _)| *name == key)
+            .map(|(_, value)| value)
+            .unwrap_or_else(|| panic!("no fact {key}"))
+    }
+
+    /// A Ctrl drag off the markers draws the box as `SelectedArea`, and the Ctrl release selects
+    /// the rows whose markers are inside it, which then show their discs; the box stays for
+    /// Prefetch.
+    #[test]
+    fn a_ctrl_box_selects_the_waypoints_inside_it() {
+        let (mut plan, mut map) = planned();
+        let one = screen(&map, at(-35.3620, 149.1650));
+        let two = screen(&map, at(-35.3610, 149.1660));
+        let from = (one.0.min(two.0) - 30.0, one.1.min(two.1) - 30.0);
+        let to = (one.0.max(two.0) + 30.0, one.1.max(two.1) + 30.0);
+        let ctrl = ModifierKeys::Control;
+        assert!(selection_press(&mut plan, &mut map, from, ctrl));
+        assert!(selection_move(
+            &mut plan,
+            &mut map,
+            (from.0 + 10.0, from.1 + 10.0),
+            ctrl
+        ));
+        assert!(selection_move(&mut plan, &mut map, to, ctrl));
+        let (top_left, bottom_right) = plan.selected_area().expect("the box");
+        assert!(top_left.latitude() > bottom_right.latitude());
+        assert!(top_left.longitude() < bottom_right.longitude());
+        assert_eq!(
+            selection_release(&mut plan, &mut map, to, ctrl, None),
+            SelectionRelease::Done
+        );
+        assert_eq!(plan.groupmarkers(), &[1, 2]);
+        assert_eq!(fact(&map, "map.selected"), "1,2");
+        assert!(plan.selected_area().is_some(), "the box stays drawn");
+        assert_eq!(plan.items().len(), 3, "nothing added");
+        // With rows selected a Ctrl press is the group's, and a Ctrl release still selects: a
+        // second box adds to the group.
+        let three = screen(&map, at(-35.3600, 149.1700));
+        let from = (three.0 - 30.0, three.1 - 30.0);
+        let to = (three.0 + 30.0, three.1 + 30.0);
+        assert!(selection_press(&mut plan, &mut map, from, ctrl));
+        assert_eq!(
+            selection_release(&mut plan, &mut map, to, ctrl, None),
+            SelectionRelease::Done
+        );
+        assert_eq!(plan.groupmarkers(), &[1, 2, 3]);
+    }
+
+    /// A Ctrl press on a waypoint is the screen's: it grabs and drags it.
+    #[test]
+    fn a_ctrl_press_on_a_waypoint_is_left_to_the_screen() {
+        let (mut plan, mut map) = planned();
+        let one = screen(&map, at(-35.3620, 149.1650));
+        assert!(!selection_press(
+            &mut plan,
+            &mut map,
+            one,
+            ModifierKeys::Control
+        ));
+        assert_eq!(
+            selection_release(&mut plan, &mut map, one, ModifierKeys::Control, None),
+            SelectionRelease::NotMine
+        );
+    }
+
+    /// With rows selected a plain drag moves them all: their markers follow the pointer, their
+    /// rows wait for the drop, which moves each by the drag - keeping the mission for Control-Z
+    /// once a row - and lets the group and the area go.
+    #[test]
+    fn a_drag_with_rows_selected_moves_them_all_on_the_drop() {
+        let (mut plan, mut map) = planned();
+        plan.add_to_group(&[1, 2]);
+        let before: Vec<(f64, f64)> = plan.items().iter().map(|item| (item.x, item.y)).collect();
+        let undo = plan.undo_count();
+        let (from, to) = ((100.0, 520.0), (160.0, 470.0));
+        let none = ModifierKeys::None;
+        assert!(selection_press(&mut plan, &mut map, from, none));
+        assert!(selection_move(&mut plan, &mut map, (130.0, 500.0), none));
+        assert!((plan.items()[0].x - before[0].0).abs() < f64::EPSILON);
+        assert!(selection_move(&mut plan, &mut map, to, none));
+        assert_eq!(
+            selection_release(&mut plan, &mut map, to, none, None),
+            SelectionRelease::Done
+        );
+        let start = map.position_at(from.0, from.1).expect("a place");
+        let end = map.position_at(to.0, to.1).expect("a place");
+        let delta = (
+            end.latitude() - start.latitude(),
+            end.longitude() - start.longitude(),
+        );
+        for index in [0, 1] {
+            let item = plan.items()[index];
+            assert!((item.x - (before[index].0 + delta.0)).abs() < 1e-9);
+            assert!((item.y - (before[index].1 + delta.1)).abs() < 1e-9);
+        }
+        assert!((plan.items()[2].x - before[2].0).abs() < f64::EPSILON);
+        assert!(plan.groupmarkers().is_empty());
+        assert_eq!(plan.undo_count(), undo + 2, "callMeDrag keeps one copy a row");
+        assert_eq!(plan.selected(), Some(2));
+        assert!(plan.selected_area().is_none());
+    }
+
+    /// With rows selected a click off the markers adds a waypoint there, as `AddWPToMap` does.
+    #[test]
+    fn a_click_with_rows_selected_adds_a_waypoint() {
+        let (mut plan, mut map) = planned();
+        plan.add_to_group(&[3]);
+        let here = (100.0, 520.0);
+        assert!(selection_press(&mut plan, &mut map, here, ModifierKeys::None));
+        let place = map.position_at(here.0, here.1).expect("a place");
+        assert_eq!(
+            selection_release(&mut plan, &mut map, here, ModifierKeys::None, None),
+            SelectionRelease::AddWaypoint(place)
+        );
+        assert_eq!(plan.groupmarkers(), &[3], "the group stays");
+    }
+
+    /// An Alt drag draws `SelectedArea` and nothing else - no pan, no waypoint; the next plain
+    /// press off the markers empties it.
+    #[test]
+    fn an_alt_drag_draws_the_selected_area() {
+        let (mut plan, mut map) = planned();
+        let alt = ModifierKeys::Alt;
+        assert!(selection_press(&mut plan, &mut map, (100.0, 100.0), alt));
+        assert!(selection_move(&mut plan, &mut map, (300.0, 250.0), alt));
+        let area = plan.selected_area().expect("the band");
+        let corner = map.position_at(100.0, 100.0).expect("a place");
+        assert!((area.0.latitude() - corner.latitude()).abs() < 1e-9);
+        assert!((area.0.longitude() - corner.longitude()).abs() < 1e-9);
+        assert_eq!(
+            selection_release(&mut plan, &mut map, (300.0, 250.0), alt, None),
+            SelectionRelease::Done
+        );
+        assert_eq!(plan.items().len(), 3);
+        assert_eq!(plan.selected_area(), Some(area));
+        assert!(fact(&map, "map.selected_area") != "none");
+        assert!(!selection_press(
+            &mut plan,
+            &mut map,
+            (100.0, 100.0),
+            ModifierKeys::None
+        ));
+        assert_eq!(plan.selected_area(), None);
+        assert_eq!(fact(&map, "map.selected_area"), "none");
+    }
+
+    /// A Shift drag pans as a plain one does - the press is the screen's - while GMap draws the
+    /// area, and the release zooms to fit it.
+    #[test]
+    fn a_shift_drag_draws_the_area_and_zooms_to_it() {
+        let (mut plan, mut map) = planned();
+        let zoom = map.zoom_level().expect("a zoom");
+        let shift = ModifierKeys::Shift;
+        assert!(!selection_press(&mut plan, &mut map, (100.0, 100.0), shift));
+        assert!(!selection_move(&mut plan, &mut map, (300.0, 250.0), shift));
+        assert!(plan.selected_area().is_some());
+        assert_eq!(
+            selection_release(&mut plan, &mut map, (300.0, 250.0), shift, None),
+            SelectionRelease::NotMine
+        );
+        assert!(
+            map.zoom_level().expect("a zoom") > zoom,
+            "zoomed in to the area"
+        );
+    }
+
+    /// Delete WP with rows selected and no marker under the menu deletes them, last first, and
+    /// lets the group go; the menu offers it.
+    #[test]
+    fn delete_wp_deletes_the_group() {
+        let (mut plan, _) = planned();
+        plan.add_to_group(&[1, 3]);
+        let mut menus = PlanMenus::default();
+        menus.open_at((10.0, 10.0), at(-35.36, 149.16), None);
+        assert!(!menus.delete_enabled());
+        if let Some(menu) = menus.open.as_mut() {
+            menu.group = true;
+        }
+        assert!(menus.delete_enabled());
+        let context = MenuContext {
+            frame: AltitudeFrame::Relative,
+            vehicle: None,
+            takeoff_pitch: false,
+            copter: false,
+            tracker_alt: 0.0,
+        };
+        menus.choose(&mut plan, MenuAction::DeleteWp, &context);
+        assert_eq!(plan.items().len(), 1);
+        assert!((plan.items()[0].x - -35.3610).abs() < 1e-9, "row 2 is left");
+        assert!(plan.groupmarkers().is_empty());
+    }
+
+    /// The pointer on a rally marker's bitmap - 24 by 45, ten left and forty up of its point -
+    /// shows "Rally Point" and its altitude; off it, or on a marker at 0, nothing.
+    #[test]
+    fn a_rally_marker_under_the_pointer_shows_its_altitude() {
+        let (_, map) = planned();
+        let rally = at(-35.3610, 149.1660);
+        let (x, y) = screen(&map, rally);
+        let markers = [(rally, 120)];
+        assert_eq!(
+            rally_tooltips_at(&map, &markers, (x, y - 20.0)),
+            vec![(rally, "Rally Point\nAlt: 120".to_owned())]
+        );
+        assert!(rally_tooltips_at(&map, &markers, (x + 20.0, y)).is_empty());
+        assert!(rally_tooltips_at(&map, &markers, (x, y + 10.0)).is_empty());
+        assert_eq!(rally_tooltips_at(&map, &markers, (x - 9.0, y - 39.0)).len(), 1);
+        assert!(rally_tooltips_at(&map, &markers, (x - 11.0, y - 20.0)).is_empty());
+        let unset = [(at(0.0, 149.1660), 50)];
+        assert!(rally_tooltips_at(&map, &unset, (x, y - 20.0)).is_empty());
+        assert_eq!(rally_tooltip(35), "Rally Point\nAlt: 35");
     }
 }

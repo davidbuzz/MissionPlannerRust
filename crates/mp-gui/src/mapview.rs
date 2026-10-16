@@ -48,6 +48,8 @@ use mp_tiles::store::{TileAnswer, TileStore};
 use mp_tiles::urlcache::{self, CacheType};
 use mp_units::{Bearing, LatLon, TileId, WebMercator, tiles};
 
+pub mod wp_draw;
+
 /// Which of Mission Planner's vehicle markers the flight map draws: `Common.getMAVMarker`'s choice
 /// by the vehicle's `MAV_TYPE` - and, where the C# asks the firmware, by the types that firmware
 /// flies.
@@ -325,6 +327,9 @@ pub struct MapViewport {
     hovered: Hovered,
     /// The tooltips the last paint drew, for the facts.
     tooltips_drawn: Vec<String>,
+    /// `WPOverlay`'s routes, the vehicle's "fence" overlay, the selection and the rally
+    /// tooltips (see [`wp_draw`]).
+    wp: wp_draw::WpLayer,
     /// The vehicle marker's tooltip - `mapicondesc` through `speechConversion`, FLIGHT DATA's
     /// `vehicle_tooltip` - while the setting is set. `// C#: Common.cs:90-93`
     vehicle_tooltip: Option<String>,
@@ -528,6 +533,7 @@ impl MapViewport {
             mission: Vec::new(),
             overlay: Vec::new(),
             overlay_mode: None,
+            wp: wp_draw::WpLayer::default(),
             home_altitude: None,
             hovered: Hovered::default(),
             tooltips_drawn: Vec::new(),
@@ -708,22 +714,28 @@ impl MapViewport {
         }
         self.home = home.map(LatLon::to_web_mercator);
         self.home_position = home;
+        // Home is the routes' first point.
+        self.refresh_routes();
     }
 
     /// Home's altitude, for the "H" marker's tooltip: `addpolygonmarker("H", ..., home.Alt *
-    /// altunitmultiplier, ...)`. Metres here, so the multiplier is 1.
-    /// `// C#: ExtLibs/Maps/WPOverlay.cs:44-50, 394-398`
+    /// altunitmultiplier, ...)`. Metres here, so the multiplier is 1. The routes' relative rows
+    /// are put above it too.
+    /// `// C#: ExtLibs/Maps/WPOverlay.cs:41-50, 394-398`
     pub fn set_home_altitude(&mut self, altitude: Option<f64>) {
         self.home_altitude = altitude;
+        self.refresh_routes();
     }
 
     /// Which `WPOverlay` the screen showing the map builds, or none.
     ///
     /// Set every frame, as home is, because the two screens that share this map build it with
     /// different radii: the planner's are its WP Radius and Loiter Radius boxes, the flight
-    /// screen's are zero (`FlightData.cs:3944-3957`).
+    /// screen's are zero (`FlightData.cs:3944-3957`). The loiter radius is where a loiter leaving
+    /// at a tangent leaves its circle, so the routes follow it.
     pub fn set_overlay(&mut self, overlay: Option<Overlay>) {
         self.overlay_mode = overlay;
+        self.refresh_routes();
     }
 
     /// Where home is drawn, as it was given.
@@ -782,10 +794,13 @@ impl MapViewport {
         let overlay = overlay_markers(items);
         if overlay != self.overlay {
             // `writeKML` makes new markers, home's included, and none of them is under the
-            // pointer until it moves.
+            // pointer until it moves - nor `selected`, though `groupmarkers` keeps their rows.
             self.hovered = Hovered::default();
             self.overlay = overlay;
+            self.set_selected_rows(&[]);
         }
+        // And the routes through them (see `wp_draw`).
+        self.set_route_items(items);
     }
 
     /// Replaces the survey area shown on the map.
@@ -2344,9 +2359,11 @@ impl MapViewport {
         self.guided = guided.filter(|marker| is_fixed(marker.position));
     }
 
-    /// The "Alt: " tooltips to draw: each `GMapMarkerWP` under the pointer, which
-    /// `addpolygonmarker` gave `ToolTipMode.OnMouseOver` and its altitude written `"0"`.
-    /// `// C#: ExtLibs/Maps/WPOverlay.cs:393-398; ExtLibs/GMap.NET.Drawing/GMap.NET.WindowsForms/GMapOverlay.cs:348-358`
+    /// The overlay's tooltips to draw, in its markers' order: the "Alt: " of each `GMapMarkerWP`
+    /// under the pointer, which `addpolygonmarker` gave `ToolTipMode.OnMouseOver` and its altitude
+    /// written `"0"`, and each DO_SET_ROI's number, its red marker's `ToolTipMode.Always`.
+    /// `// C#: ExtLibs/Maps/WPOverlay.cs:120-125, 393-398;
+    /// ExtLibs/GMap.NET.Drawing/GMap.NET.WindowsForms/GMapOverlay.cs:348-358`
     fn hover_tooltips(&self) -> Vec<(WebMercator, String)> {
         if self.overlay_mode.is_none() {
             return Vec::new();
@@ -2361,8 +2378,14 @@ impl MapViewport {
             .map(|marker| (marker.tag, marker.at, marker.alt));
         home.into_iter()
             .chain(items)
-            .filter(|(tag, _, _)| self.hovered.pins.contains(tag))
-            .filter_map(|(_, at, alt)| Some((at, format!("Alt: {}", format_zero(alt?)))))
+            .filter_map(|(tag, at, alt)| match alt {
+                // Home always has an altitude: only DO_SET_ROI's marker has none.
+                None => Some((at, tag.text())),
+                Some(alt) if self.hovered.pins.contains(&tag) => {
+                    Some((at, format!("Alt: {}", format_zero(alt))))
+                }
+                Some(_) => None,
+            })
             .collect()
     }
 
@@ -2388,7 +2411,7 @@ impl MapViewport {
         }
         #[allow(clippy::cast_possible_truncation)] // `(int) Zoom`, 0 to 24 or so
         let step = zoom.map_or_else(none, |zoom| (zoom.trunc() as i64).to_string());
-        vec![
+        let mut facts = vec![
             (
                 "map.zoom",
                 zoom.map_or_else(none, |zoom| format!("{zoom:.2}")),
@@ -2445,7 +2468,10 @@ impl MapViewport {
             ("map.vehicle.sysid", self.marker.sysid.to_string()),
             ("map.vehicle.drawn", self.vehicle.is_some().to_string()),
             ("map.following", self.auto_pan.to_string()),
-        ]
+        ];
+        // The routes, pins, vehicle fence and selection (see `wp_draw`).
+        facts.extend(self.wp_facts());
+        facts
     }
 }
 
@@ -3310,6 +3336,11 @@ fn paint_live(map: &mut MapViewport, bounds: Bounds<Pixels>, window: &mut Window
     // Until the home marker is drawn below, it is not - including by a paint with nothing to frame.
     map.home_label_drawn = false;
     map.tooltips_drawn.clear();
+    // `MAV.fencepoints`, which both screens draw as their "fence" overlay: the shown vehicle's
+    // fence as the frame handed it to the quick view's GeoFenceDist.
+    if map.overlay_mode.is_some() {
+        map.set_vehicle_fence(&crate::quick::fence_points());
+    }
     // A view the user chose wins over the automatic fit; that is what makes panning stick.
     // With nothing to frame and no view chosen, the map is where Mission Planner's is at start:
     // GMap's default position (0, 0), and zoom 3 - the "no zoom in" the C# picks when the saved
@@ -3404,10 +3435,11 @@ fn paint_live(map: &mut MapViewport, bounds: Bounds<Pixels>, window: &mut Window
         map.phases[2] = submit.elapsed();
     }
 
-    // The geofence: a boundary, so it is drawn in the alert colour and closed explicitly. It goes
-    // under everything else, because it is the thing the rest must stay inside.
+    // The geofence, closed: `geofencepolygon`, `new Pen(Color.Pink, 5)` over no fill. It goes under
+    // everything else, because it is the thing the rest must stay inside.
+    // `// C#: GCSViews/FlightPlanner.cs:272-274`
     if map.fence.len() > 1 {
-        let mut builder = PathBuilder::stroke(px(2.0));
+        let mut builder = PathBuilder::stroke(px(wp_draw::GEOFENCE_WIDTH));
         let mut vertices = map.fence.iter();
         if let Some(first) = vertices.next() {
             builder.move_to(to_screen(*first));
@@ -3417,27 +3449,35 @@ fn paint_live(map: &mut MapViewport, bounds: Bounds<Pixels>, window: &mut Window
             builder.line_to(to_screen(*first));
         }
         match builder.build() {
-            Ok(path) => window.paint_path(path, Hsla::from(rgb(0xf8_51_49))),
+            Ok(path) => window.paint_path(path, Hsla::from(rgb(wp_draw::FENCE_PINK))),
             Err(_) => map.track_path_failures += 1,
         }
     }
 
-    // The geofence's exclusion polygons, in the fence's pen.
+    // The geofence's exclusion polygons, as `CreateOverlay` draws an exclusion: filled
+    // `Color.FromArgb(30, 255, 0, 0)` and outlined in `Pens.Red`.
+    // `// C#: ExtLibs/Maps/WPOverlay.cs:315-321`
     for polygon in &map.fence_exclusions {
         if polygon.len() < 2 {
             continue;
         }
-        let mut builder = PathBuilder::stroke(px(2.0));
-        let mut vertices = polygon.iter();
+        let screen: Vec<Point<Pixels>> = polygon.iter().map(|vertex| to_screen(*vertex)).collect();
+        fill_through(
+            window,
+            &screen,
+            Hsla::from(gpui::rgba(wp_draw::EXCLUSION_FILL)),
+        );
+        let mut builder = PathBuilder::stroke(px(1.0));
+        let mut vertices = screen.iter();
         if let Some(first) = vertices.next() {
-            builder.move_to(to_screen(*first));
+            builder.move_to(*first);
             for vertex in vertices {
-                builder.line_to(to_screen(*vertex));
+                builder.line_to(*vertex);
             }
-            builder.line_to(to_screen(*first));
+            builder.line_to(*first);
         }
         match builder.build() {
-            Ok(path) => window.paint_path(path, Hsla::from(rgb(0xf8_51_49))),
+            Ok(path) => window.paint_path(path, Hsla::from(rgb(wp_draw::FENCE_RED))),
             Err(_) => map.track_path_failures += 1,
         }
     }
@@ -3648,36 +3688,13 @@ fn paint_live(map: &mut MapViewport, bounds: Bounds<Pixels>, window: &mut Window
         }
     }
 
-    // The planned mission: a dashed-looking track plus a marker per waypoint, drawn beneath the
-    // flown path so the two are distinguishable where they overlap.
-    if map.mission.len() > 1 {
-        let mut builder = PathBuilder::stroke(px(1.5));
-        let mut points = map.mission.iter();
-        if let Some((first, _)) = points.next() {
-            builder.move_to(to_screen(*first));
-        }
-        for (point, _) in points {
-            builder.line_to(to_screen(*point));
-        }
-        match builder.build() {
-            Ok(path) => window.paint_path(path, Hsla::from(rgb(0x58_a6_ff))),
-            Err(_) => map.track_path_failures += 1,
-        }
-    }
-    for (waypoint, _) in &map.mission {
-        let at = to_screen(*waypoint);
-        window.paint_quad(quad(
-            Bounds {
-                origin: point(at.x - px(3.0), at.y - px(3.0)),
-                size: size(px(6.0), px(6.0)),
-            },
-            gpui::Corners::all(px(3.0)),
-            rgb(0x58_a6_ff),
-            gpui::Edges::default(),
-            rgb(0x00_00_00),
-            gpui::BorderStyle::default(),
-        ));
-    }
+    // `WPOverlay`: its routes - the yellow legs to home, dashed while home is near, and the
+    // mission's four-pixel yellow line with an arrow on each leg, curved through spline
+    // waypoints - then each item's pin: DO_SET_ROI's red, every other's green `GMapMarkerWP` with
+    // its number, and the selection's red disc under it.
+    // `// C#: ExtLibs/Maps/WPOverlay.cs:28-357, 441-591; ExtLibs/Maps/GMapMarkerWP.cs:42-60`
+    wp_draw::paint_routes(map, origin, &to_screen, window);
+    wp_draw::paint_item_pins(map, &to_screen, gmap_zoom(vw, w), window, cx);
 
     // The radius circles: each marker's `GMapMarkerRect`, which `addpolygonmarker` adds after the
     // marker, so it is drawn over it.
@@ -3771,6 +3788,9 @@ fn paint_live(map: &mut MapViewport, bounds: Bounds<Pixels>, window: &mut Window
         paint_tooltip(window, cx, to_screen(at), &text);
         map.tooltips_drawn.push(text);
     }
+    // Then `rallypointoverlay`'s: "Rally Point" and the altitude, on each rally marker under the
+    // pointer.
+    wp_draw::paint_rally_tooltips(map, window, cx, &to_screen);
 
     // The flight screen's Guided Mode marker on `routes`, above the mission: a green
     // `GMarkerGoogle` with `ToolTipMode.Always`. Its rect is among the circles above.
@@ -3797,6 +3817,11 @@ fn paint_live(map: &mut MapViewport, bounds: Bounds<Pixels>, window: &mut Window
         map.tooltips_drawn.push(text);
     }
 
+    // The vehicle's fence, the "fence" overlay each `writeKML` adds last: its polygons, circles
+    // and blue-dot pins.
+    // `// C#: GCSViews/FlightPlanner.cs:1497-1517; GCSViews/FlightData.cs:4021-4035`
+    wp_draw::paint_fence_layer(map, bounds, &to_screen, window, cx);
+
     // The vehicle, as Mission Planner's marker for its type draws it.
     let phase_vehicle = Instant::now();
     if let Some((position, heading)) = map.vehicle {
@@ -3821,6 +3846,9 @@ fn paint_live(map: &mut MapViewport, bounds: Bounds<Pixels>, window: &mut Window
         }
     }
     map.phases[3] = phase_vehicle.elapsed();
+
+    // `SelectedArea`, over the overlays.
+    wp_draw::paint_selected_area(map, &to_screen, window);
 
     map.record(started.elapsed());
 }

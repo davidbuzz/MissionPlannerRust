@@ -68,7 +68,13 @@ wrote).
   "Rally Point / Alt" tooltip; the selected waypoint's red disc and the Ctrl box-select that sets
   it; the `SelectedArea` rubber band (Prefetch takes the whole view without it); the Dist to Home
   and the survey dialog's "Line:" tooltips; marker pins beyond green and red; map rotation and the
-  scale bar.
+  scale bar. (Mended 2026-10-16, but for the two tooltips, rotation and the scale bar: the route,
+  its legs to home and Spline2's curves in mp_mission::wp_overlay and spline2; MAV.fencepoints'
+  "fence" overlay with its circles, and the geofence polygon in its pink; the rally tooltip; the
+  Ctrl box select, the group drag and Delete WP of a group, with the red discs; SelectedArea from
+  the Ctrl box or an Alt or Shift drag, which Prefetch takes; the waypoints' green pins, ROI's red
+  with its number, the fence's blue-dot pins. The selection needs `plan::selection_layer` among
+  the planning map's children.)
 - FLIGHT DATA: the position read-out under the map (`Coords.cs`, `coords1`); the vehicle marker's
   tooltip (`mapicondesc`); the pre-flight checklist (`CheckListControl.cs`).
   (ported 2026-10-16: the read-out, horizontal, under the flight map - `fly::coords_strip` - and

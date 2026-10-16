@@ -178,6 +178,9 @@ pub const MAY_SCROLL: &[&str] = &[
     "dronecan-filter-dronecan_",
     "dronecan-filter-mppt_",
     "dronecan-filter-uavcan_",
+    // Prefetch's lines, one a zoom level, in a 200 px list (prefetch_ui.rs): an area box-selected
+    // at a low zoom lists more levels than fit, and the list scrolls (2026-10-16).
+    "plan-prefetch-lines",
 ];
 
 /// The rows of the lists that scroll and are named by what they hold - a parameter's name, an
@@ -481,6 +484,15 @@ mod tests {
         }
         assert!(!must_show("dronecan-filter-all"));
         for control in ["dronecan-filter-close", "dronecan-filter-form"] {
+            assert!(must_show(control), "{control}");
+        }
+    }
+
+    /// Prefetch's list of zoom levels scrolls; its spinners and total may not be cut off.
+    #[test]
+    fn the_prefetch_lines_scroll_in_their_list() {
+        assert!(!must_show("plan-prefetch-lines"));
+        for control in ["plan-prefetch-total", "plan-prefetch-min", "plan-prefetch-max"] {
             assert!(must_show(control), "{control}");
         }
     }

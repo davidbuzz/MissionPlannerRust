@@ -23,8 +23,9 @@
 //! 5030-5080` @ efb0801; `ExtLibs/GMap.NET.WindowsForms/GMap.NET.WindowsForms/
 //! TilePrefetcher.cs`, `TilePrefetcherMenu.cs`; GPL-3.0-only).
 //!
-//! Prefetch: with no area rubber-banded on the map - this map has no `SelectedArea`, so always -
-//! "No ripp area defined, ripp displayed on screen?" (Rip, Yes/No); Yes takes the view. The menu
+//! Prefetch: the area rubber-banded on the map, `SelectedArea` - the planner's Ctrl box, or a drag
+//! with Alt or Shift held (`plan::selection_move`) - or with none, "No ripp area defined, ripp
+//! displayed on screen?" (Rip, Yes/No); Yes takes the view. The menu
 //! then offers a zoom range, 1 to 20 to begin with, within the map's 0 to 24, counting the tiles
 //! per zoom and estimating their size; OK runs a `TilePrefetcher` for each zoom in turn, a form
 //! with the progress line and bar, until the last or until cancelled. Prefetch WP Path asks
@@ -395,11 +396,14 @@ pub(crate) fn menu_form(
             cx,
         ))
         .child(
+            // One line a zoom level: a list that scrolls past 200 px, as an area box-selected at a
+            // low zoom lists more levels than fit (layout_guard's MAY_SCROLL names it).
             crate::probe::measured("plan-prefetch-lines", div())
+                .id("plan-prefetch-lines")
                 .flex()
                 .flex_col()
                 .max_h(px(200.0))
-                .overflow_hidden()
+                .overflow_y_scroll()
                 .text_xs()
                 .text_color(rgb(theme::TEXT))
                 .children(lines.into_iter().map(|line| div().child(line))),

@@ -2949,6 +2949,9 @@ impl MissionPlanner {
                         }
                     }))
                     .child(mapview::map_element(self.map.clone()))
+                    // The planning map's selection layer: Ctrl's box-select, Alt's and Shift's
+                    // rubber band, a group's drag (FlightPlanner.cs:7378-7797).
+                    .children(planning.then(|| plan::selection_layer(cx)))
                     // The planning map's zoom icon, `zoomicon`, and its menu.
                     .children(planning.then(|| plan::zoom_icon(cx)))
                     .children(planning.then(|| plan::poly_icon(cx)))

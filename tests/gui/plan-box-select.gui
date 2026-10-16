@@ -1,0 +1,60 @@
+# FLIGHT PLAN's selection on the map (NOT_DONE_YET_MATRIX.md, "The ledger audit's gaps with
+# callers", 2026-10-16).
+#
+# A drag with Ctrl held draws MainMap.SelectedArea from the press to the pointer, and the Ctrl
+# release adds every WPOverlay marker inside the box to groupmarkers, whose GMapMarkerWP then draws
+# its red disc (GCSViews/FlightPlanner.cs:7518-7524, 7700-7727, 7362-7376; ExtLibs/Maps/
+# GMapMarkerWP.cs:44-48). With rows selected a plain drag moves them all, and the drop writes
+# them and lets the group and the box go (FlightPlanner.cs:7444-7473, 7756-7795). A drag with Alt
+# held is GMap's own selection, SelectedArea and nothing else (ExtLibs/GMap.NET.WindowsForms/
+# GMap.NET.WindowsForms/GMapControl.cs:1821-1849, 2114-2131), which Map Tool > Prefetch takes
+# without asking (FlightPlanner.cs:5030-5051).
+#
+# Needs the map's selection layer, plan::selection_layer, among the planning map's children.
+# Self-contained: its own data directory, holding a home, so the map has somewhere to be.
+
+env XDG_DATA_HOME $WORK
+env MP_PLAN_DIR $WORK
+setup mkdir -p "$WORK/MissionPlannerRust" && printf '<?xml version="1.0" encoding="utf-8"?><Config><TXT_homelat>-35.3632621</TXT_homelat><TXT_homelng>149.1652374</TXT_homelng><TXT_homealt>584.1</TXT_homealt></Config>' > "$WORK/MissionPlannerRust/config.xml"
+tiles offline
+
+screen plan
+window 1600x1200
+budget 14
+
+# Three waypoints, the third well away from the first two.
+expect map.ready true
+click map@0.40x0.40
+click map@0.50x0.45
+click map@0.75x0.75
+expect mission.items 3
+expect plan.groupmarkers none
+expect map.selected none
+
+# A Ctrl box round the first two: they are selected, with their discs, and the box stays drawn.
+drag map@0.35x0.35 map@0.55x0.50 ctrl
+expect plan.groupmarkers 1,2
+expect map.selected 1,2
+expect map.selected.discs 2
+expect map.selected_area ~ ;
+expect mission.items 3
+
+# A drag with rows selected moves them, not the map: on the drop the rows are written, and the
+# group and the box go.
+drag map@0.20x0.80 map@0.25x0.85
+expect plan.groupmarkers none
+expect map.selected none
+expect map.selected_area none
+expect mission.items 3
+
+# An Alt drag draws the area and adds nothing.
+drag map@0.10x0.10 map@0.30x0.30 alt
+expect map.selected_area ~ ;
+expect mission.items 3
+
+# Prefetch takes the area: its menu opens with no question.
+click map@0.60x0.20:right
+click menu-mapTool
+click menu-prefetch
+expect plan.prompt none
+expect plan.prefetch.menu 1-20

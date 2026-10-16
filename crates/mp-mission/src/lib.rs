@@ -46,12 +46,14 @@ pub mod polygon;
 pub mod rotary;
 pub mod rows;
 pub mod shapefile;
+pub mod spline2;
 pub mod survey;
 pub mod text_mission;
 mod utm;
 pub mod validate;
 pub mod waypoints;
 pub mod wire;
+pub mod wp_overlay;
 
 pub use corridor::{CorridorArgs, create_corridor};
 pub use fence::{FenceError, FenceItem, RallyPoint, fences_from_items};

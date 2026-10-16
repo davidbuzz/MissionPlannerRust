@@ -57,6 +57,7 @@
 #   hover map@0.40x0.40          move the pointer onto a control and press nothing
 #   drag fft-INS_LOG_BAT_CNT-thumb fft-INS_LOG_BAT_CNT-track@0.5x0.5  press on the first control,
 #                               move to the second in steps, let go: a track bar's thumb dragged
+#   drag map@0.3x0.3 map@0.6x0.6 ctrl   ... with a key held throughout: ctrl, alt or shift
 #   reveal servo-SERVO9_FUNCTION-list servo-SERVO9_FUNCTION-1   wheel a list until an entry is inside its box
 #   type flight.bin             type into whatever has focus
 #   key Return                  press a named key
@@ -812,15 +813,26 @@ PY
             # a track bar's thumb dragged along its channel.
             FROM="${2:?drag needs a start}"
             TO="${3:?drag needs an end}"
+            # A key held down the whole way, the fourth word: ctrl, alt or shift - the planner's
+            # Ctrl box-select and GMap's Alt selection are drags with one held.
+            HOLD="${4:-}"
+            case "$HOLD" in
+                ""|ctrl|alt|shift) ;;
+                *) echo "line $LINE_NO: drag holds ctrl, alt or shift, not '$HOLD'" >&2; FAILURES=$((FAILURES + 1)); continue ;;
+            esac
             wait_publishes 1
             raise_window
             if FROM_AT=$(resolve_control "$FROM") && TO_AT=$("$ROOT/tools/gui-click.sh" --resolve "$PROBE_FILE" "$WIN_ID" "$TO"); then
                 FROM_AT=$(printf '%s\n' "$FROM_AT" | tail -1)
-                echo "dragging '$FROM' at ${FROM_AT/ /,} to '$TO' at ${TO_AT/ /,}"
+                echo "dragging '$FROM' at ${FROM_AT/ /,} to '$TO' at ${TO_AT/ /,}${HOLD:+ holding $HOLD}"
                 read -r X0 Y0 <<<"$FROM_AT"
                 read -r X1 Y1 <<<"$TO_AT"
                 xdotool mousemove --window "$WIN_ID" "$X0" "$Y0"
                 sleep 0.05
+                if [ -n "$HOLD" ]; then
+                    xdotool keydown "$HOLD"
+                    sleep 0.05
+                fi
                 xdotool mousedown 1
                 for STEP in 1 2 3 4 5 6 7 8; do
                     sleep 0.03
@@ -829,6 +841,10 @@ PY
                 sleep 0.05
                 sent_input
                 xdotool mouseup 1
+                if [ -n "$HOLD" ]; then
+                    sleep 0.05
+                    xdotool keyup "$HOLD"
+                fi
             else
                 echo "line $LINE_NO: could not drag '$FROM' to '$TO'" >&2
                 FAILURES=$((FAILURES + 1))

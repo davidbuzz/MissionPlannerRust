@@ -201,6 +201,16 @@ pub fn set_fence(fence: Vec<mp_vehicle::FenceItem>) {
         .unwrap_or_else(std::sync::PoisonError::into_inner) = fence;
 }
 
+/// The fence last handed over: what both maps draw as their "fence" `WPOverlay`, which
+/// `writeKML` builds from `MAV.fencepoints` as GeoFenceDist reads it.
+/// `// C#: GCSViews/FlightPlanner.cs:1497-1517; GCSViews/FlightData.cs:4021-4035`
+pub fn fence_points() -> Vec<mp_vehicle::FenceItem> {
+    FENCE
+        .os_lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+        .clone()
+}
+
 /// `GeoFenceDist` from the fence last handed over.
 fn geo_fence_dist(state: &VehicleState) -> f64 {
     let fence = FENCE
