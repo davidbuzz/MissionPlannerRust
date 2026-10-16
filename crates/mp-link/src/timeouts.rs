@@ -137,6 +137,11 @@ pub struct ProtocolTimeouts {
     /// `getHomePositionAsync`: `GET_HOME_POSITION` until a `HOME_POSITION` arrives.
     /// C#: MAVLinkInterface.cs:3357 (`retrys = 3`), :3366 (700 ms).
     pub home_position: Retry,
+    /// How long after the parameters change `param.json` is written: `MAVState`'s timer, started
+    /// by the first change and not again until it has fired (see [`crate::param_cache`]).
+    ///
+    /// C#: ExtLibs/ArduPilot/Mavlink/MAVState.cs:76, 94 (`new Timer(..., null, 2000, -1)`).
+    pub param_cache_write: Duration,
 }
 
 impl Default for ProtocolTimeouts {
@@ -161,6 +166,7 @@ impl Default for ProtocolTimeouts {
             rally_fetch: Retry::new(700, 3),
             fence_fetch: Retry::new(700, 3),
             home_position: Retry::new(700, 3),
+            param_cache_write: Duration::from_millis(2000),
         }
     }
 }
@@ -198,6 +204,7 @@ impl ProtocolTimeouts {
             rally_fetch: scale(self.rally_fetch),
             fence_fetch: scale(self.fence_fetch),
             home_position: scale(self.home_position),
+            param_cache_write: self.param_cache_write / divisor,
         }
     }
 }
@@ -217,5 +224,7 @@ mod tests {
         assert_eq!(fast.param_list_quiet, Duration::from_millis(40));
         assert_eq!(fast.ftp.other.retries, 30);
         assert_eq!(fast.ftp.other.timeout, Duration::from_millis(10));
+        assert_eq!(slow.param_cache_write, Duration::from_millis(2000));
+        assert_eq!(fast.param_cache_write, Duration::from_millis(20));
     }
 }

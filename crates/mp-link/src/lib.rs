@@ -108,6 +108,7 @@ pub mod messages;
 pub mod mirror;
 pub mod mission_points;
 pub mod mission_transfer;
+pub mod param_cache;
 pub mod param_download;
 pub mod param_fetch;
 mod protocols;
@@ -244,6 +245,18 @@ pub struct LinkConfig {
     /// product path, where it costs one untaken branch a frame; `planner`'s `MP_STORM` turns it
     /// on. **Not the C#'s.**
     pub stamp_arrivals: bool,
+    /// `Settings.GetDataDirectory()`, under which each vehicle's parameters are kept as
+    /// `paramcache/<aptype>/<uid2>/<sysid>/<compid>/param.json`, written two seconds after they
+    /// change (see [`param_cache`]). `None` keeps no cache, which is the default, so that a tool
+    /// or a test writes nothing into the user's folders; for the planner's links it is
+    /// `mp_settings::data_directory()`, since `MAVState` always writes.
+    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVState.cs:27-46, 63-95`
+    pub data_directory: Option<std::path::PathBuf>,
+    /// `MainV2.UseCachedParams`: whether [`Link::read_cached_params`] reads a vehicle's
+    /// `param.json`, less than an hour old, in place of fetching its parameters. False, as the
+    /// C#'s is, and nothing in the C# sets it.
+    /// `// C#: MainV2.cs:450, 1659-1667`
+    pub use_cached_params: bool,
 }
 
 impl Default for LinkConfig {
@@ -258,6 +271,8 @@ impl Default for LinkConfig {
             stream_rate_hz: 4,
             timeouts: ProtocolTimeouts::default(),
             stamp_arrivals: false,
+            data_directory: None,
+            use_cached_params: false,
         }
     }
 }
@@ -322,6 +337,9 @@ struct Shared {
     /// Parameter fetches - MAVFTP first, the stream after - the caller has started, finished ones
     /// included so their outcome can be read (`param_fetch`).
     param_fetches: Mutex<BTreeMap<VehicleId, param_fetch::ParamFetch>>,
+    /// Each vehicle's `param.json` - what its parameters hold beyond the table, and its write -
+    /// when the link keeps one (see [`param_cache`]). Locked after `params` wherever both are.
+    param_cache: Mutex<param_cache::ParamCaches>,
     /// Requests the link thread has picked up, finished ones included.
     requests: Mutex<BTreeMap<RequestId, Request>>,
     /// Requests the link thread has yet to pick up.
@@ -579,6 +597,9 @@ impl Link {
             .os_lock()
             .map(|mut d| *d = description.clone())
             .unwrap_or(());
+        if let Ok(mut caches) = shared.param_cache.os_lock() {
+            caches.directory.clone_from(&config.data_directory);
+        }
         let (tx, rx) = std::sync::mpsc::channel::<Vec<u8>>();
 
         let thread_shared = Arc::clone(&shared);
@@ -2107,15 +2128,23 @@ fn run_link(
                                     state.autopilot == MAV_AUTOPILOT_ARDUPILOTMEGA
                                 });
                                 // Every PARAM_VALUE counts toward a download, whatever its
-                                // type, as every one does in getParamListAsync.
+                                // type, as every one does in getParamListAsync. The one that
+                                // completes it is getParamListAsync's `AddRange`, which
+                                // `param.json` is written after (see `param_cache`).
+                                // C#: MAVLinkInterface.cs:2240-2242
+                                let mut list_fetched = false;
                                 if let Ok(mut downloads) = shared.param_downloads.os_lock()
                                     && let Some(download) = downloads.get_mut(&id)
                                 {
+                                    let was_finished = download.is_finished();
                                     download.on_param_value(
                                         param.param_index,
                                         param.param_count,
                                         Instant::now(),
                                     );
+                                    list_fetched = !was_finished
+                                        && download.state()
+                                            == param_download::ParamDownloadState::Complete;
                                 }
                                 if let Some(kind) = ParamType::from_wire(param.param_type) {
                                     let airspeed = AIRSPEED_MIN_PARAMS.contains(&name.as_str());
@@ -2130,18 +2159,33 @@ fn run_link(
                                     // request finished finds the table already agreeing with it.
                                     // Lock order: requests, then parameters.
                                     let mut held = shared.requests.os_lock();
+                                    let mut answered = param_cache::Answered::default();
                                     if let Ok(held) = held.as_mut() {
                                         for request in held.values_mut() {
-                                            request.on_param_value(
+                                            if request.on_param_value(
                                                 id,
                                                 &name,
                                                 param.param_index,
                                                 value,
-                                            );
+                                            ) {
+                                                answered.took(&request.kind);
+                                            }
                                         }
                                     }
                                     if let Ok(mut table) = shared.params.os_lock() {
                                         let table = table.entry(id).or_default();
+                                        // `param[st] = new MAVLinkParam(...)` as `param.json`'s
+                                        // list sees it, before the table takes the name. Lock
+                                        // order: parameters, then the cache.
+                                        param_cache::on_param_value(
+                                            shared,
+                                            id,
+                                            &name,
+                                            table.get(&name).is_some(),
+                                            answered,
+                                            is_ardupilot,
+                                            Instant::now(),
+                                        );
                                         table.insert(
                                             name,
                                             value,
@@ -2161,6 +2205,9 @@ fn run_link(
                                         }
                                     }
                                     drop(held);
+                                }
+                                if list_fetched {
+                                    param_cache::list_fetched(shared, id, Instant::now());
                                 }
                             }
                         }
@@ -2359,6 +2406,13 @@ fn run_link(
             Instant::now(),
             &mut param_actions,
             &mut param_recorded,
+        );
+        // `param.json`, two seconds after the parameters changed. C#: MAVState.cs:65-95
+        param_cache::tick(
+            shared,
+            &registry,
+            Instant::now(),
+            config.timeouts.param_cache_write,
         );
         // `SaveToTlog` of a MAVFTP fetch's parameters. C#: MAVLinkInterface.cs:1903-1912
         for frame in param_recorded.drain(..) {
@@ -2617,6 +2671,8 @@ fn run_link(
     if let Some(writer) = recorder.as_mut() {
         let _ = writer.flush();
     }
+    // A `param.json` still waiting is written now: the C#'s timer fires after the port closes.
+    param_cache::tick(shared, &registry, Instant::now(), Duration::ZERO);
     decoder.flush(&DIALECT, |_| {});
     registry.publish_all();
     // And every vehicle's handle, or a link that ended before its first publish - a short

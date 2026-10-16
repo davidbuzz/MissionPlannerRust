@@ -504,6 +504,9 @@ impl Telemetry {
             record_path: recording.clone(),
             // Packet to pixel, when frames are being measured (frametimes.rs).
             stamp_arrivals: crate::frametimes::enabled(),
+            // param.json under the data directory, as MAVState writes it (MAVState.cs:27-46);
+            // UseCachedParams stays off, as nothing in the C# sets it.
+            data_directory: mp_settings::data_directory(),
             ..LinkConfig::default()
         };
         match Link::connect(url, config) {

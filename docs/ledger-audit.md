@@ -71,12 +71,18 @@ wrote).
   scale bar.
 - FLIGHT DATA: the position read-out under the map (`Coords.cs`, `coords1`); the vehicle marker's
   tooltip (`mapicondesc`); the pre-flight checklist (`CheckListControl.cs`).
-- The message box's `[link;url;text]` markup (the zero-altitude plane warning shows it raw).
+  (ported 2026-10-16: the read-out, horizontal, under the flight map - `fly::coords_strip` - and
+  the tooltip, `speechConversion` of `mapicondesc` kept as each map's loop keeps its marker -
+  `fly::VehicleTooltip`; the checklist remains.)
+- The message box's `[link;url;text]` markup (the zero-altitude plane warning shows it raw)
+  (mended 2026-10-16: `ui::box_text`, the shared modal and FLIGHT PLAN's prompt draw the link).
 - SETUP and CONFIG: a page popped out into its own window on a double-click
   (`BackstageView.cs`).
-- The Live Calibration sphere's arrow keys (`Sphere.cs`).
+- The Live Calibration sphere's arrow keys (`Sphere.cs`) (mended 2026-10-16).
 - The parameter cache `param.json`, written after every change and read with `UseCachedParams`
   (`MAVState.cs`).
+  (mended 2026-10-16: mp-link's param_cache, written two seconds after a change; the read behind a
+  flag nothing sets, as there.)
 - The connection control's vehicle (sysid) selector and Link Stats label.
 - LOGS: MavlinkLog's "Tlog > Kml or Graph" form (Create KML is `headless-planner kml` alone).
 - Every graph's zoom, pan and context menu (ZedGraph's, reproduced in the log browser alone).

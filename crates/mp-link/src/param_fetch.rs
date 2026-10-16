@@ -239,6 +239,9 @@ pub(crate) fn tick(
                 match unpack_outcome(outcome) {
                     Ok(list) => {
                         recorded_frames(*id, &list, recorded);
+                        // The `AddRange` that `param.json` is written after, and the file's
+                        // types and defaults it holds (see `param_cache`).
+                        crate::param_cache::file_filled(shared, *id, &list, now);
                         // `param.Clear(); TotalReported = count; AddRange(mavlist)`: the table
                         // replaced whole, each entry at its place in the file.
                         // C#: MAVLinkInterface.cs:1898-1902

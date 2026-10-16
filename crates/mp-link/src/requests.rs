@@ -728,9 +728,19 @@ impl Request {
     /// set succeeded. The vehicle may have clamped or refused the value, and the C# still returns
     /// true and stores what came back (C#: MAVLinkInterface.cs:1690-1728); so does this, carrying
     /// the reported value in [`RequestOutcome::Accepted`] for a caller that wants to compare.
-    pub fn on_param_value(&mut self, from: VehicleId, name: &str, index: u16, value: ParamValue) {
+    ///
+    /// Whether this request took it: the C#'s `setParam` and `GetParamAsync` then put the
+    /// parameter in the vehicle's list themselves, which `param.json` is written after
+    /// ([`crate::param_cache`]).
+    pub fn on_param_value(
+        &mut self,
+        from: VehicleId,
+        name: &str,
+        index: u16,
+        value: ParamValue,
+    ) -> bool {
         if self.state != RequestState::Waiting || from != self.target {
-            return;
+            return false;
         }
         let matches = match &self.kind {
             // "MAVLINK bad param response" otherwise, and keep waiting (:1699-1703).
@@ -752,6 +762,7 @@ impl Request {
         if matches {
             self.finish(RequestOutcome::Accepted { value: Some(value) });
         }
+        matches
     }
 
     /// A `COMMAND_ACK` arrived from `from`. C#: MAVLinkInterface.cs:2797-2831.
