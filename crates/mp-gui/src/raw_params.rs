@@ -97,6 +97,7 @@ use mp_link::requests::RequestOutcome;
 use mp_os::fs::FsExt as _;
 
 use crate::MissionPlanner;
+use crate::box_keys::{self, BoxKeys};
 use crate::config::firmware::{BoxIds, PathBox};
 use crate::config::param_compare::{self, ParamCompare};
 use crate::config::servo_output::{self, Combo};
@@ -1623,26 +1624,22 @@ pub fn overlays(
         ));
     }
     if raw.question() {
+        let yes = box_keys::answer(|this, _window, _cx| this.answer_reset(true));
+        let no = box_keys::answer(|this, _window, _cx| this.answer_reset(false));
         let buttons = vec![
             action(
                 "param-reset-yes",
                 "Yes",
                 theme::ACCENT,
                 true,
-                cx.listener(|this, _event: &(), _window, cx| {
-                    this.answer_reset(true);
-                    cx.notify();
-                }),
+                box_keys::click(&yes, cx),
             ),
             action(
                 "param-reset-no",
                 "No",
                 theme::ACCENT,
                 true,
-                cx.listener(|this, _event: &(), _window, cx| {
-                    this.answer_reset(false);
-                    cx.notify();
-                }),
+                box_keys::click(&no, cx),
             ),
         ];
         shown.push(servo_output::modal(
@@ -1651,19 +1648,18 @@ pub fn overlays(
             RESET_QUESTION,
             false,
             buttons,
+            BoxKeys::yes_no(&yes, &no),
             window,
         ));
     }
     if let Some(text) = raw.message() {
+        let dismiss = box_keys::answer(|this, _window, _cx| this.raw_params.message = None);
         let ok = action(
             "param-message-ok",
             "OK",
             theme::ACCENT,
             true,
-            cx.listener(|this, _event: &(), _window, cx| {
-                this.raw_params.message = None;
-                cx.notify();
-            }),
+            box_keys::click(&dismiss, cx),
         );
         // `CustomMessageBox.Show(text)`: no caption.
         shown.push(servo_output::modal(
@@ -1672,6 +1668,7 @@ pub fn overlays(
             text,
             false,
             vec![ok],
+            BoxKeys::ok(&dismiss),
             window,
         ));
     }
@@ -2685,6 +2682,7 @@ mod tests {
             include_str!("raw_params.rs"),
             include_str!("params.rs"),
             include_str!("main.rs"),
+            include_str!("box_keys.rs"),
             // ---- ConfigRawParams remainder ----
             include_str!("raw_params_grid.rs"),
             // ---- end ConfigRawParams remainder ----
@@ -2703,6 +2701,7 @@ mod tests {
             include_str!("raw_params.rs"),
             include_str!("params.rs"),
             include_str!("main.rs"),
+            include_str!("box_keys.rs"),
             include_str!("raw_params_grid.rs"),
             include_str!("file_list.rs"),
             include_str!("config/param_compare.rs"),

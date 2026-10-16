@@ -1384,24 +1384,25 @@ pub fn overlay(
         layers = layers.child(question(input, prompt, window, cx));
     }
     if let Some(strength) = open.strength.as_ref() {
+        let dismiss = crate::box_keys::answer(|this, _window, _cx| {
+            let result = this.extra.auth_keys.strength_ok();
+            status(this, result);
+        });
         let ok = crate::ui::action(
             "authkeys-box-ok",
             "OK",
             theme::ACCENT,
             true,
-            cx.listener(|this, _event: &(), _window, cx| {
-                let result = this.extra.auth_keys.strength_ok();
-                status(this, result);
-                cx.notify();
-            }),
+            crate::box_keys::click(&dismiss, cx),
         );
-        // `CustomMessageBox.Show(text)`: no caption.
+        // `CustomMessageBox.Show(text)`: no caption, and OK the form's AcceptButton.
         layers = layers.child(crate::config::servo_output::modal(
             "authkeys-box",
             "",
             &strength.text,
             false,
             vec![ok],
+            crate::box_keys::BoxKeys::ok(&dismiss),
             window,
         ));
     }

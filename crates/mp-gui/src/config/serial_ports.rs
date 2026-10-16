@@ -1805,15 +1805,15 @@ pub fn overlay(
         .collect();
     out.extend(progress_window(serial, window, cx));
     if let Some(message) = serial.message() {
+        // OK the form's AcceptButton ([`crate::box_keys`]).
+        let dismiss =
+            crate::box_keys::answer(|this, _window, _cx| this.serial_ports.dismiss_message());
         let ok = action(
             "serial-message-ok",
             "OK",
             theme::ACCENT,
             true,
-            cx.listener(|this, _event: &(), _window, cx| {
-                this.serial_ports.dismiss_message();
-                cx.notify();
-            }),
+            crate::box_keys::click(&dismiss, cx),
         );
         out.push(modal(
             "serial-message",
@@ -1821,6 +1821,7 @@ pub fn overlay(
             &message.text,
             true,
             vec![ok],
+            crate::box_keys::BoxKeys::ok(&dismiss),
             window,
         ));
     }

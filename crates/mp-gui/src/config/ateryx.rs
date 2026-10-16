@@ -1198,32 +1198,31 @@ pub fn overlay(
         ));
     }
     ateryx.question?;
+    // Yes the form's AcceptButton and No its CancelButton: Enter and Escape answer it too
+    // ([`crate::box_keys`]).
     let answer = |yes: bool| {
-        move |this: &mut MissionPlanner,
-              _event: &(),
-              _window: &mut Window,
-              cx: &mut Context<MissionPlanner>| {
+        crate::box_keys::answer(move |this, _window, _cx| {
             let speeds = this.ateryx_speeds();
             let telemetry = &mut this.telemetry;
             this.ateryx
                 .answer(yes, speeds, |params| send_storage(telemetry, params));
-            cx.notify();
-        }
+        })
     };
+    let (on_yes, on_no) = (answer(true), answer(false));
     let buttons = vec![
         action(
             "ateryx-question-yes",
             "Yes",
             theme::ACCENT,
             true,
-            cx.listener(answer(true)),
+            crate::box_keys::click(&on_yes, cx),
         ),
         action(
             "ateryx-question-no",
             "No",
             theme::ACCENT,
             true,
-            cx.listener(answer(false)),
+            crate::box_keys::click(&on_no, cx),
         ),
     ];
     Some(modal(
@@ -1232,6 +1231,7 @@ pub fn overlay(
         RESET_FLASH,
         false,
         buttons,
+        crate::box_keys::BoxKeys::yes_no(&on_yes, &on_no),
         window,
     ))
 }

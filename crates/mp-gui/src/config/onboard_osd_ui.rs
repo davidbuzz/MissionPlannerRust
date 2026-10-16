@@ -1199,26 +1199,24 @@ pub fn overlay(
 }
 
 /// A question: Discard's OK/Cancel, Reset's Yes/No, or Update Params' OK/Cancel with its
-/// Show-me-again box.
+/// Show-me-again box - OK or Yes the form's `AcceptButton`, which Enter presses, and Cancel or
+/// No its `CancelButton`, which Escape presses ([`crate::box_keys`]).
 fn question_box(
     question: Question,
     window: &Window,
     cx: &mut Context<MissionPlanner>,
 ) -> AnyElement {
     let answer = |yes: bool| {
-        move |this: &mut MissionPlanner,
-              _event: &(),
-              _window: &mut Window,
-              cx: &mut Context<MissionPlanner>| {
+        crate::box_keys::answer(move |this, _window, _cx| {
             let view = this.telemetry.view();
             let shown_again = this.persisted.get(SHOW_AGAIN_KEY).map(str::to_owned);
             let telemetry = &this.telemetry;
             this.software_pages2
                 .onboard_osd
                 .answer(yes, telemetry, &view, shown_again.as_deref());
-            cx.notify();
-        }
+        })
     };
+    let (on_yes, on_no) = (answer(true), answer(false));
     let (title, text, yes_text, no_text): (&str, String, &'static str, &'static str) =
         match question {
             Question::Discard => ("", ARE_YOU_SURE.to_owned(), "OK", "Cancel"),
@@ -1261,16 +1259,17 @@ fn question_box(
         yes_text,
         theme::ACCENT,
         true,
-        cx.listener(answer(true)),
+        crate::box_keys::click(&on_yes, cx),
     ));
     buttons.push(action(
         "osd-question-no",
         no_text,
         theme::ACCENT,
         true,
-        cx.listener(answer(false)),
+        crate::box_keys::click(&on_no, cx),
     ));
-    modal("osd-question", title, &text, false, buttons, window)
+    let keys = crate::box_keys::BoxKeys::yes_no(&on_yes, &on_no);
+    modal("osd-question", title, &text, false, buttons, keys, window)
 }
 
 /// `SetupDialog`: "OSD/Telemetry Parameters Setup" - a heading a screen, a row a slot, and

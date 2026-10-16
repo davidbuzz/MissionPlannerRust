@@ -100,6 +100,7 @@ use mp_link::requests::RequestOutcome;
 use mp_params::ParamMeta;
 
 use crate::MissionPlanner;
+use crate::box_keys::{self, Answer, BoxKeys};
 use crate::config::servo_output::{self, Combo};
 use crate::params::{Parameter, Written};
 use crate::textfield::{KeyOutcome, TextField};
@@ -2865,8 +2866,9 @@ pub fn overlays(
 ) -> Vec<AnyElement> {
     let mut shown = Vec::new();
     if let Some(again) = grid.warning() {
-        // `CreateMessageShowAgainForm`: the text, "Show me again?" ticked at the left, OK.
-        // C#: Common.cs:296-443
+        // `CreateMessageShowAgainForm`: the text, "Show me again?" ticked at the left, OK - the
+        // form's AcceptButton, and no CancelButton without Cancel. C#: Common.cs:296-443
+        let close = box_keys::answer(|this, _window, _cx| this.param_grid.close_warning());
         let buttons = vec![
             check(
                 "raw-param-warning-again",
@@ -2884,10 +2886,7 @@ pub fn overlays(
                 "OK",
                 theme::ACCENT,
                 true,
-                cx.listener(|this, _event: &(), _window, cx| {
-                    this.param_grid.close_warning();
-                    cx.notify();
-                }),
+                box_keys::click(&close, cx),
             ),
         ];
         shown.push(servo_output::modal(
@@ -2896,11 +2895,21 @@ pub fn overlays(
             RAW_PARAM_WARNING_TEXT,
             false,
             buttons,
+            BoxKeys::ok(&close),
             window,
         ));
     } else if let Some(again) = grid.refresh() {
         // `MessageShowAgain("Refresh Params", ..., show_cancel: true)`: the text, "Show me
-        // again?" ticked at the left, OK and Cancel. C#: Common.cs:296-443
+        // again?" ticked at the left, OK and Cancel, the form's AcceptButton and CancelButton.
+        // C#: Common.cs:296-443
+        let ok = box_keys::answer(|this, _window, _cx| {
+            if this.param_grid.answer_refresh(true) {
+                this.telemetry.download_parameters();
+            }
+        });
+        let cancel = box_keys::answer(|this, _window, _cx| {
+            this.param_grid.answer_refresh(false);
+        });
         let buttons = vec![
             check(
                 "param-refresh-again",
@@ -2919,22 +2928,14 @@ pub fn overlays(
                 "OK",
                 theme::ACCENT,
                 true,
-                cx.listener(|this, _event: &(), _window, cx| {
-                    if this.param_grid.answer_refresh(true) {
-                        this.telemetry.download_parameters();
-                    }
-                    cx.notify();
-                }),
+                box_keys::click(&ok, cx),
             ),
             action(
                 "param-refresh-cancel",
                 "Cancel",
                 theme::TEXT,
                 true,
-                cx.listener(|this, _event: &(), _window, cx| {
-                    this.param_grid.answer_refresh(false);
-                    cx.notify();
-                }),
+                box_keys::click(&cancel, cx),
             ),
         ];
         shown.push(servo_output::modal(
@@ -2943,16 +2944,27 @@ pub fn overlays(
             REFRESH_TEXT,
             false,
             buttons,
+            BoxKeys::yes_no(&ok, &cancel),
             window,
         ));
     } else if let Some(front) = grid.front() {
-        let buttons = if front.is_question() {
-            vec![
-                answer("param-box-yes", "Yes", true, cx),
-                answer("param-box-no", "No", false, cx),
-            ]
+        // OK and Yes the form's AcceptButton, No its CancelButton - so Enter or Escape answers
+        // the box over the grid, the cell beneath that raised it holding the keyboard or not.
+        let yes = box_keys::answer(|this, _window, _cx| this.param_grid_answer(true));
+        let (buttons, keys) = if front.is_question() {
+            let no = box_keys::answer(|this, _window, _cx| this.param_grid_answer(false));
+            (
+                vec![
+                    answer("param-box-yes", "Yes", &yes, cx),
+                    answer("param-box-no", "No", &no, cx),
+                ],
+                BoxKeys::yes_no(&yes, &no),
+            )
         } else {
-            vec![answer("param-box-ok", "OK", true, cx)]
+            (
+                vec![answer("param-box-ok", "OK", &yes, cx)],
+                BoxKeys::ok(&yes),
+            )
         };
         shown.push(servo_output::modal(
             "param-box",
@@ -2960,6 +2972,7 @@ pub fn overlays(
             &front.text,
             false,
             buttons,
+            keys,
             window,
         ));
     }
@@ -2969,23 +2982,14 @@ pub fn overlays(
     shown
 }
 
-/// A box's button: OK and Yes are `true`, No `false`.
+/// A box's button, its click `work`: OK and Yes answer `true`, No `false`.
 fn answer(
     id: &'static str,
     text: &'static str,
-    yes: bool,
+    work: &Answer,
     cx: &mut Context<MissionPlanner>,
 ) -> AnyElement {
-    action(
-        id,
-        text,
-        theme::ACCENT,
-        true,
-        cx.listener(move |this, _event: &(), _window, cx| {
-            this.param_grid_answer(yes);
-            cx.notify();
-        }),
-    )
+    action(id, text, theme::ACCENT, true, box_keys::click(work, cx))
 }
 
 /// Set Bitmask's window: `ShowUserControl`'s form, 700 wide, not modal, over the screen.
@@ -4141,6 +4145,7 @@ mod tests {
             include_str!("raw_params.rs"),
             include_str!("params.rs"),
             include_str!("main.rs"),
+            include_str!("box_keys.rs"),
         ];
         for line in scripts.iter().flat_map(|script| script.lines()) {
             let line = line.split('#').next().unwrap_or_default().trim();

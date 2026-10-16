@@ -80,6 +80,7 @@ use gpui::{
 use mp_link::RequestId;
 use mp_link::requests::RequestOutcome;
 
+use crate::box_keys::{self, BoxKeys};
 use crate::MissionPlanner;
 // The shared controls, under the names the pages have long imported them by from here.
 pub use crate::config::mavlink_controls::{
@@ -1104,16 +1105,20 @@ where
 
 /// A modal box drawn over the whole window, as `CustomMessageBox.Show` is: its caption, its
 /// text - with the `[link;url;text]` it may carry drawn as a link under it, as `ShowUI` draws one
-/// ([`crate::ui::box_text`]) - and its buttons.
-/// `// C#: ExtLibs/Controls/CustomMessageBox.cs:73-240`
+/// ([`crate::ui::box_text`]) - and its buttons, whose accept and cancel `keys` Enter and Escape
+/// press while it shows, as the form's `AcceptButton` and `CancelButton` ([`crate::box_keys`]).
+/// `// C#: ExtLibs/Controls/CustomMessageBox.cs:73-240, 286-360`
 pub fn modal(
     id: &'static str,
     title: &str,
     text: &str,
     alert: bool,
     buttons: Vec<AnyElement>,
+    keys: BoxKeys,
     window: &Window,
 ) -> AnyElement {
+    // The keys answer the box drawn last this frame, which is the one on top.
+    box_keys::show(id, keys);
     let size = window.viewport_size();
     let dialog = crate::probe::measured(id, div())
         .flex()
@@ -1340,26 +1345,26 @@ pub fn overlay(
     cx: &mut Context<MissionPlanner>,
 ) -> Option<AnyElement> {
     if let Some(question) = servo.question() {
+        let yes = box_keys::answer(|this, _window, _cx| {
+            this.servo_output.answer(true, Instant::now());
+        });
+        let no = box_keys::answer(|this, _window, _cx| {
+            this.servo_output.answer(false, Instant::now());
+        });
         let buttons = vec![
             action(
                 "servo-question-yes",
                 "Yes",
                 theme::ACCENT,
                 true,
-                cx.listener(|this, _event: &(), _window, cx| {
-                    this.servo_output.answer(true, Instant::now());
-                    cx.notify();
-                }),
+                box_keys::click(&yes, cx),
             ),
             action(
                 "servo-question-no",
                 "No",
                 theme::ACCENT,
                 true,
-                cx.listener(|this, _event: &(), _window, cx| {
-                    this.servo_output.answer(false, Instant::now());
-                    cx.notify();
-                }),
+                box_keys::click(&no, cx),
             ),
         ];
         return Some(modal(
@@ -1368,19 +1373,18 @@ pub fn overlay(
             &question.text(),
             false,
             buttons,
+            BoxKeys::yes_no(&yes, &no),
             window,
         ));
     }
     let message = servo.message()?;
+    let dismiss = box_keys::answer(|this, _window, _cx| this.servo_output.dismiss_message());
     let ok = action(
         "servo-message-ok",
         "OK",
         theme::ACCENT,
         true,
-        cx.listener(|this, _event: &(), _window, cx| {
-            this.servo_output.dismiss_message();
-            cx.notify();
-        }),
+        box_keys::click(&dismiss, cx),
     );
     Some(modal(
         "servo-message",
@@ -1388,6 +1392,7 @@ pub fn overlay(
         &message.text,
         message.title == ERROR_TITLE,
         vec![ok],
+        BoxKeys::ok(&dismiss),
         window,
     ))
 }

@@ -3511,22 +3511,28 @@ pub fn overlay(
             ))
         }
         Prompt::TryAgain { .. } => {
-            let answer = |id: &'static str, text: &'static str, yes: bool| {
+            // `MessageBox.Show(..., YesNoCancel)`, the platform's own box: Enter presses Yes, its
+            // default button, and Escape its Cancel ([`crate::box_keys`]).
+            // `// C#: SikRadio/RFD900.cs:2317`
+            let again = |yes: bool| {
+                crate::box_keys::answer(move |this, _window, _cx| {
+                    this.extra.sikradio.answer_again(yes);
+                })
+            };
+            let (on_yes, on_no) = (again(true), again(false));
+            let answer = |id: &'static str, text: &'static str, work: &crate::box_keys::Answer| {
                 action(
                     id,
                     text,
                     theme::ACCENT,
                     true,
-                    cx.listener(move |this, _event: &(), _window, cx| {
-                        this.extra.sikradio.answer_again(yes);
-                        cx.notify();
-                    }),
+                    crate::box_keys::click(work, cx),
                 )
             };
             let buttons = vec![
-                answer("sikradio-again-yes", "Yes", true),
-                answer("sikradio-again-no", "No", false),
-                answer("sikradio-again-cancel", "Cancel", false),
+                answer("sikradio-again-yes", "Yes", &on_yes),
+                answer("sikradio-again-no", "No", &on_no),
+                answer("sikradio-again-cancel", "Cancel", &on_no),
             ];
             Some(modal(
                 IDS.question,
@@ -3534,6 +3540,7 @@ pub fn overlay(
                 "Programming firmware failed.  Try again?",
                 false,
                 buttons,
+                crate::box_keys::BoxKeys::yes_no(&on_yes, &on_no),
                 window,
             ))
         }

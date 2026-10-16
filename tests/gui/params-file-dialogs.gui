@@ -101,7 +101,16 @@ expect params.selected.value 6000
 expect params.box No matching Params
 expect params.box.text ~ Missing 1 params
 expect params.box.text ~ NOT_A_PARAM
-click param-box-ok
+# Answered from the keyboard, as the form's AcceptButton is (CustomMessageBox.cs:288-300; the
+# owner's of 2026-10-16, a box whose OK he could not reach): the keyboard was the file dialog's
+# box, gone with it, and the keys reach this box all the same (crates/mp-gui/src/box_keys.rs).
+# OK alone has no CancelButton: Escape is the box's, and presses nothing. Enter is its OK.
+expect ui.box param-box
+key Escape
+expect ui.box.key param-box nothing
+expect params.box No matching Params
+key Return
+expect ui.box.key param-box accept
 expect params.box none
 
 # Compare Params: the Open dialog again; a file double-clicked is its OK, and ParamCompare

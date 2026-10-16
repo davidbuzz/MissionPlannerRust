@@ -73,7 +73,12 @@ expect config.firmware.vehicle none
 # platform, its one file selected. One release and one version among the three: only the
 # Platform picker shows (FirmwareSelection.xaml.cs:24-57).
 click fw-quad
-click fw-question-yes
+# Yes from the keyboard: Enter, the form's AcceptButton (CustomMessageBox.cs:302-317;
+# crates/mp-gui/src/box_keys.rs, the owner's of 2026-10-16).
+expect config.firmware.question Are you sure you want to upload Copter V4.7.1 OFFICIAL?
+expect ui.box fw-question
+key Return
+expect ui.box.key fw-question accept
 expect config.firmware.vehicle Copter
 expect config.firmware.candidates 3
 expect config.firmware.chosen https://firmware.ardupilot.org/Copter/stable/CubeOrange/arducopter.apj

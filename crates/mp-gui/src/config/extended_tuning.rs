@@ -2072,10 +2072,12 @@ pub fn overlay(
     window: &Window,
     cx: &mut Context<MissionPlanner>,
 ) -> Option<AnyElement> {
+    // Yes the form's AcceptButton and No its CancelButton: Enter and Escape answer it too
+    // ([`crate::box_keys`]).
     let yes_no =
         |yes: &'static str, no: &'static str, large: bool, cx: &mut Context<MissionPlanner>| {
             let answer = move |yes: bool| {
-                move |this: &mut MissionPlanner| {
+                crate::box_keys::answer(move |this, _window, _cx| {
                     let now = Instant::now();
                     if large {
                         let view = this.telemetry.view();
@@ -2091,51 +2093,48 @@ pub fn overlay(
                     } else {
                         this.extended_tuning.answer(yes, now);
                     }
-                }
+                })
             };
             let (on_yes, on_no) = (answer(true), answer(false));
-            vec![
+            let buttons = vec![
                 action(
                     yes,
                     "Yes",
                     theme::ACCENT,
                     true,
-                    cx.listener(move |this, _event: &(), _window, cx| {
-                        on_yes(this);
-                        cx.notify();
-                    }),
+                    crate::box_keys::click(&on_yes, cx),
                 ),
                 action(
                     no,
                     "No",
                     theme::ACCENT,
                     true,
-                    cx.listener(move |this, _event: &(), _window, cx| {
-                        on_no(this);
-                        cx.notify();
-                    }),
+                    crate::box_keys::click(&on_no, cx),
                 ),
-            ]
+            ];
+            (buttons, crate::box_keys::BoxKeys::yes_no(&on_yes, &on_no))
         };
     if let Some(question) = tuning.question() {
-        let buttons = yes_no("extended-question-yes", "extended-question-no", false, cx);
+        let (buttons, keys) = yes_no("extended-question-yes", "extended-question-no", false, cx);
         return Some(modal(
             "extended-question",
             OUT_OF_RANGE_TITLE,
             &question.text(),
             false,
             buttons,
+            keys,
             window,
         ));
     }
     if let Some(large) = tuning.large() {
-        let buttons = yes_no("extended-large-yes", "extended-large-no", true, cx);
+        let (buttons, keys) = yes_no("extended-large-yes", "extended-large-no", true, cx);
         return Some(modal(
             "extended-large",
             LARGE_TITLE,
             &large_text(&large.param),
             false,
             buttons,
+            keys,
             window,
         ));
     }

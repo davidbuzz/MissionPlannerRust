@@ -2611,6 +2611,17 @@ pub fn list_overlay(
     } else {
         CheckState::Unchecked
     };
+    // `MessageShowAgain` with Cancel: OK the form's AcceptButton, Cancel its CancelButton, so
+    // Enter and Escape answer it too ([`crate::box_keys`]). `// C#: Common.cs:438-439`
+    let answer = |ok: bool| {
+        crate::box_keys::answer(move |this, _window, _cx| {
+            let view = this.telemetry.view();
+            if access(this).answer_refresh(ok, &view) {
+                this.telemetry.download_parameters();
+            }
+        })
+    };
+    let (on_ok, on_cancel) = (answer(true), answer(false));
     let buttons = vec![
         div()
             .relative()
@@ -2634,26 +2645,14 @@ pub fn list_overlay(
             "OK",
             theme::ACCENT,
             true,
-            cx.listener(move |this, _event: &(), _window, cx| {
-                let view = this.telemetry.view();
-                if access(this).answer_refresh(true, &view) {
-                    this.telemetry.download_parameters();
-                }
-                cx.notify();
-            }),
+            crate::box_keys::click(&on_ok, cx),
         ),
         action(
             ids.confirm_cancel,
             "Cancel",
             theme::DIM,
             true,
-            cx.listener(move |this, _event: &(), _window, cx| {
-                let view = this.telemetry.view();
-                if access(this).answer_refresh(false, &view) {
-                    this.telemetry.download_parameters();
-                }
-                cx.notify();
-            }),
+            crate::box_keys::click(&on_cancel, cx),
         ),
     ];
     Some(crate::config::servo_output::modal(
@@ -2662,6 +2661,7 @@ pub fn list_overlay(
         REFRESH_WARNING.trim_end(),
         true,
         buttons,
+        crate::box_keys::BoxKeys::yes_no(&on_ok, &on_cancel),
         window,
     ))
 }

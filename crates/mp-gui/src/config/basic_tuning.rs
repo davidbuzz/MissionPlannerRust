@@ -1104,11 +1104,10 @@ pub fn overlay(
             Ask::Range(_, question) => (OUT_OF_RANGE_TITLE, question.text()),
             Ask::Large(param) => (LARGE_VALUE_TITLE, large_value_text(param)),
         };
+        // Yes the form's AcceptButton and No its CancelButton: Enter and Escape answer it too
+        // ([`crate::box_keys`]).
         let answer = |yes: bool| {
-            move |this: &mut MissionPlanner,
-                  _event: &(),
-                  _window: &mut Window,
-                  cx: &mut Context<MissionPlanner>| {
+            crate::box_keys::answer(move |this, _window, _cx| {
                 let view = this.telemetry.view();
                 let vehicle = crate::setup::Vehicle::of(&view, this.telemetry.firmware_banner());
                 this.basic_tuning.answer(
@@ -1118,23 +1117,23 @@ pub fn overlay(
                     crate::metadata::lookup,
                     Instant::now(),
                 );
-                cx.notify();
-            }
+            })
         };
+        let (on_yes, on_no) = (answer(true), answer(false));
         let buttons = vec![
             action(
                 "tuning-question-yes",
                 "Yes",
                 theme::ACCENT,
                 true,
-                cx.listener(answer(true)),
+                crate::box_keys::click(&on_yes, cx),
             ),
             action(
                 "tuning-question-no",
                 "No",
                 theme::ACCENT,
                 true,
-                cx.listener(answer(false)),
+                crate::box_keys::click(&on_no, cx),
             ),
         ];
         return Some(modal(
@@ -1143,6 +1142,7 @@ pub fn overlay(
             &text,
             false,
             buttons,
+            crate::box_keys::BoxKeys::yes_no(&on_yes, &on_no),
             window,
         ));
     }

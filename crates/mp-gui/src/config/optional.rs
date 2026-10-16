@@ -771,7 +771,8 @@ pub fn input_box(
     .into_any_element()
 }
 
-/// A message box, with OK.
+/// A message box, with OK - which Enter presses too, as the form's `AcceptButton`
+/// ([`crate::box_keys`]).
 pub fn message_box(
     id: &'static str,
     ok_id: &'static str,
@@ -780,15 +781,13 @@ pub fn message_box(
     on_ok: impl Fn(&mut MissionPlanner) + 'static,
     cx: &mut Context<MissionPlanner>,
 ) -> AnyElement {
+    let dismiss = crate::box_keys::answer(move |this, _window, _cx| on_ok(this));
     let ok = action(
         ok_id,
         "OK",
         theme::ACCENT,
         true,
-        cx.listener(move |this, _event: &(), _window, cx| {
-            on_ok(this);
-            cx.notify();
-        }),
+        crate::box_keys::click(&dismiss, cx),
     );
     crate::config::servo_output::modal(
         id,
@@ -796,6 +795,7 @@ pub fn message_box(
         message.text.trim_end(),
         message.title == ERROR_TITLE,
         vec![ok],
+        crate::box_keys::BoxKeys::ok(&dismiss),
         window,
     )
 }

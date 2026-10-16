@@ -5091,7 +5091,9 @@ pub fn overlay(
     Some(div().children(layers).into_any_element())
 }
 
-/// A question: Yes/No, OK/Cancel, or a show-again box's OK.
+/// A question: Yes/No, OK/Cancel, or a show-again box's OK - Yes or OK the form's
+/// `AcceptButton`, which Enter presses, and No or Cancel its `CancelButton`, which Escape presses
+/// ([`crate::box_keys`]).
 fn question_box(
     page: &DroneCan,
     question: &Question,
@@ -5099,37 +5101,37 @@ fn question_box(
     cx: &mut Context<MissionPlanner>,
 ) -> AnyElement {
     let answer = |yes: bool| {
-        move |this: &mut MissionPlanner,
-              _event: &(),
-              _window: &mut Window,
-              cx: &mut Context<MissionPlanner>| {
+        crate::box_keys::answer(move |this, _window, _cx| {
             let url = this.dronecan_box_url();
             this.extra
                 .dronecan
                 .answer(yes, url, &mut this.persisted, Instant::now());
-            cx.notify();
-        }
+        })
     };
     let (yes_text, no_text) = match question.asked {
         Asked::SearchInternet { .. } => ("Yes", Some("No")),
         Asked::NewFirmware { .. } | Asked::WriteParams { .. } => ("OK", None),
         Asked::SlcanWithoutLink | Asked::RefreshParams => ("OK", Some("Cancel")),
     };
+    let yes = answer(true);
     let mut buttons = vec![action(
         "dronecan-question-yes",
         yes_text,
         theme::ACCENT,
         true,
-        cx.listener(answer(true)),
+        crate::box_keys::click(&yes, cx),
     )];
+    let mut keys = crate::box_keys::BoxKeys::ok(&yes);
     if let Some(no_text) = no_text {
+        let no = answer(false);
         buttons.push(action(
             "dronecan-question-no",
             no_text,
             theme::DIM,
             true,
-            cx.listener(answer(false)),
+            crate::box_keys::click(&no, cx),
         ));
+        keys = crate::box_keys::BoxKeys::yes_no(&yes, &no);
     }
     if let Some(again) = page.show_again() {
         let mut check = Check::default();
@@ -5162,6 +5164,7 @@ fn question_box(
         &question.text.replace("\r\n", "\n"),
         false,
         buttons,
+        keys,
         window,
     )
 }

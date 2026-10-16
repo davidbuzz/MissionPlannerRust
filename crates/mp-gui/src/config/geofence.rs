@@ -819,26 +819,27 @@ pub fn overlay(
     cx: &mut Context<MissionPlanner>,
 ) -> Option<AnyElement> {
     if let Some(question) = fence.question() {
+        // Yes the form's AcceptButton and No its CancelButton ([`crate::box_keys`]).
+        let yes = crate::box_keys::answer(|this, _window, _cx| {
+            this.software_pages.geofence.answer(true, Instant::now());
+        });
+        let no = crate::box_keys::answer(|this, _window, _cx| {
+            this.software_pages.geofence.answer(false, Instant::now());
+        });
         let buttons = vec![
             action(
                 "fence-question-yes",
                 "Yes",
                 theme::ACCENT,
                 true,
-                cx.listener(|this, _event: &(), _window, cx| {
-                    this.software_pages.geofence.answer(true, Instant::now());
-                    cx.notify();
-                }),
+                crate::box_keys::click(&yes, cx),
             ),
             action(
                 "fence-question-no",
                 "No",
                 theme::ACCENT,
                 true,
-                cx.listener(|this, _event: &(), _window, cx| {
-                    this.software_pages.geofence.answer(false, Instant::now());
-                    cx.notify();
-                }),
+                crate::box_keys::click(&no, cx),
             ),
         ];
         return Some(modal(
@@ -847,6 +848,7 @@ pub fn overlay(
             &question.text(),
             false,
             buttons,
+            crate::box_keys::BoxKeys::yes_no(&yes, &no),
             window,
         ));
     }

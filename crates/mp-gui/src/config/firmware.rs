@@ -94,6 +94,7 @@ use mp_firmware::manifest::{
 
 use super::force_bootloader::{ForceBootloader, Page as ForcePage};
 use crate::MissionPlanner;
+use crate::box_keys::{self, BoxKeys};
 use crate::settings::Persisted;
 use crate::telemetry::{Report, Telemetry, TelemetryView};
 use crate::textfield::{KeyOutcome, TextField};
@@ -2841,7 +2842,9 @@ const IDS: BoxIds = BoxIds {
     path_cancel: "fw-path-cancel",
 };
 
-/// A question, Yes and No or OK and Cancel, answered through `answer`.
+/// A question, Yes and No or OK and Cancel, answered through `answer` - by its buttons, or by
+/// Enter and Escape, Yes or OK being the form's `AcceptButton` and No or Cancel its
+/// `CancelButton` ([`box_keys`]).
 pub fn question_box(
     ids: BoxIds,
     caption: &str,
@@ -2855,33 +2858,26 @@ pub fn question_box(
         Buttons::YesNo => ("Yes", "No"),
         Buttons::OkCancel => ("OK", "Cancel"),
     };
-    let on_yes = answer.clone();
+    let answer_yes = answer.clone();
+    let on_yes = box_keys::answer(move |this, _window, _cx| answer_yes(this, true));
+    let on_no = box_keys::answer(move |this, _window, _cx| answer(this, false));
     let buttons = vec![
-        action(
-            ids.yes,
-            yes,
-            theme::ACCENT,
-            true,
-            cx.listener(move |this, _event: &(), _window, cx| {
-                on_yes(this, true);
-                cx.notify();
-            }),
-        ),
-        action(
-            ids.no,
-            no,
-            theme::ACCENT,
-            true,
-            cx.listener(move |this, _event: &(), _window, cx| {
-                answer(this, false);
-                cx.notify();
-            }),
-        ),
+        action(ids.yes, yes, theme::ACCENT, true, box_keys::click(&on_yes, cx)),
+        action(ids.no, no, theme::ACCENT, true, box_keys::click(&on_no, cx)),
     ];
-    crate::config::servo_output::modal(ids.question, caption, text, false, buttons, window)
+    crate::config::servo_output::modal(
+        ids.question,
+        caption,
+        text,
+        false,
+        buttons,
+        BoxKeys::yes_no(&on_yes, &on_no),
+        window,
+    )
 }
 
-/// A message with its OK, dismissed through `ok`.
+/// A message with its OK, dismissed through `ok` - by the button, or by Enter, OK being the
+/// form's `AcceptButton` ([`box_keys`]).
 pub fn message_box(
     ids: BoxIds,
     waiting: &Waiting,
@@ -2889,16 +2885,8 @@ pub fn message_box(
     ok: impl Fn(&mut MissionPlanner) + 'static,
     cx: &mut Context<MissionPlanner>,
 ) -> AnyElement {
-    let button = action(
-        ids.ok,
-        "OK",
-        theme::ACCENT,
-        true,
-        cx.listener(move |this, _event: &(), _window, cx| {
-            ok(this);
-            cx.notify();
-        }),
-    );
+    let on_ok = box_keys::answer(move |this, _window, _cx| ok(this));
+    let button = action(ids.ok, "OK", theme::ACCENT, true, box_keys::click(&on_ok, cx));
     let text = waiting.text.replace("\r\n", "\n");
     crate::config::servo_output::modal(
         ids.message,
@@ -2906,6 +2894,7 @@ pub fn message_box(
         text.trim_end(),
         waiting.caption == flow::ERROR,
         vec![button],
+        BoxKeys::ok(&on_ok),
         window,
     )
 }

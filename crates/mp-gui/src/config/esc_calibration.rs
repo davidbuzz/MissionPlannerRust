@@ -736,26 +736,27 @@ pub fn overlay(
     cx: &mut Context<MissionPlanner>,
 ) -> Option<AnyElement> {
     if let Some(question) = esc.question() {
+        // Yes the form's AcceptButton and No its CancelButton ([`crate::box_keys`]).
+        let yes = crate::box_keys::answer(|this, _window, _cx| {
+            this.esc_calibration.answer(true, Instant::now());
+        });
+        let no = crate::box_keys::answer(|this, _window, _cx| {
+            this.esc_calibration.answer(false, Instant::now());
+        });
         let buttons = vec![
             action(
                 "esc-question-yes",
                 "Yes",
                 theme::ACCENT,
                 true,
-                cx.listener(|this, _event: &(), _window, cx| {
-                    this.esc_calibration.answer(true, Instant::now());
-                    cx.notify();
-                }),
+                crate::box_keys::click(&yes, cx),
             ),
             action(
                 "esc-question-no",
                 "No",
                 theme::ACCENT,
                 true,
-                cx.listener(|this, _event: &(), _window, cx| {
-                    this.esc_calibration.answer(false, Instant::now());
-                    cx.notify();
-                }),
+                crate::box_keys::click(&no, cx),
             ),
         ];
         return Some(modal(
@@ -764,19 +765,19 @@ pub fn overlay(
             &question.text(),
             false,
             buttons,
+            crate::box_keys::BoxKeys::yes_no(&yes, &no),
             window,
         ));
     }
     let message = esc.message()?;
+    let dismiss =
+        crate::box_keys::answer(|this, _window, _cx| this.esc_calibration.dismiss_message());
     let ok = action(
         "esc-message-ok",
         "OK",
         theme::ACCENT,
         true,
-        cx.listener(|this, _event: &(), _window, cx| {
-            this.esc_calibration.dismiss_message();
-            cx.notify();
-        }),
+        crate::box_keys::click(&dismiss, cx),
     );
     Some(modal(
         "esc-message",
@@ -784,6 +785,7 @@ pub fn overlay(
         &message.text,
         message.title == ERROR_TITLE || message.text == FAILED,
         vec![ok],
+        crate::box_keys::BoxKeys::ok(&dismiss),
         window,
     ))
 }

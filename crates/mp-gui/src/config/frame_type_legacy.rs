@@ -941,15 +941,15 @@ pub fn overlay(
     cx: &mut Context<MissionPlanner>,
 ) -> Option<AnyElement> {
     if let Some(message) = frame.message() {
+        // OK the form's AcceptButton ([`crate::box_keys`]).
+        let dismiss =
+            crate::box_keys::answer(|this, _window, _cx| this.frame_type_legacy.dismiss_message());
         let ok = action(
             "framelegacy-message-ok",
             "OK",
             theme::ACCENT,
             true,
-            cx.listener(|this, _event: &(), _window, cx| {
-                this.frame_type_legacy.dismiss_message();
-                cx.notify();
-            }),
+            crate::box_keys::click(&dismiss, cx),
         );
         return Some(modal(
             "framelegacy-message",
@@ -957,6 +957,7 @@ pub fn overlay(
             &message.text,
             message.title == ERROR_TITLE,
             vec![ok],
+            crate::box_keys::BoxKeys::ok(&dismiss),
             window,
         ));
     }

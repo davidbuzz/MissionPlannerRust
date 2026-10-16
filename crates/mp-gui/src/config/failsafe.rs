@@ -1702,26 +1702,27 @@ pub fn overlay(
     cx: &mut Context<MissionPlanner>,
 ) -> Option<AnyElement> {
     if let Some(question) = failsafe.question() {
+        // Yes the form's AcceptButton and No its CancelButton ([`crate::box_keys`]).
+        let yes = crate::box_keys::answer(|this, _window, _cx| {
+            this.failsafe.answer(true, Instant::now());
+        });
+        let no = crate::box_keys::answer(|this, _window, _cx| {
+            this.failsafe.answer(false, Instant::now());
+        });
         let buttons = vec![
             action(
                 "failsafe-question-yes",
                 "Yes",
                 theme::ACCENT,
                 true,
-                cx.listener(|this, _event: &(), _window, cx| {
-                    this.failsafe.answer(true, Instant::now());
-                    cx.notify();
-                }),
+                crate::box_keys::click(&yes, cx),
             ),
             action(
                 "failsafe-question-no",
                 "No",
                 theme::ACCENT,
                 true,
-                cx.listener(|this, _event: &(), _window, cx| {
-                    this.failsafe.answer(false, Instant::now());
-                    cx.notify();
-                }),
+                crate::box_keys::click(&no, cx),
             ),
         ];
         return Some(modal(
@@ -1730,19 +1731,19 @@ pub fn overlay(
             &question.text(),
             false,
             buttons,
+            crate::box_keys::BoxKeys::yes_no(&yes, &no),
             window,
         ));
     }
     let message = failsafe.message()?;
+    // OK the form's AcceptButton ([`crate::box_keys`]).
+    let dismiss = crate::box_keys::answer(|this, _window, _cx| this.failsafe.dismiss_message());
     let ok = action(
         "failsafe-message-ok",
         "OK",
         theme::ACCENT,
         true,
-        cx.listener(|this, _event: &(), _window, cx| {
-            this.failsafe.dismiss_message();
-            cx.notify();
-        }),
+        crate::box_keys::click(&dismiss, cx),
     );
     Some(modal(
         "failsafe-message",
@@ -1750,6 +1751,7 @@ pub fn overlay(
         &message.text,
         message.title == ERROR_TITLE,
         vec![ok],
+        crate::box_keys::BoxKeys::ok(&dismiss),
         window,
     ))
 }

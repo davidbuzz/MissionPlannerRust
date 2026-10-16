@@ -105,7 +105,12 @@ key Return
 expect params.editing none
 expect params.box Out of range
 expect params.box.text RTL_LOIT_TIME value is out of range. Do you want to continue?
-click param-box-no
+# No from the keyboard: Escape, the form's CancelButton (CustomMessageBox.cs:302-329), the box
+# raised by Enter in the cell beneath it (crates/mp-gui/src/box_keys.rs; the owner's of
+# 2026-10-16).
+expect ui.box param-box
+key Escape
+expect ui.box.key param-box cancel
 expect params.box none
 expect params.changes 0
 expect params.write.name none

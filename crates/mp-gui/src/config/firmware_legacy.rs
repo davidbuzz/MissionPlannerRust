@@ -1204,29 +1204,35 @@ fn image_label(
     }
 }
 
-/// The progress dialog: the status and Cancel while the list loads; "Error", the error and Close
-/// once it has failed.
+/// The progress dialog: the status and Cancel while the list loads, which Escape presses; "Error",
+/// the error and Close once it has failed, which Enter presses, as a message box's OK
+/// ([`crate::box_keys`]).
 fn loading_box(loading: &Loading, window: &Window, cx: &mut Context<MissionPlanner>) -> AnyElement {
     let (caption, text, button, id) = match &loading.error {
         Some(error) => ("Error", error.clone(), "Close", "fwl-loading-close"),
         None => ("", loading.status.clone(), "Cancel", "fwl-loading-cancel"),
     };
+    let on_close =
+        crate::box_keys::answer(|this, _window, _cx| this.firmware_legacy.close_loading());
     let close = crate::ui::action(
         id,
         button,
         theme::ACCENT,
         true,
-        cx.listener(|this, _event: &(), _window, cx| {
-            this.firmware_legacy.close_loading();
-            cx.notify();
-        }),
+        crate::box_keys::click(&on_close, cx),
     );
+    let keys = if loading.error.is_some() {
+        crate::box_keys::BoxKeys::ok(&on_close)
+    } else {
+        crate::box_keys::BoxKeys::cancel(&on_close)
+    };
     crate::config::servo_output::modal(
         "fwl-loading",
         caption,
         &text,
         loading.error.is_some(),
         vec![close],
+        keys,
         window,
     )
 }

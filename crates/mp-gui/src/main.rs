@@ -35,6 +35,7 @@ use mp_os::fs::FsExt as _;
 /// is - which is also how the GUI runner tells our window from a real Mission Planner's.
 pub const PRODUCT_NAME: &str = "MissionPlannerRust";
 
+mod box_keys;
 mod camera_photos;
 mod cmd_keys;
 mod config;
@@ -3174,6 +3175,9 @@ impl Render for MissionPlanner {
         if window.focused(cx).is_none() {
             self.root_focus.focus(window, cx);
         }
+        // No box answers Enter or Escape until this frame draws one (box_keys.rs): one closed
+        // since the last frame leaves no answer behind, and the file below is typed into its box.
+        box_keys::clear();
         // In a page, a file the browser's picker gave, typed into the box that asked for it.
         page_files::deliver(window, cx);
         // And a serial port its chooser gave, selected in the port box.
@@ -5064,6 +5068,14 @@ fn main() {
                 closing.update(cx, |this, _cx| this.form_closing()).ok();
                 true
             });
+            // Enter and Escape answer the message box showing, whatever holds the keyboard, as
+            // its form's AcceptButton and CancelButton (box_keys.rs; the owner, 2026-10-16).
+            let boxes = app.downgrade();
+            let main_window = window.window_handle();
+            cx.intercept_keystrokes(move |event, window, cx| {
+                box_keys::intercept(&boxes, main_window, &event.keystroke, window, cx);
+            })
+            .detach();
             app
         });
         match opened {

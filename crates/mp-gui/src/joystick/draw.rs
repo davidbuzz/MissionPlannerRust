@@ -39,6 +39,7 @@ use gpui::{
 
 use super::{BUTTON_ROWS, Editing, List, Sticks, forms};
 use crate::MissionPlanner;
+use crate::box_keys::{self, BoxKeys};
 use crate::config::mavlink_controls::ProgressBar;
 use crate::ui::{action, theme};
 
@@ -654,15 +655,13 @@ pub fn overlay(
     let page = &sticks.page;
     page.host?;
     if let Some(message) = &page.message {
+        let dismiss = box_keys::answer(|this, _window, _cx| this.sticks.message_ok());
         let ok = action(
             "joystick-message-ok",
             "OK",
             theme::ACCENT,
             true,
-            cx.listener(|this, _event: &(), _window, cx| {
-                this.sticks.message_ok();
-                cx.notify();
-            }),
+            box_keys::click(&dismiss, cx),
         );
         return Some(crate::config::servo_output::modal(
             "joystick-message",
@@ -670,17 +669,18 @@ pub fn overlay(
             message.text,
             false,
             vec![ok],
+            BoxKeys::ok(&dismiss),
             window,
         ));
     }
     if page.question {
         let answer = |ok: bool| {
-            move |this: &mut MissionPlanner, window: &mut Window, cx: &mut Context<MissionPlanner>| {
+            box_keys::answer(move |this, window, cx| {
                 this.sticks.question_answer(ok);
                 if ok {
                     this.joystick_focus.focus(window, cx);
                 }
-            }
+            })
         };
         let (on_ok, on_cancel) = (answer(true), answer(false));
         let buttons = vec![
@@ -689,20 +689,14 @@ pub fn overlay(
                 "OK",
                 theme::ACCENT,
                 true,
-                cx.listener(move |this, _event: &(), window, cx| {
-                    on_ok(this, window, cx);
-                    cx.notify();
-                }),
+                box_keys::click(&on_ok, cx),
             ),
             action(
                 "joystick-question-cancel",
                 "Cancel",
                 theme::ACCENT,
                 true,
-                cx.listener(move |this, _event: &(), window, cx| {
-                    on_cancel(this, window, cx);
-                    cx.notify();
-                }),
+                box_keys::click(&on_cancel, cx),
             ),
         ];
         return Some(crate::config::servo_output::modal(
@@ -711,6 +705,7 @@ pub fn overlay(
             super::IMPORT_WARNING,
             false,
             buttons,
+            BoxKeys::yes_no(&on_ok, &on_cancel),
             window,
         ));
     }

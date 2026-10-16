@@ -868,15 +868,15 @@ pub fn overlay(
     cx: &mut Context<MissionPlanner>,
 ) -> Option<AnyElement> {
     let message = accel.message()?;
+    // OK the form's AcceptButton ([`crate::box_keys`]).
+    let dismiss =
+        crate::box_keys::answer(|this, _window, _cx| this.accel_calibration.dismiss_message());
     let ok = action(
         "accel-message-ok",
         "OK",
         theme::ACCENT,
         true,
-        cx.listener(|this, _event: &(), _window, cx| {
-            this.accel_calibration.dismiss_message();
-            cx.notify();
-        }),
+        crate::box_keys::click(&dismiss, cx),
     );
     Some(modal(
         "accel-message",
@@ -884,6 +884,7 @@ pub fn overlay(
         &message.text,
         true,
         vec![ok],
+        crate::box_keys::BoxKeys::ok(&dismiss),
         window,
     ))
 }

@@ -1392,30 +1392,34 @@ impl crate::MissionPlanner {
         text.push_str("\n\n");
         text.push_str(offer.after);
         let page = offer.page;
+        // Escape closes the offer, as a CancelButton would; Enter opens nothing - a browser page
+        // is not what a key pressed at a box should bring (crate::box_keys).
+        let open = crate::box_keys::answer(move |this, _window, _cx| this.tailnet_open(page));
+        let close = crate::box_keys::answer(|this, _window, _cx| this.tailnet_offer = None);
         let buttons = vec![
             crate::ui::action(
                 OFFER_OPEN,
                 "Open the download page",
                 crate::theme::ACCENT,
                 true,
-                cx.listener(move |this, _event: &(), _window, cx| {
-                    this.tailnet_open(page);
-                    cx.notify();
-                }),
+                crate::box_keys::click(&open, cx),
             ),
             crate::ui::action(
                 OFFER_CLOSE,
                 "Close",
                 crate::theme::DIM,
                 true,
-                cx.listener(|this, _event: &(), _window, cx| {
-                    this.tailnet_offer = None;
-                    cx.notify();
-                }),
+                crate::box_keys::click(&close, cx),
             ),
         ];
         Some(crate::config::servo_output::modal(
-            OFFER_BOX, "Tailscale", &text, false, buttons, window,
+            OFFER_BOX,
+            "Tailscale",
+            &text,
+            false,
+            buttons,
+            crate::box_keys::BoxKeys::cancel(&close),
+            window,
         ))
     }
 
