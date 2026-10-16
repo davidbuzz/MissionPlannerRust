@@ -1464,7 +1464,7 @@ mod tests {
 
     /// The bundled documentation.
     fn bundled(name: &str) -> Option<&'static mp_params::ParamMeta> {
-        mp_params::param_meta::lookup(name)
+        mp_params::param_meta::lookup("ArduCopter2", name)
     }
 
     /// A connected quad holding these parameters.

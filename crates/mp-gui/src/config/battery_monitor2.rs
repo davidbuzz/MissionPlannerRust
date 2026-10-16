@@ -64,12 +64,12 @@ use mp_params::param_file::invariant_double;
 
 use super::battery_monitor::{calibrate, float_text, param_text, parse_float};
 use super::optional::{
-    FEATURE_NOT_ENABLED, Focus, INVALID_NUMBER, InputBox, Job, Set, SetQueue,
-    failure_status, group, has, input_box, label, message_box, picture, text_box, value_of,
+    FEATURE_NOT_ENABLED, Focus, INVALID_NUMBER, InputBox, Job, Set, SetQueue, failure_status,
+    group, has, input_box, label, message_box, no_parameter, picture, text_box, value_of,
 };
 use crate::MissionPlanner;
 use crate::config::failsafe::{CheckState, Lookup, options};
-use crate::config::servo_output::{Check, Combo, Message, check_box, combo_box, dropdown};
+use crate::config::servo_output::{Check, Combo, Message, check_box, combo_box_live, dropdown};
 use crate::settings::Persisted;
 use crate::setup::Key;
 use crate::telemetry::{Telemetry, TelemetryView};
@@ -890,10 +890,20 @@ pub fn page(
     for which in Which::ALL {
         let mut combo = battery.combo(which).clone();
         combo.enabled &= enabled;
-        body = body.child(combo_box(
+        // Dimmed, each says why when it is clicked (the owner's word of 2026-10-16): the page
+        // with no `BATT2_MONITOR` to set up, a `MavlinkComboBox` with no parameter of its own -
+        // the pins' come with a monitor chosen and the vehicle restarted.
+        // C#: ConfigBatteryMonitoring2.cs:19-23; Controls/MavlinkComboBox.cs:31-35, 73-99
+        let live = if enabled {
+            crate::ui::Live::when(combo.enabled, no_parameter(which.param()))
+        } else {
+            crate::ui::Live::dimmed(no_parameter("BATT2_MONITOR"))
+        };
+        body = body.child(combo_box_live(
             format!("battery2-{}", which.param()),
             &combo,
             (177.0, which.y(), 165.0, 21.0),
+            live,
             move |this| {
                 let view = this.telemetry.view();
                 let jobs = this
@@ -1027,7 +1037,7 @@ mod tests {
     use mp_link::requests::RequestOutcome;
 
     fn bundled(name: &str) -> Option<&'static mp_params::ParamMeta> {
-        mp_params::param_meta::lookup(name)
+        mp_params::param_meta::lookup("ArduCopter2", name)
     }
 
     fn view_with(parameters: &[(&str, f64)]) -> TelemetryView {

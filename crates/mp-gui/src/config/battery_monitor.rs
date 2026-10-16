@@ -2537,7 +2537,7 @@ mod tests {
 
     /// The bundled documentation, so no test depends on what another has fetched.
     fn bundled(name: &str) -> Option<&'static mp_params::ParamMeta> {
-        mp_params::param_meta::lookup(name)
+        mp_params::param_meta::lookup("ArduCopter2", name)
     }
 
     /// A connected vehicle holding these parameters, its battery at 12.6 V and 1.23 A.

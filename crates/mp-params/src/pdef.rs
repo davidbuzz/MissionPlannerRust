@@ -32,9 +32,11 @@
 //!
 //! - `<Vehicle><major.minor.patch>.apm.pdef.xml` from
 //!   `https://autotest.ardupilot.org/Parameters/versioned/<Vehicle>/stable-<version>/apm.pdef.xml`
-//!   for the five vehicles that have versioned documentation, fetched once and kept for good;
+//!   for the five vehicles that have versioned documentation;
 //! - `<Vehicle>.apm.pdef.xml.gz` from `https://autotest.ardupilot.org/Parameters/<Vehicle>/`,
-//!   unpacked beside itself and refreshed when a week old.
+//!   unpacked beside itself.
+//!
+//! Each is fetched again once it is a week old, and kept when that fetch fails.
 //!
 //! The version comes from the vehicle's banner - the `STATUSTEXT` that reads
 //! `ArduCopter V4.5.7 (1c0c8d9c)` - parsed by the C#'s regular expression, which is stranger
@@ -69,8 +71,9 @@ pub const VEHICLES: &[&str] = &[
     "Heli",
 ];
 
-/// How long an unversioned file is trusted before it is fetched again.
-/// `// C#: ExtLibs/Utilities/ParameterMetaDataRepositoryAPMpdef.cs:125`
+/// How long a fetched file is trusted before it is fetched again: `LastWriteTime.AddDays(7)`,
+/// for the versioned files and the unversioned alike.
+/// `// C#: ExtLibs/Utilities/ParameterMetaDataRepositoryAPMpdef.cs:63, 100, 105, 125`
 pub const REFRESH_AFTER: Duration = Duration::from_secs(7 * 24 * 60 * 60);
 
 /// A firmware version as `System.Version` holds it: two to four numbers, by position.
@@ -341,52 +344,118 @@ pub enum FetchError {
     },
 }
 
-/// Fetches the versioned file for a vehicle, unless it is already there.
+/// A fetch: the URL's body, or why there is none. [`download`] for the network; the tests give
+/// their own.
+type Download<'a> = &'a dyn Fn(&str) -> Result<Vec<u8>, FetchError>;
+
+/// `File.Exists(file) && new FileInfo(file).LastWriteTime.AddDays(7) > DateTime.Now`: a file
+/// written less than [`REFRESH_AFTER`] ago, which is not fetched again. The comparison is the
+/// C#'s, so a file whose write time is after now - a clock set back, a file copied from a
+/// machine ahead of this one - is kept too; one whose time cannot be read is fetched.
 ///
-/// Returns the path either way. A file already on disk is never re-fetched: a release's
-/// documentation does not change, which is why the C# checks `File.Exists` and stops.
-/// `// C#: ExtLibs/Utilities/ParameterMetaDataRepositoryAPMpdef.cs:52-71`
+/// One difference: the C# compares local times, so there a week that spans a change to or from
+/// summer time is an hour longer or shorter; here it is seven days of the system clock.
+/// `// C#: ExtLibs/Utilities/ParameterMetaDataRepositoryAPMpdef.cs:62-64, 104-106`
+fn written_within_a_week(path: &Path) -> bool {
+    let Ok(meta) = mp_os::fs::metadata(path) else {
+        return false;
+    };
+    if !meta.os_is_file() {
+        return false;
+    }
+    meta.modified().is_ok_and(|written| match written.elapsed() {
+        Ok(age) => age < REFRESH_AFTER,
+        // Written after now: `AddDays(7) > DateTime.Now` holds.
+        Err(_) => true,
+    })
+}
+
+/// Fetches the versioned file for a vehicle, unless one written less than a week ago is
+/// already there.
+///
+/// Returns the path either way. A file a week old or more is fetched again
+/// (`ParameterMetaDataRepositoryAPMpdef.cs:62-65`); when that fetch fails the file already there
+/// is kept and read, as `getFilefromNetAsync` returns false with the file untouched - it writes
+/// `saveto.new` and moves it over only once the body is in - and `Reload` then loads what is on
+/// disk (`:73-83`). Only with no file at all is a failed fetch an error.
+///
+/// Not followed: `getFilefromNetAsync`'s check of a file already there against the response's
+/// headers - a `Last-Modified` earlier than the file's write time and a `Content-Length` equal
+/// to its length keep the file unread and unwritten, so there its write time stays a week old
+/// and the next banner asks the server again. Here the body is read and written each time, and
+/// the next fetch is a week on.
+/// `// C#: ExtLibs/Utilities/ParameterMetaDataRepositoryAPMpdef.cs:52-86; ExtLibs/Utilities/Download.cs:343-441`
 pub fn fetch_versioned(
     data_directory: &Path,
     vehicle: &str,
     version: Version,
 ) -> Result<PathBuf, FetchError> {
+    fetch_versioned_with(data_directory, vehicle, version, &download)
+}
+
+/// [`fetch_versioned`] through a given fetch.
+fn fetch_versioned_with(
+    data_directory: &Path,
+    vehicle: &str,
+    version: Version,
+    download: Download<'_>,
+) -> Result<PathBuf, FetchError> {
     let path = versioned_path(data_directory, vehicle, version);
-    if path.os_is_file() {
+    if written_within_a_week(&path) {
         return Ok(path);
     }
     let url = versioned_url(vehicle, version);
-    let bytes = download(&url)?;
-    write_atomically(&path, &bytes)?;
-    Ok(path)
+    let fetched = download(&url).and_then(|bytes| write_atomically(&path, &bytes));
+    kept_on_failure(path, fetched)
+}
+
+/// A fetch's outcome for the file it was for: the file when the fetch wrote it, and the file
+/// still when the fetch failed and one is there from before - the C# reads what is on disk
+/// whatever the download did. The failure only with no file to fall back on.
+/// `// C#: ExtLibs/Utilities/ParameterMetaDataRepositoryAPMpdef.cs:73-83, 115-151, 159-169`
+fn kept_on_failure(path: PathBuf, fetched: Result<(), FetchError>) -> Result<PathBuf, FetchError> {
+    match fetched {
+        Ok(()) => Ok(path),
+        Err(_) if path.os_is_file() => Ok(path),
+        Err(err) => Err(err),
+    }
 }
 
 /// Fetches the unversioned file for a vehicle, if there is none or it is a week old.
 ///
-/// The gzipped download is kept beside the unpacked file, as the C# keeps it.
-/// `// C#: ExtLibs/Utilities/ParameterMetaDataRepositoryAPMpdef.cs:93-147`
+/// The gzipped download is kept beside the unpacked file, as the C# keeps it. A failed fetch
+/// keeps a file already there, as the versioned one does: the C#'s second pass unpacks the
+/// `.gz` it had again, or `Reload` reads the old file (`:115-151`). The C# also counts a `.gz`
+/// written within the week as fresh (`:99-101`); here the unpacked file's time decides, the two
+/// being written together.
+/// `// C#: ExtLibs/Utilities/ParameterMetaDataRepositoryAPMpdef.cs:88-152`
 pub fn fetch_unversioned(data_directory: &Path, vehicle: &str) -> Result<PathBuf, FetchError> {
+    fetch_unversioned_with(data_directory, vehicle, &download)
+}
+
+/// [`fetch_unversioned`] through a given fetch.
+fn fetch_unversioned_with(
+    data_directory: &Path,
+    vehicle: &str,
+    download: Download<'_>,
+) -> Result<PathBuf, FetchError> {
     let path = unversioned_path(data_directory, vehicle);
-    let fresh = mp_os::fs::metadata(&path)
-        .and_then(|meta| meta.modified())
-        .ok()
-        .and_then(|modified| modified.elapsed().ok())
-        .is_some_and(|age| age < REFRESH_AFTER);
-    if fresh {
+    if written_within_a_week(&path) {
         return Ok(path);
     }
     let url = unversioned_url(vehicle);
-    let gzipped = download(&url)?;
-    let mut unpacked = Vec::new();
-    flate2::read::GzDecoder::new(gzipped.as_slice())
-        .read_to_end(&mut unpacked)
-        .map_err(|source| FetchError::Io {
-            path: path.clone(),
-            source,
-        })?;
-    write_atomically(&path.with_extension("xml.gz"), &gzipped)?;
-    write_atomically(&path, &unpacked)?;
-    Ok(path)
+    let fetched = download(&url).and_then(|gzipped| {
+        let mut unpacked = Vec::new();
+        flate2::read::GzDecoder::new(gzipped.as_slice())
+            .read_to_end(&mut unpacked)
+            .map_err(|source| FetchError::Io {
+                path: path.clone(),
+                source,
+            })?;
+        write_atomically(&path.with_extension("xml.gz"), &gzipped)?;
+        write_atomically(&path, &unpacked)
+    });
+    kept_on_failure(path, fetched)
 }
 
 #[cfg(not(target_family = "wasm"))]
@@ -959,6 +1028,221 @@ mod tests {
         assert!(VERSIONED_VEHICLES.iter().all(|v| !v.starts_with("Ardu")));
     }
 
+    const DAY: Duration = Duration::from_secs(24 * 60 * 60);
+    const HOUR: Duration = Duration::from_secs(60 * 60);
+    const RELEASE: Version = Version::new(4, 5, 7);
+
+    /// An empty folder of the test's own.
+    fn scratch(test: &str) -> PathBuf {
+        let dir = mp_os::temp_dir().join(format!("mp-params-pdef-{test}-{}", mp_os::process_id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        dir
+    }
+
+    /// Sets a file's write time.
+    fn written_at(path: &Path, when: std::time::SystemTime) {
+        std::fs::File::options()
+            .write(true)
+            .open(path)
+            .unwrap()
+            .set_modified(when)
+            .unwrap();
+    }
+
+    /// A fetch that answers every URL with one body, or fails, and keeps the URLs asked for.
+    struct FakeFetch {
+        body: Option<Vec<u8>>,
+        asked: std::cell::RefCell<Vec<String>>,
+    }
+
+    impl FakeFetch {
+        fn answering(body: &[u8]) -> Self {
+            Self {
+                body: Some(body.to_vec()),
+                asked: std::cell::RefCell::default(),
+            }
+        }
+
+        fn failing() -> Self {
+            Self {
+                body: None,
+                asked: std::cell::RefCell::default(),
+            }
+        }
+
+        fn get(&self, url: &str) -> Result<Vec<u8>, FetchError> {
+            self.asked.borrow_mut().push(url.to_owned());
+            self.body.clone().ok_or_else(|| FetchError::Http {
+                url: url.to_owned(),
+                reason: "offline".to_owned(),
+            })
+        }
+
+        fn asked(&self) -> Vec<String> {
+            self.asked.borrow().clone()
+        }
+    }
+
+    /// A versioned file written less than a week ago is read as it is, nothing fetched; one a
+    /// week old or more is fetched again and replaced: `LastWriteTime.AddDays(7) > DateTime.Now`
+    /// keeps a file, and nothing else does.
+    /// `// C#: ExtLibs/Utilities/ParameterMetaDataRepositoryAPMpdef.cs:61-65`
+    #[test]
+    fn a_versioned_file_is_fetched_again_once_a_week_old() {
+        let dir = scratch("week");
+        let path = versioned_path(&dir, "Copter", RELEASE);
+        let online = FakeFetch::answering(b"new");
+        let fetch = |url: &str| online.get(url);
+        let now = std::time::SystemTime::now();
+
+        for age in [HOUR, DAY, 6 * DAY + 23 * HOUR] {
+            std::fs::write(&path, "old").unwrap();
+            written_at(&path, now - age);
+            assert_eq!(
+                fetch_versioned_with(&dir, "Copter", RELEASE, &fetch).unwrap(),
+                path
+            );
+            assert_eq!(std::fs::read_to_string(&path).unwrap(), "old", "{age:?}");
+        }
+        assert!(online.asked().is_empty(), "under a week old, nothing fetched");
+
+        for age in [7 * DAY, 7 * DAY + HOUR, 365 * DAY] {
+            std::fs::write(&path, "old").unwrap();
+            written_at(&path, now - age);
+            assert_eq!(
+                fetch_versioned_with(&dir, "Copter", RELEASE, &fetch).unwrap(),
+                path
+            );
+            assert_eq!(std::fs::read_to_string(&path).unwrap(), "new", "{age:?}");
+        }
+        assert_eq!(online.asked(), vec![versioned_url("Copter", RELEASE); 3]);
+
+        // Written just now, by that fetch: kept for the next week.
+        assert_eq!(
+            fetch_versioned_with(&dir, "Copter", RELEASE, &fetch).unwrap(),
+            path
+        );
+        assert_eq!(online.asked().len(), 3);
+
+        // None there at all: fetched.
+        let plane = versioned_path(&dir, "Plane", RELEASE);
+        assert_eq!(
+            fetch_versioned_with(&dir, "Plane", RELEASE, &fetch).unwrap(),
+            plane
+        );
+        assert_eq!(std::fs::read_to_string(&plane).unwrap(), "new");
+        assert_eq!(online.asked().last(), Some(&versioned_url("Plane", RELEASE)));
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    /// The comparison is the C#'s: a file whose write time is after now (a clock set back, a
+    /// file from a machine ahead of this one) satisfies `AddDays(7) > DateTime.Now` and is kept,
+    /// the versioned file and the unversioned alike.
+    /// `// C#: ExtLibs/Utilities/ParameterMetaDataRepositoryAPMpdef.cs:62-64, 104-106`
+    #[test]
+    fn a_file_written_after_now_is_kept() {
+        let dir = scratch("future");
+        let online = FakeFetch::answering(b"new");
+        let fetch = |url: &str| online.get(url);
+        let later = std::time::SystemTime::now() + DAY;
+
+        let versioned = versioned_path(&dir, "Copter", RELEASE);
+        std::fs::write(&versioned, "old").unwrap();
+        written_at(&versioned, later);
+        assert_eq!(
+            fetch_versioned_with(&dir, "Copter", RELEASE, &fetch).unwrap(),
+            versioned
+        );
+        let unversioned = unversioned_path(&dir, "ArduCopter");
+        std::fs::write(&unversioned, "old").unwrap();
+        written_at(&unversioned, later);
+        assert_eq!(
+            fetch_unversioned_with(&dir, "ArduCopter", &fetch).unwrap(),
+            unversioned
+        );
+
+        assert!(online.asked().is_empty());
+        assert_eq!(std::fs::read_to_string(&versioned).unwrap(), "old");
+        assert_eq!(std::fs::read_to_string(&unversioned).unwrap(), "old");
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    /// A re-fetch that fails keeps the file already there and answers it, as the C#'s
+    /// `getFilefromNetAsync` leaves the file alone and `Reload` reads it; with no file there the
+    /// failure is the answer, and nothing is left behind.
+    /// `// C#: ExtLibs/Utilities/ParameterMetaDataRepositoryAPMpdef.cs:61-83; ExtLibs/Utilities/Download.cs:343-441`
+    #[test]
+    fn a_failed_refetch_keeps_the_file_already_there() {
+        let dir = scratch("offline");
+        let offline = FakeFetch::failing();
+        let fetch = |url: &str| offline.get(url);
+
+        let path = versioned_path(&dir, "Copter", RELEASE);
+        std::fs::write(&path, "old").unwrap();
+        written_at(&path, std::time::SystemTime::now() - 8 * DAY);
+        assert_eq!(
+            fetch_versioned_with(&dir, "Copter", RELEASE, &fetch).unwrap(),
+            path
+        );
+        assert_eq!(std::fs::read_to_string(&path).unwrap(), "old");
+        assert_eq!(offline.asked(), [versioned_url("Copter", RELEASE)]);
+
+        let plane = versioned_path(&dir, "Plane", RELEASE);
+        assert!(matches!(
+            fetch_versioned_with(&dir, "Plane", RELEASE, &fetch),
+            Err(FetchError::Http { .. })
+        ));
+        assert!(!plane.os_exists());
+        let left: Vec<_> = std::fs::read_dir(&dir).unwrap().collect();
+        assert_eq!(left.len(), 1, "only the copter's file");
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    /// The unversioned file: fetched gzipped when there is none, unpacked beside the `.gz`; not
+    /// fetched again within the week; after it, a fetch that fails or brings no gzip keeps the
+    /// file there, and without one is an error.
+    /// `// C#: ExtLibs/Utilities/ParameterMetaDataRepositoryAPMpdef.cs:88-152`
+    #[test]
+    fn an_unversioned_file_is_unpacked_and_kept_as_the_versioned_is() {
+        use std::io::Write as _;
+
+        let dir = scratch("unversioned");
+        let mut gzip = flate2::write::GzEncoder::new(Vec::new(), flate2::Compression::default());
+        gzip.write_all(b"<paramfile/>").unwrap();
+        let gzipped = gzip.finish().unwrap();
+        let online = FakeFetch::answering(&gzipped);
+        let path = unversioned_path(&dir, "ArduCopter");
+
+        for _ in 0..2 {
+            assert_eq!(
+                fetch_unversioned_with(&dir, "ArduCopter", &|url: &str| online.get(url)).unwrap(),
+                path
+            );
+        }
+        assert_eq!(online.asked(), [unversioned_url("ArduCopter")]);
+        assert_eq!(std::fs::read_to_string(&path).unwrap(), "<paramfile/>");
+        assert_eq!(std::fs::read(path.with_extension("xml.gz")).unwrap(), gzipped);
+
+        written_at(&path, std::time::SystemTime::now() - 8 * DAY);
+        let offline = FakeFetch::failing();
+        let not_gzip = FakeFetch::answering(b"<paramfile/>");
+        for fetch in [&offline, &not_gzip] {
+            assert_eq!(
+                fetch_unversioned_with(&dir, "ArduCopter", &|url: &str| fetch.get(url)).unwrap(),
+                path
+            );
+            assert_eq!(std::fs::read_to_string(&path).unwrap(), "<paramfile/>");
+            assert_eq!(fetch.asked(), [unversioned_url("ArduCopter")]);
+        }
+        assert!(matches!(
+            fetch_unversioned_with(&dir, "ArduPlane", &|url: &str| not_gzip.get(url)),
+            Err(FetchError::Io { .. })
+        ));
+        assert!(!unversioned_path(&dir, "ArduPlane").os_exists());
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
     /// The files the real Mission Planner keeps on this machine parse, and the versioned one
     /// documents what the release documents.
     #[test]
@@ -994,7 +1278,7 @@ mod tests {
         assert_eq!(names.len(), 1408, "the dump PLAN.md 10.5 counted");
         let bundled = names
             .iter()
-            .filter(|name| crate::param_meta::lookup(name).is_some())
+            .filter(|name| crate::param_meta::lookup("ArduCopter2", name).is_some())
             .count();
         eprintln!("bundled table documents {bundled} of {}", names.len());
 

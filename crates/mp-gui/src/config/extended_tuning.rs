@@ -2243,7 +2243,7 @@ mod tests {
 
     /// The bundled documentation, so no test depends on what another has installed.
     fn bundled(name: &str) -> Option<&'static ParamMeta> {
-        mp_params::param_meta::lookup(name)
+        mp_params::param_meta::lookup("ArduCopter2", name)
     }
 
     fn table(entries: &[(&str, f64)]) -> Vec<(String, f64)> {

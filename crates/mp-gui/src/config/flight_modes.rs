@@ -319,15 +319,13 @@ pub fn modes_list(
     }
 }
 
-/// A parameter's documented values, from the application's parameter documentation.
-///
-/// The bundled table is ArduCopter's, so for any other firmware only a file fetched for the
-/// connected vehicle speaks for it; without one this says nothing and [`modes_list`] falls back.
+/// A parameter's documented values, from the application's parameter documentation, asked for
+/// the given firmware as `getModesList` asks `GetParameterOptionsInt(name, firmware.ToString())`:
+/// the fetched file's, else the bundled file's section for that firmware - `FLTMODE1` a plane's
+/// modes for a plane - and nothing for a firmware it has no section for (`Ateryx`, `PX4`).
+/// `// C#: ExtLibs/ArduPilot/Common.cs:143-168; ExtLibs/Utilities/ParameterMetaDataRepository.cs:76-103`
 pub fn documented_values(firmware: Firmware, name: &str) -> Option<Vec<(i64, String)>> {
-    if firmware != Firmware::ArduCopter2 && crate::metadata::documented() == 0 {
-        return None;
-    }
-    let meta = crate::metadata::lookup(name)?;
+    let meta = crate::metadata::lookup_for(firmware, name)?;
     (!meta.values.is_empty()).then(|| {
         meta.values
             .iter()
@@ -1330,17 +1328,48 @@ mod tests {
         assert!(modes_list(Firmware::ArduSub, documented).is_empty());
     }
 
-    /// The bundled documentation is a copter's, and gives the copter list the generated table
-    /// does - the two come from the same file, so the fallback is what the C# would have read.
+    /// The bundled documentation's section for each firmware gives the list the generated table
+    /// does - the two come from the same file, so the fallback is what the C# would have read:
+    /// a copter's `FLTMODE1`, a plane's own `FLTMODE1` (and `INITIALISING`), a rover's `MODE1`.
     #[test]
-    fn the_bundled_copter_documentation_is_the_generated_list() {
-        let bundled: Vec<(i64, String)> = mp_params::param_meta::lookup("FLTMODE1")
-            .expect("FLTMODE1 is documented")
-            .values
-            .iter()
-            .map(|(value, name)| (*value, (*name).to_owned()))
-            .collect();
-        assert_eq!(bundled, modes_list(Firmware::ArduCopter2, |_| None));
+    fn the_bundled_documentation_is_the_generated_list_for_each_firmware() {
+        let bundled = |section: &str, name: &str| -> Vec<(i64, String)> {
+            mp_params::param_meta::lookup(section, name)
+                .expect("documented")
+                .values
+                .iter()
+                .map(|(value, name)| (*value, (*name).to_owned()))
+                .collect()
+        };
+        assert_eq!(
+            bundled("ArduCopter2", "FLTMODE1"),
+            modes_list(Firmware::ArduCopter2, |_| None)
+        );
+        let mut plane = bundled("ArduPlane", "FLTMODE1");
+        plane.push((16, "INITIALISING".to_owned()));
+        assert_eq!(plane, modes_list(Firmware::ArduPlane, |_| None));
+        assert_eq!(
+            bundled("ArduRover", "MODE1"),
+            modes_list(Firmware::ArduRover, |_| None)
+        );
+        assert_ne!(
+            bundled("ArduPlane", "FLTMODE1").first(),
+            bundled("ArduCopter2", "FLTMODE1").first(),
+            "a plane's modes are not a copter's"
+        );
+
+        // What the page asks: each firmware's own section, nothing where the file has none.
+        assert_eq!(
+            documented_values(Firmware::ArduPlane, "FLTMODE1"),
+            Some(bundled("ArduPlane", "FLTMODE1"))
+        );
+        assert_eq!(
+            documented_values(Firmware::ArduRover, "MODE1"),
+            Some(bundled("ArduRover", "MODE1"))
+        );
+        assert_eq!(documented_values(Firmware::ArduRover, "FLTMODE1"), None);
+        assert_eq!(documented_values(Firmware::Ateryx, "FLTMODE1"), None);
+        assert_eq!(documented_values(Firmware::Px4, "COM_FLTMODE1"), None);
     }
 
     /// A row's Simple boxes take clicks only for a mode whose name holds one of the C#'s words.

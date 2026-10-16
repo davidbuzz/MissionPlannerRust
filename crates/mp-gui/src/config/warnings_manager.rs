@@ -87,7 +87,7 @@ use gpui::{
 use super::failsafe::CheckState;
 use super::optional::{at, button, label};
 use super::servo_output::{
-    Check, Combo, Designer, Number, NumberHandlers, check_box, combo_box, dropdown, number_box,
+    Check, Combo, Designer, Number, NumberHandlers, check_box, combo_box_live, dropdown, number_box,
 };
 use crate::MissionPlanner;
 use crate::textfield::{KeyOutcome, TextField};
@@ -142,6 +142,10 @@ pub const CHILD_INDENT: f32 = 5.0;
 
 /// `CB_type`'s `Text` and `Location`. `// C#: Warnings/WarningControl.cs:181-185`
 pub const TYPE_TEXT: &str = "QuickPanel Coloring";
+/// Why a rule's colour is dimmed, said when it is clicked (the owner's word of 2026-10-16):
+/// `CMB_color` is enabled for a colouring rule alone - `CB_type`, [`TYPE_TEXT`], ticked.
+/// `// C#: Warnings/WarningControl.cs:301-331`
+pub const NOT_COLOURING: &str = "not a QuickPanel Coloring warning";
 /// Where `CB_type` is.
 pub const TYPE_AT: (f32, f32) = (3.0, 5.0);
 /// `CMB_Source`. `// C#: Warnings/WarningControl.cs:100-102`
@@ -1019,10 +1023,18 @@ fn row(
         (List::Condition, CONDITION_AT),
         (List::Color, COLOR_AT),
     ] {
-        row = row.child(combo_box(
+        let list = control.list(which);
+        // The colour, disabled for a rule that is not a colouring one, says so when clicked (the
+        // owner's word of 2026-10-16). C#: Warnings/WarningControl.cs:301-331
+        let live = match which {
+            List::Color => crate::ui::Live::when(list.enabled, NOT_COLOURING),
+            List::Source | List::Condition => crate::ui::Live::from(list.enabled),
+        };
+        row = row.child(combo_box_live(
             format!("warnings-{index}-{}", which.key()),
-            control.list(which),
+            list,
             place,
+            live,
             move |this| {
                 if let Some((manager, rules)) = access(this) {
                     manager.open_list(index, which, rules, Instant::now());

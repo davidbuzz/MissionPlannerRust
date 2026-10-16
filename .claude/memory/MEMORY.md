@@ -31,6 +31,7 @@ controlled; the per-project memory directory holds symlinks to them.
 - [Verify edits applied](verify-edits-applied.md) — a replacement that matches nothing looks like success
 - [Never stop after a commit](never-stop-after-a-commit.md) — chain to the next task; a commit is not an exit condition
 - [rustfmt follows children](rustfmt-follows-children.md) — rustfmt on main.rs/lib.rs rewrites every module they declare and the tree is not fmt-clean: format leaf files, revert the rest (2026-10-03)
+- [git apply --3way stages](git-apply-3way-stages.md) — an applied patch sits staged and the next commit by other paths sweeps it in: apply unstaged or reset the index, read `git diff --cached --stat` before every commit (2026-10-16)
 - [Verify before committing](verify-before-committing.md) — clippy is its own command, read it, then commit
 - [Autotests mandatory](autotests-mandatory.md) — every change ships with a test that fails if it stops working; test the path the product takes
 - [One Opus subagent](delegate-to-opus-subagents.md) — ONE new subagent for coding help (Buzz, 2026-10-05): own worktree, disjoint files, no window, no commit; none from 2026-10-02 to then

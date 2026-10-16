@@ -62,6 +62,15 @@ expect config.battery2.speech false
 expect config.battery2.readouts >= 1
 expect config.battery2.write none
 
+# The pins, with no parameters of their own while the monitor is Disabled: MavlinkComboBoxes
+# disabled until setup finds them (MavlinkComboBox.cs:31-35, 73-99). Each click drops nothing
+# down, and says why on the status line, quietly (the owner's word of 2026-10-16).
+click battery2-BATT2_VOLT_PIN
+expect status no BATT2_VOLT_PIN on the vehicle
+click battery2-BATT2_CURR_PIN
+expect status no BATT2_CURR_PIN on the vehicle
+expect config.battery2.write none
+
 # The capacity, typed and left for the monitor combo: BATT2_CAPACITY is not listed.
 click battery2-capacity
 expect config.battery2.editing battery2-capacity

@@ -80,7 +80,7 @@ use mp_units::LatLon;
 use crate::MissionPlanner;
 use crate::mapview::MapViewport;
 use crate::textfield::{KeyOutcome, TextField};
-use crate::ui::theme;
+use crate::ui::{Live, theme};
 
 /// WinForms' 8.25 pt Microsoft Sans Serif is eleven pixels; the `.resx` sizes are laid out for it.
 const FONT: f32 = 11.0;
@@ -570,6 +570,20 @@ const UNHANDLED: (&str, &str) = ("Send Error", "An error has occurred\n");
 
 /// `openFileDialog1.Filter`'s one description. `// C#: GeoRef/georefimage.cs:89`
 pub const LOG_FILTER: &str = "Logs|*.log;*.tlog;*.bin;*.BIN";
+
+/// Why the offset's panel - Estimate Offset and the seconds box - is dimmed, said when one is
+/// clicked: `PANEL_TIME_OFFSET` is enabled for the Time offset mode alone.
+/// `// C#: GeoRef/georefimage.cs:31, 338-357`
+pub const NOT_TIME_OFFSET: &str = "not in time offset mode";
+/// Why the shutter lag's panel is dimmed: enabled for the CAM Message mode alone.
+/// `// C#: GeoRef/georefimage.cs:338-357`
+pub const NOT_CAM_MESSAGE: &str = "not in CAM Message mode";
+/// Why the base altitude is dimmed: `txt_basealt.Enabled = !georef.useAMSLAlt`.
+/// `// C#: GeoRef/georefimage.cs:369-374`
+pub const AMSL_ALT_USED: &str = "the AMSL altitude is used";
+/// Why GeoTag Images is dimmed: disabled in the Designer and when the log changes, enabled when a
+/// Pre-process ends. `// C#: GeoRef/georefimage.resx:252-254; georefimage.cs:248-249, 327-335`
+pub const NOT_PRE_PROCESSED: &str = "not pre-processed yet";
 
 /// Why Pre-process does nothing for want of its log or its folder of pictures: `BUT_doit_Click`
 /// returns without a word when either is not there; here the status line says which, quietly -
@@ -1207,6 +1221,26 @@ impl Form {
             "BUT_Geotagimages" => self.geotag_enabled,
             "pictureBox1" => false,
             _ => true,
+        }
+    }
+
+    /// A control as it is drawn: live, or dimmed and why - the state that disables it in the C#,
+    /// said on the status line when it is clicked (the owner's word of 2026-10-16). Pre-process,
+    /// disabled only while its own run holds the form, takes no click and says nothing.
+    /// `// C#: GeoRef/georefimage.cs:31, 248-249, 334, 338-357, 373; georefimage.resx:252-254`
+    #[must_use]
+    pub fn live(&self, name: &str) -> Live {
+        if self.enabled(name) {
+            return Live::Yes;
+        }
+        match name {
+            "PANEL_TIME_OFFSET" | "label1" | "TXT_offsetseconds" | "BUT_estoffset" => {
+                Live::dimmed(NOT_TIME_OFFSET)
+            }
+            "PANEL_SHUTTER_LAG" | "label27" | "TXT_shutterLag" => Live::dimmed(NOT_CAM_MESSAGE),
+            "txt_basealt" => Live::dimmed(AMSL_ALT_USED),
+            "BUT_Geotagimages" => Live::dimmed(NOT_PRE_PROCESSED),
+            _ => Live::Inert,
         }
     }
 
@@ -2051,6 +2085,9 @@ fn text_box(
                 cx.notify();
             },
         ));
+    } else {
+        // Dimmed with its panel or its tick: the click says why (the owner's word of 2026-10-16).
+        body = crate::ui::dimmed_click(body, &form.live(name));
     }
     if editing {
         body = body.track_focus(focus).on_key_down(cx.listener(key));
@@ -2216,7 +2253,7 @@ fn radio(form: &Form, radio: Radio, cx: &mut Context<MissionPlanner>) -> AnyElem
         .into_any_element()
 }
 
-/// A `MyButton`, dimmed while it is not `Enabled`.
+/// A `MyButton`, dimmed while it is not `Enabled` - its click then saying why ([`Form::live`]).
 fn button(
     form: &Form,
     name: &str,
@@ -2234,11 +2271,13 @@ fn button(
         .text_size(px(FONT))
         .child(text_of(name));
     if !form.enabled(name) {
-        return body
-            .border_color(rgb(theme::BORDER))
-            .bg(rgb(theme::PANEL))
-            .text_color(rgb(theme::DIM))
-            .into_any_element();
+        return crate::ui::dimmed_click(
+            body.border_color(rgb(theme::BORDER))
+                .bg(rgb(theme::PANEL))
+                .text_color(rgb(theme::DIM)),
+            &form.live(name),
+        )
+        .into_any_element();
     }
     body.border_color(rgb(theme::ACCENT))
         .bg(rgb(theme::ACTION))
@@ -3122,6 +3161,35 @@ mod tests {
 
     fn flat() -> Form {
         Form::new(the_day(), Arc::new(mp_georef::Flat))
+    }
+
+    /// A dimmed control says, clicked, the state that disables it in the C# (the owner's word of
+    /// 2026-10-16): GeoTag Images until a Pre-process, the offset's panel outside the Time offset
+    /// mode, the base altitude while Use AMSL Alt is ticked; a live one runs its handler.
+    /// `// C#: GeoRef/georefimage.cs:31, 248-249, 338-357, 369-374; georefimage.resx:252-254`
+    #[test]
+    fn a_dimmed_control_says_why_it_is_dimmed() {
+        let mut form = flat();
+        assert_eq!(
+            form.live("BUT_Geotagimages"),
+            Live::dimmed(NOT_PRE_PROCESSED)
+        );
+        assert_eq!(form.live("BUT_estoffset"), Live::dimmed(NOT_TIME_OFFSET));
+        assert_eq!(
+            form.live("TXT_offsetseconds"),
+            Live::dimmed(NOT_TIME_OFFSET)
+        );
+        assert_eq!(form.live("txt_basealt"), Live::dimmed(AMSL_ALT_USED));
+        assert_eq!(form.live("BUT_doit"), Live::Yes);
+        let mut status = None;
+        assert!(!crate::ui::click(&form.live("BUT_estoffset"), &mut status));
+        assert_eq!(status.as_deref(), Some(NOT_TIME_OFFSET));
+        form.click_radio(Radio::TimeOffset);
+        assert_eq!(form.live("BUT_estoffset"), Live::Yes);
+        assert_eq!(form.live("TXT_offsetseconds"), Live::Yes);
+        assert_eq!(form.live("TXT_shutterLag"), Live::dimmed(NOT_CAM_MESSAGE));
+        form.click_check(Check::AmslAltUse);
+        assert_eq!(form.live("txt_basealt"), Live::Yes);
     }
 
     /// A button's run as the form starts it, on its thread, polled until it is back.

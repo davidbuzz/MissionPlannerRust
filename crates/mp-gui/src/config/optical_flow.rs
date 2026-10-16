@@ -828,7 +828,7 @@ mod tests {
     use crate::telemetry::Telemetry;
 
     fn bundled(name: &str) -> Option<&'static mp_params::ParamMeta> {
-        mp_params::param_meta::lookup(name)
+        mp_params::param_meta::lookup("ArduCopter2", name)
     }
 
     fn table(entries: &[(&str, f64)]) -> Vec<(String, f64)> {

@@ -42,6 +42,11 @@
 //! The dialogs that draw it: every typed-path box ([`crate::config::firmware::path_box`]) and the
 //! flight screen's and LOGS' file questions ([`crate::fly::prompt_dialog`]), Review a Log's open
 //! among them.
+//!
+//! A `FolderBrowserDialog` lists folders alone ([`Chooser::folders`]): `..` and the folders of
+//! the folder its box names, no file, a folder clicked opened into the box, and its OK the folder
+//! the box names ([`chosen_folder`]) - CONFIG > Planner's Browse, the owner's word of 2026-10-16
+//! (`GCSViews/ConfigurationView/ConfigPlanner.cs:779-786`).
 
 // This module is internal to the binary; `pub` here documents intent rather than exporting API.
 #![allow(unreachable_pub)]
@@ -303,11 +308,51 @@ impl Chooser {
         }
     }
 
+    /// A folder dialog's list, `FolderBrowserDialog`'s, for the dialog `id` whose box holds
+    /// `typed`: the folder it names, or the one it sits in, else [`start_folder`]; `..` and its
+    /// folders, and no file - a folder dialog shows none. It has no filter.
+    #[must_use]
+    pub fn folders(id: &'static str, typed: &str) -> Self {
+        Self::folders_within(id, typed, &start_folder())
+    }
+
+    /// [`Chooser::folders`], a relative path taken from `directory`.
+    #[must_use]
+    pub fn folders_within(id: &'static str, typed: &str, directory: &Path) -> Self {
+        // No extension asks FLIGHT PLAN's listing for no file: `..` and the folders.
+        let (folder, mut entries) = crate::plan::dialog_listing(typed, directory, &[]);
+        entries.truncate(LIST_MAX);
+        Self {
+            id,
+            typed: typed.to_owned(),
+            filter: Filter::default(),
+            index: 0,
+            folder,
+            entries,
+        }
+    }
+
     /// Each row as it reads: a folder's name and a `/`, `../` first; a file's name.
     #[must_use]
     pub fn rows(&self) -> Vec<String> {
         self.entries.iter().map(row_text).collect()
     }
+}
+
+/// The folder a folder dialog's box names, for its OK: the path typed - absolute as it is, `~`
+/// from the home folder, else from `directory` - rebuilt from its parts, so the separator a folder
+/// row leaves after it goes, when it is a folder that is there; none for an empty box or any
+/// other path, which `FolderBrowserDialog` cannot return.
+#[must_use]
+pub fn chosen_folder(typed: &str, directory: &Path) -> Option<PathBuf> {
+    let typed = typed.trim();
+    if typed.is_empty() {
+        return None;
+    }
+    let path: PathBuf = crate::plan::typed_path(typed, directory)?
+        .components()
+        .collect();
+    path.os_is_dir().then_some(path)
 }
 
 /// A row as it reads.
@@ -733,6 +778,43 @@ mod tests {
         // A relative path is taken from the folder given.
         let relative = Chooser::within("test", "sub/", &folder, "Shape file|*.shp", 0);
         assert_eq!(relative.folder, folder.join("sub"));
+        mp_os::fs::remove_dir_all(&folder).unwrap();
+    }
+
+    /// A folder dialog lists `..` and the folders - never a file, hidden ones left out - with no
+    /// filter; a folder's row opens it; OK answers the folder the box names, its separator gone,
+    /// and nothing for an empty box, a file or a path that is not there.
+    /// `// C#: GCSViews/ConfigurationView/ConfigPlanner.cs:779-786`
+    #[test]
+    fn a_folder_dialog_lists_folders_only_and_answers_a_folder() {
+        let folder = scratch("folders");
+        for sub in ["logs", "Bench", ".hidden"] {
+            mp_os::fs::create_dir_all(folder.join(sub)).unwrap();
+        }
+        mp_os::fs::create_dir_all(folder.join("logs").join("2026-10-16")).unwrap();
+        for file in ["flight.tlog", "README", "00000001.BIN"] {
+            mp_os::fs::write(folder.join(file), "").unwrap();
+        }
+        let typed = folder.display().to_string();
+        let top = Chooser::folders_within("test", &typed, &folder);
+        assert_eq!(top.folder, folder);
+        assert_eq!(top.rows(), ["../", "Bench/", "logs/"]);
+        assert!(top.entries.iter().all(|entry| entry.folder), "no file");
+        assert!(top.filter.entries().is_empty(), "no filter");
+
+        let opened = answer(&top.entries[2]);
+        let inside = Chooser::folders_within("test", &opened, &folder);
+        assert_eq!(inside.folder, folder.join("logs"));
+        assert_eq!(inside.rows(), ["../", "2026-10-16/"]);
+
+        assert_eq!(chosen_folder(&opened, &folder), Some(folder.join("logs")));
+        assert_eq!(chosen_folder(&typed, &folder), Some(folder.clone()));
+        assert_eq!(chosen_folder("logs", &folder), Some(folder.join("logs")));
+        assert_eq!(chosen_folder("  ", &folder), None);
+        let file = folder.join("flight.tlog").display().to_string();
+        assert_eq!(chosen_folder(&file, &folder), None, "a file is no folder");
+        let missing = folder.join("missing").display().to_string();
+        assert_eq!(chosen_folder(&missing, &folder), None);
         mp_os::fs::remove_dir_all(&folder).unwrap();
     }
 

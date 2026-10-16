@@ -511,39 +511,43 @@ fn advanced(
             cx.notify();
         }),
     ))
+    // The three Multilink swarms, dimmed by the port's ruling, say it when clicked (the owner's
+    // word of 2026-10-16), as Ctrl+D does. C#: GCSViews/SITL.cs:820-824, 829-991, 1132-1145
     .child(swarm_button(
         "sitl-swarm-link",
         model::SWARM_LINK,
         104.0,
-        false,
+        crate::ui::Live::dimmed(MULTILINK_REASON),
         cx.listener(|_, _, _, _| {}),
     ))
     .child(swarm_button(
         "sitl-swarm-plane",
         model::SWARM_PLANE,
         199.0,
-        false,
+        crate::ui::Live::dimmed(MULTILINK_REASON),
         cx.listener(|_, _, _, _| {}),
     ))
     .child(swarm_button(
         "sitl-swarm-rover",
         model::SWARM_ROVER,
         294.0,
-        false,
+        crate::ui::Live::dimmed(MULTILINK_REASON),
         cx.listener(|_, _, _, _| {}),
     ))
     .into_any_element()
 }
 
-/// A `MyButton` of the swarm row, 89 by 23 at y 44; dimmed and inert while disabled.
+/// A `MyButton` of the swarm row, 89 by 23 at y 44; dimmed and inert while disabled, and dimmed
+/// for a reason, its click saying why ([`crate::ui::Live`]).
 /// `// C#: GCSViews/SITL.resx (but_swarm*.Location, but_swarm*.Size)`
 fn swarm_button(
     id: &'static str,
     text: &'static str,
     x: f32,
-    enabled: bool,
+    enabled: impl Into<crate::ui::Live>,
     on_click: impl Fn(&gpui::ClickEvent, &mut Window, &mut gpui::App) + 'static,
 ) -> AnyElement {
+    let live = enabled.into();
     let base = crate::probe::measured(id, div())
         .id(id)
         .size_full()
@@ -560,14 +564,17 @@ fn swarm_button(
         // Wrapping inside the button, as the C#'s text does: on one line it ran 110 wide in 87
         // (the layout guard on the owner's Mac, 2026-10-04).
         .child(div().w_full().child(text));
-    let base = if enabled {
+    let base = if live.is_live() {
         base.bg(rgb(theme::ACTION))
             .text_color(rgb(theme::TEXT))
             .cursor_pointer()
             .hover(|style| style.border_color(rgb(theme::ACCENT)))
             .on_click(on_click)
     } else {
-        base.bg(rgb(theme::PANEL)).text_color(rgb(theme::DIM))
+        crate::ui::dimmed_click(
+            base.bg(rgb(theme::PANEL)).text_color(rgb(theme::DIM)),
+            &live,
+        )
     };
     at(x, 44.0, 89.0, 23.0).child(base).into_any_element()
 }

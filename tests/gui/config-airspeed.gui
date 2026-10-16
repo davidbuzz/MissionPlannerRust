@@ -56,6 +56,15 @@ expect config.airspeed.pin.options 14
 expect config.airspeed.type.enabled false
 expect config.airspeed.write none
 
+# The pin and the type, MavlinkComboBoxes disabled until setup finds their parameters
+# (MavlinkComboBox.cs:31-35, 73-99), which the sensor off leaves out: each click drops nothing
+# down, and says why on the status line, quietly (the owner's word of 2026-10-16).
+click airspeed-ARSPD_PIN
+expect status no ARSPD_PIN on the vehicle
+click airspeed-ARSPD_TYPE
+expect status no ARSPD_TYPE on the vehicle
+expect config.airspeed.write none
+
 # Enable: the handler's write, echoed, then the control's, which finds 1 already held.
 click airspeed-ARSPD_ENABLE
 expect config.airspeed.enable checked

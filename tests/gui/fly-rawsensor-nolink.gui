@@ -14,7 +14,8 @@ setup mkdir -p "$WORK/MissionPlannerRust" && printf '<?xml version="1.0" encodin
 
 screen fly
 window 1600x1200
-budget 3
+budget 6
+# 6: 4.8 s measured headless on lavapipe (2026-10-16, the dimmed clicks added), the rule's ceiling plus one.
 
 expect link.button CONNECT
 
@@ -25,3 +26,18 @@ expect raw.open false
 click fly-rawsensor
 expect raw.open false
 expect status Please connect first
+
+# With no vehicle the Actions page's commands are drawn dimmed, and a dimmed control, clicked,
+# says why on the status line, quietly, and sends nothing (the owner's word of 2026-10-16) - the
+# C#'s handlers return on a closed link without a word (FlightData.cs:1021-1024, 1036-1039). The
+# strip's left arrow, with nowhere to go, says so between them, so each answer is the click's own.
+click fly-abortland
+expect status no vehicle
+click fly-tabs-left
+expect status at the first page
+click fly-changespeed
+expect status no vehicle
+click fly-tabs-left
+expect status at the first page
+click force-arm
+expect status no vehicle

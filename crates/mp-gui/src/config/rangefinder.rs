@@ -500,7 +500,7 @@ mod tests {
     use mp_link::requests::RequestOutcome;
 
     fn bundled(name: &str) -> Option<&'static mp_params::ParamMeta> {
-        mp_params::param_meta::lookup(name)
+        mp_params::param_meta::lookup("ArduCopter2", name)
     }
 
     fn view_with(parameters: &[(&str, f64)]) -> TelemetryView {

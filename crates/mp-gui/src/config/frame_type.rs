@@ -67,7 +67,7 @@ use mp_link::requests::RequestOutcome;
 use crate::MissionPlanner;
 use crate::config::flight_modes::{Firmware, ParamWriter, Progress, firmware_of};
 use crate::telemetry::{Telemetry, TelemetryView};
-use crate::ui::{action, panel, theme};
+use crate::ui::{Live, action, panel, theme};
 
 /// `DisabledOpacity`: a picture whose type the class does not take, or that is not chosen.
 /// `// C#: GCSViews/ConfigurationView/ConfigFrameClassType.cs:18`
@@ -717,6 +717,40 @@ impl FrameType {
         self.active && self.enabled
     }
 
+    /// A class button as it is drawn: live, or - the page disabled for want of `FRAME_CLASS` and
+    /// `FRAME_TYPE` - dimmed, its click saying so (the owner's word of 2026-10-16).
+    /// `// C#: GCSViews/ConfigurationView/ConfigFrameClassType.cs:36-42`
+    #[must_use]
+    pub fn class_live(&self) -> Live {
+        if self.takes_clicks() {
+            Live::Yes
+        } else if self.active {
+            Live::dimmed(NO_FRAME_PARAMETERS)
+        } else {
+            Live::Inert
+        }
+    }
+
+    /// A type's radio button as it is drawn: live, or dimmed and why, said when it is clicked
+    /// (the owner's word of 2026-10-16) - the page disabled, a class that takes no type
+    /// (`groupBox2.Enabled = false`), or a type the class's `ValidList` does not give it, as Y6B
+    /// is not a quad's.
+    /// `// C#: GCSViews/ConfigurationView/ConfigFrameClassType.cs:36-42, 72-82, 111-160`
+    #[must_use]
+    pub fn type_live(&self, frame_type: i32) -> Live {
+        if !self.takes_clicks() {
+            return self.class_live();
+        }
+        if !self.types_enabled {
+            return Live::dimmed(NO_TYPE_FOR_CLASS);
+        }
+        let valid = type_index(frame_type)
+            .and_then(|index| self.radios.get(index))
+            .copied()
+            .unwrap_or(false);
+        Live::when(valid, not_the_class_s(self.class_text()))
+    }
+
     /// A class button pressed: `radioButtonClass_CheckedChanged`. The one already down raises
     /// no `CheckedChanged`, so pressing it again does nothing - and says so, quietly, for the
     /// status line ("already Quad"; the owner's word of 2026-10-16, his rule for a press that
@@ -790,6 +824,30 @@ impl FrameType {
 /// What a press on the class or type already chosen says: "already Plus", "already Quad".
 fn already(name: &str) -> String {
     format!("already {name}")
+}
+
+/// Why the page's controls are dimmed: `Activate` disables the page on a vehicle without both.
+/// `// C#: GCSViews/ConfigurationView/ConfigFrameClassType.cs:36-42`
+pub const NO_FRAME_PARAMETERS: &str = "no FRAME_CLASS or FRAME_TYPE on the vehicle";
+
+/// Why the type group is dimmed: `ValidList` gives the class no type, or none but "no type".
+/// `// C#: GCSViews/ConfigurationView/ConfigFrameClassType.cs:72-82`
+pub const NO_TYPE_FOR_CLASS: &str = "the class takes no frame type";
+
+/// Why a type's radio button is dimmed under a class whose `ValidList` lacks it: "not a quad's
+/// frame type", for Y6B under Quad.
+/// `// C#: GCSViews/ConfigurationView/ConfigFrameClassType.cs:111-160`
+fn not_the_class_s(class: Option<&str>) -> String {
+    let Some(class) = class else {
+        return "not a frame type of this class".to_owned();
+    };
+    let class = class.to_lowercase();
+    let article = if class.starts_with(['a', 'e', 'i', 'o', 'u']) {
+        "an"
+    } else {
+        "a"
+    };
+    format!("not {article} {class}'s frame type")
 }
 
 /// Facts for a test: what the page read and shows, how its writes went, and the vehicle's
@@ -968,7 +1026,7 @@ fn class_button(
             }))
             .into_any_element()
     } else {
-        body.into_any_element()
+        crate::ui::dimmed_click(body, &frame.class_live()).into_any_element()
     }
 }
 
@@ -1009,7 +1067,8 @@ fn type_row(
     cx: &mut Context<MissionPlanner>,
 ) -> [AnyElement; 3] {
     let group_on = frame.takes_clicks() && frame.types_enabled;
-    let radio_on = group_on && frame.radios.get(index).copied().unwrap_or(false);
+    let live = frame.type_live(option.frame_type);
+    let radio_on = live.is_live();
     let bright = frame.bright.get(index).copied().unwrap_or(true);
     let checked = frame.checked_type == Some(TypeRadio::Type(option.frame_type));
     let value = option.frame_type;
@@ -1038,7 +1097,8 @@ fn type_row(
             }))
             .into_any_element()
     } else {
-        button.into_any_element()
+        // Dimmed, it says why when clicked: Y6B "not a quad's frame type".
+        crate::ui::dimmed_click(button, &live).into_any_element()
     };
 
     let (x, y, width, height) = option.picture;
@@ -1202,9 +1262,38 @@ mod tests {
         frame
     }
 
+    /// A dimmed button says why it is dimmed when it is clicked (the owner's word of 2026-10-16):
+    /// Y6B under a quad is not a quad's; under Tri, which takes no type, each type says so; with
+    /// no frame parameters every button says that. A live one runs its handler.
+    /// `// C#: GCSViews/ConfigurationView/ConfigFrameClassType.cs:36-42, 72-82, 111-160`
+    #[test]
+    fn a_dimmed_frame_button_says_why() {
+        let quad = opened(&sitl());
+        assert_eq!(quad.type_live(10), Live::dimmed("not a quad's frame type"));
+        assert_eq!(quad.type_live(1), Live::Yes);
+        assert_eq!(quad.class_live(), Live::Yes);
+        let mut status = None;
+        assert!(!crate::ui::click(&quad.type_live(10), &mut status));
+        assert_eq!(status.as_deref(), Some("not a quad's frame type"));
+
+        let tri = opened(&table(&[("FRAME_CLASS", 7.0), ("FRAME_TYPE", 0.0)]));
+        assert_eq!(tri.type_live(1), Live::dimmed(NO_TYPE_FOR_CLASS));
+        assert_eq!(tri.class_live(), Live::Yes);
+
+        let none = opened(&table(&[("FLTMODE1", 7.0)]));
+        assert_eq!(none.class_live(), Live::dimmed(NO_FRAME_PARAMETERS));
+        assert_eq!(none.type_live(10), Live::dimmed(NO_FRAME_PARAMETERS));
+
+        assert_eq!(
+            not_the_class_s(Some("OctaQuad")),
+            "not an octaquad's frame type"
+        );
+        assert_eq!(not_the_class_s(None), "not a frame type of this class");
+    }
+
     /// The bundled documentation's name for a value of a parameter.
     fn documented(param: &str, value: i32) -> Option<&'static str> {
-        mp_params::param_meta::lookup(param)?.value_name(i64::from(value))
+        mp_params::param_meta::lookup("ArduCopter2", param)?.value_name(i64::from(value))
     }
 
     /// Each class button is the `motor_frame_class` value its text names, and the vehicle's own

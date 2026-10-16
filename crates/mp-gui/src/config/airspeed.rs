@@ -41,14 +41,14 @@ use std::collections::VecDeque;
 use gpui::{AnyElement, Context, Window, div, prelude::*, px};
 
 use super::optional::{
-    FEATURE_NOT_ENABLED, Job, Set, SetQueue, error, has, heading, label, message_box, picture,
-    rule, set_failed, value_of,
+    FEATURE_NOT_ENABLED, Job, Set, SetQueue, error, has, heading, label, message_box, no_parameter,
+    picture, rule, set_failed, value_of,
 };
 use crate::MissionPlanner;
 use crate::config::extra_setup::{link_error, take_link_errors};
 use crate::config::failsafe::{Lookup, options};
 use crate::config::flight_modes::ParamWriter;
-use crate::config::servo_output::{Check, Combo, Message, check_box, combo_box, dropdown};
+use crate::config::servo_output::{Check, Combo, Message, check_box, combo_box_live, dropdown};
 use crate::setup::Key;
 use crate::telemetry::TelemetryView;
 use crate::ui::panel;
@@ -429,6 +429,16 @@ pub fn page(airspeed: &Airspeed, cx: &mut Context<MissionPlanner>) -> AnyElement
         combo.enabled &= enabled;
         combo
     };
+    // Dimmed, the pin and the type say why when clicked (the owner's word of 2026-10-16): the page
+    // with no link, or a `MavlinkComboBox` with no parameter of its own.
+    // C#: ConfigHWAirspeed.cs:18-24; Controls/MavlinkComboBox.cs:31-35, 73-99
+    let live = |which: Which, param: &str| {
+        if enabled {
+            crate::ui::Live::when(airspeed.combo(which).enabled, no_parameter(param))
+        } else {
+            crate::ui::Live::dimmed(crate::fly::NO_VEHICLE)
+        }
+    };
     let mut body = div()
         .relative()
         .w(px(650.0))
@@ -472,18 +482,20 @@ pub fn page(airspeed: &Airspeed, cx: &mut Context<MissionPlanner>) -> AnyElement
     }
     body = body
         .child(label(93.0, 61.0, "Pin", enabled))
-        .child(combo_box(
+        .child(combo_box_live(
             "airspeed-ARSPD_PIN".to_owned(),
             &combo(Which::Pin),
             (165.0, 58.0, 161.0, 21.0),
+            live(Which::Pin, "ARSPD_PIN"),
             |this| this.optional.airspeed.toggle_dropdown(Which::Pin),
             cx,
         ))
         .child(label(92.0, 89.0, "Type", enabled))
-        .child(combo_box(
+        .child(combo_box_live(
             "airspeed-ARSPD_TYPE".to_owned(),
             &combo(Which::Type),
             (165.0, 86.0, 161.0, 21.0),
+            live(Which::Type, "ARSPD_TYPE"),
             |this| this.optional.airspeed.toggle_dropdown(Which::Type),
             cx,
         ));
@@ -533,7 +545,7 @@ mod tests {
     use crate::config::optional::{Event, SetQueue};
 
     fn bundled(name: &str) -> Option<&'static mp_params::ParamMeta> {
-        mp_params::param_meta::lookup(name)
+        mp_params::param_meta::lookup("ArduCopter2", name)
     }
 
     fn table(entries: &[(&str, f64)]) -> Vec<(String, f64)> {

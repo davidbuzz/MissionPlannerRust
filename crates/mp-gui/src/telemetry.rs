@@ -43,6 +43,7 @@ use mp_mission::MissionItem;
 use mp_units::LatLon;
 use mp_vehicle::{DateTime, FenceItem, StreamRates, VehicleFamily, VehicleId, VehicleState};
 
+use crate::config::flight_modes::{Firmware, firmware_of};
 use crate::fly::{error_box, strings};
 
 /// The parameter holding the bitmask of checks performed before arming, before ArduPilot 4.7.
@@ -1852,6 +1853,9 @@ impl Telemetry {
     /// stay 0 and the MAVFtp page never lists (found by `config-mavftp.gui`, 2026-09-25).
     /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:930-933, 1819-1827, 1853-1854`
     pub fn tick(&mut self) {
+        // The parameter documentation's bundled fallback reads the shown vehicle's section, as
+        // the C#'s screens pass `cs.firmware` with every question.
+        crate::metadata::set_firmware(self.shown_firmware());
         let Some(link) = &self.link else {
             return;
         };
@@ -1869,6 +1873,19 @@ impl Telemetry {
             self.banner = crate::metadata::banner_in(messages.iter().map(|m| m.text.as_str()))
                 .map(str::to_owned);
         }
+    }
+
+    /// `cs.firmware` of the vehicle the screens show, as `setAPType` decides it from the
+    /// heartbeat and the banner; `ArduCopter2`, `CurrentState`'s initial value, with no vehicle -
+    /// as `setup::Vehicle::of` has it.
+    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:6659-6782; ExtLibs/ArduPilot/CurrentState.cs:102`
+    fn shown_firmware(&self) -> Firmware {
+        self.target()
+            .and_then(|(link, id)| link.vehicle(id))
+            .map_or(Firmware::ArduCopter2, |handle| {
+                let state = handle.load();
+                firmware_of(state.autopilot, state.vehicle_type, self.banner.as_deref())
+            })
     }
 
     /// The shown vehicle's geofence as the link has seen it, in sequence order:
@@ -2279,6 +2296,52 @@ pub mod scripted {
             assert!(Instant::now() < deadline, "timed out waiting for {what}");
             wasm_thread::sleep(Duration::from_millis(1));
         }
+    }
+}
+
+/// The firmware the parameter documentation is read for, `cs.firmware`, follows the shown
+/// vehicle as `setAPType` decides it. Asked of [`Telemetry::shown_firmware`] directly: `tick`
+/// would hand it to the documentation every test shares.
+#[cfg(test)]
+mod shown_firmware {
+    use mp_link::ProtocolTimeouts;
+    use mp_mavlink_dialects::all::{Heartbeat, MavMessage};
+
+    use super::Telemetry;
+    use super::scripted::{Vehicle, until};
+    use crate::config::flight_modes::Firmware;
+
+    fn heartbeat(mav_type: u8) -> MavMessage {
+        MavMessage::Heartbeat(Heartbeat {
+            custom_mode: 0,
+            r#type: mav_type,
+            autopilot: 3,
+            base_mode: 81,
+            system_status: 3,
+            mavlink_version: 3,
+        })
+    }
+
+    /// No vehicle is `CurrentState`'s initial `ArduCopter2`; a copter's heartbeat is
+    /// `ArduCopter2`, a fixed wing's `ArduPlane`, a boat's `ArduRover`; a banner naming one
+    /// vehicle decides over the heartbeat.
+    /// `// C#: ExtLibs/ArduPilot/Mavlink/MAVLinkInterface.cs:6659-6747; ExtLibs/ArduPilot/CurrentState.cs:102`
+    #[test]
+    fn the_shown_vehicles_firmware_is_set_aps_type() {
+        assert_eq!(Telemetry::idle().shown_firmware(), Firmware::ArduCopter2);
+
+        let (mut telemetry, mut vehicle) = Vehicle::connect(ProtocolTimeouts::default());
+        assert_eq!(telemetry.shown_firmware(), Firmware::ArduCopter2);
+        vehicle.send(&heartbeat(1));
+        until("the plane's heartbeat", || {
+            telemetry.shown_firmware() == Firmware::ArduPlane
+        });
+        vehicle.send(&heartbeat(11));
+        until("the boat's heartbeat", || {
+            telemetry.shown_firmware() == Firmware::ArduRover
+        });
+        telemetry.banner = Some("ArduSub V4.5.0 (1c0c8d9c)".to_owned());
+        assert_eq!(telemetry.shown_firmware(), Firmware::ArduSub);
     }
 }
 

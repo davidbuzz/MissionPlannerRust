@@ -1838,7 +1838,7 @@ mod tests {
     use mp_params::ParamMeta;
 
     fn bundled(name: &str) -> Option<&'static ParamMeta> {
-        mp_params::param_meta::lookup(name)
+        mp_params::param_meta::lookup("ArduCopter2", name)
     }
 
     /// Every port documented as `SERIAL1` is: the fetched documentation copies each port's
@@ -1849,9 +1849,9 @@ mod tests {
             && bytes.get(6).is_some_and(u8::is_ascii_digit)
             && bytes.get(7) == Some(&b'_')
         {
-            return mp_params::param_meta::lookup(&format!("SERIAL1{}", &name[7..]));
+            return mp_params::param_meta::lookup("ArduCopter2", &format!("SERIAL1{}", &name[7..]));
         }
-        mp_params::param_meta::lookup(name)
+        mp_params::param_meta::lookup("ArduCopter2", name)
     }
 
     fn table(entries: &[(&str, f64)]) -> Vec<(String, f64)> {

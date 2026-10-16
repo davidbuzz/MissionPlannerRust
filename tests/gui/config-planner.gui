@@ -32,14 +32,15 @@
 
 screen config
 window 1600x1200
-budget 25
+budget 28
+# 28: 26.5 s measured headless on lavapipe (2026-10-16, the dimmed clicks and Beta Updates added), the rule's ceiling plus one.
 env XDG_DATA_HOME $WORK
 env MP_CONFIG_XML $WORK/config.xml
 
 expect config.page ConfigPlanner
 expect config.title Planner
 expect config.planner.active true
-expect config.planner.dimmed CHK_GDIPlus,CHK_Password,chk_ADSB,chk_analytics,CHK_beta,CHK_mavdebug,chk_temp,CMB_osdcolor,CMB_language,CMB_theme,BUT_themecustom,BUT_Vario
+expect config.planner.dimmed CHK_GDIPlus,CHK_Password,chk_ADSB,chk_analytics,CHK_mavdebug,chk_temp,CMB_osdcolor,CMB_language,CMB_theme,BUT_themecustom,BUT_Vario
 
 # SaveConfig ran once, at start-up, before the page was activated.
 expect config.saved startup
@@ -58,6 +59,13 @@ expect config.planner.number.NUM_tracklength 200
 expect config.planner.number.num_gcsid 255
 expect config.planner.combo.CMB_Layout Advanced
 expect config.planner.combo.CMB_mapCache ServerAndCache
+
+# Beta Updates is live (the updater reads beta_updates for its channel): ticked, written True;
+# unticked, False (ConfigPlanner.cs:854-859). It was dimmed "no updater" until 2026-10-16.
+click planner-CHK_beta
+expect config.planner.beta_updates True
+click planner-CHK_beta
+expect config.planner.beta_updates False
 expect config.planner.cacheonly false
 
 # The units: none set, so the combos show their first items and ChangeUnits gives metres.
@@ -168,10 +176,21 @@ click planner-CMB_mapCache-CacheOnly
 expect config.planner.mapCache CacheOnly
 expect config.planner.cacheonly true
 
-# A dimmed box takes no click.
+# A dimmed box takes no click: it changes nothing, and says why on the status line, quietly (the
+# owner's word of 2026-10-16) - here, the ruling that leaves its handler out (ConfigPlanner.cs:
+# 699-705, 797-805, 836-846). A combo and a button the same, each answer the click's own.
 click planner-CHK_GDIPlus
 expect config.planner.CHK_GDIPlus none
 expect config.planner.check.CHK_GDIPlus false
+expect status gpui draws the HUD: there is no GDI+ renderer to choose
+click planner-CMB_theme
+expect config.planner.dropdown none
+expect status the dark palette is ratified: there is no theme to load
+click planner-BUT_Vario
+expect status no audio variometer
+click planner-chk_temp
+expect config.planner.check.chk_temp false
+expect status the Testing Screen is the EXPERIMENTAL tab here
 
 # Enable HUD Overlay: ticked as the Designer has it, hudon true from the HUD's constructor. A click
 # sets hudon and writes CHK_hudshow (ConfigPlanner.cs:375-379). No camera runs, so the HUD draws

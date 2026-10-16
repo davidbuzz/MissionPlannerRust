@@ -100,6 +100,7 @@ wrote).
   length.
 - `ParameterMetaDataRepositoryAPM`: the bundled fallback table holds the copter section alone and
   answers for every vehicle; the C# reads the vehicle's own section.
+  (mended 2026-10-16: every section bundled, the shown vehicle's read.)
 - `pdef.rs`'s `from_banner`: for a banner with one letter, "V4.5a", the C# reads an empty group,
   throws and gives no version; the Rust's test pins 4.5.49.
 - Shared controls (`MavlinkCheckBox`, `MavlinkComboBox`, `MavlinkNumericUpDown`, `InputBox`, the

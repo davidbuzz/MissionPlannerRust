@@ -23,3 +23,9 @@ click raw-param-warning-ok
 
 expect params.metadata.source ~ Copter
 expect params.metadata.documented > 1000
+
+# Apply, before any comparison: drawn dimmed, and its click says why on the status line, quietly
+# (the owner's word of 2026-10-16) - the C#'s write of a compared file is the form Compare Params
+# opens (ConfigRawParams.cs:396-419, paramcompare.cs:65-110).
+click param-apply
+expect status no comparison has found a change

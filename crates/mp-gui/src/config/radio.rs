@@ -2333,8 +2333,14 @@ mod tests {
             },
         );
 
+        // A set sent again unanswered counts once: on `fast()`'s timeouts, twenty times the
+        // link's, a loaded machine (the GUI crawl beside the tests, 2026-10-16) can have the fake
+        // vehicle's answer arrive after the link has sent the same set again - its retry, not a
+        // second write (the abandoned write's test below counts the retries on purpose).
+        let mut written = sets(&vehicle);
+        written.dedup();
         assert_eq!(
-            sets(&vehicle),
+            written,
             [
                 ("RC1_MIN".to_owned(), 1100.0),
                 ("RC1_MAX".to_owned(), 1900.0),

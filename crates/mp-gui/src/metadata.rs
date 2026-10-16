@@ -22,7 +22,8 @@
 //!
 //! Two sources, in order: the file ArduPilot generates for the firmware actually connected,
 //! fetched and cached as Mission Planner fetches it (`mp_params::pdef`), and the bundled table
-//! (`mp_params::param_meta`) for anything the file does not have or before it has arrived.
+//! (`mp_params::param_meta`) for anything the file does not have or before it has arrived - its
+//! section for the shown vehicle's firmware, as the C# reads it.
 //! PLAN.md §10.5 is why: the bundled snapshot documented 59% of a live vehicle's parameters and
 //! got a few ranges wrong, and a range that disagrees with the firmware refuses values the
 //! vehicle would accept.
@@ -44,6 +45,8 @@ use std::sync::mpsc::{Receiver, channel};
 
 use mp_params::ParamMeta;
 use mp_params::pdef::{self, Pdef, PdefParam, Version};
+
+use crate::config::flight_modes::Firmware;
 
 /// The loaded documentation, if any.
 struct Loaded {
@@ -67,43 +70,89 @@ static FALLBACK_READ_ONLY: RwLock<Vec<(String, BTreeMap<String, String>)>> =
 
 static LOADED: RwLock<Option<Loaded>> = RwLock::new(None);
 
-/// How many times documentation has been installed; see [`generation`].
+/// How many times documentation has been installed, or the vehicle it is read for has changed;
+/// see [`generation`].
 static GENERATION: AtomicU64 = AtomicU64::new(0);
 
-/// Documentation for one parameter: the fetched file's if it has it, else the bundled table's.
+/// `MainV2.comPort.MAV.cs.firmware`, which every screen hands `GetParameterMetaData` as the
+/// vehicle type: the shown vehicle's, as `setAPType` decides it, set once a frame by
+/// [`set_firmware`]. `ArduCopter2`, `CurrentState`'s initial value, until then.
+/// `// C#: ExtLibs/ArduPilot/CurrentState.cs:102; GCSViews/ConfigurationView/ConfigRawParams.cs:480-483`
+static FIRMWARE: RwLock<Firmware> = RwLock::new(Firmware::ArduCopter2);
+
+/// The firmware the documentation is read for: [`FIRMWARE`].
+#[must_use]
+pub fn firmware() -> Firmware {
+    FIRMWARE
+        .os_read()
+        .map_or(Firmware::ArduCopter2, |guard| *guard)
+}
+
+/// Sets the firmware the documentation is read for. A change moves [`generation`], so a screen
+/// that keeps what it looked up looks again in the new vehicle's section.
+pub fn set_firmware(firmware: Firmware) {
+    set_firmware_in(&FIRMWARE, &GENERATION, firmware);
+}
+
+/// [`set_firmware`] on a given slot and generation rather than the installed ones.
+fn set_firmware_in(slot: &RwLock<Firmware>, generation: &AtomicU64, firmware: Firmware) {
+    let Ok(mut held) = slot.os_write() else {
+        return;
+    };
+    if *held != firmware {
+        *held = firmware;
+        // After the firmware is in place, as `install` moves it after the table.
+        generation.fetch_add(1, Ordering::Release);
+    }
+}
+
+/// Documentation for one parameter: the fetched file's if it has it, else the bundled table's
+/// section for [`firmware`].
 ///
 /// Mission Planner's rule for both: the parameter named exactly. In the fetched file, the first
 /// of that name in the file's order (`// C#: ExtLibs/Utilities/ParameterMetaDataRepositoryAPMpdef.cs:219-231`,
-/// kept by [`Pdef::parse`]); in the bundled table, the entry of that name
-/// ([`mp_params::param_meta::lookup`]). Both are searches, not scans.
+/// kept by [`Pdef::parse`]); in the bundled table, the entry of that name in the vehicle's
+/// section and no other, nothing when that section has none ([`mp_params::param_meta::lookup`]).
+/// Both are searches, not scans.
+/// `// C#: ExtLibs/Utilities/ParameterMetaDataRepository.cs:27-52; ExtLibs/Utilities/ParameterMetaDataRepositoryAPM.cs:70-104`
 #[must_use]
 pub fn lookup(name: &str) -> Option<&'static ParamMeta> {
+    lookup_for(firmware(), name)
+}
+
+/// [`lookup`] for a given firmware rather than the shown vehicle's: what `Common.getModesList`
+/// asks, passing the firmware it was given.
+/// `// C#: ExtLibs/ArduPilot/Common.cs:88-176`
+#[must_use]
+pub fn lookup_for(firmware: Firmware, name: &str) -> Option<&'static ParamMeta> {
     let guard = LOADED.os_read().ok();
     lookup_in(
         guard
             .as_ref()
             .and_then(|guard| guard.as_ref())
             .map(|loaded| &loaded.table),
+        firmware,
         name,
     )
 }
 
-/// [`lookup`] against a given fetched table rather than the installed one.
+/// [`lookup`] against a given fetched table and firmware rather than the installed ones.
 fn lookup_in(
     fetched: Option<&BTreeMap<String, &'static ParamMeta>>,
+    firmware: Firmware,
     name: &str,
 ) -> Option<&'static ParamMeta> {
     fetched
         .and_then(|table| table.get(name).copied())
-        .or_else(|| mp_params::param_meta::lookup(name))
+        .or_else(|| mp_params::param_meta::lookup(firmware.label(), name))
 }
 
 // ---- ConfigRawParams remainder ----
 /// `GetParameterMetaData(name, ParameterMetaDataConstants.ReadOnly, firmware)`: the fetched
-/// file's `<field name="ReadOnly">` text for the parameter, else the bundled
-/// `ParameterMetaDataBackup.xml`'s mark (`ParameterMetaDataRepositoryAPM`, the C#'s last
-/// fallback, as "True"), else `None`, the C#'s empty string. The two fallbacks between - the
-/// SITL and AP_Periph vehicles' own `apm.pdef.xml` files - are not fetched here.
+/// file's `<field name="ReadOnly">` text for the parameter, else the SITL and AP_Periph files'
+/// (fetched by [`fetch_fallbacks`]), else the bundled `ParameterMetaDataBackup.xml`'s mark in
+/// [`firmware`]'s section (`ParameterMetaDataRepositoryAPM`, the C#'s last fallback, as
+/// "True"), else `None`, the C#'s empty string.
 /// `// C#: ExtLibs/Utilities/ParameterMetaDataRepository.cs:27-67; GCSViews/ConfigurationView/ConfigRawParams.cs:480-483`
 #[must_use]
 pub fn read_only(name: &str) -> Option<String> {
@@ -116,15 +165,17 @@ pub fn read_only(name: &str) -> Option<String> {
     read_only_in(
         fetched,
         fallbacks.as_deref().map_or(&[], Vec::as_slice),
+        firmware(),
         name,
     )
 }
 
 /// [`read_only`]'s chain over given tables: the vehicle's answer, else each fallback file's
-/// in order, else the bundled file's mark.
+/// in order, else the bundled file's mark in the firmware's section.
 fn read_only_in(
     fetched: Option<String>,
     fallbacks: &[(String, BTreeMap<String, String>)],
+    firmware: Firmware,
     name: &str,
 ) -> Option<String> {
     fetched
@@ -133,7 +184,10 @@ fn read_only_in(
                 .iter()
                 .find_map(|(_, marks)| marks.get(name).cloned())
         })
-        .or_else(|| mp_params::param_meta::read_only_backup(name).then(|| "True".to_owned()))
+        .or_else(|| {
+            mp_params::param_meta::read_only_backup(firmware.label(), name)
+                .then(|| "True".to_owned())
+        })
 }
 
 /// The two fallback files' ReadOnly marks, fetched (the unversioned `SITL` and `AP_Periph`
@@ -433,10 +487,10 @@ mod tests {
             .filter_map(|line| line.split(',').next())
             .collect();
         assert_eq!(names.len(), 1408);
+        let copter = Firmware::ArduCopter2;
         let bundled = |name: &str| {
-            mp_params::param_meta::copter::PARAMETERS
-                .iter()
-                .find(|meta| meta.name == name)
+            mp_params::param_meta::section("ArduCopter2")
+                .and_then(|section| section.parameters().find(|meta| meta.name == name))
         };
         let same = |left: Option<&'static ParamMeta>, right: Option<&'static ParamMeta>| match (
             left, right,
@@ -447,7 +501,7 @@ mod tests {
         };
 
         for name in &names {
-            assert!(same(lookup_in(None, name), bundled(name)), "{name}");
+            assert!(same(lookup_in(None, copter, name), bundled(name)), "{name}");
         }
 
         let Some(dir) = mp_settings::data_directory() else {
@@ -463,8 +517,8 @@ mod tests {
         let mut from_file = 0;
         for name in &names {
             let expected = table.get(*name).copied().or_else(|| bundled(name));
-            assert!(same(lookup_in(Some(&table), name), expected), "{name}");
-            if let Some(found) = lookup_in(Some(&table), name) {
+            assert!(same(lookup_in(Some(&table), copter, name), expected), "{name}");
+            if let Some(found) = lookup_in(Some(&table), copter, name) {
                 assert_eq!(found.name, *name);
             }
             from_file += usize::from(table.contains_key(*name));
@@ -518,26 +572,88 @@ mod tests {
         .into_iter()
         .collect();
         let fallbacks = vec![("SITL".to_owned(), sitl), ("AP_Periph".to_owned(), periph)];
+        let copter = Firmware::ArduCopter2;
         assert_eq!(
-            read_only_in(Some("False".to_owned()), &fallbacks, "SIM_ONLY").as_deref(),
+            read_only_in(Some("False".to_owned()), &fallbacks, copter, "SIM_ONLY").as_deref(),
             Some("False"),
             "the vehicle's file answers first"
         );
         assert_eq!(
-            read_only_in(None, &fallbacks, "SIM_ONLY").as_deref(),
+            read_only_in(None, &fallbacks, copter, "SIM_ONLY").as_deref(),
             Some("True"),
             "SITL's before AP_Periph's"
         );
         assert_eq!(
-            read_only_in(None, &fallbacks, "PERIPH_ONLY").as_deref(),
+            read_only_in(None, &fallbacks, copter, "PERIPH_ONLY").as_deref(),
             Some("True")
         );
         assert_eq!(
-            read_only_in(None, &fallbacks, "BARO1_DEVID").as_deref(),
+            read_only_in(None, &fallbacks, copter, "BARO1_DEVID").as_deref(),
             Some("True"),
             "the bundled file's mark last"
         );
-        assert_eq!(read_only_in(None, &fallbacks, "ATC_RAT_RLL_P"), None);
-        assert_eq!(read_only_in(None, &[], "NOT_A_PARAM"), None);
+        assert_eq!(read_only_in(None, &fallbacks, copter, "ATC_RAT_RLL_P"), None);
+        assert_eq!(read_only_in(None, &[], copter, "NOT_A_PARAM"), None);
+    }
+
+    /// The bundled fallback reads the firmware's own section, as `ParameterMetaDataRepositoryAPM`
+    /// reads `Elements(vechileType)` for `cs.firmware.ToString()`: a copter's parameter asked
+    /// for a plane is undocumented, the C#'s empty string; a parameter both document is each
+    /// one's own; a firmware the file has no section for (`PX4`, `Ateryx`, `Other`) has none of
+    /// it. The fetched file comes first whatever the firmware.
+    /// `// C#: ExtLibs/Utilities/ParameterMetaDataRepository.cs:42-52; ExtLibs/Utilities/ParameterMetaDataRepositoryAPM.cs:70-104`
+    #[test]
+    fn the_bundled_fallback_reads_the_firmwares_own_section() {
+        let rtl = lookup_in(None, Firmware::ArduCopter2, "RTL_ALT").expect("a copter's");
+        assert_eq!(rtl.display_name, "RTL Altitude");
+        assert_eq!(lookup_in(None, Firmware::ArduPlane, "RTL_ALT"), None);
+        assert_eq!(lookup_in(None, Firmware::ArduRover, "RTL_ALT"), None);
+        assert!(lookup_in(None, Firmware::ArduPlane, "Q_ENABLE").is_some());
+        assert_eq!(lookup_in(None, Firmware::ArduCopter2, "Q_ENABLE"), None);
+        assert!(lookup_in(None, Firmware::ArduSub, "WPNAV_SPEED").is_some());
+        assert!(lookup_in(None, Firmware::ArduTracker, "BATT_MONITOR").is_some());
+
+        let mode = |firmware| {
+            lookup_in(None, firmware, "FLTMODE1").and_then(|meta| meta.value_name(0))
+        };
+        assert_eq!(mode(Firmware::ArduCopter2), Some("Stabilize"));
+        assert_eq!(mode(Firmware::ArduPlane), Some("Manual"));
+
+        for firmware in [Firmware::Px4, Firmware::Ateryx, Firmware::Other] {
+            assert_eq!(lookup_in(None, firmware, "BATT_MONITOR"), None, "{firmware:?}");
+            assert_eq!(read_only_in(None, &[], firmware, "BARO1_DEVID"), None);
+        }
+        assert_eq!(
+            read_only_in(None, &[], Firmware::ArduPlane, "BARO1_DEVID").as_deref(),
+            Some("True")
+        );
+        assert_eq!(
+            read_only_in(None, &[], Firmware::ArduSub, "STAT_RUNTIME"),
+            None,
+            "the sub's section has no STAT_RUNTIME"
+        );
+
+        let pdef = Pdef::parse(SAMPLE).expect("parses");
+        let table = table_of(&pdef);
+        for firmware in [Firmware::ArduPlane, Firmware::Px4] {
+            let fetched = lookup_in(Some(&table), firmware, "ACRO_RP_EXPO").expect("fetched");
+            assert_eq!(fetched.description, "fetched", "{firmware:?}");
+        }
+        assert_eq!(lookup_in(Some(&table), Firmware::ArduPlane, "RTL_ALT"), None);
+    }
+
+    /// A firmware set moves the generation when it differs from the one held, and only then, so
+    /// a screen keeping its lookups looks again in the new vehicle's section.
+    #[test]
+    fn a_new_firmware_moves_the_generation() {
+        let slot = RwLock::new(Firmware::ArduCopter2);
+        let generation = AtomicU64::new(7);
+        set_firmware_in(&slot, &generation, Firmware::ArduCopter2);
+        assert_eq!(generation.load(Ordering::Acquire), 7, "the same firmware");
+        set_firmware_in(&slot, &generation, Firmware::ArduPlane);
+        assert_eq!(generation.load(Ordering::Acquire), 8);
+        assert_eq!(*slot.os_read().expect("the slot"), Firmware::ArduPlane);
+        set_firmware_in(&slot, &generation, Firmware::ArduPlane);
+        assert_eq!(generation.load(Ordering::Acquire), 8);
     }
 }

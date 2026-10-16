@@ -27,9 +27,10 @@
 //!
 //! Mission Planner reads that from `ParameterMetaDataBackup.xml`, which is generated from
 //! ArduPilot's source comments. We generate a Rust table from the same file, so the descriptions a
-//! pilot reads match the firmware they are flying.
+//! pilot reads match the firmware they are flying - every vehicle section of it, as the C# reads
+//! the connected vehicle's section and no other.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashMap};
 use std::path::Path;
 
 use anyhow::{Context, Result, bail};
@@ -161,94 +162,266 @@ fn parameters_in(section: &str) -> BTreeMap<String, ParamMeta> {
     out
 }
 
-/// Generates the metadata module for one vehicle section.
-pub fn generate(metadata_path: &Path, section_name: &str) -> Result<String> {
+/// The vehicle sections of the file, in its order: the elements under `<Params>`, each named as
+/// the C#'s `Firmwares` names a vehicle (`ArduCopter2`, `ArduPlane`, ...), which is what
+/// `ParameterMetaDataRepositoryAPM.GetParameterMetaData` asks `Elements(vechileType)` for.
+/// A name given twice is refused: the C# would read the two in turn, the table keys by name.
+/// `// C#: ExtLibs/Utilities/ParameterMetaDataRepositoryAPM.cs:80`
+pub fn section_names(xml: &str) -> Result<Vec<String>> {
+    let document = roxmltree::Document::parse(xml.trim_start_matches('\u{feff}'))
+        .context("parsing the parameter metadata")?;
+    let root = document.root_element();
+    if root.tag_name().name() != "Params" {
+        bail!("the metadata's root is <{}>, not <Params>", root.tag_name().name());
+    }
+    let mut names: Vec<String> = Vec::new();
+    for section in root.children().filter(roxmltree::Node::is_element) {
+        let name = section.tag_name().name().to_owned();
+        if names.contains(&name) {
+            bail!("<{name}> is in the metadata twice");
+        }
+        names.push(name);
+    }
+    if names.is_empty() {
+        bail!("no vehicle sections in the metadata");
+    }
+    Ok(names)
+}
+
+/// One parameter as the generated table writes it.
+fn entry_source(meta: &ParamMeta) -> String {
+    let mut out = String::with_capacity(512);
+    out.push_str("    ParamMeta {\n");
+    out.push_str(&format!("        name: \"{}\",\n", meta.name));
+    out.push_str(&format!(
+        "        display_name: \"{}\",\n",
+        meta.display_name
+    ));
+    out.push_str(&format!("        description: \"{}\",\n", meta.description));
+    out.push_str(&format!("        units: \"{}\",\n", meta.units));
+    match meta.range {
+        Some((low, high)) => {
+            out.push_str(&format!("        range: Some(({low:?}, {high:?})),\n"));
+        }
+        None => out.push_str("        range: None,\n"),
+    }
+    out.push_str(&format!("        range_text: \"{}\",\n", meta.range_text));
+    match meta.increment {
+        Some(step) => out.push_str(&format!("        increment: Some({step:?}),\n")),
+        None => out.push_str("        increment: None,\n"),
+    }
+    out.push_str("        values: &[");
+    for (number, label) in &meta.values {
+        out.push_str(&format!("({number}, \"{label}\"), "));
+    }
+    out.push_str("],\n        bitmask: &[");
+    for (bit, label) in &meta.bitmask {
+        out.push_str(&format!("({bit}, \"{label}\"), "));
+    }
+    out.push_str("],\n");
+    let level = match meta.user_level.as_str() {
+        "Standard" => "UserLevel::Standard",
+        "Advanced" => "UserLevel::Advanced",
+        _ => "UserLevel::Unspecified",
+    };
+    out.push_str(&format!("        user_level: {level},\n"));
+    out.push_str(&format!(
+        "        reboot_required: {},\n",
+        meta.reboot_required
+    ));
+    out.push_str("    },\n");
+    out
+}
+
+/// Generates the metadata module for every vehicle section of the file.
+///
+/// The C# reads the section of the vehicle it is asked for and no other
+/// (`// C#: ExtLibs/Utilities/ParameterMetaDataRepositoryAPM.cs:70-104`), so every section is
+/// kept, by its name. Most parameters are documented alike in several sections - 11,474 in the
+/// five sections of the file at 5dbb2b0, about 4,330 of them distinct - so the table holds each
+/// distinct entry once, in `ENTRIES`, sorted by name (a name documented differently in two
+/// sections, `FLTMODE1` on a copter and a plane, is two entries, in the order the sections give
+/// them), and each section lists its parameters as places in it, in name order, for the same
+/// binary search the one-section table had.
+pub fn generate(metadata_path: &Path) -> Result<String> {
     let xml = std::fs::read_to_string(metadata_path)
         .with_context(|| format!("reading {}", metadata_path.display()))?;
-    let section = tag(&xml, section_name)
-        .with_context(|| format!("no <{section_name}> section in the metadata"))?;
 
-    let params = parameters_in(section);
-    if params.len() < 100 {
-        bail!(
-            "only {} parameters found in {section_name}; the parser is wrong",
-            params.len()
-        );
+    let mut sections: Vec<(String, BTreeMap<String, ParamMeta>)> = Vec::new();
+    for name in section_names(&xml)? {
+        let section =
+            tag(&xml, &name).with_context(|| format!("no <{name}> section in the metadata"))?;
+        let params = parameters_in(section);
+        if params.len() < 100 {
+            bail!(
+                "only {} parameters found in {name}; the parser is wrong",
+                params.len()
+            );
+        }
+        sections.push((name, params));
     }
 
-        let mut out = String::with_capacity(params.len() * 400);
+    // Each name's ways of being documented, in the order the sections give them.
+    let mut variants: BTreeMap<&str, Vec<String>> = BTreeMap::new();
+    for (_, params) in &sections {
+        for meta in params.values() {
+            let source = entry_source(meta);
+            let seen = variants.entry(meta.name.as_str()).or_default();
+            if !seen.contains(&source) {
+                seen.push(source);
+            }
+        }
+    }
+    // Their places: by name, then in that order. An entry's text names it, so no two names
+    // share one.
+    let mut entries: Vec<&str> = Vec::new();
+    let mut place: HashMap<&str, usize> = HashMap::new();
+    for sources in variants.values() {
+        for source in sources {
+            place.insert(source.as_str(), entries.len());
+            entries.push(source.as_str());
+        }
+    }
+    if u16::try_from(entries.len()).is_err() {
+        bail!(
+            "{} distinct entries do not fit the table's u16 places",
+            entries.len()
+        );
+    }
+    let total: usize = sections.iter().map(|(_, params)| params.len()).sum();
+
+    let mut out = String::with_capacity(entries.len() * 560 + total * 8);
     out.push_str(crate::licence::HEADER);
     out.push('\n');
     out.push_str(&format!(
-        "//! Parameter metadata for {section_name}, generated from Mission Planner's XML.\n\
+        "//! Parameter metadata for every vehicle section of Mission Planner's XML, generated from it.\n\
          //!\n\
          //! DO NOT EDIT. Regenerate with `cargo xtask codegen-param-meta`.\n\
          //!\n\
          //! Source: https://github.com/ArduPilot/MissionPlanner/blob/5dbb2b0/ParameterMetaDataBackup.xml, which ArduPilot\n\
-         //! generates from its own source comments. {} parameters.\n\n\
+         //! generates from its own source comments. {} sections, {total} parameters, {} distinct entries.\n\n\
          // These are ranges and defaults copied from firmware documentation, not computed\n\
          // constants: a parameter whose range happens to be -3.142 to 3.142 is expressing\n\
          // radians, not approximating pi badly.\n\
          #![allow(clippy::approx_constant)]\n\n\
-         use super::{{ParamMeta, UserLevel}};\n\n",
-        params.len()
+         use super::{{ParamMeta, Section, UserLevel}};\n\n",
+        sections.len(),
+        entries.len()
     ));
 
-    out.push_str("/// Every documented parameter, sorted by name so lookup is a binary search.\n");
-    out.push_str("pub static PARAMETERS: &[ParamMeta] = &[\n");
-    for meta in params.values() {
-        out.push_str("    ParamMeta {\n");
-        out.push_str(&format!("        name: \"{}\",\n", meta.name));
-        out.push_str(&format!(
-            "        display_name: \"{}\",\n",
-            meta.display_name
-        ));
-        out.push_str(&format!("        description: \"{}\",\n", meta.description));
-        out.push_str(&format!("        units: \"{}\",\n", meta.units));
-        match meta.range {
-            Some((low, high)) => {
-                out.push_str(&format!("        range: Some(({low:?}, {high:?})),\n"));
-            }
-            None => out.push_str("        range: None,\n"),
-        }
-        out.push_str(&format!("        range_text: \"{}\",\n", meta.range_text));
-        match meta.increment {
-            Some(step) => out.push_str(&format!("        increment: Some({step:?}),\n")),
-            None => out.push_str("        increment: None,\n"),
-        }
-        out.push_str("        values: &[");
-        for (number, label) in &meta.values {
-            out.push_str(&format!("({number}, \"{label}\"), "));
-        }
-        out.push_str("],\n        bitmask: &[");
-        for (bit, label) in &meta.bitmask {
-            out.push_str(&format!("({bit}, \"{label}\"), "));
-        }
-        out.push_str("],\n");
-        let level = match meta.user_level.as_str() {
-            "Standard" => "UserLevel::Standard",
-            "Advanced" => "UserLevel::Advanced",
-            _ => "UserLevel::Unspecified",
-        };
-        out.push_str(&format!("        user_level: {level},\n"));
-        out.push_str(&format!(
-            "        reboot_required: {},\n",
-            meta.reboot_required
-        ));
-        out.push_str("    },\n");
-    }
-    out.push_str("];\n");
-
-    // The names marked ReadOnly, sorted as the table is, for the same binary search.
     out.push_str(
-        "\n/// The parameters the file marks `<ReadOnly>True</ReadOnly>`, sorted by name: the C#'s \
-         fallback for a name the fetched documentation lacks.\n",
+        "/// Every distinct entry, sorted by name: a parameter documented alike in several sections \
+         is held once, one documented differently once for each way.\n",
     );
-    out.push_str("pub static READ_ONLY: &[&str] = &[\n");
-    for meta in params.values().filter(|meta| meta.read_only) {
-        out.push_str(&format!("    \"{}\",\n", meta.name));
+    out.push_str("pub(super) static ENTRIES: &[ParamMeta] = &[\n");
+    for source in &entries {
+        out.push_str(source);
+    }
+    out.push_str("];\n\n");
+
+    out.push_str(
+        "/// The vehicle sections, in the file's order: each one's parameters as places in \
+         [`ENTRIES`], in name order, and the names it marks `<ReadOnly>True</ReadOnly>`, sorted - \
+         the C#'s fallback for a name the fetched documentation lacks.\n",
+    );
+    out.push_str("pub(super) static SECTIONS: &[Section] = &[\n");
+    for (name, params) in &sections {
+        out.push_str("    Section {\n");
+        out.push_str(&format!("        name: \"{name}\",\n"));
+        out.push_str("        entries: &[");
+        for meta in params.values() {
+            let source = entry_source(meta);
+            let at = place
+                .get(source.as_str())
+                .with_context(|| format!("{name}'s {} has no place", meta.name))?;
+            out.push_str(&format!("{at}, "));
+        }
+        out.push_str("],\n        read_only: &[");
+        for meta in params.values().filter(|meta| meta.read_only) {
+            out.push_str(&format!("\"{}\", ", meta.name));
+        }
+        out.push_str("],\n    },\n");
     }
     out.push_str("];\n");
 
     Ok(out)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A file of two sections of a hundred parameters each, `P050` documented differently in
+    /// the second, and a parameter only the first has.
+    fn two_sections() -> String {
+        let section = |name: &str, extra: &str, p050: &str| {
+            let mut body = String::new();
+            for n in 0..100 {
+                let description = if n == 50 { p050 } else { "alike" };
+                body.push_str(&format!(
+                    "<P{n:03}><DisplayName>P{n:03}</DisplayName><Description>{description}</Description></P{n:03}>"
+                ));
+            }
+            body.push_str(extra);
+            format!("<{name}>{body}</{name}>")
+        };
+        format!(
+            "\u{feff}<?xml version=\"1.0\" encoding=\"utf-8\"?>\n<Params>{}{}</Params>",
+            section(
+                "A",
+                "<ONLY_A><DisplayName>a</DisplayName><ReadOnly>True</ReadOnly></ONLY_A>",
+                "first"
+            ),
+            section("B", "", "second")
+        )
+    }
+
+    /// The sections are the elements under `<Params>`, in order, after a byte order mark; a
+    /// name given twice, another root, or no section at all is refused.
+    #[test]
+    fn the_sections_are_the_elements_under_params() {
+        assert_eq!(section_names(&two_sections()).unwrap(), ["A", "B"]);
+        assert!(section_names("<Params><A><X/></A><A><Y/></A></Params>").is_err());
+        assert!(section_names("<Other><A/></Other>").is_err());
+        assert!(section_names("<Params></Params>").is_err());
+    }
+
+    /// Every section is generated, by name; an entry documented alike in both is held once, the
+    /// one documented differently twice, the first section's first; each section's places are
+    /// in name order and its ReadOnly names its own.
+    #[test]
+    fn every_section_is_generated_and_alike_entries_are_held_once() {
+        let path = std::env::temp_dir().join(format!(
+            "xtask-param-meta-{}.xml",
+            std::process::id()
+        ));
+        std::fs::write(&path, two_sections()).unwrap();
+        let source = generate(&path).unwrap();
+        std::fs::remove_file(&path).unwrap();
+
+        assert!(source.contains("2 sections, 201 parameters, 102 distinct entries"));
+        // ONLY_A, then P000-P049, P050 twice, P051-P099.
+        assert_eq!(source.matches("    ParamMeta {\n").count(), 102);
+        let first = source.find("description: \"first\"").unwrap();
+        let second = source.find("description: \"second\"").unwrap();
+        assert!(first < second, "the first section's P050 first");
+        let list = |places: Vec<usize>| {
+            let mut text = String::from("entries: &[");
+            for place in places {
+                text.push_str(&format!("{place}, "));
+            }
+            text.push_str("],");
+            text
+        };
+        let a: Vec<usize> = std::iter::once(0).chain(1..=51).chain(53..=101).collect();
+        let b: Vec<usize> = (1..=50).chain(std::iter::once(52)).chain(53..=101).collect();
+        assert!(source.contains(&format!(
+            "        name: \"A\",\n        {}\n        read_only: &[\"ONLY_A\", ],",
+            list(a)
+        )));
+        assert!(source.contains(&format!(
+            "        name: \"B\",\n        {}\n        read_only: &[],",
+            list(b)
+        )));
+    }
 }

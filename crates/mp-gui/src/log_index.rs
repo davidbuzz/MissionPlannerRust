@@ -595,6 +595,10 @@ const LIST_HEIGHT: f32 = 460.0;
 /// `RowHeight`, and the picture's size in its cell: `new Bitmap(info.img, 150, 150)`.
 const ROW_HEIGHT: f32 = 150.0;
 const PICTURE: u32 = 150;
+/// Why Delete selected is dimmed, said when it is clicked (the owner's word of 2026-10-16):
+/// `btnDeleteLog` is disabled until a row is selected.
+/// `// C#: Log/LogIndex.Designer.cs:189; Log/LogIndex.cs:412-414`
+pub const NO_LOG_SELECTED: &str = "no log selected";
 /// The columns, in order: their headers and widths - 60 where the designer gives none, as
 /// ObjectListView's columns default. `// C#: Log/LogIndex.Designer.cs:96-174`
 const COLUMNS: [(&str, f32); 12] = [
@@ -1194,7 +1198,7 @@ pub fn window(
                     "experimental-logindex-delete",
                     "Delete selected",
                     theme::ACCENT,
-                    !form.selected.is_empty(),
+                    crate::ui::Live::when(!form.selected.is_empty(), NO_LOG_SELECTED),
                     cx.listener(|this, _event: &(), _window, cx| {
                         if let Some(form) = this.experimental.log_index.as_mut()
                             && !form.selected.is_empty()

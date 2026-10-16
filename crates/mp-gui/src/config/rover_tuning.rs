@@ -1086,7 +1086,8 @@ mod tests {
         }
     }
 
-    /// Part of ArduRover 4.5's documentation: the bundled table is the copter's.
+    /// Part of ArduRover 4.5's documentation, this test's own fixture (the bundled table has
+    /// had a rover section of its own since 2026-10-16; these tests read theirs).
     static ROVER: [ParamMeta; 6] = [
         meta(
             "ATC_STR_RAT_P",

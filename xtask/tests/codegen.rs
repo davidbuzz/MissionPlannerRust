@@ -99,19 +99,41 @@ fn flight_mode_table_is_current() {
     );
 }
 
-/// `crates/mp-params/src/generated/param_meta_copter.rs` is `codegen::param_meta::generate` for
-/// the `ArduCopter2` section, formatted.
+/// `crates/mp-params/src/generated/param_meta.rs` is `codegen::param_meta::generate` over every
+/// vehicle section of the metadata backup, formatted.
 #[test]
-fn copter_parameter_metadata_is_current() {
+fn parameter_metadata_is_current() {
     let Some(tree) = tree() else { return };
-    let source =
-        codegen::param_meta::generate(&tree.join("ParameterMetaDataBackup.xml"), "ArduCopter2")
-            .unwrap();
+    let source = codegen::param_meta::generate(&tree.join("ParameterMetaDataBackup.xml")).unwrap();
     assert_current(
-        &repo().join("crates/mp-params/src/generated/param_meta_copter.rs"),
-        &formatted("param_meta_copter.rs", &source),
+        &repo().join("crates/mp-params/src/generated/param_meta.rs"),
+        &formatted("param_meta.rs", &source),
         "codegen-param-meta",
     );
+}
+
+/// The file at 5dbb2b0 has five vehicle sections, the `Firmwares` names of the five ArduPilot
+/// vehicles, and the generated table holds each of them - which `mp_params::param_meta`'s own
+/// test names in the same order.
+/// `// C#: ExtLibs/ArduPilot/Firmwares.cs:6-18; ExtLibs/Utilities/ParameterMetaDataRepositoryAPM.cs:80`
+#[test]
+fn every_vehicle_section_of_the_metadata_is_generated() {
+    let Some(tree) = tree() else { return };
+    let xml = std::fs::read_to_string(tree.join("ParameterMetaDataBackup.xml")).unwrap();
+    let names = codegen::param_meta::section_names(&xml).unwrap();
+    assert_eq!(
+        names,
+        ["ArduCopter2", "ArduPlane", "ArduRover", "ArduSub", "ArduTracker"]
+    );
+    let committed =
+        std::fs::read_to_string(repo().join("crates/mp-params/src/generated/param_meta.rs"))
+            .unwrap();
+    for name in &names {
+        assert!(
+            committed.contains(&format!("name: \"{name}\",\n        entries: &[")),
+            "{name} is not in the generated table"
+        );
+    }
 }
 
 /// `crates/mp-mavlink-dialects/src/generated/all.rs` is the `all` dialect parsed and emitted,

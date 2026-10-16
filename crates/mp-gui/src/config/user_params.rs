@@ -750,7 +750,7 @@ mod tests {
     const ANSWERS_KEY: &str = "InputBoxParamsEnterParamNames";
 
     fn bundled(name: &str) -> Option<&'static mp_params::ParamMeta> {
-        mp_params::param_meta::lookup(name)
+        mp_params::param_meta::lookup("ArduCopter2", name)
     }
 
     fn key() -> Key {

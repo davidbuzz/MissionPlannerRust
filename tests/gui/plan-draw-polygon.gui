@@ -16,6 +16,11 @@ expect plan.menu.submenu menu-polygon
 click menu-addPolygonPoint2
 expect plan.draw draw-area
 expect survey.points 0
+# No corner yet: the area's undo is dimmed, and its click says why on the status line, quietly
+# (the owner's word of 2026-10-16).
+click survey-undo
+expect status nothing drawn
+expect survey.points 0
 
 click map@0.40x0.40:right
 click menu-polygon

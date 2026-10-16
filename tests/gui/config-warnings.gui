@@ -61,6 +61,13 @@ expect config.warnings.row.0.repeat 10
 expect config.warnings.row.0.coloring false
 expect config.warnings.row.0.addchild true
 
+# Its colour, disabled for a rule that speaks rather than colours (WarningControl.cs:301-331):
+# the click drops nothing down, and says why on the status line, quietly (the owner's word of
+# 2026-10-16).
+click warnings-0-color
+expect config.warnings.list none
+expect status not a QuickPanel Coloring warning
+
 # Its field: satcount, down the list.
 click warnings-0-source
 expect config.warnings.list warnings-0-source

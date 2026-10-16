@@ -46,6 +46,12 @@ expect config.inspector.history 50
 expect config.inspector.prompt none
 expect config.inspector.graphs 0
 
+# Graph It, disabled until a field is selected (MAVLinkInspector.cs:237, 322-337): its click asks
+# nothing, and says why on the status line, quietly (the owner's word of 2026-10-16).
+click inspector-graphit
+expect config.inspector.prompt none
+expect status no field selected
+
 # The timer's ticks: the vehicle, its autopilot, and what it sends.
 expect config.inspector.updates > 0
 expect config.inspector.vehicles Vehicle 1

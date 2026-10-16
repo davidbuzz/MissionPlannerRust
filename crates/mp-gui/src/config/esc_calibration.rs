@@ -797,7 +797,7 @@ mod tests {
     use mp_params::ParamMeta;
 
     fn bundled(name: &str) -> Option<&'static ParamMeta> {
-        mp_params::param_meta::lookup(name)
+        mp_params::param_meta::lookup("ArduCopter2", name)
     }
 
     fn sitl() -> Vec<(String, f64)> {

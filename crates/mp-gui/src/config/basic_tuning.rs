@@ -1247,7 +1247,8 @@ mod tests {
         }
     }
 
-    /// Part of ArduPlane 4.5's documentation: the bundled table is the copter's.
+    /// Part of ArduPlane 4.5's documentation, this test's own fixture (the bundled table has
+    /// had a plane section of its own since 2026-10-16; these tests read theirs).
     static PLANE: [ParamMeta; 9] = [
         meta(
             "THR_MAX",

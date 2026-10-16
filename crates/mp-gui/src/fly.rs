@@ -48,7 +48,7 @@ use crate::MissionPlanner;
 use crate::i18n::fl;
 use crate::telemetry::{Lookup, Report, TelemetryView};
 use crate::textfield::{KeyOutcome, TextField};
-use crate::ui::{action, action_sized, field, panel, theme};
+use crate::ui::{Live, action, action_sized, field, panel, theme};
 // Aliased because `mp_link::messages::Severity` is already `Severity` here and means something
 // else entirely: that one is how loud a STATUSTEXT was, this one is how bad a reading is.
 use mp_vehicle::health::Severity as Health;
@@ -60,6 +60,24 @@ pub const TAKEOFF_ALTITUDE: f32 = 10.0;
 /// `Settings.Instance["takeoff_alt", "5"]`: TakeOff's box offers the height last given, or this.
 /// `// C#: GCSViews/FlightData.cs:5408`
 pub const TAKEOFF_ALT_DEFAULT: &str = "5";
+
+/// Why a control that needs the vehicle is dimmed with none (the owner's word of 2026-10-16: a
+/// dimmed control, clicked, says why). The C#'s handlers return on `!BaseStream.IsOpen` without a
+/// word - `BUT_abortland_Click`, `BUT_ARM_Click` - and the port draws their buttons dimmed instead.
+/// `// C#: GCSViews/FlightData.cs:1021-1024, 1036-1039`
+pub const NO_VEHICLE: &str = "no vehicle";
+/// Why arm and force arm are dimmed while the vehicle is armed.
+pub const ALREADY_ARMED: &str = "already armed";
+/// Why disarm is dimmed while the vehicle is disarmed.
+pub const NOT_ARMED: &str = "not armed";
+/// Why reboot is dimmed while the vehicle is armed.
+pub const ARMED: &str = "the vehicle is armed";
+/// Why the page strip's left arrow is dimmed: the strip shows its first page's header first. The
+/// arrows are the `TabControl`'s own, a single-line strip's (`Multiline` false unless chosen).
+/// `// C#: GCSViews/FlightData.cs:431`
+pub const AT_FIRST_PAGE: &str = "at the first page";
+/// Why the right arrow is dimmed: the last page's header is the first shown.
+pub const AT_LAST_PAGE: &str = "at the last page";
 
 /// Width shared by the arm and force arm buttons.
 ///
@@ -96,6 +114,15 @@ pub fn actions_panel(
 ) -> impl IntoElement {
     let armed = view.state.as_ref().is_some_and(|s| s.armed);
     let has_vehicle = view.vehicle.is_some();
+    // Each dimmed one says why when it is clicked: no vehicle first, then the arming state.
+    let vehicle = Live::when(has_vehicle, NO_VEHICLE);
+    let unless = |live: bool, why: &'static str| {
+        if has_vehicle {
+            Live::when(live, why)
+        } else {
+            vehicle.clone()
+        }
+    };
 
     let controls = div()
         .flex()
@@ -105,7 +132,7 @@ pub fn actions_panel(
             "arm",
             "arm",
             theme::OK,
-            has_vehicle && !armed,
+            unless(!armed, ALREADY_ARMED),
             Some(ARM_BUTTON_WIDTH),
             cx.listener(|this, _event: &(), _window, cx| {
                 this.telemetry.arm(true);
@@ -116,7 +143,7 @@ pub fn actions_panel(
             "force-arm",
             "force arm",
             theme::ALERT,
-            has_vehicle && !armed,
+            unless(!armed, ALREADY_ARMED),
             Some(ARM_BUTTON_WIDTH),
             cx.listener(|this, _event: &(), _window, cx| {
                 this.begin_force_arm();
@@ -127,7 +154,7 @@ pub fn actions_panel(
             "disarm",
             "disarm",
             theme::ALERT,
-            has_vehicle && armed,
+            unless(armed, NOT_ARMED),
             cx.listener(|this, _event: &(), _window, cx| {
                 this.telemetry.arm(false);
                 cx.notify();
@@ -141,7 +168,7 @@ pub fn actions_panel(
             "takeoff",
             "TakeOff",
             theme::ACCENT,
-            has_vehicle,
+            vehicle.clone(),
             cx.listener(|this, _event: &(), window, cx| {
                 this.fly_takeoff_pressed(window, cx);
                 cx.notify();
@@ -151,7 +178,7 @@ pub fn actions_panel(
             "land",
             "land",
             theme::ACCENT,
-            has_vehicle,
+            vehicle.clone(),
             cx.listener(|this, _event: &(), _window, cx| {
                 this.telemetry.land();
                 cx.notify();
@@ -161,7 +188,7 @@ pub fn actions_panel(
             "reboot",
             "reboot",
             theme::WARN,
-            has_vehicle && !armed,
+            unless(!armed, ARMED),
             cx.listener(|this, _event: &(), _window, cx| {
                 this.telemetry.reboot();
                 this.file_status = Some("reboot sent; the link will drop".to_owned());
@@ -176,7 +203,7 @@ pub fn actions_panel(
                 "restore-checks",
                 "restore arming checks",
                 theme::OK,
-                has_vehicle,
+                vehicle.clone(),
                 cx.listener(|this, _event: &(), _window, cx| {
                     this.telemetry.enable_arming_checks();
                     this.disabled_arming_checks = false;
@@ -2579,14 +2606,15 @@ fn cell(column: i16, row: i16, content: impl IntoElement) -> gpui::Div {
 
 /// A button in the grid. The same look as [`crate::ui::action`], filling its cell with the label
 /// wrapped, because a fifth of the column is narrower than "Restart Mission" - as a fifth of the
-/// C#'s tab is.
+/// C#'s tab is. Dimmed for a reason, its click says why ([`crate::ui::dimmed_click`]).
 fn grid_button(
     id: &'static str,
     label: &'static str,
     colour: u32,
-    enabled: bool,
+    enabled: impl Into<Live>,
     on_click: impl Fn(&(), &mut Window, &mut gpui::App) + 'static,
 ) -> AnyElement {
+    let live = enabled.into();
     let base = crate::probe::measured(id, div())
         .id(id)
         .w_full()
@@ -2600,7 +2628,7 @@ fn grid_button(
         .text_xs()
         .text_center()
         .child(label);
-    if enabled {
+    if live.is_live() {
         base.bg(rgb(theme::ACTION))
             .border_color(rgb(colour))
             .text_color(rgb(colour))
@@ -2609,10 +2637,13 @@ fn grid_button(
             .on_click(move |_event, window, cx| on_click(&(), window, cx))
             .into_any_element()
     } else {
-        base.bg(rgb(theme::PANEL))
-            .border_color(rgb(theme::BORDER))
-            .text_color(rgb(theme::DIM))
-            .into_any_element()
+        crate::ui::dimmed_click(
+            base.bg(rgb(theme::PANEL))
+                .border_color(rgb(theme::BORDER))
+                .text_color(rgb(theme::DIM)),
+            &live,
+        )
+        .into_any_element()
     }
 }
 
@@ -2685,7 +2716,8 @@ struct ModifyAndSetCell<'a> {
     label: &'static str,
     control: &'a ModifyAndSet,
     focus: &'a FocusHandle,
-    enabled: bool,
+    /// The button's state, and why it is dimmed.
+    enabled: Live,
     select: Select,
     press: fn(&mut MissionPlanner),
 }
@@ -2739,7 +2771,7 @@ fn actions_tab(
     window: &Window,
     cx: &mut Context<MissionPlanner>,
 ) -> AnyElement {
-    let has_vehicle = view.vehicle.is_some();
+    let vehicle = Live::when(view.vehicle.is_some(), NO_VEHICLE);
     let setwp_text = tab
         .setwp_items
         .get(tab.setwp_selected)
@@ -2777,7 +2809,7 @@ fn actions_tab(
                 "fly-doaction",
                 fl!("flightdata-BUTactiondo-Text"),
                 theme::WARN,
-                has_vehicle,
+                vehicle.clone(),
                 cx.listener(|this, _event: &(), window, cx| {
                     this.fly_do_action(window, cx);
                     cx.notify();
@@ -2810,7 +2842,7 @@ fn actions_tab(
                 label: "Change Speed",
                 control: &tab.speed,
                 focus: &focus.speed,
-                enabled: has_vehicle,
+                enabled: vehicle.clone(),
                 select: |actions| &mut actions.speed,
                 press: MissionPlanner::fly_change_speed,
             }
@@ -2837,7 +2869,7 @@ fn actions_tab(
                 "fly-setwp",
                 fl!("flightdata-BUT_setwp-Text"),
                 theme::ACCENT,
-                has_vehicle,
+                vehicle.clone(),
                 cx.listener(|this, _event: &(), _window, cx| {
                     this.fly_set_wp();
                     cx.notify();
@@ -2851,7 +2883,7 @@ fn actions_tab(
                 "fly-restartmission",
                 fl!("flightdata-BUTrestartmission-Text"),
                 theme::ACCENT,
-                has_vehicle,
+                vehicle.clone(),
                 cx.listener(|this, _event: &(), _window, cx| {
                     this.fly_restart_mission();
                     cx.notify();
@@ -2866,7 +2898,7 @@ fn actions_tab(
                 label: "Change Alt",
                 control: &tab.alt,
                 focus: &focus.alt,
-                enabled: has_vehicle,
+                enabled: vehicle.clone(),
                 select: |actions| &mut actions.alt,
                 press: MissionPlanner::fly_change_alt,
             }
@@ -2882,7 +2914,7 @@ fn actions_tab(
                 label: "Set Loiter Rad",
                 control: &tab.loiter_rad,
                 focus: &focus.loiter_rad,
-                enabled: has_vehicle,
+                enabled: vehicle.clone(),
                 select: |actions| &mut actions.loiter_rad,
                 press: MissionPlanner::fly_set_loiter_rad,
             }
@@ -2928,7 +2960,7 @@ fn actions_tab(
                 "fly-mountmode",
                 fl!("flightdata-BUT_mountmode-Text"),
                 theme::ACCENT,
-                has_vehicle,
+                vehicle.clone(),
                 cx.listener(|this, _event: &(), _window, cx| {
                     this.fly_set_mount();
                     cx.notify();
@@ -2957,7 +2989,7 @@ fn actions_tab(
                 "fly-sendmsg",
                 fl!("flightdata-BUT_SendMSG-Text"),
                 theme::ACCENT,
-                has_vehicle,
+                vehicle.clone(),
                 cx.listener(|this, _event: &(), window, cx| {
                     this.fly_ask_message(window, cx);
                     cx.notify();
@@ -2971,7 +3003,7 @@ fn actions_tab(
                 "fly-resumemis",
                 fl!("flightdata-BUT_resumemis-Text"),
                 theme::WARN,
-                has_vehicle,
+                vehicle.clone(),
                 cx.listener(|this, _event: &(), window, cx| {
                     this.fly_actions.ask(Prompt::ResumeWarning, "");
                     // No box, but OK and closing it are Enter and Escape.
@@ -2987,7 +3019,7 @@ fn actions_tab(
                 "fly-abortland",
                 fl!("flightdata-BUT_abortland-Text"),
                 theme::WARN,
-                has_vehicle,
+                vehicle.clone(),
                 cx.listener(|this, _event: &(), _window, cx| {
                     this.fly_abort_land();
                     cx.notify();
@@ -3959,7 +3991,7 @@ pub fn page_strip(pages: &Pages, cx: &mut Context<MissionPlanner>) -> impl IntoE
                 .child(strip_arrow(
                     "fly-tabs-left",
                     "\u{25c2}",
-                    pages.can_scroll_left(),
+                    Live::when(pages.can_scroll_left(), AT_FIRST_PAGE),
                     cx.listener(|this, _event: &(), _window, cx| {
                         this.fly_pages.scroll_left();
                         cx.notify();
@@ -3968,7 +4000,7 @@ pub fn page_strip(pages: &Pages, cx: &mut Context<MissionPlanner>) -> impl IntoE
                 .child(strip_arrow(
                     "fly-tabs-right",
                     "\u{25b8}",
-                    pages.can_scroll_right(),
+                    Live::when(pages.can_scroll_right(), AT_LAST_PAGE),
                     cx.listener(|this, _event: &(), _window, cx| {
                         this.fly_pages.scroll_right();
                         cx.notify();
@@ -3977,13 +4009,14 @@ pub fn page_strip(pages: &Pages, cx: &mut Context<MissionPlanner>) -> impl IntoE
         }))
 }
 
-/// One of the strip's two arrows.
+/// One of the strip's two arrows: dimmed with nowhere to go, its click then saying so.
 fn strip_arrow(
     id: &'static str,
     label: &'static str,
-    enabled: bool,
+    enabled: impl Into<Live>,
     on_click: impl Fn(&(), &mut Window, &mut gpui::App) + 'static,
 ) -> AnyElement {
+    let live = enabled.into();
     let base = crate::probe::measured(id, div())
         .id(id)
         .px_1()
@@ -3991,7 +4024,7 @@ fn strip_arrow(
         .border_1()
         .text_xs()
         .child(label);
-    if enabled {
+    if live.is_live() {
         base.border_color(rgb(theme::BORDER))
             .text_color(rgb(theme::TEXT))
             .cursor_pointer()
@@ -3999,9 +4032,12 @@ fn strip_arrow(
             .on_click(move |_event, window, cx| on_click(&(), window, cx))
             .into_any_element()
     } else {
-        base.border_color(rgb(theme::BORDER))
-            .text_color(rgb(theme::DIM))
-            .into_any_element()
+        crate::ui::dimmed_click(
+            base.border_color(rgb(theme::BORDER))
+                .text_color(rgb(theme::DIM)),
+            &live,
+        )
+        .into_any_element()
     }
 }
 
@@ -12795,7 +12831,7 @@ mod tests {
     /// for; with nothing to choose it is `Strings.ErrorNoResponse`.
     #[test]
     fn set_mount_writes_mnt_mode_or_sends_mount_control() {
-        let modes = mount_modes(mp_params::param_meta::lookup);
+        let modes = mount_modes(|name| mp_params::param_meta::lookup("ArduCopter2", name));
         assert_eq!(modes.first(), Some(&(0, "Retracted".to_owned())));
         assert!(modes.contains(&(2, "MavLink Targeting".to_owned())));
         let with = vec![("MNT_MODE".to_owned(), 0.0)];

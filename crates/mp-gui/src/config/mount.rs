@@ -74,7 +74,7 @@ use gpui::{AnyElement, Context, KeyDownEvent, Window, div, prelude::*, px, rgb};
 use super::battery_monitor::param_text;
 use super::optional::{
     Event, Focus, Job, Set, SetQueue, failure_status, group, has, heading, label, message_box,
-    picture, plain, rule, timeout_text, value_of,
+    no_parameter, picture, plain, rule, timeout_text, value_of,
 };
 use crate::MissionPlanner;
 use crate::config::failsafe::{Lookup, options};
@@ -85,7 +85,7 @@ use crate::config::servo_output::{
 };
 use crate::setup::Key;
 use crate::telemetry::{Telemetry, TelemetryView};
-use crate::ui::{action, panel, theme};
+use crate::ui::{Live, action, panel, theme};
 
 /// The page's title in Initial Setup's list, `backstageViewPagegimbal.Text`.
 /// `// C#: GCSViews/InitialSetup.resx:540-542`
@@ -1381,11 +1381,30 @@ const LABELS: [(f32, f32, &str, bool); 36] = [
     (180.0, 559.0, TRIGGER_NOTE, true),
 ];
 
+/// Why the page is disabled when `CAM_TRIGG_TYPE` is there: `Activate`'s `catch` disabled it,
+/// a write having failed. `// C#: GCSViews/ConfigurationView/ConfigMount.cs:163-167`
+pub const WRITE_FAILED: &str = "a write failed as the page opened";
+
+/// The page as it is drawn: live, or - `Enabled = false` for the life of the page object -
+/// dimmed and why, said when anything on it is clicked (the owner's word of 2026-10-16): no
+/// `CAM_TRIGG_TYPE`, the camera trigger of firmware before 4.3, or a write that failed.
+/// `// C#: GCSViews/ConfigurationView/ConfigMount.cs:104-112, 163-167`
+#[must_use]
+pub fn page_live(mount: &Mount, parameters: &[(String, f64)]) -> Live {
+    if mount.enabled {
+        Live::Yes
+    } else if value_of(parameters, "CAM_TRIGG_TYPE").is_none() {
+        Live::dimmed(no_parameter("CAM_TRIGG_TYPE"))
+    } else {
+        Live::dimmed(WRITE_FAILED)
+    }
+}
+
 /// The page, laid out as `ConfigMount.resx` lays it out.
 pub fn page(
     mount: &Mount,
     focus: &Focus,
-    _view: &TelemetryView,
+    view: &TelemetryView,
     window: &Window,
     cx: &mut Context<MissionPlanner>,
 ) -> AnyElement {
@@ -1608,6 +1627,9 @@ pub fn page(
             ));
         }
     }
+    // Disabled, the page's controls take no click, and one clicked reaches the page, which says
+    // why on the status line, quietly - the Wiki link among them.
+    let body = crate::ui::dimmed_click(body.id("mount-page"), &page_live(mount, &view.parameters));
     panel(TITLE, body).into_any_element()
 }
 
@@ -1669,7 +1691,7 @@ mod tests {
     use mp_link::requests::RequestOutcome;
 
     fn bundled(name: &str) -> Option<&'static mp_params::ParamMeta> {
-        mp_params::param_meta::lookup(name)
+        mp_params::param_meta::lookup("ArduCopter2", name)
     }
 
     fn table(entries: &[(&str, f64)]) -> Vec<(String, f64)> {
@@ -1846,6 +1868,27 @@ mod tests {
         );
         assert_eq!(old.channel(Channel::Pan).options.len(), 11);
         assert_eq!(old.channel(Channel::Pan).options[1].1, "RC5");
+    }
+
+    /// The page disabled for want of `CAM_TRIGG_TYPE` says so when it is clicked; with the
+    /// parameter it is live (the owner's word of 2026-10-16).
+    /// `// C#: GCSViews/ConfigurationView/ConfigMount.cs:104-112`
+    #[test]
+    fn a_page_without_the_camera_trigger_says_why_it_is_dimmed() {
+        let mut page = Mount::default();
+        let modern = table(&[("SERVO1_MIN", 1100.0), ("CAM1_TYPE", 0.0)]);
+        page.activate(&modern, key(), Firmware::ArduCopter2, bundled);
+        assert!(!page.enabled());
+        assert_eq!(
+            page_live(&page, &modern),
+            Live::dimmed("no CAM_TRIGG_TYPE on the vehicle")
+        );
+        let mut status = None;
+        assert!(!crate::ui::click(&page_live(&page, &modern), &mut status));
+        assert_eq!(status.as_deref(), Some("no CAM_TRIGG_TYPE on the vehicle"));
+        let mut gimballed = Mount::default();
+        gimballed.activate(&gimbal(), key(), Firmware::ArduCopter2, bundled);
+        assert_eq!(page_live(&gimballed, &gimbal()), Live::Yes);
     }
 
     /// `Activate` finds tilt on SERVO9 and the shutter on SERVO10, writes what the vehicle holds -

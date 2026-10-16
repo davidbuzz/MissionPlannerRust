@@ -4500,6 +4500,12 @@ fn mode_controls(
     }
 }
 
+/// Why the survey area's and the fence's undo and clear are dimmed with no corner drawn, said when
+/// one is clicked (the owner's word of 2026-10-16: a dimmed control, clicked, says why). The C#'s
+/// Clear Polygon returns on no polygon without a word; the port dims the buttons instead.
+/// `// C#: GCSViews/FlightPlanner.cs:2084-2094`
+pub const NOTHING_DRAWN: &str = "nothing drawn";
+
 /// Undo and clear for the survey area's corners. How the survey is flown is the Survey (Grid)
 /// dialog's, from the map menu's Auto WP (`survey_ui.rs`).
 fn survey_controls(state: &DrawState<'_>, cx: &mut Context<MissionPlanner>) -> impl IntoElement {
@@ -4516,7 +4522,7 @@ fn survey_controls(state: &DrawState<'_>, cx: &mut Context<MissionPlanner>) -> i
                     "survey-undo",
                     "undo corner",
                     theme::TEXT,
-                    state.area_vertices > 0,
+                    crate::ui::Live::when(state.area_vertices > 0, NOTHING_DRAWN),
                     cx.listener(|this, _event: &(), _window, cx| {
                         this.plan.undo_area_vertex();
                         this.sync_map_polygon();
@@ -4527,7 +4533,7 @@ fn survey_controls(state: &DrawState<'_>, cx: &mut Context<MissionPlanner>) -> i
                     "survey-clear",
                     "clear area",
                     theme::TEXT,
-                    state.area_vertices > 0,
+                    crate::ui::Live::when(state.area_vertices > 0, NOTHING_DRAWN),
                     cx.listener(|this, _event: &(), _window, cx| {
                         this.plan.clear_area();
                         this.sync_map_polygon();
@@ -4568,7 +4574,7 @@ fn fence_controls(
                     "fence-undo",
                     "undo corner",
                     theme::TEXT,
-                    state.fence_vertices > 0,
+                    crate::ui::Live::when(state.fence_vertices > 0, NOTHING_DRAWN),
                     cx.listener(|this, _event: &(), _window, cx| {
                         this.plan.undo_fence_vertex();
                         this.sync_map_fence();
@@ -4579,7 +4585,7 @@ fn fence_controls(
                     "fence-clear",
                     "clear fence",
                     theme::TEXT,
-                    state.fence_vertices > 0,
+                    crate::ui::Live::when(state.fence_vertices > 0, NOTHING_DRAWN),
                     cx.listener(|this, _event: &(), _window, cx| {
                         this.plan.clear_fence();
                         this.sync_map_fence();
@@ -6222,7 +6228,8 @@ pub fn dialog_path(typed: &str, extension: &str, directory: &Path) -> Option<Pat
 }
 
 /// A typed path: absolute as it is, `~` from the home folder, anything else from `directory`.
-fn typed_path(typed: &str, directory: &Path) -> Option<PathBuf> {
+#[must_use]
+pub(crate) fn typed_path(typed: &str, directory: &Path) -> Option<PathBuf> {
     if typed == "~" {
         return home_directory();
     }

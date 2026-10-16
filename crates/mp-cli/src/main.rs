@@ -1038,6 +1038,10 @@ fn connect_and_download(url: &str) -> Option<(Link, mp_vehicle::VehicleId, Param
     Some((link, id, table))
 }
 
+/// The bundled documentation's section these commands read: the copter's, the one the table
+/// held before it held every vehicle's.
+const BUNDLED_SECTION: &str = "ArduCopter2";
+
 fn params(url: &str, filter: Option<&str>) -> std::process::ExitCode {
     let Some((_link, _id, table)) = connect_and_download(url) else {
         return std::process::ExitCode::FAILURE;
@@ -1048,7 +1052,7 @@ fn params(url: &str, filter: Option<&str>) -> std::process::ExitCode {
             Some(value) => {
                 println!("{name} = {} ({:?})", value.as_f64(), value.param_type());
                 // The number alone is rarely what someone needs; the documentation is the point.
-                if let Some(meta) = mp_params::param_meta::lookup(name) {
+                if let Some(meta) = mp_params::param_meta::lookup(BUNDLED_SECTION, name) {
                     if !meta.display_name.is_empty() {
                         println!("  {}", meta.display_name);
                     }
@@ -1102,7 +1106,7 @@ fn params(url: &str, filter: Option<&str>) -> std::process::ExitCode {
             let mut undocumented = 0usize;
             let mut out_of_range = Vec::new();
             for (name, value) in table.iter() {
-                let meta = mp_params::param_meta::lookup(name);
+                let meta = mp_params::param_meta::lookup(BUNDLED_SECTION, name);
                 let units = meta.map_or("", |m| m.units);
                 if meta.is_none() {
                     undocumented += 1;
@@ -1506,7 +1510,7 @@ fn param_diff(current: &str, proposed: &str) -> std::process::ExitCode {
     for difference in &differences {
         // The documentation is what turns a number into a decision. Somebody comparing a suggested
         // tune against their own wants to know what ATC_RAT_PIT_D is before changing it.
-        let meta = mp_params::param_meta::lookup(&difference.name);
+        let meta = mp_params::param_meta::lookup(BUNDLED_SECTION, &difference.name);
         let units = meta.map_or("", |m| m.units);
         let units = if units.is_empty() {
             String::new()

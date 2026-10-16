@@ -154,6 +154,13 @@ pub const REBOOT_QUESTION: &str = "Reboot?";
 /// `// C#: GCSViews/ConfigurationView/ConfigHWCompass2.cs:519-532`
 pub const NONE_MISSING: &str = "no compass is missing";
 
+/// Why the onboard calibration's Accept and Cancel are dimmed, said when one is clicked (the
+/// owner's word of 2026-10-16): disabled in the Designer, enabled by Start, and disabled again
+/// once every compass has finished.
+/// `// C#: GCSViews/ConfigurationView/ConfigHWCompass2.Designer.cs:276, 288; ConfigHWCompass2.cs:
+/// 291-292, 457-461`
+pub const NO_CALIBRATION_RUNNING: &str = "no calibration running";
+
 /// What the timer says when every compass it heard from has saved its calibration.
 /// `// C#: GCSViews/ConfigurationView/ConfigHWCompass2.cs:457-463`
 pub const PLEASE_REBOOT: &str = "Please reboot the autopilot";
@@ -3059,12 +3066,13 @@ fn group_box(place: (f32, f32, f32, f32), text: &'static str) -> Div {
         )
 }
 
-/// A button at its `Location`, its `Size`'s width at least.
+/// A button at its `Location`, its `Size`'s width at least; dimmed for a reason, its click says
+/// why ([`crate::ui::Live`]).
 pub(super) fn button(
     (x, y, width): (f32, f32, f32),
     id: &'static str,
     text: &'static str,
-    enabled: bool,
+    enabled: impl Into<crate::ui::Live>,
     on_click: impl Fn(&(), &mut Window, &mut gpui::App) + 'static,
 ) -> Div {
     div().absolute().left(px(x)).top(px(y)).child(action_sized(
@@ -3396,6 +3404,16 @@ fn onboard_group(
 ) -> AnyElement {
     let onboard = &compass.onboard;
     let [start_x, accept_x, cancel_x] = layout.buttons;
+    // Accept and Cancel, disabled until Start and again once every compass has finished, say so
+    // when clicked (the owner's word of 2026-10-16).
+    // C#: ConfigHWCompass2.Designer.cs:276, 288; ConfigHWCompass2.cs:291-292, 457-461
+    let running = |on: bool| {
+        if enabled {
+            crate::ui::Live::when(on, NO_CALIBRATION_RUNNING)
+        } else {
+            crate::ui::Live::Inert
+        }
+    };
     let mut group = group_box(layout.group, "Onboard Mag Calibration")
         .child(button(
             (start_x, 20.0, 75.0),
@@ -3412,7 +3430,7 @@ fn onboard_group(
             (accept_x, 20.0, 75.0),
             "compass-cal-accept",
             "Accept",
-            enabled && onboard.accept_enabled,
+            running(onboard.accept_enabled),
             cx.listener(|this, _event: &(), _window, cx| {
                 this.compass.click_accept();
                 cx.notify();
@@ -3422,7 +3440,7 @@ fn onboard_group(
             (cancel_x, 20.0, 75.0),
             "compass-cal-cancel",
             "Cancel",
-            enabled && onboard.cancel_enabled,
+            running(onboard.cancel_enabled),
             cx.listener(|this, _event: &(), _window, cx| {
                 this.compass.click_cancel();
                 cx.notify();
@@ -4172,7 +4190,7 @@ mod tests {
 
     /// The bundled documentation, so no test depends on what another has fetched.
     fn bundled(name: &str) -> Option<&'static mp_params::ParamMeta> {
-        mp_params::param_meta::lookup(name)
+        mp_params::param_meta::lookup("ArduCopter2", name)
     }
 
     fn params(list: &[(&str, f64)]) -> Vec<(String, f64)> {

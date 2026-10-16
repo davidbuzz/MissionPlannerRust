@@ -115,10 +115,14 @@ expect sitl.typing none
 expect sitl.wipe true
 expect sitl.cmdline foo 1
 
-# The Multilink buttons are dimmed: a press starts nothing and asks nothing.
+# The Multilink buttons are dimmed: a press starts nothing and asks nothing - and says why on the
+# status line, quietly, the port's ruling as Ctrl+D says it (the owner's word of 2026-10-16;
+# SITL.cs:820-824, 829-991, 1132-1145).
 click sitl-swarm-link
+expect status Multilink swarms connect one link per vehicle (MainV2.Comports), which is not ported
 click sitl-swarm-plane
 click sitl-swarm-rover
+expect status ~ which is not ported
 expect sitl.howmany.open false
 expect sitl.running false
 

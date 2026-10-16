@@ -82,12 +82,16 @@ EXPERIMENTAL's ReSort All logs ("N logs sorted"), and Force Accel Cal and Force 
 ## Decided by the owner (2026-10-16)
 
 1. **Dimmed controls** (45 rows, listed below): a click on a dimmed control says why on the status
-   line, quietly, as the Advanced page's withheld buttons do - being made.
+   line, quietly, as the Advanced page's withheld buttons do - done 2026-10-16 (`ui::Live`: the
+   reason a control is dimmed for travels with it, its click says it and does nothing else; each
+   reason is the C#'s own condition for `Enabled = false`, cited at the site). Beta Updates, listed
+   among the 45, is live instead: the updater is ported and reads `beta_updates` (the ledger audit).
 2. **FLIGHT DATA's tuning graph, its Clear button**: removed (bc2b1cf); the graph is emptied as
    playback starts, as the C#'s is.
 3. **Confirmations of a silent success** (above): kept.
-4. **CONFIG > Planner > Browse**: the planner's own chooser, as every other file dialog is - being
-   made.
+4. **CONFIG > Planner > Browse**: the planner's own chooser, as every other file dialog is - done
+   2026-10-16 (`file_list::Chooser::folders`, a folder mode: `..` and folders, a folder clicked
+   opened into the box, OK the folder the box names; `config-planner-browse.gui`).
 5. **SETUP > Frame Type**: the class or type the vehicle has, clicked, says "already Quad" or
    "already Plus" (a665094).
 

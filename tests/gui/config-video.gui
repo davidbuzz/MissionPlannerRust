@@ -25,7 +25,8 @@
 
 screen config
 window 1600x1200
-budget 12
+budget 15
+# 15: 13.6 s measured headless on lavapipe (2026-10-16, the dimmed clicks added), the rule's ceiling plus one.
 env XDG_DATA_HOME $WORK
 env MP_CONFIG_XML $WORK/config.xml
 # The capture is mp_video: V4L2 on Linux, Media Foundation on Windows. The tiny10 VM has no
@@ -67,6 +68,12 @@ expect config.planner.video.frames > 10
 expect config.planner.video_device 0
 expect config.planner.video_options 0
 expect hud.camera ~ x
+
+# Start again while it runs: disabled, as the C#'s is once a capture has started (:279), so it
+# changes nothing and says why on the status line (the owner's word of 2026-10-16).
+click planner-BUT_videostart
+expect status a video capture is running
+expect config.planner.video.running true
 
 # The HUD on the flight screen, over the picture; then back to the page, still capturing.
 click tab-fly

@@ -126,6 +126,11 @@ pub const CLIENT: (f32, f32) = (526.0, 311.0);
 pub const GRAPH_IT: &str = "Graph It";
 /// `but_graphit`'s `Location` and `Size`. `// C#: Controls/MAVLinkInspector.cs:238-240`
 const GRAPH_IT_AT: (f32, f32, f32, f32) = (12.0, 3.0, 75.0, 23.0);
+/// Why Graph It is dimmed, said when it is clicked (the owner's word of 2026-10-16): disabled in
+/// the Designer, enabled by a field's node selected - one whose parent is a message, named by its
+/// id - and disabled again once its graph opens.
+/// `// C#: Controls/MAVLinkInspector.cs:237, 322-337, 445`
+pub const NO_FIELD_SELECTED: &str = "no field selected";
 
 /// `chk_gcstraffic.Text`. `// C#: Controls/MAVLinkInspector.cs:253`
 pub const GCS_TRAFFIC: &str = "Show GCS Traffic";
@@ -1910,7 +1915,7 @@ fn form(
             "inspector-graphit",
             GRAPH_IT,
             GRAPH_IT_AT,
-            inspector.graph_it,
+            crate::ui::Live::when(inspector.graph_it, NO_FIELD_SELECTED),
             move |this, window, cx| {
                 if let Some(inspector) = access(this) {
                     inspector.press_graph_it();

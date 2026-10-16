@@ -2482,6 +2482,13 @@ pub fn list_body(
     body
 }
 
+/// Why `panel1`'s two Save buttons are dimmed, said when one is clicked (the owner's word of
+/// 2026-10-16): the panel is disabled in the Designer, and the code that would fill it from the
+/// vehicle and enable it is commented out.
+/// `// C#: GCSViews/ConfigurationView/ConfigADSB.resx:399-401; ConfigADSB.cs:260-304, 673-709`
+pub const PANEL1_COMMENTED_OUT: &str =
+    "commented out in Mission Planner: nothing fills or saves it";
+
 /// The page, laid out as `ConfigADSB.resx` lays it out: the list's buttons, `panel1` - disabled,
 /// as the Designer leaves it; nothing enables it - and the controls.
 pub fn page(
@@ -2511,7 +2518,7 @@ pub fn page(
             "adsb-saveflid",
             "Save",
             (201.0, 2.0, 103.0, 19.0),
-            false,
+            crate::ui::Live::dimmed(PANEL1_COMMENTED_OUT),
             |_, _, _| {},
             cx,
         ))
@@ -2531,7 +2538,7 @@ pub fn page(
             "adsb-saveacreg",
             "Save",
             (521.0, 3.0, 103.0, 19.0),
-            false,
+            crate::ui::Live::dimmed(PANEL1_COMMENTED_OUT),
             |_, _, _| {},
             cx,
         ));
@@ -2690,7 +2697,7 @@ mod tests {
     use mp_link::requests::RequestOutcome;
 
     fn bundled(name: &str) -> Option<&'static mp_params::ParamMeta> {
-        mp_params::param_meta::lookup(name)
+        mp_params::param_meta::lookup("ArduCopter2", name)
     }
 
     /// The bundled documentation, with a range and an increment for `AVD_F_DIST_XY`, which it

@@ -27,7 +27,8 @@ setup mkdir -p "$WORK/MissionPlannerRust/srtm" && python3 -c 'import sys, zipfil
 
 screen fly
 window 1600x1200
-budget 25
+budget 29
+# 29: 27.9 s measured headless on lavapipe (2026-10-16, the dimmed clicks added), the rule's ceiling plus one.
 # DataFlash Logs is the last header: bring it to the front of the row, then show its page.
 click fly-tabs-right
 click fly-tabs-right
@@ -99,6 +100,18 @@ click georef-prompt-ok
 expect fly.georef.prompt none
 expect fly.georef.TXT_logfile ~ /logs/camera.bin
 expect fly.georef.TXT_jpgdir ~ /logs
+
+# Estimate Offset and its seconds, dimmed outside the Time offset mode, and GeoTag Images before a
+# Pre-process (georefimage.cs:31, 338-357; georefimage.resx:252-254): each click runs nothing and
+# says why on the status line, quietly (the owner's word of 2026-10-16).
+click georef-BUT_estoffset
+expect status not in time offset mode
+expect fly.georef.running none
+click georef-BUT_Geotagimages
+expect status not pre-processed yet
+expect fly.georef.running none
+click georef-TXT_offsetseconds
+expect status not in time offset mode
 
 # Estimate Offset: in the time offset panel, which its radio button enables.
 click georef-RDIO_TimeOffset

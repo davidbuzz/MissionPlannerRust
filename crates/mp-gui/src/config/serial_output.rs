@@ -312,18 +312,21 @@ pub fn item_id(combo: &str, index: usize, text: &str) -> String {
 }
 
 /// A combo as the windows draw one: the text, an arrow, and its list below while it is open.
+/// Dimmed for a reason ([`crate::ui::Live`]), its click says why.
 #[allow(clippy::too_many_arguments)] // the combo's parts
 pub fn combo(
     id: &str,
     text: &str,
     items: &[String],
     open: bool,
-    enabled: bool,
+    enabled: impl Into<crate::ui::Live>,
     (x, y, width, height): (f32, f32, f32, f32),
     on_toggle: impl Fn(&mut MissionPlanner) + 'static,
     on_choose: impl Fn(&mut MissionPlanner, usize) + 'static + Clone,
     cx: &mut Context<MissionPlanner>,
 ) -> AnyElement {
+    let live = enabled.into();
+    let enabled = live.is_live();
     let box_id = id.to_owned();
     let mut element = div().absolute().left(px(x)).top(px(y)).w(px(width));
     let head = crate::probe::measured(box_id.clone(), div())
@@ -360,7 +363,7 @@ pub fn combo(
                 cx.notify();
             }))
     } else {
-        head
+        crate::ui::dimmed_click(head, &live)
     };
     element = element.child(head);
     if open && enabled {

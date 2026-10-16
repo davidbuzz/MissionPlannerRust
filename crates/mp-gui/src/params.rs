@@ -918,6 +918,13 @@ fn step_button(
         }))
 }
 
+/// Why apply is dimmed: no comparison has found a value to change. The C#'s Write of a compared
+/// file is the comparison form's own Continue, which only Compare Params opens, so there is
+/// nothing to press before a comparison (the owner's word of 2026-10-16: a dimmed control, clicked,
+/// says why).
+/// `// C#: GCSViews/ConfigurationView/ConfigRawParams.cs:396-419; Controls/paramcompare.cs:65-110`
+pub const NO_CHANGE_COMPARED: &str = "no comparison has found a change";
+
 /// Saving, loading and comparing `.param` files.
 ///
 /// This is how a build gets backed up before it is changed, how a setup is cloned onto a second
@@ -1057,7 +1064,7 @@ pub fn file_panel(
                             format!("apply {changed}")
                         },
                         theme::WARN,
-                        changed > 0,
+                        crate::ui::Live::when(changed > 0, NO_CHANGE_COMPARED),
                         cx.listener(|this, _event: &(), _window, cx| {
                             this.apply_params();
                             cx.notify();
@@ -1540,7 +1547,7 @@ mod tests {
 
     /// The bundled documentation, which no test installs over as one can the fetched file.
     fn bundled(name: &str) -> Option<&'static ParamMeta> {
-        mp_params::param_meta::lookup(name)
+        mp_params::param_meta::lookup("ArduCopter2", name)
     }
 
     /// A frame whose view carries the same list as the last collects nothing: it is handed what
@@ -1686,7 +1693,7 @@ mod tests {
         Parameter {
             name: name.to_owned(),
             value,
-            meta: mp_params::param_meta::lookup(name),
+            meta: mp_params::param_meta::lookup("ArduCopter2", name),
             default: None,
         }
     }
@@ -2019,7 +2026,7 @@ mod tests {
         // out-of-range write and then behaves oddly.
         // ACCEL_Z_D documents one; BATT_CAPACITY, checked first, does not - not every parameter
         // has a range, which is why the editor only shows one when there is one to show.
-        let meta = mp_params::param_meta::lookup("ACCEL_Z_D").expect("metadata");
+        let meta = mp_params::param_meta::lookup("ArduCopter2", "ACCEL_Z_D").expect("metadata");
         let (low, high) = meta.range.expect("ACCEL_Z_D documents a range");
         assert!(low < high);
         assert!(!meta.accepts(high + 1.0));
@@ -2027,7 +2034,8 @@ mod tests {
 
         // And a parameter without one is not treated as having an empty range, which would make
         // every value out of bounds.
-        let no_range = mp_params::param_meta::lookup("BATT_CAPACITY").expect("metadata");
+        let no_range =
+            mp_params::param_meta::lookup("ArduCopter2", "BATT_CAPACITY").expect("metadata");
         assert!(no_range.range.is_none());
         assert!(
             no_range.accepts(3300.0),

@@ -1459,10 +1459,24 @@ pub fn label(x: f32, y: f32, text: impl Into<SharedString>) -> Div {
 pub fn combo_box(
     id: String,
     combo: &Combo,
-    (x, y, width, height): (f32, f32, f32, f32),
+    place: (f32, f32, f32, f32),
     on_open: impl Fn(&mut MissionPlanner) + 'static,
     cx: &mut Context<MissionPlanner>,
 ) -> AnyElement {
+    combo_box_live(id, combo, place, combo.enabled, on_open, cx)
+}
+
+/// [`combo_box`] in the state `enabled` gives rather than its `Enabled`: dimmed for a reason
+/// ([`crate::ui::Live`]), its click says why on the status line and drops nothing down.
+pub fn combo_box_live(
+    id: String,
+    combo: &Combo,
+    (x, y, width, height): (f32, f32, f32, f32),
+    enabled: impl Into<crate::ui::Live>,
+    on_open: impl Fn(&mut MissionPlanner) + 'static,
+    cx: &mut Context<MissionPlanner>,
+) -> AnyElement {
+    let live = enabled.into();
     let base = crate::probe::measured(id.clone(), div())
         .id(SharedString::from(id))
         .size_full()
@@ -1481,7 +1495,7 @@ pub fn combo_box(
                 .child(combo.text().to_owned()),
         )
         .child(div().text_size(px(7.0)).child("▼"));
-    let base = if combo.enabled {
+    let base = if live.is_live() {
         base.bg(rgb(theme::ACTION))
             .text_color(rgb(theme::TEXT))
             .cursor_pointer()
@@ -1491,7 +1505,10 @@ pub fn combo_box(
                 cx.notify();
             }))
     } else {
-        base.bg(rgb(theme::PANEL)).text_color(rgb(theme::DIM))
+        crate::ui::dimmed_click(
+            base.bg(rgb(theme::PANEL)).text_color(rgb(theme::DIM)),
+            &live,
+        )
     };
     at(x, y, width, height).child(base).into_any_element()
 }
@@ -2045,7 +2062,7 @@ mod tests {
 
     /// The bundled documentation, so no test depends on what another has installed.
     fn bundled(name: &str) -> Option<&'static ParamMeta> {
-        mp_params::param_meta::lookup(name)
+        mp_params::param_meta::lookup("ArduCopter2", name)
     }
 
     fn table(entries: &[(&str, f64)]) -> Vec<(String, f64)> {

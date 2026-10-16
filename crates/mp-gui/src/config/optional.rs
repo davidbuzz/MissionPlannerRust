@@ -505,15 +505,26 @@ pub fn group(
 /// A `PictureBox` showing its resource: [`crate::pictures::picture`].
 pub use crate::pictures::picture;
 
-/// A plain button (`MyButton`) at its place; dimmed and inert while disabled.
+/// Why a control is dimmed for want of its parameter, said when it is clicked (the owner's word
+/// of 2026-10-16): a `MavlinkComboBox` is disabled from its constructor until `setup` finds its
+/// parameter, and a page that needs one disables itself without it.
+/// `// C#: Controls/MavlinkComboBox.cs:31-35, 73-99`
+#[must_use]
+pub fn no_parameter(name: &str) -> String {
+    format!("no {name} on the vehicle")
+}
+
+/// A plain button (`MyButton`) at its place; dimmed and inert while disabled - and, dimmed for a
+/// reason ([`crate::ui::Live`]), its click saying why.
 pub fn button(
     id: &'static str,
     text: &'static str,
     (x, y, width, height): (f32, f32, f32, f32),
-    enabled: bool,
+    enabled: impl Into<crate::ui::Live>,
     on_click: impl Fn(&mut MissionPlanner, &mut Window, &mut Context<MissionPlanner>) + 'static,
     cx: &mut Context<MissionPlanner>,
 ) -> AnyElement {
+    let live = enabled.into();
     let base = crate::probe::measured(id, div())
         .id(id)
         .size_full()
@@ -524,7 +535,7 @@ pub fn button(
         .border_1()
         .text_xs()
         .child(text);
-    let base = if enabled {
+    let base = if live.is_live() {
         base.bg(rgb(theme::ACTION))
             .border_color(rgb(theme::BORDER))
             .text_color(rgb(theme::TEXT))
@@ -535,9 +546,12 @@ pub fn button(
                 cx.notify();
             }))
     } else {
-        base.bg(rgb(theme::PANEL))
-            .border_color(rgb(theme::BORDER))
-            .text_color(rgb(theme::DIM))
+        crate::ui::dimmed_click(
+            base.bg(rgb(theme::PANEL))
+                .border_color(rgb(theme::BORDER))
+                .text_color(rgb(theme::DIM)),
+            &live,
+        )
     };
     at(x, y, width, height).child(base).into_any_element()
 }
@@ -1223,6 +1237,16 @@ pub mod tests {
             }
         }
         messages.into_iter().collect()
+    }
+
+    /// A control dimmed for want of its parameter names it, in the status line's quiet words.
+    #[test]
+    fn a_control_without_its_parameter_says_which() {
+        assert_eq!(
+            no_parameter("BATT2_VOLT_PIN"),
+            "no BATT2_VOLT_PIN on the vehicle"
+        );
+        assert_eq!(no_parameter("ARSPD_PIN"), "no ARSPD_PIN on the vehicle");
     }
 
     /// `advance_split`: a handler's box ahead of its calls is a box; a call's false, its throw

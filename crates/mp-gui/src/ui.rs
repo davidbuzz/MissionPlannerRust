@@ -26,7 +26,11 @@
 // This module is internal to the binary; `pub` here documents intent rather than exporting API.
 #![allow(unreachable_pub)]
 
-use gpui::{AnyElement, App, ScrollHandle, SharedString, Window, div, prelude::*, px, rgb};
+use gpui::{
+    AnyElement, App, ClickEvent, ScrollHandle, SharedString, Window, div, prelude::*, px, rgb,
+};
+
+use crate::MissionPlanner;
 
 /// Palette. Deliberately close to Mission Planner's dark theme so the port feels familiar rather
 /// than merely new.
@@ -140,20 +144,114 @@ pub fn panel_with_corner(
         .child(body)
 }
 
+/// Whether a control takes its click, and why not while it is dimmed.
+///
+/// A control drawn dimmed - one the C# sets `Enabled = false` in that state, or one a ruling
+/// leaves out - takes no click, as the C#'s takes none. But a press that did nothing is taken for
+/// a dead control, so the click of a dimmed control says why on the status line, quietly, and does
+/// nothing else: the owner's word of 2026-10-16 on the click crawl's 45 dimmed controls
+/// (docs/click-report.md), his rule of 2026-10-14 for a press the C# answers with nothing
+/// ([`crate::fly::Refusal::Quiet`]). The reason is the state that dims the control, in the words
+/// the port uses for it - "no vehicle", "no log selected" - or the ruling's.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Live {
+    /// Drawn live: a click runs the control's handler.
+    Yes,
+    /// Drawn dimmed, and why: a click puts the words on the status line and runs nothing.
+    Dimmed(SharedString),
+    /// Drawn dimmed by a caller that gives no reason - a plain `false` - so a click does nothing.
+    Inert,
+}
+
+impl Live {
+    /// Live while `live` holds, else dimmed for `why`.
+    #[must_use]
+    pub fn when(live: bool, why: impl Into<SharedString>) -> Self {
+        if live {
+            Self::Yes
+        } else {
+            Self::Dimmed(why.into())
+        }
+    }
+
+    /// Dimmed for `why`.
+    #[must_use]
+    pub fn dimmed(why: impl Into<SharedString>) -> Self {
+        Self::Dimmed(why.into())
+    }
+
+    /// Whether the control is drawn live.
+    #[must_use]
+    pub const fn is_live(&self) -> bool {
+        matches!(self, Self::Yes)
+    }
+}
+
+impl From<bool> for Live {
+    /// A control's plain `enabled`, as the widgets took it before a dimmed control could say why:
+    /// live, or dimmed with no reason given.
+    fn from(live: bool) -> Self {
+        if live { Self::Yes } else { Self::Inert }
+    }
+}
+
+/// A click on a control in the state `live`, the status line being `status` (the window's
+/// `file_status`): whether the control's handler runs. A dimmed control's runs nothing, and why it
+/// is dimmed goes on the status line; an inert one's runs nothing and says nothing.
+#[must_use]
+pub fn click(live: &Live, status: &mut Option<String>) -> bool {
+    match live {
+        Live::Yes => true,
+        Live::Dimmed(why) => {
+            *status = Some(why.to_string());
+            false
+        }
+        Live::Inert => false,
+    }
+}
+
+/// The click of a control dimmed for `why` ([`click`]): the words on the main window's status
+/// line, which is drawn again, and nothing else. The window's [`MissionPlanner`] is found from the
+/// window the click lands in - it is the root view of the only one - so a widget that is handed no
+/// `Context` can give its dimmed form this click all the same.
+pub fn says_why(why: SharedString) -> impl Fn(&ClickEvent, &mut Window, &mut App) + 'static {
+    let live = Live::Dimmed(why);
+    move |_event, window, cx| {
+        let Some(Some(planner)) = window.root::<MissionPlanner>() else {
+            return;
+        };
+        planner.update(cx, |this, cx| {
+            let _runs = click(&live, &mut this.file_status);
+            cx.notify();
+        });
+    }
+}
+
+/// A control's element as it is drawn dimmed: given [`says_why`]'s click while `live` is dimmed
+/// for a reason, and left as it is otherwise - a live control's handler is its widget's own, and
+/// an inert one takes no click.
+pub fn dimmed_click<E: StatefulInteractiveElement>(element: E, live: &Live) -> E {
+    match live {
+        Live::Dimmed(why) => element.on_click(says_why(why.clone())),
+        Live::Yes | Live::Inert => element,
+    }
+}
+
 /// A control that commands the aircraft.
 ///
 /// Visually distinct from [`button`] on purpose. Reading telemetry and changing what the aircraft
 /// is doing are different kinds of act, and a UI where "read mission" and "arm" look the same
 /// invites the second when the operator meant the first.
 ///
-/// `enabled` false renders the control dimmed and inert rather than hiding it, so the layout does
-/// not move as the vehicle's state changes - a button that appears under the cursor is a button
-/// that gets pressed by accident.
+/// `enabled` false - or [`Live::Dimmed`] - renders the control dimmed and inert rather than hiding
+/// it, so the layout does not move as the vehicle's state changes - a button that appears under
+/// the cursor is a button that gets pressed by accident. Dimmed for a reason, its click says why
+/// ([`dimmed_click`]).
 pub fn action(
     id: &'static str,
     label: impl Into<SharedString>,
     colour: u32,
-    enabled: bool,
+    enabled: impl Into<Live>,
     on_click: impl Fn(&(), &mut Window, &mut App) + 'static,
 ) -> AnyElement {
     action_sized(id, label, colour, enabled, None, on_click)
@@ -168,10 +266,11 @@ pub fn action_sized(
     id: &'static str,
     label: impl Into<SharedString>,
     colour: u32,
-    enabled: bool,
+    enabled: impl Into<Live>,
     min_width: Option<gpui::Pixels>,
     on_click: impl Fn(&(), &mut Window, &mut App) + 'static,
 ) -> AnyElement {
+    let live = enabled.into();
     // measured() wraps the plain div before `.id()`, because `.id()` yields a Stateful<Div> and
     // the bounds hook lives on Div. It reports where this control ended up, so a test script can
     // click it by name rather than by a coordinate that goes stale the next time the layout
@@ -190,7 +289,7 @@ pub fn action_sized(
         base = base.min_w(min_width).flex().justify_center();
     }
 
-    if enabled {
+    if live.is_live() {
         base.bg(rgb(theme::ACTION))
             .border_color(rgb(colour))
             .text_color(rgb(colour))
@@ -199,10 +298,13 @@ pub fn action_sized(
             .on_click(move |_event, window, cx| on_click(&(), window, cx))
             .into_any_element()
     } else {
-        base.bg(rgb(theme::PANEL))
-            .border_color(rgb(theme::BORDER))
-            .text_color(rgb(theme::DIM))
-            .into_any_element()
+        dimmed_click(
+            base.bg(rgb(theme::PANEL))
+                .border_color(rgb(theme::BORDER))
+                .text_color(rgb(theme::DIM)),
+            &live,
+        )
+        .into_any_element()
     }
 }
 
@@ -299,6 +401,37 @@ mod tests {
         // sides are constants.
         const _: () = assert!(THUMB_FRACTION > 0.0);
         const _: () = assert!(THUMB_FRACTION < 1.0);
+    }
+
+    /// A dimmed control's click: its reason on the status line, and its handler not run - the
+    /// owner's word of 2026-10-16. A live one's runs and leaves the status line alone; one dimmed
+    /// with no reason runs nothing and says nothing.
+    #[test]
+    fn a_dimmed_controls_click_says_why_and_does_nothing_else() {
+        let mut status = Some("connected".to_owned());
+        assert!(!click(&Live::dimmed("no vehicle"), &mut status));
+        assert_eq!(status.as_deref(), Some("no vehicle"));
+
+        let mut status = Some("connected".to_owned());
+        assert!(click(&Live::Yes, &mut status));
+        assert_eq!(status.as_deref(), Some("connected"));
+
+        assert!(!click(&Live::Inert, &mut status));
+        assert_eq!(status.as_deref(), Some("connected"));
+    }
+
+    #[test]
+    fn a_control_is_dimmed_for_its_reason_when_its_state_does_not_hold() {
+        assert_eq!(Live::when(true, "no log selected"), Live::Yes);
+        assert_eq!(
+            Live::when(false, "no log selected"),
+            Live::Dimmed(SharedString::from("no log selected"))
+        );
+        assert!(Live::Yes.is_live());
+        assert!(!Live::dimmed("x").is_live() && !Live::Inert.is_live());
+        // A widget's plain `enabled`: live, or dimmed with nothing to say.
+        assert_eq!(Live::from(true), Live::Yes);
+        assert_eq!(Live::from(false), Live::Inert);
     }
 
     #[test]

@@ -42,8 +42,11 @@
 //!   mission is read when a vehicle connects; the map access mode rebuilds the map's tile store
 //!   (`CacheOnly` is the store's offline mode); Joystick Setup opens the joystick page over this
 //!   one, with the boxes and settings forms it opens drawn over the window as SETUP draws them;
-//!   Browse asks for a folder in the desktop's own folder dialog, and a desktop that has none to
-//!   show says why on the status line, where the C#'s `FolderBrowserDialog` always shows; Open
+//!   Browse opens the C#'s `FolderBrowserDialog` as the planner's own chooser, as every file
+//!   dialog here is (the owner's word of 2026-10-16; [`crate::file_list`]): over the page, its box
+//!   holding the log folder Log Path names, the folder it names listed under it - `..` and its
+//!   folders, no file - a folder clicked opened into the box, and OK the folder the box names put
+//!   in Log Path, as `txt_log_dir.Text = ofd.SelectedPath` does (`ConfigPlanner.cs:779-786`); Open
 //!   Map Cache opens the tile cache's directory;
 //! * Video Device lists the capture devices when it is clicked and Video Format the chosen
 //!   device's formats; Start opens the capture (`mp_video`, V4L2 on Linux where the C# has
@@ -60,7 +63,10 @@
 //! this application does not have: GDI+ (gpui draws the HUD); the UI language (English only); the
 //! theme and Custom (the dark palette is ratified); OSD Color (its handler's body is commented out, `ConfigPlanner.cs:433-440`);
 //! Start/Stop Vario; Password Protect Config; ADSB (no ADSB server client); OptOut Anon Stats (no
-//! analytics); Beta Updates (no updater); Mavlink Message Debug; Testing Screen.
+//! analytics); Mavlink Message Debug; Testing Screen (the EXPERIMENTAL
+//! tab). A dimmed control, clicked, puts those words on the status line, quietly, and does
+//! nothing else (the owner's word of 2026-10-16; [`crate::ui::Live`]); so does Start while a
+//! capture runs.
 //! `CHK_AutoParamCommit` is not drawn: `Activate` hides it outside a display view with the
 //! parameter commit button, and neither preset has one (`DisplayView.cs:214`); a Custom view that
 //! turns it on shows it in the C#, for a commit button this application's parameter list does
@@ -112,7 +118,7 @@ use crate::display_view::{DisplayName, DisplayView};
 use crate::settings::Persisted;
 use crate::telemetry::{Telemetry, TelemetryView};
 use crate::textfield::{KeyOutcome, TextField};
-use crate::ui::theme;
+use crate::ui::{Live, theme};
 
 /// `$this.Size`.
 /// `// C#: GCSViews/ConfigurationView/ConfigPlanner.resx ($this.Size)`
@@ -467,6 +473,7 @@ pub const CHECKS: &[CheckSpec] = &[
         (107, 349, 220, 17),
         Some("CHK_GDIPlus"),
         false,
+        // C#: ConfigPlanner.cs:699-705 - the HUD's renderer, chosen at the next start.
         Some("gpui draws the HUD: there is no GDI+ renderer to choose"),
     ),
     check(
@@ -531,6 +538,7 @@ pub const CHECKS: &[CheckSpec] = &[
         (340, 554, 142, 17),
         Some("password_protect"),
         false,
+        // C#: ConfigPlanner.cs:861-876 - a password asked for and kept, for the setup screens.
         Some("no password protects the configuration screens here"),
     ),
     check(
@@ -547,6 +555,7 @@ pub const CHECKS: &[CheckSpec] = &[
         (598, 554, 55, 17),
         Some("enableadsb"),
         false,
+        // C#: ConfigPlanner.cs:925-961 - the ADSB server's address asked for, and its client.
         Some("no ADSB server client: traffic comes from the vehicle's ADSB_VEHICLE"),
     ),
     check(
@@ -563,6 +572,7 @@ pub const CHECKS: &[CheckSpec] = &[
         (107, 577, 115, 17),
         Some("analyticsoptout"),
         false,
+        // C#: ConfigPlanner.cs:848-852 - `Tracking.OptOut`.
         Some("no anonymous statistics are sent: nothing to opt out of"),
     ),
     check(
@@ -571,7 +581,10 @@ pub const CHECKS: &[CheckSpec] = &[
         (228, 577, 91, 17),
         Some("beta_updates"),
         false,
-        Some("no updater"),
+        // C#: ConfigPlanner.cs:854-859 - `beta_updates`, which the updater reads for its channel
+        // (help.rs's BETA_UPDATES_KEY) where the C# sets `Update.dobeta` as well. Dimmed "no
+        // updater" until 2026-10-16, after mp-update had ported Update.cs (the ledger audit).
+        None,
     ),
     check(
         "chk_norcreceiver",
@@ -611,6 +624,7 @@ pub const CHECKS: &[CheckSpec] = &[
         (106, 623, 155, 17),
         None,
         false,
+        // C#: ConfigPlanner.cs:643-646 - `MainV2.comPort.debugmavlink`.
         Some("no MAVLink message debug log"),
     ),
     check(
@@ -619,7 +633,9 @@ pub const CHECKS: &[CheckSpec] = &[
         (340, 623, 144, 17),
         None,
         false,
-        Some("no Testing Screen"),
+        // C#: ConfigPlanner.cs:992-1012 - `new temp().Show()`, which is the EXPERIMENTAL tab
+        // here (Ctrl+F), the owner's request of 2026-10-04 (experimental.rs).
+        Some("the Testing Screen is the EXPERIMENTAL tab here"),
     ),
 ];
 
@@ -700,6 +716,7 @@ pub const COMBOS: &[ComboSpec] = &[
         "CMB_osdcolor",
         (107, 62, 138, 21),
         &[],
+        // C#: ConfigPlanner.cs:429-441
         Some("its handler's body is commented out: choosing a colour changes nothing"),
     ),
     combo("CMB_severity", (107, 111, 138, 21), SEVERITIES, None),
@@ -707,7 +724,8 @@ pub const COMBOS: &[ComboSpec] = &[
         "CMB_language",
         (107, 139, 138, 21),
         &[],
-        Some("the language is config.xml's `language`, read at start-up"),
+        // C#: ConfigPlanner.cs:417-427 - `changelanguage`, then a restart.
+        Some("the language is read from config.xml at start-up"),
     ),
     combo("CMB_distunits", (107, 195, 138, 21), DISTANCES, None),
     combo("CMB_altunits", (320, 195, 138, 21), DISTANCES, None),
@@ -721,6 +739,7 @@ pub const COMBOS: &[ComboSpec] = &[
         "CMB_theme",
         (107, 421, 138, 21),
         &[],
+        // C#: ConfigPlanner.cs:797-805 - `ThemeManager.LoadTheme`.
         Some("the dark palette is ratified: there is no theme to load"),
     ),
     combo("CMB_Layout", (107, 448, 138, 21), LAYOUTS, None),
@@ -748,12 +767,14 @@ pub const BUTTONS: &[ButtonSpec] = &[
     ("BUT_videostop", (439, 6, 75, 23), "Stop", None),
     ("BUT_Joystick", (107, 166, 99, 23), "Joystick Setup", None),
     ("BUT_logdirbrowse", (496, 393, 75, 23), "Browse", None),
+    // C#: ConfigPlanner.cs:807-810 - `ThemeManager.StartThemeEditor`.
     (
         "BUT_themecustom",
         (249, 421, 75, 20),
         "Custom",
         Some("the dark palette is ratified: there is no theme editor"),
     ),
+    // C#: ConfigPlanner.cs:836-846 - `Vario.Start` and `Stop`.
     (
         "BUT_Vario",
         (107, 551, 99, 20),
@@ -830,6 +851,42 @@ pub fn dimmed() -> Vec<&'static str> {
         )
         .collect()
 }
+
+/// Why the control `name` is dimmed by the page's rulings - its handler drives something this
+/// application does not have - or `None` for one that is not.
+#[must_use]
+pub fn dim_of(name: &str) -> Option<&'static str> {
+    CHECKS
+        .iter()
+        .find(|spec| spec.name == name)
+        .and_then(|spec| spec.dim)
+        .or_else(|| {
+            COMBOS
+                .iter()
+                .find(|spec| spec.name == name)
+                .and_then(|spec| spec.dim)
+        })
+        .or_else(|| {
+            BUTTONS
+                .iter()
+                .find(|(held, ..)| *held == name)
+                .and_then(|(_, _, _, dim)| *dim)
+        })
+}
+
+/// What Start says, dimmed, while a capture runs: `BUT_videostart.Enabled = false` once it has
+/// started. `// C#: GCSViews/ConfigurationView/ConfigPlanner.cs:137-146, 279`
+pub const CAPTURING: &str = "a video capture is running";
+
+/// The caption of Browse's folder dialog: the platform `FolderBrowserDialog`'s own.
+/// `// C#: GCSViews/ConfigurationView/ConfigPlanner.cs:781`
+pub const BROWSE_CAPTION: &str = "Browse For Folder";
+
+/// What the folder dialog's OK says, quietly, with an empty box; and before a path that is no
+/// folder, which the platform dialog cannot return.
+pub const NO_FOLDER_TYPED: &str = "no folder typed";
+/// See [`NO_FOLDER_TYPED`].
+pub const NO_FOLDER_AT: &str = "no folder at ";
 
 // -------------------------------------------------------------------------------------------------
 // The telemetry rates.
@@ -1184,8 +1241,6 @@ pub enum Effect {
     MapAccess,
     /// `BUT_mapCacheDir`: the directory opened.
     OpenDirectory(PathBuf),
-    /// `BUT_logdirbrowse`: the folder dialog.
-    BrowseLogDirectory,
     /// `BUT_videostart`: `new Capture(index, media)` and `Start()` for the device and format
     /// chosen; [`run_video`] does it and, when it starts, writes the two settings.
     /// `// C#: GCSViews/ConfigurationView/ConfigPlanner.cs:262-286`
@@ -1198,8 +1253,9 @@ pub enum Effect {
     /// `BUT_videostop`: `MainV2.cam.Dispose()`, and `MainV2.cam = null`.
     /// `// C#: GCSViews/ConfigurationView/ConfigPlanner.cs:288-295`
     VideoStop,
-    /// Words for the status line: "Camera Fail: " and why, where the C# has a message box, or
-    /// [`NO_CAPTURE`] for a Stop the C# answers with nothing.
+    /// Words for the status line: "Camera Fail: " and why, where the C# has a message box,
+    /// [`NO_CAPTURE`] for a Stop the C# answers with nothing, or why the folder dialog's OK took
+    /// no folder.
     Status(String),
 }
 
@@ -1317,6 +1373,9 @@ pub struct Planner {
     queued: VecDeque<Step>,
     messages: VecDeque<Message>,
     joystick: bool,
+    /// Browse's folder dialog while it shows: its box, the folder it names listed under it.
+    /// `// C#: GCSViews/ConfigurationView/ConfigPlanner.cs:779-786`
+    browse: Option<TextField>,
     /// `CurrentState`'s multipliers and unit names, as `ChangeUnits` last set them.
     units: DisplayUnits,
     /// `cs.rateattitude`, `rateposition`, `ratestatus`, `raterc`, `ratesensors`.
@@ -1370,6 +1429,7 @@ impl Planner {
             queued: VecDeque::new(),
             messages: VecDeque::new(),
             joystick: false,
+            browse: None,
             units: DisplayUnits::default(),
             rates,
             gcssysid: gcs_sysid_setting(settings),
@@ -1568,6 +1628,26 @@ impl Planner {
     #[must_use]
     pub const fn joystick_open(&self) -> bool {
         self.joystick
+    }
+
+    /// Browse's folder dialog's box, while the dialog shows.
+    #[must_use]
+    pub const fn browsing(&self) -> Option<&TextField> {
+        self.browse.as_ref()
+    }
+
+    /// A control as it is drawn: dimmed for the page's ruling on it ([`dim_of`]), Start dimmed
+    /// while a capture runs ([`CAPTURING`]), live otherwise. A dimmed one, clicked, says why on
+    /// the status line and does nothing else ([`crate::ui::click`]).
+    #[must_use]
+    pub fn live(&self, name: &str) -> Live {
+        if let Some(why) = dim_of(name) {
+            return Live::dimmed(why);
+        }
+        if name == "BUT_videostart" && self.video_running() {
+            return Live::dimmed(CAPTURING);
+        }
+        Live::Yes
     }
 
     /// `CurrentState`'s units.
@@ -1858,7 +1938,8 @@ impl Planner {
     }
 
     /// Leaving the page. `ConfigPlanner` is `IActivate` only; its `InputBox`es are modal, so the
-    /// page cannot be left with one open in the C#, and here leaving cancels it.
+    /// page cannot be left with one open in the C#, and here leaving cancels it - and the folder
+    /// dialog, which is modal too.
     pub fn deactivate(&mut self) {
         self.active = false;
         self.open = None;
@@ -1866,11 +1947,13 @@ impl Planner {
         self.queued.clear();
         self.messages.clear();
         self.joystick = false;
+        self.browse = None;
         self.focused = None;
     }
 
     /// A click on a check box: the box toggled and its `CheckedChanged` handler run. A dimmed box
-    /// does nothing.
+    /// does nothing here: its click says why on the status line where it is drawn
+    /// ([`Self::live`]).
     pub fn click(&mut self, name: &'static str, settings: &mut Persisted) {
         let Some(spec) = CHECKS.iter().find(|spec| spec.name == name) else {
             return;
@@ -1885,7 +1968,7 @@ impl Planner {
 
     /// Whether a modal box is showing, which takes every click on the page.
     fn blocked(&self) -> bool {
-        self.prompt.is_some() || !self.messages.is_empty() || self.joystick
+        self.prompt.is_some() || !self.messages.is_empty() || self.joystick || self.browse.is_some()
     }
 
     /// A box's `CheckedChanged`.
@@ -1898,8 +1981,10 @@ impl Planner {
         match name {
             // C#: ConfigPlanner.cs:381-410 - the speech boxes show and hide with it.
             // C#: ConfigPlanner.cs:1074-1078; 647-655; 693-696; 773-776; 918-922; 966;
-            // 1013-1016; 1063-1071; 1079-1107
+            // 1013-1016; 1063-1071; 1079-1107; 854-859 (CHK_beta: `beta_updates`, the updater's
+            // channel - its `Update.dobeta` is read from the setting here)
             "CHK_enablespeech"
+            | "CHK_beta"
             | "CHK_speechArmedOnly"
             | "CHK_resetapmonconnect"
             | "CHK_rtsresetesp32"
@@ -2320,7 +2405,9 @@ impl Planner {
                 self.effects.push(Effect::VideoStop);
             }
             "BUT_Joystick" => self.joystick = true,
-            "BUT_logdirbrowse" => self.effects.push(Effect::BrowseLogDirectory),
+            // `new FolderBrowserDialog().ShowDialog()`: the planner's own, over the page, at the
+            // log folder Log Path names. C#: ConfigPlanner.cs:779-786
+            "BUT_logdirbrowse" => self.browse = Some(browse_box(self.log_dir.value())),
             "BUT_mapCacheDir" => {
                 if map_cache.os_is_dir() {
                     self.effects
@@ -2340,6 +2427,80 @@ impl Planner {
     pub fn close_joystick(&mut self) {
         self.joystick = false;
     }
+
+    /// A row of the folder dialog's list clicked ([`crate::file_list::Choice::Row`]): a folder,
+    /// put in the box with a separator after it, which the list then opens.
+    pub fn browse_row(&mut self, text: &str) {
+        if let Some(field) = self.browse.as_mut() {
+            field.set(text.to_owned());
+        }
+    }
+
+    /// A key in the folder dialog's box: typing, Enter its OK and Escape its Cancel.
+    pub fn browse_key(&mut self, event: &KeyDownEvent, settings: &mut Persisted) -> bool {
+        let Some(field) = self.browse.as_mut() else {
+            return false;
+        };
+        match field.key(event) {
+            KeyOutcome::Changed => true,
+            KeyOutcome::Submitted => {
+                self.browse_ok(settings);
+                true
+            }
+            KeyOutcome::Cancelled => {
+                self.browse = None;
+                true
+            }
+            KeyOutcome::Ignored => false,
+        }
+    }
+
+    /// The folder dialog's OK: `DialogResult.OK` with the folder the box names, which goes to the
+    /// Log Path box as `ofd.SelectedPath` does ([`Self::browsed`]), and the dialog closed. The
+    /// platform dialog returns only a folder that is there; a box naming none keeps the dialog
+    /// and says so on the status line, quietly.
+    /// `// C#: GCSViews/ConfigurationView/ConfigPlanner.cs:779-786`
+    pub fn browse_ok(&mut self, settings: &mut Persisted) {
+        let Some(field) = self.browse.as_ref() else {
+            return;
+        };
+        let typed = field.value().trim().to_owned();
+        match crate::file_list::chosen_folder(&typed, &crate::file_list::start_folder()) {
+            Some(folder) => {
+                self.browse = None;
+                self.browsed(&folder, settings);
+            }
+            None if typed.is_empty() => self
+                .effects
+                .push(Effect::Status(NO_FOLDER_TYPED.to_owned())),
+            None => self
+                .effects
+                .push(Effect::Status(format!("{NO_FOLDER_AT}{typed}"))),
+        }
+    }
+
+    /// The folder dialog's Cancel: `DialogResult.Cancel`, and nothing changed.
+    pub fn browse_cancel(&mut self) {
+        self.browse = None;
+    }
+}
+
+/// The folder dialog's box as Browse opens it: the folder Log Path names with a separator after
+/// it, so the list under it shows inside it, where it is a folder that is there; Log Path's text
+/// as it is otherwise, the list then showing the folder it sits in.
+fn browse_box(log_dir: &str) -> TextField {
+    let mut field = TextField::new("");
+    let log_dir = log_dir.trim();
+    if !log_dir.is_empty() && Path::new(log_dir).os_is_dir() {
+        let separator = std::path::MAIN_SEPARATOR;
+        field.set(format!(
+            "{}{separator}",
+            log_dir.trim_end_matches(['/', '\\'])
+        ));
+    } else {
+        field.set(log_dir.to_owned());
+    }
+    field
 }
 
 /// What Start and Stop ask of the application, which holds the capture as `MainV2` holds `cam`.
@@ -2394,22 +2555,6 @@ pub fn run_video(
         }
         Effect::Status(words) => Some(words.clone()),
         _ => None,
-    }
-}
-
-/// What Browse's folder dialog came to: the folder chosen; nothing, for a Cancel or a dialog that
-/// went away; or why there was no dialog, for the status line as an error. The dialog is the
-/// desktop's own (gpui's `prompt_for_paths`: the XDG desktop portal on Linux), and a desktop with
-/// no portal refuses it, where `FolderBrowserDialog` always shows: the refusal was dropped, and the
-/// press did nothing with no word (the click crawl, 2026-10-15, on a display with no portal).
-/// `// C#: GCSViews/ConfigurationView/ConfigPlanner.cs:779-786`
-fn browse_answer<E: std::fmt::Display, G>(
-    answer: Result<Result<Option<Vec<PathBuf>>, E>, G>,
-) -> Result<Option<PathBuf>, String> {
-    match answer {
-        Ok(Ok(paths)) => Ok(paths.and_then(|paths| paths.into_iter().next())),
-        Ok(Err(why)) => Err(crate::fly::error_box(why)),
-        Err(_gone) => Ok(None),
     }
 }
 
@@ -2524,36 +2669,12 @@ impl MissionPlanner {
         self.planner_window_effects(rest, cx);
     }
 
-    /// What a handler asked for that needs the window: the folder dialog and the file manager.
+    /// What a handler asked for that needs the window: the file manager, the capture, and the
+    /// status line.
     fn planner_window_effects(&mut self, effects: Vec<Effect>, cx: &mut Context<Self>) {
         for effect in effects {
             match effect {
                 Effect::OpenDirectory(path) => cx.open_with_system(&path),
-                Effect::BrowseLogDirectory => {
-                    let chosen = cx.prompt_for_paths(gpui::PathPromptOptions {
-                        files: false,
-                        directories: true,
-                        multiple: false,
-                        prompt: None,
-                    });
-                    cx.spawn(async move |this, cx| {
-                        let answer = browse_answer(chosen.await);
-                        let _ = this.update(cx, |this, cx| {
-                            match answer {
-                                Ok(Some(folder)) => {
-                                    let rest = this.planner_apply(|planner, settings| {
-                                        planner.browsed(&folder, settings);
-                                    });
-                                    this.planner_window_effects(rest, cx);
-                                }
-                                Ok(None) => {}
-                                Err(why) => this.file_status = Some(why),
-                            }
-                            cx.notify();
-                        });
-                    })
-                    .detach();
-                }
                 effect @ (Effect::VideoStart { .. } | Effect::VideoStop | Effect::Status(_)) => {
                     let words = run_video(
                         &mut self.planner,
@@ -2686,9 +2807,14 @@ impl MissionPlanner {
             body = body.child(combo_box(planner, spec, cx));
         }
         for spec in BUTTONS {
-            // Start is disabled while a capture runs. C#: ConfigPlanner.cs:137-146, 281
-            let disabled = spec.0 == "BUT_videostart" && planner.video_running();
-            body = body.child(button(spec, planner.blocked() || disabled, cx));
+            // Start is disabled while a capture runs (C#: ConfigPlanner.cs:137-146, 279), and
+            // every button under a modal box, which takes the click.
+            let state = if planner.blocked() {
+                Live::Inert
+            } else {
+                planner.live(spec.0)
+            };
+            body = body.child(button(spec, &state, cx));
         }
         for (index, ((spec, number), handle)) in NUMBERS
             .iter()
@@ -2759,9 +2885,10 @@ fn control_id(name: &str) -> String {
     format!("planner-{name}")
 }
 
-/// A check box and its text. A dimmed one is drawn inert.
+/// A check box and its text. A dimmed one is drawn inert, its click saying why.
 fn check_box(planner: &Planner, spec: &CheckSpec, cx: &mut Context<MissionPlanner>) -> AnyElement {
-    let live = spec.dim.is_none();
+    let state = planner.live(spec.name);
+    let live = state.is_live();
     let name = spec.name;
     let mark = planner.checked(name).then(|| {
         div()
@@ -2804,13 +2931,15 @@ fn check_box(planner: &Planner, spec: &CheckSpec, cx: &mut Context<MissionPlanne
             }))
             .into_any_element()
     } else {
-        base.into_any_element()
+        crate::ui::dimmed_click(base, &state).into_any_element()
     }
 }
 
-/// A combo box: the selected item's text, and a click to drop its list down.
+/// A combo box: the selected item's text, and a click to drop its list down - or, dimmed, to
+/// say why.
 fn combo_box(planner: &Planner, spec: &ComboSpec, cx: &mut Context<MissionPlanner>) -> AnyElement {
-    let live = spec.dim.is_none();
+    let state = planner.live(spec.name);
+    let live = state.is_live();
     let name = spec.name;
     let id = control_id(name);
     let base = crate::probe::measured(id.clone(), at_spec(spec.at))
@@ -2842,7 +2971,7 @@ fn combo_box(planner: &Planner, spec: &ComboSpec, cx: &mut Context<MissionPlanne
             }))
             .into_any_element()
     } else {
-        base.into_any_element()
+        crate::ui::dimmed_click(base, &state).into_any_element()
     }
 }
 
@@ -2915,10 +3044,10 @@ fn dropdown(planner: &Planner, spec: &ComboSpec, cx: &mut Context<MissionPlanner
     list.into_any_element()
 }
 
-/// A button at its place. A dimmed one, or any while a box is modal, is drawn inert.
-fn button(spec: &ButtonSpec, blocked: bool, cx: &mut Context<MissionPlanner>) -> AnyElement {
-    let (name, geometry, text, dim) = *spec;
-    let live = dim.is_none();
+/// A button at its place, in the state `state`: a dimmed one drawn inert, its click saying why;
+/// any while a box is modal inert and silent, the box taking the click.
+fn button(spec: &ButtonSpec, state: &Live, cx: &mut Context<MissionPlanner>) -> AnyElement {
+    let (name, geometry, text, _) = *spec;
     let id = control_id(name);
     let base = crate::probe::measured(id.clone(), at_spec(geometry))
         .id(SharedString::from(id))
@@ -2929,25 +3058,32 @@ fn button(spec: &ButtonSpec, blocked: bool, cx: &mut Context<MissionPlanner>) ->
         .border_1()
         .whitespace_nowrap()
         .text_xs();
-    if live && !blocked {
+    if state.is_live() {
         base.bg(rgb(theme::ACTION))
             .border_color(rgb(theme::ACCENT))
             .text_color(rgb(theme::ACCENT))
             .cursor_pointer()
             .hover(|style| style.bg(rgb(theme::BORDER)))
             .child(text)
-            .on_click(cx.listener(move |this, _event, _window, cx| {
+            .on_click(cx.listener(move |this, _event, window, cx| {
                 let cache = mp_tiles::TileCache::default_root();
                 this.planner_run(cx, |planner, _settings| planner.press(name, &cache));
+                // The folder dialog's box takes the keyboard as it opens, as the InputBoxes' do.
+                if this.planner.browsing().is_some() {
+                    this.planner_focus.prompt.focus(window, cx);
+                }
                 cx.notify();
             }))
             .into_any_element()
     } else {
-        base.bg(rgb(theme::PANEL))
-            .border_color(rgb(theme::BORDER))
-            .text_color(rgb(theme::DIM))
-            .child(text)
-            .into_any_element()
+        crate::ui::dimmed_click(
+            base.bg(rgb(theme::PANEL))
+                .border_color(rgb(theme::BORDER))
+                .text_color(rgb(theme::DIM))
+                .child(text),
+            state,
+        )
+        .into_any_element()
     }
 }
 
@@ -3081,7 +3217,8 @@ fn log_dir_box(
         .into_any_element()
 }
 
-/// The message box or the `InputBox` showing, over the page: both are modal in the C#.
+/// The message box, the folder dialog or the `InputBox` showing, over the page: all are modal in
+/// the C#.
 /// `// C#: ExtLibs/Controls/InputBox.cs:61-172`
 fn dialog(
     planner: &Planner,
@@ -3125,6 +3262,8 @@ fn dialog(
                     cx.notify();
                 }),
             )))
+    } else if let Some(field) = planner.browsing() {
+        browse_dialog(card(theme::ACCENT).w(px(520.0)), field, focus, window, cx)
     } else {
         let prompt = planner.prompt()?;
         let focused = focus.prompt.is_focused(window);
@@ -3190,6 +3329,85 @@ fn dialog(
         "planner-dialog-backdrop",
         dialog.into_any_element(),
     ))
+}
+
+/// Browse's `FolderBrowserDialog`, as the planner's own chooser: its caption, the box naming the
+/// folder with the keyboard, the folder it names listed under it - `..` and its folders, no file
+/// ([`crate::file_list::Chooser::folders`]) - a folder clicked put in the box, which the list then
+/// opens, and OK and Cancel. OK answers the folder the box names ([`Planner::browse_ok`]).
+/// `// C#: GCSViews/ConfigurationView/ConfigPlanner.cs:779-786`
+fn browse_dialog(
+    card: Div,
+    field: &TextField,
+    focus: &Focus,
+    window: &Window,
+    cx: &mut Context<MissionPlanner>,
+) -> Div {
+    let focused = focus.prompt.is_focused(window);
+    let chooser = crate::file_list::Chooser::folders("planner-browse", field.value());
+    let list = crate::file_list::view(
+        &chooser,
+        None,
+        |this, choice, window, cx| {
+            this.planner_focus.prompt.focus(window, cx);
+            if let crate::file_list::Choice::Row { text, .. } = choice {
+                this.planner.browse_row(&text);
+            }
+        },
+        cx,
+    );
+    crate::probe::measured("planner-browse", card)
+        .child(
+            div()
+                .text_xs()
+                .text_color(rgb(theme::DIM))
+                .child(BROWSE_CAPTION),
+        )
+        .child(crate::textfield::text_field(
+            "planner-browse-value",
+            field,
+            &focus.prompt,
+            focused,
+            px(490.0),
+            cx.listener(|this, event: &KeyDownEvent, _window, cx| {
+                let mut used = false;
+                this.planner_run(cx, |planner, settings| {
+                    used = planner.browse_key(event, settings);
+                });
+                if used {
+                    cx.notify();
+                }
+            }),
+        ))
+        .child(list)
+        .child(
+            div()
+                .flex()
+                .justify_end()
+                .gap_2()
+                .child(crate::ui::action_sized(
+                    "planner-browse-ok",
+                    "OK",
+                    theme::ACCENT,
+                    true,
+                    Some(px(75.0)),
+                    cx.listener(|this, _event: &(), _window, cx| {
+                        this.planner_run(cx, |planner, settings| planner.browse_ok(settings));
+                        cx.notify();
+                    }),
+                ))
+                .child(crate::ui::action_sized(
+                    "planner-browse-cancel",
+                    "Cancel",
+                    theme::DIM,
+                    true,
+                    Some(px(75.0)),
+                    cx.listener(|this, _event: &(), _window, cx| {
+                        this.planner.browse_cancel();
+                        cx.notify();
+                    }),
+                )),
+        )
 }
 
 /// What a modal window sits on: the page, covered.
@@ -3371,6 +3589,11 @@ fn facts(planner: &Planner, settings: &Persisted, read_mission_on_connect: bool)
             .map_or_else(|| "none".to_owned(), |message| message.text.clone()),
     );
     facts.record("config.planner.joystick", planner.joystick_open());
+    // Browse's folder dialog: what its box holds, or `none` while it is closed.
+    facts.record(
+        "config.planner.browse",
+        planner.browsing().map_or("none", TextField::value),
+    );
     // The video controls: how many devices and formats are listed and which are chosen, whether
     // a capture runs, the frames it has decoded, and why a Start was refused or a read failed.
     let video = &planner.video;
@@ -4429,12 +4652,28 @@ mod tests {
         assert_eq!(planner.take_effects(), [Effect::MapAccess]);
     }
 
+    /// `CHK_beta_CheckedChanged`: the box writes `beta_updates`, the key the updater's check reads
+    /// for its channel; it was dimmed "no updater" until the audit of 2026-10-16 found the updater
+    /// ported. `// C#: ConfigPlanner.cs:854-859`
+    #[test]
+    fn beta_updates_is_live_and_writes_its_key() {
+        let mut settings = Persisted::at(None);
+        let mut planner = activated(&mut settings);
+        assert!(!dimmed().contains(&"CHK_beta"));
+        assert!(!planner.checked("CHK_beta"));
+        planner.click("CHK_beta", &mut settings);
+        assert!(planner.checked("CHK_beta"));
+        assert_eq!(settings.get("beta_updates"), Some("True"));
+        planner.click("CHK_beta", &mut settings);
+        assert_eq!(settings.get("beta_updates"), Some("False"));
+    }
+
     #[test]
     fn a_dimmed_control_does_nothing() {
         let mut settings = Persisted::at(None);
         let mut planner = activated(&mut settings);
         let before = settings.config().clone();
-        for name in ["CHK_GDIPlus", "chk_ADSB", "CHK_beta", "chk_temp"] {
+        for name in ["CHK_GDIPlus", "chk_ADSB", "chk_temp"] {
             let was = planner.checked(name);
             planner.click(name, &mut settings);
             assert_eq!(planner.checked(name), was, "{name}");
@@ -4457,7 +4696,6 @@ mod tests {
                 "CHK_Password",
                 "chk_ADSB",
                 "chk_analytics",
-                "CHK_beta",
                 "CHK_mavdebug",
                 "chk_temp",
                 "CMB_osdcolor",
@@ -4603,7 +4841,9 @@ mod tests {
         assert!(!planner.checked("CHK_maprotation"));
         planner.close_joystick();
         planner.press("BUT_logdirbrowse", Path::new("/"));
-        assert_eq!(planner.take_effects(), [Effect::BrowseLogDirectory]);
+        assert!(planner.browsing().is_some(), "the folder dialog");
+        assert!(planner.take_effects().is_empty());
+        planner.browse_cancel();
         let cache = mp_os::temp_dir();
         planner.press("BUT_mapCacheDir", &cache);
         assert_eq!(planner.take_effects(), [Effect::OpenDirectory(cache)]);
@@ -4616,31 +4856,133 @@ mod tests {
         );
     }
 
-    /// Browse's folder dialog: the folder chosen goes to the box; a Cancel, or a dialog that went
-    /// away, does nothing; a desktop with no folder dialog to show says why on the status line, as
-    /// an error, where the press said nothing (the click crawl, 2026-10-15).
-    /// `// C#: ConfigPlanner.cs:779-786`
+    /// Browse is the planner's own folder dialog (the owner's word of 2026-10-16): it opens in the
+    /// log folder Log Path names, listing `..` and its folders and no file; a folder clicked is put
+    /// in the box and listed; OK puts the folder the box names in Log Path, as `SelectedPath` goes
+    /// to `txt_log_dir`, and writes `logdirectory`; a box naming no folder keeps the dialog and
+    /// says so, quietly; Cancel changes nothing. While it shows, the page takes no click.
+    /// `// C#: ConfigPlanner.cs:779-795`
     #[test]
-    fn browse_says_why_when_the_desktop_has_no_folder_dialog() {
-        let folder = PathBuf::from("/var/log/planner");
+    fn browse_opens_the_planners_own_folder_dialog_and_ok_answers_a_folder() {
+        let scratch = Scratch::new("browse");
+        let logs = scratch.0.join("logs");
+        for folder in ["flights", "bench"] {
+            mp_os::fs::create_dir_all(logs.join(folder)).expect("a folder");
+        }
+        mp_os::fs::write(logs.join("flight.tlog"), "tlog").expect("a log");
+        let mut settings = Persisted::at(None);
+        let mut planner = Planner::new(&settings).with_video_source(Arc::new(FakeSource::empty()));
+        planner.activate(&mut settings, Some(logs.as_path()));
+        let _ = planner.take_effects();
+        assert_eq!(planner.log_dir(), logs.display().to_string());
+
+        planner.press("BUT_logdirbrowse", Path::new("/"));
+        let separator = std::path::MAIN_SEPARATOR;
+        let typed = planner.browsing().map(|field| field.value().to_owned());
+        assert_eq!(typed, Some(format!("{}{separator}", logs.display())));
+        let chooser =
+            crate::file_list::Chooser::folders("planner-browse", typed.as_deref().unwrap_or(""));
+        assert_eq!(chooser.folder, logs);
         assert_eq!(
-            browse_answer::<&str, ()>(Ok(Ok(Some(vec![folder.clone()])))),
-            Ok(Some(folder))
+            chooser.rows(),
+            ["../", "bench/", "flights/"],
+            "no file listed"
         );
-        assert_eq!(browse_answer::<&str, ()>(Ok(Ok(None))), Ok(None));
+
+        // Modal: the page takes no click while it shows.
+        planner.click("CHK_maprotation", &mut settings);
+        assert!(!planner.checked("CHK_maprotation"));
+
+        // A folder clicked: its path and a separator in the box, the list inside it.
+        let flights = chooser
+            .entries
+            .iter()
+            .find(|entry| entry.name == "flights")
+            .map(crate::file_list::answer)
+            .expect("flights listed");
+        planner.browse_row(&flights);
         assert_eq!(
-            browse_answer::<&str, ()>(Ok(Ok(Some(Vec::new())))),
-            Ok(None)
+            planner.browsing().map(TextField::value),
+            Some(flights.as_str())
         );
-        assert_eq!(browse_answer::<&str, ()>(Err(())), Ok(None));
+
+        // OK: the folder, without the separator, in Log Path and in `logdirectory`.
+        planner.browse_ok(&mut settings);
+        assert!(planner.browsing().is_none(), "closed");
+        let chosen = logs.join("flights").display().to_string();
+        assert_eq!(planner.log_dir(), chosen);
+        assert_eq!(settings.get("logdirectory"), Some(chosen.as_str()));
+        assert!(planner.take_effects().is_empty());
+
+        // A box naming no folder: the dialog stays, and says why.
+        planner.press("BUT_logdirbrowse", Path::new("/"));
+        let missing = logs.join("missing").display().to_string();
+        planner.browse_row(&missing);
+        planner.browse_ok(&mut settings);
+        assert!(planner.browsing().is_some(), "kept open");
         assert_eq!(
-            browse_answer::<&str, ()>(Ok(Err(
-                "Couldn't open file picker due to missing xdg-desktop-portal implementation."
-            ))),
-            Err(
-                "Error: Couldn't open file picker due to missing xdg-desktop-portal implementation."
-                    .to_owned()
-            )
+            planner.take_effects(),
+            [Effect::Status(format!("{NO_FOLDER_AT}{missing}"))]
+        );
+        planner.browse_row("");
+        planner.browse_ok(&mut settings);
+        assert_eq!(
+            planner.take_effects(),
+            [Effect::Status(NO_FOLDER_TYPED.to_owned())]
+        );
+
+        // Cancel: closed, Log Path as it was.
+        planner.browse_cancel();
+        assert!(planner.browsing().is_none());
+        assert_eq!(planner.log_dir(), chosen);
+    }
+
+    /// Enter in the folder dialog's box is its OK, Escape its Cancel.
+    #[test]
+    fn the_folder_dialogs_box_takes_enter_and_escape() {
+        let scratch = Scratch::new("browse-keys");
+        let mut settings = Persisted::at(None);
+        let mut planner = Planner::new(&settings).with_video_source(Arc::new(FakeSource::empty()));
+        planner.activate(&mut settings, Some(scratch.0.as_path()));
+        planner.press("BUT_logdirbrowse", Path::new("/"));
+        assert!(planner.browse_key(&key("escape", None), &mut settings));
+        assert!(planner.browsing().is_none());
+        planner.press("BUT_logdirbrowse", Path::new("/"));
+        assert!(planner.browse_key(&key("enter", None), &mut settings));
+        assert!(planner.browsing().is_none());
+        assert_eq!(planner.log_dir(), scratch.0.display().to_string());
+    }
+
+    /// Every dimmed control says why it is dimmed when it is clicked, in the port's words: short,
+    /// lower case and with no full stop, as the status line's other quiet answers are; Start says
+    /// so while a capture runs; a live control's click runs its handler (the owner's word of
+    /// 2026-10-16).
+    #[test]
+    fn a_dimmed_control_says_why_when_clicked() {
+        let mut settings = Persisted::at(None);
+        let planner = activated(&mut settings);
+        for name in dimmed() {
+            let Live::Dimmed(why) = planner.live(name) else {
+                panic!("{name} is drawn live");
+            };
+            assert_eq!(Some(&*why), dim_of(name), "{name}");
+            assert!(
+                why.chars().next().is_some_and(char::is_lowercase) && !why.ends_with('.'),
+                "{name}: {why}"
+            );
+            let mut status = None;
+            assert!(!crate::ui::click(&planner.live(name), &mut status));
+            assert_eq!(status.as_deref(), Some(&*why));
+        }
+        assert_eq!(planner.live("BUT_logdirbrowse"), Live::Yes);
+        assert_eq!(planner.live("CHK_maprotation"), Live::Yes);
+        assert_eq!(
+            planner.live("CHK_GDIPlus"),
+            Live::dimmed("gpui draws the HUD: there is no GDI+ renderer to choose")
+        );
+        assert_eq!(
+            planner.live("chk_temp"),
+            Live::dimmed("the Testing Screen is the EXPERIMENTAL tab here")
         );
     }
 
@@ -4926,6 +5268,11 @@ mod tests {
             let name = id
                 .strip_prefix("planner-")
                 .unwrap_or_else(|| panic!("{id} is not the page's"));
+            // A dimmed control takes the click as it is drawn: why, on the status line, and
+            // nothing else (`crate::ui::dimmed_click`).
+            if !crate::ui::click(&planner.live(name), &mut self.status) {
+                return;
+            }
             if let Some(spec) = COMBOS.iter().find(|spec| spec.name == name) {
                 planner.toggle_dropdown(spec.name, settings);
             } else if let Some((spec, index)) = COMBOS.iter().find_map(|spec| {

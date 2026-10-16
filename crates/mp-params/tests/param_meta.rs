@@ -22,12 +22,23 @@
 
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
-use mp_params::param_meta::{copter, lookup};
+use mp_params::param_meta::{Section, section};
 use mp_params::{ParamMeta, UserLevel};
+
+/// The copter section, `Firmwares.ArduCopter2`'s, which these tests read.
+const COPTER: &str = "ArduCopter2";
+
+fn copter() -> &'static Section {
+    section(COPTER).expect("the copter section")
+}
+
+fn lookup(name: &str) -> Option<&'static ParamMeta> {
+    mp_params::param_meta::lookup(COPTER, name)
+}
 
 #[test]
 fn the_table_is_substantial_and_sorted() {
-    let params = copter::PARAMETERS;
+    let params = copter();
     assert!(
         params.len() > 800,
         "only {} parameters documented",
@@ -36,7 +47,7 @@ fn the_table_is_substantial_and_sorted() {
 
     // lookup() binary searches, so ordering is load-bearing, not cosmetic.
     let mut last: Option<&str> = None;
-    for meta in params {
+    for meta in params.parameters() {
         if let Some(previous) = last {
             assert!(
                 meta.name > previous,
@@ -115,8 +126,8 @@ fn bitmask_parameters_decode_to_names() {
 #[test]
 fn enumerated_parameters_name_their_values() {
     // Find any enumeration in the table and check the naming round-trips.
-    let enumerated = copter::PARAMETERS
-        .iter()
+    let enumerated = copter()
+        .parameters()
         .find(|meta| meta.is_enumeration() && meta.values.len() > 2)
         .expect("the table contains enumerations");
 
@@ -143,11 +154,11 @@ fn indexed_parameter_names_find_their_own_documentation() {
 
 #[test]
 fn user_levels_classify_most_parameters() {
-    let basic = copter::PARAMETERS
-        .iter()
+    let basic = copter()
+        .parameters()
         .filter(|m| m.user_level.is_basic())
         .count();
-    let total = copter::PARAMETERS.len();
+    let total = copter().len();
     assert!(
         basic > 50,
         "only {basic} of {total} parameters are marked Standard"

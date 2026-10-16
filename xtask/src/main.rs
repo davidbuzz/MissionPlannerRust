@@ -368,10 +368,10 @@ fn codegen_param_meta() -> Result<()> {
         bail!("parameter metadata not found at {}", metadata.display());
     }
 
-    let source = codegen::param_meta::generate(&metadata, "ArduCopter2")?;
+    let source = codegen::param_meta::generate(&metadata)?;
     let out_dir = root.join("crates/mp-params/src/generated");
     std::fs::create_dir_all(&out_dir)?;
-    let out_file = out_dir.join("param_meta_copter.rs");
+    let out_file = out_dir.join("param_meta.rs");
     std::fs::write(&out_file, &source)?;
 
     let status = std::process::Command::new("rustfmt")

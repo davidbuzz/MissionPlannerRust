@@ -12,7 +12,8 @@
 
 screen fly
 window 1600x1200
-budget 31
+budget 34
+# 34: 32.4 s measured headless on lavapipe (2026-10-16, the dimmed clicks added), the rule's ceiling plus one.
 
 expect fly.tabs tabQuick,tabActions,tabPagemessages,tabActionsSimple,tabPagePreFlight,tabGauges,tabTransponder,tabStatus,tabServo,tabAuxFunction,tabScripts,tabPayload,tabTLogs,tablogbrowse
 expect fly.tabs.text Quick,Actions,Messages,Actions,PreFlight,Gauges,Transponder,Status,Servo/Relay,Aux Function,Scripts,Payload Control,Telemetry Logs,DataFlash Logs
@@ -38,9 +39,10 @@ expect fly.tab tabActionsSimple
 expect fly.tab.text Actions
 expect fly.page.overflow 0
 
-# The left arrow has nowhere to go yet.
+# The left arrow has nowhere to go yet: drawn dimmed, and its click says so on the status line.
 click fly-tabs-left
 expect fly.tabs.first 0
+expect status at the first page
 
 # From here each page is brought to the front of the row before it is chosen, so its header is
 # in view whatever the font makes of the widths.

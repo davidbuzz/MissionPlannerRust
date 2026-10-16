@@ -40,6 +40,13 @@ expect config.cot.rows 0
 click cot-BTN_clear_TB
 expect status Clear Window: no output to clear
 
+# The baud rate, dimmed for TAK Multicast - CMB_baudrate.Enabled is false for a port with no
+# "com" in its name (SerialOutputCoT.cs:424-430) - opens nothing, and says why on the status
+# line, quietly (the owner's word of 2026-10-16).
+click cot-CMB_baudrate
+expect status not a serial port
+expect config.cot.baud 4800
+
 # A row for sysid 1: its UID, and takv ticked.
 click cot-cell-0-0
 type 1

@@ -665,6 +665,11 @@ pub struct Form {
     pending: Option<(Kind, u32)>,
 }
 
+/// Why the baud rate is dimmed, clicked (the owner's word of 2026-10-16: a dimmed control says
+/// why): the port chosen is not a serial one - its name has no "com" in it.
+/// `// C#: Controls/SerialOutputCoT.cs:424-430`
+pub const NOT_A_SERIAL_PORT: &str = "not a serial port";
+
 impl Form {
     /// `CMB_baudrate.Enabled`: only for a port whose name has "com" in it, any case.
     /// `// C#: Controls/SerialOutputCoT.cs:424-430`
@@ -1634,7 +1639,7 @@ pub fn overlay(
             &form.baud,
             &bauds,
             form.baud_open,
-            form.baud_enabled(),
+            crate::ui::Live::when(form.baud_enabled(), NOT_A_SERIAL_PORT),
             BAUD_AT,
             |this| access(this).toggle_list(true),
             |this, index| access(this).choose(true, index),
