@@ -270,9 +270,6 @@ fn file_name_of(path: &std::path::Path) -> String {
     )
 }
 
-/// The name a parameter backup gets if the operator does not choose one.
-const DEFAULT_PARAM_FILE: &str = "vehicle.param";
-
 /// Repaint interval when measuring the renderer: as fast as the executor will schedule, so paint
 /// cost is measured rather than the timer.
 const REFRESH_BENCH: Duration = Duration::from_millis(1);
@@ -499,10 +496,6 @@ struct MissionPlanner {
     selected_param: Option<String>,
     /// `chk_none_default`: only the parameters off their defaults listed.
     param_none_default: bool,
-    /// The `.param` file name to save to, load from or compare against.
-    param_file_name: textfield::TextField,
-    /// Focus for that field.
-    param_file_focus: gpui::FocusHandle,
     /// Joystick state: the device, the mapping and the failsafe.
     sticks: joystick::Sticks,
     /// The keyboard for the joystick page's expo boxes, its forms' boxes and its file dialogs.
@@ -538,13 +531,6 @@ struct MissionPlanner {
     log_screen_focus: gpui::FocusHandle,
     /// The log browser's `txt_info`.
     log_info_focus: gpui::FocusHandle,
-    /// What has been typed into the log field search.
-    /// The result of the last comparison against a file, newest first.
-    ///
-    /// Held rather than applied. A comparison is something an operator reads before deciding, and
-    /// the decision is a second, deliberate press - loading a tune because it was compared would
-    /// be the worst possible reading of "show me what this would change".
-    param_differences: Vec<mp_params::param_file::Difference>,
     /// Initial Setup's Radio Calibration page.
     radio_input: config::radio::RadioInput,
     /// Initial Setup's Motor Test page, and its boxes' focus.
@@ -993,12 +979,6 @@ impl MissionPlanner {
             selected_param_group: None,
             selected_param: None,
             param_none_default: false,
-            param_file_name: {
-                let mut field = textfield::TextField::new(DEFAULT_PARAM_FILE);
-                field.set(DEFAULT_PARAM_FILE);
-                field
-            },
-            param_file_focus: cx.focus_handle(),
             sticks: joystick::Sticks::new(),
             joystick_focus: cx.focus_handle(),
             hud: hud::HudInputs::default(),
@@ -1017,7 +997,6 @@ impl MissionPlanner {
             log_prompt_focus: cx.focus_handle(),
             log_screen_focus: cx.focus_handle(),
             log_info_focus: cx.focus_handle(),
-            param_differences: Vec::new(),
             radio_input: config::radio::RadioInput::default(),
             motor_test: config::motor_test::MotorTest::default(),
             motor_focus: config::motor_test::Focus::new(cx),
@@ -1353,133 +1332,6 @@ impl MissionPlanner {
                 self.file_status = Some(format!("{} is not a mission file: {err}", path.display()));
             }
         }
-    }
-
-    /// Where a named parameter file lives.
-    ///
-    /// The same directory as missions and by the same rule: a name, not a path, so a typed
-    /// separator cannot write outside it.
-    fn param_path(&self) -> std::path::PathBuf {
-        let name = self.param_file_name.value().trim();
-        let leaf = name
-            .rsplit(['/', '\\'])
-            .next()
-            .filter(|part| !part.is_empty() && *part != "." && *part != "..")
-            .unwrap_or(DEFAULT_PARAM_FILE);
-        let leaf = if leaf.contains('.') {
-            leaf.to_owned()
-        } else {
-            format!("{leaf}.param")
-        };
-        Self::plan_directory().join(leaf)
-    }
-
-    /// The parameters currently held for the vehicle, as a file would hold them.
-    fn params_as_file(&self) -> mp_params::param_file::ParamFile {
-        let view = self.telemetry.view();
-        mp_params::param_file::ParamFile::from_values(
-            view.parameters
-                .iter()
-                .map(|(name, value)| (name.clone(), *value)),
-        )
-    }
-
-    /// Writes the vehicle's parameters to a file.
-    ///
-    /// Refused while the download is incomplete. A backup missing four hundred parameters is
-    /// indistinguishable from a complete one once it is on disk, and it will be found and loaded
-    /// by somebody who believes it is a backup.
-    fn save_params(&mut self) {
-        let view = self.telemetry.view();
-        let expected = usize::from(view.parameters_expected);
-        let held = view.parameters.len();
-        if held == 0 {
-            self.file_status = Some("no parameters to save - download them first".to_owned());
-            return;
-        }
-        if expected > held {
-            self.file_status = Some(format!(
-                "only {held} of {expected} parameters are here; wait for the download to finish"
-            ));
-            return;
-        }
-        let path = self.param_path();
-        let file = self.params_as_file();
-        self.file_status = match file.save(&path) {
-            Ok(()) => {
-                page_files::saved(&path);
-                Some(format!(
-                    "saved {} of {held} parameters to {}",
-                    file.len(),
-                    path.display()
-                ))
-            }
-            Err(err) => Some(format!("could not save to {}: {err}", path.display())),
-        };
-    }
-
-    /// Compares a file against the vehicle, without changing anything.
-    fn compare_params(&mut self) {
-        let path = self.param_path();
-        let proposed = match mp_params::param_file::ParamFile::load(&path) {
-            Ok(file) => file,
-            Err(err) => {
-                self.param_differences.clear();
-                self.file_status = Some(format!("could not read {}: {err}", path.display()));
-                return;
-            }
-        };
-        let current = self.params_as_file();
-        if current.is_empty() {
-            self.file_status = Some("no parameters from the vehicle to compare against".to_owned());
-            return;
-        }
-        self.param_differences = current.compare(&proposed);
-        let unreadable = proposed.rejected().len();
-        self.file_status = Some(match (self.param_differences.len(), unreadable) {
-            (0, 0) => format!("the vehicle already matches {}", path.display()),
-            (0, bad) => format!(
-                "the vehicle matches {}, but {bad} lines of it could not be read",
-                path.display()
-            ),
-            (n, 0) => format!("{n} parameters differ from {}", path.display()),
-            (n, bad) => format!(
-                "{n} parameters differ from {}; {bad} lines could not be read",
-                path.display()
-            ),
-        });
-    }
-
-    /// Writes the differences found by the last comparison to the vehicle.
-    ///
-    /// Only what the comparison found, and only what the vehicle already has. A parameter in the
-    /// file that this firmware does not know is skipped rather than sent: ArduPilot ignores a set
-    /// for an unknown name silently, so sending it would report success for nothing happening.
-    ///
-    /// One at a time, each waiting for the vehicle's echo and sent again until it comes, as the
-    /// C#'s Write Params loop does; the status line follows it and ends with the C#'s summary.
-    /// `// C#: GCSViews/ConfigurationView/ConfigRawParams.cs:313-371`
-    fn apply_params(&mut self) {
-        if self.param_differences.is_empty() {
-            self.file_status = Some("compare a file first - there is nothing to apply".to_owned());
-            return;
-        }
-        let mut writes = Vec::new();
-        let mut skipped = 0usize;
-        for difference in &self.param_differences {
-            match difference.kind {
-                mp_params::param_file::Change::Changed { to, .. } => {
-                    writes.push((difference.name.clone(), to));
-                }
-                mp_params::param_file::Change::Added { .. }
-                | mp_params::param_file::Change::Missing { .. } => skipped += 1,
-            }
-        }
-        // The comparison is now stale - it describes a vehicle that no longer exists. Cleared
-        // rather than left on screen, because a list of differences beside an "apply" button that
-        // has already been pressed invites pressing it again.
-        self.param_differences.clear();
-        self.start_param_writes(params::ParamWrites::apply(writes, skipped));
     }
 
     /// Switches the map to another tile provider, and remembers it.
@@ -2869,14 +2721,6 @@ impl MissionPlanner {
                 &parameters,
                 selected.as_deref(),
                 self.raw_params.changes(),
-                cx,
-            ))
-            .child(params::file_panel(
-                view,
-                &self.param_file_name,
-                &self.param_file_focus,
-                self.param_file_focus.is_focused(window),
-                &self.param_differences,
                 cx,
             ))
             .into_any_element();

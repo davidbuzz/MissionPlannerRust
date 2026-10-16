@@ -24,9 +24,9 @@
 //! ReadOnly and out-of-range questions, Write Params and its Ctrl+S, the columns' widths and the
 //! splitter's distance kept between visits, and the RawParamWarning box.
 //!
-//! The screen is `params.rs` (the group list, the rows, the editor and the file panel) and
-//! `raw_params.rs` (row 82's right-hand column and `_changes`); this is the grid's own behaviour
-//! and the state behind it.
+//! The screen is `params.rs` (the group list, the rows and the editor) and `raw_params.rs` (row
+//! 82's right-hand column, its file dialogs among it, and `_changes`); this is the grid's own
+//! behaviour and the state behind it.
 //!
 //! * **Fav** (`:595-596, 1045-1063, 833-858`): each row's check box is ticked from the
 //!   `fav_params` setting when the rows are made; clicking it appends the name to the list or
@@ -1796,8 +1796,8 @@ impl RawGrid {
     }
 
     /// The question's Yes: the writes, in `SortENABLE`'s order, one after another - each "Set
-    /// NAME Failed" if never heard back and the summary after them on the status line, as the
-    /// file panel's writes say theirs - and Write Params' end kept for when they are heard back.
+    /// NAME Failed" if never heard back and the summary after them on the status line, as every
+    /// list of writes says theirs - and Write Params' end kept for when they are heard back.
     /// A closed port is the second loop's refusal.
     /// `// C#: GCSViews/ConfigurationView/ConfigRawParams.cs:313-364`
     ///
@@ -1933,8 +1933,8 @@ impl MissionPlanner {
     }
 
     /// `Params_CellValueChanged`: a Value cell's new text - typed, put there by the Options
-    /// control, the editor's step or a presaved file - checked, and waiting in `_changes` for
-    /// Write Params when it passes.
+    /// control, the editor's step, Load from file or a compared file - checked, and waiting in
+    /// `_changes` for Write Params when it passes.
     /// `// C#: GCSViews/ConfigurationView/ConfigRawParams.cs:454-533`
     pub(crate) fn param_grid_edit(&mut self, name: &str, text: &str) {
         let range = crate::metadata::lookup(name).and_then(|meta| meta.range);

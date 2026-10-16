@@ -87,6 +87,7 @@ wrote).
   `Utilities/Update.cs` and `help.rs` reads `beta_updates`.
 - ConfigRawParams' Load, Save and Compare are `params.rs`'s own typed-file panel, not the chooser
   every other file dialog here uses (the owner's word of 2026-10-16 on Browse).
+  (mended 2026-10-16: the chooser, with the C#'s filters; params-file-dialogs.gui.)
 
 ## Behaviour that differs from the C#, found by the readers (to the matrix as one row)
 

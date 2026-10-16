@@ -97,10 +97,11 @@ click param-collapse
 expect params.collapsed true
 expect params.shown > 1000
 # Every parameter listed, but only the rows in the box built (a DataGridView paints its visible
-# rows): 1,408 element trees a frame made the screen crawl (2026-09-26). A box holds at most
-# 13 rows.
+# rows): 1,408 element trees a frame made the screen crawl (2026-09-26). A box held at most
+# 13 rows while the file panel sat under the grid; 23 since the panel went (2026-10-16, the
+# C#'s Load, Save and Compare at their rows instead).
 expect params.rows.drawn > 0
-expect params.rows.drawn < 20
+expect params.rows.drawn < 30
 
 # Left and come back to: still collapsed.
 click tab-fly

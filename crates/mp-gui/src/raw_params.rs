@@ -18,15 +18,29 @@
 //
 // SPDX-License-Identifier: GPL-3.0-only
 
-//! The Full Parameter List's remainder: `ConfigRawParams`'s Write Params, Reset to Default, Load
-//! Presaved and its file list, Commit Params, the Modified filter, Refresh Table and the tree's
-//! collapse.
+//! The Full Parameter List's remainder: `ConfigRawParams`'s Load from file, Save to file, Write
+//! Params, Compare Params, Reset to Default, Load Presaved and its file list, Commit Params, the
+//! Modified filter, Refresh Table and the tree's collapse.
 //!
-//! The screen itself - the group list, the rows, the editor and the file panel - is `params.rs`;
-//! this is the rest of the C#'s right-hand column and the state behind it.
+//! The screen itself - the group list, the rows and the editor - is `params.rs`; this is the rest
+//! of the C#'s right-hand column and the state behind it.
 //!
-//! * Write Params (`BUT_writePIDS`): the button, first of these in the Designer's order, enabled
-//!   with the port open. Its handler is the grid's (`raw_params_grid.rs`), which Ctrl+S runs too:
+//! * Load from file, Save to file and Compare Params (`BUT_load`, `BUT_save`, `BUT_compare`), rows
+//!   0, 1 and 5 of the column and never disabled: each opens its file dialog as the planner's own
+//!   chooser, a box over the folder it names listed to browse ([`crate::file_list`]), as every
+//!   other file dialog here is (the owner's word of 2026-10-16). Load from file's and Compare
+//!   Params' are `OpenFileDialog`s with `ParamFile.FileMask`, Save to file's a `SaveFileDialog`
+//!   with "Param List|*.param;*.parm"; each has `DefaultExt = ".param"` with `AddExtension`, and
+//!   none sets a folder or a name, so each opens with its box empty. Load from file reads the file
+//!   with `loadParamFile` and puts each value whose name the grid has a row for in that row's
+//!   Value cell where the text differs - an edit like any other, waiting in `_changes` for Write
+//!   Params - and lists the names it has no row for in "Missing N params" under "No matching
+//!   Params". Save to file writes every row's Value cell, an edit waiting included, as
+//!   `SaveParamFile` writes. Compare Params reads its file and opens `ParamCompare` over the
+//!   vehicle's table and it, as Load Presaved does; its Continue puts the rows ticked in the grid,
+//!   and nothing is said after.
+//! * Write Params (`BUT_writePIDS`): the button, after Load from file and Save to file in the
+//!   Designer's order, enabled with the port open. Its handler is the grid's (`raw_params_grid.rs`), which Ctrl+S runs too:
 //!   it asks, then writes every edit waiting in `_changes`.
 //! * Reset to Default asks "Reset all parameters to default\nAre you sure!!" under "Reset", then
 //!   `setParam(new[] {"FORMAT_VERSION", "SYSID_SW_MREV"}, 0)` - the first of the two the vehicle
@@ -48,28 +62,84 @@
 //! * Refresh Table (shown with the Planner page's Slow Machine ticked): the rows made again.
 //! * `but_collapse`: the tree hidden, and its prefix dropped, so every row shows.
 //!
+//! Where the three file buttons differ, and why:
+//!
+//! * with the port closed, Load from file adds each name the grid has no row for to `MAV.param` as
+//!   a REAL32 and activates the screen again (`:141-144, 195-200`); this planner holds no table of
+//!   parameters without a link, so those names are missed and listed in the box;
+//! * a file that cannot be read, or a value `double.Parse` refuses - `loadParamFile`'s
+//!   `FormatException`, which neither handler catches - reaches Mission Planner's
+//!   unhandled-exception box; here its words go on the status line, by the owner's ruling of
+//!   2026-09-25;
+//! * the file is read by mp-params' `ParamFile`, Load Presaved's reader too, which hands its
+//!   values over in name order where the C#'s `Dictionary` keeps the file's, so the missing names
+//!   are listed in that order;
+//! * `SaveFileDialog`'s "already exists, replace it?" is not asked: the dialog writes the path
+//!   given, as every Save As here does;
+//! * Save to file's `Strings.InvalidNumberEntered` for a Value cell that is no number cannot
+//!   arise: a text typed that is none leaves the cell red and its value as it was
+//!   (`raw_params_grid.rs`), so every row's value is a number's.
+//!
 //! `// C#: GCSViews/ConfigurationView/ConfigRawParams.cs`
 
 // This module is internal to the binary; `pub` here documents intent rather than exporting API.
 #![allow(unreachable_pub)]
 
 use std::collections::BTreeMap;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::mpsc::{Receiver, TryRecvError};
 use web_time::{Duration, Instant};
 
-use gpui::{AnyElement, Context, SharedString, Window, div, prelude::*, px, rgb};
+use gpui::{AnyElement, Context, KeyDownEvent, SharedString, Window, div, prelude::*, px, rgb};
 use mp_firmware::manifest::Fetch;
 use mp_link::RequestId;
 use mp_link::requests::RequestOutcome;
+use mp_os::fs::FsExt as _;
 
 use crate::MissionPlanner;
+use crate::config::firmware::{BoxIds, PathBox};
 use crate::config::param_compare::{self, ParamCompare};
 use crate::config::servo_output::{self, Combo};
 use crate::fly::{error_box, strings};
 use crate::params::Written;
 use crate::telemetry::{Lookup, Report, Telemetry};
+use crate::textfield::KeyOutcome;
 use crate::ui::{action, theme};
+
+/// `BUT_load.Text`. `// C#: GCSViews/ConfigurationView/ConfigRawParams.resx`
+pub const LOAD_FROM_FILE: &str = "Load from file";
+/// `BUT_save.Text`. `// C#: GCSViews/ConfigurationView/ConfigRawParams.resx`
+pub const SAVE_TO_FILE: &str = "Save to file";
+/// `BUT_compare.Text`. `// C#: GCSViews/ConfigurationView/ConfigRawParams.resx`
+pub const COMPARE_PARAMS: &str = "Compare Params";
+/// `ParamFile.FileMask`: Load from file's and Compare Params' `OpenFileDialog.Filter`.
+/// `// C#: ExtLibs/Utilities/ParamFile.cs:15; GCSViews/ConfigurationView/ConfigRawParams.cs:134, 405`
+pub const FILE_MASK: &str = "Parameter File|*.param;*.parm|All Files|*.*";
+/// Save to file's `SaveFileDialog.Filter`.
+/// `// C#: GCSViews/ConfigurationView/ConfigRawParams.cs:231`
+pub const SAVE_FILTER: &str = "Param List|*.param;*.parm";
+/// The three dialogs' `DefaultExt`, ".param", which `AddExtension` puts on a name typed without
+/// an extension.
+/// `// C#: GCSViews/ConfigurationView/ConfigRawParams.cs:131-132, 228-229, 402-403`
+pub const DEFAULT_EXT: &str = "param";
+/// The caption of Load from file's box for the names the grid has no row for.
+/// `// C#: GCSViews/ConfigurationView/ConfigRawParams.cs:220`
+pub const NO_MATCHING: &str = "No matching Params";
+/// `Environment.NewLine`, which `StreamWriter.WriteLine` ends each line of `SaveParamFile` with:
+/// the platform's.
+const NEWLINE: &str = if cfg!(windows) { "\r\n" } else { "\n" };
+/// The three file dialogs' ids: the box, its OK and its Cancel, and the chooser's name.
+const FILE_IDS: BoxIds = BoxIds {
+    question: "param-file-question",
+    yes: "param-file-question-yes",
+    no: "param-file-question-no",
+    message: "param-file-message",
+    ok: "param-file-message-ok",
+    path: "param-file",
+    path_value: "param-file-value",
+    path_ok: "param-file-ok",
+    path_cancel: "param-file-cancel",
+};
 
 /// `BUT_writePIDS.Text`. `// C#: GCSViews/ConfigurationView/ConfigRawParams.resx`
 pub const WRITE_PARAMS: &str = "Write Params";
@@ -166,8 +236,20 @@ pub struct RawParams {
     reset: Option<Reset>,
     /// `CMB_paramfiles` and Load Presaved.
     presets: Presets,
-    /// `ParamCompare`, open over a presaved file.
+    /// `ParamCompare`, open over a presaved file or the file Compare Params chose.
     compare: Option<ParamCompare>,
+    /// Whether Load Presaved opened `ParamCompare`, whose OK is followed by "Loaded parameters,
+    /// please make sure you write them!"; Compare Params shows the form and nothing after it.
+    /// `// C#: GCSViews/ConfigurationView/ConfigRawParams.cs:413-416, 962-965`
+    compare_presaved: bool,
+    /// Load from file's, Save to file's or Compare Params' dialog, showing: which, and its box.
+    file: Option<(FileFor, PathBox)>,
+    /// The dialog's keyboard, made the first time one shows.
+    file_focus: Option<gpui::FocusHandle>,
+    /// The file Save to file last wrote and how many parameters, for the facts.
+    saved: Option<(PathBuf, usize)>,
+    /// Load from file's last `loaded` and `missed`, for the facts.
+    loaded: Option<(usize, usize)>,
 }
 
 impl RawParams {
@@ -196,7 +278,7 @@ impl RawParams {
     }
 
     /// `_changes`: every value edited and not yet written - the grid's Value cell typed into, its
-    /// Options control, the editor's step, a presaved file's rows - each waiting, its cell green,
+    /// Options control, the editor's step, a loaded or compared file's rows - each waiting, green,
     /// until Write Params sends it. A change leaves once its `setParam` returns; one that throws,
     /// every retry unanswered, stays for the next Write Params.
     /// `// C#: GCSViews/ConfigurationView/ConfigRawParams.cs:313-364, 518-524`
@@ -280,6 +362,55 @@ impl RawParams {
     /// `chk_modified` clicked.
     pub fn click_modified(&mut self) {
         self.modified = !self.modified;
+    }
+
+    /// `ParamCompare` opened over the vehicle's table and a file: by Load Presaved, `presaved`,
+    /// or by Compare Params.
+    fn open_compare(&mut self, form: ParamCompare, presaved: bool) {
+        self.compare = Some(form);
+        self.compare_presaved = presaved;
+    }
+
+    /// `ParamCompare`'s button pressed: the form, closed, and whether Load Presaved opened it.
+    fn take_compare(&mut self) -> Option<(ParamCompare, bool)> {
+        let form = self.compare.take()?;
+        Some((form, std::mem::take(&mut self.compare_presaved)))
+    }
+
+    /// The file dialog showing, if one is: which button's, and its box.
+    #[must_use]
+    pub fn file(&self) -> Option<(FileFor, &PathBox)> {
+        self.file.as_ref().map(|(button, path)| (*button, path))
+    }
+
+    /// Load from file, Save to file or Compare Params pressed: its dialog.
+    pub fn press_file(&mut self, button: FileFor) {
+        self.file = Some((button, button.dialog()));
+    }
+
+    /// The file dialog answered, its box's relative names taken from `directory`. Cancel closes
+    /// it and does nothing more, as `DialogResult.Cancel` does. OK on an `OpenFileDialog` takes a
+    /// file that is there ([`opened_file`]) and on the `SaveFileDialog` the name typed, ".param"
+    /// put on one with no extension; any other answer keeps the dialog asking, as the platform's
+    /// does. The file chosen, and the button it is for.
+    /// `// C#: GCSViews/ConfigurationView/ConfigRawParams.cs:137-141, 234-235, 408-411`
+    pub fn answer_file(&mut self, ok: bool, directory: &Path) -> Option<(FileFor, PathBuf)> {
+        let (button, path) = self.file.take()?;
+        if !ok {
+            return None;
+        }
+        let typed = path.field.value();
+        let chosen = match button {
+            FileFor::Load | FileFor::Compare => opened_file(typed, directory),
+            FileFor::Save => crate::plan::dialog_path(typed, DEFAULT_EXT, directory),
+        };
+        match chosen {
+            Some(file) => Some((button, file)),
+            None => {
+                self.file = Some((button, path));
+                None
+            }
+        }
     }
 }
 
@@ -438,6 +569,199 @@ pub fn commit_params(telemetry: &mut Telemetry) -> Option<RequestId> {
     telemetry.command(vehicle, PREFLIGHT_STORAGE, COMMIT, commit_report())
 }
 
+// --- Load from file, Save to file and Compare Params --------------------------------------------
+
+/// The button a file dialog is for.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum FileFor {
+    /// Load from file's `OpenFileDialog`.
+    Load,
+    /// Save to file's `SaveFileDialog`.
+    Save,
+    /// Compare Params' `OpenFileDialog`.
+    Compare,
+}
+
+impl FileFor {
+    /// The word the facts say it with.
+    #[must_use]
+    pub const fn word(self) -> &'static str {
+        match self {
+            Self::Load => "load",
+            Self::Save => "save",
+            Self::Compare => "compare",
+        }
+    }
+
+    /// The dialog the button shows: Load from file's and Compare Params' `OpenFileDialog` with
+    /// `ParamFile.FileMask`, Save to file's `SaveFileDialog` with its "Param List" filter,
+    /// captioned as the platform's are. None sets `InitialDirectory` or `FileName`, so each opens
+    /// with its box empty over [`crate::file_list::start_folder`], as every dialog here that sets
+    /// no folder does.
+    /// `// C#: GCSViews/ConfigurationView/ConfigRawParams.cs:129-135, 226-232, 400-406`
+    #[must_use]
+    pub fn dialog(self) -> PathBox {
+        match self {
+            Self::Load | Self::Compare => PathBox::new("", FILE_MASK),
+            Self::Save => {
+                let mut save = PathBox::new("", SAVE_FILTER);
+                save.caption = crate::joystick::SAVE_AS;
+                save
+            }
+        }
+    }
+}
+
+/// The file an `OpenFileDialog` with `AddExtension` and `DefaultExt = ".param"` answers for what
+/// its box holds: the file named - a relative name from `directory`, the folder the dialog lists -
+/// or, for a name typed without an extension, that name with ".param" when that is the file there.
+/// None while it names no file there, for which the dialog asks again.
+/// `// C#: GCSViews/ConfigurationView/ConfigRawParams.cs:131-132, 402-403`
+#[must_use]
+pub fn opened_file(typed: &str, directory: &Path) -> Option<PathBuf> {
+    let named = crate::plan::dialog_path(typed, "", directory)?;
+    if named.os_is_file() {
+        return Some(named);
+    }
+    let with_extension = named.with_extension(DEFAULT_EXT);
+    (named.extension().is_none() && with_extension.os_is_file()).then_some(with_extension)
+}
+
+/// `ParamFile.loadParamFile`, through mp-params' reader, Load Presaved's too: the file's names and
+/// values; or, as text, what the C# throws - the file unreadable, or "Invalid number on param
+/// NAME : VALUE" for a value `double.Parse` refuses, when nothing of the file is loaded.
+/// `// C#: ExtLibs/Utilities/ParamFile.cs:17-46`
+///
+/// # Errors
+/// What `loadParamFile` would throw.
+pub fn read_param_file(path: &Path) -> Result<Vec<(String, f64)>, String> {
+    use mp_params::param_file::{ParamFile, RejectReason};
+    let file = ParamFile::load(path).map_err(|err| format!("{}: {err}", path.display()))?;
+    // mp-params passes over a line whose value is no number and reads on; the C#'s `double.Parse`
+    // of `items[1]` throws, at the first such line in the file's order.
+    for rejected in file.rejected() {
+        if rejected.reason != RejectReason::NotANumber {
+            continue;
+        }
+        let items: Vec<&str> = rejected
+            .text
+            .split([' ', ',', '\t'])
+            .filter(|item| !item.is_empty())
+            .collect();
+        if let [name, value, ..] = items.as_slice()
+            && mp_log::netfmt::parse_double(value).is_none()
+        {
+            return Err(format!("Invalid number on param {name} : {value}"));
+        }
+    }
+    Ok(file
+        .iter()
+        .map(|(name, value)| (name.to_owned(), value))
+        .collect())
+}
+
+/// A row of the grid, as [`crate::raw_params_grid::value_text`] reads its Value cell.
+fn cell(name: &str, value: f64) -> crate::params::Parameter {
+    crate::params::Parameter {
+        name: name.to_owned(),
+        value,
+        meta: None,
+        default: None,
+    }
+}
+
+/// What Load from file's loop over a file comes to.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct Loading {
+    /// The Value cells to set, in turn: each row's name and the file's value as `ToString()`
+    /// writes it.
+    pub edits: Vec<(String, String)>,
+    /// `loaded`: how many of the file's names the grid has a row for.
+    pub loaded: usize,
+    /// `missing`: the names it has none for.
+    pub missing: Vec<String>,
+}
+
+/// `loadparamsfromfile`'s loop over a file's values and the grid's rows - the vehicle's
+/// parameters, each Value cell's text as [`crate::raw_params_grid::value_text`] writes it, an edit
+/// waiting in `changes` included: a name with a row is loaded, its cell set to the file's value
+/// when the cell's text differs; a name with none is missed. The loop's own list of the names it
+/// passes over, `SYSID_SW_MREV` to `FORMAT_VERSION`, never matches here: `loadParamFile` has
+/// dropped every one of them already.
+/// `// C#: GCSViews/ConfigurationView/ConfigRawParams.cs:157-211; ExtLibs/Utilities/ParamFile.cs:47-76`
+#[must_use]
+pub fn load_values(
+    rows: &[(String, f64)],
+    changes: &BTreeMap<String, f64>,
+    file: &[(String, f64)],
+) -> Loading {
+    let mut loading = Loading::default();
+    for (name, value) in file {
+        // `param2[name].ToString()`.
+        let value = mp_log::netfmt::double(*value);
+        match rows.iter().find(|(row, _)| row == name) {
+            Some((_, held)) => {
+                loading.loaded += 1;
+                if crate::raw_params_grid::value_text(&cell(name, *held), changes) != value {
+                    loading.edits.push((name.clone(), value));
+                }
+            }
+            None => loading.missing.push(name.clone()),
+        }
+    }
+    loading
+}
+
+/// The box's text for the names missed: "Missing N params" and, on the line after, each name
+/// followed by a space; none when nothing was missed.
+/// `// C#: GCSViews/ConfigurationView/ConfigRawParams.cs:213-221`
+#[must_use]
+pub fn missing_text(missing: &[String]) -> Option<String> {
+    if missing.is_empty() {
+        return None;
+    }
+    let list: String = missing.iter().map(|name| format!("{name} ")).collect();
+    Some(format!("Missing {} params\n{list}", missing.len()))
+}
+
+/// Save to file's values: every row's Value cell read back as a number, `double.Parse` of its
+/// text - the edit waiting in `changes` where there is one, else the vehicle's value as the cell
+/// writes it - so a REAL32 is saved as the grid shows it, 0.1 and not 0.100000001490116.
+/// `// C#: GCSViews/ConfigurationView/ConfigRawParams.cs:237-250`
+#[must_use]
+pub fn grid_values(rows: &[(String, f64)], changes: &BTreeMap<String, f64>) -> Vec<(String, f64)> {
+    rows.iter()
+        .filter_map(|(name, value)| {
+            let text = crate::raw_params_grid::value_text(&cell(name, *value), changes);
+            mp_log::netfmt::parse_double(&text).map(|value| (name.clone(), value))
+        })
+        .collect()
+}
+
+/// `ParamFile.SaveParamFile`'s text: the names in `SortedList`'s order, `Comparer.Default`'s - the
+/// culture's ([`mp_log::netfmt::culture_compare`]) - each `NAME,value` with the value as
+/// `double.ToString(CultureInfo.InvariantCulture)` writes it (the C#'s two branches write the
+/// same), each line ended as `StreamWriter.WriteLine` ends it, with the platform's newline.
+/// `// C#: ExtLibs/Utilities/ParamFile.cs:85-108`
+#[must_use]
+pub fn param_file_text(values: &[(String, f64)]) -> String {
+    let mut sorted: Vec<&(String, f64)> = values.iter().collect();
+    sorted.sort_by(|a, b| mp_log::netfmt::culture_compare(&a.0, &b.0));
+    sorted
+        .into_iter()
+        .map(|(name, value)| format!("{name},{}{NEWLINE}", mp_log::netfmt::double(*value)))
+        .collect()
+}
+
+/// `SaveParamFile` to `path`: `File.Open(fn, FileMode.Create)`, over any file of that name.
+/// `// C#: ExtLibs/Utilities/ParamFile.cs:85-108`
+///
+/// # Errors
+/// The file cannot be written.
+pub fn write_param_file(path: &Path, values: &[(String, f64)]) -> std::io::Result<()> {
+    mp_os::fs::write(path, param_file_text(values))
+}
+
 // --- Load Presaved -------------------------------------------------------------------------------
 
 /// One of `paramfiles`: a `GitHubContent.FileInfo`'s `name` and `path`.
@@ -551,12 +875,7 @@ pub fn load_preset(fetch: &dyn Fetch, file: &PresetFile, directory: Option<&Path
         .ok_or_else(|| format!("{} is not a file name", file.name))?;
     let path = directory.join(name);
     mp_os::fs::write(&path, &data).map_err(|err| format!("{}: {err}", path.display()))?;
-    let loaded = mp_params::param_file::ParamFile::load(&path)
-        .map_err(|err| format!("{}: {err}", path.display()))?;
-    Ok(loaded
-        .iter()
-        .map(|(name, value)| (name.to_owned(), value))
-        .collect())
+    read_param_file(&path)
 }
 
 /// `CMB_paramfiles` and `BUT_paramfileload`, and the fetches behind them.
@@ -729,8 +1048,8 @@ impl MissionPlanner {
                     // C#: GCSViews/ConfigurationView/ConfigRawParams.cs:959-962
                     Ok(values) => {
                         let view = self.telemetry.view();
-                        self.raw_params.compare =
-                            Some(ParamCompare::new(&view.parameters, &values));
+                        self.raw_params
+                            .open_compare(ParamCompare::new(&view.parameters, &values), true);
                     }
                     // A box in the C#; an error, so on the status line (the owner's ruling,
                     // 2026-09-25).
@@ -813,11 +1132,11 @@ impl MissionPlanner {
     /// waiting green in `_changes` - one row after another, so the questions come in turn. A
     /// value that is no number is the C#'s `double.Parse` throwing into the
     /// `ErrorSettingParameter` box: the status line's here (the owner's ruling). The form then
-    /// closes with OK, and "Loaded parameters, please make sure you write them!" says the values
-    /// wait for Write Params.
-    /// `// C#: Controls/paramcompare.cs:65-108; GCSViews/ConfigurationView/ConfigRawParams.cs:453-524, 959-965`
+    /// closes with OK; opened by Load Presaved, "Loaded parameters, please make sure you write
+    /// them!" says the values wait for Write Params, and opened by Compare Params nothing is said.
+    /// `// C#: Controls/paramcompare.cs:65-108; GCSViews/ConfigurationView/ConfigRawParams.cs:413-416, 453-524, 959-965`
     fn save_compare(&mut self) {
-        let Some(form) = self.raw_params.compare.take() else {
+        let Some((form, presaved)) = self.raw_params.take_compare() else {
             return;
         };
         for row in form.rows().iter().filter(|row| row.used) {
@@ -829,8 +1148,114 @@ impl MissionPlanner {
             self.param_grid_edit(&name, row.new_value.trim());
         }
         // After the questions the rows raised, as the C#'s box comes once the form has closed.
-        let (caption, text) = LOADED;
-        self.param_grid.notice(caption, text);
+        if presaved {
+            let (caption, text) = LOADED;
+            self.param_grid.notice(caption, text);
+        }
+    }
+
+    /// Load from file, Save to file or Compare Params pressed: its file dialog, with the
+    /// keyboard - which ends the typing in a Value cell first, as any other control taking the
+    /// keyboard from the grid does, so Save to file writes what was typed.
+    /// `// C#: GCSViews/ConfigurationView/ConfigRawParams.cs:127-137, 224-234, 396-408`
+    fn ask_param_file(&mut self, button: FileFor, window: &mut Window, cx: &mut Context<Self>) {
+        self.param_grid_commit_edit();
+        self.raw_params.press_file(button);
+        let focus = self
+            .raw_params
+            .file_focus
+            .get_or_insert_with(|| cx.focus_handle())
+            .clone();
+        focus.focus(window, cx);
+    }
+
+    /// A key in the file dialog's box: Enter is its OK and Escape its Cancel, as the platform's
+    /// dialog takes them. Whether the box took it.
+    fn param_file_key(&mut self, event: &KeyDownEvent) -> bool {
+        let outcome = match self.raw_params.file.as_mut() {
+            Some((_, path)) => path.field.key(event),
+            None => return false,
+        };
+        match outcome {
+            KeyOutcome::Submitted => self.param_file_answered(true),
+            KeyOutcome::Cancelled => self.param_file_answered(false),
+            KeyOutcome::Changed => {}
+            KeyOutcome::Ignored => return false,
+        }
+        true
+    }
+
+    /// The file dialog answered: the file chosen loaded, saved or compared; Cancel, or an answer
+    /// the dialog asks again for, does nothing.
+    fn param_file_answered(&mut self, ok: bool) {
+        match self
+            .raw_params
+            .answer_file(ok, &crate::file_list::start_folder())
+        {
+            None => {}
+            Some((FileFor::Load, file)) => self.load_param_file(&file),
+            Some((FileFor::Save, file)) => self.save_param_file(&file),
+            Some((FileFor::Compare, file)) => self.compare_param_file(&file),
+        }
+    }
+
+    /// Load from file's file: `loadparamsfromfile` - each of its values the grid has a row for put
+    /// in that row's Value cell where the text differs, an edit like any other (the ReadOnly box,
+    /// the out-of-range question, the change waiting green in `_changes`), one after another; then
+    /// the names it has no row for in "Missing N params" under "No matching Params", after the
+    /// questions the cells raised, as the C#'s box comes once its loop has ended. A file that
+    /// cannot be read goes on the status line ([`read_param_file`]).
+    /// `// C#: GCSViews/ConfigurationView/ConfigRawParams.cs:141, 149-222`
+    fn load_param_file(&mut self, file: &Path) {
+        let values = match read_param_file(file) {
+            Ok(values) => values,
+            Err(why) => {
+                self.file_status = Some(error_box(why));
+                return;
+            }
+        };
+        let view = self.telemetry.view();
+        let loading = load_values(&view.parameters, self.raw_params.changes(), &values);
+        for (name, text) in &loading.edits {
+            self.param_grid_edit(name, text);
+        }
+        if let Some(text) = missing_text(&loading.missing) {
+            self.param_grid.notice(NO_MATCHING, &text);
+        }
+        self.raw_params.loaded = Some((loading.loaded, loading.missing.len()));
+    }
+
+    /// Save to file's name: every row's Value cell, an edit waiting for Write Params included,
+    /// written as `SaveParamFile` writes them - in a page, the file handed to the browser as a
+    /// download too. A file that cannot be written - `File.Open` throwing, which the C# does not
+    /// catch - goes on the status line (the owner's ruling of 2026-09-25).
+    /// `// C#: GCSViews/ConfigurationView/ConfigRawParams.cs:235-252; ExtLibs/Utilities/ParamFile.cs:85-108`
+    fn save_param_file(&mut self, file: &Path) {
+        let view = self.telemetry.view();
+        let values = grid_values(&view.parameters, self.raw_params.changes());
+        match write_param_file(file, &values) {
+            Ok(()) => {
+                crate::page_files::saved(file);
+                self.raw_params.saved = Some((file.to_path_buf(), values.len()));
+            }
+            Err(err) => self.file_status = Some(error_box(format!("{}: {err}", file.display()))),
+        }
+    }
+
+    /// Compare Params' file: `loadParamFile` of it, and `ParamCompare` over the grid, the
+    /// vehicle's table and the file, as Load Presaved opens it; its Continue puts the rows ticked
+    /// in the grid ([`Self::save_compare`]). A file that cannot be read goes on the status line
+    /// ([`read_param_file`]).
+    /// `// C#: GCSViews/ConfigurationView/ConfigRawParams.cs:409-416`
+    fn compare_param_file(&mut self, file: &Path) {
+        match read_param_file(file) {
+            Ok(values) => {
+                let view = self.telemetry.view();
+                self.raw_params
+                    .open_compare(ParamCompare::new(&view.parameters, &values), false);
+            }
+            Err(why) => self.file_status = Some(error_box(why)),
+        }
     }
 
     /// The facts a script reads.
@@ -863,6 +1288,62 @@ impl MissionPlanner {
         record("params.reset.running", raw.reset.is_some());
         record("params.message", raw.message.unwrap_or(""));
         record("params.compare.open", raw.compare.is_some());
+        record(
+            "params.compare.rows",
+            raw.compare.as_ref().map_or(0, |form| form.rows().len()),
+        );
+        record(
+            "params.compare.names",
+            raw.compare
+                .as_ref()
+                .map(|form| {
+                    form.rows()
+                        .iter()
+                        .map(|row| row.name.as_str())
+                        .collect::<Vec<_>>()
+                        .join(",")
+                })
+                .filter(|names| !names.is_empty())
+                .unwrap_or_else(|| "none".to_owned()),
+        );
+        // The file dialog showing - which button's, its caption and what its box holds - and what
+        // the last Save to file and Load from file came to.
+        record(
+            "params.file",
+            raw.file
+                .as_ref()
+                .map_or("none", |(button, _)| button.word()),
+        );
+        record(
+            "params.file.caption",
+            raw.file.as_ref().map_or("none", |(_, path)| path.caption),
+        );
+        record(
+            "params.file.typed",
+            raw.file
+                .as_ref()
+                .map(|(_, path)| path.field.value())
+                .filter(|typed| !typed.is_empty())
+                .unwrap_or("none"),
+        );
+        record(
+            "params.file.saved",
+            raw.saved
+                .as_ref()
+                .map_or_else(|| "none".to_owned(), |(file, _)| file.display().to_string()),
+        );
+        record(
+            "params.file.saved.count",
+            raw.saved.as_ref().map_or(0, |(_, count)| *count),
+        );
+        record(
+            "params.file.loaded",
+            raw.loaded.map_or(0, |(loaded, _)| loaded),
+        );
+        record(
+            "params.file.missed",
+            raw.loaded.map_or(0, |(_, missed)| missed),
+        );
         let filters = crate::params::Filters {
             none_default: self.param_none_default,
             modified: raw.modified,
@@ -953,9 +1434,31 @@ pub fn collapse_button(collapsed: bool, cx: &mut Context<MissionPlanner>) -> Any
 /// `// C#: GCSViews/ConfigurationView/ConfigRawParams.resx`
 const COMBO_SIZE: (f32, f32) = (110.0, 21.0);
 
-/// The rest of the C#'s right-hand column: Write Params, Commit Params (when the display view
-/// shows it), the presaved files and Load Presaved, Reset to Default, Modified, and Refresh Table
-/// (with Slow Machine ticked), in the Designer's top-to-bottom order.
+/// Load from file, Save to file or Compare Params: its file dialog opened, with the keyboard.
+/// Nothing ever disables any of the three: neither the Designer nor `Activate` sets `Enabled`.
+/// `// C#: GCSViews/ConfigurationView/ConfigRawParams.Designer.cs:75-113; ConfigRawParams.cs:50-97`
+fn file_button(
+    id: &'static str,
+    text: &'static str,
+    button: FileFor,
+    cx: &mut Context<MissionPlanner>,
+) -> AnyElement {
+    action(
+        id,
+        text,
+        theme::ACCENT,
+        true,
+        cx.listener(move |this, _event: &(), window, cx| {
+            this.ask_param_file(button, window, cx);
+            cx.notify();
+        }),
+    )
+}
+
+/// The rest of the C#'s right-hand column: Load from file, Save to file, Write Params, Compare
+/// Params, Commit Params (when the display view shows it), the presaved files and Load Presaved,
+/// Reset to Default, Modified, and Refresh Table (with Slow Machine ticked), in the Designer's
+/// top-to-bottom order.
 /// `// C#: GCSViews/ConfigurationView/ConfigRawParams.resx; ConfigRawParams.cs:58-66`
 pub fn controls(
     raw: &RawParams,
@@ -997,6 +1500,9 @@ pub fn controls(
         ));
     }
 
+    // `BUT_load` and `BUT_save`, rows 0 and 1 of the column ([`file_button`]).
+    // C#: GCSViews/ConfigurationView/ConfigRawParams.resx (tableLayoutPanel1); ConfigRawParams.cs:127-147, 224-255
+    //
     // `BUT_writePIDS`, row 3 of the column - before Commit Params' row 6 and the rest -
     // `Enabled = MainV2.comPort.BaseStream.IsOpen`, and `BUT_writePIDS_Click` over `_changes`.
     // Pressing it takes the keyboard from the grid, which commits a cell being typed into first.
@@ -1006,6 +1512,8 @@ pub fn controls(
         .flex_wrap()
         .items_center()
         .gap_2()
+        .child(file_button("param-load", LOAD_FROM_FILE, FileFor::Load, cx))
+        .child(file_button("param-save", SAVE_TO_FILE, FileFor::Save, cx))
         .child(action(
             "param-write",
             WRITE_PARAMS,
@@ -1016,6 +1524,15 @@ pub fn controls(
                 this.param_grid_save();
                 cx.notify();
             }),
+        ))
+        // `BUT_compare`, row 5, after Write Params - Refresh Params' row 4 between them is
+        // invisible - and never disabled.
+        // C#: GCSViews/ConfigurationView/ConfigRawParams.resx (tableLayoutPanel1); ConfigRawParams.cs:396-419
+        .child(file_button(
+            "param-compare",
+            COMPARE_PARAMS,
+            FileFor::Compare,
+            cx,
         ));
     if crate::setup::display(COMMIT_FLAG) {
         row = row.child(action(
@@ -1081,14 +1598,30 @@ pub fn controls(
     row.into_any_element()
 }
 
-/// The boxes over the window: Reset to Default's question, the reboot's report, and
-/// `ParamCompare` over a presaved file.
+/// The boxes over the window: Load from file's, Save to file's or Compare Params' file dialog,
+/// Reset to Default's question, the reboot's report, and `ParamCompare` over a presaved file or
+/// the file Compare Params chose.
 pub fn overlays(
     raw: &RawParams,
     window: &Window,
     cx: &mut Context<MissionPlanner>,
 ) -> Vec<AnyElement> {
     let mut shown = Vec::new();
+    // The dialog as the planner's own chooser: its box, the folder it names listed by the
+    // dialog's filter, OK and Cancel (`crate::file_list`; the owner's word of 2026-10-16).
+    if let Some((_, path)) = raw.file()
+        && let Some(focus) = raw.file_focus.as_ref()
+    {
+        shown.push(crate::config::firmware::path_box(
+            FILE_IDS,
+            path,
+            focus,
+            window,
+            |this, event| this.param_file_key(event),
+            |this, ok| this.param_file_answered(ok),
+            cx,
+        ));
+    }
     if raw.question() {
         let buttons = vec![
             action(
@@ -1397,15 +1930,17 @@ mod tests {
     }
 
     /// Write Params is the `.resx`'s button: its text, and its place in the right-hand column -
-    /// row 3, after Load from file and Save to file and before Commit Params' row 6, which is why
-    /// it comes first of the controls this module draws.
+    /// row 3, after Load from file and Save to file and before Compare Params' row 5 and Commit
+    /// Params' row 6, which is the order this module draws them in.
     /// `// C#: GCSViews/ConfigurationView/ConfigRawParams.resx; ConfigRawParams.Designer.cs:323-337`
     #[test]
     fn write_params_is_the_resx_button() {
         let Some(resx) = crate::config_coverage::source::csharp(
             "GCSViews/ConfigurationView/ConfigRawParams.resx",
         ) else {
-            eprintln!("skipped: MP_SRC does not name a clone of https://github.com/ArduPilot/MissionPlanner");
+            eprintln!(
+                "skipped: MP_SRC does not name a clone of https://github.com/ArduPilot/MissionPlanner"
+            );
             return;
         };
         let values = crate::config_coverage::source::resx(&resx);
@@ -1420,6 +1955,7 @@ mod tests {
             ("BUT_load", 0),
             ("BUT_save", 1),
             ("BUT_writePIDS", 3),
+            ("BUT_compare", 5),
             ("BUT_commitToFlash", 6),
             ("BUT_reset_params", 10),
         ] {
@@ -1778,19 +2314,341 @@ mod tests {
         assert!(presets.can_load());
     }
 
-    /// Every control and fact the script names is one this module or the screen draws or
-    /// records.
+    /// Load from file, Save to file and Compare Params are the `.resx`'s buttons, and their
+    /// dialogs the C#'s: the filters and `DefaultExt` as the handlers set them,
+    /// `ParamFile.FileMask` as the reader's class has it, and the missing names' caption.
+    /// `// C#: GCSViews/ConfigurationView/ConfigRawParams.resx; ConfigRawParams.cs:129-135, 226-232, 400-406, 220; ExtLibs/Utilities/ParamFile.cs:15`
     #[test]
-    fn the_scripts_names_exist() {
-        let script = include_str!("../../../tests/gui/params-list-remainder.gui");
-        let sources = [
-            include_str!("raw_params.rs"),
-            include_str!("params.rs"),
-            include_str!("main.rs"),
-            // ---- ConfigRawParams remainder ----
-            include_str!("raw_params_grid.rs"),
-            // ---- end ConfigRawParams remainder ----
+    fn the_file_buttons_are_the_csharps() {
+        use crate::config_coverage::source;
+        let (Some(resx), Some(cs), Some(param_file)) = (
+            source::csharp("GCSViews/ConfigurationView/ConfigRawParams.resx"),
+            source::csharp("GCSViews/ConfigurationView/ConfigRawParams.cs"),
+            source::csharp("ExtLibs/Utilities/ParamFile.cs"),
+        ) else {
+            eprintln!(
+                "skipped: MP_SRC does not name a clone of https://github.com/ArduPilot/MissionPlanner"
+            );
+            return;
+        };
+        let values = source::resx(&resx);
+        for (control, text) in [
+            ("BUT_load", LOAD_FROM_FILE),
+            ("BUT_save", SAVE_TO_FILE),
+            ("BUT_compare", COMPARE_PARAMS),
+        ] {
+            assert_eq!(
+                values.get(&format!("{control}.Text")).map(String::as_str),
+                Some(text),
+                "{control}"
+            );
+        }
+        assert!(param_file.contains(&format!("public static string FileMask = \"{FILE_MASK}\";")));
+        assert_eq!(
+            cs.matches("Filter = ParamFile.FileMask").count(),
+            2,
+            "Load from file's and Compare Params'"
+        );
+        assert!(cs.contains(&format!("Filter = \"{SAVE_FILTER}\"")));
+        assert_eq!(
+            cs.matches(&format!("DefaultExt = \".{DEFAULT_EXT}\""))
+                .count(),
+            3,
+            "each of the three"
+        );
+        assert!(cs.contains(&format!("\"{NO_MATCHING}\"")));
+    }
+
+    /// Each button opens its dialog: Load from file's and Compare Params' an Open with
+    /// `ParamFile.FileMask`, Save to file's a Save As with "Param List", each with its box empty -
+    /// no `FileName` - and the chooser under it listing a folder's files by the filter's first
+    /// entry, a parameter file of either extension and no other.
+    /// `// C#: GCSViews/ConfigurationView/ConfigRawParams.cs:129-135, 226-232, 400-406`
+    #[test]
+    fn each_file_button_opens_its_dialog() {
+        let folder = scratch("open");
+        mp_os::fs::create_dir_all(folder.join("sub")).unwrap();
+        for file in ["tune.param", "old.parm", "notes.txt"] {
+            mp_os::fs::write(folder.join(file), "").unwrap();
+        }
+        for (button, filter, caption, kind) in [
+            (
+                FileFor::Load,
+                FILE_MASK,
+                crate::config::firmware::OPEN_FILE,
+                "Parameter File",
+            ),
+            (
+                FileFor::Save,
+                SAVE_FILTER,
+                crate::joystick::SAVE_AS,
+                "Param List",
+            ),
+            (
+                FileFor::Compare,
+                FILE_MASK,
+                crate::config::firmware::OPEN_FILE,
+                "Parameter File",
+            ),
+        ] {
+            let mut raw = RawParams::default();
+            assert!(raw.file().is_none());
+            raw.press_file(button);
+            let (shown, path) = raw.file().expect("the dialog");
+            assert_eq!(shown, button);
+            assert_eq!(path.filter, filter);
+            assert_eq!(path.caption, caption);
+            assert_eq!(path.field.value(), "", "no FileName");
+            let chooser = crate::file_list::Chooser::within(
+                FILE_IDS.path,
+                path.field.value(),
+                &folder,
+                path.filter,
+                0,
+            );
+            assert_eq!(chooser.folder, folder);
+            assert_eq!(
+                chooser
+                    .filter
+                    .entry(0)
+                    .map(|entry| entry.description.as_str()),
+                Some(kind)
+            );
+            assert_eq!(chooser.rows(), ["../", "sub/", "old.parm", "tune.param"]);
+            // Nothing else is touched by opening one.
+            assert!(raw.changes().is_empty());
+            assert!(raw.compare().is_none());
+        }
+        let _ = mp_os::fs::remove_dir_all(&folder);
+    }
+
+    /// A folder of the test's own, emptied first.
+    fn scratch(name: &str) -> PathBuf {
+        let folder = mp_os::temp_dir().join(format!(
+            "mp-gui-rawparams-{name}-{}-{:?}",
+            mp_os::process_id(),
+            wasm_thread::current().id()
+        ));
+        let _ = mp_os::fs::remove_dir_all(&folder);
+        mp_os::fs::create_dir_all(&folder).expect("scratch folder");
+        folder
+    }
+
+    /// Cancel closes each dialog and does nothing more. OK on an Open takes a file that is there -
+    /// a relative name from the folder listed, and a name typed without an extension found with
+    /// ".param" (`AddExtension`) - and keeps asking for anything else; OK on the Save As takes the
+    /// name typed, ".param" put on one with no extension, and keeps asking for no name or a folder.
+    /// `// C#: GCSViews/ConfigurationView/ConfigRawParams.cs:129-141, 226-235, 400-411`
+    #[test]
+    fn a_file_dialog_answers_as_the_platforms_does() {
+        let folder = scratch("answer");
+        mp_os::fs::write(folder.join("tune.param"), "RTL_ALT,1500\n").unwrap();
+        mp_os::fs::write(folder.join("other.parm"), "RTL_ALT,1500\n").unwrap();
+        let typed = |path: &Path| path.display().to_string();
+        let answer = |button: FileFor, text: &str, ok: bool| {
+            let mut raw = RawParams::default();
+            raw.press_file(button);
+            if let Some((_, path)) = raw.file.as_mut() {
+                path.field.set(text);
+            }
+            let chosen = raw.answer_file(ok, &folder);
+            assert!(raw.changes().is_empty() && raw.compare().is_none());
+            (chosen, raw.file().map(|(showing, _)| showing))
+        };
+        let tune = typed(&folder.join("tune.param"));
+        for button in [FileFor::Load, FileFor::Save, FileFor::Compare] {
+            assert_eq!(answer(button, &tune, false), (None, None), "Cancel");
+        }
+        for button in [FileFor::Load, FileFor::Compare] {
+            let chosen = |file: &str| (Some((button, folder.join(file))), None);
+            assert_eq!(answer(button, &tune, true), chosen("tune.param"));
+            assert_eq!(
+                answer(button, &typed(&folder.join("tune")), true),
+                chosen("tune.param"),
+                "AddExtension"
+            );
+            assert_eq!(answer(button, "other.parm", true), chosen("other.parm"));
+            for asked_again in [
+                String::new(),
+                typed(&folder),
+                typed(&folder.join("missing.param")),
+            ] {
+                assert_eq!(
+                    answer(button, &asked_again, true),
+                    (None, Some(button)),
+                    "{asked_again:?}"
+                );
+            }
+        }
+        let saved = |file: &str| (Some((FileFor::Save, folder.join(file))), None);
+        assert_eq!(
+            answer(FileFor::Save, &typed(&folder.join("backup")), true),
+            saved("backup.param")
+        );
+        assert_eq!(
+            answer(FileFor::Save, &typed(&folder.join("backup.txt")), true),
+            saved("backup.txt")
+        );
+        assert_eq!(answer(FileFor::Save, &tune, true), saved("tune.param"));
+        for asked_again in [
+            String::new(),
+            "  ".to_owned(),
+            format!("{}{}", typed(&folder), std::path::MAIN_SEPARATOR),
+        ] {
+            assert_eq!(
+                answer(FileFor::Save, &asked_again, true),
+                (None, Some(FileFor::Save)),
+                "{asked_again:?}"
+            );
+        }
+        let _ = mp_os::fs::remove_dir_all(&folder);
+    }
+
+    /// `loadParamFile` through mp-params: comments, a line with no value and the names it drops
+    /// left out; an unreadable file, and a value `double.Parse` refuses - the first in the file -
+    /// are what the C# throws, and nothing of the file is had.
+    /// `// C#: ExtLibs/Utilities/ParamFile.cs:17-83`
+    #[test]
+    fn a_param_file_is_read_as_load_param_file_reads_it() {
+        let folder = scratch("read");
+        let good = folder.join("good.param");
+        mp_os::fs::write(
+            &good,
+            "#NOTE: 16/10/2026\nRTL_ALT,1500\nFORMAT_VERSION,13\nWPNAV_SPEED 750\nLONE\n",
+        )
+        .unwrap();
+        let mut values = read_param_file(&good).expect("read");
+        values.sort_by(|a, b| a.0.cmp(&b.0));
+        assert_eq!(
+            values,
+            [
+                ("RTL_ALT".to_owned(), 1500.0),
+                ("WPNAV_SPEED".to_owned(), 750.0)
+            ]
+        );
+        let bad = folder.join("bad.param");
+        mp_os::fs::write(&bad, "RTL_ALT,1500\nWPNAV_SPEED,fast\nANGLE_MAX,abc\n").unwrap();
+        assert_eq!(
+            read_param_file(&bad),
+            Err("Invalid number on param WPNAV_SPEED : fast".to_owned())
+        );
+        assert!(read_param_file(&folder.join("missing.param")).is_err());
+        let _ = mp_os::fs::remove_dir_all(&folder);
+    }
+
+    /// Load from file's loop: a name with a row whose cell's text differs is an edit, with the
+    /// file's value as `ToString()` writes it; one whose text is the same - the vehicle's REAL32
+    /// as the cell shows it, or the edit waiting - is loaded and left; a name with no row is
+    /// missed, and the box says how many and which.
+    /// `// C#: GCSViews/ConfigurationView/ConfigRawParams.cs:157-221`
+    #[test]
+    fn a_file_loads_into_the_grid_as_the_csharps_loop_does() {
+        let rows = vec![
+            ("RTL_ALT".to_owned(), 1500.0),
+            ("ATC_RAT_RLL_P".to_owned(), f64::from(0.135_f32)),
+            ("WPNAV_SPEED".to_owned(), 500.0),
+            ("ANGLE_MAX".to_owned(), 4500.0),
         ];
+        let changes = BTreeMap::from([("WPNAV_SPEED".to_owned(), 750.0)]);
+        let file = vec![
+            ("ANGLE_MAX".to_owned(), 3000.0),
+            ("ATC_RAT_RLL_P".to_owned(), 0.135),
+            ("NOT_A_PARAM".to_owned(), 1.0),
+            ("RTL_ALT".to_owned(), 1500.0),
+            ("WPNAV_SPEED".to_owned(), 750.0),
+            ("ZZ_GONE".to_owned(), 2.5),
+        ];
+        let loading = load_values(&rows, &changes, &file);
+        assert_eq!(loading.edits, [("ANGLE_MAX".to_owned(), "3000".to_owned())]);
+        assert_eq!(loading.loaded, 4);
+        assert_eq!(loading.missing, ["NOT_A_PARAM", "ZZ_GONE"]);
+        assert_eq!(
+            missing_text(&loading.missing).as_deref(),
+            Some("Missing 2 params\nNOT_A_PARAM ZZ_GONE ")
+        );
+        assert_eq!(missing_text(&[]), None);
+        // Without the edit waiting, the file's 0.1 is the cell's new text.
+        let loading = load_values(&rows, &BTreeMap::new(), &[("WPNAV_SPEED".to_owned(), 0.1)]);
+        assert_eq!(
+            loading.edits,
+            [("WPNAV_SPEED".to_owned(), "0.1".to_owned())]
+        );
+    }
+
+    /// Save to file writes each row's Value cell - the edit waiting, else the vehicle's REAL32 as
+    /// the cell shows it - in the culture's order, `NAME,value` as `double.ToString()` writes it,
+    /// a line each ended with the platform's newline, over any file of the name; read back, it
+    /// loads nothing new and misses nothing.
+    /// `// C#: GCSViews/ConfigurationView/ConfigRawParams.cs:235-252; ExtLibs/Utilities/ParamFile.cs:85-108`
+    #[test]
+    fn a_file_is_saved_as_save_param_file_writes_it() {
+        let rows = vec![
+            ("INS_ACC1_CALTEMP".to_owned(), -300.0),
+            ("ATC_ANGLE_BOOST".to_owned(), 1.0),
+            ("INS_GYROFFS_Z".to_owned(), f64::from(8.9e-5_f32)),
+            ("ATC_ANG_YAW_P".to_owned(), 4.5),
+            ("INS_ACC_ID".to_owned(), 2_753_282.0),
+            ("ATC_RAT_RLL_P".to_owned(), f64::from(0.1_f32)),
+        ];
+        let changes = BTreeMap::from([("ATC_ANGLE_BOOST".to_owned(), 0.0)]);
+        let values = grid_values(&rows, &changes);
+        assert_eq!(values.len(), rows.len());
+        let text = param_file_text(&values);
+        assert!(text.ends_with(NEWLINE));
+        assert_eq!(
+            text.split_terminator(NEWLINE).collect::<Vec<_>>(),
+            [
+                "ATC_ANG_YAW_P,4.5",
+                "ATC_ANGLE_BOOST,0",
+                "ATC_RAT_RLL_P,0.1",
+                "INS_ACC_ID,2753282",
+                "INS_ACC1_CALTEMP,-300",
+                "INS_GYROFFS_Z,8.9E-05",
+            ]
+        );
+
+        let folder = scratch("save");
+        let file = folder.join("backup.param");
+        mp_os::fs::write(&file, "an older and longer file\n".repeat(40)).unwrap();
+        write_param_file(&file, &values).expect("written");
+        assert_eq!(
+            mp_os::fs::read_to_string(&file).unwrap(),
+            text,
+            "FileMode.Create: nothing of the old file left"
+        );
+        let read = read_param_file(&file).expect("read back");
+        assert_eq!(
+            load_values(&rows, &changes, &read),
+            Loading {
+                edits: Vec::new(),
+                loaded: rows.len(),
+                missing: Vec::new(),
+            }
+        );
+        let _ = mp_os::fs::remove_dir_all(&folder);
+    }
+
+    /// Compare Params' form puts the rows ticked in the grid with nothing said after; Load
+    /// Presaved's says "Loaded" after.
+    /// `// C#: GCSViews/ConfigurationView/ConfigRawParams.cs:413-416, 959-965`
+    #[test]
+    fn only_load_presaved_says_loaded_after_the_compare() {
+        let form = ParamCompare::new(
+            &[("RTL_ALT".to_owned(), 1500.0)],
+            &[("RTL_ALT".to_owned(), 2000.0)],
+        );
+        let mut raw = RawParams::default();
+        raw.open_compare(form.clone(), false);
+        assert_eq!(raw.compare().map(|form| form.rows().len()), Some(1));
+        assert_eq!(raw.take_compare(), Some((form.clone(), false)));
+        assert!(raw.compare().is_none());
+        raw.open_compare(form.clone(), true);
+        assert_eq!(raw.take_compare(), Some((form, true)));
+        assert_eq!(raw.take_compare(), None);
+    }
+
+    /// Every control and fact a script names is one these sources draw or record.
+    fn assert_names_exist(script: &str, sources: &[&str]) {
         for line in script.lines() {
             let line = line.split('#').next().unwrap_or_default().trim();
             let mut words = line.split_whitespace();
@@ -1799,11 +2657,12 @@ mod tests {
             };
             let name = name.split(['@', ':']).next().unwrap_or_default();
             // A row or a group is named by a `format!`: `param-RTL_ALT_M` is `"param-{name}"`.
-            // Any stem up to a dash will do: `param-step--` is `"param-step-{label}"`.
+            // Any stem up to a dash will do: `param-step--` is `"param-step-{label}"`; or a stem
+            // that is a name's prefix of its own, as the chooser's rows' `"chooser-file-"` is.
             let made: Vec<String> = name
                 .match_indices('-')
                 .filter_map(|(at, _)| name.get(..=at))
-                .map(|stem| format!("\"{stem}{{"))
+                .flat_map(|stem| [format!("\"{stem}{{"), format!("\"{stem}\"")])
                 .collect();
             match verb {
                 "click" | "expect" => assert!(
@@ -1816,5 +2675,41 @@ mod tests {
                 _ => {}
             }
         }
+    }
+
+    /// Every control and fact the script names is one this module or the screen draws or
+    /// records.
+    #[test]
+    fn the_scripts_names_exist() {
+        let sources = [
+            include_str!("raw_params.rs"),
+            include_str!("params.rs"),
+            include_str!("main.rs"),
+            // ---- ConfigRawParams remainder ----
+            include_str!("raw_params_grid.rs"),
+            // ---- end ConfigRawParams remainder ----
+        ];
+        assert_names_exist(
+            include_str!("../../../tests/gui/params-list-remainder.gui"),
+            &sources,
+        );
+    }
+
+    /// Every control and fact the file dialogs' script names is one this module, the screen, the
+    /// chooser or `ParamCompare` draws or records.
+    #[test]
+    fn the_file_dialogs_scripts_names_exist() {
+        let sources = [
+            include_str!("raw_params.rs"),
+            include_str!("params.rs"),
+            include_str!("main.rs"),
+            include_str!("raw_params_grid.rs"),
+            include_str!("file_list.rs"),
+            include_str!("config/param_compare.rs"),
+        ];
+        assert_names_exist(
+            include_str!("../../../tests/gui/params-file-dialogs.gui"),
+            &sources,
+        );
     }
 }

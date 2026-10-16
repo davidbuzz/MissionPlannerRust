@@ -1,0 +1,161 @@
+# The Full Parameter List's Load from file, Save to file and Compare Params, each opening its file
+# dialog as the planner's own chooser, as every other file dialog here is (the owner's word of
+# 2026-10-16; crates/mp-gui/src/file_list.rs, crates/mp-gui/src/raw_params.rs).
+#
+# The claims, each the C#'s (GCSViews/ConfigurationView/ConfigRawParams.cs) unless marked:
+# * The three buttons are the .resx's BUT_load, BUT_save and BUT_compare, rows 0, 1 and 5 of the
+#   right-hand column around Write Params' row 3, and nothing disables them.
+# * Load from file and Compare Params open an OpenFileDialog with ParamFile.FileMask,
+#   "Parameter File|*.param;*.parm|All Files|*.*" (:129-135, 400-406; ExtLibs/Utilities/
+#   ParamFile.cs:15), and Save to file a SaveFileDialog with "Param List|*.param;*.parm"
+#   (:226-232); none names a folder or a file, so each box opens empty. The folder the box names
+#   is listed by the filter; a row clicked is put in the box; a double click on a file is OK; OK
+#   on a folder keeps asking; Cancel does nothing.
+# * Load from file (loadparamsfromfile, :149-222): each value whose name the grid has a row for
+#   is put in its Value cell where the text differs - an edit waiting in _changes for Write
+#   Params, nothing written - FORMAT_VERSION is never read (loadParamFile, ParamFile.cs:47-76),
+#   and the names with no row are listed in "Missing N params" under "No matching Params".
+# * Compare Params (:396-419) opens ParamCompare over the vehicle's table and the file; its
+#   Continue puts the rows ticked in the grid (paramcompare.cs:90-109), and nothing is said after
+#   - Load Presaved's "Loaded" box is its own (:962-965).
+# * Save to file (:224-255, SaveParamFile) writes every row's Value cell, the edit waiting
+#   included; ".param" is put on a name typed without one (DefaultExt, AddExtension). Loaded back,
+#   the file changes nothing and misses nothing.
+#
+# Nothing is written to the vehicle: the edits wait in _changes, which the next Activate clears.
+#
+# Needs SITL copter on tcp:127.0.0.1:5760 started from tools/sitl/params/copter.parm, with
+# RTL_LOIT_TIME 5000, its default. Run as
+#
+#   tools/gui-test.sh tests/gui/params-file-dialogs.gui -- tcp:127.0.0.1:5760
+
+env MP_CONFIG_XML $WORK/config.xml
+setup mkdir -p "$WORK/params/sub" && printf 'RTL_LOIT_TIME,6000\nFORMAT_VERSION,1\nNOT_A_PARAM,1\n' > "$WORK/params/tune.param" && printf 'RTL_LOIT_TIME,7000\n' > "$WORK/params/other.parm" && printf 'notes\n' > "$WORK/params/notes.txt"
+
+screen params
+window 1600x1200
+budget 44
+# 44: 42.4 s measured headless on lavapipe (2026-10-16), the rule's ceiling plus one.
+
+# RawParamWarning, on Activate (:92): "Show me again?" unticked, so no later visit asks, and OK.
+# The vehicle first: a click before its first heartbeat is a click the screen may forget.
+expect vehicle.count > 0
+click raw-param-warning-again
+click raw-param-warning-ok
+
+expect vehicle.connected true
+expect params.held > 1000
+expect params.fetch ~ over
+expect params.changes 0
+
+# The buttons in the column's order: Load from file, Save to file, Write Params, Compare Params.
+expect param-load left-of param-save
+expect param-save left-of param-write
+expect param-write left-of param-compare
+expect param-compare left-of param-load-presaved
+
+# RTL_LOIT_TIME's row, to watch its Value cell. RTL lies below a 1200-pixel window: wheeled in.
+reveal params-tree param-group-RTL
+click param-group-RTL
+click param-RTL_LOIT_TIME
+expect params.selected.value 5000
+
+# Load from file: the Open dialog, its box empty, by the parameter files' filter.
+click param-load
+expect params.file load
+expect params.file.caption Open
+expect params.file.typed none
+expect chooser.id param-file
+expect chooser.type Parameter File
+# The folder typed: its parameter files listed, the text file not.
+click param-file-value
+key ctrl+a
+type $WORK/params/
+expect chooser.folder ~ params
+expect chooser.files ../,sub/,other.parm,tune.param
+# OK on a folder keeps asking; Cancel closes it, nothing loaded.
+click param-file-ok
+expect params.file load
+click param-file-cancel
+expect params.file none
+expect params.changes 0
+expect params.box none
+
+# Again: the file's row clicked puts it in the box, and OK loads it.
+click param-load
+click param-file-value
+key ctrl+a
+type $WORK/params/
+expect chooser.files ../,sub/,other.parm,tune.param
+click chooser-file-3
+expect params.file.typed ~ tune.param
+click param-file-ok
+expect params.file none
+# RTL_LOIT_TIME's cell is the file's 6000, waiting; FORMAT_VERSION never read; NOT_A_PARAM has
+# no row, and the box lists it.
+expect params.file.loaded 1
+expect params.file.missed 1
+expect params.changes 1
+expect params.changes.names RTL_LOIT_TIME
+expect params.selected.value 6000
+expect params.box No matching Params
+expect params.box.text ~ Missing 1 params
+expect params.box.text ~ NOT_A_PARAM
+click param-box-ok
+expect params.box none
+
+# Compare Params: the Open dialog again; a file double-clicked is its OK, and ParamCompare
+# shows the vehicle's 5000 against the file's 7000.
+click param-compare
+expect params.file compare
+expect params.file.caption Open
+expect chooser.type Parameter File
+click param-file-value
+key ctrl+a
+type $WORK/params/
+expect chooser.files ../,sub/,other.parm,tune.param
+doubleclick chooser-file-2
+expect params.file none
+expect params.compare.open true
+expect params.compare.rows 1
+expect params.compare.names RTL_LOIT_TIME
+# Continue: the row ticked into the grid, waiting; no "Loaded" box after it.
+click paramcompare-save
+expect params.compare.open false
+expect params.changes 1
+expect params.selected.value 7000
+expect params.box none
+
+# Save to file: the Save As dialog with the Param List filter; Cancel writes nothing.
+click param-save
+expect params.file save
+expect params.file.caption Save As
+expect params.file.typed none
+expect chooser.type Param List
+click param-file-cancel
+expect params.file none
+expect params.file.saved none
+
+# A name typed without an extension, and Enter: written as backup.param, every row in it.
+click param-save
+click param-file-value
+key ctrl+a
+type $WORK/params/backup
+key Return
+expect params.file none
+expect params.file.saved ~ backup.param
+expect params.file.saved.count > 1000
+
+# Loaded back, by its name typed: every name has its row, and no cell's text differs - the edit
+# waiting, 7000, is what the file holds.
+click param-load
+click param-file-value
+key ctrl+a
+type $WORK/params/backup.param
+click param-file-ok
+expect params.file none
+expect params.file.loaded > 1000
+expect params.file.missed 0
+expect params.box none
+expect params.changes 1
+expect params.selected.value 7000
