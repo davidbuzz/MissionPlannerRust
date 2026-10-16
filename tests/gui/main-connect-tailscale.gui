@@ -1,0 +1,56 @@
+# The port box's list as the owner asked on 2026-10-16: without the motherboard's /dev/ttyS<n>
+# ("no-one wants them"; connect.rs's is_motherboard_uart, the C# lists every port mono names) and
+# with "Tailscale" as its last kind - a TCP link to a tailnet host, the owner's own, which
+# mp-transport routes through this computer's Tailscale or the built-in node. Chosen, the baud box
+# is off as TCP's is; CONNECT asks "tailnet host" (a MagicDNS name or 100.x address) then "remote
+# Port" (5760 offered), the answers kept under Tailscale_host and Tailscale_port and offered again.
+# Here the host typed is the link argument's own - 127.0.0.1 is no tailnet address, so the link is
+# plain TCP to the SITL, which proves the kind's path end to end short of a tailnet.
+#
+# MP_SERIAL_PORTS is the harness's door for the ports (crates/mp-transport/src/serial.rs);
+# $LINK_HOST and $LINK_PORT are the link argument's parts (tools/gui-test.sh), so a run on another
+# SITL types that one's.
+#
+# Needs SITL copter running on tcp:127.0.0.1:5760, which the script connects to itself - the
+# binary starts with no link, as main-connect.gui's does (MP_GUI_LINK names another SITL to a run
+# that has one). Run as
+#
+#   tools/gui-test.sh tests/gui/main-connect-tailscale.gui
+
+screen fly
+window 1600x1200
+budget 9
+# 12: to be measured (2026-10-16).
+env XDG_DATA_HOME $WORK
+env MP_SETTINGS $WORK/settings.conf
+env MP_SERIAL_PORTS /dev/ttyS0,/dev/ttyS1,/dev/ttyS2,/dev/ttyS3,/dev/ttyUSB0
+setup mkdir -p "$WORK/MissionPlannerRust" && printf '<?xml version="1.0" encoding="utf-8"?><Config></Config>' > "$WORK/MissionPlannerRust/config.xml"
+
+# The application starts with no link; the list: AUTO, the one adapter, the five kinds.
+expect vehicle.connected false
+click main-port
+expect link.ports 7
+expect main-port-TCP above main-port-Tailscale
+click main-port-Tailscale
+expect link.port Tailscale
+
+# CONNECT: the tailnet host, then the port, each kept.
+click main-connect
+expect link.prompt tailnet host
+key ctrl+u
+type $LINK_HOST
+key Return
+expect link.prompt remote Port
+key ctrl+u
+type $LINK_PORT
+key Return
+expect link.prompt none
+expect vehicle.connected true
+expect link.button DISCONNECT
+expect status ~ connected to tcp:$LINK_HOST:$LINK_PORT
+
+# Disconnected; the answers offered again next time.
+click main-connect
+expect vehicle.connected false
+expect config.Tailscale_host $LINK_HOST
+expect config.Tailscale_port $LINK_PORT

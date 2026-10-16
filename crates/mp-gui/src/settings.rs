@@ -258,7 +258,7 @@ impl SaveEvent {
 /// write, and the display units, which that page writes too - as does the speech alert that
 /// Initial Setup's Battery Monitor writes (`config/battery_monitor.rs`). The Planner page publishes
 /// each of its own keys as `config.planner.<key>` (`config/planner.rs`), from this same dictionary.
-pub const PUBLISHED: [&str; 59] = [
+pub const PUBLISHED: [&str; 61] = [
     "TXT_homelat",
     "TXT_homelng",
     "TXT_homealt",
@@ -281,6 +281,9 @@ pub const PUBLISHED: [&str; 59] = [
     "TCP_host",
     "TCP_port",
     "UDP_port",
+    // The Tailscale kind's two answers (connect.rs, the owner's kind of 2026-10-16).
+    "Tailscale_host",
+    "Tailscale_port",
     "distunits",
     "altunits",
     "speedunits",

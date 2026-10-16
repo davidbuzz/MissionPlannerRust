@@ -46,7 +46,15 @@ pub(crate) const BAUDS: [&str; 16] = [
 
 /// The port box's entries after the serial ports.
 /// `// C#: MainV2.cs:1297-1301`
-pub(crate) const NETWORK_PORTS: [&str; 4] = ["TCP", "UDP", "UDPCl", "WS"];
+pub(crate) const NETWORK_PORTS: [&str; 5] = ["TCP", "UDP", "UDPCl", "WS", "Tailscale"];
+
+/// A motherboard UART as Linux names it, `/dev/ttyS<n>`: listed by the C# (mono lists every
+/// `ttyS*`), left out here - "no-one wants them" (the owner's word of 2026-10-16). USB adapters
+/// are `ttyUSB*` and `ttyACM*`, and stay.
+fn is_motherboard_uart(name: &str) -> bool {
+    name.strip_prefix("/dev/ttyS")
+        .is_some_and(|rest| !rest.is_empty() && rest.bytes().all(|b| b.is_ascii_digit()))
+}
 
 /// `Strings.CONNECTc` and `DISCONNECTc`, the button's two texts.
 /// `// C#: ExtLibs/Strings/Strings.resx:271-279`
@@ -64,14 +72,21 @@ pub(crate) const INVALID_BAUD_RATE: &str = "Invalid BaudRate";
 /// `// C#: MainV2.cs:1858`
 pub(crate) const STILL_MOVING_SPEED: f64 = 4.0;
 
-/// `PopulateSerialportList`: `AUTO`, the serial ports as the system lists them, then the network
-/// kinds. `AUTO` is listed as the C# lists it, and refused when chosen: its port scan
-/// (`CommsSerialScan`) is not ported.
+/// `PopulateSerialportList`: `AUTO`, the serial ports as the system lists them - less the
+/// motherboard's `/dev/ttyS<n>`, the owner's word of 2026-10-16 - then the network kinds, with
+/// "Tailscale" last: a TCP link to a tailnet host, the owner's own (2026-10-16; not in the C#,
+/// which knows nothing of Tailscale). `AUTO` is listed as the C# lists it, and refused when
+/// chosen: its port scan (`CommsSerialScan`) is not ported.
 /// `// C#: MainV2.cs:1293-1302`
 #[must_use]
 pub(crate) fn port_list(serial_ports: &[String]) -> Vec<String> {
     let mut list = vec!["AUTO".to_owned()];
-    list.extend(serial_ports.iter().cloned());
+    list.extend(
+        serial_ports
+            .iter()
+            .filter(|name| !is_motherboard_uart(name))
+            .cloned(),
+    );
     list.extend(NETWORK_PORTS.iter().map(|name| (*name).to_owned()));
     list
 }
@@ -80,7 +95,7 @@ pub(crate) fn port_list(serial_ports: &[String]) -> Vec<String> {
 /// `// C#: MainV2.cs:1974-1981`
 #[must_use]
 pub(crate) fn baud_enabled(port: &str) -> bool {
-    !matches!(port, "UDP" | "UDPCl" | "TCP" | "AUTO")
+    !matches!(port, "UDP" | "UDPCl" | "TCP" | "AUTO" | "Tailscale")
 }
 
 /// `CMB_baudrate_TextChanged`: the text must parse as an integer, else "Invalid BaudRate"; the
@@ -112,6 +127,10 @@ pub(crate) enum Kind {
     WebSocket,
     /// The serial scan, not ported.
     Auto,
+    /// A TCP client to a tailnet host - a MagicDNS name or a 100.x address - which mp-transport
+    /// routes through this computer's Tailscale, or the built-in node while it runs
+    /// (`tailnet::route`). The owner's own, 2026-10-16; not in the C#.
+    Tailscale,
 }
 
 /// `doConnect`'s `switch (portname)`.
@@ -124,6 +143,7 @@ pub(crate) fn kind(port: &str) -> Kind {
         "UDPCl" => Kind::UdpClient,
         "WS" => Kind::WebSocket,
         "AUTO" => Kind::Auto,
+        "Tailscale" => Kind::Tailscale,
         _ => Kind::Serial,
     }
 }
@@ -188,6 +208,22 @@ pub(crate) fn questions(kind: Kind) -> Vec<Question> {
             key: "WS_url",
             default: "",
         }],
+        // TCP's two questions for a tailnet host, under keys of their own, so the last tailnet
+        // vehicle is offered again (the owner's kind, 2026-10-16).
+        Kind::Tailscale => vec![
+            Question {
+                title: "tailnet host",
+                text: "Enter the vehicle's tailnet name or 100.x address (ensure remote end is already started)",
+                key: "Tailscale_host",
+                default: "",
+            },
+            Question {
+                title: "remote Port",
+                text: "Enter remote port",
+                key: "Tailscale_port",
+                default: "5760",
+            },
+        ],
         Kind::Serial | Kind::Auto => Vec::new(),
     }
 }
@@ -215,7 +251,7 @@ pub(crate) fn url(kind: Kind, port: &str, baud: &str, answers: &[String]) -> Opt
     let answer = |index: usize| answers.get(index).map(|answer| answer.trim());
     match kind {
         Kind::Serial => Some(format!("serial:{port}:{baud}")),
-        Kind::Tcp => Some(format!("tcp:{}:{}", answer(0)?, answer(1)?)),
+        Kind::Tcp | Kind::Tailscale => Some(format!("tcp:{}:{}", answer(0)?, answer(1)?)),
         Kind::Udp => Some(format!("udp:0.0.0.0:{}", answer(0)?)),
         Kind::UdpClient => Some(format!("udpcl:{}:{}", answer(0)?, answer(1)?)),
         Kind::WebSocket => Some(answer(0)?.to_owned()),
@@ -322,10 +358,44 @@ mod tests {
                 "TCP",
                 "UDP",
                 "UDPCl",
-                "WS"
+                "WS",
+                "Tailscale"
             ]
         );
-        assert_eq!(port_list(&[]).len(), 5);
+        assert_eq!(port_list(&[]).len(), 6);
+    }
+
+    /// The motherboard's `/dev/ttyS<n>` are left out (the owner's word of 2026-10-16); an
+    /// adapter on `ttyUSB`, `ttyACM`, a Windows COM port or a name that only begins so stay.
+    #[test]
+    fn the_motherboard_uarts_are_left_out_of_the_list() {
+        let ports: Vec<String> = ["/dev/ttyS0", "/dev/ttyS31", "/dev/ttyUSB0", "/dev/ttyACM1", "COM4", "/dev/ttySomething"]
+            .iter()
+            .map(|p| (*p).to_owned())
+            .collect();
+        assert_eq!(
+            port_list(&ports)[1..5],
+            ["/dev/ttyUSB0", "/dev/ttyACM1", "COM4", "/dev/ttySomething"]
+        );
+        assert!(is_motherboard_uart("/dev/ttyS3") && !is_motherboard_uart("/dev/ttyS"));
+    }
+
+    /// Tailscale is a kind: TCP's link to a tailnet host, its baud off, its two questions under
+    /// keys of its own, the host offered empty the first time.
+    #[test]
+    fn tailscale_is_a_tcp_kind_with_its_own_questions() {
+        assert_eq!(kind("Tailscale"), Kind::Tailscale);
+        assert!(!baud_enabled("Tailscale"));
+        let asked = questions(Kind::Tailscale);
+        assert_eq!(
+            asked.iter().map(|q| (q.title, q.key, q.default)).collect::<Vec<_>>(),
+            [("tailnet host", "Tailscale_host", ""), ("remote Port", "Tailscale_port", "5760")]
+        );
+        assert_eq!(
+            url(Kind::Tailscale, "Tailscale", "", &["buzz55".to_owned(), "5760".to_owned()]),
+            Some("tcp:buzz55:5760".to_owned())
+        );
+        assert_eq!(url(Kind::Tailscale, "Tailscale", "", &["buzz55".to_owned()]), None);
     }
 
     #[test]

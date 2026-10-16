@@ -132,7 +132,8 @@ mod tests {
                 "TCP",
                 "UDP",
                 "UDPCl",
-                "WS"
+                "WS",
+                "Tailscale"
             ]
         );
         // None granted yet: straight after AUTO.
