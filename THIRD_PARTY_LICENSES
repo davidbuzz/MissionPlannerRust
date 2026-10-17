@@ -1014,7 +1014,7 @@ BSD Zero Clause License (0BSD).
 | rustfft | 6.4.1 | MIT OR Apache-2.0 | crates.io |
 | rustix | 0.38.44 | Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT | crates.io |
 | rustix | 1.1.5 | Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT | crates.io |
-| rustls | 0.23.45 | Apache-2.0 OR ISC OR MIT | crates.io |
+| rustls | 0.23.46 | Apache-2.0 OR ISC OR MIT | crates.io |
 | rustls-pki-types | 1.15.1 | MIT OR Apache-2.0 | crates.io |
 | rustls-webpki | 0.103.15 | ISC | crates.io |
 | rustpython | 0.5.0 | MIT | git https://github.com/davidbuzz/RustPython @ dfe0898 |

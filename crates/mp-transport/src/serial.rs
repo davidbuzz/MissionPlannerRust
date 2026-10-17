@@ -74,6 +74,8 @@ fn harness_ports() -> Option<Vec<PortInfo>> {
 }
 
 /// [`PORTS_ENV`]'s value as ports: comma-separated names, trimmed, empties dropped, each bare.
+/// The desktop's alone: a web page lists the ports its own chooser granted (page.rs).
+#[cfg(not(target_family = "wasm"))]
 fn harness_list(listed: &str) -> Vec<PortInfo> {
     listed
         .split(',')

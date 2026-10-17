@@ -372,13 +372,14 @@ fn fifty_vehicles_through_one_link_are_routed_apart() {
         }));
         !commands_sent.is_empty()
     });
-    assert_eq!(commands_sent.len(), 1);
-    assert_eq!(
-        (
-            commands_sent[0].target_system,
-            commands_sent[0].target_component
+    // Every command on the wire is this one, to the vehicle it names: a slow machine's first look
+    // can find its retries there too (`doCommand` sends again until answered; macOS CI found
+    // twelve, 2026-10-17), and they go where the first went.
+    assert!(
+        commands_sent.iter().all(
+            |long| (long.target_system, long.target_component, long.command) == (37, 1, TAKEOFF)
         ),
-        (37, 1)
+        "a command went elsewhere: {commands_sent:?}"
     );
     let ack = |result| {
         MavMessage::CommandAck(CommandAck {
