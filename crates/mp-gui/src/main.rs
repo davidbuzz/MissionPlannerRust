@@ -36,6 +36,7 @@ use mp_os::fs::FsExt as _;
 pub const PRODUCT_NAME: &str = "MissionPlannerRust";
 
 mod box_keys;
+mod click_log;
 mod camera_photos;
 mod cmd_keys;
 mod config;
@@ -2205,6 +2206,7 @@ impl MissionPlanner {
                 this.plugins.manager.close();
             }
             this.screen = screen;
+            click_log::screen(screen.label());
             if screen == Screen::Plugins {
                 this.plugins.open_manager(&this.persisted);
             }
@@ -4581,6 +4583,11 @@ impl Render for MissionPlanner {
             // `MainV2.ProcessCmdKey`: a key no element inside took, on its way out.
             // `// C#: MainV2.cs:4074-4189`
             .track_focus(&self.root_focus)
+            // Every press, before any element takes it: printed as a recipe line under --demo
+            // or --record (click_log.rs).
+            .capture_any_mouse_down(|event: &gpui::MouseDownEvent, _window, _cx| {
+                click_log::note(event);
+            })
             .on_key_down(cx.listener(|this, event: &gpui::KeyDownEvent, window, cx| {
                 if this.process_cmd_key(&event.keystroke, window, cx) {
                     cx.stop_propagation();
@@ -4836,6 +4843,9 @@ struct Arguments {
     /// `--demo`: the owner's user demo (2026-10-17) - the planner opens disconnected and the
     /// Welcome-Demo-Sitl plugin, carried for this run, starts a simulator and flies it.
     demo: bool,
+    /// `--record`: every click printed on the command line as a demo recipe line (click_log.rs),
+    /// as `--demo` prints them too.
+    record: bool,
     /// The link to open, if one was named.
     target: Option<String>,
     /// Whether to read the mission automatically once a vehicle appears.
@@ -4877,7 +4887,11 @@ OPTIONS:
         --read-mission      read the vehicle's mission once it appears
         --demo              the demonstration: open disconnected and let the Welcome-Demo-Sitl
                             plugin start a simulator, plan a mission and fly it, as a watcher
-                            sees it (tools/demo/run.sh runs the whole user demo)
+                            sees it (tools/demo/run.sh runs the whole user demo); every click
+                            is printed as --record prints it
+        --record            print every click as a demo recipe line - `screen plan`,
+                            `click plan-zoomicon`, `click map@0.40x0.40` - to paste into
+                            tools/demo/owner.gui
         --screen SCREEN     open on fly, plan, setup, config, params or logs (default: fly)
         --window WIDTHxHEIGHT
                             initial window size (default: 1600x1200)
@@ -4918,6 +4932,7 @@ const fn auto_fetch_wanted(held: usize, expected: u16) -> bool {
 fn parse_arguments(arguments: impl IntoIterator<Item = String>) -> Result<Arguments, String> {
     let mut parsed = Arguments {
         demo: false,
+        record: false,
         target: None,
         read_mission: false,
         screen: None,
@@ -4929,6 +4944,7 @@ fn parse_arguments(arguments: impl IntoIterator<Item = String>) -> Result<Argume
         match argument.as_str() {
             "--read-mission" => parsed.read_mission = true,
             "--demo" => parsed.demo = true,
+            "--record" => parsed.record = true,
             "--screen" => {
                 parsed.screen = Some(arguments.next().ok_or("--screen needs a name")?);
             }
@@ -5014,6 +5030,9 @@ fn main() {
     // A link given on the command line wins; otherwise offer the one last connected to - but a
     // demo run opens disconnected: its plugin starts the simulator and connects to it.
     plugins_ui::set_demo_run(arguments.demo);
+    if arguments.demo || arguments.record {
+        click_log::enable();
+    }
     let target = if arguments.demo {
         None
     } else {
@@ -5281,6 +5300,9 @@ mod tests {
         assert!(both.demo);
         assert_eq!(both.screen.as_deref(), Some("plan"));
         assert!(!parse_arguments(["udp:14550".to_owned()]).expect("parses").demo);
+        let record = parse_arguments(["--record".to_owned()]).expect("parses");
+        assert!(record.record && !record.demo);
+        assert!(!parse_arguments(["--demo".to_owned()]).expect("parses").record);
     }
 
     #[test]

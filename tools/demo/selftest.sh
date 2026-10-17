@@ -60,6 +60,14 @@ assert tour.clicks_to_play(("fly-tab-actions",), ["fly-tab-actions"]) == ["fly-t
 # The opening: CONFIG > Planner > Video Device Start, the owner's, named exactly as the planner names it.
 assert tour.OPENING[0]["clicks"] == ["config-page-ConfigPlanner", "planner-BUT_videostart"]
 assert any(b["control"] == "planner-BUT_videostart" for b in blocks), "the recipe knows the button"
+# The owner's own sequence: owner.gui's lines as `planner --record` prints them, a block a screen.
+import tempfile
+with tempfile.NamedTemporaryFile("w", suffix=".gui", delete=False) as f:
+    f.write("# mine\nscreen plan\nclick plan-zoomicon\nclick map@0.40x0.40:right\nkey Escape\nscreen fly\nclick tab-fly\n")
+owner = tour.read_owner(f.name)
+assert [b["screen"] for b in owner] == ["plan", "fly"], owner
+assert owner[0]["clicks"] == ["plan-zoomicon", "map@0.40x0.40:right", "key:Escape"], owner[0]
+assert tour.read_owner("/nonexistent/owner.gui") == []
 # SETUP's Advanced page is kept for the end (the owner, 2026-10-17); its blocks are many.
 tail = [b for b in played if b["page"] in tour.LAST_PAGES]
 assert tail and all(b["page"] == "setup-page-ConfigAdvanced" for b in tail), len(tail)

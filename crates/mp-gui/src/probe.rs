@@ -450,8 +450,8 @@ pub fn centres_text() -> String {
         .unwrap_or_default()
 }
 
-/// The positions recorded, for tests.
-#[cfg(test)]
+/// Every control measured in the last frame, by name: the recorder of clicks reads the one under
+/// the pointer from it (click_log.rs), and the tests their expectations.
 pub fn snapshot() -> BTreeMap<String, Rect> {
     registry()
         .os_lock()

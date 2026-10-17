@@ -155,6 +155,34 @@ def collapse_dialog_sequences(blocks):
 
 # A page's tab, the first click of a block on a paged screen.
 PAGE_TAB = re.compile(r"-(page|tab)-")
+# The owner's own sequence, if he wrote one: tools/demo/owner.gui, the lines `planner --record`
+# printed for clicks he made by hand (`screen X`, `click Y`, `key Z`), played after the opening
+# and before the screens' rounds, as written.
+OWNER_FILE = os.path.join(HERE, "owner.gui")
+
+
+def read_owner(path):
+    """The owner's file as blocks: a block per `screen` line, its clicks and keys in order."""
+    blocks = []
+    if not os.path.exists(path):
+        return blocks
+    block = None
+    for raw in open(path, errors="replace"):
+        line = raw.split("#", 1)[0].strip()
+        if not line:
+            continue
+        if line.startswith("screen "):
+            block = {"label": "owner", "screen": line[7:].strip(), "page": "owner", "control": "",
+                     "verdict": "visible", "clicks": []}
+            blocks.append(block)
+        elif line.startswith("click ") and block is not None:
+            block["clicks"].append(line[6:].strip())
+            block["control"] = line[6:].strip()
+        elif line.startswith("key ") and block is not None:
+            block["clicks"].append("key:" + line[4:].strip())
+        elif line.startswith("type ") and block is not None:
+            block["clicks"].append("type:" + line[5:])
+    return [b for b in blocks if b["clicks"]]
 # Families played once, by their first block alone: PLAN's draw area (the owner, 2026-10-17: "it
 # goes to plan tab -> draw block and clicks a bunch of stuff, pls limit that block to just the
 # first one in the 'draw' area").
@@ -206,6 +234,8 @@ def allowed(block):
     if block["screen"] not in CONNECTED_SCREENS and not block["label"].startswith("disc"):
         return False
     for action in block["clicks"]:
+        if action.startswith("type:"):
+            continue
         name = action.removeprefix("key:")
         if DENY.search(name) or DEMO_DENY.search(name) or name in OPENERS:
             return False
@@ -323,6 +353,9 @@ class Tour:
             if action.startswith("key:"):
                 self.app.key(action[4:])
                 self.say(f"  key {action[4:]}")
+            elif action.startswith("type:"):
+                self.app.sh("xdotool", "type", "--window", self.app.win, "--delay", "40", action[5:])
+                self.say(f"  type {action[5:]}")
             elif not self.click(action):
                 done = False
                 break
@@ -388,8 +421,8 @@ def main():
     deadline = time.time() + options.minutes * 60
     cursors = {s: 0 for s in screens}
     played = 0
-    # The owner's opening, first.
-    for block in OPENING:
+    # The owner's opening, first; then his own recorded sequence, if he wrote one.
+    for block in OPENING + read_owner(OWNER_FILE):
         if tour.go_to(block["screen"]):
             tour.play(block)
             played += 1

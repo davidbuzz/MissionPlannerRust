@@ -29,3 +29,12 @@ PLAN play the connected crawl's visible clicks less the deny. The demo's SITL is
 tab's, tcp 5760, as Mission Planner's is; `run.sh` first stops an earlier demo's planner and any
 ArduPilot SITL left on that port, by pid (the owner's word of 2026-10-17), and stops itself if
 something that is not a SITL holds it.
+
+## Your own clicks in the demo
+
+`dist/planner --record` prints every click you make as a recipe line on the command line -
+`screen plan`, `click plan-zoomicon`, `click map@0.40x0.40` (where in the map, two places),
+`click map@0.50x0.50:right` for the right button; `--demo` prints them too. Paste the lines you
+want into `tools/demo/owner.gui` (a `#` starts a comment, a `screen` line starts a block) and the
+tour plays them after Video Device Start, before the screens' rounds, exactly as written. Typing
+is not recorded: add a `type <text>` line by hand where you typed.

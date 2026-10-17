@@ -1,0 +1,26 @@
+# `planner --record` (and --demo) prints every click on the command line as a demo recipe line -
+# `screen plan`, `click plan-zoomicon`, `click map@0.40x0.40`, `:right` for the right button - so a
+# sequence the owner made by hand can be pasted into tools/demo/owner.gui and played in his demo
+# (his word, 2026-10-17; crates/mp-gui/src/click_log.rs). The runner cannot read the planner's
+# standard output, so the same line, less its "click ", is the fact ui.clicked.
+#
+# No link needed. Run as
+#   tools/gui-test.sh tests/gui/demo-record.gui -- --record
+
+screen fly
+window 1600x1200
+budget 4
+env XDG_DATA_HOME $WORK
+env MP_CONFIG_XML $WORK/config.xml
+
+click tab-plan
+expect screen plan
+expect ui.clicked tab-plan
+# A map click carries where in the map it landed, two places, as the runner names a point.
+click map@0.40x0.40
+expect ui.clicked map@0.40x0.40
+click map@0.50x0.50:right
+expect ui.clicked map@0.50x0.50:right
+key Escape
+click tab-fly
+expect ui.clicked tab-fly
