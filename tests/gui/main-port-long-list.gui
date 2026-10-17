@@ -27,6 +27,10 @@ expect screen plugins
 # The list: AUTO, thirty-six adapters and the five kinds.
 click main-port
 expect link.ports 42
+# The box is its own words, not its open list: the list sits below it (the browser's serial check,
+# 2026-10-17, clicked the box's centre to close the list and chose the row there).
+expect main-port-AUTO below main-port
+expect main-port-list below main-port
 # WS, the last row, is past the thirtieth: the wheel brings it into the box, and it is chosen.
 reveal main-port-list main-port-WS
 click main-port-WS

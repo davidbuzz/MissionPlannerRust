@@ -1408,9 +1408,13 @@ impl MissionPlanner {
         let port = self.connect_box.port.clone();
         let baud_on = connect::baud_enabled(&port) && !connected;
         let mut strip = div().flex().items_center().gap_2();
-        // `cmb_Connection`: the choice, and its list below it when clicked.
+        // `cmb_Connection`: the choice, and its list below it when clicked. The box's words are
+        // what the probe measures as `main-port`, not the box: the probe takes an element's
+        // children, and the open list is one, so the box's centre lay inside its list - a click
+        // meant to close the list chose the row there (the browser's serial_check, 2026-10-17:
+        // TCP, once Tailscale made the list eight rows).
         strip = strip.child(
-            probe::measured("main-port", div())
+            div()
                 .id("main-port")
                 .relative()
                 .px_2()
@@ -1423,11 +1427,13 @@ impl MissionPlanner {
                 .text_color(rgb(if connected { theme::DIM } else { theme::TEXT }))
                 .cursor_pointer()
                 .hover(|style| style.bg(rgb(theme::BORDER)))
-                .child(if port.is_empty() {
-                    "port".to_owned()
-                } else {
-                    port.clone()
-                })
+                .child(
+                    probe::measured("main-port", div()).child(if port.is_empty() {
+                        "port".to_owned()
+                    } else {
+                        port.clone()
+                    }),
+                )
                 .on_click(cx.listener(|this, _event, _window, cx| {
                     // `CMB_serialport_Click`: the list filled afresh, the old choice kept if
                     // it is still there.
@@ -1485,7 +1491,7 @@ impl MissionPlanner {
         );
         // `cmb_Baud`: its text, and the sixteen rates below it when clicked.
         strip = strip.child(
-            probe::measured("main-baud", div())
+            div()
                 .id("main-baud")
                 .relative()
                 .px_2()
@@ -1498,7 +1504,8 @@ impl MissionPlanner {
                 .text_color(rgb(if baud_on { theme::TEXT } else { theme::DIM }))
                 .cursor_pointer()
                 .hover(|style| style.bg(rgb(theme::BORDER)))
-                .child(self.connect_box.baud.clone())
+                // The words measured as `main-baud`, as the port box's are.
+                .child(probe::measured("main-baud", div()).child(self.connect_box.baud.clone()))
                 .on_click(cx.listener(move |this, _event, _window, cx| {
                     if !baud_on {
                         return;
