@@ -1,0 +1,77 @@
+# Your own clicks in the demo, played right after CONFIG > Planner > Video Device Start and before
+# the tour's screen-by-screen clicks, exactly as written.
+#
+# Record them: run `dist/planner --record` (or --demo), use it normally, and copy the lines it
+# prints in the terminal into this file. Each `screen` line starts a block; its clicks follow.
+#
+#   screen plan
+#   click plan-zoomicon
+#   click map@0.40x0.40          a point in the map: across, then down, as fractions of its box
+#   click map@0.50x0.50:right    the right button
+#   key Escape
+#   type 100                     typing is not recorded: add a type line where you typed
+#
+# A `#` starts a comment. With no lines below, the demo plays nothing extra here.
+click fly-tab-actions
+click fly-tab-messages
+click fly-tab-actionssimple
+click fly-tab-preflight
+click fly-tab-gauges
+click fly-tabs-right
+click fly-tabs-right
+click fly-tabs-right
+click fly-tabs
+click fly-tab-status
+click fly-tab-servo
+click fly-tab-servo
+click fly-tabs-right
+click fly-tabs-right
+click fly-tabs-right
+click fly-tabs-right
+click fly-tab-auxfunction
+click fly-tab-scripts
+click fly-tab-payload
+click fly-tab-tlogs
+click fly-tab-tlogs
+click tab-plan
+screen plan
+click tab-setup
+screen setup
+click setup-page-ConfigFirmwareDisabled
+click setup-page-ConfigMandatory
+click setup-page-ConfigFrameClassType
+click setup-page-ConfigAccelerometerCalibration
+click setup-page-ConfigHWCompass2
+click setup-page-ConfigRadioInput
+click setup-page-ConfigRadioOutput
+click setup-page-ConfigSerial
+click setup-page-ConfigESCCalibration
+click setup-page-ConfigFlightModes
+click setup-page-ConfigInitialParams
+click setup-list
+click setup-page-ConfigADSB
+click setup-page-ConfigOptional
+click setup-page-ConfigSerialInjectGPS
+click setup-page-ConfigCubeID
+click setup-page-Sikradio
+click setup-page-ConfigGPSOrder
+click setup-page-ConfigBatteryMonitoring
+click setup-page-ConfigBatteryMonitoring2
+click setup-page-ConfigDroneCAN
+click setup-page-JoystickSetup
+click setup-page-ConfigCompassMot
+click setup-page-ConfigHWRangeFinder
+click setup-page-ConfigHWAirspeed
+click setup-list
+click setup-page-ConfigHWOptFlow
+click setup-page-ConfigHWOSD
+click setup-page-ConfigMount
+click setup-list
+click setup-page-ConfigHWBT
+click setup-page-ConfigHWParachute
+click setup-page-ConfigHWESP8266
+click setup-page-TrackerUI
+click setup-page-ConfigFFT
+click setup-page-ConfigAdvanced
+click setup-page-ConfigTerminal
+click setup-page-ConfigREPL

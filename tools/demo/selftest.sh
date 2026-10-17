@@ -68,6 +68,9 @@ owner = tour.read_owner(f.name)
 assert [b["screen"] for b in owner] == ["plan", "fly"], owner
 assert owner[0]["clicks"] == ["plan-zoomicon", "map@0.40x0.40:right", "key:Escape"], owner[0]
 assert tour.read_owner("/nonexistent/owner.gui") == []
+# The shipped owner.gui parses; its blocks, if any, are well formed.
+for block in tour.read_owner(tour.OWNER_FILE):
+    assert block["screen"] and block["clicks"], block
 # SETUP's Advanced page is kept for the end (the owner, 2026-10-17); its blocks are many.
 tail = [b for b in played if b["page"] in tour.LAST_PAGES]
 assert tail and all(b["page"] == "setup-page-ConfigAdvanced" for b in tail), len(tail)
