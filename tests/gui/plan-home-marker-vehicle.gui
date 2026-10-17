@@ -35,7 +35,10 @@ expect plan.prompt none
 expect plan.home ~ -35.36
 expect map.home ~ -35.36
 
-# The flight map now draws the vehicle's home.
+# The flight map now draws the vehicle's home. The screen's own fact first: the map's facts are
+# the shared map's and can pass while the flight screen is still painting, and the layout guard's
+# last snapshot then found its tabs and column missing (a loaded run, 2026-10-17).
 click tab-fly
+expect screen fly
 expect map.home ~ -35.36
 expect map.home ~ 149.16

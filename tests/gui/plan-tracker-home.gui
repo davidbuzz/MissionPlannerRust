@@ -16,8 +16,8 @@ env MP_PLAN_DIR $WORK
 
 screen plan
 window 1600x1200
-budget 26
-# 26: 24.3 s measured headless on lavapipe (2026-10-16, the wait for the SITL's home within it), the rule's ceiling plus one.
+budget 110
+# 110: the wait for a fresh simulator's home can be 90 s (2026-10-17); on a settled one the run is about 25 s.
 
 # The vehicle first: a click before its first heartbeat is a click the screen may forget
 # (vehicle.connected only says the link is open).
@@ -25,9 +25,19 @@ expect vehicle.count > 0
 # The map first: a press before its first paint records nothing.
 expect map.ready true
 # Home known first: the prompt offers cs.HomeAlt while no tracker location is set
-# (FlightPlanner.cs:6967-6970), so the value depends on home having arrived - 0 before, the
-# SITL's 584.09 after (2026-10-16).
-within 40
+# (FlightPlanner.cs:6967-6970), and HomeAlt is 0 until a HOME_POSITION has been heard. The vehicle
+# sends one unasked only when its home is set - a fresh SITL's, a minute or so after it starts -
+# so on a simulator that settled before the planner connected nothing arrives until something asks:
+# the C# asks in a mission read or write (FlightPlanner.cs:6277, 6567), never at connect, and so
+# does this planner (the memory of 2026-10-17: a 20-minute-old SITL gave none in three runs). Read
+# the mission, as plan-home-marker-vehicle.gui does; the read asks for home.
+click plan-read
+settle 0.3
+key Return
+expect plan.prompt none
+# A settled simulator answers the read's ask at once; a fresh one has no home to give until its
+# EKF has an origin and a fix, a minute or so after it starts, and then sends it unasked.
+within 100
 expect vehicle.home ~ -35.36
 click map@0.40x0.40:right
 click menu-trackerHome

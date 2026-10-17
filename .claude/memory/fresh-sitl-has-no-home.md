@@ -1,30 +1,23 @@
 ---
 name: fresh-sitl-has-no-home
-description: A freshly started SITL has no home for 60-90 s (its EKF origin and fix come first), so scripts that expect the vehicle's home (plan-home-marker-vehicle, plan-tracker-home) fail on a fresh own SITL and pass on a settled one - wait, or run them late in a batch
+description: A vehicle's home reaches the planner only when the vehicle sets it (a fresh SITL, a minute after start) or when the planner asks - in a mission read or write, as the C# does, never at connect: a script that wants home reads the mission first; a settled SITL gives none unasked
 metadata:
   type: project
 ---
 
-On 2026-10-16 `plan-home-marker-vehicle.gui` and `plan-tracker-home.gui` failed every batch run on
-my own fresh SITL (instance 3, tcp:5790) with `vehicle.home` none, and a probe showed home still
-unknown 70 s after the SITL started; the same script passed unchanged at about 90 s. ArduPilot's
-SITL sets home only once its EKF has an origin and a 3D fix, which on this loaded machine takes
-60-90 s at speedup 1; the suite's long-running SITL never shows it. Two afternoons were spent
-suspecting the day's code before the probe settled it.
-
-**How to apply:** a script that reads the vehicle's home is run on a SITL at least 90 s old - late
-in a batch, or after a wait; a failing `vehicle.home`/`plan.home` on a fresh SITL is the simulator,
-not the port, until a settled run says otherwise. The planner's default home in those runs is the
-config's -27.5097083, 153.0153894. Related: [[test-sitls-own-their-ports]],
-[[signing-script-keys-the-sitl]].
-
-**Revised 2026-10-17:** the age of the SITL is not the whole story. In three batch runs on my own
-SITL (instance 3) plan-tracker-home.gui found `vehicle.home` none at 5, 20 and 25 minutes of SITL
-life, while the suite's own order passes it. The difference is what ran before: the suite runs
-experimental-takeoff.gui (which arms and flies the copter) and fly-messages.gui before plan-*, my
-batches left both out as fresh-SITL-dependent. Likely home reaches the planner only once the
-vehicle has armed (ArduPilot sets home on arming) or when the mission is read (the C# asks
-GET_HOME_POSITION in getWPs; mp-link's requests.rs:683 has the command) - to be checked, not
-assumed. Until then: run plan-tracker-home after a script that arms the SITL, or read the mission
-first; and never read a failing `vehicle.home` as the day's code without that check.
+**Settled 2026-10-17.** The planner hears HOME_POSITION in two ways only: the vehicle sends one
+unasked when its home is set - a fresh SITL does that a minute or so after it starts, once its
+EKF has an origin and a fix - and it answers MAV_CMD_GET_HOME_POSITION, which the C# sends only in
+a mission read (FlightPlanner.cs:6277) or after a write (:6567) and Set Home Here, never at
+connect; mp-link's `get_home_position` is asked from the same places. So:
+- a script on a *fresh* SITL sees home arrive by itself at 60-90 s (the passes of 2026-10-16);
+- a script on a *settled* SITL - one that set home before the planner connected - never sees it
+  unless the script reads or writes the mission (three batch runs on a 5-25 minute old SITL,
+  2026-10-17: `vehicle.home` none throughout); why the suite's own order passed it is not
+  established and was not re-checked - each script is a fresh planner, so an earlier script's
+  arming does not help it;
+- the fix is in the script, not the port: plan-tracker-home.gui clicks plan-read first.
+**How to apply:** a script wanting `vehicle.home` or `plan.home` reads the mission (or writes
+one) and waits on `plan.home`; never wait on home after a bare connect, and never read a missing
+home as the day's code. Related: [[test-sitls-own-their-ports]].
 
