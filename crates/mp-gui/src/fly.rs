@@ -3584,7 +3584,8 @@ impl Page {
                 "Video Control, the gimbal's video in a window of its own, is not ported."
             }
             // `// C#: GCSViews/FlightData.Designer.cs:2208`
-            Self::TLogs => "Tlog > Kml or Graph is headless-planner kml, on the command line.",
+            // Tlog > Kml or Graph is the form (mavlink_log.rs): nothing to say.
+            Self::TLogs => return None,
             // The conversions' and Geo Reference Images' file dialogs are boxes.
             // `// C#: GCSViews/FlightData.cs:1086-1091, 1139-1153, 1315-1319; GeoRef/georefimage.cs:87-138`
             Self::LogBrowse => "A log is named by typing it, from the log directory.",
@@ -5976,7 +5977,8 @@ pub fn playback_page(playback: &Playback, cx: &mut Context<MissionPlanner>) -> A
     let row2 = div()
         .flex()
         .gap_1()
-        .child(div().w(px(91.0)).flex_shrink_0())
+        // `BUT_log2kml`, the third row's first cell (FlightData.Designer.cs:2208): the form.
+        .child(left(crate::mavlink_log::page_button(cx)))
         .child(
             div()
                 .flex()
@@ -11657,7 +11659,7 @@ mod tests {
         for page in Page::ALL {
             assert_eq!(
                 page.note().is_none(),
-                matches!(page, Page::Actions | Page::Quick | Page::Transponder),
+                matches!(page, Page::Actions | Page::Quick | Page::Transponder | Page::TLogs),
                 "{} should say what the C# has on it that this does not",
                 page.name()
             );

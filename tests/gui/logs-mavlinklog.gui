@@ -1,0 +1,106 @@
+# FLIGHT DATA's "Tlog > Kml or Graph" (GCSViews/FlightData.cs:1305-1310; Log/MavlinkLog.cs) on
+# LOGS' Telemetry Logs page: its form over the page; a button not ported saying so; Convert to Text
+# writing every packet of the log beside it as DebugPacket writes it; Create KML + GPX replaying the
+# log, asking the home altitude - the log holds no mission - and writing flight.gpx and
+# flight.tlog.kmz; Graph Log naming the log in the caption and filling the tree, a node for each
+# message and the form's own CUSTOM (the log has no RAW_IMU, so its four end after mag_field); a
+# field's box ticked graphing it against the left axis of its units, a right click graphing one on
+# the right, and a box unticked taking its curve away. What each file holds is mp-log's and
+# mp-kml's tests' (crates/mp-log/src/mavlinklog.rs, crates/mp-kml/src/tlog.rs); the tree's and the
+# axes' rules crates/mp-gui/src/mavlink_log.rs's.
+#
+# Run as: tools/gui-headless.sh logs-mavlinklog
+env MP_LOG_DIR $WORK/logs
+env MP_CONFIG_XML $WORK/config.xml
+setup mkdir -p $WORK/logs && cp testdata/georef/camera.tlog $WORK/logs/flight.tlog
+
+screen logs
+window 1600x1200
+budget 25
+# A first budget, set by hand until a passing run records one.
+
+click logs-tab-tlogs
+expect logs.page tlogs
+expect mavlinklog.open false
+click fly-log2kml
+expect mavlinklog.open true
+expect mavlinklog.title Log
+expect mavlinklog.progress 0
+expect mavlinklog.busy none
+
+# Extract Params is not ported: dimmed, and its click says so, asking nothing.
+click mavlinklog-params
+expect status Extract Params is not ported
+expect mavlinklog.asking none
+
+# Convert to Text: its dialog in the log directory, listing the telemetry logs; the log
+# double-clicked written to flight.txt beside it.
+click mavlinklog-text
+expect mavlinklog.asking open: Convert to Text
+expect chooser.id mavlinklog-path
+expect chooser.files ../,flight.tlog
+doubleclick chooser-file-1
+expect mavlinklog.asking none
+within 30
+expect mavlinklog.written flight.txt
+expect mavlinklog.progress 100
+expect mavlinklog.busy none
+
+# Create KML + GPX: its dialog sets no folder, so the log is typed. The log holds no mission item 0,
+# so "Relative Alt" is asked once it is read; Cancel keeps the altitudes above sea level.
+click mavlinklog-kml
+expect mavlinklog.asking open: Create KML + GPX
+type $WORK/logs/flight.tlog
+key Return
+within 30
+expect mavlinklog.asking Relative Alt: Please enter your home altitude, or press cancel to use absolute alt
+click mavlinklog-input-cancel
+expect mavlinklog.asking none
+within 30
+expect mavlinklog.written flight.gpx,flight.tlog.kmz
+expect mavlinklog.progress 100
+
+# Graph Log: the caption names the log; the tree a node for each message, sorted as the culture
+# sorts them, ATTITUDE third after AHRS and AHRS2, and CUSTOM's two; no curve yet.
+click mavlinklog-graph
+type $WORK/logs/flight.tlog
+key Return
+expect mavlinklog.title Log - flight.tlog
+within 30
+expect mavlinklog.tree ~ AHRS,AHRS2,ATTITUDE,
+expect mavlinklog.node.ATTITUDE pitch,pitchspeed,roll,rollspeed,time_boot_ms,yaw,yawspeed
+expect mavlinklog.node.CUSTOM custom,mag_field
+expect mavlinklog.node.ATTITUDE.expanded false
+expect mavlinklog.curves 0
+expect mavlinklog.axes.left Y Axis
+
+# ATTITUDE expanded; roll's box ticked: graphed in degrees against a new left axis titled with its
+# units.
+click mavlinklog-node-ATTITUDE-expand
+expect mavlinklog.node.ATTITUDE.expanded true
+click mavlinklog-node-ATTITUDE-roll-check
+expect mavlinklog.checked ATTITUDE.roll
+expect mavlinklog.curves 1
+# Its Tag, the name it was graphed by (MavlinkLog.cs:945).
+expect mavlinklog.curves.tags roll mavlink_attitude_t
+expect mavlinklog.curve.0 ~ roll attitude_t |
+expect mavlinklog.curve.0 ~ | left [rad]
+expect mavlinklog.axes.left Y Axis,[rad]
+
+# pitch right-clicked: ticked, and graphed against a new right axis of its units - one ZedGraph
+# makes hidden - the default right axis shown and -R after the label.
+click mavlinklog-node-ATTITUDE-pitch:right
+expect mavlinklog.checked ATTITUDE.pitch,ATTITUDE.roll
+expect mavlinklog.curves 2
+expect mavlinklog.curves.tags roll mavlink_attitude_t,pitch mavlink_attitude_t
+expect mavlinklog.curve.1 ~ pitch attitude_t-R |
+expect mavlinklog.curve.1 ~ | right [rad]
+
+# roll's box again: its curve goes, pitch's stays.
+click mavlinklog-node-ATTITUDE-roll-check
+expect mavlinklog.checked ATTITUDE.pitch
+expect mavlinklog.curves 1
+expect mavlinklog.curve.0 ~ pitch attitude_t-R |
+
+click mavlinklog-close
+expect mavlinklog.open false

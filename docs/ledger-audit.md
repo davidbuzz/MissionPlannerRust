@@ -91,7 +91,9 @@ wrote).
   flag nothing sets, as there.)
 - The connection control's vehicle (sysid) selector and Link Stats label (Link Stats mended
   2026-10-16: the Stats... link and its window; the selector is the picker above the flight map).
-- LOGS: MavlinkLog's "Tlog > Kml or Graph" form (Create KML is `headless-planner kml` alone).
+- LOGS: MavlinkLog's "Tlog > Kml or Graph" form (Create KML is `headless-planner kml` alone)
+  (mended 2026-10-16: the form over the Telemetry Logs page - KML + GPX, Text, CSV, Graph Log, Matlab;
+  Extract Params, WPs and CS say why they are not).
 - Every graph's zoom, pan and context menu (ZedGraph's, reproduced in the log browser alone).
 - (Mended 2026-10-16: the plugin world's packet subscription, the plugin subscribing as the C#'s does.)
   The OpenDroneID backend never sends: it waits for `OPEN_DRONE_ID_ARM_STATUS`, and the plugin

@@ -671,6 +671,14 @@ pub fn input_box(
             "inspector-points-cancel",
             "inspector-points-value",
         ),
+        // ---- Tlog > Kml or Graph ----
+        // Create KML + GPX's "Alt offset" and "Relative Alt".
+        "mavlinklog-input-box" => (
+            "mavlinklog-input-ok",
+            "mavlinklog-input-cancel",
+            "mavlinklog-input-value",
+        ),
+        // ---- end Tlog > Kml or Graph ----
         _ => (
             "battery2-prompt-ok",
             "battery2-prompt-cancel",

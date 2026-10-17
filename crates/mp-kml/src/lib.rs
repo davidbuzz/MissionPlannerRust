@@ -41,6 +41,7 @@ use mp_units::LatLon;
 
 pub mod dflog;
 pub mod read;
+pub mod tlog;
 
 /// The colours Mission Planner cycles flight-path segments through.
 ///
@@ -117,10 +118,28 @@ fn coordinate(position: LatLon, altitude: f64) -> String {
 /// `// C#: Log/MavlinkLogBase.cs:171-250`
 #[must_use]
 pub fn flight_path(name: &str, track: &[TrackPoint]) -> String {
+    flight_paths(name, &[track])
+}
+
+/// Writes several vehicles' flown paths in one document, as `writeKML` writes every system's of a
+/// telemetry log: each track's segments in turn, numbered and coloured from the first again, as
+/// the C#'s `c` starts at -1 for each.
+///
+/// `// C#: Log/MavlinkLogBase.cs:171-196, 202-250`
+#[must_use]
+pub fn flight_paths(name: &str, tracks: &[&[TrackPoint]]) -> String {
     let mut out = String::new();
     out.push_str(&header(name));
     out.push_str(LINE_STYLE);
+    for track in tracks {
+        segments(&mut out, track);
+    }
+    out.push_str(FOOTER);
+    out
+}
 
+/// One track's segments, a mode each.
+fn segments(out: &mut String, track: &[TrackPoint]) {
     // Consecutive samples in the same mode are one segment, and every sample belongs to exactly
     // one of them.
     //
@@ -150,9 +169,6 @@ pub fn flight_path(name: &str, track: &[TrackPoint]) -> String {
         }
         start = end;
     }
-
-    out.push_str(FOOTER);
-    out
 }
 
 /// One coloured segment of the path.

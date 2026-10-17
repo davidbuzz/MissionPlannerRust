@@ -166,6 +166,9 @@ pub const MAY_SCROLL: &[&str] = &[
     // 1,153 wide. `// C#: Log/LogIndex.Designer.cs:83-87, 96-174`
     "experimental-logindex-row-",
     "experimental-logindex-header-",
+    // "Tlog > Kml or Graph"'s `treeView1`: a node for each message of a log and its fields under
+    // it, which scroll in its 293-high box beside the graph. `// C#: Log/MavlinkLog.resx (treeView1)`
+    "mavlinklog-node-",
     // DroneCAN's Filter window, `panel`, a FlowLayoutPanel with AutoScroll in a 600-high panel:
     // ALL and a box for every data type `MSG_INFO` knows, named by the type - whose first names are
     // these - scroll in it; the close box does not (the click crawl, 2026-10-15: the debug build's

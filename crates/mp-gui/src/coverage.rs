@@ -39,6 +39,7 @@
 
 /// What stands in for a C# action here.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[allow(dead_code)] // Elsewhere has no row since Tlog > Kml or Graph's form; the table says so
 pub enum Ours {
     /// On the flight screen, under this control id (a `probe::measured` or `action` id) or
     /// `fn name` for a handler.
@@ -218,7 +219,8 @@ pub const FLIGHTDATA: &[Action] = &[
         "Click",
         "BUT_log2kml_Click",
         "Tlog > Kml or Graph",
-        Elsewhere("headless-planner kml"),
+        // `new MavlinkLog().Show()`: its form over the page (mavlink_log.rs).
+        Done("fly-log2kml"),
     ),
     row(
         "BUT_loganalysis",
@@ -1113,6 +1115,7 @@ mod tests {
         include_str!("quick.rs"),
         include_str!("poi.rs"),
         include_str!("logdownload.rs"),
+        include_str!("mavlink_log.rs"),
         include_str!("transponder.rs"),
         include_str!("payload.rs"),
         include_str!("gauge.rs"),
@@ -1249,7 +1252,7 @@ mod tests {
         );
         assert_eq!(
             (done, elsewhere, missing, plumbing, dropped),
-            (113, 1, 2, 18, 2)
+            (114, 0, 2, 18, 2)
         );
     }
 }

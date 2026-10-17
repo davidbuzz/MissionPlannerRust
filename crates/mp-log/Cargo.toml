@@ -34,6 +34,9 @@ rustfft.workspace = true
 mp-calibration.workspace = true
 mp-mavlink-dialects.workspace = true
 dxf.workspace = true
+# "Tlog > Kml or Graph"'s Convert to Text writes a signature, and Convert to CSV a file transfer's
+# data, in base 64, as `Convert.ToBase64String` and Json.NET write them (`mavlinklog`).
+base64.workspace = true
 
 [dev-dependencies]
 # The tlog writer is the link's recorder; the round-trip tests read back what it writes.

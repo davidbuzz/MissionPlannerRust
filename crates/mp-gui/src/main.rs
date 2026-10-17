@@ -71,6 +71,7 @@ mod logdownload;
 mod logs_tab;
 mod mapview;
 mod mav_serial;
+mod mavlink_log;
 // EXPERIMENTAL's Message Interval form.
 mod message_interval;
 // EXPERIMENTAL's adjust aircraft baro height: its window.
@@ -714,6 +715,8 @@ struct MissionPlanner {
     // ---- Geo Reference ----
     /// The Geo Reference Images form (`GeoRef/georefimage.cs`) the DataFlash Logs page opens.
     georef: georef_ui::GeorefUi,
+    /// LOGS' and FLIGHT DATA's "Tlog > Kml or Graph" form while it shows (mavlink_log.rs).
+    mavlink_log: Option<mavlink_log::MavlinkLogForm>,
     // ---- end Geo Reference ----
     /// The connection control's Link Stats window (`Controls/ConnectionStats.cs`).
     link_stats: link_stats::LinkStatsUi,
@@ -1093,6 +1096,7 @@ impl MissionPlanner {
             // ---- end Firmware Legacy / Ateryx ----
             // ---- Geo Reference ----
             georef: georef_ui::GeorefUi::new(cx),
+            mavlink_log: None,
             // ---- end Geo Reference ----
             link_stats: link_stats::LinkStatsUi::default(),
             key_forms: cmd_keys::KeyForms::new(cx),
@@ -3353,6 +3357,7 @@ impl Render for MissionPlanner {
         }
         // EXPERIMENTAL's mag calb log, its answer handed to the Compass page's SaveOffsets.
         experimental::tick(self);
+        mavlink_log::tick(self);
         self.note_status();
         // Tailscale: its poller, the first start's offer, a failed tailnet link explained.
         self.tailnet_tick(&view);
@@ -3574,6 +3579,7 @@ impl Render for MissionPlanner {
             let harness = web_time::Instant::now();
             facts::record("screen", self.screen.label());
             logs_tab::record_facts(self.logs_page);
+            mavlink_log::record_facts(self.mavlink_log.as_ref());
             self.persisted.record_facts();
             i18n::record_facts();
             // Where the map draws home, as `latitude,longitude`, read back from the map, and
@@ -4314,6 +4320,7 @@ impl Render for MissionPlanner {
                 // ---- Geo Reference ----
                 // `new Georefimage().Show()`: its form over the screen, which stays usable.
                 .children(georef_ui::window(self, window, cx))
+                .children(mavlink_log::window(self, window, cx))
                 // ---- end Geo Reference ----
                 )
                 .into_any_element(),
@@ -4389,7 +4396,8 @@ impl Render for MissionPlanner {
                             cx,
                         ))
                         .children(fly::analysis_report(&self.fly_data, cx))
-                        .children(georef_ui::window(self, window, cx)),
+                        .children(georef_ui::window(self, window, cx))
+                        .children(mavlink_log::window(self, window, cx)),
                 )
                 .into_any_element(),
             // Each a backstage view: the list down the left, the chosen page beside it, each

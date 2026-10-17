@@ -177,9 +177,16 @@ mod tests {
         assert!(!value.contains('\n'));
     }
 
+    /// The two tests that publish, one at a time: `PUBLISHED` is one counter for the process, and
+    /// a publish from the other test between a test's two was one frame too many (2026-10-17).
+    static ONE_PUBLISHER: Mutex<()> = Mutex::new(());
+
     /// Recording while switched off must cost nothing and must not panic.
     #[test]
     fn recording_while_disabled_does_nothing() {
+        let _one = ONE_PUBLISHER
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         // MP_FACTS is not set under `cargo test`, so this exercises the off path.
         record("key", "value");
         publish();
@@ -189,6 +196,9 @@ mod tests {
     /// Every publish is a frame, and `ui.frame` counts them: one more each time.
     #[test]
     fn each_publish_counts_a_frame() {
+        let _one = ONE_PUBLISHER
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         // The facts as a frame's first `record` makes them, which `cargo test` (no MP_FACTS) skips.
         let facts = FACTS.get_or_init(|| Mutex::new(BTreeMap::new()));
         let frame = || {

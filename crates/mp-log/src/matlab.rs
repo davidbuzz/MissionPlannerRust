@@ -334,6 +334,124 @@ pub fn process_log_file(log: &Path, mode_name: ModeName<'_>) -> Result<PathBuf, 
     Ok(path)
 }
 
+/// `TimeSpan.TicksPerDay`.
+const TICKS_PER_DAY: i64 = 864_000_000_000;
+/// Days from 0001-01-01, `DateTime.MinValue`, to 1970-01-01.
+const UNIX_EPOCH_DAYS: i64 = 719_162;
+
+/// Days from 1970-01-01 of a proleptic Gregorian date: [`crate::dflogbuffer::civil_from_days`]
+/// the other way.
+fn days_from_civil(year: i64, month: u32, day: u32) -> i64 {
+    let month = i64::from(month);
+    let year = if month <= 2 { year - 1 } else { year };
+    let era = year.div_euclid(400);
+    let yoe = year.rem_euclid(400);
+    let doy = (153 * (if month > 2 { month - 3 } else { month + 9 }) + 2) / 5 + i64::from(day) - 1;
+    let doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
+    era * 146_097 + doe - 719_468
+}
+
+/// `GetMatLabSerialDate`: a local time in ticks as MATLAB's serial date number -
+/// `(dt.AddYears(1).AddDays(2) - DateTime.MinValue).TotalDays`, a year and two days added because
+/// .NET has no year 0. `AddYears` keeps the month and day, February 29th becoming the 28th in a
+/// year without one; `TotalDays` is the ticks times `DaysPerTick`, `1.0 / TicksPerDay`.
+/// `// C#: ExtLibs/Utilities/MatLab.cs:384-393`
+#[must_use]
+#[allow(clippy::cast_precision_loss)] // `(double)_ticks`, as `TimeSpan` converts
+pub fn serial_date(ticks: i64) -> f64 {
+    const DAYS_PER_TICK: f64 = 1.0 / 864_000_000_000.0;
+    let days = ticks.div_euclid(TICKS_PER_DAY);
+    let of_day = ticks.rem_euclid(TICKS_PER_DAY);
+    let (year, month, day) = crate::dflogbuffer::civil_from_days(days - UNIX_EPOCH_DAYS);
+    let year = year + 1;
+    let leap = year % 4 == 0 && (year % 100 != 0 || year % 400 == 0);
+    let day = if month == 2 && day == 29 && !leap {
+        28
+    } else {
+        day
+    };
+    let shifted =
+        (days_from_civil(year, month, day) + UNIX_EPOCH_DAYS + 2) * TICKS_PER_DAY + of_day;
+    shifted as f64 * DAYS_PER_TICK
+}
+
+/// `MatLab.tlog`, the "Tlog > Kml or Graph" form's Create Matlab file: a telemetry log read with
+/// `MavlinkParse.ReadPacket` ([`crate::TlogReader`]), every message this build decodes but a
+/// ground station's heartbeat; each scalar field a row of its time - the packet's stamp, local, as
+/// a serial date ([`serial_date`]), `DateTime.MinValue`'s with none - and its value, under
+/// `<field>_mavlink_<message>_t`; arrays left out. The arrays come in the order their names were
+/// first seen, where the C# takes them from a `Hashtable`, whose order is the runtime's string
+/// hashing's (as [`process_log`]'s `Seen`). A stamp is believed between 2001 and 2103, as
+/// [`crate::TlogReader`] believes one, where the C#'s reader takes any under 9,999,999 hours.
+/// `// C#: ExtLibs/Utilities/MatLab.cs:268-382`
+#[must_use]
+pub fn process_tlog(data: &[u8], zone: crate::mavlinklog::Zone<'_>) -> Vec<MlArray> {
+    use mp_mavlink::FieldValue;
+    use mp_mavlink_dialects::all::{DIALECT, MavMessage};
+    let mut rows: Ordered<Vec<Vec<f64>>> = Ordered::default();
+    let mut reader = crate::TlogReader::new(data);
+    while let Some(record) = reader.next_record(&DIALECT) {
+        let Ok((frame, _)) = mp_mavlink::parse(record.frame, &DIALECT) else {
+            continue;
+        };
+        let Some(message) = MavMessage::decode(frame.msgid, frame.payload) else {
+            continue;
+        };
+        if let MavMessage::Heartbeat(heartbeat) = &message
+            && heartbeat.r#type == 6
+        {
+            continue;
+        }
+        let time = record
+            .timestamp_micros
+            .and_then(mp_vehicle::DateTime::from_tlog_micros)
+            .unwrap_or(mp_vehicle::DateTime::MIN);
+        let serial = serial_date(crate::mavlinklog::local_ticks(time, zone));
+        let name = crate::mavlinklog::struct_name(message.name());
+        for (info, (field, value)) in message.field_info().iter().zip(message.fields()) {
+            if info.array_len > 0 {
+                continue;
+            }
+            #[allow(clippy::cast_precision_loss)] // `(double)(ulong)value`, as the C# converts
+            let number = match value {
+                FieldValue::Unsigned(value) => value as f64,
+                FieldValue::Signed(value) => value as f64,
+                FieldValue::Float(value) => value,
+                _ => continue,
+            };
+            rows.entry(&format!("{field}_{name}"))
+                .push(vec![serial, number]);
+        }
+    }
+    rows.take()
+        .into_iter()
+        .map(|(name, rows)| MlArray::Double {
+            name: Some(name.replace(' ', "_")),
+            rows,
+        })
+        .collect()
+}
+
+/// Create Matlab file (`BUT_matlab`, `MatLabForms.ProcessTLog`) for one telemetry log: its arrays
+/// ([`process_tlog`]) written to `<log>.mat` beside it, uncompressed, returning where.
+///
+/// # Errors
+///
+/// The log cannot be read or the `.mat` written: the C#'s "Error converting file" box.
+/// `// C#: Log/MatLabForms.cs:10-41; ExtLibs/Utilities/MatLab.cs:375-381`
+pub fn process_tlog_file(
+    log: &Path,
+    zone: crate::mavlinklog::Zone<'_>,
+) -> Result<PathBuf, MatlabError> {
+    let data = mp_os::fs::read(log)?;
+    let arrays = process_tlog(&data, zone);
+    let mut name = log.as_os_str().to_owned();
+    name.push(".mat");
+    let path = PathBuf::from(name);
+    mp_os::fs::write(&path, write_mat(&arrays, &created_now()))?;
+    Ok(path)
+}
+
 /// csmatio's header date, `ddd, dd MMM yyyy HH:mm:ss GMT`, for now.
 #[must_use]
 pub fn created_now() -> String {
@@ -560,5 +678,86 @@ mod tests {
         assert_eq!(&written[128..], &expected[..]);
         assert!(written.starts_with(b"MATLAB 5.0 MAT-file, Platform: "));
         assert_eq!(&written[124..128], b"\x00\x01IM");
+    }
+
+    /// `MatLab.tlog`: each scalar field a row of its serial date and value under
+    /// `<field>_mavlink_<message>_t`, in the order first seen; arrays and a ground station's
+    /// heartbeat left out. MATLAB's `datenum('16-Oct-2026')` is 740271, and `DateTime.MinValue`'s
+    /// serial date, a year and two days, 367.
+    #[test]
+    fn a_telemetry_log_is_a_row_per_scalar_field() {
+        use mp_mavlink_dialects::all::{Heartbeat, Statustext};
+        fn frame<M: mp_mavlink::Message>(message: &M, sysid: u32) -> Vec<u8> {
+            let mut payload = vec![0u8; M::LEN];
+            message.encode(&mut payload);
+            let mut out = [0u8; 300];
+            let n = mp_mavlink::encode_v2(&mut out, 0, sysid, 1, M::ID, &payload, M::CRC_EXTRA, 0)
+                .unwrap();
+            out[..n].to_vec()
+        }
+        let heartbeat = |r#type| Heartbeat {
+            custom_mode: 4,
+            r#type,
+            autopilot: 3,
+            base_mode: 89,
+            system_status: 4,
+            mavlink_version: 3,
+        };
+        let text = Statustext {
+            severity: 6,
+            text: [b'a'; 50],
+            id: 0,
+            chunk_seq: 0,
+        };
+        let mut data = Vec::new();
+        for (seconds, frame) in [
+            (0u64, frame(&heartbeat(6), 255)),
+            (0, frame(&heartbeat(2), 1)),
+            (6 * 3600, frame(&text, 1)),
+        ] {
+            data.extend((1_792_108_800_000_000u64 + seconds * 1_000_000).to_be_bytes());
+            data.extend(frame);
+        }
+        let arrays = process_tlog(&data, &crate::mavlinklog::utc);
+        let names: Vec<&str> = arrays
+            .iter()
+            .map(|array| match array {
+                MlArray::Double { name, .. } => name.as_deref().unwrap_or(""),
+                _ => "",
+            })
+            .collect();
+        assert_eq!(
+            names,
+            [
+                "custom_mode_mavlink_heartbeat_t",
+                "type_mavlink_heartbeat_t",
+                "autopilot_mavlink_heartbeat_t",
+                "base_mode_mavlink_heartbeat_t",
+                "system_status_mavlink_heartbeat_t",
+                "mavlink_version_mavlink_heartbeat_t",
+                "severity_mavlink_statustext_t",
+                "id_mavlink_statustext_t",
+                "chunk_seq_mavlink_statustext_t",
+            ]
+        );
+        // The vehicle's heartbeat alone: the ground station's is left out.
+        let MlArray::Double { rows, .. } = &arrays[1] else {
+            panic!("a double");
+        };
+        assert_eq!(rows.len(), 1);
+        assert!((rows[0][0] - 740_271.0).abs() < 1e-6, "{}", rows[0][0]);
+        assert_eq!(rows[0][1], 2.0);
+        let MlArray::Double { rows, .. } = &arrays[6] else {
+            panic!("a double");
+        };
+        assert!((rows[0][0] - 740_271.25).abs() < 1e-6, "{}", rows[0][0]);
+        assert_eq!(rows[0][1], 6.0);
+        assert!((serial_date(0) - 367.0).abs() < 1e-9);
+        // February 29th a year on is the 28th: 2024-02-29 is 2025-02-28 plus two days.
+        let leap_day = (days_from_civil(2024, 2, 29) + UNIX_EPOCH_DAYS) * TICKS_PER_DAY;
+        let expected = days_from_civil(2025, 3, 2) + UNIX_EPOCH_DAYS;
+        #[allow(clippy::cast_precision_loss)]
+        let expected = expected as f64;
+        assert!((serial_date(leap_day) - expected).abs() < 1e-6);
     }
 }

@@ -75,7 +75,7 @@ pub const NEWLINE: &str = if cfg!(windows) { "\r\n" } else { "\n" };
 pub const PLANE_MODEL: &[u8] = include_bytes!("../assets/block_plane_0.dae");
 
 /// Its name in the `.kmz`, which each aircraft's `Link` refers to.
-const PLANE_MODEL_NAME: &str = "block_plane_0.dae";
+pub(crate) const PLANE_MODEL_NAME: &str = "block_plane_0.dae";
 
 /// `new List<Point3D>[200]`: how many flight path segments there can be.
 const SEGMENTS: usize = 200;
@@ -548,7 +548,7 @@ fn distance(lat1: f64, lng1: f64, lat2: f64, lng2: f64) -> f64 {
 
 /// A local time as `DateTime.ToString("yyyy-MM-ddTHH:mm:sszzzzzz")` writes it: `zzzzzz` is `zzz`,
 /// the offset as `+hh:mm`.
-fn gpx_time(datetime: Option<i64>, zone: Zone<'_>) -> String {
+pub(crate) fn gpx_time(datetime: Option<i64>, zone: Zone<'_>) -> String {
     let utc = datetime.unwrap_or(MIN_VALUE_MILLIS);
     let offset = zone(utc);
     let local = if datetime.is_some() {
@@ -1514,7 +1514,7 @@ pub fn process_text(data: &[u8], output: &mut LogOutput) {
 }
 
 /// The local time now as a zip entry's stamp, `DateTime.Now`.
-fn dos_now(zone: Zone<'_>) -> zip::DosTime {
+pub(crate) fn dos_now(zone: Zone<'_>) -> zip::DosTime {
     let now = i64::try_from(mp_log::now_micros() / 1000).unwrap_or(0);
     let local = now + i64::from(zone(now)) * 1000;
     let seconds = local.div_euclid(1000);

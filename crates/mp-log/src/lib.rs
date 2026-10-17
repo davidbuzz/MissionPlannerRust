@@ -58,6 +58,7 @@ pub mod logparams;
 pub mod magcal_log;
 pub mod matlab;
 pub mod mavgraph;
+pub mod mavlinklog;
 pub mod netfmt;
 pub mod overlay;
 pub mod plot;

@@ -1268,9 +1268,17 @@ impl DateScale {
     /// `// C#: ExtLibs/ZedGraph/ZedGraph/DateScale.cs:847-853`
     #[must_use]
     pub fn label(x: f64) -> String {
+        Self::label_in(x, X_FORMAT)
+    }
+
+    /// A tic's label in a graph's own `Scale.Format`, a `chrono` format string: the "Tlog > Kml or
+    /// Graph" form's is `HH:mm:ss`, `%H:%M:%S` (`Log/MavlinkLog.cs:45`).
+    /// `// C#: ExtLibs/ZedGraph/ZedGraph/DateScale.cs:847-853`
+    #[must_use]
+    pub fn label_in(x: f64, format: &str) -> String {
         calendar(x).map_or_else(
             || "Date Error".to_owned(),
-            |date| date.format(X_FORMAT).to_string(),
+            |date| date.format(format).to_string(),
         )
     }
 }
