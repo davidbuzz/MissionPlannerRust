@@ -86,13 +86,42 @@ pub const ENV: &str = "MP_PLUGINS";
 /// scripts that are not about plugins (`tools/gui-test.sh` sets it unless a script asks for them).
 pub const BUILTIN_ENV: &str = "MP_BUILTIN_PLUGINS";
 
-/// The built-in plugins, unless [`BUILTIN_ENV`] is `0`.
-fn builtins() -> &'static [(&'static str, &'static [u8])] {
-    if std::env::var(BUILTIN_ENV).is_ok_and(|value| value == "0") {
-        &[]
-    } else {
-        builtin::BUILTIN
+/// Whether this is a demo run (`planner --demo`, the owner's user demo of 2026-10-17): the
+/// Welcome-Demo-Sitl, built into the browser alone until then, loaded on the desktop and enabled
+/// for the run whatever `DisabledPlugins` says - it unticks itself at the end of every run.
+static DEMO_RUN: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// Sets whether this is a demo run, from the command line, before the plugins start.
+pub fn set_demo_run(on: bool) {
+    DEMO_RUN.store(on, std::sync::atomic::Ordering::Relaxed);
+}
+
+/// Whether this is a demo run.
+#[must_use]
+pub fn demo_run() -> bool {
+    DEMO_RUN.load(std::sync::atomic::Ordering::Relaxed)
+}
+
+/// The built-in plugins, unless [`BUILTIN_ENV`] is `0`, and a demo run's.
+fn builtins() -> Vec<(&'static str, &'static [u8])> {
+    builtins_for(
+        !std::env::var(BUILTIN_ENV).is_ok_and(|value| value == "0"),
+        demo_run(),
+    )
+}
+
+/// The plugins carried into a start: `BUILTIN` while `shipped`, and `DEMO` for a `demo` run -
+/// the harness's `MP_BUILTIN_PLUGINS=0` leaves the shipped ones out of a demo run too, so a
+/// script sees the demo alone.
+fn builtins_for(shipped: bool, demo: bool) -> Vec<(&'static str, &'static [u8])> {
+    let mut list: Vec<(&'static str, &'static [u8])> = Vec::new();
+    if shipped {
+        list.extend_from_slice(builtin::BUILTIN);
     }
+    if demo {
+        list.extend_from_slice(builtin::DEMO);
+    }
+    list
 }
 
 /// The setting `PluginLoader.DisabledPluginNames` is read from. `// C#: MainV2.cs:3199-3201`
@@ -200,9 +229,23 @@ fn node_wanted(persisted: &crate::settings::Persisted) -> bool {
 /// A disabled list as it is in force: in a page opened with `?demo=0` - the browser build's
 /// checks - the Welcome-Demo-Sitl as well, which then never starts, and the plugin manager does
 /// not list it.
-fn in_force(mut disabled: Vec<String>) -> Vec<String> {
-    if mp_os::page_query("demo").as_deref() == Some("0") {
+fn in_force(disabled: Vec<String>) -> Vec<String> {
+    in_force_for(
+        disabled,
+        mp_os::page_query("demo").as_deref() == Some("0"),
+        demo_run(),
+    )
+}
+
+/// [`in_force`] from its two switches: the page's `?demo=0` adds the demo to the list, and a
+/// desktop demo run takes it off - the plugin unticks itself at the end of a run and saves, and
+/// the next `--demo` must still have it.
+fn in_force_for(mut disabled: Vec<String>, page_says_no: bool, demo: bool) -> Vec<String> {
+    if page_says_no {
         disabled.push(DEMO_FILE.to_owned());
+    }
+    if demo {
+        disabled.retain(|name| !name.eq_ignore_ascii_case(DEMO_FILE));
     }
     disabled
 }
@@ -373,7 +416,7 @@ impl Plugins {
         // `PluginLoader.LoadAll` at start: the shipped plugins and the folder's, less the
         // disabled ones. `// C#: Plugin/PluginLoader.cs:203-311`
         let host = PluginHost::load_with_builtins(
-            builtins(),
+            &builtins(),
             folder().as_deref(),
             &disabled,
             Limits::default(),
@@ -454,8 +497,9 @@ impl Plugins {
     pub fn open_manager(&mut self, persisted: &crate::settings::Persisted) {
         let disabled = disabled_list(persisted);
         let dir = folder();
+        let carried = builtins();
         let present = |name: &str| {
-            builtin::BUILTIN
+            carried
                 .iter()
                 .any(|(built_in, _)| built_in.eq_ignore_ascii_case(name))
                 || dir.as_ref().is_some_and(|dir| dir.join(name).os_is_file())
@@ -1820,6 +1864,50 @@ mod tests {
         assert!(native_enabled(&persisted, node), "its tick kept");
         persisted.set(DISABLED, "");
         assert!(node_wanted(&persisted), "Tailscale ticked again");
+    }
+
+    /// A demo run (`--demo`, the owner's user demo of 2026-10-17) carries the Welcome-Demo-Sitl
+    /// on the desktop, where a plain start does not; the harness's `MP_BUILTIN_PLUGINS=0` leaves
+    /// the shipped plugins out of it and the demo in; and the demo stays enabled for the run
+    /// though it unticked itself last time.
+    #[test]
+    #[cfg(not(target_family = "wasm"))]
+    fn a_demo_run_carries_the_welcome_demo_and_a_plain_start_does_not() {
+        let names = |list: Vec<(&str, &[u8])>| -> Vec<String> {
+            list.iter().map(|(name, _)| (*name).to_owned()).collect()
+        };
+        assert_eq!(
+            names(builtins_for(false, true)),
+            ["welcomedemositl.wasm"],
+            "the demo alone for a script"
+        );
+        assert!(!names(builtins_for(true, false)).contains(&"welcomedemositl.wasm".to_owned()));
+        let both = names(builtins_for(true, true));
+        assert_eq!(
+            both.last().map(String::as_str),
+            Some("welcomedemositl.wasm")
+        );
+        assert_eq!(both.len(), super::builtin::BUILTIN.len() + 1);
+        assert!(
+            !builtin::DEMO.is_empty(),
+            "the desktop carries it for --demo"
+        );
+        let unticked = vec![
+            "welcomedemositl.wasm".to_owned(),
+            "opendroneid.wasm".to_owned(),
+        ];
+        assert_eq!(
+            in_force_for(unticked.clone(), false, true),
+            ["opendroneid.wasm".to_owned()],
+            "a demo run takes the demo off the list"
+        );
+        assert_eq!(in_force_for(unticked.clone(), false, false), unticked);
+        assert_eq!(
+            in_force_for(Vec::new(), true, false),
+            ["welcomedemositl.wasm".to_owned()],
+            "the page's ?demo=0 adds it"
+        );
+        assert!(!demo_run(), "off until the command line says so");
     }
 
     /// The planner carries the plugins Mission Planner ships, so a plain start loads them with

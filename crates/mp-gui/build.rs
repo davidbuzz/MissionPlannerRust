@@ -76,10 +76,14 @@ const SHIPPED: &[&str] = &[
 
 /// The plugins the browser build carries besides [`SHIPPED`]: the owner's Welcome-Demo-Sitl
 /// (2026-10-05), not in the C#, a first visit's demonstration. Name order after [`SHIPPED`]'s.
+/// The desktop carries them apart, in `DEMO`, loaded for a demo run alone (`planner --demo`, the
+/// owner's user demo of 2026-10-17).
 const WEB_ONLY: &[&str] = &["welcomedemositl"];
 
-/// Builds [`SHIPPED`], and for the browser build [`WEB_ONLY`] too, for WebAssembly and writes
-/// `builtin_plugins.rs` into `OUT_DIR`.
+/// Builds [`SHIPPED`] and [`WEB_ONLY`] for WebAssembly and writes `builtin_plugins.rs` into
+/// `OUT_DIR`: `BUILTIN`, the plugins every start loads ([`SHIPPED`], and [`WEB_ONLY`] too in the
+/// browser build), and `DEMO`, the ones a demo run adds ([`WEB_ONLY`] on the desktop, none in the
+/// browser, where they are built in already).
 ///
 /// A failure fails the planner's build: a planner without its plugins is the bug this exists to
 /// end, not a degraded build to carry on with.
@@ -109,11 +113,12 @@ fn build_shipped_plugins() {
     // The browser build runs plugins on wasmtime's interpreter, which cannot compile: they are
     // compiled below, to Pulley bytecode, by the plugin host's own precompile at the same wasmtime.
     let web = std::env::var("TARGET").is_ok_and(|target| target.starts_with("wasm32"));
-    let shipped: Vec<&str> = SHIPPED
-        .iter()
-        .chain(if web { WEB_ONLY } else { &[] })
-        .copied()
-        .collect();
+    let shipped: Vec<&str> = SHIPPED.iter().chain(WEB_ONLY).copied().collect();
+    let (every_start, demo_run): (Vec<&str>, Vec<&str>) = if web {
+        (shipped.clone(), Vec::new())
+    } else {
+        (SHIPPED.to_vec(), WEB_ONLY.to_vec())
+    };
     let cargo = std::env::var("CARGO").unwrap_or_else(|_| "cargo".to_owned());
     let mut command = Command::new(cargo);
     command
@@ -148,11 +153,6 @@ fn build_shipped_plugins() {
     if web {
         precompile_for_web(&shipped, &root, &target, &built, &out);
     }
-    let mut table = String::from(
-        "/// The plugins Mission Planner ships, built for WebAssembly by `build.rs`: file name and\n\
-         /// component bytes, in name order.\n\
-         pub const BUILTIN: &[(&str, &[u8])] = &[\n",
-    );
     for name in &shipped {
         let from = built.join(format!("{name}.wasm"));
         let to = out.join(format!("{name}.wasm"));
@@ -163,10 +163,28 @@ fn build_shipped_plugins() {
                 panic!("the shipped plugin {} is not there: {err}", from.display())
             });
         }
-        table.push_str(&format!(
+    }
+    let entry = |name: &str| {
+        format!(
             "    (\"{name}.wasm\", include_bytes!({:?})),\n",
-            to.display().to_string()
-        ));
+            out.join(format!("{name}.wasm")).display().to_string()
+        )
+    };
+    let mut table = String::from(
+        "/// The plugins Mission Planner ships, built for WebAssembly by `build.rs`: file name and\n\
+         /// component bytes, in name order.\n\
+         pub const BUILTIN: &[(&str, &[u8])] = &[\n",
+    );
+    for name in &every_start {
+        table.push_str(&entry(name));
+    }
+    table.push_str(
+        "];\n/// The plugins a demo run adds (`planner --demo`): the browser build's extra built-ins,\n\
+         /// carried apart on the desktop; none in the browser, where `BUILTIN` has them.\n\
+         pub const DEMO: &[(&str, &[u8])] = &[\n",
+    );
+    for name in &demo_run {
+        table.push_str(&entry(name));
     }
     table.push_str("];\n");
     std::fs::write(out.join("builtin_plugins.rs"), table)

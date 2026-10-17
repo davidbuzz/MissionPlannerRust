@@ -147,7 +147,37 @@ class App:
     def sh(self, *argv):
         return subprocess.run(argv, capture_output=True, text=True, env=self.env0)
 
+    @classmethod
+    def attach(cls, display, pid, probe_file, facts_file):
+        """An App over a planner someone else started with MP_PROBE and MP_FACTS - the user demo's
+        tour (tools/demo/tour.py) drives the window dist/planner --demo opened - found by its pid;
+        never closed from here."""
+        self = cls.__new__(cls)
+        self.display = display
+        self.env0 = dict(os.environ, DISPLAY=display)
+        self.work = None
+        self.probe_file, self.facts_file = probe_file, facts_file
+        self.proc, self.pid, self.stderr = None, pid, None
+        self.win = None
+        deadline = time.time() + 30
+        while time.time() < deadline:
+            found = self.sh("xdotool", "search", "--pid", str(pid), "--onlyvisible",
+                            "--name", ".").stdout.split()
+            if found and os.path.exists(probe_file):
+                self.win = found[-1]
+                break
+            time.sleep(0.25)
+        if not self.win:
+            raise RuntimeError(f"no visible window of pid {pid} with a probe at {probe_file}")
+        return self
+
     def alive(self):
+        if self.proc is None:
+            try:
+                os.kill(self.pid, 0)
+                return True
+            except OSError:
+                return False
         return self.proc.poll() is None
 
     def probe(self):
@@ -240,6 +270,8 @@ class App:
         self.sh("xdotool", "click", "--repeat", str(notches), "--delay", "40", "5" if down else "4")
 
     def close(self):
+        if self.proc is None:
+            return  # attached to someone else's planner: theirs to close
         try:
             self.proc.terminate()
             self.proc.wait(5)

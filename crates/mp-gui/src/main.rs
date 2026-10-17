@@ -4833,6 +4833,9 @@ fn parse_window_size(value: &str) -> Option<(f32, f32)> {
 /// What the command line asked for.
 #[derive(Debug)]
 struct Arguments {
+    /// `--demo`: the owner's user demo (2026-10-17) - the planner opens disconnected and the
+    /// Welcome-Demo-Sitl plugin, carried for this run, starts a simulator and flies it.
+    demo: bool,
     /// The link to open, if one was named.
     target: Option<String>,
     /// Whether to read the mission automatically once a vehicle appears.
@@ -4872,6 +4875,9 @@ OPTIONS:
     -h, --help              print this and exit
     -V, --version           print the version and exit
         --read-mission      read the vehicle's mission once it appears
+        --demo              the demonstration: open disconnected and let the Welcome-Demo-Sitl
+                            plugin start a simulator, plan a mission and fly it, as a watcher
+                            sees it (tools/demo/run.sh runs the whole user demo)
         --screen SCREEN     open on fly, plan, setup, config, params or logs (default: fly)
         --window WIDTHxHEIGHT
                             initial window size (default: 1600x1200)
@@ -4911,6 +4917,7 @@ const fn auto_fetch_wanted(held: usize, expected: u16) -> bool {
 
 fn parse_arguments(arguments: impl IntoIterator<Item = String>) -> Result<Arguments, String> {
     let mut parsed = Arguments {
+        demo: false,
         target: None,
         read_mission: false,
         screen: None,
@@ -4921,6 +4928,7 @@ fn parse_arguments(arguments: impl IntoIterator<Item = String>) -> Result<Argume
     while let Some(argument) = arguments.next() {
         match argument.as_str() {
             "--read-mission" => parsed.read_mission = true,
+            "--demo" => parsed.demo = true,
             "--screen" => {
                 parsed.screen = Some(arguments.next().ok_or("--screen needs a name")?);
             }
@@ -5003,8 +5011,14 @@ fn main() {
     let asked = arguments.window.is_some() || std::env::var_os("MP_WINDOW").is_some();
     let (width, height) = window_size(arguments.window.as_deref(), saved.window);
     let screen = Screen::initial(arguments.screen.as_deref(), saved.screen.as_deref());
-    // A link given on the command line wins; otherwise offer the one last connected to.
-    let target = arguments.target.or_else(|| saved.link.clone());
+    // A link given on the command line wins; otherwise offer the one last connected to - but a
+    // demo run opens disconnected: its plugin starts the simulator and connects to it.
+    plugins_ui::set_demo_run(arguments.demo);
+    let target = if arguments.demo {
+        None
+    } else {
+        arguments.target.or_else(|| saved.link.clone())
+    };
     let read_mission = arguments.read_mission;
 
     platform::application().run(move |cx: &mut App| {
@@ -5254,6 +5268,19 @@ mod tests {
         // their flag did nothing.
         assert!(parse_arguments(["--screen".to_owned()]).is_err());
         assert!(parse_arguments(["--window".to_owned()]).is_err());
+    }
+
+    /// `--demo` is a flag, alone or beside the others; without it a run is no demo.
+    #[test]
+    fn the_demo_flag_is_parsed() {
+        let demo = parse_arguments(["--demo".to_owned()]).expect("parses");
+        assert!(demo.demo);
+        assert!(demo.target.is_none());
+        let both = parse_arguments(["--screen".to_owned(), "plan".to_owned(), "--demo".to_owned()])
+            .expect("parses");
+        assert!(both.demo);
+        assert_eq!(both.screen.as_deref(), Some("plan"));
+        assert!(!parse_arguments(["udp:14550".to_owned()]).expect("parses").demo);
     }
 
     #[test]

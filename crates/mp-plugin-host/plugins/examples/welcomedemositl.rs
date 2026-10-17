@@ -31,8 +31,9 @@
 //! its pointer goes.
 //!
 //! A plugin rather than part of the planner so a user can turn it off as any other. The browser
-//! build carries it built in and enabled; the desktop does not, and runs it only from a file put
-//! in the plugins folder.
+//! build carries it built in and enabled; the desktop carries it apart and runs it for
+//! `planner --demo` alone (the owner's user demo, 2026-10-17; tools/demo/run.sh), or from a file
+//! put in the plugins folder.
 //!
 //! Every click is the host's `demo-click`: a real click on the control the planner names, which
 //! the planner handles as a pilot's. Between clicks it waits for what the click was for - the

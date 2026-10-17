@@ -1,0 +1,35 @@
+# The user demo's start on the desktop (Buzz, 2026-10-17): `planner --demo` opens disconnected
+# and carries the Welcome-Demo-Sitl plugin, built into the browser alone until then
+# (plugins/examples/welcomedemositl.rs, build.rs's DEMO table), enabled for the run. Its drawn
+# pointer shows, clicks SIMULATION, then its Multirotor - the SITL fetched and started as
+# sitl-launch.gui has it, the planner connected to tcp:127.0.0.1:5760 - and goes on to PLAN. This
+# script sees that much: the plugin loaded alone (the harness leaves the shipped plugins out), its
+# first clicks, the simulator up and the link open. tools/demo/run.sh runs the whole demo.
+#
+# Needs the network (the manifest and the 7 MB simulator) and port 5760 free, as sitl-launch.gui
+# does: a SITL already there is refused by the setup line, and the test does not run. Run as
+#   tools/gui-test.sh tests/gui/demo-start.gui -- --demo
+
+screen fly
+window 1600x1200
+budget 22
+env XDG_DATA_HOME $WORK
+env MP_CONFIG_XML $WORK/config.xml
+setup printf '<?xml version="1.0" encoding="utf-8"?><Config><sitl_download_version>2</sitl_download_version></Config>' > "$WORK/config.xml"
+linux: setup if ss -Hltn 'sport = :5760' | grep -q .; then echo 'port 5760 is busy: the demo launches its own SITL there; stop the one running first' >&2; exit 3; fi
+
+# Disconnected at start whatever the last link was; the demo plugin alone, enabled.
+expect vehicle.connected false
+expect plugins.count 1
+# Its pointer, and its first click: the SIMULATION tab.
+within 20
+expect demo.pointer shown
+within 20
+expect screen simulation
+expect demo.last tab-simulation
+# Multirotor: the simulator fetched and started, the link opened, FLIGHT DATA shown by the start.
+within 40
+expect sitl.outcome connect tcp:127.0.0.1:5760
+within 20
+expect vehicle.connected true
+expect demo.clicks >= 2

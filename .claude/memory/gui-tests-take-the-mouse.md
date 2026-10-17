@@ -58,3 +58,10 @@ the real pointer and Buzz's windows are never touched, and the Quick page's thre
 while the desktop was covered by the session-failed screen. Slower than the GPU (budgets recorded from
 the slower run); the storm gate still needs the GPU. Prefer it for every run Buzz has not asked to
 watch. See [[one-build-at-a-time]] for the screen's cause.
+
+**The demo (2026-10-17):** `tools/demo/run.sh` and any headless rehearsal of it start a SITL on
+tcp:5760 and kill whatever SITL holds that port first - so a rehearsal of mine while Buzz is
+running the demo himself kills his, and his kills mine. "re 'Rehearse the whole five-minute demo
+headless' - NO, not yet. user is still testing." No rehearsal while he is testing; a rehearsal
+only on his word, like a run on his display.
+
