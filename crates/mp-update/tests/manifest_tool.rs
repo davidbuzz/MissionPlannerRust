@@ -78,12 +78,19 @@ fn downloads_in(dir: &Path) {
 }
 
 fn tool(arguments: &[&str]) -> Output {
-    let script = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../tools/release/manifest.py");
+    tool_named("manifest.py", arguments)
+}
+
+/// One of `tools/release`'s Python tools, run as the workflow runs it.
+fn tool_named(name: &str, arguments: &[&str]) -> Output {
+    let script = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../tools/release")
+        .join(name);
     Command::new("python3")
         .arg(script)
         .args(arguments)
         .output()
-        .expect("python3, which the release workflow runs the tool under")
+        .expect("python3, which the release workflow runs the tools under")
 }
 
 fn write(dir: &Path, channel: &str, tag: &str, more: &[&str]) -> Output {
@@ -343,4 +350,209 @@ fn a_tag_is_a_stable_release_and_a_run_by_hand_is_no_release() {
         ("GITHUB_SHA", COMMIT),
     ]);
     assert!(!ok);
+}
+
+/// The release notes, which the workflow writes and nobody else: `tools/release/notes.py` on two
+/// lock files and the advisories against their crates, answered here from a file as OSV answers
+/// the workflow. An advisory against the old version of a crate and not its new one is fixed; one
+/// against both is not; a crate that only stayed is not asked about.
+#[test]
+fn the_release_notes_are_computed_from_two_lock_files_and_their_advisories() {
+    let dir = scratch("notes");
+    let lock = |crates: &[(&str, &str)]| {
+        let mut text = String::from("version = 4\n");
+        for (name, version) in crates {
+            text.push_str(&format!(
+                "\n[[package]]\nname = \"{name}\"\nversion = \"{version}\"\n"
+            ));
+            // A crate of this workspace has no source and is no dependency to report.
+            if *name != "mp-update" {
+                text.push_str(
+                    "source = \"registry+https://github.com/rust-lang/crates.io-index\"\n",
+                );
+            }
+        }
+        text
+    };
+    std::fs::write(
+        dir.join("old.lock"),
+        lock(&[
+            ("wasmtime", "48.0.6"),
+            ("rustls-webpki", "0.103.15"),
+            ("chrono", "0.4.45"),
+            ("gone", "1.0.0"),
+            ("twice", "1.0.0"),
+            ("twice", "2.0.0"),
+            ("mp-update", "0.0.0"),
+        ]),
+    )
+    .unwrap();
+    std::fs::write(
+        dir.join("new.lock"),
+        lock(&[
+            ("wasmtime", "48.0.9"),
+            ("rustls-webpki", "0.103.17"),
+            ("chrono", "0.4.45"),
+            ("tar", "0.4.46"),
+            ("twice", "1.0.0"),
+            ("twice", "2.0.1"),
+            ("mp-update", "0.0.0"),
+        ]),
+    )
+    .unwrap();
+    std::fs::write(
+        dir.join("advisories.json"),
+        r#"{
+          "wasmtime 48.0.6": [{"id": "RUSTSEC-2026-0378", "summary": "Panic lowering a stream | into a guest"}],
+          "wasmtime 48.0.9": [],
+          "rustls-webpki 0.103.15": [
+            {"id": "RUSTSEC-2026-0382", "summary": "Certificate verification may accept distrusted intermediates"},
+            {"id": "RUSTSEC-2026-9999", "summary": "Not fixed by this release"}],
+          "rustls-webpki 0.103.17": [{"id": "RUSTSEC-2026-9999", "summary": "Not fixed by this release"}],
+          "gone 1.0.0": [{"id": "RUSTSEC-2026-1111", "summary": "In a crate no longer used"}],
+          "chrono 0.4.45": [{"id": "RUSTSEC-2026-0543", "summary": "chrono is unmaintained"}]
+        }"#,
+    )
+    .unwrap();
+    let path = |name: &str| dir.join(name).to_string_lossy().into_owned();
+    let section = |tag: &str, old: &str, out: &str| {
+        let output = tool_named(
+            "notes.py",
+            &[
+                "section",
+                "--tag",
+                tag,
+                "--previous",
+                "v0_0_1",
+                "--commit",
+                COMMIT,
+                "--date",
+                "2026-11-18",
+                "--old-lock",
+                &path(old),
+                "--new-lock",
+                &path("new.lock"),
+                "--advisories",
+                &path("advisories.json"),
+                "--out",
+                &path(out),
+            ],
+        );
+        assert!(
+            output.status.success(),
+            "{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        std::fs::read_to_string(dir.join(out)).unwrap()
+    };
+
+    let said = section("v0_0_2", "old.lock", "section.md");
+    assert!(
+        said.starts_with(
+            "## v0_0_2 - 2026-11-18\n\nCommit `42992d086a78`, compared with v0_0_1.\n"
+        ),
+        "{said}"
+    );
+    // Fixed: against the old version and not the new, and against a crate that is gone.
+    assert!(said.contains(
+        "| [RUSTSEC-2026-0378](https://rustsec.org/advisories/RUSTSEC-2026-0378) | wasmtime | 48.0.6 | 48.0.9 | Panic lowering a stream / into a guest |"
+    ), "{said}");
+    assert!(said.contains("| rustls-webpki | 0.103.15 | 0.103.17 | Certificate verification may accept distrusted intermediates |"), "{said}");
+    assert!(
+        said.contains("RUSTSEC-2026-1111) | gone | 1.0.0 | removed | In a crate no longer used |"),
+        "{said}"
+    );
+    // Not fixed: still against the new version; and against a crate that did not change.
+    assert!(
+        !said.contains("RUSTSEC-2026-9999") && !said.contains("RUSTSEC-2026-0543"),
+        "{said}"
+    );
+    // The dependencies' changes, a crate of two versions by both.
+    assert!(
+        said.contains("3 updated, 1 added, 1 removed, of 5 crates from crates.io."),
+        "{said}"
+    );
+    for row in [
+        "| twice | 1.0.0, 2.0.0 | 1.0.0, 2.0.1 |",
+        "| tar | - | 0.4.46 |",
+        "| gone | 1.0.0 | removed |",
+    ] {
+        assert!(said.contains(row), "{row} in {said}");
+    }
+    assert!(
+        !said.contains("| chrono |") && !said.contains("mp-update"),
+        "{said}"
+    );
+
+    // A release with the dependencies it had: nothing fixed, nothing changed, and it says so.
+    let same = section("v0_0_3", "new.lock", "next.md");
+    assert!(
+        same.contains("None: this release closes no advisory against what v0_0_1 was built from."),
+        "{same}"
+    );
+    assert!(
+        same.contains("0 updated, 0 added, 0 removed, of 5 crates from crates.io."),
+        "{same}"
+    );
+    assert!(!same.contains("<details>"), "{same}");
+
+    // RELEASE_NOTES.md: made with its header, the newest release first, and a release written
+    // twice held once.
+    let notes = path("RELEASE_NOTES.md");
+    let prepend = |section: &str, tag: &str| {
+        let output = tool_named(
+            "notes.py",
+            &[
+                "prepend",
+                "--file",
+                &notes,
+                "--section",
+                &path(section),
+                "--tag",
+                tag,
+            ],
+        );
+        assert!(
+            output.status.success(),
+            "{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        std::fs::read_to_string(&notes).unwrap()
+    };
+    let first = prepend("section.md", "v0_0_2");
+    assert!(
+        first.starts_with("# Release notes\n\nWritten by the release workflow"),
+        "{first}"
+    );
+    assert!(first.contains("Not edited by hand."), "{first}");
+    assert_eq!(first.matches("\n## ").count(), 1);
+    let second = prepend("next.md", "v0_0_3");
+    assert!(
+        second.find("## v0_0_3 - ").unwrap() < second.find("## v0_0_2 - ").unwrap(),
+        "{second}"
+    );
+    assert_eq!(
+        prepend("next.md", "v0_0_3"),
+        second,
+        "the same release again changes nothing"
+    );
+    assert_eq!(second.matches("\n## ").count(), 2);
+    // A section named for another release than its own is refused.
+    assert!(
+        !tool_named(
+            "notes.py",
+            &[
+                "prepend",
+                "--file",
+                &notes,
+                "--section",
+                &path("next.md"),
+                "--tag",
+                "v0_0_9"
+            ]
+        )
+        .status
+        .success()
+    );
+    let _ = std::fs::remove_dir_all(&dir);
 }

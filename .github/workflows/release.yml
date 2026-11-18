@@ -335,12 +335,36 @@ jobs:
       TAG: ${{ needs.what.outputs.tag }}
       BUILT: ${{ needs.what.outputs.built }}
     steps:
-      # For tools/release/manifest.py.
+      # For tools/release, and every tag: the notes compare this release with the one before it.
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: actions/download-artifact@v4
         with:
           path: assets
           merge-multiple: true
+      - name: What changed since the last release (tools/release/notes.py)
+        # Nobody writes the notes: the advisories fixed are those against what the last release
+        # was built from and not against this one, asked of the OSV database, and the dependency
+        # changes are the two Cargo.lock files' difference (the owner, 2026-11-18).
+        run: |
+          if [ "$CHANNEL" = beta ]; then
+            previous=$(git describe --tags --abbrev=0 --match 'v[0-9]*')
+          else
+            previous=$(git describe --tags --abbrev=0 --match 'v[0-9]*' "$TAG^")
+          fi
+          git show "$previous:Cargo.lock" > old.lock
+          python3 tools/release/notes.py section --tag "$TAG" --previous "$previous" \
+            --commit "$GITHUB_SHA" --date "${BUILT%%T*}" --old-lock old.lock --new-lock Cargo.lock \
+            --out section.md
+          # RELEASE_NOTES.md as a download: main's, with this release at its head; the beta's is
+          # its own section alone, since only a tagged release is kept in the file.
+          if [ "$CHANNEL" = beta ]; then
+            cp section.md assets/RELEASE_NOTES.md
+          else
+            git show origin/main:RELEASE_NOTES.md > assets/RELEASE_NOTES.md 2>/dev/null || rm -f assets/RELEASE_NOTES.md
+            python3 tools/release/notes.py prepend --file assets/RELEASE_NOTES.md --section section.md --tag "$TAG"
+          fi
       - name: Checksums and release notes
         run: |
           cd assets
@@ -349,6 +373,9 @@ jobs:
           ls -la
           linux=$(ls *_linux-x86_64.tar.gz); deb=$(ls *.deb); windows=$(ls *_windows-x86_64.zip); macos=$(ls *_macos-universal.tar.gz)
           {
+            # What changed, computed (the step above), before what the downloads are.
+            cat ../section.md
+            echo
             if [ "$CHANNEL" = beta ]; then
               echo "MissionPlannerRust beta: main as of ${GITHUB_SHA:0:12}, after release ${VERSION}. Replaced by the next beta."
               echo "HELP > Check for BETA Updates takes a planner to it; the releases are the tagged ones."
@@ -430,3 +457,22 @@ jobs:
         run: |
           sleep 15
           python3 tools/release/manifest.py verify "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/releases/download/$TAG/update.json"
+      - name: RELEASE_NOTES.md on main (a tagged release)
+        # The file in the repository is the workflow's too: this release's section put at its
+        # head and committed. Pushed with the workflow's own token, which starts no other
+        # workflow; tools/release/what.sh's nightly check allows for that commit.
+        if: needs.what.outputs.channel == 'stable'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          for attempt in 1 2 3; do
+            git fetch -q origin main
+            git checkout -q -B main origin/main
+            python3 tools/release/notes.py prepend --file RELEASE_NOTES.md --section section.md --tag "$TAG"
+            git add RELEASE_NOTES.md
+            if git diff --cached --quiet; then echo "RELEASE_NOTES.md already holds $TAG"; exit 0; fi
+            git commit -q -m "RELEASE_NOTES.md: $TAG, written by the release workflow (tools/release/notes.py)"
+            if git push -q origin main; then git log --oneline -1; exit 0; fi
+            echo "main moved while this was pushed: again"; sleep 5
+          done
+          echo "RELEASE_NOTES.md could not be pushed to main"; exit 1

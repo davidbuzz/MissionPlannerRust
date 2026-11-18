@@ -371,6 +371,7 @@ developer identity, and it was started here from a shell, not from Finder; an In
 | HELP's two buttons, the question, the progress dialog, the daily check, `/update`, the restart | `crates/mp-gui/src/help.rs` |
 | "Check for updates at start", the owner's box | `crates/mp-gui/src/config/planner.rs` (`chk_updateatstart`) |
 | What a workflow run builds; the manifest written and the published release checked | `tools/release/what.sh`, `tools/release/manifest.py`, `.github/workflows/release.yml` |
+| The release notes, computed: advisories fixed and dependency changes since the last release | `tools/release/notes.py`, and `RELEASE_NOTES.md`, which the workflow commits after a tagged release |
 
 The first port of the C#'s updater - the per-file MD5 update and `headless-planner update-apply` -
 is removed, and the ledger's rows for `Utilities/Update.cs` and `Updater/Program.cs` are marked
@@ -400,11 +401,19 @@ redesigned by the owner's word.
 
 ### 10.3 Making a release
 
+The steps, the checks afterwards and what to do when a run fails are in
+`how_to_do_a_beta_or_release.md`; what follows is the outline.
+
 1. **A stable release**: push a tag, `v0_0_2`. The workflow builds the three planners told they
    are release 0.0.2 of the stable channel at that commit, checks each says so (`planner
    --version`), opens and paints each, packages them, publishes them under the tag as the latest
    release, uploads `update.json` last, and then fetches the manifest by its public address and
-   every download it names, holding each to its size and hash.
+   every download it names, holding each to its size and hash. The release's notes are the
+   workflow's own (the owner, 2026-11-18: "i want the process that writes any RELEASE_NOTES.md to
+   be 100% automated"): the RustSec advisories against what the last release was built from and
+   not against this one, asked of the OSV database for every crate whose version changed, and
+   the dependency changes between the two `Cargo.lock` files. They head the release's page, are
+   attached as `RELEASE_NOTES.md`, and are committed to `main` in that file.
 2. **The beta**: nothing to do. Each night the workflow looks at main; when it has moved since
    the last beta and CI passed on it, the same three builds are published under the one tag
    `beta`, a pre-release, their names carrying the commit, the manifest replaced after they are

@@ -52,9 +52,15 @@ elif [ "${GITHUB_EVENT_NAME:-}" = schedule ] || [ "${WANTED:-none}" = beta ]; th
         if [ "$current" = "$sha" ]; then
             say "the beta is already this commit: nothing to build tonight"
             build=false
-        elif [ "$(gh run list --workflow CI --commit "$sha" --status success --limit 1 --json databaseId --jq length)" != 1 ]; then
-            say "CI has not passed on this commit: nothing to build tonight"
-            build=false
+        else
+            # CI's verdict is on the last commit that changed more than the release notes: the one
+            # the release workflow commits after a release is its own, pushed with the workflow's
+            # token, which starts no CI.
+            code=$(git log -1 --format=%H "$sha" -- . ':(exclude)RELEASE_NOTES.md')
+            if [ "$(gh run list --workflow CI --commit "$code" --status success --limit 1 --json databaseId --jq length)" != 1 ]; then
+                say "CI has not passed on ${code:0:12}: nothing to build tonight"
+                build=false
+            fi
         fi
     fi
 else
