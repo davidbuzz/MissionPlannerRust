@@ -315,7 +315,7 @@ names, each marked `// MissionPlannerRust:` and listed in that directory's `READ
 BSD Zero Clause License (0BSD).
 
 <!-- BEGIN crates: written by `cargo xtask licences` from `cargo metadata`; not edited by hand -->
-1126 crates, every target's and every feature's, from `cargo metadata` over Cargo.lock; each licence is one `deny.toml` admits (`xtask/tests/licences.rs` holds both).
+1128 crates, every target's and every feature's, from `cargo metadata` over Cargo.lock; each licence is one `deny.toml` admits (`xtask/tests/licences.rs` holds both).
 
 | Crate | Version | Licence | Source |
 |---|---|---|---|
@@ -578,6 +578,7 @@ BSD Zero Clause License (0BSD).
 | fiat-crypto | 0.2.9 | MIT OR Apache-2.0 OR BSD-1-Clause | crates.io |
 | fiat-crypto | 0.3.0 | MIT OR Apache-2.0 OR BSD-1-Clause | crates.io |
 | filedescriptor | 0.8.3 | MIT | crates.io |
+| filetime | 0.2.30 | MIT/Apache-2.0 | crates.io |
 | find-msvc-tools | 0.1.13 | MIT OR Apache-2.0 | crates.io |
 | fixedbitset | 0.5.7 | MIT OR Apache-2.0 | crates.io |
 | flate2 | 1.1.10 | MIT OR Apache-2.0 | crates.io |
@@ -1131,6 +1132,7 @@ BSD Zero Clause License (0BSD).
 | taffy | 0.13.0 | MIT | crates.io |
 | tailscale | 0.6.1 | BSD-3-Clause | path |
 | tao-core-video-sys | 0.2.0 | MIT | crates.io |
+| tar | 0.4.46 | MIT OR Apache-2.0 | crates.io |
 | target-lexicon | 0.13.5 | Apache-2.0 WITH LLVM-exception | crates.io |
 | tauri-winrt-notification | 0.7.3 | MIT OR Apache-2.0 | crates.io |
 | tempfile | 3.27.0 | MIT OR Apache-2.0 | crates.io |

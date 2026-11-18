@@ -20,25 +20,35 @@
 
 //! The HELP screen - `MainV2`'s HELP - ported from `GCSViews/Help.cs`, `Help.Designer.cs` and
 //! `Help.resx`: the help text (`Resources.help_text`), "Check for Updates", "Check for BETA
-//! Updates", "Show Console Window (restart)" and the Change Log link; with `Update.CheckForUpdate`
-//! and `Update.DoUpdate`'s conversation around `mp_update` - the "Update Found / Update Now"
-//! question, the "Check for Updates" progress dialog with its Cancel, "No update available.", and
-//! the handover to the updater - and `MainV2`'s once-a-day check at startup, `Program.
-//! CleanupFiles`' copy of a new updater into place, and the `/update` and `/updatebeta` command
-//! lines.
+//! Updates", "Show Console Window (restart)" and the Change Log link; with the conversation of
+//! `Update.CheckForUpdate` and `Update.DoUpdate` - the "Update Found / Update Now" question, the
+//! "Check for Updates" progress dialog with its Cancel, "No update available." - `MainV2`'s
+//! once-a-day check at startup, `Program.CleanupFiles`, and the `/update` and `/updatebeta`
+//! command lines.
 //!
-//! Divergences, each at its site: the check's and the update's failures go on the status line
+//! The update behind that conversation is this planner's own, not the C#'s, on the owner's word
+//! of 2026-11-18 (updates.md, and `crates/mp-update`): a release's manifest read from GitHub, the
+//! release's archive fetched, checked, tried and moved into place by the planner itself, with no
+//! `Updater.exe`. What differs from the C# for the user, each at its site: the question says what
+//! is offered ("0.0.1 to 0.0.2"); the beta button asks as the other does, where the C#'s updates
+//! at once, and Control on it is nothing, there being no master channel; a planner with a link
+//! open installs and does not restart; the Debian package's install fetches the new package and
+//! shows its command; a development build is told so; CONFIG > Planner has a box that turns the
+//! check at start off; and in a web page both buttons are hidden, as the C# hides them for a
+//! Windows Store install (`Help.cs:27-31`).
+//!
+//! Divergences kept from before: the check's and the update's failures go on the status line
 //! (the owner's ruling of 2026-09-25; the C# boxes them); "Show Console Window" writes its
-//! setting and nothing more (the console window is Windows', allocated at the next start); the
-//! updater is `headless-planner update-apply`, which ships beside the planner as `Updater.exe`
-//! ships beside Mission Planner; and `MP_UPDATE_DIR` is the harness's door - the directory the
-//! update is written to, in place of the program's own, and with it the updater is named rather
-//! than started.
+//! setting and nothing more (the console window is Windows', allocated at the next start); and
+//! `MP_UPDATE_DIR` is the harness's door - the directory the update is installed in, in place of
+//! the program's own, and with it the new planner is named rather than started.
 //! `// C#: GCSViews/Help.cs; GCSViews/Help.Designer.cs; GCSViews/Help.resx; Utilities/Update.cs;
 //! MainV2.cs:823, 3668-3678, 4037-4051; Program.cs:189-205, 616-628`
 
 // This module is internal to the binary; `pub` here documents intent rather than exporting API.
 #![allow(unreachable_pub)]
+// In a web page nothing is updated, so what the update's threads use is unused there.
+#![cfg_attr(target_family = "wasm", allow(dead_code, unused_imports, unused_variables))]
 
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -47,10 +57,11 @@ use std::sync::mpsc::{Receiver, TryRecvError, channel};
 use web_time::Instant;
 
 use gpui::{AnyElement, Context, MouseButton, Window, div, prelude::*, px, rgb};
-use mp_update::check::Check;
+use mp_update::identity::{Channel, Identity};
+use mp_update::manifest::{Manifest, manifest_url};
 use mp_update::{
-    CHECK_FOR_UPDATES, Channel, Fetch, MASTER_WARNING, UPDATE_FAILED, UPDATE_FOUND,
-    UPDATE_NOT_FOUND, UPDATE_NOW, Which,
+    CHECK_FOR_UPDATES, DEVELOPMENT_BUILD, UPDATE_FAILED, UPDATE_FOUND, UPDATE_NOT_FOUND,
+    UPDATE_NOW,
 };
 
 use crate::MissionPlanner;
@@ -97,19 +108,20 @@ pub const SHOW_CONSOLE_KEY: &str = "showconsole";
 /// The settings the once-a-day check keeps and reads. `// C#: MainV2.cs:3668-3676`
 pub const UPDATE_CHECK_KEY: &str = "update_check";
 pub const BETA_UPDATES_KEY: &str = "beta_updates";
-/// The harness's door: the directory the update is written to in place of the program's.
+/// CONFIG > Planner's "Check for updates at start": "False" turns the once-a-day check off. Not
+/// in the C#, whose check has no switch: the owner's (2026-11-18).
+pub const UPDATE_AT_START_KEY: &str = "update_check_at_start";
+/// The harness's door: the directory the update is installed in, in place of the program's.
 pub const INSTALL_DIR_ENV: &str = "MP_UPDATE_DIR";
-/// What Check for Updates and Check for BETA Updates say, and all they do: the owner's word of
-/// 2026-10-14, "for both of them to *ONLY* print "Sorry, Updates arent impleented yet", and do
-/// noting more", the update paths behind them refused. On the status line, which every screen
-/// draws.
-pub const UPDATES_NOT_IMPLEMENTED: &str = "Sorry, Updates aren't implemented yet";
-/// Whether this build updates itself at all: not yet ([`UPDATES_NOT_IMPLEMENTED`]) - not from the
-/// buttons, the check at startup, or `/update` and `/updatebeta`. The port of `Update.cs` behind
-/// them stays, and its tests turn it on ([`Help::allowing_updates`]).
-const UPDATES_ALLOWED: bool = false;
-/// The updater beside the planner. `// C#: Utilities/Update.cs:62-72`
-const UPDATER: &str = "headless-planner";
+/// What the buttons say once an update is installed and this planner is still the old one.
+pub const RESTART_TO_FINISH: &str = "The update is installed: restart the planner to use it";
+/// The status line when an update has been moved into place.
+pub const UPDATE_INSTALLED: &str = "Update installed";
+/// The status line when it was installed with a link open: no restart.
+pub const INSTALLED_LATER: &str =
+    "Update installed: it takes effect when the planner is next started";
+/// A platform the release workflow builds nothing for.
+pub const NO_RELEASE_HERE: &str = "no release is published for this kind of computer";
 
 /// `Resources.help_text`, the RTF's words: its paragraphs, a tab where it has one, the links as
 /// their addresses - with "Mission Planner" read "MissionPlannerRust" (the owner, 2026-10-04).
@@ -136,7 +148,7 @@ pub const HELP_TEXT: &str = "\n\
     \tDesign: Samantha Nelson\n\
     \tContributions to MissionPlannerRust from: none yet, pls get in touch - https://github.com/davidbuzz/MissionPlannerRust\n\
     \tArduCopter Illustrations: Max Levine\n\
-    Libraries: gpui (Zed Industries), RustPython, wasmtime, serialport, ureq, image, tiny-skia, nalgebra, rustfft, dxf, roxmltree, flate2, ring, GStreamer - 1,126 crates in all, listed in THIRD_PARTY_LICENSES\n\
+    Libraries: gpui (Zed Industries), RustPython, wasmtime, serialport, ureq, image, tiny-skia, nalgebra, rustfft, dxf, roxmltree, flate2, ring, GStreamer - 1,128 crates in all, listed in THIRD_PARTY_LICENSES\n\
     \n\
     Companies that have contributed to MissionPlannerRust's development: none yet, pls get in touch\n\
     \n\
@@ -201,28 +213,35 @@ pub enum Flow {
     Checking,
     /// "Update Found" - "Update Now", Yes or No. `// C#: Utilities/Update.cs:181-199`
     Question {
-        /// The box's text, the C#'s, with its `[link;...;ChangeLog]`, which the box draws as a
-        /// link under the words (`crate::ui::box_text`).
+        /// The box's text, the C#'s with what is offered after it, and its
+        /// `[link;...;ChangeLog]`, which the box draws as a link under the words
+        /// (`crate::ui::box_text`).
         text: String,
     },
     /// `DoUpdate`'s progress dialog, its worker running. `// C#: Utilities/Update.cs:199-215`
     Updating,
-    /// A box with OK: "No update available.", or "This will update to MASTER release" before
-    /// that update.
+    /// A box with OK: "No update available.", or where the new package is and its command.
     Message {
         /// The box's text.
         text: String,
-        /// Whether `DoUpdate` follows OK.
-        then_update: bool,
     },
-    /// The update is downloaded and the updater named: the application exits.
+    /// The update is installed: the new planner is started and this one exits.
     Restarting,
+}
+
+/// What an update came to.
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum Done {
+    /// Installed in place: the files moved in.
+    Installed(usize),
+    /// The Debian package, fetched for the package manager to install.
+    Package(PathBuf),
 }
 
 /// What `DoUpdate`'s worker says: `UpdateProgressAndStatus`, then its end.
 enum Progress {
     Said(i32, String),
-    Done(Result<Vec<PathBuf>, String>),
+    Done(Result<Done, String>),
 }
 
 /// `DoUpdate`'s worker, running.
@@ -231,18 +250,61 @@ struct Updating {
     cancel: Arc<AtomicBool>,
 }
 
-/// The HELP page and `Update`'s state.
+/// How this planner is installed, which decides what "Update Now" does (updates.md, 4.5).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Kind {
+    /// An archive unpacked into a folder: updated in place.
+    Archive,
+    /// The Debian package: the new package fetched and its command shown.
+    Deb,
+}
+
+/// What follows an update installed in place.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum AfterInstall {
+    /// Under the harness's door: the new planner is named, not started.
+    Named,
+    /// A link is open: no restart, the update takes effect at the next start. A ground station
+    /// does not end itself while it is connected to a vehicle (the owner, 2026-11-18).
+    Later,
+    /// The new planner started and this one ended, as the C#'s updater restarts it.
+    Restart,
+}
+
+/// What follows, by the door and the link.
+#[must_use]
+pub const fn after_install(door: bool, linked: bool) -> AfterInstall {
+    if door {
+        AfterInstall::Named
+    } else if linked {
+        AfterInstall::Later
+    } else {
+        AfterInstall::Restart
+    }
+}
+
+/// The network the updater asks; a web page has no updater.
+#[cfg(not(target_family = "wasm"))]
+type Network = Arc<dyn mp_update::download::Source>;
+#[cfg(target_family = "wasm")]
+type Network = ();
+/// The new planner's trial before it is installed (`mp_update::install::trial`).
+type Trial = fn(&Path, &Manifest) -> Result<(), String>;
+
+/// The HELP page and the update's state.
 pub struct Help {
     /// `CHK_showconsole.Checked`.
     show_console: bool,
     /// What the update is doing.
     flow: Flow,
-    /// `Update.dobeta` and `Update.domaster`, for the check or update in hand.
-    which: Which,
+    /// The channel of the check or update in hand: `Update.dobeta`.
+    which: Channel,
     /// `CheckForUpdate(NotifyNoUpdate)`.
     notify_no_update: bool,
-    /// `CheckForUpdate` on its thread.
-    check: Option<Receiver<Result<Check, String>>>,
+    /// `CheckForUpdate` on its thread: the release it offers, if any.
+    check: Option<Receiver<Result<Option<Box<Manifest>>, String>>>,
+    /// The release the question is about, and "Update Now" installs.
+    offered: Option<Manifest>,
     /// `DoUpdate`'s worker.
     updating: Option<Updating>,
     /// The progress dialog's bar and its text.
@@ -251,16 +313,24 @@ pub struct Help {
     started: Instant,
     /// What the last check or update came to, for the facts.
     last: String,
-    /// The `.new` files the last update wrote.
+    /// The files the last update moved into place.
     written: usize,
-    /// The updater's command line, once the update is downloaded.
+    /// The new planner's command line, once the update is installed.
     restart: Option<String>,
+    /// An update is installed and this planner is still the old one: the buttons say to restart.
+    installed: bool,
     /// The network.
-    fetch: Arc<dyn Fetch + Send + Sync>,
-    /// `Settings.GetRunningDirectory()`: where the program and its `version.txt` are.
+    network: Network,
+    /// Where the planner is installed. `// C#: Settings.GetRunningDirectory`
     install_dir: PathBuf,
-    /// Whether the update paths run ([`UPDATES_ALLOWED`]).
-    updates: bool,
+    /// What this build is; `None` a development build, which is never updated from a release.
+    build: Option<Identity>,
+    /// How it is installed.
+    kind: Kind,
+    /// Where the Debian package's new package is fetched to.
+    downloads: PathBuf,
+    /// The new planner's trial.
+    trial: Trial,
     /// How many times a button has been refused, for the facts.
     refused: usize,
     /// The last address a link of this page handed to the desktop's browser, for the facts.
@@ -281,9 +351,9 @@ pub fn install_dir() -> PathBuf {
         .unwrap_or_else(|| PathBuf::from("."))
 }
 
-/// The updater's binary beside the program. `// C#: Utilities/Update.cs:62-72`
-fn updater_path(install_dir: &Path) -> PathBuf {
-    install_dir.join(format!("{UPDATER}{}", std::env::consts::EXE_SUFFIX))
+/// The planner's file name, as a release's archive holds it.
+fn program() -> String {
+    format!("planner{}", std::env::consts::EXE_SUFFIX)
 }
 
 /// `Settings.GetBoolean(key)`: "True" (as `bool.ToString()` writes it), without case.
@@ -293,29 +363,37 @@ fn setting_is_true(persisted: &Persisted, key: &str) -> bool {
         .is_some_and(|value| value.eq_ignore_ascii_case("true"))
 }
 
-/// `Program.CleanupFiles` and `updateCheckMain`: every `<updater>*.new` beside the program
-/// copied over the updater and deleted - the updater cannot replace itself.
-/// `// C#: Program.cs:616-628; Utilities/Update.cs:74-84`
-pub fn cleanup_updater_files(install_dir: &Path) {
-    let Ok(entries) = mp_os::fs::read_dir(install_dir) else {
-        return;
-    };
-    for path in entries.flatten().map(|e| e.path()) {
-        let name = path
-            .file_name()
-            .map_or_else(String::new, |n| n.to_string_lossy().into_owned());
-        if name.starts_with(UPDATER) && name.ends_with(".new") {
-            let target = install_dir.join(name.trim_end_matches(".new"));
-            if mp_os::fs::copy(&path, &target).is_ok() {
-                let _ = mp_os::fs::remove_file(&path);
-            }
-        }
-    }
+/// Whether the check at start is wanted: yes until CONFIG > Planner's box says "False".
+fn check_at_start(persisted: &Persisted) -> bool {
+    !persisted
+        .get(UPDATE_AT_START_KEY)
+        .is_some_and(|value| value.eq_ignore_ascii_case("false"))
 }
 
-/// `Program.CleanupFiles` at startup, in the program's own directory.
+/// At startup, in the program's own directory: the files the last update moved aside deleted,
+/// as `Program.CleanupFiles` clears what the C#'s updater left. `// C#: Program.cs:616-628`
 pub fn cleanup_files() {
-    cleanup_updater_files(&install_dir());
+    #[cfg(not(target_family = "wasm"))]
+    mp_update::install::cleanup(&install_dir());
+}
+
+/// How the planner at the program's own place is installed; an archive under the harness's
+/// door, whose install is a scratch folder.
+fn kind_here() -> Kind {
+    #[cfg(not(target_family = "wasm"))]
+    if std::env::var_os(INSTALL_DIR_ENV).is_none()
+        && let Ok(exe) = std::env::current_exe()
+        && mp_update::install::install_kind(&exe) == mp_update::install::InstallKind::Deb
+    {
+        return Kind::Deb;
+    }
+    Kind::Archive
+}
+
+/// No trial: a web page installs nothing.
+#[cfg(target_family = "wasm")]
+fn no_trial(_: &Path, _: &Manifest) -> Result<(), String> {
+    Ok(())
 }
 
 impl Default for Help {
@@ -325,21 +403,31 @@ impl Default for Help {
 }
 
 impl Help {
-    /// The page, with the network and the program's directory.
+    /// The page, with the network, the program's directory and what this build is.
     #[must_use]
     pub fn new() -> Self {
-        Self::with(Arc::new(mp_firmware::manifest::Http), install_dir())
+        #[cfg(not(target_family = "wasm"))]
+        let mut help = Self::with(
+            Arc::new(mp_update::download::Http),
+            install_dir(),
+            mp_update::identity::this_build(),
+        );
+        #[cfg(target_family = "wasm")]
+        let mut help = Self::with((), install_dir(), None);
+        help.kind = kind_here();
+        help
     }
 
-    /// The page over another network and directory: the tests'.
+    /// The page over another network, directory and build: the tests'.
     #[must_use]
-    pub fn with(fetch: Arc<dyn Fetch + Send + Sync>, install_dir: PathBuf) -> Self {
+    pub fn with(network: Network, install_dir: PathBuf, build: Option<Identity>) -> Self {
         Self {
             show_console: false,
             flow: Flow::Idle,
-            which: Which::Stable,
+            which: Channel::Stable,
             notify_no_update: false,
             check: None,
+            offered: None,
             updating: None,
             bar: Bar::default(),
             progress_text: String::new(),
@@ -347,21 +435,30 @@ impl Help {
             last: "none".to_owned(),
             written: 0,
             restart: None,
-            fetch,
+            installed: false,
+            network,
             install_dir,
-            updates: UPDATES_ALLOWED,
+            build,
+            kind: Kind::Archive,
+            #[cfg(not(target_family = "wasm"))]
+            downloads: mp_update::install::downloads_dir(),
+            #[cfg(target_family = "wasm")]
+            downloads: PathBuf::new(),
+            #[cfg(not(target_family = "wasm"))]
+            trial: mp_update::install::trial,
+            #[cfg(target_family = "wasm")]
+            trial: no_trial,
             refused: 0,
             opened: None,
             tailscale_link: std::cell::Cell::new(false),
         }
     }
 
-    /// The update paths turned on, for the tests of the ported `Update.cs` behind them.
-    #[cfg(test)]
+    /// Whether the two update buttons are shown: not in a web page, which is whatever its site
+    /// serves - as the C# hides them for a Windows Store install. `// C#: GCSViews/Help.cs:27-31`
     #[must_use]
-    pub const fn allowing_updates(mut self) -> Self {
-        self.updates = true;
-        self
+    pub const fn updates_shown() -> bool {
+        cfg!(not(target_family = "wasm"))
     }
 
     /// `Help.Activate`: the check box from the setting. `// C#: GCSViews/Help.cs:17-31`
@@ -393,134 +490,171 @@ impl Help {
         !matches!(self.flow, Flow::Idle)
     }
 
-    /// The channel `which` names, out of the settings.
-    fn channel(which: Which, persisted: &Persisted) -> Channel {
-        which.channel(&|key| persisted.get(key).map(str::to_owned))
+    /// The check's thread: the channel's manifest fetched and held against this build.
+    #[cfg(not(target_family = "wasm"))]
+    fn spawn_check(
+        &self,
+        url: String,
+        channel: Channel,
+        build: Identity,
+    ) -> Option<Receiver<Result<Option<Box<Manifest>>, String>>> {
+        use mp_update::check::{Check, check_for_update};
+        let (sender, receiver) = channel_pair();
+        let network = Arc::clone(&self.network);
+        wasm_thread::Builder::new()
+            .name("mp-update-check".to_owned())
+            .spawn(move || {
+                let found = check_for_update(network.as_ref(), &url, channel, &build).map(|check| {
+                    match check {
+                        Check::UpdateFound(manifest) => Some(manifest),
+                        Check::UpToDate => None,
+                    }
+                });
+                let _ = sender.send(found);
+            })
+            .ok()?;
+        Some(receiver)
     }
 
-    /// `Update.CheckForUpdate(NotifyNoUpdate)` on a thread of its own: nothing without a
-    /// version URL; else the channel's `version.txt` against the program's, and then the
-    /// question, or "No update available." when asked to say so.
+    #[cfg(target_family = "wasm")]
+    fn spawn_check(
+        &self,
+        _url: String,
+        _channel: Channel,
+        _build: Identity,
+    ) -> Option<Receiver<Result<Option<Box<Manifest>>, String>>> {
+        None
+    }
+
+    /// `Update.CheckForUpdate(NotifyNoUpdate)` on a thread of its own: nothing for a development
+    /// build; else the channel's manifest against this build, and then the question, or "No
+    /// update available." when asked to say so.
     /// `// C#: Utilities/Update.cs:118-178; GCSViews/Help.cs:33-48; MainV2.cs:4037-4051`
     pub fn check_for_update(
         &mut self,
-        which: Which,
+        which: Channel,
         notify_no_update: bool,
         persisted: &Persisted,
     ) {
-        if !self.updates || self.busy() {
-            return;
-        }
-        let channel = Self::channel(which, persisted);
-        if channel.version_url.is_empty() {
-            self.last = "no channel".to_owned();
-            return;
-        }
-        self.which = which;
-        self.notify_no_update = notify_no_update;
-        self.flow = Flow::Checking;
-        let (sender, receiver) = channel_pair();
-        let fetch = Arc::clone(&self.fetch);
-        let install_dir = self.install_dir.clone();
-        let url = channel.version_url;
-        let spawned = wasm_thread::Builder::new()
-            .name("mp-update-check".to_owned())
-            .spawn(move || {
-                let outcome =
-                    mp_update::check::check_for_update(fetch.as_ref(), &url, &install_dir);
-                let _ = sender.send(outcome);
-            });
-        if spawned.is_err() {
-            self.flow = Flow::Idle;
-            return;
-        }
-        self.check = Some(receiver);
-    }
-
-    /// `BUT_updatecheck_Click`: the stable channel checked, "No update available." said - or,
-    /// with updates refused, only the words for the status line.
-    /// `// C#: GCSViews/Help.cs:33-48`
-    pub fn update_check_clicked(&mut self, persisted: &Persisted) -> Option<&'static str> {
-        if !self.updates {
-            self.refused += 1;
-            return Some(UPDATES_NOT_IMPLEMENTED);
-        }
-        self.check_for_update(Which::Stable, true, persisted);
-        None
-    }
-
-    /// `BUT_betaupdate_Click`: `dobeta`, and with Control held `domaster` behind "This will
-    /// update to MASTER release"; then `DoUpdate`, no version asked - or, with updates refused,
-    /// only the words for the status line.
-    /// `// C#: GCSViews/Help.cs:66-82`
-    pub fn beta_update_clicked(
-        &mut self,
-        control_held: bool,
-        persisted: &Persisted,
-    ) -> Option<&'static str> {
-        if !self.updates {
-            self.refused += 1;
-            return Some(UPDATES_NOT_IMPLEMENTED);
-        }
         if self.busy() {
-            return None;
+            return;
         }
-        self.which = Which::Beta;
-        if control_held {
-            self.which = Which::Master;
-            self.flow = Flow::Message {
-                text: MASTER_WARNING.to_owned(),
-                then_update: true,
-            };
-            return None;
+        let Some(build) = self.build.clone() else {
+            return;
+        };
+        let url = manifest_url(which, &|key| persisted.get(key).map(str::to_owned));
+        if let Some(receiver) = self.spawn_check(url, which, build) {
+            self.which = which;
+            self.notify_no_update = notify_no_update;
+            self.flow = Flow::Checking;
+            self.check = Some(receiver);
         }
-        self.start_update(persisted);
+    }
+
+    /// A button's click: the channel checked and "No update available." said when there is
+    /// none - or, for a build that is no release or one already updated and waiting for its
+    /// restart, only the words for the status line.
+    fn clicked(&mut self, which: Channel, persisted: &Persisted) -> Option<&'static str> {
+        if self.build.is_none() {
+            self.refused += 1;
+            return Some(DEVELOPMENT_BUILD);
+        }
+        if self.installed {
+            self.refused += 1;
+            return Some(RESTART_TO_FINISH);
+        }
+        self.check_for_update(which, true, persisted);
         None
     }
 
-    /// `Update.DoUpdate`: the "Check for Updates" progress dialog and its worker, on a thread.
-    /// `// C#: Utilities/Update.cs:199-217, 684-738`
-    pub fn start_update(&mut self, persisted: &Persisted) {
-        if !self.updates {
-            self.flow = Flow::Idle;
-            return;
-        }
-        let channel = Self::channel(self.which, persisted);
-        self.flow = Flow::Updating;
-        self.bar = Bar::default();
-        self.progress_text = "Checking for Updates".to_owned();
-        self.started = Instant::now();
+    /// `BUT_updatecheck_Click`: the stable channel. `// C#: GCSViews/Help.cs:33-48`
+    pub fn update_check_clicked(&mut self, persisted: &Persisted) -> Option<&'static str> {
+        self.clicked(Channel::Stable, persisted)
+    }
+
+    /// `BUT_betaupdate_Click`: the beta channel. The C# updates at once and asks nothing, and
+    /// with Control held goes to its master channel; here the beta is asked about as a release
+    /// is, saying what is offered, and Control is nothing - there is no master channel (the
+    /// owner, 2026-11-18). `// C#: GCSViews/Help.cs:66-82`
+    pub fn beta_update_clicked(&mut self, persisted: &Persisted) -> Option<&'static str> {
+        self.clicked(Channel::Beta, persisted)
+    }
+
+    /// The update's thread: in place for an archive's install, the new package fetched for the
+    /// Debian package's.
+    #[cfg(not(target_family = "wasm"))]
+    fn spawn_update(&self, manifest: Manifest) -> Option<Updating> {
+        use mp_update::install::{fetch_deb, install};
         let (sender, receiver) = channel_pair();
         let cancel = Arc::new(AtomicBool::new(false));
         let cancelled = Arc::clone(&cancel);
-        let fetch = Arc::clone(&self.fetch);
+        let network = Arc::clone(&self.network);
         let install_dir = self.install_dir.clone();
-        let spawned = wasm_thread::Builder::new()
+        let downloads = self.downloads.clone();
+        let kind = self.kind;
+        let trial = self.trial;
+        wasm_thread::Builder::new()
             .name("mp-update".to_owned())
             .spawn(move || {
                 let reporter = sender.clone();
-                let outcome = mp_update::check::do_update(
-                    fetch.as_ref(),
-                    &channel,
-                    &install_dir,
-                    &mut |percent, text| {
-                        let _ = reporter.send(Progress::Said(percent, text.to_owned()));
-                    },
-                    &|| cancelled.load(Ordering::Relaxed),
-                );
+                let mut progress = |percent: i32, text: &str| {
+                    let _ = reporter.send(Progress::Said(percent, text.to_owned()));
+                };
+                let cancel_requested = || cancelled.load(Ordering::Relaxed);
+                let outcome = match (kind, mp_update::manifest::platform()) {
+                    (Kind::Deb, _) => fetch_deb(
+                        network.as_ref(),
+                        &manifest,
+                        &downloads,
+                        &mut progress,
+                        &cancel_requested,
+                    )
+                    .map(Done::Package),
+                    (Kind::Archive, Some(platform)) => install(
+                        network.as_ref(),
+                        &manifest,
+                        platform,
+                        &install_dir,
+                        &program(),
+                        &trial,
+                        &mut progress,
+                        &cancel_requested,
+                    )
+                    .map(|done| Done::Installed(done.files)),
+                    (Kind::Archive, None) => Err(NO_RELEASE_HERE.to_owned()),
+                };
                 let _ = sender.send(Progress::Done(outcome));
-            });
-        if spawned.is_err() {
-            self.flow = Flow::Idle;
-            return;
-        }
-        self.updating = Some(Updating {
+            })
+            .ok()?;
+        Some(Updating {
             progress: receiver,
             cancel,
-        });
+        })
     }
 
-    /// The progress dialog's Cancel: `CancelRequested`, which the worker sees at its next file.
+    #[cfg(target_family = "wasm")]
+    fn spawn_update(&self, _manifest: Manifest) -> Option<Updating> {
+        None
+    }
+
+    /// `Update.DoUpdate`: the "Check for Updates" progress dialog and its worker, on a thread,
+    /// for the release the question offered.
+    /// `// C#: Utilities/Update.cs:199-217, 684-738`
+    pub fn start_update(&mut self) {
+        self.flow = Flow::Idle;
+        let Some(manifest) = self.offered.take() else {
+            return;
+        };
+        if let Some(updating) = self.spawn_update(manifest) {
+            self.flow = Flow::Updating;
+            self.bar = Bar::default();
+            self.progress_text = "Checking for Updates".to_owned();
+            self.started = Instant::now();
+            self.updating = Some(updating);
+        }
+    }
+
+    /// The progress dialog's Cancel: `CancelRequested`, which the worker sees at its next read.
     /// `// C#: Utilities/Update.cs:209, 311-315`
     pub fn cancel_update(&self) {
         if let Some(updating) = &self.updating {
@@ -529,42 +663,40 @@ impl Help {
     }
 
     /// The question's answer: Yes is `DoUpdate`. `// C#: Utilities/Update.cs:190-198`
-    pub fn answer(&mut self, yes: bool, persisted: &Persisted) {
+    pub fn answer(&mut self, yes: bool) {
         if !matches!(self.flow, Flow::Question { .. }) {
             return;
         }
         if yes {
-            self.start_update(persisted);
+            self.start_update();
         } else {
+            self.offered = None;
             self.flow = Flow::Idle;
         }
     }
 
-    /// A message's OK: the master update follows its warning.
-    pub fn message_ok(&mut self, persisted: &Persisted) {
-        let Flow::Message { then_update, .. } = &self.flow else {
-            return;
-        };
-        if *then_update {
-            self.start_update(persisted);
-        } else {
+    /// A message's OK.
+    pub fn message_ok(&mut self) {
+        if matches!(self.flow, Flow::Message { .. }) {
             self.flow = Flow::Idle;
         }
     }
 
     /// `MainV2`'s check at startup: once a day on the stable channel, the day kept as
     /// `update_check`; on a day already checked, the beta channel when `beta_updates` is set.
+    /// Not for a development build, and not when CONFIG > Planner's "Check for updates at
+    /// start" is unticked - a box the C# has not got, the owner's (2026-11-18).
     /// `// C#: MainV2.cs:3668-3678`
     pub fn startup_check(&mut self, persisted: &mut Persisted) {
-        if !self.updates {
+        if self.build.is_none() || !check_at_start(persisted) {
             return;
         }
         let today = crate::settings::short_date_today();
         if persisted.get(UPDATE_CHECK_KEY) != Some(today.as_str()) {
-            self.check_for_update(Which::Stable, false, persisted);
+            self.check_for_update(Channel::Stable, false, persisted);
             persisted.set(UPDATE_CHECK_KEY, today);
         } else if setting_is_true(persisted, BETA_UPDATES_KEY) {
-            self.check_for_update(Which::Beta, false, persisted);
+            self.check_for_update(Channel::Beta, false, persisted);
         }
     }
 
@@ -614,45 +746,44 @@ impl Help {
         status
     }
 
-    /// `CheckForUpdate`'s finding: the question with "BETA " before it for the beta channel, "No
-    /// update available." when asked, or the failure, which the C# logs ("Update check failed")
-    /// or boxes (the Help page's Error box) and the status line says.
-    /// `// C#: Utilities/Update.cs:180-203; GCSViews/Help.cs:44-47; MainV2.cs:4047-4050`
-    fn checked(&mut self, outcome: Result<Check, String>) -> Option<String> {
-        match outcome {
-            Ok(Check::UpdateFound { changelog_url }) => {
-                let extra = if self.which == Which::Beta {
+    /// `CheckForUpdate`'s finding: the question with "BETA " before it for the beta channel and
+    /// what is offered after it, "No update available." when asked, or the failure, which the C#
+    /// logs ("Update check failed") or boxes (the Help page's Error box) and the status line
+    /// says. `// C#: Utilities/Update.cs:180-203; GCSViews/Help.cs:44-47; MainV2.cs:4047-4050`
+    fn checked(&mut self, outcome: Result<Option<Box<Manifest>>, String>) -> Option<String> {
+        match (outcome, &self.build) {
+            (Ok(Some(manifest)), Some(build)) => {
+                let extra = if self.which == Channel::Beta {
                     "BETA "
                 } else {
                     ""
                 };
                 self.last = "update found".to_owned();
                 // `extra + Strings.UpdateFound + " [link;" + ... + ";ChangeLog]"`: the box draws
-                // the markup as `CustomMessageBox` does, a link under the words.
-                // `// C#: Utilities/Update.cs:192-195`
+                // the markup as `CustomMessageBox` does, a link under the words - to the
+                // release's page here. `// C#: Utilities/Update.cs:192-195`
                 self.flow = Flow::Question {
-                    text: format!("{extra}{UPDATE_FOUND} [link;{changelog_url};ChangeLog]"),
+                    text: format!(
+                        "{extra}{UPDATE_FOUND}: {} [link;{};ChangeLog]",
+                        manifest.described_for(build),
+                        manifest.notes_url
+                    ),
                 };
+                self.offered = Some(*manifest);
                 None
             }
-            Ok(Check::UpToDate) => {
+            (Ok(_), _) => {
                 self.last = "up to date".to_owned();
                 self.flow = if self.notify_no_update {
                     Flow::Message {
                         text: UPDATE_NOT_FOUND.to_owned(),
-                        then_update: false,
                     }
                 } else {
                     Flow::Idle
                 };
                 None
             }
-            Ok(Check::NoChannel) => {
-                self.last = "no channel".to_owned();
-                self.flow = Flow::Idle;
-                None
-            }
-            Err(why) => {
+            (Err(why), _) => {
                 self.last = format!("Update check failed: {why}");
                 self.flow = Flow::Idle;
                 Some(self.last.clone())
@@ -660,24 +791,24 @@ impl Help {
         }
     }
 
-    /// `updateCheckMain`'s end: the files downloaded, a new updater copied into place, "Starting
-    /// Updater" and the application's exit; or "Update Failed " and why.
+    /// The update's end: installed in place, and the restart; the new package fetched, and where
+    /// it is and its command in a box; or "Update Failed " and why.
     /// `// C#: Utilities/Update.cs:60-109`
-    fn updated(&mut self, outcome: Result<Vec<PathBuf>, String>) -> Option<String> {
+    fn updated(&mut self, outcome: Result<Done, String>) -> Option<String> {
         match outcome {
-            Ok(written) => {
-                self.written = written.len();
-                cleanup_updater_files(&self.install_dir);
-                let planner = std::env::current_exe().map_or_else(
-                    |_| String::from("planner"),
-                    |exe| exe.to_string_lossy().into_owned(),
-                );
-                self.restart = Some(format!(
-                    "{} update-apply {planner}",
-                    updater_path(&self.install_dir).display()
-                ));
-                self.last = "Starting Updater".to_owned();
+            Ok(Done::Installed(files)) => {
+                self.written = files;
+                self.installed = true;
+                self.restart = Some(self.install_dir.join(program()).display().to_string());
+                self.last = UPDATE_INSTALLED.to_owned();
                 self.flow = Flow::Restarting;
+                Some(self.last.clone())
+            }
+            Ok(Done::Package(package)) => {
+                self.last = format!("Downloaded {}", package.display());
+                self.flow = Flow::Message {
+                    text: package_text(&package),
+                };
                 Some(self.last.clone())
             }
             Err(why) => {
@@ -688,23 +819,25 @@ impl Help {
         }
     }
 
-    /// The updater's command, once the update is downloaded.
+    /// The new planner's command, once the update is installed.
+    #[cfg(not(target_family = "wasm"))]
     #[must_use]
     pub fn restart_command(&self) -> Option<std::process::Command> {
         if !matches!(self.flow, Flow::Restarting) {
             return None;
         }
-        let planner = std::env::current_exe().ok()?;
-        let mut command = std::process::Command::new(updater_path(&self.install_dir));
-        command
-            .arg("update-apply")
-            .arg(planner)
-            .current_dir(&self.install_dir);
+        let mut command = std::process::Command::new(self.install_dir.join(program()));
+        command.current_dir(&self.install_dir);
         Some(command)
     }
 
-    /// The restart taken: under the harness's door the updater is named, not started, and the
-    /// page goes back to idle.
+    /// Whether an update has just been installed and the restart is to be decided.
+    #[must_use]
+    pub const fn restarting(&self) -> bool {
+        matches!(self.flow, Flow::Restarting)
+    }
+
+    /// The restart decided: the page goes back to idle.
     pub fn restart_taken(&mut self) {
         self.flow = Flow::Idle;
     }
@@ -727,7 +860,7 @@ impl Help {
         record(
             "help.question",
             match &self.flow {
-                Flow::Question { text } | Flow::Message { text, .. } => text.as_str(),
+                Flow::Question { text } | Flow::Message { text } => text.as_str(),
                 _ => "none",
             },
         );
@@ -738,7 +871,29 @@ impl Help {
         record("help.opened", self.opened.unwrap_or("none"));
         record("help.tailscale", self.tailscale_link.get());
         record("help.restart", self.restart.as_deref().unwrap_or("none"));
+        record("help.installed", self.installed);
+        record("help.updates", Self::updates_shown());
+        record(
+            "help.build",
+            mp_update::identity::version_line(
+                "planner",
+                env!("CARGO_PKG_VERSION"),
+                self.build.as_ref(),
+            ),
+        );
     }
+}
+
+/// What the box says of a fetched package: where it is, and the command that installs it.
+fn package_text(package: &Path) -> String {
+    #[cfg(not(target_family = "wasm"))]
+    let command = mp_update::install::deb_command(package);
+    #[cfg(target_family = "wasm")]
+    let command = String::new();
+    format!(
+        "The new package is in {}.\nClose the planner and install it with:\n{command}",
+        package.display()
+    )
 }
 
 /// A channel pair, typed by use.
@@ -746,43 +901,82 @@ fn channel_pair<T>() -> (std::sync::mpsc::Sender<T>, Receiver<T>) {
     channel()
 }
 
-/// `/update` and `/updatebeta`: `DoUpdate` without a window - its progress on the console, the
-/// updater started and the exit code the shell sees. `// C#: Program.cs:194-205`
+/// `/update` and `/updatebeta`: the check and the update without a window - what is found and
+/// the update's progress on the console, the new planner started, and the exit code the shell
+/// sees. What an earlier update left is cleared first, as at any start; under the harness's door
+/// the new planner is named, not started. `tools/release/self-update-test.py` drives this on
+/// each platform with a planner built as a release. `// C#: Program.cs:194-205`
+#[cfg(not(target_family = "wasm"))]
 pub fn update_from_command_line(beta: bool) -> i32 {
-    if !UPDATES_ALLOWED {
-        eprintln!("{UPDATES_NOT_IMPLEMENTED}");
+    use mp_update::check::{Check, check_for_update};
+    use mp_update::install::{downloads_dir, fetch_deb, install, trial};
+    let Some(build) = mp_update::identity::this_build() else {
+        eprintln!("{DEVELOPMENT_BUILD}");
         return 1;
-    }
+    };
+    cleanup_files();
     let persisted = Persisted::load();
-    let which = if beta { Which::Beta } else { Which::Stable };
-    let channel = which.channel(&|key| persisted.get(key).map(str::to_owned));
-    let install_dir = install_dir();
+    let which = if beta { Channel::Beta } else { Channel::Stable };
+    let url = manifest_url(which, &|key| persisted.get(key).map(str::to_owned));
+    let network = mp_update::download::Http;
     println!("{CHECK_FOR_UPDATES}");
-    let outcome = mp_update::check::do_update(
-        &mp_firmware::manifest::Http,
-        &channel,
-        &install_dir,
-        &mut |_percent, text| println!("{text}"),
-        &|| false,
-    );
-    match outcome {
-        Ok(_) => {
-            cleanup_updater_files(&install_dir);
-            println!("Starting Updater");
-            let planner = std::env::current_exe().unwrap_or_else(|_| PathBuf::from("planner"));
-            match std::process::Command::new(updater_path(&install_dir))
-                .arg("update-apply")
-                .arg(planner)
+    let manifest = match check_for_update(&network, &url, which, &build) {
+        Ok(Check::UpdateFound(manifest)) => manifest,
+        Ok(Check::UpToDate) => {
+            println!("{UPDATE_NOT_FOUND}");
+            return 0;
+        }
+        Err(why) => {
+            eprintln!("Update check failed: {why}");
+            return 1;
+        }
+    };
+    println!("{UPDATE_FOUND}: {}", manifest.described_for(&build));
+    // A line a step, and a download's every tenth percent.
+    let mut said = String::new();
+    let mut progress = |percent: i32, text: &str| {
+        let step = text.split(':').next().unwrap_or(text);
+        let line = if percent >= 10 {
+            format!("{step}: {}%", percent / 10 * 10)
+        } else {
+            step.to_owned()
+        };
+        if line != said {
+            println!("{line}");
+            said = line;
+        }
+    };
+    let install_dir = install_dir();
+    let outcome = match (kind_here(), mp_update::manifest::platform()) {
+        (Kind::Deb, _) => fetch_deb(&network, &manifest, &downloads_dir(), &mut progress, &|| false)
+            .map(|package| println!("{}", package_text(&package))),
+        (Kind::Archive, Some(platform)) => install(
+            &network,
+            &manifest,
+            platform,
+            &install_dir,
+            &program(),
+            &trial,
+            &mut progress,
+            &|| false,
+        )
+        .and_then(|done| {
+            println!("{UPDATE_INSTALLED}: {} files", done.files);
+            let planner = install_dir.join(program());
+            if std::env::var_os(INSTALL_DIR_ENV).is_some() {
+                println!("The new planner is {}", planner.display());
+                return Ok(());
+            }
+            std::process::Command::new(planner)
                 .current_dir(&install_dir)
                 .spawn()
-            {
-                Ok(_) => 0,
-                Err(why) => {
-                    eprintln!("{UPDATE_FAILED}{why}");
-                    1
-                }
-            }
-        }
+                .map(|_| ())
+                .map_err(|why| why.to_string())
+        }),
+        (Kind::Archive, None) => Err(NO_RELEASE_HERE.to_owned()),
+    };
+    match outcome {
+        Ok(()) => 0,
         Err(why) => {
             eprintln!("{UPDATE_FAILED}{why}");
             1
@@ -790,26 +984,44 @@ pub fn update_from_command_line(beta: bool) -> i32 {
     }
 }
 
+/// A web page has no update: it is whatever its site serves.
+#[cfg(target_family = "wasm")]
+pub fn update_from_command_line(_beta: bool) -> i32 {
+    1
+}
+
 impl MissionPlanner {
-    /// Once a frame: the update's threads, their news on the status line, and the restart - the
-    /// updater started and the application quit, or, under the harness's door, the updater
-    /// named.
+    /// Once a frame: the update's threads, their news on the status line, and what follows an
+    /// update installed in place ([`after_install`]) - the new planner started and this one
+    /// ended; with a link open, no restart, said on the status line; under the harness's door,
+    /// the new planner named.
     pub(crate) fn help_tick(&mut self, cx: &mut Context<Self>) {
         if let Some(status) = self.help.tick() {
             self.file_status = Some(status);
         }
-        if let Some(mut command) = self.help.restart_command() {
-            if std::env::var_os(INSTALL_DIR_ENV).is_some() {
+        if !self.help.restarting() {
+            return;
+        }
+        let door = std::env::var_os(INSTALL_DIR_ENV).is_some();
+        match after_install(door, self.telemetry.has_link()) {
+            AfterInstall::Named => self.help.restart_taken(),
+            AfterInstall::Later => {
+                self.file_status = Some(INSTALLED_LATER.to_owned());
                 self.help.restart_taken();
-                return;
             }
-            match command.spawn() {
-                // "Quitting existing process"
-                Ok(_) => cx.quit(),
-                Err(why) => {
-                    self.file_status = Some(format!("{UPDATE_FAILED}{why}"));
-                    self.help.restart_taken();
+            AfterInstall::Restart => {
+                #[cfg(not(target_family = "wasm"))]
+                if let Some(mut command) = self.help.restart_command() {
+                    // The settings written before the new planner reads them.
+                    self.save_config(crate::settings::SaveEvent::Close);
+                    match command.spawn() {
+                        // "Quitting existing process"
+                        Ok(_) => cx.quit(),
+                        Err(why) => self.file_status = Some(format!("{UPDATE_FAILED}{why}")),
+                    }
                 }
+                let _ = &cx;
+                self.help.restart_taken();
             }
         }
     }
@@ -883,9 +1095,8 @@ pub fn screen(
         BETA_UPDATE_TEXT,
         (0.0, 0.0, bw, bh),
         enabled,
-        |this, window, _cx| {
-            let control = window.modifiers().control;
-            if let Some(refused) = this.help.beta_update_clicked(control, &this.persisted) {
+        |this, _window, _cx| {
+            if let Some(refused) = this.help.beta_update_clicked(&this.persisted) {
                 this.file_status = Some(refused.to_owned());
             }
         },
@@ -985,8 +1196,9 @@ pub fn screen(
         .min_w(px(PAGE.0))
         .bg(rgb(theme::BG))
         .child(text_box)
-        .child(update_check)
-        .child(beta_update)
+        // Not in a web page: `BUT_betaupdate.Visible = false`. `// C#: GCSViews/Help.cs:27-31`
+        .children(Help::updates_shown().then_some(update_check))
+        .children(Help::updates_shown().then_some(beta_update))
         .child(show_console)
         .child(change_log)
         .into_any_element()
@@ -1007,10 +1219,10 @@ pub fn overlay(
             text,
             Buttons::YesNo,
             window,
-            |this, yes| this.help.answer(yes, &this.persisted),
+            |this, yes| this.help.answer(yes),
             cx,
         ),
-        Flow::Message { text, .. } => {
+        Flow::Message { text } => {
             let waiting = Waiting {
                 text: text.clone(),
                 caption: String::new(),
@@ -1020,7 +1232,7 @@ pub fn overlay(
                 BOXES,
                 &waiting,
                 window,
-                |this| this.help.message_ok(&this.persisted),
+                |this| this.help.message_ok(),
                 cx,
             )
         }
@@ -1128,15 +1340,22 @@ mod tests {
     }
     use std::collections::HashMap;
 
+    use mp_update::download::{Body, Source, sha256_hex};
+
+    /// A network of files held in memory.
     struct Server(HashMap<String, Vec<u8>>);
 
-    impl Fetch for Server {
-        fn get(&self, url: &str) -> Result<Vec<u8>, String> {
-            let bare = url.split('?').next().unwrap_or(url);
-            self.0
-                .get(bare)
+    impl Source for Server {
+        fn open(&self, url: &str) -> Result<Body, String> {
+            let bytes = self
+                .0
+                .get(url)
                 .cloned()
-                .ok_or_else(|| format!("http status 404 for {bare}"))
+                .ok_or_else(|| format!("{url}: http status: 404"))?;
+            Ok(Body {
+                length: Some(bytes.len() as u64),
+                reader: Box::new(std::io::Cursor::new(bytes)),
+            })
         }
     }
 
@@ -1166,96 +1385,175 @@ mod tests {
         }
     }
 
-    fn server(dir: &Path, version: &str) -> Arc<Server> {
-        let probe = b"probe content";
-        let checksums = format!("{}  ./update-probe.txt\n", mp_update::md5::hex(probe));
-        let _ = dir;
+    const OLD_COMMIT: &str = "0570c61aa1b2c3d4e5f60718293a4b5c6d7e8f90";
+    const NEW_COMMIT: &str = "42992d086a789143682f2997adc737545e3d8c2e";
+    const ARCHIVE_URL: &str = "https://x/files/missionplanner-rust_0_0_2.zip";
+    const DEB_URL: &str = "https://x/files/missionplanner-rust_0.0.2_amd64.deb";
+    const DEB_BYTES: &[u8] = b"!<arch>\ndebian-binary";
+
+    fn build(version: &str, channel: &str, commit: &str, built: &str) -> Option<Identity> {
+        Identity::from_values(Some(version), Some(commit), Some(channel), Some(built))
+    }
+
+    /// A release's archive: the planner and its licence in the release's own folder. A zip, which
+    /// the updater unpacks by the download's name whatever the platform.
+    fn archive() -> Vec<u8> {
+        let entry = |name: String, data: &[u8]| mp_log::zip::Entry {
+            name,
+            data: data.to_vec(),
+        };
+        mp_log::zip::write(
+            &[
+                entry(format!("missionplanner-rust_0_0_2/{}", program()), b"the new planner"),
+                entry("missionplanner-rust_0_0_2/LICENSE".to_owned(), b"new licence"),
+            ],
+            mp_log::zip::DosTime {
+                year: 2026,
+                month: 11,
+                day: 20,
+                hour: 3,
+                minute: 10,
+                second: 0,
+            },
+        )
+        .expect("a zip")
+    }
+
+    /// A channel's manifest: release 0.0.2 at `commit`, with this platform's archive and the
+    /// Debian package.
+    fn manifest(channel: &str, commit: &str, built: &str) -> Vec<u8> {
+        let platform = mp_update::manifest::platform().expect("a platform with releases");
+        let asset = |name: &str, url: &str, bytes: &[u8]| {
+            format!(
+                r#"{{"name": "{name}", "url": "{url}", "size": {}, "sha256": "{}"}}"#,
+                bytes.len(),
+                sha256_hex(bytes)
+            )
+        };
+        format!(
+            r#"{{"schema": 1, "channel": "{channel}", "version": "0.0.2", "tag": "v0_0_2",
+                "commit": "{commit}", "built": "{built}",
+                "notes_url": "https://x/releases/tag/v0_0_2",
+                "assets": {{"{platform}": {}, "linux-x86_64-deb": {}}}}}"#,
+            asset("missionplanner-rust_0_0_2.zip", ARCHIVE_URL, &archive()),
+            asset("missionplanner-rust_0.0.2_amd64.deb", DEB_URL, DEB_BYTES),
+        )
+        .into_bytes()
+    }
+
+    fn server() -> Arc<Server> {
         Arc::new(Server(HashMap::from([
             (
-                "https://x/version.txt".to_owned(),
-                version.as_bytes().to_vec(),
+                "https://x/update.json".to_owned(),
+                manifest("stable", NEW_COMMIT, "2026-11-20T03:10:00Z"),
             ),
             (
-                "https://x/beta/version.txt".to_owned(),
-                b"9.0.0.0\n".to_vec(),
+                "https://x/beta/update.json".to_owned(),
+                manifest("beta", NEW_COMMIT, "2026-11-25T02:00:00Z"),
             ),
-            (
-                "https://x/checksums.txt".to_owned(),
-                checksums.clone().into_bytes(),
-            ),
-            (
-                "https://x/beta/checksums.txt".to_owned(),
-                checksums.into_bytes(),
-            ),
-            (
-                "https://x/files//update-probe.txt".to_owned(),
-                probe.to_vec(),
-            ),
+            (ARCHIVE_URL.to_owned(), archive()),
+            (DEB_URL.to_owned(), DEB_BYTES.to_vec()),
         ])))
     }
 
-    const KEYS: [(&str, &str); 6] = [
-        ("UpdateLocationVersion", "https://x/version.txt"),
-        ("UpdateLocationMD5", "https://x/checksums.txt"),
-        ("UpdateLocation", "https://x/files/"),
-        ("BetaUpdateLocationVersion", "https://x/beta/version.txt"),
-        ("BetaUpdateLocationMD5", "https://x/beta/checksums.txt"),
-        ("BetaUpdateLocationZip", "https://x/files/"),
+    const KEYS: [(&str, &str); 2] = [
+        ("UpdateManifest", "https://x/update.json"),
+        ("BetaUpdateManifest", "https://x/beta/update.json"),
     ];
 
-    #[test]
-    fn no_channel_does_nothing_and_a_channel_asks_the_question() {
-        let dir = scratch("question");
-        let mut help = Help::with(server(&dir, "2.0.0.0\n"), dir.clone()).allowing_updates();
-        help.update_check_clicked(&settings(&[]));
-        assert_eq!(help.flow, Flow::Idle);
-        assert_eq!(help.last, "no channel");
+    fn passes(_: &Path, _: &Manifest) -> Result<(), String> {
+        Ok(())
+    }
 
+    /// Release 0.0.1, installed from an archive in `dir`, with a new planner that passes its trial.
+    fn release_0_0_1(dir: &Path) -> Help {
+        mp_os::fs::write(dir.join(program()), b"the old planner").expect("the old planner");
+        mp_os::fs::write(dir.join("LICENSE"), b"old licence").expect("the old licence");
+        let mut help = Help::with(
+            server(),
+            dir.to_path_buf(),
+            build("0.0.1", "stable", OLD_COMMIT, "2026-10-06T11:00:00Z"),
+        );
+        help.trial = passes;
+        help
+    }
+
+    /// A build that is no release - `cargo build`'s - is never updated from one: both buttons
+    /// only say so, and nothing is asked of the network at start either.
+    #[test]
+    fn a_development_build_only_says_what_it_is() {
+        let dir = scratch("development");
+        let mut help = Help::with(server(), dir.clone(), None);
+        let mut persisted = settings(&KEYS);
+        persisted.set(BETA_UPDATES_KEY, "True");
+        assert_eq!(help.update_check_clicked(&persisted), Some(DEVELOPMENT_BUILD));
+        assert_eq!(help.beta_update_clicked(&persisted), Some(DEVELOPMENT_BUILD));
+        assert_eq!(help.refused, 2);
+        help.startup_check(&mut persisted);
+        assert_eq!(persisted.get(UPDATE_CHECK_KEY), None, "no day kept: no check made");
+        help.check_for_update(Channel::Beta, true, &persisted);
+        help.start_update();
+        assert_eq!(help.flow, Flow::Idle);
+        assert!(help.check.is_none() && help.updating.is_none());
+        assert_eq!(help.written, 0);
+        assert!(help.restart.is_none());
+        assert!(Help::updates_shown());
+        mp_os::fs::remove_dir_all(&dir).expect("cleanup");
+    }
+
+    #[test]
+    fn a_release_is_asked_about_with_what_is_offered_and_its_change_log() {
+        let dir = scratch("question");
+        let mut help = release_0_0_1(&dir);
         let persisted = settings(&KEYS);
-        help.update_check_clicked(&persisted);
+        assert_eq!(help.update_check_clicked(&persisted), None);
         assert_eq!(help.flow, Flow::Checking);
         assert!(wait(&mut help).is_none());
-        // The C#'s words, the ChangeLog its box's link (crate::ui::split_link).
+        // The C#'s words, what is offered after them, and the ChangeLog its box's link
+        // (crate::ui::split_link) - to the release's page.
         assert_eq!(
             help.flow,
             Flow::Question {
-                text: "Update Found [link;https://x/ChangeLog.txt;ChangeLog]".to_owned()
+                text: "Update Found: 0.0.1 to 0.0.2 [link;https://x/releases/tag/v0_0_2;ChangeLog]"
+                    .to_owned()
             }
         );
         if let Flow::Question { text } = &help.flow {
             let (words, link) = crate::ui::split_link(text);
-            assert_eq!(words, "Update Found ");
+            assert_eq!(words, "Update Found: 0.0.1 to 0.0.2 ");
             assert_eq!(
                 link,
                 Some(crate::ui::BoxLink {
-                    url: "https://x/ChangeLog.txt".to_owned(),
+                    url: "https://x/releases/tag/v0_0_2".to_owned(),
                     text: "ChangeLog".to_owned(),
                 })
             );
         }
-        help.answer(false, &persisted);
+        // No: nothing fetched, nothing changed.
+        help.answer(false);
         assert_eq!(help.flow, Flow::Idle);
+        assert!(help.offered.is_none());
+        assert_eq!(mp_os::fs::read(dir.join(program())).expect("planner"), b"the old planner");
 
         // Up to date, and asked to say so: "No update available."; the startup check says nothing.
-        mp_os::fs::write(dir.join("version.txt"), "2.0.0.0\n").expect("version.txt");
+        help.build = build("0.0.2", "stable", NEW_COMMIT, "2026-11-20T03:10:00Z");
         help.update_check_clicked(&persisted);
         wait(&mut help);
         assert_eq!(
             help.flow,
             Flow::Message {
-                text: UPDATE_NOT_FOUND.to_owned(),
-                then_update: false
+                text: UPDATE_NOT_FOUND.to_owned()
             }
         );
-        help.message_ok(&persisted);
+        help.message_ok();
         assert_eq!(help.flow, Flow::Idle);
-        help.check_for_update(Which::Stable, false, &persisted);
+        help.check_for_update(Channel::Stable, false, &persisted);
         wait(&mut help);
         assert_eq!(help.flow, Flow::Idle);
         assert_eq!(help.last, "up to date");
 
         // A channel that does not answer: the failure on the status line.
-        let broken = settings(&[("UpdateLocationVersion", "https://x/none.txt")]);
+        let broken = settings(&[("UpdateManifest", "https://x/none.json")]);
         help.update_check_clicked(&broken);
         let status = wait(&mut help).expect("a status");
         assert!(status.starts_with("Update check failed: "), "{status}");
@@ -1264,55 +1562,127 @@ mod tests {
     }
 
     #[test]
-    fn yes_downloads_and_names_the_updater_and_the_beta_button_skips_the_question() {
+    fn yes_installs_the_release_in_place_and_names_the_new_planner() {
         let dir = scratch("update");
-        let mut help = Help::with(server(&dir, "2.0.0.0\n"), dir.clone()).allowing_updates();
+        let mut help = release_0_0_1(&dir);
         let persisted = settings(&KEYS);
         help.update_check_clicked(&persisted);
         wait(&mut help);
-        help.answer(true, &persisted);
+        help.answer(true);
         assert_eq!(help.flow, Flow::Updating);
         let status = wait(&mut help);
-        assert_eq!(status.as_deref(), Some("Starting Updater"));
+        assert_eq!(status.as_deref(), Some(UPDATE_INSTALLED));
         assert_eq!(help.flow, Flow::Restarting);
-        assert_eq!(help.written, 1);
+        assert!(help.restarting());
+        assert_eq!(help.written, 2);
+        // The new files in place, the old ones beside them for the next start to delete.
+        assert_eq!(mp_os::fs::read(dir.join(program())).expect("planner"), b"the new planner");
+        assert_eq!(mp_os::fs::read(dir.join("LICENSE")).expect("licence"), b"new licence");
         assert_eq!(
-            mp_os::fs::read(dir.join("update-probe.txt.new")).expect("the new file"),
-            b"probe content"
+            mp_os::fs::read(dir.join(format!("{}.old", program()))).expect("the old planner"),
+            b"the old planner"
         );
-        assert!(
-            help.restart
-                .as_deref()
-                .is_some_and(|r| r.contains("update-apply")),
-            "{:?}",
-            help.restart
+        assert!(!dir.join(".update").os_exists());
+        assert_eq!(
+            help.restart.as_deref(),
+            Some(dir.join(program()).display().to_string().as_str())
         );
         assert!(help.restart_command().is_some());
         help.restart_taken();
         assert_eq!(help.flow, Flow::Idle);
+        // Until it is restarted this is still the old planner: the buttons say so.
+        assert_eq!(help.update_check_clicked(&persisted), Some(RESTART_TO_FINISH));
+        assert_eq!(help.beta_update_clicked(&persisted), Some(RESTART_TO_FINISH));
+        assert_eq!(help.flow, Flow::Idle);
+        // The next start.
+        assert_eq!(mp_update::install::cleanup(&dir), 2);
+        assert!(!dir.join(format!("{}.old", program())).os_exists());
+        mp_os::fs::remove_dir_all(&dir).expect("cleanup");
+    }
 
-        // The beta button: no question, the update at once; with Control, the warning first.
-        mp_os::fs::remove_file(dir.join("update-probe.txt.new")).expect("removed");
-        help.beta_update_clicked(false, &persisted);
-        assert_eq!(help.flow, Flow::Updating);
-        assert_eq!(help.which, Which::Beta);
+    #[test]
+    fn a_new_planner_that_fails_its_trial_is_not_installed() {
+        fn refuses(_: &Path, _: &Manifest) -> Result<(), String> {
+            Err("the new planner does not start on this computer: exit status: 1".to_owned())
+        }
+        let dir = scratch("trial");
+        let mut help = release_0_0_1(&dir);
+        help.trial = refuses;
+        let persisted = settings(&KEYS);
+        help.update_check_clicked(&persisted);
         wait(&mut help);
-        assert_eq!(help.flow, Flow::Restarting);
-        help.restart_taken();
-        help.beta_update_clicked(true, &persisted);
+        help.answer(true);
+        let status = wait(&mut help).expect("a status");
+        assert_eq!(
+            status,
+            "Update Failed the new planner does not start on this computer: exit status: 1"
+        );
+        assert_eq!(help.flow, Flow::Idle);
+        assert!(!help.installed);
+        assert_eq!(mp_os::fs::read(dir.join(program())).expect("planner"), b"the old planner");
+        assert!(!dir.join(format!("{}.old", program())).os_exists());
+        assert!(!dir.join(".update").os_exists());
+        mp_os::fs::remove_dir_all(&dir).expect("cleanup");
+    }
+
+    #[test]
+    fn the_beta_button_asks_about_the_beta_and_only_a_later_one() {
+        let dir = scratch("beta");
+        let mut help = release_0_0_1(&dir);
+        help.build = build("0.0.2", "beta", OLD_COMMIT, "2026-11-24T02:00:00Z");
+        let persisted = settings(&KEYS);
+        assert_eq!(help.beta_update_clicked(&persisted), None);
+        assert_eq!(help.which, Channel::Beta);
+        wait(&mut help);
+        assert_eq!(
+            help.flow,
+            Flow::Question {
+                text: "BETA Update Found: 0570c61aa1b2 built 2026-11-24 to 42992d086a78 built \
+                       2026-11-25 [link;https://x/releases/tag/v0_0_2;ChangeLog]"
+                    .to_owned()
+            }
+        );
+        help.answer(false);
+        // The beta this build already is: nothing to offer.
+        help.build = build("0.0.2", "beta", NEW_COMMIT, "2026-11-25T02:00:00Z");
+        help.beta_update_clicked(&persisted);
+        wait(&mut help);
         assert_eq!(
             help.flow,
             Flow::Message {
-                text: MASTER_WARNING.to_owned(),
-                then_update: true
+                text: UPDATE_NOT_FOUND.to_owned()
             }
         );
-        assert_eq!(help.which, Which::Master);
-        // The master channel has no addresses here: its update fails and says so.
-        help.message_ok(&persisted);
-        assert_eq!(help.flow, Flow::Updating);
+        mp_os::fs::remove_dir_all(&dir).expect("cleanup");
+    }
+
+    /// The Debian package's install is the package manager's to replace: the new package is
+    /// fetched and checked, and the box says where it is and the command that installs it (the
+    /// owner, 2026-11-18). Nothing beside the planner is touched.
+    #[test]
+    fn the_debian_package_is_fetched_and_its_command_said() {
+        let dir = scratch("deb");
+        let downloads = dir.join("Downloads");
+        mp_os::fs::create_dir_all(&downloads).expect("downloads");
+        let mut help = release_0_0_1(&dir);
+        help.kind = Kind::Deb;
+        help.downloads = downloads.clone();
+        let persisted = settings(&KEYS);
+        help.update_check_clicked(&persisted);
+        wait(&mut help);
+        help.answer(true);
         let status = wait(&mut help).expect("a status");
-        assert!(status.starts_with(UPDATE_FAILED), "{status}");
+        let package = downloads.join("missionplanner-rust_0.0.2_amd64.deb");
+        assert_eq!(status, format!("Downloaded {}", package.display()));
+        assert_eq!(mp_os::fs::read(&package).expect("the package"), DEB_BYTES);
+        let Flow::Message { text } = &help.flow else {
+            panic!("a message: {:?}", help.flow);
+        };
+        assert!(text.starts_with(&format!("The new package is in {}.", package.display())), "{text}");
+        assert!(text.contains("sudo apt install "), "{text}");
+        assert!(!help.installed && !help.restarting());
+        assert_eq!(mp_os::fs::read(dir.join(program())).expect("planner"), b"the old planner");
+        help.message_ok();
         assert_eq!(help.flow, Flow::Idle);
         mp_os::fs::remove_dir_all(&dir).expect("cleanup");
     }
@@ -1320,59 +1690,35 @@ mod tests {
     #[test]
     fn cancel_is_the_users_request() {
         let dir = scratch("cancel");
-        let mut help = Help::with(server(&dir, "2.0.0.0\n"), dir.clone()).allowing_updates();
+        let mut help = release_0_0_1(&dir);
         let persisted = settings(&KEYS);
-        help.which = Which::Stable;
-        help.start_update(&persisted);
+        help.update_check_clicked(&persisted);
+        wait(&mut help);
+        help.answer(true);
         help.cancel_update();
         let status = wait(&mut help).expect("a status");
-        // Cancelled before the file, or after it was already fetched: either way the C#'s words.
+        // Cancelled before the swap, or after it had begun: either way the C#'s words.
         assert!(
-            status == format!("{UPDATE_FAILED}User Request") || status == "Starting Updater",
+            status == format!("{UPDATE_FAILED}User Request") || status == UPDATE_INSTALLED,
             "{status}"
         );
         mp_os::fs::remove_dir_all(&dir).expect("cleanup");
     }
 
-    /// The owner's word of 2026-10-14: both buttons only say "Sorry, Updates aren't implemented
-    /// yet", and nothing behind them runs - not the check, the download, the master warning, the
-    /// daily check at startup or `/update` - with a channel set and a newer version waiting on it.
+    /// What follows an install: under the harness's door the new planner is only named; with a
+    /// link open nothing restarts; otherwise the new planner is started.
     #[test]
-    fn the_product_refuses_every_update() {
-        let dir = scratch("refused");
-        let mut help = Help::with(server(&dir, "2.0.0.0\n"), dir.clone());
-        let mut persisted = settings(&KEYS);
-        persisted.set(BETA_UPDATES_KEY, "True");
-        assert_eq!(
-            help.update_check_clicked(&persisted),
-            Some(UPDATES_NOT_IMPLEMENTED)
-        );
-        assert_eq!(
-            help.beta_update_clicked(false, &persisted),
-            Some(UPDATES_NOT_IMPLEMENTED)
-        );
-        assert_eq!(
-            help.beta_update_clicked(true, &persisted),
-            Some(UPDATES_NOT_IMPLEMENTED)
-        );
-        assert_eq!(help.refused, 3);
-        help.startup_check(&mut persisted);
-        assert_eq!(persisted.get(UPDATE_CHECK_KEY), None, "no day kept: no check made");
-        help.start_update(&persisted);
-        help.check_for_update(Which::Beta, true, &persisted);
-        assert_eq!(help.flow, Flow::Idle);
-        assert!(help.check.is_none() && help.updating.is_none());
-        assert_eq!(help.written, 0);
-        assert!(help.restart.is_none());
-        assert_eq!(update_from_command_line(false), 1);
-        assert_eq!(update_from_command_line(true), 1);
-        mp_os::fs::remove_dir_all(&dir).expect("cleanup");
+    fn a_planner_with_a_link_open_does_not_restart_itself() {
+        assert_eq!(after_install(false, false), AfterInstall::Restart);
+        assert_eq!(after_install(false, true), AfterInstall::Later);
+        assert_eq!(after_install(true, false), AfterInstall::Named);
+        assert_eq!(after_install(true, true), AfterInstall::Named);
     }
 
     #[test]
     fn the_console_setting_and_the_daily_check_follow_the_settings() {
         let dir = scratch("daily");
-        let mut help = Help::with(server(&dir, "2.0.0.0\n"), dir.clone()).allowing_updates();
+        let mut help = release_0_0_1(&dir);
         let mut persisted = settings(&KEYS);
         help.activate(&persisted);
         assert!(!help.show_console());
@@ -1385,43 +1731,35 @@ mod tests {
         help.activate(&persisted);
         assert!(help.show_console());
 
+        // CONFIG > Planner's box unticked: no check at start, and no day kept.
+        persisted.set(UPDATE_AT_START_KEY, "False");
+        help.startup_check(&mut persisted);
+        assert_eq!(help.flow, Flow::Idle);
+        assert_eq!(persisted.get(UPDATE_CHECK_KEY), None);
+        persisted.set(UPDATE_AT_START_KEY, "True");
+
         // A new day: the stable check, and the day kept.
         help.startup_check(&mut persisted);
         assert_eq!(help.flow, Flow::Checking);
-        assert_eq!(help.which, Which::Stable);
+        assert_eq!(help.which, Channel::Stable);
         assert_eq!(
             persisted.get(UPDATE_CHECK_KEY),
             Some(crate::settings::short_date_today().as_str())
         );
         wait(&mut help);
-        help.answer(false, &persisted);
+        assert!(matches!(&help.flow, Flow::Question { text } if text.starts_with("Update Found: ")));
+        help.answer(false);
         // The same day again: nothing, unless beta updates are on, which checks the beta channel.
         help.startup_check(&mut persisted);
         assert_eq!(help.flow, Flow::Idle);
         persisted.set(BETA_UPDATES_KEY, "True");
         help.startup_check(&mut persisted);
         assert_eq!(help.flow, Flow::Checking);
-        assert_eq!(help.which, Which::Beta);
+        assert_eq!(help.which, Channel::Beta);
         wait(&mut help);
         assert!(
-            matches!(&help.flow, Flow::Question { text } if text.starts_with("BETA Update Found"))
+            matches!(&help.flow, Flow::Question { text } if text.starts_with("BETA Update Found: "))
         );
-        mp_os::fs::remove_dir_all(&dir).expect("cleanup");
-    }
-
-    #[test]
-    fn a_new_updater_is_copied_into_place() {
-        let dir = scratch("updater");
-        let updater = updater_path(&dir);
-        mp_os::fs::write(&updater, b"old").expect("old updater");
-        let new = dir.join(format!(
-            "{}.new",
-            updater.file_name().expect("a name").to_string_lossy()
-        ));
-        mp_os::fs::write(&new, b"new").expect("new updater");
-        cleanup_updater_files(&dir);
-        assert_eq!(mp_os::fs::read(&updater).expect("updater"), b"new");
-        assert!(!new.os_exists());
         mp_os::fs::remove_dir_all(&dir).expect("cleanup");
     }
 }

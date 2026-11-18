@@ -74,7 +74,9 @@ echo "written to $OUT"
 [ "$MODE" = "deb" ] || exit 0
 
 # ---- The Debian package ----------------------------------------------------------------------
-VERSION=$(grep -m1 '^version = ' "$ROOT/Cargo.toml" | sed 's/.*"\(.*\)"/\1/')
+# The release workflow names the release it is building (tools/release/what.sh's `deb`); else the
+# workspace's version.
+VERSION=${MP_RELEASE_DEB:-$(grep -m1 '^version = ' "$ROOT/Cargo.toml" | sed 's/.*"\(.*\)"/\1/')}
 ARCH=$(dpkg --print-architecture)
 NAME="missionplanner-rust"
 STAGE="$OUT/deb/${NAME}_${VERSION}_${ARCH}"

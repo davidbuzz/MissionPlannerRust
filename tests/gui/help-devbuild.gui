@@ -1,0 +1,40 @@
+# HELP's two update buttons on a development build - `cargo build`'s, which is every planner but
+# the release workflow's (crates/mp-update/src/identity.rs; updates.md, section 4.3).
+#
+# The claim: a build that is no release is never updated from one. Each button puts
+# mp_update's DEVELOPMENT_BUILD on the status line and asks the network nothing - though the
+# settings below, a channel with a release on it and beta updates on, would have a release ask
+# about it - and the check at startup does not run.
+#
+# Against tests/gui/update-server.py on 127.0.0.1:5795, so that a request, were one made, would be
+# answered.
+#
+# Needs no link: tools/gui-headless.sh help-devbuild
+
+env XDG_DATA_HOME $WORK
+env MP_UPDATE_DIR $WORK/install
+setup mkdir -p "$WORK/install" "$WORK/MissionPlannerRust"
+setup python3 tests/gui/update-server.py --work $WORK --port 5795
+setup printf '<?xml version="1.0" encoding="utf-8"?><Config><UpdateManifest>http://127.0.0.1:5795/update.json</UpdateManifest><BetaUpdateManifest>http://127.0.0.1:5795/beta/update.json</BetaUpdateManifest><beta_updates>True</beta_updates></Config>' > "$WORK/MissionPlannerRust/config.xml"
+
+screen help
+window 1600x1200
+budget 5
+
+expect screen help
+expect help.build ~ (development build)
+expect help.flow idle
+expect help.last none
+
+click help-updatecheck
+expect help.refused 1
+expect status.drawn This is a development build: it is updated from its source, not from a release
+expect help.flow idle
+expect help.last none
+
+click help-betaupdate
+expect help.refused 2
+expect status.drawn This is a development build: it is updated from its source, not from a release
+expect help.flow idle
+expect help.written 0
+expect help.restart none

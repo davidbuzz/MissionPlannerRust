@@ -1,6 +1,6 @@
 [package]
 name = "mp-update"
-description = "Mission Planner's update check and updater: Utilities/Update.cs and Updater/Program.cs"
+description = "The planner's own update: a release's manifest read, its archive fetched, checked and moved into place"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -13,13 +13,20 @@ workspace = true
 [dependencies]
 # The std calls that panic in a web page, std's on the desktop (web/tools/port_os.py).
 mp-os.workspace = true
-# Threads, std's on the desktop and Web Workers in a web page (web/tools/port_threads.py).
-wasm_thread = { git = "https://github.com/zed-industries/wasm_thread", rev = "0cf96c7708dfb97ccf3da50347e25edcf75d6937" }
-# The clock, std's on the desktop and the browser's in a web page (web/tools/port_clock.py).
-web-time = "1"
-# The network, as `Download`'s `HttpClient`: the `Fetch` trait the firmware code fetches through.
+# The manifest, `update.json`.
+serde_json.workspace = true
+
+# Everything that fetches, unpacks and installs: not in a web page, which is whatever its site
+# serves and has no install to update.
+[target.'cfg(not(target_family = "wasm"))'.dependencies]
+# The planner's User-Agent.
 mp-firmware.workspace = true
-# The zip the beta and master channels are read from (`GetNewFileZip`).
+# The Windows release's zip.
 mp-log.workspace = true
-# `CheckMD5`'s `Regex`.
-regex.workspace = true
+# The network.
+ureq.workspace = true
+# A download's SHA-256, checked against the manifest's.
+sha2.workspace = true
+# The Linux and macOS releases' `.tar.gz`.
+flate2.workspace = true
+tar.workspace = true

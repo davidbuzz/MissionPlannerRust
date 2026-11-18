@@ -170,6 +170,7 @@ const KEYS: &[&str] = &[
     "speecharmenabled",
     "speechlowspeedenabled",
     "beta_updates",
+    "update_check_at_start",
     "password_protect",
     "showairports",
     "enableadsb",
@@ -336,6 +337,11 @@ const fn check(
         dim,
     }
 }
+
+/// The boxes that are the owner's own, which the C#'s page and its `.resx` have not got: the
+/// test that holds every box to the `.resx` leaves them out.
+#[cfg(test)]
+pub const OWN: [&str; 1] = ["chk_updateatstart"];
 
 /// The speech boxes Enable Speech shows and hides.
 /// `// C#: GCSViews/ConfigurationView/ConfigPlanner.cs:388-409`
@@ -600,6 +606,17 @@ pub const CHECKS: &[CheckSpec] = &[
         "TFR's",
         (496, 577, 54, 17),
         Some("showtfr"),
+        true,
+        None,
+    ),
+    // Not in the C#, whose once-a-day update check has no switch: the owner's box of 2026-11-18
+    // ("Daily, with an off box"), ticked until unticked, on Beta Updates' row in the room to the
+    // right of TFR's. help.rs's startup check reads its key (UPDATE_AT_START_KEY). [`OWN`]
+    check(
+        "chk_updateatstart",
+        "Check for updates at start",
+        (598, 577, 170, 17),
+        Some("update_check_at_start"),
         true,
         None,
     ),
@@ -1816,6 +1833,7 @@ impl Planner {
             "chk_ADSB",
             "chk_norcreceiver",
             "chk_tfr",
+            "chk_updateatstart",
             "chk_shownofly",
             "CHK_params_bg",
             "chk_slowMachine",
@@ -1993,6 +2011,7 @@ impl Planner {
             | "CHK_disttohomeflightdata"
             | "CHK_showairports"
             | "chk_tfr"
+            | "chk_updateatstart"
             | "chk_norcreceiver"
             | "CHK_params_bg"
             | "chk_slowMachine"
@@ -4668,6 +4687,25 @@ mod tests {
         assert_eq!(settings.get("beta_updates"), Some("False"));
     }
 
+    /// "Check for updates at start", the owner's box of 2026-11-18: ticked until it is unticked,
+    /// and what it writes is the key help.rs's check at startup reads.
+    #[test]
+    fn the_update_check_at_start_is_on_until_unticked() {
+        let mut settings = Persisted::at(None);
+        let mut planner = activated(&mut settings);
+        assert!(!dimmed().contains(&"chk_updateatstart"));
+        assert!(planner.checked("chk_updateatstart"));
+        assert_eq!(settings.get(crate::help::UPDATE_AT_START_KEY), None);
+        planner.click("chk_updateatstart", &mut settings);
+        assert!(!planner.checked("chk_updateatstart"));
+        assert_eq!(settings.get(crate::help::UPDATE_AT_START_KEY), Some("False"));
+        // And it comes back unticked from the setting.
+        let mut again = activated(&mut settings);
+        assert!(!again.checked("chk_updateatstart"));
+        again.click("chk_updateatstart", &mut settings);
+        assert_eq!(settings.get(crate::help::UPDATE_AT_START_KEY), Some("True"));
+    }
+
     #[test]
     fn a_dimmed_control_does_nothing() {
         let mut settings = Persisted::at(None);
@@ -5576,7 +5614,7 @@ mod tests {
             (x, y, width, height)
         };
         let mut checked = 0;
-        for spec in CHECKS {
+        for spec in CHECKS.iter().filter(|spec| !OWN.contains(&spec.name)) {
             assert_eq!(spec.at, geometry(spec.name), "{}", spec.name);
             assert_eq!(
                 resx.get(&format!("{}.Text", spec.name)).map(String::as_str),

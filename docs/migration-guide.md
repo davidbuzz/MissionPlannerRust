@@ -74,11 +74,25 @@ download.
 
 ## Updates
 
-The HELP screen's *Check for Updates* and *Check for BETA Updates* say only "Sorry, Updates
-aren't implemented yet" on the status line (the owner's word, 2026-10-14), and nothing else is
-done: the once-a-day check at start-up, the download and the `/update` and `/updatebeta`
-command-line switches are refused too. Mission Planner's own update code is ported
-(`crates/mp-update`) and held back, off.
+The HELP screen's *Check for Updates* and *Check for BETA Updates* are there, and CONFIG >
+Planner's *Beta Updates*, but the update behind them is this planner's own (`updates.md`), not
+Mission Planner's:
+
+- It reads this project's releases on GitHub, not firmware.ardupilot.org. The stable channel is
+  the newest release; the beta is one rolling build of the main branch, made nightly.
+- The question says what is offered - "Update Found: 0.0.1 to 0.0.2" - and its ChangeLog link
+  goes to the release's page. The beta button asks too, where Mission Planner's updates at once.
+  Holding Control on it does nothing: there is no master channel.
+- *Update Now* downloads the whole release, checks it, and the planner replaces itself; there is
+  no `Updater.exe`. While a vehicle is connected it installs and does not restart - the update
+  takes effect the next time the planner is started.
+- Installed from the `.deb`, the planner cannot replace itself: it downloads the new package and
+  shows the `apt` command to install it.
+- The once-a-day check at start-up can be turned off: CONFIG > Planner, *Check for updates at
+  start*.
+- A planner built from source says it is a development build and is not updated from a release.
+  The browser page has neither button: it is always whatever the site serves.
+- `/update` and `/updatebeta` on the command line do the same without a window.
 
 ## When it crashes
 

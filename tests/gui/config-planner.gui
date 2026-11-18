@@ -32,7 +32,7 @@
 
 screen config
 window 1600x1200
-budget 28
+budget 30
 # 28: 26.5 s measured headless on lavapipe (2026-10-16, the dimmed clicks and Beta Updates added), the rule's ceiling plus one.
 env XDG_DATA_HOME $WORK
 env MP_CONFIG_XML $WORK/config.xml
@@ -66,6 +66,13 @@ click planner-CHK_beta
 expect config.planner.beta_updates True
 click planner-CHK_beta
 expect config.planner.beta_updates False
+
+# Check for updates at start: the owner's box of 2026-11-18, not the C#'s, whose once-a-day check
+# has no switch. Ticked until unticked; help.rs's check at startup reads the key.
+click planner-chk_updateatstart
+expect config.planner.update_check_at_start False
+click planner-chk_updateatstart
+expect config.planner.update_check_at_start True
 expect config.planner.cacheonly false
 
 # The units: none set, so the combos show their first items and ChangeUnits gives metres.

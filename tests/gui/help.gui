@@ -1,33 +1,43 @@
 # The HELP screen: GCSViews/Help.cs, Help.Designer.cs and Help.resx, ported in
-# crates/mp-gui/src/help.rs over crates/mp-update (Utilities/Update.cs, Updater/Program.cs).
+# crates/mp-gui/src/help.rs, with the planner's own update behind its two buttons
+# (crates/mp-update; updates.md - the owner's word of 2026-11-18, in place of the C#'s
+# Utilities/Update.cs and Updater/Program.cs).
 #
 # The claim: MainV2's HELP tab shows the help text with Check for Updates, Check for BETA Updates,
 # Show Console Window (restart) and the Change Log link (Help.resx); Show Console Window writes
-# showconsole (Help.cs:50-53). Updates are refused, the owner's word of 2026-10-14 - "for both of
-# them to *ONLY* print "Sorry, Updates arent impleented yet", and do noting more": each button
-# puts help.rs's UPDATES_NOT_IMPLEMENTED on the status line and starts nothing, and MainV2's check
-# at startup (MainV2.cs:3668-3678) does not run - though the settings below, a channel with a
-# newer beta on it, beta_updates on and today already checked, would have asked "BETA Update
-# Found" at once. The update server runs so that a request, were one made, would be answered.
+# showconsole (Help.cs:50-53). A planner that is release 0.0.1 - made one for this run by
+# MP_UPDATE_IDENTITY, the harness's door, as the release workflow compiles it into a real one -
+# asks the stable channel and is offered 0.0.2 with the release's page as its ChangeLog; the beta
+# button is offered the beta's later build; No leaves everything alone. Yes fetches the release's
+# archive, checks it against the manifest, unpacks it, runs the new planner's --version and moves
+# the files into the install - under MP_UPDATE_DIR, a folder of this run's, where the new planner
+# is named and not started. After that the buttons say to restart.
 #
-# Against tests/gui/update-server.py, a channel on 127.0.0.1:5793.
+# Against tests/gui/update-server.py, a channel on 127.0.0.1:5793 whose new planner is a shell
+# script, so the install is Linux's and macOS's lines; unit tests hold the rest (help.rs,
+# crates/mp-update).
 #
 # Needs no link: tools/gui-headless.sh help
 
 env XDG_DATA_HOME $WORK
 env MP_UPDATE_DIR $WORK/install
+env MP_UPDATE_IDENTITY 0.0.1,stable,0570c61aa1b2c3d4e5f60718293a4b5c6d7e8f90,2026-10-06T11:00:00Z
 env MP_OPEN_WITH_SHELL_LOG $WORK/opened.txt
-setup mkdir -p "$WORK/install" "$WORK/MissionPlannerRust" && printf '1.0.0.0\n' > "$WORK/install/version.txt"
+setup mkdir -p "$WORK/install" "$WORK/MissionPlannerRust" && printf 'the old planner\n' > "$WORK/install/planner" && printf 'the old licence\n' > "$WORK/install/LICENSE"
 setup python3 tests/gui/update-server.py --work $WORK --port 5793
-setup printf '<?xml version="1.0" encoding="utf-8"?><Config><UpdateLocationVersion>http://127.0.0.1:5793/version.txt</UpdateLocationVersion><UpdateLocationMD5>http://127.0.0.1:5793/checksums.txt</UpdateLocationMD5><UpdateLocation>http://127.0.0.1:5793/files/</UpdateLocation><BetaUpdateLocationVersion>http://127.0.0.1:5793/beta/version.txt</BetaUpdateLocationVersion><BetaUpdateLocationMD5>http://127.0.0.1:5793/beta/checksums.txt</BetaUpdateLocationMD5><BetaUpdateLocationZip>http://127.0.0.1:5793/beta/Beta.zip</BetaUpdateLocationZip><update_check>%s</update_check><beta_updates>True</beta_updates></Config>' "$(date +%-m/%-d/%Y)" > "$WORK/MissionPlannerRust/config.xml"
+# Today already checked and beta updates off: nothing is asked at start, so each question below is
+# its button's.
+setup printf '<?xml version="1.0" encoding="utf-8"?><Config><UpdateManifest>http://127.0.0.1:5793/update.json</UpdateManifest><BetaUpdateManifest>http://127.0.0.1:5793/beta/update.json</BetaUpdateManifest><update_check>%s</update_check><beta_updates>False</beta_updates></Config>' "$(date +%-m/%-d/%Y)" > "$WORK/MissionPlannerRust/config.xml"
 
 screen help
 window 1600x1200
-budget 6
+budget 8
 
 expect screen help
 
-# No check at startup: nothing asked.
+# What this planner is, and nothing asked at startup.
+expect help.build planner 0.0.1 (stable, commit 0570c61aa1b2, built 2026-10-06T11:00:00Z)
+expect help.updates true
 expect help.flow idle
 expect help.last none
 
@@ -38,22 +48,41 @@ expect help.console true
 click help-showconsole
 expect help.console false
 
-# Check for Updates: the words on the status line, and nothing started.
-expect help.refused 0
+# Check for Updates: the stable channel's release, what it is, and its page as the ChangeLog. No.
 click help-updatecheck
-expect help.refused 1
-expect status.drawn Sorry, Updates aren't implemented yet
-expect help.flow idle
-expect help.last none
-
-# Check for BETA Updates: the same, and nothing downloaded or started.
-click help-betaupdate
-expect help.refused 2
-expect status.drawn Sorry, Updates aren't implemented yet
+expect help.flow question
+expect help.question Update Found: 0.0.1 to 0.0.2 [link;http://127.0.0.1:5793/releases/tag/v0_0_2;ChangeLog]
+click help-question-no
 expect help.flow idle
 expect help.written 0
-expect help.last none
+
+# Check for BETA Updates: the beta's later build, asked about as a release is. No.
+click help-betaupdate
+expect help.flow question
+expect help.question BETA Update Found: 0570c61aa1b2 built 2026-10-06 to 9f8e7d6c5b4a built 2026-11-25 [link;http://127.0.0.1:5793/releases/tag/beta;ChangeLog]
+click help-question-no
+expect help.flow idle
+expect help.written 0
 expect help.restart none
+expect help.installed false
+
+# Yes: fetched, checked, unpacked, the new planner tried, its two files moved into the install.
+linux: click help-updatecheck
+linux: expect help.flow question
+linux: click help-question-yes
+linux: expect help.installed true
+linux: expect help.last Update installed
+linux: expect help.written 2
+linux: expect help.restart $WORK/install/planner
+linux: expect help.flow idle
+linux: expect status.drawn Update installed
+# Until it is restarted this is still the old planner: both buttons say so, and ask nothing.
+linux: click help-updatecheck
+linux: expect help.refused 1
+linux: expect status.drawn The update is installed: restart the planner to use it
+linux: click help-betaupdate
+linux: expect help.refused 2
+linux: expect help.flow idle
 
 # The guide to Tailscale, the owner's plan of 2026-10-14, while Tailscale is enabled in PLUGINS (it
 # is until unticked): its link hands the guide's address to the desktop's browser.

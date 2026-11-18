@@ -5,10 +5,26 @@ name: release builds
 # publish. The planner alone: headless-planner is an internal testing tool, not part of the
 # application. The owner's borrowed Mac builds the same commit by hand as a check (DEV_MACOS.md).
 # Run by hand (Actions > release builds > Run workflow), or by pushing a release tag - "v" and a
-# number, v0_1 or v1.2.0 - which builds that tag's commit and then publishes the three downloads,
+# number, v0_0_2 - which builds that tag's commit and then publishes the three downloads,
 # their checksums and the release notes as the tag's GitHub release (the `publish` job).
+#
+# The planner's own update reads what this publishes (updates.md): each build is told what it is -
+# its version, channel and commit, which `planner --version` prints - and `publish` writes
+# update.json beside the downloads, the manifest the planner fetches. A tag is the stable
+# channel's release. The beta channel's is one rolling pre-release under the tag "beta", built
+# nightly when main has moved and its CI passed, or by hand with the channel "beta". The `what`
+# job (tools/release/what.sh) decides which of these a run is.
 on:
   workflow_dispatch:
+    inputs:
+      channel:
+        description: "beta publishes this build as the beta channel's; none keeps it as this run's artifacts"
+        type: choice
+        options: [none, beta]
+        default: none
+  schedule:
+    # The beta, nightly: 16:17 UTC, the small hours in eastern Australia.
+    - cron: '17 16 * * *'
   push:
     tags: ['v[0-9]*']
 
@@ -16,12 +32,50 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
+  what:
+    name: What this run builds
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      actions: read
+    outputs:
+      build: ${{ steps.what.outputs.build }}
+      channel: ${{ steps.what.outputs.channel }}
+      version: ${{ steps.what.outputs.version }}
+      label: ${{ steps.what.outputs.label }}
+      deb: ${{ steps.what.outputs.deb }}
+      tag: ${{ steps.what.outputs.tag }}
+      built: ${{ steps.what.outputs.built }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Every tag: a beta carries the version of the last release before it.
+          fetch-depth: 0
+      - id: what
+        env:
+          GH_TOKEN: ${{ github.token }}
+          WANTED: ${{ inputs.channel }}
+        run: tools/release/what.sh >> "$GITHUB_OUTPUT"
+
   linux:
     name: Linux (x86-64, glibc 2.35)
     # 22.04, not the newest: a binary needs the glibc it was built against or newer, and 22.04's
     # 2.35 runs on 22.04 and 24.04 alike, where a 24.04 build needs 2.39 (tools/package.sh says so).
     runs-on: ubuntu-22.04
     timeout-minutes: 150
+    needs: what
+    if: needs.what.outputs.build == 'true'
+    env:
+      # What the build is, compiled in (crates/mp-update/src/identity.rs): empty for a build by
+      # hand, which calls itself a development build and is never updated from a release.
+      MP_RELEASE_VERSION: ${{ needs.what.outputs.version }}
+      MP_RELEASE_CHANNEL: ${{ needs.what.outputs.channel }}
+      MP_RELEASE_COMMIT: ${{ github.sha }}
+      MP_RELEASE_BUILT: ${{ needs.what.outputs.built }}
+      MP_RELEASE_LABEL: ${{ needs.what.outputs.label }}
+      # The Debian package's version, which may hold no underscore (tools/package.sh).
+      MP_RELEASE_DEB: ${{ needs.what.outputs.deb }}
     steps:
       - uses: actions/checkout@v4
       # A release build with the profile's debug information is larger than the runner's free
@@ -39,6 +93,11 @@ jobs:
             linux-libc-dev fakeroot xvfb mesa-vulkan-drivers
       - name: Build, strip and package (tools/package.sh deb)
         run: tools/package.sh deb
+      - name: It says what it is
+        if: needs.what.outputs.channel != ''
+        run: |
+          dist/planner --version | tee version.txt
+          grep -F "planner $MP_RELEASE_VERSION ($MP_RELEASE_CHANNEL, commit ${GITHUB_SHA:0:12}" version.txt
       - name: The release planner opens and paints
         env:
           MP_SMOKE: "1"
@@ -57,8 +116,7 @@ jobs:
           xvfb-run -a --server-args="-screen 0 1600x1200x24" dist/planner
       - name: Archive
         run: |
-          V=$(grep -m1 '^version = ' Cargo.toml | sed 's/.*"\(.*\)"/\1/')
-          [ "$GITHUB_REF_TYPE" = tag ] && V=${GITHUB_REF_NAME#v}
+          V=${MP_RELEASE_LABEL:-$(grep -m1 '^version = ' Cargo.toml | sed 's/.*"\(.*\)"/\1/')}
           N=missionplanner-rust_${V}_linux-x86_64
           mkdir -p release/$N
           cp dist/planner LICENSE NOTICE THIRD_PARTY_LICENSES README.md release/$N/
@@ -95,7 +153,16 @@ jobs:
     name: Windows (x86-64, MSVC)
     runs-on: windows-latest
     timeout-minutes: 150
+    needs: what
+    if: needs.what.outputs.build == 'true'
     env:
+      # What the build is, compiled in (crates/mp-update/src/identity.rs): empty for a build by
+      # hand, which calls itself a development build and is never updated from a release.
+      MP_RELEASE_VERSION: ${{ needs.what.outputs.version }}
+      MP_RELEASE_CHANNEL: ${{ needs.what.outputs.channel }}
+      MP_RELEASE_COMMIT: ${{ github.sha }}
+      MP_RELEASE_BUILT: ${{ needs.what.outputs.built }}
+      MP_RELEASE_LABEL: ${{ needs.what.outputs.label }}
       # The C runtime linked in, so that the binaries need no Visual C++ Redistributable.
       RUSTFLAGS: -C target-feature=+crt-static
     steps:
@@ -103,6 +170,14 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - name: Build
         run: cargo build --release -p mp-gui --bin planner
+      - name: It says what it is
+        if: needs.what.outputs.channel != ''
+        shell: pwsh
+        run: |
+          $said = (& .\target\release\planner.exe --version | Out-String).Trim()
+          $said
+          $wanted = "planner $env:MP_RELEASE_VERSION ($env:MP_RELEASE_CHANNEL, commit $($env:GITHUB_SHA.Substring(0, 12))"
+          if (-not $said.Contains($wanted)) { Write-Error "wanted: $wanted"; exit 1 }
       - name: The DLLs it imports (system ones only)
         shell: pwsh
         run: |
@@ -118,7 +193,7 @@ jobs:
         shell: pwsh
         run: |
           $v = (Select-String -Path Cargo.toml -Pattern '^version = "(.*)"' | Select-Object -First 1).Matches[0].Groups[1].Value
-          if ($env:GITHUB_REF_TYPE -eq 'tag') { $v = $env:GITHUB_REF_NAME.Substring(1) }
+          if ($env:MP_RELEASE_LABEL) { $v = $env:MP_RELEASE_LABEL }
           $n = "missionplanner-rust_${v}_windows-x86_64"
           New-Item -ItemType Directory -Force -Path "release\$n" | Out-Null
           Copy-Item target\release\planner.exe, LICENSE, NOTICE, THIRD_PARTY_LICENSES, README.md "release\$n\"
@@ -157,7 +232,16 @@ jobs:
     # GitHub's Intel images are being retired, and Apple's toolchain cross-compiles either way.
     runs-on: macos-latest
     timeout-minutes: 180
+    needs: what
+    if: needs.what.outputs.build == 'true'
     env:
+      # What the build is, compiled in (crates/mp-update/src/identity.rs): empty for a build by
+      # hand, which calls itself a development build and is never updated from a release.
+      MP_RELEASE_VERSION: ${{ needs.what.outputs.version }}
+      MP_RELEASE_CHANNEL: ${{ needs.what.outputs.channel }}
+      MP_RELEASE_COMMIT: ${{ github.sha }}
+      MP_RELEASE_BUILT: ${{ needs.what.outputs.built }}
+      MP_RELEASE_LABEL: ${{ needs.what.outputs.label }}
       # liblzma-sys takes Homebrew's xz through pkg-config when it is there, and the runner has it;
       # built in, the planner links nothing outside macOS (DEV_MACOS.md).
       LZMA_API_STATIC: "1"
@@ -181,6 +265,11 @@ jobs:
           strip dist/planner
           lipo -info dist/planner
           file dist/planner
+      - name: It says what it is
+        if: needs.what.outputs.channel != ''
+        run: |
+          dist/planner --version | tee version.txt
+          grep -F "planner $MP_RELEASE_VERSION ($MP_RELEASE_CHANNEL, commit ${GITHUB_SHA:0:12}" version.txt
       - name: It links macOS alone
         run: |
           otool -L dist/planner
@@ -195,8 +284,7 @@ jobs:
         run: dist/planner
       - name: Archive
         run: |
-          V=$(grep -m1 '^version = ' Cargo.toml | sed 's/.*"\(.*\)"/\1/')
-          [ "$GITHUB_REF_TYPE" = tag ] && V=${GITHUB_REF_NAME#v}
+          V=${MP_RELEASE_LABEL:-$(grep -m1 '^version = ' Cargo.toml | sed 's/.*"\(.*\)"/\1/')}
           N=missionplanner-rust_${V}_macos-universal
           mkdir -p release/$N
           cp dist/planner LICENSE NOTICE THIRD_PARTY_LICENSES README.md release/$N/
@@ -233,14 +321,22 @@ jobs:
 
   publish:
     name: GitHub release
-    # Only for a release tag, and only once all three platforms have built, opened and packaged.
-    if: github.ref_type == 'tag'
-    needs: [linux, windows, macos]
+    # Only for a release - a tag's, or the beta - and only once all three platforms have built,
+    # opened and packaged.
+    if: needs.what.outputs.channel != ''
+    needs: [what, linux, windows, macos]
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 30
     permissions:
       contents: write
+    env:
+      CHANNEL: ${{ needs.what.outputs.channel }}
+      VERSION: ${{ needs.what.outputs.version }}
+      TAG: ${{ needs.what.outputs.tag }}
+      BUILT: ${{ needs.what.outputs.built }}
     steps:
+      # For tools/release/manifest.py.
+      - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
         with:
           path: assets
@@ -253,7 +349,12 @@ jobs:
           ls -la
           linux=$(ls *_linux-x86_64.tar.gz); deb=$(ls *.deb); windows=$(ls *_windows-x86_64.zip); macos=$(ls *_macos-universal.tar.gz)
           {
-            echo "MissionPlannerRust ${GITHUB_REF_NAME}: Mission Planner, the ground control station for ArduPilot, in Rust."
+            if [ "$CHANNEL" = beta ]; then
+              echo "MissionPlannerRust beta: main as of ${GITHUB_SHA:0:12}, after release ${VERSION}. Replaced by the next beta."
+              echo "HELP > Check for BETA Updates takes a planner to it; the releases are the tagged ones."
+            else
+              echo "MissionPlannerRust ${TAG}: Mission Planner, the ground control station for ArduPilot, in Rust."
+            fi
             echo
             echo "Built from commit ${GITHUB_SHA} by this repository's release workflow. Each planner below"
             echo "was opened and painted once on its own platform before it was packaged."
@@ -279,20 +380,53 @@ jobs:
             echo
             echo "MissionPlannerRust is derived from Mission Planner (https://github.com/ArduPilot/MissionPlanner)"
             echo "and licensed under the GNU General Public License version 3; its source is this repository at"
-            echo "${GITHUB_REF_NAME}."
+            echo "${TAG} (commit ${GITHUB_SHA})."
+            echo
+            echo "update.json is the manifest the planner's own update reads (updates.md)."
           } > ../notes.md
           cat ../notes.md
-      - name: Publish
+      - name: Publish, the manifest last
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
         run: |
           cd assets
-          if gh release view "$GITHUB_REF_NAME" > /dev/null 2>&1; then
-            gh release upload "$GITHUB_REF_NAME" * --clobber
-            gh release edit "$GITHUB_REF_NAME" --notes-file ../notes.md
+          # update.json, from the downloads as they are here: a planner that reads it is sent to
+          # files of exactly these sizes and hashes, so it goes up after them, never before.
+          python3 ../tools/release/manifest.py write --channel "$CHANNEL" --tag "$TAG" \
+            --version "$VERSION" --commit "$GITHUB_SHA" --built "$BUILT" \
+            --repository "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY" --dir . --out ../update.json
+          if [ "$CHANNEL" = beta ]; then
+            # One rolling pre-release: this beta's downloads beside the last one's (their names
+            # carry the commit), then the manifest, then the tag moved and the last one's removed.
+            if gh release view beta > /dev/null 2>&1; then
+              old=$(gh release view beta --json assets --jq '.assets[].name')
+              gh release upload beta * --clobber
+            else
+              old=
+              gh release create beta * --prerelease --target "$GITHUB_SHA" \
+                --title "MissionPlannerRust beta" --notes-file ../notes.md
+            fi
+            gh release upload beta ../update.json --clobber
+            gh api -X PATCH "repos/$GITHUB_REPOSITORY/git/refs/tags/beta" -f sha="$GITHUB_SHA" -F force=true
+            gh release edit beta --prerelease --notes-file ../notes.md
+            for name in $old; do
+              [ -e "$name" ] || [ "$name" = update.json ] || gh release delete-asset beta "$name" --yes
+            done
           else
-            gh release create "$GITHUB_REF_NAME" * --title "MissionPlannerRust $GITHUB_REF_NAME" \
-              --notes-file ../notes.md --verify-tag
+            if gh release view "$TAG" > /dev/null 2>&1; then
+              gh release upload "$TAG" * --clobber
+              gh release edit "$TAG" --notes-file ../notes.md
+            else
+              gh release create "$TAG" * --title "MissionPlannerRust $TAG" \
+                --notes-file ../notes.md --verify-tag --latest
+            fi
+            gh release upload "$TAG" ../update.json --clobber
           fi
-          gh release view "$GITHUB_REF_NAME" --json url,assets --jq '.url, (.assets[] | "  " + .name)'
+          gh release view "$TAG" --json url,assets --jq '.url, (.assets[] | "  " + .name)'
+      - name: The published release is what the manifest says
+        # As a planner would fetch it: the manifest by its public address, then every download it
+        # names, each held to its size and SHA-256.
+        run: |
+          sleep 15
+          python3 tools/release/manifest.py verify "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/releases/download/$TAG/update.json"

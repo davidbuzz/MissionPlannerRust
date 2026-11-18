@@ -4993,7 +4993,16 @@ fn main() {
         return;
     }
     if raw.iter().any(|a| a == "--version" || a == "-V") {
-        println!("planner {}", env!("CARGO_PKG_VERSION"));
+        // What this build is: a release, by its version, channel and commit, or a development
+        // build. The updater's trial of a new planner reads this line (mp_update::install).
+        println!(
+            "{}",
+            mp_update::identity::version_line(
+                "planner",
+                env!("CARGO_PKG_VERSION"),
+                mp_update::identity::this_build().as_ref()
+            )
+        );
         return;
     }
 
@@ -5012,8 +5021,8 @@ fn main() {
         }
     };
 
-    // `Program.CleanupFiles`: a new updater left beside the program by the last update, copied
-    // into place. `// C#: Program.cs:616-628`
+    // `Program.CleanupFiles`: what the last update left beside the program - here the files it
+    // moved aside, deleted. `// C#: Program.cs:616-628`
     help::cleanup_files();
 
     // `Program`'s `UnhandledException` and `ThreadException` handlers: a panic's report, written

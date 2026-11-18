@@ -818,15 +818,18 @@ migration guide for existing Mission Planner users.
   **cold start < 500 ms**, installer < 150 MB.
 - **Replaces:** `Updater/`, `ExtLibs/Installer`, `wix/`, `Msi/`, `MAC/`, `MissionPlanner.sh`, `build*.bat`.
 - **Today:** `tools/package.sh` builds the stripped release planner and reports what a machine needs to
-  run it. The update is ported: `mp-update` is
-  `Utilities/Update.cs` (the version check, the MD5-listed download of changed files as `.new`)
-  and `Updater/Program.cs` (`headless-planner update-apply`, the swap and restart), driven from
-  the HELP screen (`GCSViews/Help.cs`, ported) and `MainV2`'s once-a-day check; the channel's
-  addresses are settings of `app.config`'s names, empty until one is published for this program.
-  Since df43b93 (2026-10-14, the owner's word) it is held back: both of HELP's update buttons say
-  only "Sorry, Updates aren't implemented yet", and the once-a-day check, the master warning, the
-  download and `/update` and `/updatebeta` are refused, the port kept behind `help.rs`'s
-  `UPDATES_ALLOWED`, off, its tests turning it on (`Help::allowing_updates`).
+  run it. The update is the planner's own
+  since 2026-11-18 (the owner's word; `updates.md`): `mp-update` reads a release's `update.json`
+  manifest from this repository's GitHub releases - the stable channel the newest release, the
+  beta one rolling nightly pre-release - against what the build knows itself to be (its version,
+  channel and commit, compiled in by the release workflow), and on Update Now fetches the
+  release's archive, holds it to the manifest's SHA-256, unpacks it, runs the new planner's
+  `--version`, and moves each file into place with the old one aside, deleted at the next start;
+  driven from the HELP screen (`GCSViews/Help.cs`, ported, its question, progress dialog and
+  once-a-day check kept) and `/update`. No second program: the first port of
+  `Utilities/Update.cs` and `Updater/Program.cs` (`headless-planner update-apply`), held back
+  behind "Sorry, Updates aren't implemented yet" since df43b93 (2026-10-14), is removed. A real
+  stamped planner updates itself end to end under `tools/release/self-update-test.py`.
   Releases since 2026-10-04: a tag of "v" and a number runs `.github/workflows/release.yml` at
   its commit - the planner built natively on Linux (ubuntu-22.04, so glibc 2.35), Windows (MSVC, the
   C runtime linked in) and macOS (one universal binary for Apple Silicon and Intel, joined by
