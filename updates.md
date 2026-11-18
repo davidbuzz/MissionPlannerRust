@@ -1,6 +1,8 @@
 # Updates: how the planner finds and installs a newer version of itself
 
-Status, 2026-11-18: **built, all of it but signing, which the owner ruled out** - the check, the
+Status, 2026-11-18: **built, all of it but signing, which the owner ruled out, and not yet
+released: no release is to be made until he judges it tested enough, and none is ever made but
+by his own action** - the check, the
 install in place, the Debian package's download, the beta channel and the release workflow that
 feeds them. Sections 1 to 9 are the plan as it was agreed and what was tested before it was
 written; **section 10 is what was built, how to release with it, and what is proven where.** The
@@ -222,9 +224,9 @@ part:
 - **`release.yml`**: the three build values (4.3); `publish` writes and uploads `update.json`,
   last, so no manifest is ever visible before its files; a closing step fetches the manifest by
   its public address and checks every asset's hash.
-- **Beta**: the same workflow run for the `beta` channel, publishing to the `beta` pre-release:
-  nightly when main has moved since the last beta and its CI is green, and by hand (section 7).
-  Each run is about an hour on three platforms.
+- **Beta**: the same workflow run for the `beta` channel, publishing to the `beta` pre-release,
+  when the owner runs it by hand. It was first to run nightly as well; he ruled that out the same
+  day (section 7). Each run is about an hour on three platforms.
 - **Tests**: `mp-update` unit tests for the manifest, the ordering, a hash mismatch, an archive
   entry that escapes, a cancelled download, and the swap with its roll-back in a scratch folder;
   the swap of a running program on CI's Windows runner; `help.gui` against
@@ -239,7 +241,8 @@ part:
    release page in the browser. Useful by itself, and it cannot break an install.
 3. **Install in place** on Linux, Windows and macOS archives; the `.deb` downloaded with its
    command shown; an unwritable folder gets its message. The ported C# updater removed.
-4. **The beta channel**: CI's nightly rolling pre-release, the beta button, `beta_updates`.
+4. **The beta channel**: the rolling pre-release the owner makes by hand, the beta button,
+   `beta_updates`.
 5. Each installer as it arrives (MSI, `.dmg`, AppImage) with its own way of being replaced.
 
 The planners already released, `v0_0_0` and `v0_0_1`, have no updater: their users move to the
@@ -253,7 +256,8 @@ first updating release by hand, once.
 | When may main be pushed? | Not by me: everything stays local until he pushes. The release job's manifest step is unproven on GitHub until then. |
 | What is the first updating release called? | `v0_0_2`, underscores kept; the planner reads the numbers. |
 | How is the work committed? | Locally, an item a commit, nothing pushed. |
-| When are beta builds made? | Nightly when main has moved and its CI is green, and by hand. |
+| When are beta builds made? | First: nightly when main has moved and its CI is green, and by hand. **Then, the same day, overruled by him: "DO NOT DO ANY FORM OF AUTOMATED RELEASE, EVER. this is DENIED. user must always action it."** By hand only; the schedule is removed. |
+| When is the first updating release made? | When he decides. That there is no `v0_0_2` tag "is NOT an oversight by the user, its an active and deliberate choice by the user, as inadequate testing has been performed on the new 'updater' at this stage." |
 | The `.deb`? | Download the new `.deb`, check it, show the `apt` command. |
 | Signing? | Never. |
 | The ported C# updater? | Removed once the new path passes; the ledger's two rows (`Utilities/Update.cs`, `Updater/Program.cs`) marked redesigned by his word. |
@@ -414,11 +418,10 @@ The steps, the checks afterwards and what to do when a run fails are in
    not against this one, asked of the OSV database for every crate whose version changed, and
    the dependency changes between the two `Cargo.lock` files. They head the release's page, are
    attached as `RELEASE_NOTES.md`, and are committed to `main` in that file.
-2. **The beta**: nothing to do. Each night the workflow looks at main; when it has moved since
-   the last beta and CI passed on it, the same three builds are published under the one tag
-   `beta`, a pre-release, their names carrying the commit, the manifest replaced after they are
-   up and the previous beta's files removed after that. Actions > release builds > Run workflow
-   with the channel `beta` makes one at once.
+2. **The beta**: the owner runs the workflow by hand with the channel `beta` (Actions > release
+   builds > Run workflow). The same three builds are published under the one tag `beta`, a
+   pre-release, their names carrying the commit, the manifest replaced after they are up and the
+   previous beta's files removed after that. Nothing makes a beta by itself.
 3. **A build to look at**: Run workflow with no channel, as before. It is kept as the run's
    artifacts and calls itself a development build.
 
@@ -451,7 +454,7 @@ The planners here were debug builds stamped by hand; the workflow's are release 
 by `what.sh`, and on macOS universal ones.
 
 Not yet run: the release workflow on GitHub - the stamped builds, the manifest's upload, the
-check of the published release, the nightly beta. Its scripts are tested here; the workflow's
+check of the published release, the beta. Its scripts are tested here; the workflow's
 own steps are first exercised by the first tag or beta run after the owner pushes. Nor, still,
 the updated planner started from Finder on a Mac, an Intel Mac, or a Windows folder Defender
 watches (section 8).

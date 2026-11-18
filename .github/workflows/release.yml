@@ -11,9 +11,15 @@ name: release builds
 # The planner's own update reads what this publishes (updates.md): each build is told what it is -
 # its version, channel and commit, which `planner --version` prints - and `publish` writes
 # update.json beside the downloads, the manifest the planner fetches. A tag is the stable
-# channel's release. The beta channel's is one rolling pre-release under the tag "beta", built
-# nightly when main has moved and its CI passed, or by hand with the channel "beta". The `what`
-# job (tools/release/what.sh) decides which of these a run is.
+# channel's release. The beta channel's is one rolling pre-release under the tag "beta", made
+# when the owner runs this workflow by hand with the channel "beta". The `what` job
+# (tools/release/what.sh) decides which of these a run is.
+#
+# NOTHING HERE RELEASES BY ITSELF, and nothing may be added that does (the owner, 2026-11-18: "DO
+# NOT DO ANY FORM OF AUTOMATED RELEASE, EVER. this is DENIED. user must always action it."). There
+# is no schedule: a release starts when he pushes a tag, a beta when he runs the workflow, and
+# neither any other way. A nightly beta, which this workflow had for some hours of that day, is
+# removed.
 on:
   workflow_dispatch:
     inputs:
@@ -22,9 +28,6 @@ on:
         type: choice
         options: [none, beta]
         default: none
-  schedule:
-    # The beta, nightly: 16:17 UTC, the small hours in eastern Australia.
-    - cron: '17 16 * * *'
   push:
     tags: ['v[0-9]*']
 
@@ -38,7 +41,6 @@ jobs:
     timeout-minutes: 5
     permissions:
       contents: read
-      actions: read
     outputs:
       build: ${{ steps.what.outputs.build }}
       channel: ${{ steps.what.outputs.channel }}
@@ -54,7 +56,6 @@ jobs:
           fetch-depth: 0
       - id: what
         env:
-          GH_TOKEN: ${{ github.token }}
           WANTED: ${{ inputs.channel }}
         run: tools/release/what.sh >> "$GITHUB_OUTPUT"
 
@@ -460,7 +461,7 @@ jobs:
       - name: RELEASE_NOTES.md on main (a tagged release)
         # The file in the repository is the workflow's too: this release's section put at its
         # head and committed. Pushed with the workflow's own token, which starts no other
-        # workflow; tools/release/what.sh's nightly check allows for that commit.
+        # workflow. It is part of the release the owner started, not a release of its own.
         if: needs.what.outputs.channel == 'stable'
         run: |
           git config user.name "github-actions[bot]"

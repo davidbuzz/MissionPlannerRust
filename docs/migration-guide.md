@@ -79,7 +79,8 @@ Planner's *Beta Updates*, but the update behind them is this planner's own (`upd
 Mission Planner's:
 
 - It reads this project's releases on GitHub, not firmware.ardupilot.org. The stable channel is
-  the newest release; the beta is one rolling build of the main branch, made nightly.
+  the newest release; the beta is one rolling build of the main branch, made when the project
+  publishes one.
 - The question says what is offered - "Update Found: 0.0.1 to 0.0.2" - and its ChangeLog link
   goes to the release's page. The beta button asks too, where Mission Planner's updates at once.
   Holding Control on it does nothing: there is no master channel.

@@ -824,7 +824,7 @@ migration guide for existing Mission Planner users.
   run it. The update is the planner's own
   since 2026-11-18 (the owner's word; `updates.md`): `mp-update` reads a release's `update.json`
   manifest from this repository's GitHub releases - the stable channel the newest release, the
-  beta one rolling nightly pre-release - against what the build knows itself to be (its version,
+  beta one rolling pre-release, made by the owner's hand - against what the build knows itself to be (its version,
   channel and commit, compiled in by the release workflow), and on Update Now fetches the
   release's archive, holds it to the manifest's SHA-256, unpacks it, runs the new planner's
   `--version`, and moves each file into place with the old one aside, deleted at the next start;
