@@ -104,7 +104,10 @@ pub fn trial(planner: &Path, manifest: &Manifest) -> Result<(), String> {
     if said.contains(&version) && said.contains(crate::identity::short(&manifest.commit)) {
         Ok(())
     } else {
-        Err(format!("the download is not release {}: it says {said:?}", manifest.tag))
+        Err(format!(
+            "the download is not release {}: it says {said:?}",
+            manifest.tag
+        ))
     }
 }
 
@@ -239,7 +242,9 @@ pub fn cleanup(install_dir: &Path) -> usize {
     let mut kept = Vec::new();
     for line in text.lines().map(str::trim).filter(|line| !line.is_empty()) {
         let relative = Path::new(line);
-        let inside = relative.components().all(|c| matches!(c, Component::Normal(_)));
+        let inside = relative
+            .components()
+            .all(|c| matches!(c, Component::Normal(_)));
         if !inside || !line.ends_with(".old") {
             continue;
         }
@@ -262,7 +267,9 @@ pub fn cleanup(install_dir: &Path) -> usize {
 /// there is neither.
 #[must_use]
 pub fn downloads_dir() -> PathBuf {
-    let home = std::env::var_os("HOME").or_else(|| std::env::var_os("USERPROFILE")).map(PathBuf::from);
+    let home = std::env::var_os("HOME")
+        .or_else(|| std::env::var_os("USERPROFILE"))
+        .map(PathBuf::from);
     match home {
         Some(home) if home.join("Downloads").os_is_dir() => home.join("Downloads"),
         Some(home) if home.os_is_dir() => home,
@@ -327,10 +334,13 @@ mod tests {
     /// A release 0.0.2 whose platform download is those bytes.
     fn release(platform: &str, name: &str, url: &str, bytes: &[u8]) -> Manifest {
         let mut manifest = Manifest::parse(
-            crate::manifest::tests::text("stable", "0.0.2", COMMIT, "2026-11-20T03:10:00Z").as_bytes(),
+            crate::manifest::tests::text("stable", "0.0.2", COMMIT, "2026-11-20T03:10:00Z")
+                .as_bytes(),
         )
         .unwrap();
-        manifest.assets.insert(platform.to_owned(), asset_of(name, url, bytes));
+        manifest
+            .assets
+            .insert(platform.to_owned(), asset_of(name, url, bytes));
         manifest
     }
 
@@ -345,10 +355,26 @@ mod tests {
 
     fn archive(planner: &[u8]) -> Vec<u8> {
         tar_gz(&[
-            ("missionplanner-rust_0_0_2_linux-x86_64/planner", planner, 0o755),
-            ("missionplanner-rust_0_0_2_linux-x86_64/LICENSE", b"new licence", 0o644),
-            ("missionplanner-rust_0_0_2_linux-x86_64/sitl-wasm/arducopter.wasm", b"new wasm", 0o644),
-            ("missionplanner-rust_0_0_2_linux-x86_64/sitl-wasm/arduplane.wasm", b"a new file", 0o644),
+            (
+                "missionplanner-rust_0_0_2_linux-x86_64/planner",
+                planner,
+                0o755,
+            ),
+            (
+                "missionplanner-rust_0_0_2_linux-x86_64/LICENSE",
+                b"new licence",
+                0o644,
+            ),
+            (
+                "missionplanner-rust_0_0_2_linux-x86_64/sitl-wasm/arducopter.wasm",
+                b"new wasm",
+                0o644,
+            ),
+            (
+                "missionplanner-rust_0_0_2_linux-x86_64/sitl-wasm/arduplane.wasm",
+                b"a new file",
+                0o644,
+            ),
         ])
     }
 
@@ -358,9 +384,18 @@ mod tests {
 
     /// The install as it was before any update: the old files, and nothing of an update's.
     fn untouched(dir: &Path) {
-        assert_eq!(mp_os::fs::read(dir.join("planner")).unwrap(), b"the old planner");
-        assert_eq!(mp_os::fs::read(dir.join("LICENSE")).unwrap(), b"old licence");
-        assert_eq!(mp_os::fs::read(dir.join("sitl-wasm/arducopter.wasm")).unwrap(), b"old wasm");
+        assert_eq!(
+            mp_os::fs::read(dir.join("planner")).unwrap(),
+            b"the old planner"
+        );
+        assert_eq!(
+            mp_os::fs::read(dir.join("LICENSE")).unwrap(),
+            b"old licence"
+        );
+        assert_eq!(
+            mp_os::fs::read(dir.join("sitl-wasm/arducopter.wasm")).unwrap(),
+            b"old wasm"
+        );
         assert!(!dir.join("planner.old").os_exists());
         assert!(!dir.join("sitl-wasm/arduplane.wasm").os_exists());
         assert!(!dir.join(WORK).os_exists());
@@ -390,17 +425,45 @@ mod tests {
         )
         .unwrap();
         assert_eq!(done, Installed { files: 4, old: 3 });
-        assert_eq!(mp_os::fs::read(dir.join("planner")).unwrap(), planner_saying("0.0.2"));
-        assert_eq!(mp_os::fs::read(dir.join("LICENSE")).unwrap(), b"new licence");
-        assert_eq!(mp_os::fs::read(dir.join("sitl-wasm/arducopter.wasm")).unwrap(), b"new wasm");
-        assert_eq!(mp_os::fs::read(dir.join("sitl-wasm/arduplane.wasm")).unwrap(), b"a new file");
+        assert_eq!(
+            mp_os::fs::read(dir.join("planner")).unwrap(),
+            planner_saying("0.0.2")
+        );
+        assert_eq!(
+            mp_os::fs::read(dir.join("LICENSE")).unwrap(),
+            b"new licence"
+        );
+        assert_eq!(
+            mp_os::fs::read(dir.join("sitl-wasm/arducopter.wasm")).unwrap(),
+            b"new wasm"
+        );
+        assert_eq!(
+            mp_os::fs::read(dir.join("sitl-wasm/arduplane.wasm")).unwrap(),
+            b"a new file"
+        );
         // The old ones beside them, listed; the work folder gone.
-        assert_eq!(mp_os::fs::read(dir.join("planner.old")).unwrap(), b"the old planner");
-        assert_eq!(mp_os::fs::read(dir.join("sitl-wasm/arducopter.wasm.old")).unwrap(), b"old wasm");
-        let mut listed: Vec<String> =
-            mp_os::fs::read_to_string(dir.join(OLD_LIST)).unwrap().lines().map(str::to_owned).collect();
+        assert_eq!(
+            mp_os::fs::read(dir.join("planner.old")).unwrap(),
+            b"the old planner"
+        );
+        assert_eq!(
+            mp_os::fs::read(dir.join("sitl-wasm/arducopter.wasm.old")).unwrap(),
+            b"old wasm"
+        );
+        let mut listed: Vec<String> = mp_os::fs::read_to_string(dir.join(OLD_LIST))
+            .unwrap()
+            .lines()
+            .map(str::to_owned)
+            .collect();
         listed.sort();
-        assert_eq!(listed, ["LICENSE.old", "planner.old", "sitl-wasm/arducopter.wasm.old"]);
+        assert_eq!(
+            listed,
+            [
+                "LICENSE.old",
+                "planner.old",
+                "sitl-wasm/arducopter.wasm.old"
+            ]
+        );
         assert!(!dir.join(WORK).os_exists());
         assert_eq!(said.first().unwrap(), "Checking the install directory");
         assert_eq!(said.last().unwrap(), "Installing");
@@ -411,7 +474,10 @@ mod tests {
         assert!(!dir.join("planner.old").os_exists());
         assert!(!dir.join("sitl-wasm/arducopter.wasm.old").os_exists());
         assert!(!dir.join(OLD_LIST).os_exists());
-        assert_eq!(mp_os::fs::read(dir.join("notes.old")).unwrap(), b"the user's own");
+        assert_eq!(
+            mp_os::fs::read(dir.join("notes.old")).unwrap(),
+            b"the user's own"
+        );
         assert_eq!(cleanup(&dir), 0);
         let _ = mp_os::fs::remove_dir_all(&dir);
     }
@@ -428,12 +494,25 @@ mod tests {
                    program: &str,
                    try_it: &dyn Fn(&Path, &Manifest) -> Result<(), String>,
                    cancel: &dyn Fn() -> bool| {
-            install(&server, manifest, platform, &dir, program, try_it, &mut |_, _| {}, cancel).unwrap_err()
+            install(
+                &server,
+                manifest,
+                platform,
+                &dir,
+                program,
+                try_it,
+                &mut |_, _| {},
+                cancel,
+            )
+            .unwrap_err()
         };
 
         // A download that is not the manifest's.
         let mut other = manifest.clone();
-        other.assets.insert("linux-x86_64".to_owned(), asset_of(NAME, URL, b"something else"));
+        other.assets.insert(
+            "linux-x86_64".to_owned(),
+            asset_of(NAME, URL, b"something else"),
+        );
         assert_eq!(
             run(&other, "linux-x86_64", "planner", &passes, &|| false),
             format!("File downloaded does not match hash: {NAME}")
@@ -451,14 +530,19 @@ mod tests {
         );
         untouched(&dir);
         // The new planner refused by its trial.
-        let refuses = |_: &Path, _: &Manifest| Err("the new planner does not start on this computer".to_owned());
+        let refuses = |_: &Path, _: &Manifest| {
+            Err("the new planner does not start on this computer".to_owned())
+        };
         assert_eq!(
             run(&manifest, "linux-x86_64", "planner", &refuses, &|| false),
             "the new planner does not start on this computer"
         );
         untouched(&dir);
         // Cancel.
-        assert_eq!(run(&manifest, "linux-x86_64", "planner", &passes, &|| true), USER_REQUEST);
+        assert_eq!(
+            run(&manifest, "linux-x86_64", "planner", &passes, &|| true),
+            USER_REQUEST
+        );
         untouched(&dir);
         // And a directory that cannot be written.
         let error = install(
@@ -491,15 +575,31 @@ mod tests {
         assert_eq!(trial(&planner, &manifest), Ok(()));
         // Another release than the manifest's, by its version and by its commit.
         write(&planner_saying("0.0.1"));
-        assert!(trial(&planner, &manifest).unwrap_err().starts_with("the download is not release v0_0_2"));
+        assert!(
+            trial(&planner, &manifest)
+                .unwrap_err()
+                .starts_with("the download is not release v0_0_2")
+        );
         write(b"#!/bin/sh\necho 'planner 0.0.2 (stable, commit 000000000000)'\n");
-        assert!(trial(&planner, &manifest).unwrap_err().starts_with("the download is not release v0_0_2"));
+        assert!(
+            trial(&planner, &manifest)
+                .unwrap_err()
+                .starts_with("the download is not release v0_0_2")
+        );
         // One that fails, and one that is no program at all.
         write(b"#!/bin/sh\nexit 3\n");
-        assert!(trial(&planner, &manifest).unwrap_err().starts_with("the new planner does not start"));
+        assert!(
+            trial(&planner, &manifest)
+                .unwrap_err()
+                .starts_with("the new planner does not start")
+        );
         mp_os::fs::write(&planner, b"not a program").unwrap();
         mp_os::fs::set_permissions(&planner, mp_os::fs::Permissions::from_mode(0o644)).unwrap();
-        assert!(trial(&planner, &manifest).unwrap_err().starts_with("the new planner does not start"));
+        assert!(
+            trial(&planner, &manifest)
+                .unwrap_err()
+                .starts_with("the new planner does not start")
+        );
         let _ = mp_os::fs::remove_dir_all(&dir);
     }
 
@@ -512,11 +612,24 @@ mod tests {
         mp_os::fs::write(staged.join("planner"), b"the new planner").unwrap();
         mp_os::fs::write(staged.join("LICENSE"), b"new licence").unwrap();
         // The third file is not there to be moved: the two before it go back.
-        let files = [PathBuf::from("planner"), PathBuf::from("LICENSE"), PathBuf::from("sitl-wasm/arducopter.wasm")];
+        let files = [
+            PathBuf::from("planner"),
+            PathBuf::from("LICENSE"),
+            PathBuf::from("sitl-wasm/arducopter.wasm"),
+        ];
         assert!(swap(&staged, &files, &dir).is_err());
-        assert_eq!(mp_os::fs::read(dir.join("planner")).unwrap(), b"the old planner");
-        assert_eq!(mp_os::fs::read(dir.join("LICENSE")).unwrap(), b"old licence");
-        assert_eq!(mp_os::fs::read(dir.join("sitl-wasm/arducopter.wasm")).unwrap(), b"old wasm");
+        assert_eq!(
+            mp_os::fs::read(dir.join("planner")).unwrap(),
+            b"the old planner"
+        );
+        assert_eq!(
+            mp_os::fs::read(dir.join("LICENSE")).unwrap(),
+            b"old licence"
+        );
+        assert_eq!(
+            mp_os::fs::read(dir.join("sitl-wasm/arducopter.wasm")).unwrap(),
+            b"old wasm"
+        );
         assert!(!dir.join("planner.old").os_exists());
         assert!(!dir.join("LICENSE.old").os_exists());
         assert!(!dir.join("sitl-wasm/arducopter.wasm.old").os_exists());
@@ -529,19 +642,28 @@ mod tests {
         installed(&dir);
         mp_os::fs::write(dir.join("planner.old"), b"old").unwrap();
         mp_os::fs::write(dir.join("planner"), b"kept").unwrap();
-        let outside = dir.parent().unwrap().join(format!("mp-update-outside-{}.old", mp_os::process_id()));
+        let outside = dir
+            .parent()
+            .unwrap()
+            .join(format!("mp-update-outside-{}.old", mp_os::process_id()));
         mp_os::fs::write(&outside, b"not ours").unwrap();
         mp_os::fs::create_dir_all(dir.join(WORK).join("staged")).unwrap();
         mp_os::fs::write(
             dir.join(OLD_LIST),
-            format!("planner.old\nplanner\n../{}\n/etc/passwd.old\ngone.old\n", outside.file_name().unwrap().to_string_lossy()),
+            format!(
+                "planner.old\nplanner\n../{}\n/etc/passwd.old\ngone.old\n",
+                outside.file_name().unwrap().to_string_lossy()
+            ),
         )
         .unwrap();
         assert_eq!(cleanup(&dir), 1);
         assert!(!dir.join("planner.old").os_exists());
         assert_eq!(mp_os::fs::read(dir.join("planner")).unwrap(), b"kept");
         assert_eq!(mp_os::fs::read(&outside).unwrap(), b"not ours");
-        assert_eq!(mp_os::fs::read(dir.join("notes.old")).unwrap(), b"the user's own");
+        assert_eq!(
+            mp_os::fs::read(dir.join("notes.old")).unwrap(),
+            b"the user's own"
+        );
         assert!(!dir.join(WORK).os_exists());
         assert!(!dir.join(OLD_LIST).os_exists());
         let _ = mp_os::fs::remove_file(&outside);
@@ -558,7 +680,10 @@ mod tests {
         let package = fetch_deb(&server, &manifest, &dir, &mut |_, _| {}, &|| false).unwrap();
         assert_eq!(package, dir.join("missionplanner-rust_0.0.2_amd64.deb"));
         assert_eq!(mp_os::fs::read(&package).unwrap(), bytes);
-        assert!(!dir.join("missionplanner-rust_0.0.2_amd64.deb.part").os_exists());
+        assert!(
+            !dir.join("missionplanner-rust_0.0.2_amd64.deb.part")
+                .os_exists()
+        );
         // Not the manifest's bytes: nothing kept.
         let _ = mp_os::fs::remove_file(&package);
         let wrong = release(DEB, "missionplanner-rust_0.0.2_amd64.deb", url, b"other");
@@ -566,16 +691,24 @@ mod tests {
         assert!(!package.os_exists());
 
         assert_eq!(
-            deb_command(Path::new("/home/buzz/Downloads/missionplanner-rust_0.0.2_amd64.deb")),
+            deb_command(Path::new(
+                "/home/buzz/Downloads/missionplanner-rust_0.0.2_amd64.deb"
+            )),
             "sudo apt install /home/buzz/Downloads/missionplanner-rust_0.0.2_amd64.deb"
         );
         assert_eq!(
             deb_command(Path::new("/home/a b/it's.deb")),
             "sudo apt install '/home/a b/it'\\''s.deb'"
         );
-        assert_eq!(install_kind(Path::new("/home/buzz/planner/planner")), InstallKind::Archive);
+        assert_eq!(
+            install_kind(Path::new("/home/buzz/planner/planner")),
+            InstallKind::Archive
+        );
         if cfg!(target_os = "linux") {
-            assert_eq!(install_kind(Path::new("/usr/bin/planner")), InstallKind::Deb);
+            assert_eq!(
+                install_kind(Path::new("/usr/bin/planner")),
+                InstallKind::Deb
+            );
         }
         let _ = mp_os::fs::remove_dir_all(&dir);
     }

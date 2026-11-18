@@ -122,8 +122,8 @@ impl Manifest {
     /// wrong kind, an address that is neither https nor this machine, a file name with a path in
     /// it, a hash that is not sixty-four hexadecimal digits.
     pub fn parse(bytes: &[u8]) -> Result<Self, String> {
-        let value: serde_json::Value =
-            serde_json::from_slice(bytes).map_err(|why| format!("the update manifest is not JSON: {why}"))?;
+        let value: serde_json::Value = serde_json::from_slice(bytes)
+            .map_err(|why| format!("the update manifest is not JSON: {why}"))?;
         let text = |name: &str| -> Result<String, String> {
             value
                 .get(name)
@@ -142,11 +142,14 @@ impl Manifest {
             None => return Err("the update manifest has no schema".to_owned()),
         }
         let channel = text("channel")?;
-        let channel = Channel::parse(&channel)
-            .ok_or_else(|| format!("the update manifest names no channel this planner has: {channel:?}"))?;
+        let channel = Channel::parse(&channel).ok_or_else(|| {
+            format!("the update manifest names no channel this planner has: {channel:?}")
+        })?;
         let notes_url = text("notes_url")?;
         if !allowed_url(&notes_url) {
-            return Err(format!("the update manifest's notes_url is not https: {notes_url}"));
+            return Err(format!(
+                "the update manifest's notes_url is not https: {notes_url}"
+            ));
         }
         let listed = value
             .get("assets")
@@ -243,11 +246,15 @@ fn asset(platform: &str, entry: &serde_json::Value) -> Result<Asset, String> {
     };
     let name = text("name")?;
     if name.contains(['/', '\\']) || name.starts_with('.') {
-        return Err(format!("the update manifest's {platform} names a path, not a file: {name}"));
+        return Err(format!(
+            "the update manifest's {platform} names a path, not a file: {name}"
+        ));
     }
     let url = text("url")?;
     if !allowed_url(&url) {
-        return Err(format!("the update manifest's {platform} is not fetched over https: {url}"));
+        return Err(format!(
+            "the update manifest's {platform} is not fetched over https: {url}"
+        ));
     }
     let size = entry
         .get("size")
@@ -255,8 +262,14 @@ fn asset(platform: &str, entry: &serde_json::Value) -> Result<Asset, String> {
         .filter(|size| *size > 0)
         .ok_or_else(|| format!("the update manifest's {platform} has no size"))?;
     let sha256 = text("sha256")?;
-    if sha256.len() != 64 || !sha256.bytes().all(|b| matches!(b, b'0'..=b'9' | b'a'..=b'f')) {
-        return Err(format!("the update manifest's {platform} has no SHA-256: {sha256}"));
+    if sha256.len() != 64
+        || !sha256
+            .bytes()
+            .all(|b| matches!(b, b'0'..=b'9' | b'a'..=b'f'))
+    {
+        return Err(format!(
+            "the update manifest's {platform} has no SHA-256: {sha256}"
+        ));
     }
     Ok(Asset {
         name,
@@ -309,7 +322,8 @@ pub(crate) mod tests {
     #[test]
     fn a_manifest_reads_field_by_field() {
         let manifest =
-            Manifest::parse(text("stable", "0.0.2", COMMIT, "2026-11-20T03:10:00Z").as_bytes()).unwrap();
+            Manifest::parse(text("stable", "0.0.2", COMMIT, "2026-11-20T03:10:00Z").as_bytes())
+                .unwrap();
         assert_eq!(manifest.channel, Channel::Stable);
         assert_eq!(manifest.version.to_string(), "0.0.2");
         assert_eq!(manifest.tag, "v0_0_2");
@@ -318,7 +332,10 @@ pub(crate) mod tests {
         assert_eq!(linux.name, "missionplanner-rust_0_0_2_linux-x86_64.tar.gz");
         assert_eq!(linux.size, 58_623_651);
         assert_eq!(linux.sha256, HASH);
-        assert_eq!(manifest.asset(DEB).unwrap().name, "missionplanner-rust_0.0.2_amd64.deb");
+        assert_eq!(
+            manifest.asset(DEB).unwrap().name,
+            "missionplanner-rust_0.0.2_amd64.deb"
+        );
         assert_eq!(
             manifest.asset("windows-x86_64").unwrap_err(),
             "release v0_0_2 has no download for windows-x86_64"
@@ -328,24 +345,42 @@ pub(crate) mod tests {
     #[test]
     fn what_is_wrong_with_a_manifest_is_said_by_the_field() {
         let good = text("stable", "0.0.2", COMMIT, "2026-11-20T03:10:00Z");
-        let broken = |from: &str, to: &str| Manifest::parse(good.replacen(from, to, 1).as_bytes()).unwrap_err();
-        assert!(Manifest::parse(b"<html>").unwrap_err().starts_with("the update manifest is not JSON"));
+        let broken = |from: &str, to: &str| {
+            Manifest::parse(good.replacen(from, to, 1).as_bytes()).unwrap_err()
+        };
+        assert!(
+            Manifest::parse(b"<html>")
+                .unwrap_err()
+                .starts_with("the update manifest is not JSON")
+        );
         assert_eq!(
             broken("\"schema\": 1", "\"schema\": 2"),
             "the update manifest is of schema 2, which this planner does not read"
         );
-        assert_eq!(broken("\"schema\": 1,", ""), "the update manifest has no schema");
+        assert_eq!(
+            broken("\"schema\": 1,", ""),
+            "the update manifest has no schema"
+        );
         assert!(broken("\"stable\"", "\"master\"").contains("no channel this planner has"));
         assert!(broken("\"0.0.2\"", "\"next\"").starts_with("not a release version"));
-        assert_eq!(broken("\"commit\"", "\"comit\""), "the update manifest has no commit");
+        assert_eq!(
+            broken("\"commit\"", "\"comit\""),
+            "the update manifest has no commit"
+        );
         // Never over plain http from another machine, and never to a path.
         assert!(
-            broken("\"url\": \"https://github.com", "\"url\": \"http://example.com")
-                .contains("is not fetched over https")
+            broken(
+                "\"url\": \"https://github.com",
+                "\"url\": \"http://example.com"
+            )
+            .contains("is not fetched over https")
         );
         assert!(
-            broken("\"name\": \"missionplanner", "\"name\": \"../missionplanner")
-                .contains("names a path, not a file")
+            broken(
+                "\"name\": \"missionplanner",
+                "\"name\": \"../missionplanner"
+            )
+            .contains("names a path, not a file")
         );
         assert!(broken("58623651", "0").ends_with("has no size"));
         assert!(broken(HASH, "BA7816BF").contains("has no SHA-256"));
@@ -357,7 +392,8 @@ pub(crate) mod tests {
     #[test]
     fn stable_is_offered_by_its_version_and_beta_by_its_commit_and_day() {
         let stable =
-            Manifest::parse(text("stable", "0.0.2", COMMIT, "2026-11-20T03:10:00Z").as_bytes()).unwrap();
+            Manifest::parse(text("stable", "0.0.2", COMMIT, "2026-11-20T03:10:00Z").as_bytes())
+                .unwrap();
         assert!(stable.offers(&build("0.0.1", "stable", OTHER, "2026-10-06T11:00:00Z")));
         assert!(!stable.offers(&build("0.0.2", "stable", COMMIT, "2026-11-20T03:10:00Z")));
         assert!(!stable.offers(&build("0.0.3", "stable", OTHER, "2026-12-01T00:00:00Z")));
@@ -371,7 +407,8 @@ pub(crate) mod tests {
         );
 
         let beta =
-            Manifest::parse(text("beta", "0.0.2", COMMIT, "2026-11-25T02:00:00Z").as_bytes()).unwrap();
+            Manifest::parse(text("beta", "0.0.2", COMMIT, "2026-11-25T02:00:00Z").as_bytes())
+                .unwrap();
         assert!(beta.offers(&build("0.0.2", "beta", OTHER, "2026-11-24T02:00:00Z")));
         assert!(beta.offers(&build("0.0.2", "stable", OTHER, "2026-11-20T03:10:00Z")));
         // The same commit, or a build newer than the beta: nothing.
@@ -386,7 +423,10 @@ pub(crate) mod tests {
         // channel holds, even a release of its own version's number.
         let development = Identity::development("0.0.2");
         assert!(stable.offers(&development) && beta.offers(&development));
-        assert_eq!(stable.described_for(&development), "a development build to 0.0.2");
+        assert_eq!(
+            stable.described_for(&development),
+            "a development build to 0.0.2"
+        );
         assert_eq!(
             beta.described_for(&development),
             "a development build to 42992d086a78 built 2026-11-25"
@@ -405,7 +445,10 @@ pub(crate) mod tests {
             "https://github.com/davidbuzz/MissionPlannerRust/releases/download/beta/update.json"
         );
         let set = |key: &str| Some(format!("http://127.0.0.1:5793/{key}.json"));
-        assert_eq!(manifest_url(Channel::Beta, &set), "http://127.0.0.1:5793/BetaUpdateManifest.json");
+        assert_eq!(
+            manifest_url(Channel::Beta, &set),
+            "http://127.0.0.1:5793/BetaUpdateManifest.json"
+        );
         let blank = |_: &str| Some("  ".to_owned());
         assert!(manifest_url(Channel::Stable, &blank).starts_with("https://github.com/"));
     }

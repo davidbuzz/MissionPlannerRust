@@ -79,21 +79,33 @@ mod tests {
         let stable = text("stable", "0.0.2", COMMIT, "2026-11-20T03:10:00Z");
         let server = Server::with(&[(url, stable.as_bytes())]);
         let build = |version: &str| {
-            Identity::from_values(Some(version), Some(OTHER), Some("stable"), Some("2026-10-06T11:00:00Z"))
-                .unwrap()
+            Identity::from_values(
+                Some(version),
+                Some(OTHER),
+                Some("stable"),
+                Some("2026-10-06T11:00:00Z"),
+            )
+            .unwrap()
         };
         match check_for_update(&server, url, Channel::Stable, &build("0.0.1")).unwrap() {
             Check::UpdateFound(manifest) => assert_eq!(manifest.tag, "v0_0_2"),
             Check::UpToDate => panic!("0.0.2 is above 0.0.1"),
         }
-        assert_eq!(check_for_update(&server, url, Channel::Stable, &build("0.0.2")).unwrap(), Check::UpToDate);
+        assert_eq!(
+            check_for_update(&server, url, Channel::Stable, &build("0.0.2")).unwrap(),
+            Check::UpToDate
+        );
         // The beta button is never answered with the stable channel's release.
         assert_eq!(
             check_for_update(&server, url, Channel::Beta, &build("0.0.1")).unwrap_err(),
             "the manifest at https://x/update.json is the stable channel's, not the beta channel's"
         );
         // No answer, and an answer that is no manifest.
-        assert!(check_for_update(&server, "https://x/none", Channel::Stable, &build("0.0.1")).unwrap_err().contains("404"));
+        assert!(
+            check_for_update(&server, "https://x/none", Channel::Stable, &build("0.0.1"))
+                .unwrap_err()
+                .contains("404")
+        );
         let page = Server::with(&[(url, b"<html>Not Found</html>")]);
         assert!(
             check_for_update(&page, url, Channel::Stable, &build("0.0.1"))

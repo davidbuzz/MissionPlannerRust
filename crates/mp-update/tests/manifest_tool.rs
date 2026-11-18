@@ -39,10 +39,26 @@ const COMMIT: &str = "42992d086a789143682f2997adc737545e3d8c2e";
 const BUILT: &str = "2026-11-20T03:10:00Z";
 /// A release's downloads as `release.yml` names them, each with contents of its own.
 const DOWNLOADS: [(&str, &str, &[u8]); 4] = [
-    ("linux-x86_64", "missionplanner-rust_0_0_2_linux-x86_64.tar.gz", b"the linux archive"),
-    (DEB, "missionplanner-rust_0.0.2_amd64.deb", b"the debian package"),
-    ("windows-x86_64", "missionplanner-rust_0_0_2_windows-x86_64.zip", b"the windows zip"),
-    ("macos-universal", "missionplanner-rust_0_0_2_macos-universal.tar.gz", b"the macos archive"),
+    (
+        "linux-x86_64",
+        "missionplanner-rust_0_0_2_linux-x86_64.tar.gz",
+        b"the linux archive",
+    ),
+    (
+        DEB,
+        "missionplanner-rust_0.0.2_amd64.deb",
+        b"the debian package",
+    ),
+    (
+        "windows-x86_64",
+        "missionplanner-rust_0_0_2_windows-x86_64.zip",
+        b"the windows zip",
+    ),
+    (
+        "macos-universal",
+        "missionplanner-rust_0_0_2_macos-universal.tar.gz",
+        b"the macos archive",
+    ),
 ];
 
 fn scratch(test: &str) -> PathBuf {
@@ -73,8 +89,19 @@ fn tool(arguments: &[&str]) -> Output {
 fn write(dir: &Path, channel: &str, tag: &str, more: &[&str]) -> Output {
     let dir = dir.to_string_lossy();
     let mut arguments = vec![
-        "write", "--channel", channel, "--tag", tag, "--commit", COMMIT, "--built", BUILT,
-        "--repository", REPOSITORY, "--dir", &dir,
+        "write",
+        "--channel",
+        channel,
+        "--tag",
+        tag,
+        "--commit",
+        COMMIT,
+        "--built",
+        BUILT,
+        "--repository",
+        REPOSITORY,
+        "--dir",
+        &dir,
     ];
     arguments.extend_from_slice(more);
     tool(&arguments)
@@ -85,33 +112,64 @@ fn the_release_job_writes_a_manifest_the_planner_reads() {
     let dir = scratch("write");
     downloads_in(&dir);
     let output = write(&dir, "stable", "v0_0_2", &[]);
-    assert!(output.status.success(), "{}", String::from_utf8_lossy(&output.stderr));
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
     let bytes = std::fs::read(dir.join("update.json")).unwrap();
-    assert_eq!(output.stdout, bytes, "the manifest is printed as it is written");
+    assert_eq!(
+        output.stdout, bytes,
+        "the manifest is printed as it is written"
+    );
     let manifest = Manifest::parse(&bytes).unwrap();
     assert_eq!(manifest.channel, Channel::Stable);
-    assert_eq!(manifest.version.to_string(), "0.0.2", "the tag's own numbers");
+    assert_eq!(
+        manifest.version.to_string(),
+        "0.0.2",
+        "the tag's own numbers"
+    );
     assert_eq!(manifest.tag, "v0_0_2");
     assert_eq!(manifest.commit, COMMIT);
     assert_eq!(manifest.built, BUILT);
-    assert_eq!(manifest.notes_url, format!("{REPOSITORY}/releases/tag/v0_0_2"));
+    assert_eq!(
+        manifest.notes_url,
+        format!("{REPOSITORY}/releases/tag/v0_0_2")
+    );
     assert_eq!(manifest.assets.len(), 4);
     for (platform, name, contents) in DOWNLOADS {
         let asset = manifest.asset(platform).unwrap();
         assert_eq!(asset.name, name);
-        assert_eq!(asset.url, format!("{REPOSITORY}/releases/download/v0_0_2/{name}"));
+        assert_eq!(
+            asset.url,
+            format!("{REPOSITORY}/releases/download/v0_0_2/{name}")
+        );
         assert_eq!(asset.size, contents.len() as u64);
         assert_eq!(asset.sha256, sha256_hex(contents));
     }
 
     // The beta: its tag is no version, so the workflow says which release it follows.
     let out = dir.join("beta.json");
-    let output = write(&dir, "beta", "beta", &["--version", "0.0.2", "--out", &out.to_string_lossy()]);
-    assert!(output.status.success(), "{}", String::from_utf8_lossy(&output.stderr));
+    let output = write(
+        &dir,
+        "beta",
+        "beta",
+        &["--version", "0.0.2", "--out", &out.to_string_lossy()],
+    );
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
     let beta = Manifest::parse(&std::fs::read(&out).unwrap()).unwrap();
     assert_eq!((beta.channel, beta.tag.as_str()), (Channel::Beta, "beta"));
     assert_eq!(beta.version.to_string(), "0.0.2");
-    assert!(beta.asset(DEB).unwrap().url.starts_with(&format!("{REPOSITORY}/releases/download/beta/")));
+    assert!(
+        beta.asset(DEB)
+            .unwrap()
+            .url
+            .starts_with(&format!("{REPOSITORY}/releases/download/beta/"))
+    );
     let output = write(&dir, "beta", "beta", &[]);
     assert!(!output.status.success());
     assert!(String::from_utf8_lossy(&output.stderr).contains("is not a release tag"));
@@ -122,13 +180,22 @@ fn the_release_job_writes_a_manifest_the_planner_reads() {
     let output = write(&dir, "stable", "v0_0_2", &[]);
     assert!(!output.status.success());
     let said = String::from_utf8_lossy(&output.stderr).into_owned();
-    assert!(said.contains("holds 0 downloads for windows-x86_64"), "{said}");
+    assert!(
+        said.contains("holds 0 downloads for windows-x86_64"),
+        "{said}"
+    );
     assert!(!dir.join("update.json").exists());
     std::fs::rename(dir.join("elsewhere.bin"), dir.join(DOWNLOADS[2].1)).unwrap();
-    std::fs::write(dir.join("missionplanner-rust_0_0_1_windows-x86_64.zip"), b"an older one").unwrap();
+    std::fs::write(
+        dir.join("missionplanner-rust_0_0_1_windows-x86_64.zip"),
+        b"an older one",
+    )
+    .unwrap();
     let output = write(&dir, "stable", "v0_0_2", &[]);
     assert!(!output.status.success());
-    assert!(String::from_utf8_lossy(&output.stderr).contains("holds 2 downloads for windows-x86_64"));
+    assert!(
+        String::from_utf8_lossy(&output.stderr).contains("holds 2 downloads for windows-x86_64")
+    );
     let _ = std::fs::remove_dir_all(&dir);
 }
 
@@ -143,15 +210,39 @@ fn the_release_job_checks_what_it_published() {
     let release_text = release.to_string_lossy();
     let manifest_text = manifest.to_string_lossy();
     let output = tool(&[
-        "write", "--channel", "stable", "--tag", "v0_0_2", "--commit", COMMIT, "--built", BUILT,
-        "--repository", &repository, "--dir", &release_text, "--out", &manifest_text,
+        "write",
+        "--channel",
+        "stable",
+        "--tag",
+        "v0_0_2",
+        "--commit",
+        COMMIT,
+        "--built",
+        BUILT,
+        "--repository",
+        &repository,
+        "--dir",
+        &release_text,
+        "--out",
+        &manifest_text,
     ]);
-    assert!(output.status.success(), "{}", String::from_utf8_lossy(&output.stderr));
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
 
     let output = tool(&["verify", &manifest_text]);
     let said = String::from_utf8_lossy(&output.stdout).into_owned();
-    assert!(output.status.success(), "{said}{}", String::from_utf8_lossy(&output.stderr));
-    assert!(said.starts_with("stable 0.0.2 (v0_0_2, 42992d086a78, built 2026-11-20T03:10:00Z)"), "{said}");
+    assert!(
+        output.status.success(),
+        "{said}{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert!(
+        said.starts_with("stable 0.0.2 (v0_0_2, 42992d086a78, built 2026-11-20T03:10:00Z)"),
+        "{said}"
+    );
     assert_eq!(said.matches("  ok   ").count(), 4, "{said}");
 
     // One download changed after the manifest was written, and one gone.
@@ -160,7 +251,12 @@ fn the_release_job_checks_what_it_published() {
     let output = tool(&["verify", &manifest_text]);
     let said = String::from_utf8_lossy(&output.stdout).into_owned();
     assert!(!output.status.success(), "{said}");
-    assert!(said.contains("  FAIL linux-x86_64: missionplanner-rust_0_0_2_linux-x86_64.tar.gz is 21 bytes"), "{said}");
+    assert!(
+        said.contains(
+            "  FAIL linux-x86_64: missionplanner-rust_0_0_2_linux-x86_64.tar.gz is 21 bytes"
+        ),
+        "{said}"
+    );
     assert!(said.contains("  FAIL macos-universal: "), "{said}");
     assert_eq!(said.matches("  ok   ").count(), 2, "{said}");
     let _ = std::fs::remove_dir_all(&root);
@@ -179,7 +275,10 @@ fn a_tag_is_a_stable_release_and_a_run_by_hand_is_no_release() {
             .envs(environment.iter().copied())
             .output()
             .expect("bash");
-        (output.status.success(), String::from_utf8_lossy(&output.stdout).into_owned())
+        (
+            output.status.success(),
+            String::from_utf8_lossy(&output.stdout).into_owned(),
+        )
     };
     let answer = |said: &str, name: &str| {
         said.lines()
@@ -190,11 +289,19 @@ fn a_tag_is_a_stable_release_and_a_run_by_hand_is_no_release() {
 
     // A release tag: the stable channel, its numbers with points for the version and the Debian
     // package, its own form for the downloads' names.
-    let (ok, said) = run(&[("GITHUB_REF_TYPE", "tag"), ("GITHUB_REF_NAME", "v0_0_2"), ("GITHUB_SHA", COMMIT)]);
+    let (ok, said) = run(&[
+        ("GITHUB_REF_TYPE", "tag"),
+        ("GITHUB_REF_NAME", "v0_0_2"),
+        ("GITHUB_SHA", COMMIT),
+    ]);
     assert!(ok, "{said}");
     for (name, value) in [
-        ("build", "true"), ("channel", "stable"), ("version", "0.0.2"), ("label", "0_0_2"),
-        ("deb", "0.0.2"), ("tag", "v0_0_2"),
+        ("build", "true"),
+        ("channel", "stable"),
+        ("version", "0.0.2"),
+        ("label", "0_0_2"),
+        ("deb", "0.0.2"),
+        ("tag", "v0_0_2"),
     ] {
         assert_eq!(answer(&said, name), value, "{name}");
     }
@@ -211,7 +318,9 @@ fn a_tag_is_a_stable_release_and_a_run_by_hand_is_no_release() {
 
     // A run by hand with no channel: built, and no release - a development build.
     let (ok, said) = run(&[
-        ("GITHUB_REF_TYPE", "branch"), ("GITHUB_EVENT_NAME", "workflow_dispatch"), ("WANTED", "none"),
+        ("GITHUB_REF_TYPE", "branch"),
+        ("GITHUB_EVENT_NAME", "workflow_dispatch"),
+        ("WANTED", "none"),
         ("GITHUB_SHA", COMMIT),
     ]);
     assert!(ok, "{said}");
@@ -228,6 +337,10 @@ fn a_tag_is_a_stable_release_and_a_run_by_hand_is_no_release() {
     );
 
     // A tag that is no release.
-    let (ok, _) = run(&[("GITHUB_REF_TYPE", "tag"), ("GITHUB_REF_NAME", "vnext"), ("GITHUB_SHA", COMMIT)]);
+    let (ok, _) = run(&[
+        ("GITHUB_REF_TYPE", "tag"),
+        ("GITHUB_REF_NAME", "vnext"),
+        ("GITHUB_SHA", COMMIT),
+    ]);
     assert!(!ok);
 }

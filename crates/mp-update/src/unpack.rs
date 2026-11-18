@@ -57,7 +57,12 @@ fn place(name: &str) -> Result<Option<PathBuf>, String> {
 }
 
 /// One file written under the staging folder, its folders made first.
-fn write(into: &Path, relative: &Path, data: &mut dyn std::io::Read, mode: Option<u32>) -> Result<(), String> {
+fn write(
+    into: &Path,
+    relative: &Path,
+    data: &mut dyn std::io::Read,
+    mode: Option<u32>,
+) -> Result<(), String> {
     let target = into.join(relative);
     let failed = |why: std::io::Error| format!("{}: {why}", target.display());
     if let Some(parent) = target.parent() {
@@ -69,7 +74,8 @@ fn write(into: &Path, relative: &Path, data: &mut dyn std::io::Read, mode: Optio
     #[cfg(unix)]
     if let Some(mode) = mode {
         use std::os::unix::fs::PermissionsExt as _;
-        mp_os::fs::set_permissions(&target, mp_os::fs::Permissions::from_mode(mode & 0o777)).map_err(failed)?;
+        mp_os::fs::set_permissions(&target, mp_os::fs::Permissions::from_mode(mode & 0o777))
+            .map_err(failed)?;
     }
     #[cfg(not(unix))]
     let _ = mode;
@@ -91,7 +97,10 @@ pub fn unpack(archive: &Path, into: &Path) -> Result<Vec<PathBuf>, String> {
     } else if name.ends_with(".zip") {
         unpack_zip(archive, into)?
     } else {
-        return Err(format!("not an archive this planner unpacks: {}", archive.display()));
+        return Err(format!(
+            "not an archive this planner unpacks: {}",
+            archive.display()
+        ));
     };
     if files.is_empty() {
         return Err(format!("the archive holds no files: {}", archive.display()));
@@ -106,14 +115,20 @@ fn unpack_tar_gz(archive: &Path, into: &Path) -> Result<Vec<PathBuf>, String> {
     let mut files = Vec::new();
     for entry in tar.entries().map_err(damaged)? {
         let mut entry = entry.map_err(damaged)?;
-        let name = entry.path().map_err(damaged)?.to_string_lossy().into_owned();
+        let name = entry
+            .path()
+            .map_err(damaged)?
+            .to_string_lossy()
+            .into_owned();
         let kind = entry.header().entry_type();
         if kind == tar::EntryType::Directory {
             place(&name)?;
             continue;
         }
         if !matches!(kind, tar::EntryType::Regular | tar::EntryType::Continuous) {
-            return Err(format!("the archive holds something that is not a file: {name}"));
+            return Err(format!(
+                "the archive holds something that is not a file: {name}"
+            ));
         }
         let Some(relative) = place(&name)? else {
             continue;
@@ -127,7 +142,8 @@ fn unpack_tar_gz(archive: &Path, into: &Path) -> Result<Vec<PathBuf>, String> {
 
 fn unpack_zip(archive: &Path, into: &Path) -> Result<Vec<PathBuf>, String> {
     let bytes = mp_os::fs::read(archive).map_err(|why| format!("{}: {why}", archive.display()))?;
-    let entries = mp_log::zip::read(&bytes).map_err(|why| format!("{}: {why}", archive.display()))?;
+    let entries =
+        mp_log::zip::read(&bytes).map_err(|why| format!("{}: {why}", archive.display()))?;
     let mut files = Vec::new();
     for entry in entries {
         // Windows' own archiver writes its separators as it finds them.
@@ -153,8 +169,10 @@ pub(crate) mod tests {
 
     /// A `.tar.gz` of those entries: a path, its bytes and its mode.
     pub(crate) fn tar_gz(entries: &[(&str, &[u8], u32)]) -> Vec<u8> {
-        let mut builder =
-            tar::Builder::new(flate2::write::GzEncoder::new(Vec::new(), flate2::Compression::fast()));
+        let mut builder = tar::Builder::new(flate2::write::GzEncoder::new(
+            Vec::new(),
+            flate2::Compression::fast(),
+        ));
         for (path, bytes, mode) in entries {
             let mut header = tar::Header::new_gnu();
             header.set_size(bytes.len() as u64);
@@ -172,10 +190,26 @@ pub(crate) mod tests {
         mp_os::fs::write(
             &archive,
             tar_gz(&[
-                ("missionplanner-rust_0_0_2_linux-x86_64/planner", b"the planner", 0o755),
-                ("missionplanner-rust_0_0_2_linux-x86_64/LICENSE", b"GPL", 0o644),
-                ("missionplanner-rust_0_0_2_linux-x86_64/sitl-wasm/arducopter.wasm", b"wasm", 0o644),
-                ("missionplanner-rust_0_0_2_linux-x86_64/._planner", b"a note of macOS's tar", 0o644),
+                (
+                    "missionplanner-rust_0_0_2_linux-x86_64/planner",
+                    b"the planner",
+                    0o755,
+                ),
+                (
+                    "missionplanner-rust_0_0_2_linux-x86_64/LICENSE",
+                    b"GPL",
+                    0o644,
+                ),
+                (
+                    "missionplanner-rust_0_0_2_linux-x86_64/sitl-wasm/arducopter.wasm",
+                    b"wasm",
+                    0o644,
+                ),
+                (
+                    "missionplanner-rust_0_0_2_linux-x86_64/._planner",
+                    b"a note of macOS's tar",
+                    0o644,
+                ),
             ]),
         )
         .unwrap();
@@ -184,14 +218,30 @@ pub(crate) mod tests {
         files.sort();
         assert_eq!(
             files,
-            [PathBuf::from("LICENSE"), PathBuf::from("planner"), PathBuf::from("sitl-wasm/arducopter.wasm")]
+            [
+                PathBuf::from("LICENSE"),
+                PathBuf::from("planner"),
+                PathBuf::from("sitl-wasm/arducopter.wasm")
+            ]
         );
-        assert_eq!(mp_os::fs::read(staged.join("planner")).unwrap(), b"the planner");
-        assert_eq!(mp_os::fs::read(staged.join("sitl-wasm/arducopter.wasm")).unwrap(), b"wasm");
+        assert_eq!(
+            mp_os::fs::read(staged.join("planner")).unwrap(),
+            b"the planner"
+        );
+        assert_eq!(
+            mp_os::fs::read(staged.join("sitl-wasm/arducopter.wasm")).unwrap(),
+            b"wasm"
+        );
         #[cfg(unix)]
         {
             use std::os::unix::fs::PermissionsExt as _;
-            let mode = |name: &str| mp_os::fs::metadata(staged.join(name)).unwrap().permissions().mode() & 0o777;
+            let mode = |name: &str| {
+                mp_os::fs::metadata(staged.join(name))
+                    .unwrap()
+                    .permissions()
+                    .mode()
+                    & 0o777
+            };
             assert_eq!((mode("planner"), mode("LICENSE")), (0o755, 0o644));
         }
         let _ = mp_os::fs::remove_dir_all(&dir);
@@ -201,21 +251,43 @@ pub(crate) mod tests {
     fn the_windows_zip_is_staged_the_same_way() {
         let dir = scratch("unpack-zip");
         let archive = dir.join("missionplanner-rust_0_0_2_windows-x86_64.zip");
-        let entry = |name: &str, data: &[u8]| mp_log::zip::Entry { name: name.to_owned(), data: data.to_vec() };
+        let entry = |name: &str, data: &[u8]| mp_log::zip::Entry {
+            name: name.to_owned(),
+            data: data.to_vec(),
+        };
         let bytes = mp_log::zip::write(
             &[
                 entry("missionplanner-rust_0_0_2_windows-x86_64/", b""),
-                entry("missionplanner-rust_0_0_2_windows-x86_64\\planner.exe", b"MZ"),
-                entry("missionplanner-rust_0_0_2_windows-x86_64/sitl-wasm/bridge.mjs", b"js"),
+                entry(
+                    "missionplanner-rust_0_0_2_windows-x86_64\\planner.exe",
+                    b"MZ",
+                ),
+                entry(
+                    "missionplanner-rust_0_0_2_windows-x86_64/sitl-wasm/bridge.mjs",
+                    b"js",
+                ),
             ],
-            mp_log::zip::DosTime { year: 2026, month: 11, day: 18, hour: 0, minute: 0, second: 0 },
+            mp_log::zip::DosTime {
+                year: 2026,
+                month: 11,
+                day: 18,
+                hour: 0,
+                minute: 0,
+                second: 0,
+            },
         )
         .unwrap();
         mp_os::fs::write(&archive, bytes).unwrap();
         let staged = dir.join("staged");
         let mut files = unpack(&archive, &staged).unwrap();
         files.sort();
-        assert_eq!(files, [PathBuf::from("planner.exe"), PathBuf::from("sitl-wasm/bridge.mjs")]);
+        assert_eq!(
+            files,
+            [
+                PathBuf::from("planner.exe"),
+                PathBuf::from("sitl-wasm/bridge.mjs")
+            ]
+        );
         assert_eq!(mp_os::fs::read(staged.join("planner.exe")).unwrap(), b"MZ");
         let _ = mp_os::fs::remove_dir_all(&dir);
     }
@@ -232,12 +304,17 @@ pub(crate) mod tests {
             header.set_size(4);
             header.set_mode(0o644);
             header.set_cksum();
-            let mut builder =
-                tar::Builder::new(flate2::write::GzEncoder::new(Vec::new(), flate2::Compression::fast()));
+            let mut builder = tar::Builder::new(flate2::write::GzEncoder::new(
+                Vec::new(),
+                flate2::Compression::fast(),
+            ));
             builder.append(&header, &b"evil"[..]).unwrap();
             mp_os::fs::write(&archive, builder.into_inner().unwrap().finish().unwrap()).unwrap();
             let error = unpack(&archive, &staged).unwrap_err();
-            assert!(error.starts_with("the archive holds a path outside itself"), "{error}");
+            assert!(
+                error.starts_with("the archive holds a path outside itself"),
+                "{error}"
+            );
         }
         assert!(!dir.join("escaped").os_exists());
         assert!(!dir.parent().unwrap().join("escaped").os_exists());
@@ -248,9 +325,13 @@ pub(crate) mod tests {
         header.set_entry_type(tar::EntryType::Symlink);
         header.set_size(0);
         header.set_cksum();
-        let mut builder =
-            tar::Builder::new(flate2::write::GzEncoder::new(Vec::new(), flate2::Compression::fast()));
-        builder.append_link(&mut header, "release/planner", "/bin/sh").unwrap();
+        let mut builder = tar::Builder::new(flate2::write::GzEncoder::new(
+            Vec::new(),
+            flate2::Compression::fast(),
+        ));
+        builder
+            .append_link(&mut header, "release/planner", "/bin/sh")
+            .unwrap();
         mp_os::fs::write(&archive, builder.into_inner().unwrap().finish().unwrap()).unwrap();
         assert_eq!(
             unpack(&archive, &staged).unwrap_err(),
@@ -258,10 +339,18 @@ pub(crate) mod tests {
         );
 
         // Neither kind of archive, and an archive of nothing.
-        assert!(unpack(&dir.join("planner.deb"), &staged).unwrap_err().starts_with("not an archive"));
+        assert!(
+            unpack(&dir.join("planner.deb"), &staged)
+                .unwrap_err()
+                .starts_with("not an archive")
+        );
         let empty = dir.join("empty.tar.gz");
         mp_os::fs::write(&empty, tar_gz(&[])).unwrap();
-        assert!(unpack(&empty, &staged).unwrap_err().starts_with("the archive holds no files"));
+        assert!(
+            unpack(&empty, &staged)
+                .unwrap_err()
+                .starts_with("the archive holds no files")
+        );
         let _ = mp_os::fs::remove_dir_all(&dir);
     }
 }

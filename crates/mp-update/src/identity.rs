@@ -105,7 +105,8 @@ impl Identity {
     #[must_use]
     pub fn development(package_version: &str) -> Self {
         Self {
-            version: ReleaseVersion::parse(package_version).unwrap_or_else(|_| ReleaseVersion::zero()),
+            version: ReleaseVersion::parse(package_version)
+                .unwrap_or_else(|_| ReleaseVersion::zero()),
             commit: "development".to_owned(),
             channel: Channel::Stable,
             built: String::new(),
@@ -180,9 +181,13 @@ mod tests {
 
     #[test]
     fn a_build_with_its_three_values_is_a_release_and_any_other_a_development_build() {
-        let identity =
-            Identity::from_values(Some("0.0.2"), Some(COMMIT), Some("stable"), Some("2026-11-20T03:10:00Z"))
-                .unwrap();
+        let identity = Identity::from_values(
+            Some("0.0.2"),
+            Some(COMMIT),
+            Some("stable"),
+            Some("2026-11-20T03:10:00Z"),
+        )
+        .unwrap();
         assert_eq!(identity.version.to_string(), "0.0.2");
         assert_eq!(identity.channel, Channel::Stable);
         assert_eq!(identity.short_commit(), "42992d086a78");
@@ -191,17 +196,36 @@ mod tests {
         assert_eq!((beta.channel, beta.built.as_str()), (Channel::Beta, ""));
         // Nothing compiled in, or any one of the three missing, empty or unreadable.
         assert_eq!(Identity::from_values(None, None, None, None), None);
-        assert_eq!(Identity::from_values(None, Some(COMMIT), Some("stable"), None), None);
-        assert_eq!(Identity::from_values(Some("0.0.2"), None, Some("stable"), None), None);
-        assert_eq!(Identity::from_values(Some("0.0.2"), Some(" "), Some("stable"), None), None);
-        assert_eq!(Identity::from_values(Some("0.0.2"), Some(COMMIT), None, None), None);
-        assert_eq!(Identity::from_values(Some("0.0.2"), Some(COMMIT), Some("master"), None), None);
-        assert_eq!(Identity::from_values(Some("next"), Some(COMMIT), Some("stable"), None), None);
+        assert_eq!(
+            Identity::from_values(None, Some(COMMIT), Some("stable"), None),
+            None
+        );
+        assert_eq!(
+            Identity::from_values(Some("0.0.2"), None, Some("stable"), None),
+            None
+        );
+        assert_eq!(
+            Identity::from_values(Some("0.0.2"), Some(" "), Some("stable"), None),
+            None
+        );
+        assert_eq!(
+            Identity::from_values(Some("0.0.2"), Some(COMMIT), None, None),
+            None
+        );
+        assert_eq!(
+            Identity::from_values(Some("0.0.2"), Some(COMMIT), Some("master"), None),
+            None
+        );
+        assert_eq!(
+            Identity::from_values(Some("next"), Some(COMMIT), Some("stable"), None),
+            None
+        );
     }
 
     #[test]
     fn the_door_names_an_identity_in_one_line() {
-        let identity = Identity::from_door(&format!("0.0.1,beta,{COMMIT},2026-11-01T00:00:00Z")).unwrap();
+        let identity =
+            Identity::from_door(&format!("0.0.1,beta,{COMMIT},2026-11-01T00:00:00Z")).unwrap();
         assert_eq!(identity.version.to_string(), "0.0.1");
         assert_eq!(identity.channel, Channel::Beta);
         assert_eq!(identity.built, "2026-11-01T00:00:00Z");
@@ -211,8 +235,12 @@ mod tests {
 
     #[test]
     fn version_says_what_kind_of_build_this_is() {
-        let identity =
-            Identity::from_values(Some("v0_0_2"), Some(COMMIT), Some("stable"), Some("2026-11-20T03:10:00Z"));
+        let identity = Identity::from_values(
+            Some("v0_0_2"),
+            Some(COMMIT),
+            Some("stable"),
+            Some("2026-11-20T03:10:00Z"),
+        );
         assert_eq!(
             version_line("planner", &identity.unwrap()),
             "planner 0.0.2 (stable, commit 42992d086a78, built 2026-11-20T03:10:00Z)"
@@ -220,8 +248,17 @@ mod tests {
         // A build nobody told what it is: its package's version, and that it is a developer's.
         let development = Identity::development("0.0.0");
         assert!(!development.stamped);
-        assert_eq!((development.channel, development.built.as_str()), (Channel::Stable, ""));
-        assert_eq!(version_line("planner", &development), "planner 0.0.0 (development build)");
-        assert_eq!(Identity::development("not a version").version.to_string(), "0");
+        assert_eq!(
+            (development.channel, development.built.as_str()),
+            (Channel::Stable, "")
+        );
+        assert_eq!(
+            version_line("planner", &development),
+            "planner 0.0.0 (development build)"
+        );
+        assert_eq!(
+            Identity::development("not a version").version.to_string(),
+            "0"
+        );
     }
 }

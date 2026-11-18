@@ -100,7 +100,11 @@ impl Source for Http {
             .get("content-length")
             .and_then(|value| value.to_str().ok())
             .and_then(|text| text.parse().ok());
-        let reader = response.into_body().into_with_config().limit(MAX_ASSET).reader();
+        let reader = response
+            .into_body()
+            .into_with_config()
+            .limit(MAX_ASSET)
+            .reader();
         Ok(Body {
             length,
             reader: Box::new(reader),
@@ -155,11 +159,15 @@ fn fetch_unchecked(
     cancel_requested: &dyn Fn() -> bool,
 ) -> Result<(), String> {
     if !allowed_url(&asset.url) {
-        return Err(format!("not fetched, the address is not https: {}", asset.url));
+        return Err(format!(
+            "not fetched, the address is not https: {}",
+            asset.url
+        ));
     }
     progress(0, &format!("{GETTING}{}", asset.name));
     let mut body = source.open(&asset.url)?;
-    let mut file = mp_os::fs::File::create(target).map_err(|why| format!("{}: {why}", target.display()))?;
+    let mut file =
+        mp_os::fs::File::create(target).map_err(|why| format!("{}: {why}", target.display()))?;
     let mut hash = Sha256::new();
     let mut buffer = vec![0_u8; 64 * 1024];
     let mut done: u64 = 0;
@@ -168,13 +176,17 @@ fn fetch_unchecked(
         if cancel_requested() {
             return Err(USER_REQUEST.to_owned());
         }
-        let read = body.reader.read(&mut buffer).map_err(|why| format!("{}: {why}", asset.url))?;
+        let read = body
+            .reader
+            .read(&mut buffer)
+            .map_err(|why| format!("{}: {why}", asset.url))?;
         if read == 0 {
             break;
         }
         let chunk = buffer.get(..read).unwrap_or_default();
         hash.update(chunk);
-        file.write_all(chunk).map_err(|why| format!("{}: {why}", target.display()))?;
+        file.write_all(chunk)
+            .map_err(|why| format!("{}: {why}", target.display()))?;
         done += read as u64;
         // More than the manifest's size is not the manifest's file: stop before the disk fills.
         if done > asset.size {
@@ -195,7 +207,8 @@ fn fetch_unchecked(
             );
         }
     }
-    file.sync_all().map_err(|why| format!("{}: {why}", target.display()))?;
+    file.sync_all()
+        .map_err(|why| format!("{}: {why}", target.display()))?;
     drop(file);
     if done != asset.size || hex(&hash.finalize()) != asset.sha256 {
         return Err(mismatch(asset));
@@ -226,7 +239,10 @@ pub(crate) mod tests {
     impl Server {
         pub(crate) fn with(files: &[(&str, &[u8])]) -> Self {
             Self {
-                files: files.iter().map(|(url, bytes)| ((*url).to_owned(), bytes.to_vec())).collect(),
+                files: files
+                    .iter()
+                    .map(|(url, bytes)| ((*url).to_owned(), bytes.to_vec()))
+                    .collect(),
                 asked: Mutex::new(Vec::new()),
             }
         }
@@ -235,7 +251,11 @@ pub(crate) mod tests {
     impl Source for Server {
         fn open(&self, url: &str) -> Result<Body, String> {
             self.asked.os_lock().unwrap().push(url.to_owned());
-            let bytes = self.files.get(url).ok_or_else(|| format!("{url}: http status: 404"))?.clone();
+            let bytes = self
+                .files
+                .get(url)
+                .ok_or_else(|| format!("{url}: http status: 404"))?
+                .clone();
             Ok(Body {
                 length: Some(bytes.len() as u64),
                 reader: Box::new(std::io::Cursor::new(bytes)),
@@ -278,23 +298,52 @@ pub(crate) mod tests {
 
         // The file, whole, with its progress to 100.
         let good = asset_of("planner.tar.gz", url, &bytes);
-        fetch_file(&server, &good, &target, &mut |percent, text| said.push((percent, text.to_owned())), &|| false)
-            .unwrap();
+        fetch_file(
+            &server,
+            &good,
+            &target,
+            &mut |percent, text| said.push((percent, text.to_owned())),
+            &|| false,
+        )
+        .unwrap();
         assert_eq!(mp_os::fs::read(&target).unwrap(), bytes);
-        assert_eq!(said.first().unwrap(), &(0, "Getting planner.tar.gz".to_owned()));
+        assert_eq!(
+            said.first().unwrap(),
+            &(0, "Getting planner.tar.gz".to_owned())
+        );
         assert_eq!(said.last().unwrap().0, 100);
-        assert!(said.last().unwrap().1.starts_with("Getting planner.tar.gz: 0.2 of 0.2 MB"));
+        assert!(
+            said.last()
+                .unwrap()
+                .1
+                .starts_with("Getting planner.tar.gz: 0.2 of 0.2 MB")
+        );
 
         // Another hash, a shorter file and a longer one: refused, and nothing left behind.
         let mut wrong = good.clone();
         wrong.sha256 = hex(&Sha256::digest(b"something else"));
         for (bad, why) in [
             (wrong, "another hash"),
-            (Asset { size: good.size + 1, ..good.clone() }, "shorter than said"),
-            (Asset { size: good.size - 1, ..good.clone() }, "longer than said"),
+            (
+                Asset {
+                    size: good.size + 1,
+                    ..good.clone()
+                },
+                "shorter than said",
+            ),
+            (
+                Asset {
+                    size: good.size - 1,
+                    ..good.clone()
+                },
+                "longer than said",
+            ),
         ] {
             let error = fetch_file(&server, &bad, &target, &mut |_, _| {}, &|| false).unwrap_err();
-            assert_eq!(error, "File downloaded does not match hash: planner.tar.gz", "{why}");
+            assert_eq!(
+                error, "File downloaded does not match hash: planner.tar.gz",
+                "{why}"
+            );
             assert!(!target.os_exists(), "{why}");
         }
 
@@ -303,8 +352,16 @@ pub(crate) mod tests {
         assert_eq!(error, USER_REQUEST);
         assert!(!target.os_exists());
         let missing = asset_of("planner.tar.gz", "https://x/none", &bytes);
-        assert!(fetch_file(&server, &missing, &target, &mut |_, _| {}, &|| false).unwrap_err().contains("404"));
-        let plain = asset_of("planner.tar.gz", "http://example.com/planner.tar.gz", &bytes);
+        assert!(
+            fetch_file(&server, &missing, &target, &mut |_, _| {}, &|| false)
+                .unwrap_err()
+                .contains("404")
+        );
+        let plain = asset_of(
+            "planner.tar.gz",
+            "http://example.com/planner.tar.gz",
+            &bytes,
+        );
         assert!(
             fetch_file(&server, &plain, &target, &mut |_, _| {}, &|| false)
                 .unwrap_err()
@@ -316,11 +373,18 @@ pub(crate) mod tests {
     #[test]
     fn a_manifest_is_fetched_whole_and_no_larger_than_allowed() {
         let server = Server::with(&[("https://x/update.json", b"{\"schema\": 1}")]);
-        assert_eq!(get(&server, "https://x/update.json", 64).unwrap(), b"{\"schema\": 1}");
+        assert_eq!(
+            get(&server, "https://x/update.json", 64).unwrap(),
+            b"{\"schema\": 1}"
+        );
         assert_eq!(
             get(&server, "https://x/update.json", 5).unwrap_err(),
             "https://x/update.json: more than 5 bytes"
         );
-        assert!(get(&server, "http://example.com/update.json", 64).unwrap_err().contains("not https"));
+        assert!(
+            get(&server, "http://example.com/update.json", 64)
+                .unwrap_err()
+                .contains("not https")
+        );
     }
 }

@@ -119,7 +119,16 @@ mod tests {
 
     #[test]
     fn what_is_not_a_version_is_refused_by_name() {
-        for text in ["", "v", "beta", "0..2", "0.0.2-beta", "0.x", "-1.0", "1.2.3.4.5.6.7.8.9"] {
+        for text in [
+            "",
+            "v",
+            "beta",
+            "0..2",
+            "0.0.2-beta",
+            "0.x",
+            "-1.0",
+            "1.2.3.4.5.6.7.8.9",
+        ] {
             let error = ReleaseVersion::parse(text).unwrap_err();
             assert!(error.contains(&format!("{text:?}")), "{error}");
         }
