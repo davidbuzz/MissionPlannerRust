@@ -1,17 +1,87 @@
-# Your own clicks in the demo, played right after CONFIG > Planner > Video Device Start and before
-# the tour's screen-by-screen clicks, exactly as written.
+# The demo: `planner --demo` plays this file, a step a line, from the top, with its drawn pointer.
+# Edit it as you like - the whole demo is here (the owner, 2026-11-18). It is read from where the
+# planner is started (tools/demo/owner.gui); a planner started elsewhere plays the copy built in.
 #
-# Record them: run `dist/planner --record` (or --demo), use it normally, and copy the lines it
-# prints in the terminal into this file. Each `screen` line starts a block; its clicks follow.
+# The lines:
 #
-#   screen plan
-#   click plan-zoomicon
-#   click map@0.40x0.40          a point in the map: across, then down, as fractions of its box
-#   click map@0.50x0.50:right    the right button
-#   key Escape
-#   type 100                     typing is not recorded: add a type line where you typed
+#   click plan-zoomicon          the pointer to a control, and a click; it waits for the control
+#   click map@0.40x0.40          a point in a map: across, then down, as parts of its box
+#   click map@0.50x0.50:right    :right after any click is the right button
+#   click map@vehicle            the vehicle's place on the map
+#   click map@vehicle+80,-80     80 metres east and 80 south of the vehicle
+#   screen plan                  wait for that screen to be showing
+#   key Escape                   a key: Escape, Return, ctrl+f
+#   type 100                     text into what has the keyboard
+#   wait tab-simulation 120      wait for a control to come on screen, so many seconds at most
+#   wait located 180             ... or for the vehicle: located, armed, climbed, auto
+#   answer fly-prompt-ok 3       click it if it comes within so long, else go on
+#   pause 2                      seconds
 #
-# A `#` starts a comment. With no lines below, the demo plays nothing extra here.
+# Record your own: run `planner --record` (or --demo), use it normally, and copy the lines it
+# prints in the terminal into this file. Typing is not recorded: add a `type` line where you typed.
+# A `#` starts a comment. A click whose control does not come within five seconds is passed over
+# and the demo goes on; a `wait` that does not come stops the demo, and the status line says which
+# line and why.
+
+# ---- The demo as it was while its steps were fixed in the Welcome-Demo-Sitl plugin ----
+
+# The simulator's copter, started from SIMULATION; the planner connects to it.
+wait tab-simulation 120
+pause 2
+click tab-simulation
+click sitl-picture-quad
+wait located 180
+pause 3
+
+# PLAN, and the map brought in on the copter.
+click tab-plan
+click plan-zoomicon
+click menu-zoomToVehicle
+pause 1
+
+# Home set where the copter is, from the map's right-click menu: without it Write refuses.
+click map@vehicle:right
+click menu-setHomeHere
+pause 1
+
+# Four waypoints in a square around the copter, 80 metres out.
+click map@vehicle+80,+80
+click map@vehicle+80,-80
+click map@vehicle-80,-80
+click map@vehicle-80,+80
+
+# A survey to the west: a polygon drawn on the map, then Auto WP > Survey (Grid) and Accept.
+click map@vehicle-240,+0:right
+click menu-polygon
+click menu-addPolygonPoint2
+click map@vehicle-160,+80
+click map@vehicle-160,-80
+click map@vehicle-320,-80
+click map@vehicle-320,+80
+click map@vehicle-240,+0:right
+click menu-autoWP
+click menu-surveyGrid
+click survey-BUT_Accept
+pause 2
+
+# The mission written to the copter.
+click plan-write
+pause 2
+
+# FLY: armed, taken off, and sent on the mission.
+click tab-fly
+click fly-tab-actions
+click force-arm
+wait armed 20
+click takeoff
+answer fly-prompt-ok 3      # TakeOff asks the height the first time only
+wait climbed 40
+click Auto
+wait auto 15
+pause 2
+
+# ---- The owner's own clicks, as he recorded them ----
+
 click fly-tab-actions
 click fly-tab-messages
 click fly-tab-actionssimple

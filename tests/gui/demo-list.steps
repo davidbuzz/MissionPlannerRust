@@ -1,0 +1,13 @@
+# A short list for tests/gui/demo-list.gui: every kind of line the demo's list has but the waits
+# for a vehicle, played with no link and nothing fetched.
+wait tab-plan 20
+click tab-plan
+screen plan
+click map@0.40x0.40          # a waypoint, where the map is
+click map@0.60x0.60:right    # the map's menu
+key Escape                   # and away again
+answer no-such-question 1    # never asked: passed over
+pause 0.5
+click tab-help
+screen help
+click tab-fly

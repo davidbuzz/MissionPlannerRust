@@ -1,0 +1,37 @@
+# `planner --demo` plays a list (crates/mp-gui/src/demo_script.rs; the owner's word of 2026-11-18:
+# "i would like this editable-list-of-clicks to be the entire demo"). The demo's own list,
+# tools/demo/owner.gui, starts a simulator and flies it; this plays a short one in its place
+# through the harness's door, MP_DEMO_FILE - tests/gui/demo-list.steps - with no link and nothing
+# fetched: a wait for a control, clicks on tabs, a click and a right click at points of the map, a
+# key, an answer to a question that never comes, a pause, and waits for two screens.
+#
+# The claim: the planner plays it by itself with its drawn pointer, each click a real one - the
+# map's click adds a waypoint, the tabs change the screen - in the list's order, to its end, and
+# says so; no plugin plays it. Run from the repository as
+#   tools/gui-test.sh tests/gui/demo-list.gui -- --demo
+
+screen fly
+window 1600x1200
+budget 13
+env XDG_DATA_HOME $WORK
+env MP_CONFIG_XML $WORK/config.xml
+env MP_DEMO_FILE tests/gui/demo-list.steps
+
+expect plugins.count 0
+expect demo.script ~ line
+within 10
+expect demo.pointer shown
+within 10
+expect screen plan
+# The map's click, as a pilot's: a waypoint.
+within 10
+expect mission.items 1
+within 15
+expect screen help
+within 10
+expect demo.script done
+expect demo.skipped none
+expect screen fly
+expect demo.last tab-fly
+expect demo.clicks 5
+expect vehicle.connected false

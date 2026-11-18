@@ -53,12 +53,23 @@ struct Gesture {
     button: MouseButton,
 }
 
+/// What the pointer's owner types once its move is done.
+#[derive(Debug)]
+enum Typed {
+    /// Text, then Enter.
+    Line(String),
+    /// Text alone.
+    Text(String),
+    /// A key by its name.
+    Key(String),
+}
+
 /// The pointer: where it is drawn, the move under way, and what to type after it.
 #[derive(Debug, Default)]
 pub struct DemoPointer {
     at: Option<(f32, f32)>,
     gesture: Option<Gesture>,
-    typing: VecDeque<String>,
+    typing: VecDeque<Typed>,
     clicked: Option<((f32, f32), Instant)>,
     /// The clicks asked for so far, and the last one's target: a control's name, or `map`.
     clicks: usize,
@@ -128,7 +139,18 @@ impl DemoPointer {
 
     /// `text`, then Enter, typed into what has the keyboard once the move under way is done.
     pub fn type_text(&mut self, text: String) {
-        self.typing.push_back(text);
+        self.typing.push_back(Typed::Line(text));
+    }
+
+    /// `text` alone, with no Enter after it: the demo list's `type` (demo_script.rs).
+    pub fn type_plain(&mut self, text: String) {
+        self.typing.push_back(Typed::Text(text));
+    }
+
+    /// A key by its name - `Escape`, `Return`, `ctrl+f` - pressed once the move under way is
+    /// done: the demo list's `key`.
+    pub fn press_key(&mut self, name: String) {
+        self.typing.push_back(Typed::Key(name));
     }
 
     /// Whether a move or typing is still to come.
@@ -179,8 +201,12 @@ impl DemoPointer {
             }
             return;
         }
-        if let Some(text) = self.typing.pop_front() {
-            window.defer(cx, move |window, cx| type_keys(&text, window, cx));
+        if let Some(typed) = self.typing.pop_front() {
+            window.defer(cx, move |window, cx| match typed {
+                Typed::Line(text) => type_keys(&text, true, window, cx),
+                Typed::Text(text) => type_keys(&text, false, window, cx),
+                Typed::Key(name) => press(&name, window, cx),
+            });
         }
     }
 
@@ -222,6 +248,28 @@ impl DemoPointer {
 #[must_use]
 pub fn visible(control: &str) -> bool {
     visible_centre(control).is_some()
+}
+
+/// The middle of what shows of a control, for a click there.
+#[must_use]
+pub fn centre(control: &str) -> Option<(f32, f32)> {
+    visible_centre(control)
+}
+
+/// A point across and down a control's box, as parts of it - the demo list's `map@0.40x0.40`,
+/// as `--record` writes a click in a map (click_log.rs) - when that point is on screen.
+#[must_use]
+pub fn part(control: &str, across: f32, down: f32) -> Option<(f32, f32)> {
+    let (rect, seen) = crate::probe::placement(control)?;
+    let at = (
+        rect.width.mul_add(across, rect.x),
+        rect.height.mul_add(down, rect.y),
+    );
+    let inside = at.0 >= seen.x
+        && at.0 <= seen.x + seen.width
+        && at.1 >= seen.y
+        && at.1 <= seen.y + seen.height;
+    inside.then_some(at)
 }
 
 /// The centre of what can be seen of a control the probe saw in its last frame: the control cut
@@ -274,8 +322,49 @@ fn click(
     );
 }
 
-/// `text` a key at a time, then Enter, into what has the keyboard.
-fn type_keys(text: &str, window: &mut Window, cx: &mut gpui::App) {
+/// A key's name as a list or `xdotool` writes it - `Escape`, `Return`, `ctrl+f` - as gpui's
+/// keystroke: the key in lower case, `Return` its `enter`, the modifiers before a `+`.
+fn keystroke(name: &str) -> Keystroke {
+    let mut modifiers = Modifiers::default();
+    let mut parts: Vec<&str> = name.split('+').collect();
+    let key = parts.pop().unwrap_or_default();
+    for modifier in parts {
+        match modifier.to_ascii_lowercase().as_str() {
+            "ctrl" | "control" => modifiers.control = true,
+            "alt" => modifiers.alt = true,
+            "shift" => modifiers.shift = true,
+            "super" | "cmd" | "win" => modifiers.platform = true,
+            _ => {}
+        }
+    }
+    let key = match key.to_ascii_lowercase().as_str() {
+        "return" | "kp_enter" => "enter".to_owned(),
+        "esc" => "escape".to_owned(),
+        "prior" => "pageup".to_owned(),
+        "next" => "pagedown".to_owned(),
+        other => other.to_owned(),
+    };
+    Keystroke {
+        modifiers,
+        key,
+        key_char: None,
+    }
+}
+
+/// A key by its name, pressed into what has the keyboard.
+fn press(name: &str, window: &mut Window, cx: &mut gpui::App) {
+    window.dispatch_event(
+        PlatformInput::KeyDown(KeyDownEvent {
+            keystroke: keystroke(name),
+            is_held: false,
+            prefer_character_input: false,
+        }),
+        cx,
+    );
+}
+
+/// `text` a key at a time, and then Enter when `enter`, into what has the keyboard.
+fn type_keys(text: &str, enter: bool, window: &mut Window, cx: &mut gpui::App) {
     let key = |key: String, key_char: Option<String>| {
         PlatformInput::KeyDown(KeyDownEvent {
             keystroke: Keystroke {
@@ -290,7 +379,9 @@ fn type_keys(text: &str, window: &mut Window, cx: &mut gpui::App) {
     for c in text.chars() {
         window.dispatch_event(key(c.to_string(), Some(c.to_string())), cx);
     }
-    window.dispatch_event(key("enter".to_owned(), None), cx);
+    if enter {
+        window.dispatch_event(key("enter".to_owned(), None), cx);
+    }
 }
 
 /// An arrow cursor at `tip`, white with a dark edge, and a widening ring where it last clicked.

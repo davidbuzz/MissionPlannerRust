@@ -100,6 +100,7 @@ mod plugin_manager;
 mod plugins_ui;
 // The owner's Welcome-Demo-Sitl plugin's pointer: a drawn cursor and real clicks (not in the C#).
 mod demo_pointer;
+mod demo_script;
 // ---- end row 96 ----
 mod platform;
 mod poi;
@@ -3478,6 +3479,7 @@ impl Render for MissionPlanner {
         // ---- row 96 ----
         // The plugins' snapshot, and what they did and asked since the last frame.
         self.plugins_tick(&view, window, cx);
+        self.demo_tick(&view, window, cx);
         // ---- end row 96 ----
         frametimes::lap("plugins");
         // The sets and commands the link is retrying: what those that ended say goes on the
@@ -4892,13 +4894,15 @@ OPTIONS:
     -h, --help              print this and exit
     -V, --version           print the version and exit
         --read-mission      read the vehicle's mission once it appears
-        --demo              the demonstration: open disconnected and let the Welcome-Demo-Sitl
-                            plugin start a simulator, plan a mission and fly it, as a watcher
-                            sees it (tools/demo/run.sh runs the whole user demo); every click
-                            is printed as --record prints it
+        --demo              the demonstration: open disconnected and play the list in
+                            tools/demo/owner.gui, a step a line, with a drawn pointer -
+                            start a simulator, plan a mission and fly it, then whatever
+                            the list goes on to; read from where the planner is started,
+                            or the copy built in; every click is printed as --record
+                            prints it
         --record            print every click as a demo recipe line - `screen plan`,
                             `click plan-zoomicon`, `click map@0.40x0.40` - to paste into
-                            tools/demo/owner.gui
+                            tools/demo/owner.gui, which --demo plays
         --screen SCREEN     open on fly, plan, setup, config, params or logs (default: fly)
         --window WIDTHxHEIGHT
                             initial window size (default: 1600x1200)
@@ -5039,12 +5043,22 @@ fn main() {
     let asked = arguments.window.is_some() || std::env::var_os("MP_WINDOW").is_some();
     let (width, height) = window_size(arguments.window.as_deref(), saved.window);
     let screen = Screen::initial(arguments.screen.as_deref(), saved.screen.as_deref());
-    // A link given on the command line wins; otherwise offer the one last connected to - but a
-    // demo run opens disconnected: its plugin starts the simulator and connects to it.
-    plugins_ui::set_demo_run(arguments.demo);
+    // `--demo`: the demo's list read before the window is made, so a line that is no step is
+    // said on the command line and nothing opens.
+    if arguments.demo {
+        match demo_script::load() {
+            Ok(steps) => demo_script::ask(steps),
+            Err(why) => {
+                eprintln!("planner: the demo's list, {}: {why}", demo_script::FILE);
+                std::process::exit(2);
+            }
+        }
+    }
     if arguments.demo || arguments.record {
         click_log::enable();
     }
+    // A link given on the command line wins; otherwise offer the one last connected to - but a
+    // demo run opens disconnected: its list starts the simulator and connects to it.
     let target = if arguments.demo {
         None
     } else {

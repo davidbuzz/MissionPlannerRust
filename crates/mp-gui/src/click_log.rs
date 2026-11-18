@@ -22,9 +22,10 @@
 //! `click plan-zoomicon`, `click map@0.40x0.40`, `click map@0.50x0.50:right` - under `--demo` or
 //! `--record` (the owner's word of 2026-10-17: "have the command line print click activity when
 //! --demo or --record"), so a sequence he made by hand, copied from the terminal into
-//! `tools/demo/owner.gui`, plays in his demo. The control is the innermost one the probe measured
-//! under the pointer (probe.rs); the map carries the point's fractions of its box, as
-//! tools/gui-test.sh and the tour click it; the right button is `:right`. Not in the C#.
+//! `tools/demo/owner.gui`, plays in his demo - which is that file, played by `--demo` itself
+//! (demo_script.rs). The control is the innermost one the probe measured under the pointer
+//! (probe.rs); the map carries the point's fractions of its box, as tools/gui-test.sh and the
+//! demo's list click it; the right button is `:right`. Not in the C#.
 
 use std::collections::BTreeMap;
 use std::sync::atomic::{AtomicBool, Ordering};

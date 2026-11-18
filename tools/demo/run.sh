@@ -1,25 +1,25 @@
 #!/usr/bin/env bash
-# The user demo (Buzz, 2026-10-17): a 5-10 minute autonomous, fully visible run of the Linux
-# planner on this display. dist/planner --demo opens disconnected and its Welcome-Demo-Sitl plugin
-# takes over with its drawn pointer - SIMULATION > Multirotor, PLAN, Zoom To Vehicle, Set Home
-# Here, four waypoints, a survey, Write, FLY > Actions, force arm, TakeOff, Auto, then it unticks
-# itself - and when its pointer goes, tools/demo/tour.py replays the click-everything crawl's
-# recipe with the real pointer on the same window for the minutes left. The planner stays open at
+# The user demo (Buzz, 2026-10-17), as the list it is since 2026-11-18: dist/planner --demo opens
+# disconnected and plays tools/demo/owner.gui, a step a line, with its drawn pointer - SIMULATION >
+# Multirotor, PLAN, Zoom To Vehicle, Set Home Here, four waypoints, a survey, Write, FLY > Actions,
+# force arm, TakeOff, Auto, and then whatever the list goes on to. The list is the whole demo and
+# the planner plays it by itself: this script only makes the way clear for it (an earlier demo's
+# planner, a SITL left on tcp:5760), starts it, and says how it ended. The planner stays open at
 # the end, the copter flying.
 #
 #   tools/demo/run.sh
 #
-# No arguments: it runs five minutes on this display (DISPLAY) with dist/planner, the owner's word
-# of 2026-10-17. Takes the mouse: on the desktop only when its owner says so. A rehearsal runs the
-# same command on an Xvfb display (`tools/gui-headless.sh` makes :99) with DISPLAY=:99 and, so it
-# leaves the machine's settings, tiles and plugin choices alone, XDG_DATA_HOME, MP_CONFIG_XML and
-# MP_SETTINGS set to a scratch directory of its own in the environment; the demo proper uses the
-# owner's. The demo's SITL is the SIMULATION tab's, tcp 5760, as Mission Planner's is.
+# No arguments: this display (DISPLAY) with dist/planner, the owner's word of 2026-10-17. The
+# pointer is drawn by the planner; the real mouse is not taken. A rehearsal runs the same command
+# on an Xvfb display (`tools/gui-headless.sh` makes :99) with DISPLAY=:99 and, so it leaves the
+# machine's settings, tiles and plugin choices alone, XDG_DATA_HOME, MP_CONFIG_XML and MP_SETTINGS
+# set to a scratch directory of its own in the environment; the demo proper uses the owner's. The
+# demo's SITL is the SIMULATION tab's, tcp 5760, as Mission Planner's is.
 set -uo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
 ROOT="$(cd "$HERE/../.." && pwd)"
-MINUTES=5; BINARY="$ROOT/dist/planner"; SHOW="${DISPLAY:-:0}"; DWELL=0.8
-[ $# -eq 0 ] || { echo "usage: $0 - no arguments: five minutes on this display with dist/planner" >&2; exit 2; }
+BINARY="$ROOT/dist/planner"; SHOW="${DISPLAY:-:0}"
+[ $# -eq 0 ] || { echo "usage: $0 - no arguments: the demo on this display with dist/planner" >&2; exit 2; }
 [ -x "$BINARY" ] || { echo "no planner at $BINARY" >&2; exit 1; }
 # An earlier demo's planner still open - this binary with --demo - is stopped first, by its pid.
 for pid in $(pgrep -f "^$BINARY --demo"); do
@@ -55,22 +55,27 @@ if [ -n "${MP_CONFIG_XML:-}" ] && [ ! -f "$MP_CONFIG_XML" ]; then
     printf '<?xml version="1.0" encoding="utf-8"?><Config><sitl_download_version>2</sitl_download_version></Config>' > "$MP_CONFIG_XML"
 fi
 START=$(date +%s)
-echo "demo: $BINARY --demo on $DISPLAY, $MINUTES min, facts in $WORK"
+echo "demo: $BINARY --demo on $DISPLAY, facts in $WORK"
+# The list is read from where the planner is started: the repository, so an edit to
+# tools/demo/owner.gui is what plays.
+cd "$ROOT"
 "$BINARY" --demo --window 1600x1200 > "$WORK/planner.log" 2>&1 &
 PID=$!
 fact() { grep "^$1 = " "$MP_FACTS" 2>/dev/null | head -1 | cut -d= -f2- | sed 's/^ //'; }
-# The welcome part: its pointer shows within a minute, and goes once it has unticked itself and
-# saved - or it stops early, saying why in plugins.status.
-for _ in $(seq 1 120); do [ "$(fact demo.pointer)" = shown ] && break; kill -0 $PID 2>/dev/null || { echo "the planner ended: $(tail -3 "$WORK/planner.log")" >&2; exit 1; }; sleep 0.5; done
-echo "welcome demo: pointer shown at +$(( $(date +%s) - START )) s"
-for _ in $(seq 1 600); do
-    if [ "$(fact demo.last)" = plugin-manager-save ] || [ "$(fact demo.pointer)" = hidden ] && [ "$(fact demo.clicks)" != 0 ]; then
-        [ "$(fact demo.pointer)" = hidden ] && break
-    fi
+# The list plays: its pointer shows within a minute, and demo.script says the line under way,
+# then "done" - or "stopped: ..." with the line that did not come and why.
+for _ in $(seq 1 120); do
+    [ "$(fact demo.pointer)" = shown ] && break
     kill -0 $PID 2>/dev/null || { echo "the planner ended: $(tail -3 "$WORK/planner.log")" >&2; exit 1; }
     sleep 0.5
 done
-echo "welcome demo: done at +$(( $(date +%s) - START )) s, $(fact demo.clicks) clicks, last $(fact demo.last); plugins.status: $(fact plugins.status)"
-LEFT=$(python3 -c "import sys; print(max(1.0, $MINUTES - ($(date +%s) - $START) / 60))")
-python3 "$HERE/tour.py" --display "$DISPLAY" --pid $PID --probe "$MP_PROBE" --facts "$MP_FACTS" --minutes "$LEFT" --dwell "$DWELL" --log "$WORK/tour.log"
-echo "demo over at +$(( $(date +%s) - START )) s; the planner (pid $PID) stays open; log in $WORK"
+echo "demo: pointer shown at +$(( $(date +%s) - START )) s"
+while :; do
+    case "$(fact demo.script)" in
+        done) echo "demo: the list played to its end at +$(( $(date +%s) - START )) s, $(fact demo.clicks) clicks"; break ;;
+        stopped*) echo "demo: $(fact demo.script)" >&2; break ;;
+    esac
+    kill -0 $PID 2>/dev/null || { echo "the planner ended: $(tail -3 "$WORK/planner.log")" >&2; exit 1; }
+    sleep 1
+done
+echo "the planner (pid $PID) stays open; its log and facts are in $WORK"

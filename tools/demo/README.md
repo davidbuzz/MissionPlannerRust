@@ -1,40 +1,52 @@
-# demo - the user demo's one command
+# demo - the user demo
 
-The owner's demo (2026-10-17): a 5-10 minute autonomous, fully visible run of the Linux planner.
+The owner's demo (2026-10-17): an autonomous, fully visible run of the Linux planner. Since
+2026-11-18 it is one editable list, `owner.gui`, and the planner plays it by itself.
 
-    tools/demo/run.sh             five minutes on this display with dist/planner; no arguments
-    tools/demo/selftest.sh        the guards, without a window
+    planner --demo                the demo: the list played with a drawn pointer
+    tools/demo/run.sh             the same with dist/planner, after making the way clear for it
 
-`run.sh` starts `dist/planner --demo` on the display: the planner opens disconnected and its
-Welcome-Demo-Sitl plugin runs with its drawn pointer - SIMULATION > Multirotor, PLAN, Zoom To
-Vehicle, Set Home Here, four waypoints, a survey, Write, FLY > Actions, force arm, TakeOff and
-Auto, then it unticks itself on PLUGINS (crates/mp-plugin-host/plugins/examples/welcomedemositl.rs).
-When its pointer goes, `tour.py` drives the same window with the real pointer for the minutes
-left: the click-everything crawl's recipe (`tools/gui-crawl/out/recipe.txt`) replayed screen by
-screen, only the blocks the crawl saw happen, gliding to each control and dwelling after each
-click so a watcher can follow. The planner stays open at the end, the copter flying.
+`planner --demo` opens disconnected and plays `tools/demo/owner.gui`, a step a line, from the
+top: SIMULATION > Multirotor, PLAN, Zoom To Vehicle, Set Home Here, four waypoints, a survey,
+Write, FLY > Actions, force arm, TakeOff and Auto - what the Welcome-Demo-Sitl plugin did while
+its steps were fixed in its source - and then whatever the list goes on to. The pointer is the
+planner's own, drawn over the window; the real mouse is not taken. The planner stays open at the
+end, the copter flying.
 
-It takes the mouse: on the desktop only when its owner says so. A rehearsal runs the same command
-on an Xvfb display (`tools/gui-headless.sh` makes :99 with lavapipe) with `DISPLAY=:99`, and with
+The list is read from where the planner is started, so run it from the repository:
+`./target/debug/planner --demo`. Started elsewhere, it plays the copy that was built in.
+
+`run.sh` adds only this: it stops an earlier demo's planner and any ArduPilot SITL left on tcp
+5760, by pid (the owner's word of 2026-10-17), stops itself if something that is not a SITL holds
+that port, starts `dist/planner --demo`, and says how the list ended. A rehearsal runs it on an
+Xvfb display (`tools/gui-headless.sh` makes :99 with lavapipe) with `DISPLAY=:99`, and with
 `XDG_DATA_HOME`, `MP_CONFIG_XML` and `MP_SETTINGS` pointed at a scratch directory so it leaves the
 machine's settings, tiles and plugin choices alone.
 
-What the tour never clicks: the crawl's deny list (`crawl.py`'s `DENY`: every button that opens a
-port or device) and the demo's own (`tour.py`'s `DEMO_DENY`): the simulation and plugins tabs, the
-flight modes and actions, arming, fly-to, set WP, mission and fence writes, parameter writes and
-refreshes, the connection controls, Ctrl+T, prefetch, and anything that clears the mission. On
-SETUP, CONFIG and the other pages only what the crawl's disconnected workers saw happen is played
-(their blocks are labelled `disc-*`), so no parameter is written to the flying copter; FLY and
-PLAN play the connected crawl's visible clicks less the deny. The demo's SITL is the SIMULATION
-tab's, tcp 5760, as Mission Planner's is; `run.sh` first stops an earlier demo's planner and any
-ArduPilot SITL left on that port, by pid (the owner's word of 2026-10-17), and stops itself if
-something that is not a SITL holds it.
+## The list
 
-## Your own clicks in the demo
+`owner.gui` says its own line forms at its head: `click`, `screen`, `key`, `type`, `wait`,
+`answer`, `pause`. `crates/mp-gui/src/demo_script.rs` reads and plays them.
 
-`dist/planner --record` prints every click you make as a recipe line on the command line -
+A `click` whose control does not come within five seconds, or a `screen` that does not show, is
+passed over and the demo goes on: a list recorded in one window is played in another (the fact
+`demo.skipped` holds those lines' numbers). A `wait` that does not come - a vehicle that does not
+arm - stops the demo where it is: the planner is left as it stands, the status line says which
+line and why, and the fact `demo.script` says the same.
+
+## Your own clicks
+
+`planner --record` prints every click you make as a line of the list on the command line -
 `screen plan`, `click plan-zoomicon`, `click map@0.40x0.40` (where in the map, two places),
 `click map@0.50x0.50:right` for the right button; `--demo` prints them too. Paste the lines you
-want into `tools/demo/owner.gui` (a `#` starts a comment, a `screen` line starts a block) and the
-tour plays them after Video Device Start, before the screens' rounds, exactly as written. Typing
-is not recorded: add a `type <text>` line by hand where you typed.
+want into `owner.gui`, anywhere. Typing is not recorded: add a `type <text>` line by hand where
+you typed.
+
+## What changed on 2026-11-18
+
+Before, `--demo` ran the Welcome-Demo-Sitl plugin, and `tour.py` then drove the window with the
+real pointer for the minutes left: your `owner.gui` lines, and after them the click-everything
+crawl's recipe, screen by screen. The owner's word: "i would like this editable-list-of-clicks to
+be the entire demo, and for it to start-with whats in the demo right now". So the plugin's steps
+are the list's first lines, the crawl's tour is no longer part of the demo, and `tour.py` and its
+self-test are gone. The plugin itself is the browser build's welcome, as before.

@@ -1,13 +1,15 @@
 # The user demo's start on the desktop (Buzz, 2026-10-17): `planner --demo` opens disconnected
-# and carries the Welcome-Demo-Sitl plugin, built into the browser alone until then
-# (plugins/examples/welcomedemositl.rs, build.rs's DEMO table), enabled for the run. Its drawn
+# and plays the demo's list, tools/demo/owner.gui, with its drawn pointer (demo_script.rs; the
+# owner's word of 2026-11-18, "i would like this editable-list-of-clicks to be the entire demo").
+# No plugin plays it: the Welcome-Demo-Sitl, which `--demo` loaded until then, is not loaded. The
 # pointer shows, clicks SIMULATION, then its Multirotor - the SITL fetched and started as
-# sitl-launch.gui has it, the planner connected to tcp:127.0.0.1:5760 - and goes on to PLAN. This
-# script sees that much: the plugin loaded alone (the harness leaves the shipped plugins out), its
-# first clicks, the simulator up and the link open. tools/demo/run.sh runs the whole demo.
+# sitl-launch.gui has it, the planner connected to tcp:127.0.0.1:5760 - and the list goes on to
+# PLAN. This script sees that much: no plugin, the list under way by its line, its first clicks,
+# the simulator up and the link open.
 #
 # Needs the network (the manifest and the 7 MB simulator) and port 5760 free, as sitl-launch.gui
-# does: a SITL already there is refused by the setup line, and the test does not run. Run as
+# does: a SITL already there is refused by the setup line, and the test does not run. Run from the
+# repository, where the list is read from, as
 #   tools/gui-test.sh tests/gui/demo-start.gui -- --demo
 
 screen fly
@@ -18,9 +20,11 @@ env MP_CONFIG_XML $WORK/config.xml
 setup printf '<?xml version="1.0" encoding="utf-8"?><Config><sitl_download_version>2</sitl_download_version></Config>' > "$WORK/config.xml"
 linux: setup if ss -Hltn 'sport = :5760' | grep -q .; then echo 'port 5760 is busy: the demo launches its own SITL there; stop the one running first' >&2; exit 3; fi
 
-# Disconnected at start whatever the last link was; the demo plugin alone, enabled.
+# Disconnected at start whatever the last link was; no plugin (the harness leaves the shipped ones
+# out), and the list under way.
 expect vehicle.connected false
-expect plugins.count 1
+expect plugins.count 0
+expect demo.script ~ line
 # Its pointer, and its first click: the SIMULATION tab.
 within 20
 expect demo.pointer shown

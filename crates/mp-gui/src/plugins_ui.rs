@@ -86,15 +86,12 @@ pub const ENV: &str = "MP_PLUGINS";
 /// scripts that are not about plugins (`tools/gui-test.sh` sets it unless a script asks for them).
 pub const BUILTIN_ENV: &str = "MP_BUILTIN_PLUGINS";
 
-/// Whether this is a demo run (`planner --demo`, the owner's user demo of 2026-10-17): the
-/// Welcome-Demo-Sitl, built into the browser alone until then, loaded on the desktop and enabled
-/// for the run whatever `DisabledPlugins` says - it unticks itself at the end of every run.
+/// Whether the Welcome-Demo-Sitl is loaded on the desktop for this run, enabled whatever
+/// `DisabledPlugins` says. It was `planner --demo`'s (the owner's user demo of 2026-10-17); since
+/// 2026-11-18 `--demo` plays the demo's list, `tools/demo/owner.gui` (demo_script.rs), whose first
+/// lines are that plugin's steps written out, and nothing sets this. On the desktop the plugin
+/// now runs only from a file put in the plugins folder; the browser build carries it as before.
 static DEMO_RUN: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
-
-/// Sets whether this is a demo run, from the command line, before the plugins start.
-pub fn set_demo_run(on: bool) {
-    DEMO_RUN.store(on, std::sync::atomic::Ordering::Relaxed);
-}
 
 /// Whether this is a demo run.
 #[must_use]
@@ -389,6 +386,9 @@ pub struct Plugins {
     pub manager: crate::plugin_manager::PluginManager,
     /// The demo pointer plugins drive (the owner's Welcome-Demo-Sitl): its cursor and clicks.
     pub demo: crate::demo_pointer::DemoPointer,
+    /// `planner --demo`'s list being played with that pointer (demo_script.rs), kept once it has
+    /// ended for the facts.
+    pub script: Option<crate::demo_script::Player>,
     /// The built-in Tailscale node, while its tick and the Tailscale row are on
     /// (`plugin_manager::TAILSCALE_NODE`; the owner's, 2026-10-14): the links dial the tailnet's
     /// hosts through it (mp-transport's `tailnet`).
@@ -452,6 +452,7 @@ impl Plugins {
             packets: None,
             manager: crate::plugin_manager::PluginManager::default(),
             demo: crate::demo_pointer::DemoPointer::default(),
+            script: crate::demo_script::take(),
             #[cfg(not(target_family = "wasm"))]
             tailnet: None,
         };
@@ -812,6 +813,118 @@ impl Plugins {
     }
 }
 
+/// The planner as the demo's list acts on it (`demo_script::World`): the demo pointer for its
+/// clicks and keys, the probe for what is on screen, and the vehicle as the plugins read it.
+struct DemoHost<'a> {
+    demo: &'a mut crate::demo_pointer::DemoPointer,
+    map: &'a std::rc::Rc<std::cell::RefCell<crate::mapview::MapViewport>>,
+    screen: &'a str,
+    state: Option<&'a VehicleState>,
+    connected: bool,
+    status: &'a mut Option<String>,
+    now: web_time::Instant,
+}
+
+impl DemoHost<'_> {
+    /// A number the vehicle gives for `name`, zero when it gives none.
+    fn number(&self, name: &str) -> f64 {
+        match cs_value(self.state, self.connected, name) {
+            Some(CsValue::Number(value)) => value,
+            _ => 0.0,
+        }
+    }
+
+    /// Where in the window a `click` lands, when its place is on screen.
+    fn point(&self, control: &str, place: crate::demo_script::Place) -> Option<(f32, f32)> {
+        use crate::demo_script::Place;
+        match place {
+            Place::Centre => crate::demo_pointer::centre(control),
+            Place::Part(across, down) => crate::demo_pointer::part(control, across, down),
+            Place::Vehicle(east, north) => {
+                /// Metres in a degree of latitude.
+                const METRES_PER_DEGREE: f64 = 111_320.0;
+                let (lat, lng) = (self.number("lat"), self.number("lng"));
+                if lat == 0.0 && lng == 0.0 {
+                    return None;
+                }
+                let east_metres = METRES_PER_DEGREE * lat.to_radians().cos().max(0.01);
+                let at = mp_units::LatLon::new(
+                    lat + north / METRES_PER_DEGREE,
+                    lng + east / east_metres,
+                )
+                .ok()?;
+                // On the map as it is drawn, and inside what shows of the control named.
+                crate::demo_pointer::centre(control)?;
+                self.map.borrow().window_point(at)
+            }
+        }
+    }
+}
+
+impl crate::demo_script::World for DemoHost<'_> {
+    fn visible(&self, control: &str) -> bool {
+        crate::demo_pointer::visible(control)
+    }
+
+    fn screen(&self) -> &str {
+        self.screen
+    }
+
+    fn vehicle(&self, until: &crate::demo_script::Until) -> bool {
+        use crate::demo_script::Until;
+        let flag = |name: &str| {
+            matches!(cs_value(self.state, self.connected, name), Some(CsValue::Flag(true)))
+        };
+        match until {
+            // As the Welcome-Demo-Sitl waits (welcomedemositl.rs, `arrived`).
+            Until::Located => {
+                flag("connected") && self.number("lat") != 0.0 && self.number("satcount") >= 6.0
+            }
+            Until::Armed => flag("armed"),
+            Until::Climbed => self.number("alt") >= 2.0,
+            Until::Auto => matches!(
+                cs_value(self.state, self.connected, "mode"),
+                Some(CsValue::Text(mode)) if mode.eq_ignore_ascii_case("auto")
+            ),
+            Until::Shown(control) => crate::demo_pointer::visible(control),
+        }
+    }
+
+    fn busy(&self) -> bool {
+        self.demo.busy()
+    }
+
+    fn click(&mut self, control: &str, place: crate::demo_script::Place, right: bool) -> bool {
+        let Some(at) = self.point(control, place) else {
+            return false;
+        };
+        let millis = crate::demo_script::MOVE_MS;
+        if right {
+            self.demo.right_click_at(at, control, millis, self.now);
+        } else {
+            self.demo.click_at(at, control, millis, self.now);
+        }
+        true
+    }
+
+    fn key(&mut self, name: &str) {
+        self.demo.press_key(name.to_owned());
+    }
+
+    fn type_text(&mut self, text: &str) {
+        self.demo.type_plain(text.to_owned());
+    }
+
+    fn status(&mut self, text: &str) {
+        log::warn!("{text}");
+        *self.status = Some(text.to_owned());
+    }
+
+    fn end(&mut self) {
+        self.demo.end();
+    }
+}
+
 /// `Host.cs.<name>` as the plugin host's type: [`crate::scripts_tab::cs_value`], which the
 /// Scripts tab answers with too.
 #[must_use]
@@ -884,6 +997,72 @@ impl MissionPlanner {
         }
     }
 
+    /// Once a frame, after the plugins: the demo list's step under way (demo_script.rs), then the
+    /// demo pointer's move, click or typing for this frame - a plugin's or the list's - and frames
+    /// while either goes on. Apart from [`Self::plugins_tick`], which stops early with no plugin
+    /// loaded, where `planner --demo` still plays.
+    pub(crate) fn demo_tick(
+        &mut self,
+        view: &TelemetryView,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let now = web_time::Instant::now();
+        if let Some(mut player) = self.plugins.script.take() {
+            if player.running() {
+                // The list names its controls as the probe measures them.
+                crate::probe::enable();
+                let mut host = DemoHost {
+                    demo: &mut self.plugins.demo,
+                    map: &self.map,
+                    screen: self.screen.label(),
+                    state: view.state.as_deref(),
+                    connected: view.connected && view.state.is_some(),
+                    status: &mut self.file_status,
+                    now,
+                };
+                player.tick(now, &mut host);
+            }
+            self.plugins.script = Some(player);
+        }
+        self.plugins.demo.tick(now, window, cx);
+        let playing = self
+            .plugins
+            .script
+            .as_ref()
+            .is_some_and(crate::demo_script::Player::running);
+        if playing || self.plugins.demo.active(now) {
+            window.request_animation_frame();
+        }
+        if facts::enabled() {
+            let (clicks, last) = self.plugins.demo.clicks();
+            facts::record("demo.clicks", clicks);
+            facts::record("demo.last", last.unwrap_or("none"));
+            facts::record(
+                "demo.pointer",
+                if self.plugins.demo.shown(now) {
+                    "shown"
+                } else {
+                    "hidden"
+                },
+            );
+            facts::record(
+                "demo.script",
+                self.plugins
+                    .script
+                    .as_ref()
+                    .map_or_else(|| "none".to_owned(), crate::demo_script::Player::progress),
+            );
+            facts::record(
+                "demo.skipped",
+                self.plugins
+                    .script
+                    .as_ref()
+                    .map_or_else(|| "none".to_owned(), crate::demo_script::Player::skipped),
+            );
+        }
+    }
+
     /// Once a frame: the plugins' snapshot refreshed, what they did and asked served, a menu
     /// click on the planning map passed on, and the facts recorded.
     pub(crate) fn plugins_tick(
@@ -945,12 +1124,6 @@ impl MissionPlanner {
         for request in self.plugins.host.drain() {
             self.serve(request.plugin, request.body, view);
         }
-        // The demo pointer's move, click or typing for this frame, and frames while it moves.
-        let now = web_time::Instant::now();
-        self.plugins.demo.tick(now, window, cx);
-        if self.plugins.demo.active(now) {
-            window.request_animation_frame();
-        }
         // A planning map entry chosen: `Host.FPMenuMapPosition` with it.
         if let Some((plugin, id, at)) = self.plan_menus.plugin_click.take() {
             self.plugins
@@ -990,17 +1163,6 @@ impl MissionPlanner {
             facts::record(
                 "plugins.enabled-native",
                 self.persisted.get(ENABLED_NATIVE).unwrap_or("none"),
-            );
-            let (clicks, last) = self.plugins.demo.clicks();
-            facts::record("demo.clicks", clicks);
-            facts::record("demo.last", last.unwrap_or("none"));
-            facts::record(
-                "demo.pointer",
-                if self.plugins.demo.shown(web_time::Instant::now()) {
-                    "shown"
-                } else {
-                    "hidden"
-                },
             );
         }
     }
