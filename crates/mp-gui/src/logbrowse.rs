@@ -2675,9 +2675,11 @@ fn pastel(number: i64) -> Option<u32> {
 
 /// Seconds GPS time is ahead of UTC, as `gpsTimeToTime` asks: for today, not for the log.
 fn leap_seconds_now() -> i64 {
-    use chrono::Datelike as _;
-    let today = chrono::Local::now();
-    mp_log::index::leap_seconds_gps(today.year(), today.month())
+    let today = jiff::Zoned::now();
+    mp_log::index::leap_seconds_gps(
+        i32::from(today.year()),
+        u32::try_from(today.month()).unwrap_or(1),
+    )
 }
 
 /// The value ranges the chart's axes take over a time window.

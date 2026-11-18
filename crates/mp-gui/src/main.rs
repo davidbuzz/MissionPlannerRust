@@ -2293,7 +2293,7 @@ impl MissionPlanner {
             state,
             &mut self.hud_timing,
             web_time::Instant::now(),
-            chrono::Local::now().format("%H:%M:%S").to_string(),
+            jiff::Zoned::now().strftime("%H:%M:%S").to_string(),
             &view.parameters,
         )
     }

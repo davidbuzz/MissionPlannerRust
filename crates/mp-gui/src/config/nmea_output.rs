@@ -189,8 +189,8 @@ pub fn degrees_minutes(value: f64) -> f64 {
 #[must_use]
 pub fn sentences(
     cs: &Snapshot,
-    utc: chrono::DateTime<chrono::Utc>,
-    local: chrono::NaiveDate,
+    utc: jiff::Timestamp,
+    local: jiff::civil::Date,
     counter: u32,
     home: Option<(f64, f64, f64)>,
 ) -> Vec<String> {
@@ -198,7 +198,7 @@ pub fn sentences(
     let lng = degrees_minutes(cs.lng);
     let ns = if cs.lat < 0.0 { "S" } else { "N" };
     let ew = if cs.lng < 0.0 { "W" } else { "E" };
-    let time = utc.format("%H%M%S%.3f").to_string();
+    let time = utc.strftime("%H%M%S%.3f").to_string();
     let finish = |line: String| format!("{line}*{}\r", checksum(&line));
     let mut out = Vec::new();
     // GGA: the fix is 1 from a 3D fix up; the undulation to a tenth of a metre; the last
@@ -235,7 +235,7 @@ pub fn sentences(
         format_f64((lng * 100.0).abs(), "0.00000"),
         format_f64(f64::from(cs.ground_speed) * 1.943_844, "0.0"),
         format_f64(f64::from(cs.ground_course), "0.0"),
-        local.format("%d%m%y"),
+        local.strftime("%d%m%y"),
     )));
     if counter.is_multiple_of(20)
         && let Some((hlat, hlng, halt)) = home
@@ -286,8 +286,8 @@ fn main_loop(mut stream: Box<dyn Transport>, shared: &Shared) {
         let cs = shared.snapshot.os_lock().map(|s| *s).unwrap_or_default();
         let lines = sentences(
             &cs,
-            chrono::Utc::now(),
-            chrono::Local::now().date_naive(),
+            jiff::Timestamp::now(),
+            jiff::Zoned::now().date(),
             counter,
             None,
         );
@@ -800,7 +800,6 @@ fn finish_question(this: &mut MissionPlanner, ok: bool) {
 mod tests {
     use super::super::serial_output::INVALID_BAUD_RATE;
     use super::*;
-    use chrono::TimeZone as _;
 
     fn canberra() -> Snapshot {
         Snapshot {
@@ -831,11 +830,12 @@ mod tests {
     /// `// C#: Controls/SerialOutputNMEA.cs:124-230`
     #[test]
     fn the_sentences_are_the_csharps() {
-        let utc = chrono::Utc
-            .with_ymd_and_hms(2026, 10, 2, 12, 34, 56)
-            .single()
-            .expect("a time");
-        let local = chrono::NaiveDate::from_ymd_opt(2026, 10, 2).expect("a date");
+        let utc = jiff::civil::date(2026, 10, 2)
+            .at(12, 34, 56, 0)
+            .to_zoned(jiff::tz::TimeZone::UTC)
+            .expect("a time")
+            .timestamp();
+        let local = jiff::civil::date(2026, 10, 2);
         let lines = sentences(&canberra(), utc, local, 0, None);
         assert_eq!(lines.len(), 6);
         assert!(

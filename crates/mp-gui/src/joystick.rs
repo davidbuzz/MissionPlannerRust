@@ -1922,10 +1922,9 @@ pub fn export_config(dir: &Path, to: &Path) -> Result<usize, String> {
             data,
         });
     }
-    let now = chrono::Local::now();
+    let now = jiff::Zoned::now();
     let stamp = {
-        use chrono::{Datelike, Timelike};
-        let part = |value: u32| u16::try_from(value).unwrap_or(0);
+        let part = |value: i8| u16::try_from(value).unwrap_or(0);
         mp_log::zip::DosTime {
             year: u16::try_from(now.year()).unwrap_or(1980),
             month: part(now.month()),

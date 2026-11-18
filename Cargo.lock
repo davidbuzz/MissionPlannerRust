@@ -4206,10 +4206,12 @@ dependencies = [
  "jiff-core",
  "jiff-static",
  "jiff-tzdb-platform",
+ "js-sys",
  "log",
  "portable-atomic",
  "portable-atomic-util",
  "serde_core",
+ "wasm-bindgen",
  "windows-link 0.2.1",
 ]
 
@@ -5131,7 +5133,6 @@ dependencies = [
  "aes",
  "base64 0.22.1",
  "cbc",
- "chrono",
  "console_error_panic_hook",
  "flate2",
  "fluent-bundle",
@@ -5141,6 +5142,7 @@ dependencies = [
  "gpui_web",
  "gpui_windows",
  "image",
+ "jiff",
  "js-sys",
  "log",
  "lzma-rs",
@@ -5197,7 +5199,7 @@ dependencies = [
 name = "mp-kml"
 version = "0.0.0"
 dependencies = [
- "chrono",
+ "jiff",
  "mp-log",
  "mp-mavlink",
  "mp-mavlink-dialects",
@@ -5385,8 +5387,8 @@ dependencies = [
 name = "mp-tiles"
 version = "0.0.0"
 dependencies = [
- "chrono",
  "image",
+ "jiff",
  "mp-os",
  "mp-settings",
  "mp-units",

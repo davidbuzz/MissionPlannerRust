@@ -256,10 +256,13 @@ pub fn size_units(size: u64) -> String {
 /// `// C#: Controls/MavFTPUI.cs:144-149`
 #[must_use]
 pub fn modified_string(modified_utc: Option<u32>) -> String {
-    use chrono::TimeZone;
     modified_utc
-        .and_then(|secs| chrono::Local.timestamp_opt(i64::from(secs), 0).single())
-        .map(|time| time.format("%Y-%m-%d %H:%M:%S").to_string())
+        .and_then(|secs| jiff::Timestamp::from_second(i64::from(secs)).ok())
+        .map(|time| {
+            time.to_zoned(jiff::tz::TimeZone::system())
+                .strftime("%Y-%m-%d %H:%M:%S")
+                .to_string()
+        })
         .unwrap_or_default()
 }
 

@@ -169,7 +169,6 @@ impl TileSource {
     /// map borrow one without owning it.
     #[must_use]
     pub fn attribution_text(&self) -> &'static str {
-        use chrono::Datelike as _;
         use std::collections::BTreeMap;
         use std::sync::Mutex;
 
@@ -182,7 +181,7 @@ impl TileSource {
             return self.attribution;
         };
         formatted.entry(self.attribution).or_insert_with(|| {
-            let year = chrono::Local::now().year().to_string();
+            let year = jiff::Zoned::now().year().to_string();
             Box::leak(self.attribution.replace("{0}", &year).into_boxed_str())
         })
     }
@@ -740,8 +739,7 @@ mod tests {
 
     #[test]
     fn the_copyright_carries_this_years_date() {
-        use chrono::Datelike as _;
-        let year = chrono::Local::now().year();
+        let year = jiff::Zoned::now().year();
         assert_eq!(
             GOOGLE_SATELLITE_MAP.attribution_text(),
             format!("©{year} Google - Map data ©{year} Tele Atlas, Imagery ©{year} TerraMetrics")

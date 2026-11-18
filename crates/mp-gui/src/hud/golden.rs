@@ -383,8 +383,8 @@ fn recorded_sheets() -> Vec<(&'static str, Image)> {
                 let now = start + Duration::from_micros(micros.saturating_sub(first));
                 let clock = i64::try_from(micros)
                     .ok()
-                    .and_then(chrono::DateTime::from_timestamp_micros)
-                    .map(|time| time.format("%H:%M:%S").to_string())
+                    .and_then(|micros| jiff::Timestamp::from_microsecond(micros).ok())
+                    .map(|time| time.strftime("%H:%M:%S").to_string())
                     .unwrap_or_default();
                 // Every ATTITUDE is a frame, so the clocks see each transition when the screen
                 // would.

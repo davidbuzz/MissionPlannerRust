@@ -71,7 +71,7 @@ pub const SKIP_ALL_CHECKS: f32 = -1.0;
 ///
 /// The frames inside the file carry UTC, so nothing about the data depends on this.
 fn flight_stamp() -> String {
-    chrono::Local::now().format("%Y-%m-%d %H-%M-%S").to_string()
+    jiff::Zoned::now().strftime("%Y-%m-%d %H-%M-%S").to_string()
 }
 
 /// How many log lines the flight screen shows.

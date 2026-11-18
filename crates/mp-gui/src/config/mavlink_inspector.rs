@@ -95,7 +95,6 @@ use std::sync::atomic::{AtomicBool, Ordering as Atomic};
 use std::sync::{Arc, Mutex};
 use web_time::{Duration, Instant};
 
-use chrono::{Datelike as _, NaiveDate, NaiveDateTime, Timelike as _};
 use gpui::{
     AnyElement, Context, FocusHandle, KeyDownEvent, SharedString, Window, div, prelude::*, px, rgb,
 };
@@ -327,8 +326,13 @@ fn unix_date_text(usec: u64) -> Option<String> {
     if ms > MAX_MS {
         return None;
     }
-    let time = chrono::DateTime::from_timestamp_millis(i64::try_from(ms).ok()?)?;
-    Some(time.format("%-m/%-d/%Y %-I:%M:%S %p").to_string())
+    // From the calendar's 1970, not a point in time: `DateTime.MaxValue` is past what a
+    // timestamp that leaves room for a time zone holds.
+    let time = jiff::civil::date(1970, 1, 1)
+        .at(0, 0, 0, 0)
+        .checked_add(jiff::SignedDuration::from_millis(i64::try_from(ms).ok()?))
+        .ok()?;
+    Some(time.strftime("%-m/%-d/%Y %-I:%M:%S %p").to_string())
 }
 
 /// `Encoding.ASCII.GetString`: a byte past 127 is `?`, a NUL is kept.
@@ -946,16 +950,17 @@ const TARGET_X_STEPS: f64 = 7.0;
 const GRACE: f64 = 0.1;
 
 /// The calendar parts of an `XDate`, to the millisecond: `XLDateToCalendarDate`.
-fn calendar(x: f64) -> Option<NaiveDateTime> {
+fn calendar(x: f64) -> Option<jiff::civil::DateTime> {
     let ms = (x * MS_PER_DAY).round();
     if !ms.is_finite() || ms.abs() > 1.0e15 {
         return None;
     }
     #[allow(clippy::cast_possible_truncation)] // bounded above
     let ms = ms as i64;
-    NaiveDate::from_ymd_opt(1899, 12, 30)?
-        .and_hms_opt(0, 0, 0)?
-        .checked_add_signed(chrono::TimeDelta::try_milliseconds(ms)?)
+    jiff::civil::date(1899, 12, 30)
+        .at(0, 0, 0, 0)
+        .checked_add(jiff::SignedDuration::from_millis(ms))
+        .ok()
 }
 
 /// `CalendarDateToXLDate` of parts that may be out of range, `NormalizeCalendarDate` carrying
@@ -973,34 +978,33 @@ fn from_calendar(
 ) -> f64 {
     let months = i64::from(year) * 12 + i64::from(month) - 1;
     let (Ok(year), Ok(month)) = (
-        i32::try_from(months.div_euclid(12)),
-        u32::try_from(months.rem_euclid(12) + 1),
+        i16::try_from(months.div_euclid(12)),
+        i8::try_from(months.rem_euclid(12) + 1),
     ) else {
         return 0.0;
     };
-    let Some(first) = NaiveDate::from_ymd_opt(year, month, 1).and_then(|d| d.and_hms_opt(0, 0, 0))
-    else {
+    let Ok(first) = jiff::civil::Date::new(year, month, 1) else {
         return 0.0;
     };
-    let Some(epoch) = NaiveDate::from_ymd_opt(1899, 12, 30).and_then(|d| d.and_hms_opt(0, 0, 0))
-    else {
-        return 0.0;
-    };
+    let epoch = jiff::civil::date(1899, 12, 30).at(0, 0, 0, 0);
     let offset = (((day - 1) * 24 + hour) * 60 + minute) * 60_000 + second * 1000 + ms;
-    let since = (first - epoch).num_milliseconds() + offset;
+    let Ok(whole) = i64::try_from(first.at(0, 0, 0, 0).duration_since(epoch).as_millis()) else {
+        return 0.0;
+    };
+    let since = whole + offset;
     since as f64 / MS_PER_DAY
 }
 
 /// A date's parts as `i64`s: year, month, day, hour, minute, second, millisecond.
-fn parts(date: NaiveDateTime) -> (i32, i32, i64, i64, i64, i64, i64) {
+fn parts(date: jiff::civil::DateTime) -> (i32, i32, i64, i64, i64, i64, i64) {
     (
-        date.year(),
-        i32::try_from(date.month()).unwrap_or(1),
+        i32::from(date.year()),
+        i32::from(date.month()),
         i64::from(date.day()),
         i64::from(date.hour()),
         i64::from(date.minute()),
         i64::from(date.second()),
-        i64::from(date.nanosecond() / 1_000_000),
+        i64::from(date.millisecond()),
     )
 }
 
@@ -1217,8 +1221,8 @@ impl DateScale {
     /// `// C#: ExtLibs/ZedGraph/ZedGraph/DateScale.cs:333-390`
     #[allow(clippy::cast_possible_truncation)] // clamped below
     fn tic_count(&self) -> i64 {
-        let years = |date: Option<NaiveDateTime>| date.map_or(0, |d| i64::from(d.year()));
-        let months = |date: Option<NaiveDateTime>| date.map_or(0, |d| i64::from(d.month()));
+        let years = |date: Option<jiff::civil::DateTime>| date.map_or(0, |d| i64::from(d.year()));
+        let months = |date: Option<jiff::civil::DateTime>| date.map_or(0, |d| i64::from(d.month()));
         let (low, high) = (calendar(self.min), calendar(self.max));
         #[allow(clippy::cast_precision_loss)]
         let count = match self.unit {
@@ -1271,14 +1275,14 @@ impl DateScale {
         Self::label_in(x, X_FORMAT)
     }
 
-    /// A tic's label in a graph's own `Scale.Format`, a `chrono` format string: the "Tlog > Kml or
+    /// A tic's label in a graph's own `Scale.Format`, a `strftime` format string: the "Tlog > Kml or
     /// Graph" form's is `HH:mm:ss`, `%H:%M:%S` (`Log/MavlinkLog.cs:45`).
     /// `// C#: ExtLibs/ZedGraph/ZedGraph/DateScale.cs:847-853`
     #[must_use]
     pub fn label_in(x: f64, format: &str) -> String {
         calendar(x).map_or_else(
             || "Date Error".to_owned(),
-            |date| date.format(format).to_string(),
+            |date| date.strftime(format).to_string(),
         )
     }
 }

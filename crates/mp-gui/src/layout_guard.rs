@@ -402,7 +402,7 @@ impl Banner {
         }
         if let Some(text) = self.newly_shown(now) {
             let line = record_line(
-                &chrono::Local::now().format("%Y-%m-%d %H:%M:%S").to_string(),
+                &jiff::Zoned::now().strftime("%Y-%m-%d %H:%M:%S").to_string(),
                 place,
                 size,
                 &text,

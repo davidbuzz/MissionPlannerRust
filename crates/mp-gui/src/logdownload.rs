@@ -376,13 +376,14 @@ pub fn caption(listing: &LogListing) -> String {
 
 /// `GetItemCaption`: the Unix time made local. `// C#: Log/LogDownloadMavLink.cs:121-124`
 fn item_caption(listing: &LogListing) -> String {
-    use chrono::TimeZone as _;
-    chrono::Local
-        .timestamp_opt(i64::from(listing.time_utc), 0)
-        .single()
-        .map_or_else(String::new, |time| {
-            time.format("%-m/%-d/%Y %-I:%M:%S %p").to_string()
-        })
+    jiff::Timestamp::from_second(i64::from(listing.time_utc)).map_or_else(
+        |_| String::new(),
+        |time| {
+            time.to_zoned(jiff::tz::TimeZone::system())
+                .strftime("%-m/%-d/%Y %-I:%M:%S %p")
+                .to_string()
+        },
+    )
 }
 
 /// The window's state.

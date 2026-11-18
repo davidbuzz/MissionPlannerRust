@@ -100,11 +100,9 @@ pub fn utc(_: i64) -> i32 {
 /// This machine's time zone, `TimeZoneInfo.Local`: what the DataFlash Logs page passes.
 #[must_use]
 pub fn local_zone(utc_millis: i64) -> i32 {
-    use chrono::{Offset, TimeZone};
-    chrono::Local
-        .timestamp_millis_opt(utc_millis)
-        .single()
-        .map_or(0, |time| time.offset().fix().local_minus_utc())
+    jiff::Timestamp::from_millisecond(utc_millis).map_or(0, |time| {
+        time.to_zoned(jiff::tz::TimeZone::system()).offset().seconds()
+    })
 }
 
 /// `Core.Geometry.Point3D`: longitude, latitude, altitude.

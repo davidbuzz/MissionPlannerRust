@@ -866,7 +866,7 @@ fn to_upper(text: &str) -> String {
 /// `// C#: MainV2.cs:3952, 3962`
 #[must_use]
 pub fn short_date_today() -> String {
-    chrono::Local::now().format("%-m/%-d/%Y").to_string()
+    jiff::Zoned::now().strftime("%-m/%-d/%Y").to_string()
 }
 
 /// `KIndex.kregex`, `K-index at .+ was ([0-9]+)`, on the bulletin: the first line that says it -

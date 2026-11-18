@@ -104,9 +104,8 @@ lzma-rs.workspace = true
 # Local time, for naming a flight recording the way the pilot's own clock reads. std has no
 # timezone support at all, and the alternatives are worse: libc's localtime_r needs unsafe, which
 # the workspace denies, and time's now_local refuses to answer in a multi-threaded process, which
-# this is by the time a link is open. Free here - gpui already depends on chrono, so it is
-# compiled either way.
-chrono = { workspace = true }
+# this is by the time a link is open. jiff reads the system's time zone itself.
+jiff = { workspace = true }
 
 # Constructing a gpui RenderImage needs image::Frame, and gpui does not re-export the image crate.
 # The same version mp-tiles decodes with, so a tile crosses the boundary without converting.
@@ -145,8 +144,8 @@ gpui_windows = { git = "https://github.com/zed-industries/zed", rev = "62e5991dd
 gpui_macos = { git = "https://github.com/zed-industries/zed", rev = "62e5991dd0f0c8a3af8d5e7e9c4652490d468db8", features = ["font-kit"] }
 
 [target.'cfg(target_family = "wasm")'.dependencies]
-# Local time in a web page: chrono reads the browser's `Date` ("wasmbind"), not std's clock.
-chrono = { workspace = true, features = ["wasmbind"] }
+# Local time in a web page: jiff reads the browser's clock and time zone ("js"), not std's.
+jiff = { workspace = true, features = ["js"] }
 # The page's calls into the planner: its facts for the browser checks (facts.rs).
 wasm-bindgen = "0.2"
 # The planner's calls into the page: its file picker and downloads (page_files.rs).

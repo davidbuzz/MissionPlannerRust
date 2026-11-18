@@ -172,7 +172,7 @@ fn reports_dir(data_dir: &Path) -> PathBuf {
 pub fn write_report(data_dir: &Path, text: &str) -> std::io::Result<PathBuf> {
     let dir = reports_dir(data_dir);
     mp_os::fs::create_dir_all(&dir)?;
-    let stamp = chrono::Local::now().format("%Y-%m-%dT%H-%M-%S").to_string();
+    let stamp = jiff::Zoned::now().strftime("%Y-%m-%dT%H-%M-%S").to_string();
     let mut path = dir.join(format!("{stamp}.txt"));
     let mut counter = 1;
     while path.os_exists() {

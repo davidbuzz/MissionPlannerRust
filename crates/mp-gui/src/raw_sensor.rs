@@ -329,7 +329,7 @@ impl RawSensor {
             // time as en-US writes them, each value as `float.ToString()` - its shortest form.
             let line = format!(
                 "{},{},{},{},{},{},{}",
-                chrono::Local::now().format("%-m/%-d/%Y %-I:%M:%S %p"),
+                jiff::Zoned::now().strftime("%-m/%-d/%Y %-I:%M:%S %p"),
                 values[0],
                 values[1],
                 values[2],

@@ -178,7 +178,7 @@ pub struct Event {
     pub course: f64,
     pub speed: f64,
     /// `DateTime.UtcNow`.
-    pub time: chrono::DateTime<chrono::Utc>,
+    pub time: jiff::Timestamp,
     /// Additional Details, from the UID's row: a `<takv />`, the contact's callsign and endpoint,
     /// the VMF uid - each only when given.
     pub takv: bool,
@@ -188,9 +188,9 @@ pub struct Event {
 }
 
 /// `yyyy-MM-ddTHH:mm:ss.ffK` of a UTC time: hundredths cut, not rounded, and `Z`.
-fn cot_time(time: chrono::DateTime<chrono::Utc>) -> String {
-    let hundredths = time.timestamp_subsec_millis() / 10;
-    format!("{}.{hundredths:02}Z", time.format("%Y-%m-%dT%H:%M:%S"))
+fn cot_time(time: jiff::Timestamp) -> String {
+    let hundredths = time.subsec_millisecond() / 10;
+    format!("{}.{hundredths:02}Z", time.strftime("%Y-%m-%dT%H:%M:%S"))
 }
 
 /// `ToString("N<n>")` with no group separator, as `getXmlString`'s culture has it: .NET's fifteen
@@ -299,8 +299,8 @@ pub fn event_xml(event: &Event, indent: bool) -> Result<String, String> {
         level: 0,
     };
     let time = cot_time(event.time);
-    let start = cot_time(event.time - chrono::Duration::seconds(5));
-    let stale = cot_time(event.time + chrono::Duration::seconds(120));
+    let start = cot_time(event.time - jiff::SignedDuration::from_secs(5));
+    let stale = cot_time(event.time + jiff::SignedDuration::from_secs(120));
     x.open("event");
     x.attribute("version", "2.0")?;
     x.attribute("uid", &event.uid)?;
@@ -498,7 +498,7 @@ pub fn vehicle_xml(
     inputs: &Inputs,
     sysid: u32,
     at: &Position,
-    time: chrono::DateTime<chrono::Utc>,
+    time: jiff::Timestamp,
 ) -> Result<String, String> {
     let uid = uid_for(&inputs.rows, sysid).unwrap_or_default();
     let mut event = Event {
@@ -559,7 +559,7 @@ fn main_loop(shared: &Shared) {
             .os_lock()
             .map(|i| i.clone())
             .unwrap_or_default();
-        let time = chrono::Utc::now();
+        let time = jiff::Timestamp::now();
         let mut view = String::new();
         let mut threw = false;
         for (id, at) in &inputs.vehicles {
@@ -1764,9 +1764,11 @@ mod tests {
         {
             let f: Vec<&str> = line.split('|').collect();
             let number = |i: usize| f[i].parse::<f64>().expect("a number");
-            let time = chrono::NaiveDateTime::parse_from_str(f[9], "%Y-%m-%dT%H:%M:%S%.f")
+            let time = jiff::civil::DateTime::strptime("%Y-%m-%dT%H:%M:%S%.f", f[9])
                 .expect("a time")
-                .and_utc();
+                .to_zoned(jiff::tz::TimeZone::UTC)
+                .expect("a time in UTC")
+                .timestamp();
             let given = |i: usize| (!f[i].is_empty()).then(|| f[i].to_owned());
             let event = Event {
                 uid: f[1].to_owned(),
@@ -1807,7 +1809,7 @@ mod tests {
             alt: 0.0,
             course: 0.0,
             speed: 0.0,
-            time: chrono::Utc::now(),
+            time: jiff::Timestamp::now(),
             takv: false,
             callsign: None,
             endpoint: None,
@@ -1888,7 +1890,7 @@ mod tests {
             speed: 5.0,
             course: 90.0,
         };
-        let time = chrono::Utc::now();
+        let time = jiff::Timestamp::now();
         let xml = vehicle_xml(&inputs, 1, &at, time).expect("an event");
         assert!(xml.contains(r#"uid="UAV-1""#), "{xml}");
         assert!(xml.contains("<takv />"), "{xml}");

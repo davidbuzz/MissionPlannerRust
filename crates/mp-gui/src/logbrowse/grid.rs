@@ -148,7 +148,7 @@ enum Clock {
 impl Clock {
     /// A row's time, in the local zone as `gpsTimeToTime` converts it.
     fn text(self, boot_ms: Option<f64>) -> String {
-        self.text_in(boot_ms, &chrono::Local)
+        self.text_in(boot_ms, &jiff::tz::TimeZone::system())
     }
 
     /// A row's time in a given zone.
@@ -158,23 +158,12 @@ impl Clock {
     /// 100-nanosecond ticks and shows milliseconds; microseconds lose nothing that shows. A time
     /// the calendar cannot hold is an exception the C#'s cell handler swallows, leaving the cell
     /// empty, and is left empty here.
-    fn text_in<Tz: chrono::TimeZone>(self, boot_ms: Option<f64>, zone: &Tz) -> String
-    where
-        Tz::Offset: std::fmt::Display,
-    {
+    fn text_in(self, boot_ms: Option<f64>, zone: &jiff::tz::TimeZone) -> String {
         self.formatted_in(boot_ms, zone, TIME_FORMAT)
     }
 
     /// A row's time in a given zone and format.
-    fn formatted_in<Tz: chrono::TimeZone>(
-        self,
-        boot_ms: Option<f64>,
-        zone: &Tz,
-        format: &str,
-    ) -> String
-    where
-        Tz::Offset: std::fmt::Display,
-    {
+    fn formatted_in(self, boot_ms: Option<f64>, zone: &jiff::tz::TimeZone, format: &str) -> String {
         let boot_ms = boot_ms.unwrap_or(0.0);
         match self {
             Self::Gps {
@@ -184,22 +173,20 @@ impl Clock {
                 #[allow(clippy::cast_possible_truncation, clippy::cast_precision_loss)]
                 // a boot clock in milliseconds is far inside both types' ranges
                 let since_fix_us = ((boot_ms - at_fix as f64) * 1000.0) as i64;
-                chrono::DateTime::from_timestamp_millis(start_ms)
+                jiff::Timestamp::from_millisecond(start_ms)
                     .and_then(|start| {
-                        start.checked_add_signed(chrono::TimeDelta::microseconds(since_fix_us))
+                        start.checked_add(jiff::SignedDuration::from_micros(since_fix_us))
                     })
-                    .map(|time| time.with_timezone(zone).format(format).to_string())
+                    .map(|time| time.to_zoned(zone.clone()).strftime(format).to_string())
                     .unwrap_or_default()
             }
             Self::FromYearOne => {
                 #[allow(clippy::cast_possible_truncation)] // as above
                 let since_boot_us = (boot_ms * 1000.0) as i64;
-                chrono::NaiveDate::from_ymd_opt(1, 1, 1)
-                    .and_then(|day| day.and_hms_opt(0, 0, 0))
-                    .and_then(|start| {
-                        start.checked_add_signed(chrono::TimeDelta::microseconds(since_boot_us))
-                    })
-                    .map(|time| time.format(format).to_string())
+                jiff::civil::date(1, 1, 1)
+                    .at(0, 0, 0, 0)
+                    .checked_add(jiff::SignedDuration::from_micros(since_boot_us))
+                    .map(|time| time.strftime(format).to_string())
                     .unwrap_or_default()
             }
         }
@@ -537,7 +524,7 @@ impl Grid {
     #[must_use]
     pub fn time_of_day(&self, boot_ms: f64) -> String {
         self.clock
-            .formatted_in(Some(boot_ms), &chrono::Local, "%H:%M:%S%.3f")
+            .formatted_in(Some(boot_ms), &jiff::tz::TimeZone::system(), "%H:%M:%S%.3f")
     }
 
     /// The columns `LoadLog` gives the C#'s grid, which Export Visible writes a cell of for
@@ -991,16 +978,16 @@ mod tests {
             boot_ms: 2_500,
         };
         assert_eq!(
-            clock.text_in(Some(3_000.9), &chrono::Utc),
+            clock.text_in(Some(3_000.9), &jiff::tz::TimeZone::UTC),
             "2024-02-07 23:59:42.500"
         );
         assert_eq!(
-            clock.text_in(Some(1_000.0), &chrono::Utc),
+            clock.text_in(Some(1_000.0), &jiff::tz::TimeZone::UTC),
             "2024-02-07 23:59:40.500",
             "before the fix is before the start"
         );
         assert_eq!(
-            clock.text_in(None, &chrono::Utc),
+            clock.text_in(None, &jiff::tz::TimeZone::UTC),
             "2024-02-07 23:59:39.500",
             "a record with no time counts as boot"
         );
@@ -1027,7 +1014,7 @@ mod tests {
         );
         let grid = grid_over(data);
         assert_eq!(
-            grid.clock.text_in(Some(9_999.332), &chrono::Utc),
+            grid.clock.text_in(Some(9_999.332), &jiff::tz::TimeZone::UTC),
             "2026-10-04 12:30:57.800"
         );
     }

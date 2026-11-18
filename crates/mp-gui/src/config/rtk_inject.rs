@@ -2565,7 +2565,7 @@ pub mod worker {
         let dir = log_dir?;
         let path = dir.join(format!(
             "{}.gpsbase",
-            chrono::Local::now().format("%Y-%m-%d %H-%M-%S")
+            jiff::Zoned::now().strftime("%Y-%m-%d %H-%M-%S")
         ));
         match mp_os::fs::OpenOptions::new()
             .read(true)
@@ -2778,7 +2778,7 @@ pub mod worker {
             mp_params::param_file::invariant_double(position.lat),
             mp_params::param_file::invariant_double(position.lng),
             mp_params::param_file::invariant_double(position.alt),
-            chrono::Local::now().format("%H:%M:%S")
+            jiff::Zoned::now().strftime("%H:%M:%S")
         ));
     }
 

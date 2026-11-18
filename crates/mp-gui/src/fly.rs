@@ -8567,7 +8567,7 @@ impl MissionPlanner {
     /// `// C#: GCSViews/FlightData.cs:4773-4785`
     fn fly_start_avi(&mut self) {
         let directory = crate::telemetry::Telemetry::recording_directory();
-        let name = chrono::Local::now().format("%Y-%m-%d %H-%M-%S").to_string();
+        let name = jiff::Zoned::now().strftime("%Y-%m-%d %H-%M-%S").to_string();
         let path = directory.join(format!("{name}.avi"));
         let mut writer = mp_video::avi::AviWriter::new();
         let opened = mp_os::fs::create_dir_all(&directory).and_then(|()| writer.start(&path));

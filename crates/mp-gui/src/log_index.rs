@@ -197,9 +197,10 @@ pub fn date_text(ticks: i64) -> String {
         return "1/1/0001 12:00:00 AM".to_owned();
     }
     let unix_ms = (ticks - UNIX_EPOCH_TICKS) / TICKS_PER_MS;
-    chrono::DateTime::from_timestamp_millis(unix_ms).map_or_else(String::new, |utc| {
-        utc.with_timezone(&chrono::Local).format(FORMAT).to_string()
-    })
+    jiff::Timestamp::from_millisecond(unix_ms).map_or_else(
+        |_| String::new(),
+        |utc| utc.to_zoned(jiff::tz::TimeZone::system()).strftime(FORMAT).to_string(),
+    )
 }
 
 /// `TimeSpan.ToString()`: `[-][d.]hh:mm:ss[.fffffff]`.

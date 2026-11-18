@@ -787,7 +787,7 @@ fn websocket_raw<C: Connection>(stream: &mut C, head: &str, shared: &Shared) {
     };
     let handshake = format!(
         "HTTP/1.1 101 WebSocket Protocol Handshake\r\nUpgrade: WebSocket\r\nConnection: upgrade\r\nDate: {}\r\nSec-WebSocket-Accept: {accept}\r\n{protocol}Server: Mission Planner\r\n\r\n",
-        chrono::Utc::now().format("%a, %d %b %Y %H:%M:%S GMT")
+        jiff::Timestamp::now().strftime("%a, %d %b %Y %H:%M:%S GMT")
     );
     if !write_all(stream, &[handshake.as_bytes()]) {
         return;
@@ -1331,9 +1331,9 @@ fn static_file<C: Connection>(stream: &mut C, head: &str, url: &str, root: &Path
             // give.
             let since = time.duration_since(web_time::UNIX_EPOCH).ok()?;
             let seconds = i64::try_from(since.as_secs()).ok()?;
-            chrono::DateTime::<chrono::Utc>::from_timestamp(seconds, since.subsec_nanos())
+            jiff::Timestamp::new(seconds, i32::try_from(since.subsec_nanos()).ok()?).ok()
         })
-        .map(|time| time.format("%a, %d %b %Y %H:%M:%S GMT").to_string())
+        .map(|time| time.strftime("%a, %d %b %Y %H:%M:%S GMT").to_string())
         .unwrap_or_default();
     if let Some(since) = header_value(head, "If-Modified-Since")
         && since.eq_ignore_ascii_case(&modified)

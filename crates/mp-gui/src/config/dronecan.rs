@@ -2070,7 +2070,7 @@ impl DroneCan {
         if self.log && opening {
             self.log_file = log_directory().and_then(|dir| {
                 let _ = mp_os::fs::create_dir_all(&dir);
-                let name = format!("{}.can", chrono::Local::now().format("%Y-%m-%d %H-%M-%S"));
+                let name = format!("{}.can", jiff::Zoned::now().strftime("%Y-%m-%d %H-%M-%S"));
                 mp_os::fs::File::create(dir.join(name)).ok()
             });
         }
@@ -4026,8 +4026,7 @@ impl MissionPlanner {
         let on_setup = self.screen == crate::Screen::Setup;
         let now = Instant::now();
         let wall_second = {
-            use chrono::Timelike as _;
-            chrono::Local::now().second()
+            u32::try_from(jiff::Zoned::now().second()).unwrap_or(0)
         };
         self.extra.dronecan.tick(
             &self.telemetry,
