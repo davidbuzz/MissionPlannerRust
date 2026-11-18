@@ -365,7 +365,11 @@ jobs:
           fetch-depth: 0
       - uses: actions/download-artifact@v4
         with:
-          path: assets
+          # Not "assets": the repository has a folder of that name, and since this job checks the
+          # repository out the downloads landed among its files - the beta run of 2026-11-18
+          # (44259800782) uploaded one of them and stopped at the first folder, "read geoid: is a
+          # directory".
+          path: release-files
           merge-multiple: true
       - name: What changed since the last release (tools/release/notes.py)
         # Nobody writes the notes: the advisories fixed are those against what the last release
@@ -384,14 +388,14 @@ jobs:
           # RELEASE_NOTES.md as a download: main's, with this release at its head; the beta's is
           # its own section alone, since only a tagged release is kept in the file.
           if [ "$CHANNEL" = beta ]; then
-            cp section.md assets/RELEASE_NOTES.md
+            cp section.md release-files/RELEASE_NOTES.md
           else
-            git show origin/main:RELEASE_NOTES.md > assets/RELEASE_NOTES.md 2>/dev/null || rm -f assets/RELEASE_NOTES.md
-            python3 tools/release/notes.py prepend --file assets/RELEASE_NOTES.md --section section.md --tag "$TAG"
+            git show origin/main:RELEASE_NOTES.md > release-files/RELEASE_NOTES.md 2>/dev/null || rm -f release-files/RELEASE_NOTES.md
+            python3 tools/release/notes.py prepend --file release-files/RELEASE_NOTES.md --section section.md --tag "$TAG"
           fi
       - name: Checksums and release notes
         run: |
-          cd assets
+          cd release-files
           cat SHA256SUMS-linux SHA256SUMS-windows SHA256SUMS-macos > SHA256SUMS.txt
           rm SHA256SUMS-linux SHA256SUMS-windows SHA256SUMS-macos
           ls -la
@@ -441,9 +445,17 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
         run: |
-          cd assets
+          cd release-files
           # update.json, from the downloads as they are here: a planner that reads it is sent to
           # files of exactly these sizes and hashes, so it goes up after them, never before.
+          # What is published, by name: the four downloads, their checksums and the notes. Never
+          # "everything in this folder".
+          set -- *_linux-x86_64.tar.gz *_amd64.deb *_windows-x86_64.zip *_macos-universal.tar.gz \
+            SHA256SUMS.txt RELEASE_NOTES.md
+          for file in "$@"; do
+            [ -f "$file" ] || { echo "not a file to publish: $file"; exit 1; }
+          done
+          [ $# -eq 6 ] || { echo "expected six files to publish, found $#: $*"; exit 1; }
           python3 ../tools/release/manifest.py write --channel "$CHANNEL" --tag "$TAG" \
             --version "$VERSION" --commit "$GITHUB_SHA" --built "$BUILT" \
             --repository "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY" --dir . --out ../update.json
@@ -452,7 +464,7 @@ jobs:
             # the last one's (their names carry the commit), then the manifest, then the last
             # one's removed. No tag is made or moved and no commit named.
             old=$(gh release view beta --json assets --jq '.assets[].name')
-            gh release upload beta * --clobber
+            gh release upload beta "$@" --clobber
             gh release upload beta ../update.json --clobber
             gh release edit beta --prerelease --notes-file ../notes.md
             for name in $old; do
@@ -460,10 +472,10 @@ jobs:
             done
           else
             if gh release view "$TAG" > /dev/null 2>&1; then
-              gh release upload "$TAG" * --clobber
+              gh release upload "$TAG" "$@" --clobber
               gh release edit "$TAG" --notes-file ../notes.md
             else
-              gh release create "$TAG" * --title "MissionPlannerRust $TAG" \
+              gh release create "$TAG" "$@" --title "MissionPlannerRust $TAG" \
                 --notes-file ../notes.md --verify-tag --latest
             fi
             gh release upload "$TAG" ../update.json --clobber
