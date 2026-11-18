@@ -1,12 +1,17 @@
 # Updates: how the planner finds and installs a newer version of itself
 
-Status, 2026-11-18: **the plan is agreed and its questions answered (section 7); being built,
-phase by phase (section 6).** Until phase 2 lands, HELP's "Check for Updates" and "Check for BETA
-Updates" still answer "Sorry, Updates aren't implemented yet" (the owner's word of 2026-10-14). The owner's word of 2026-11-18 asks for a working version that need not
-copy the C#: "i dont think i want it to work exactly like the old C# app ... write a technical
-implementation plan that works on at least linux/macos/windows (we might still want the update/s
-turned off in wasm?)". This file is that plan, and becomes the description of the process once
-it is built. Section 7 holds what the owner decided.
+Status, 2026-11-18: **built, all of it but signing, which the owner ruled out** - the check, the
+install in place, the Debian package's download, the beta channel and the release workflow that
+feeds them. Sections 1 to 9 are the plan as it was agreed and what was tested before it was
+written; **section 10 is what was built, how to release with it, and what is proven where.** The
+one part not yet run is the workflow on GitHub itself, which waits for the owner's push.
+
+It began as the owner's bug of 2026-11-18: HELP's "Check for Updates" and "Check for BETA
+Updates" worked in the C# and here said only "Sorry, Updates aren't implemented yet" (his own word
+of 2026-10-14). He asked for a working version that need not copy the C#: "i dont think i want it
+to work exactly like the old C# app ... write a technical implementation plan that works on at
+least linux/macos/windows (we might still want the update/s turned off in wasm?)", and then "pls
+do all phases of the 'update' together, excluding signing".
 
 ## 1. What Mission Planner does
 
@@ -44,10 +49,11 @@ Why not copy it as it is:
 
 ## 2. What we have
 
-- **`crates/mp-update`**: a tested port of the above (`check.rs`, `apply.rs`, `md5.rs`,
-  `version.rs`), with HELP's conversation around it in `help.rs` - the question, the progress
-  dialog with Cancel, "No update available.", the daily check, `/update` and `/updatebeta`. All of
-  it is off behind `UPDATES_ALLOWED = false`, and the channel settings are empty.
+- **`crates/mp-update`**, as it was before this: a tested port of the above (`check.rs`,
+  `apply.rs`, `md5.rs`, `version.rs`), with HELP's conversation around it in `help.rs` - the
+  question, the progress dialog with Cancel, "No update available.", the daily check, `/update`
+  and `/updatebeta`. All of it was off behind `UPDATES_ALLOWED = false`, and the channel settings
+  were empty. The conversation is kept; the port behind it is replaced (section 10).
 - **CI** (`.github/workflows`):
   - `ci.yml`, every push to main and every pull request: tests on Linux, Windows and macOS, the
     cross-compile, the wasm check, SITL, fuzzing, codegen, wire agreement, licences and
@@ -98,6 +104,7 @@ One small file per release, written by the `publish` job from the files it has j
   "schema": 1,
   "channel": "stable",
   "version": "0.0.2",
+  "tag": "v0_0_2",
   "commit": "42992d086a789143682f2997adc737545e3d8c2e",
   "built": "2026-11-20T03:10:00Z",
   "notes_url": "https://github.com/davidbuzz/MissionPlannerRust/releases/tag/v0_0_2",
@@ -111,8 +118,9 @@ One small file per release, written by the `publish` job from the files it has j
 ```
 
 The planner downloads the same archives a person downloads by hand, so there is one set of files
-and the release job's open-and-paint check covers what the updater installs. Each asset is
-fetched from the manifest's own release (`releases/download/<tag>/<name>`).
+and the release job's open-and-paint check covers what the updater installs. Each asset also
+carries its `url`, under the manifest's own release (`releases/download/<tag>/<name>`), left out
+above for width. An address that is not https is refused, the manifest's and each download's.
 
 ### 4.3 The planner knows what it is
 
@@ -196,12 +204,13 @@ part:
   address); the manifest backend avoids that. Its defaults bring in `reqwest`, so it would be
   taken without them. It wants `sha2` 0.11 beside this tree's 0.10, and adds `self-replace`,
   `tar`, `zip` and `urlencoding` to the licence table. It is left out of the browser build.
-- **Recommendation.** Phase 3 starts by reading whether its pieces (`manifest`, `checksums`,
-  `MoveAll`, `restart`) can be driven without its terminal flow. If they can, use them and write
-  only the conversation. If the download cannot report or be cancelled, keep our own download
-  (`mp_firmware`'s `Fetch`, `sha2` and `flate2` are already here) and take `self-replace` alone
-  (Apache-2.0; `tempfile`, `fastrand` and `windows-sys`, all three already in the tree) for the
-  swap.
+- **What was done.** Neither `self_update` nor `self-replace` is used. What this updater needs
+  beyond a download and a swap is its own - the manifest of section 4.2, progress into HELP's
+  dialog and its Cancel between reads, the trial run of the new planner, the Debian package's
+  path, no restart with a link open - and the swap itself, once section 9 had shown that a rename
+  is all it takes on all three systems, is forty lines with their roll-back (`install.rs`). One
+  crate was added: `tar` 0.4 (MIT or Apache-2.0, with `filetime` under it), to read the Linux and
+  macOS archives; `sha2`, `flate2`, `ureq` and `serde_json` were here already.
 
 ## 5. CI changes
 
@@ -250,11 +259,14 @@ first updating release by hand, once.
 
 ## 8. To be proven on the machines
 
-- macOS: the move, the quarantine mark and the signature are proven from a shell (9.2); still to
-  do, the updated planner started from Finder, and an Intel Mac.
-- Windows: the rename itself is proven with stand-ins (9.1); still to do, the real `planner.exe`
-  on the CI runner and in the VM, and what Defender makes of a program that writes an executable.
+- macOS: the move, the quarantine mark and the signature are proven from a shell (9.2), and a
+  real planner updating itself on Apple Silicon (10.4); still to do, the updated planner started
+  from Finder, the workflow's universal build, and an Intel Mac.
+- Windows: the rename is proven with stand-ins (9.1) and with a real `planner.exe` updating
+  itself in the VM (10.4); still to do, the workflow's MSVC build doing the same, and what
+  Defender makes of a program that writes an executable in a folder it watches.
 - Linux: the staged `--version` run on a machine below glibc 2.35 refusing cleanly.
+- GitHub: the release workflow itself, at the owner's first push and tag (10.4).
 
 ## 9. What the tests taught: a running program's file on Windows and macOS
 
@@ -338,3 +350,93 @@ What it settles:
 
 Not covered: Gatekeeper's assessment of the planner is "rejected", as for any program without a
 developer identity, and it was started here from a shell, not from Finder; an Intel Mac.
+
+## 10. As built
+
+### 10.1 Where it is
+
+| What | Where |
+|---|---|
+| What this build is: version, channel, commit, compiled in by the release workflow; `--version` | `crates/mp-update/src/identity.rs` |
+| A version read from `v0_0_2`, `0_0_2` or `0.0.2` alike, ordered by its numbers | `crates/mp-update/src/release.rs` |
+| The manifest read and held to its form; which release is offered to which build | `crates/mp-update/src/manifest.rs`, `check.rs` |
+| A download to a file with its SHA-256 taken on the way, progress and Cancel | `crates/mp-update/src/download.rs` |
+| The `.tar.gz` and `.zip` unpacked, nothing outside the staging folder, files and folders only | `crates/mp-update/src/unpack.rs` |
+| The trial run, the swap with its roll-back, the next start's clean-up, the Debian package | `crates/mp-update/src/install.rs` |
+| HELP's two buttons, the question, the progress dialog, the daily check, `/update`, the restart | `crates/mp-gui/src/help.rs` |
+| "Check for updates at start", the owner's box | `crates/mp-gui/src/config/planner.rs` (`chk_updateatstart`) |
+| What a workflow run builds; the manifest written and the published release checked | `tools/release/what.sh`, `tools/release/manifest.py`, `.github/workflows/release.yml` |
+
+The first port of the C#'s updater - the per-file MD5 update and `headless-planner update-apply` -
+is removed, and the ledger's rows for `Utilities/Update.cs` and `Updater/Program.cs` are marked
+redesigned by the owner's word.
+
+### 10.2 What a user sees
+
+- **A release** (the workflow's build): "Check for Updates" asks "Update Found: 0.0.1 to 0.0.2",
+  with the release's page as its ChangeLog link; "Check for BETA Updates" asks about the beta's
+  build by its commit and day. Yes shows the C#'s progress dialog - getting, unpacking, checking
+  the new planner, installing - and then the new planner starts and the old one ends.
+- **With a link open** it installs and does not restart: "Update installed: it takes effect when
+  the planner is next started". Until then both buttons say "The update is installed: restart
+  the planner to use it".
+- **From the `.deb`**: Yes fetches the new package into Downloads, checks it, and a box says
+  where it is and the command, `sudo apt install <path>`.
+- **A development build** (`cargo build`): both buttons say so on the status line and nothing is
+  fetched, at start or ever.
+- **In the browser page**: neither button is there.
+- **At start**: once a day, silently unless there is a release to offer; on later starts the same
+  day, the beta too when CONFIG > Planner's Beta Updates is ticked; never when "Check for updates
+  at start" is unticked.
+- **Settings**: `update_check` (the day last checked), `beta_updates`, `update_check_at_start`;
+  `UpdateManifest` and `BetaUpdateManifest` name another manifest than this repository's, for a
+  fork or a test.
+
+### 10.3 Making a release
+
+1. **A stable release**: push a tag, `v0_0_2`. The workflow builds the three planners told they
+   are release 0.0.2 of the stable channel at that commit, checks each says so (`planner
+   --version`), opens and paints each, packages them, publishes them under the tag as the latest
+   release, uploads `update.json` last, and then fetches the manifest by its public address and
+   every download it names, holding each to its size and hash.
+2. **The beta**: nothing to do. Each night the workflow looks at main; when it has moved since
+   the last beta and CI passed on it, the same three builds are published under the one tag
+   `beta`, a pre-release, their names carrying the commit, the manifest replaced after they are
+   up and the previous beta's files removed after that. Actions > release builds > Run workflow
+   with the channel `beta` makes one at once.
+3. **A build to look at**: Run workflow with no channel, as before. It is kept as the run's
+   artifacts and calls itself a development build.
+
+The planners released before this, `v0_0_0` and `v0_0_1`, have no updater: their users fetch the
+first updating release by hand, once.
+
+### 10.4 What is proven, and where
+
+| | How | Result |
+|---|---|---|
+| The updater's parts | `cargo test -p mp-update`: 23 unit tests - the manifest, the ordering, a wrong hash, a short and a long download, Cancel, an archive that would write outside itself, a link in an archive, the trial against a planner that is another release or does not start, the swap undone part way, the clean-up touching only what its list names | pass, Linux |
+| The workflow's tools against the planner's reader | `crates/mp-update/tests/manifest_tool.rs`: `manifest.py write` read back by `Manifest::parse`; `manifest.py verify` on a release laid out on disk, and on one tampered with; `what.sh` for a tag and for a run by hand | pass, Linux |
+| HELP's logic | `help.rs`'s tests: a development build, the question and its link, Yes installing in place, a failed trial installing nothing, the beta, the Debian package, Cancel, no restart with a link open, the daily check and its off box | pass, Linux |
+| The screen | `tests/gui/help.gui` (a release asks, installs into a scratch folder, then says to restart), `help-devbuild.gui`, `config-planner.gui` (the new box), headless | pass, Linux |
+| **A real planner updating itself** | `tools/release/self-update-test.py <planner built as a release>`: a stamped planner, served a release of itself from this machine, refuses a wrong download, then fetches, checks, unpacks, tries and installs over its own running file, starts as the release, and deletes the old files at its next start | see below |
+
+The self-update test, by platform:
+
+| Platform | The planner | Result, 2026-11-18 |
+|---|---|---|
+| Linux (this machine, x86-64) | `cargo build` with the release values set, stripped; 147 MB | **16 of 16** |
+| macOS 26.3, Apple Silicon | built on the Mac the same way, from this tree; 134 MB. Also `cargo test -p mp-update` there: 26 of 26 | **16 of 16** |
+| Windows 10 21H2 (the tiny10 VM) | cross-compiled here for `x86_64-pc-windows-gnu`, stripped; 135 MB. Also the crate's unit tests there: 22 of 22 (the trial's own test is Unix's) | **16 of 16** |
+
+On each, the step section 9 is about is the real one: the running planner moved its own file
+aside, moved the new one into its name, and the new one started. The test opens no window - it
+drives `/update`, HELP's update without its boxes - so what it does not cover is the restart from
+the window and the dialogs themselves, which `help.gui` and `help.rs`'s tests cover on Linux.
+The planners here were debug builds stamped by hand; the workflow's are release builds stamped
+by `what.sh`, and on macOS universal ones.
+
+Not yet run: the release workflow on GitHub - the stamped builds, the manifest's upload, the
+check of the published release, the nightly beta. Its scripts are tested here; the workflow's
+own steps are first exercised by the first tag or beta run after the owner pushes. Nor, still,
+the updated planner started from Finder on a Mac, an Intel Mac, or a Windows folder Defender
+watches (section 8).
