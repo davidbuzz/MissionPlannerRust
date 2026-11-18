@@ -4997,11 +4997,7 @@ fn main() {
         // build. The updater's trial of a new planner reads this line (mp_update::install).
         println!(
             "{}",
-            mp_update::identity::version_line(
-                "planner",
-                env!("CARGO_PKG_VERSION"),
-                mp_update::identity::this_build().as_ref()
-            )
+            mp_update::identity::version_line("planner", &mp_update::identity::this_build())
         );
         return;
     }

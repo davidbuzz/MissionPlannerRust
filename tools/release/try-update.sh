@@ -1,10 +1,14 @@
 #!/usr/bin/env bash
-# A planner on this machine whose update works, with a channel of its own to update from - for
-# trying HELP's two buttons by hand before any release with a manifest is on GitHub (the owner,
-# 2026-11-18: "i want to run a local copy of app on this linux box where the update functionality
-# works"). updates.md is the design; tools/release/self-update-test.py is the same thing as a test.
+# Releases of this tree and a channel serving them on this machine - for trying the update by
+# hand before any release with a manifest is on GitHub. The owner's local working copy is
+# target/debug/planner, whose own buttons update it (updates.md, section 4.3); what this adds is
+# something for a planner to update *to* and a planner that is a release, which the check at
+# start needs. tools/release/self-update-test.py is the same thing as a test.
 #
-#   tools/release/try-update.sh [folder]      default ~/mp-update-demo
+#   tools/release/try-update.sh <folder>      a folder of your choosing; it is emptied first
+#
+# The folder is asked for, never assumed: the first run of this put ~/mp-update-demo in the
+# owner's home unasked (2026-11-18).
 #
 # A planner from `cargo build` is a development build and is never updated, so this builds three
 # that are told they are releases, as the release workflow tells its own (MP_RELEASE_*): 0.0.1 of
@@ -24,7 +28,10 @@
 # build it was: run it when no other build is going.
 set -euo pipefail
 ROOT=$(cd "$(dirname "$0")/../.." && pwd)
-DEMO=${1:-$HOME/mp-update-demo}
+DEMO=${1:?usage: tools/release/try-update.sh <folder> - a folder to build the demo in, emptied first}
+case "$DEMO" in
+    /|"$HOME"|"$HOME/") echo "not $DEMO" >&2; exit 2 ;;
+esac
 PORT=5797
 JOBS=${JOBS:-4}
 cd "$ROOT"

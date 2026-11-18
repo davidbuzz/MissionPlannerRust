@@ -4,6 +4,7 @@ One line per memory. Files live in `.claude/memory/` in this repository so they 
 controlled; the per-project memory directory holds symlinks to them.
 
 **CRITICAL:**
+- [EXPLICIT CONSENT outside the repo](explicit-consent-outside-the-repo.md) — ALWAYS ask before any edit (create, write, move, delete) to any directory outside ~/MissionPlannerRust/; working files go in target/; never undo an overstep unasked (Buzz, 2026-11-18: ~/mp-update-demo, "CONSENT DENIED")
 - [NOT IN THE C#, NOT IN SCOPE](not-in-the-csharp-not-in-scope.md) — never invent a feature Mission Planner does not have; ask instead
 - [Port from the C# source](port-from-the-csharp-source.md) — https://github.com/ArduPilot/MissionPlanner is the spec, the clone `MP_SRC` names (never its path in the repo); read the .cs, never recall it
 - [No callers, no port](no-callers-no-port.md) — a .cs file or function nobody calls is recorded out of scope, never ported (Buzz, 2026-09-25)

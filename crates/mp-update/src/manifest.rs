@@ -183,9 +183,13 @@ impl Manifest {
     /// Stable is offered when its version is above the build's, whatever the build's channel - a
     /// beta carries the version of the last release before it, so the next release is above it.
     /// Beta is offered when it is another commit than the build's and was built later, so a
-    /// release newer than the beta is never taken back to it.
+    /// release newer than the beta is never taken back to it. A development build, which cannot
+    /// say which release it is, is offered whatever the channel holds.
     #[must_use]
     pub fn offers(&self, build: &Identity) -> bool {
+        if !build.stamped {
+            return true;
+        }
         match self.channel {
             Channel::Stable => self.version > build.version,
             Channel::Beta => self.commit != build.commit && self.built > build.built,
@@ -196,6 +200,16 @@ impl Manifest {
     /// and the commit for a beta.
     #[must_use]
     pub fn described_for(&self, build: &Identity) -> String {
+        if !build.stamped {
+            return match self.channel {
+                Channel::Stable => format!("a development build to {}", self.version),
+                Channel::Beta => format!(
+                    "a development build to {} built {}",
+                    crate::identity::short(&self.commit),
+                    day(&self.built)
+                ),
+            };
+        }
         match self.channel {
             Channel::Stable => format!("{} to {}", build.version, self.version),
             Channel::Beta => format!(
@@ -366,6 +380,16 @@ pub(crate) mod tests {
         assert_eq!(
             beta.described_for(&build("0.0.2", "beta", OTHER, "2026-11-24T02:00:00Z")),
             "0570c61aa1b2 built 2026-11-24 to 42992d086a78 built 2026-11-25"
+        );
+
+        // A development build - cargo's, which knows no release it is - is offered whatever the
+        // channel holds, even a release of its own version's number.
+        let development = Identity::development("0.0.2");
+        assert!(stable.offers(&development) && beta.offers(&development));
+        assert_eq!(stable.described_for(&development), "a development build to 0.0.2");
+        assert_eq!(
+            beta.described_for(&development),
+            "a development build to 42992d086a78 built 2026-11-25"
         );
     }
 

@@ -90,8 +90,9 @@ Mission Planner's:
   shows the `apt` command to install it.
 - The once-a-day check at start-up can be turned off: CONFIG > Planner, *Check for updates at
   start*.
-- A planner built from source says it is a development build and is not updated from a release.
-  The browser page has neither button: it is always whatever the site serves.
+- A planner built from source is a development build: its two buttons update it as a release's
+  do, and it is not checked at start-up. The browser page has neither button: it is always
+  whatever the site serves.
 - `/update` and `/updatebeta` on the command line do the same without a window.
 
 ## When it crashes

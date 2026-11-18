@@ -65,6 +65,3 @@ pub const UPDATE_NOT_FOUND: &str = "No update available.";
 pub const CHECK_FOR_UPDATES: &str = "Check for Updates";
 /// "Update Failed " before the exception's message. `// C#: Update.cs:103, 108`
 pub const UPDATE_FAILED: &str = "Update Failed ";
-/// What the buttons say of a build that is no release: `cargo build`'s, a developer's.
-pub const DEVELOPMENT_BUILD: &str =
-    "This is a development build: it is updated from its source, not from a release";

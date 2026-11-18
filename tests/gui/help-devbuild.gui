@@ -1,13 +1,14 @@
-# HELP's two update buttons on a development build - `cargo build`'s, which is every planner but
-# the release workflow's (crates/mp-update/src/identity.rs; updates.md, section 4.3).
+# HELP's two update buttons on a development build - `cargo build`'s, target/debug/planner, which
+# is the owner's local working copy and every planner but the release workflow's
+# (crates/mp-update/src/identity.rs; updates.md, section 4.3).
 #
-# The claim: a build that is no release is never updated from one. Each button puts
-# mp_update's DEVELOPMENT_BUILD on the status line and asks the network nothing - though the
-# settings below, a channel with a release on it and beta updates on, would have a release ask
-# about it - and the check at startup does not run.
+# The claim: a development build updates when a button asks (the owner, 2026-11-18). It cannot
+# say which release it is, so each button is offered whatever its channel holds, "a development
+# build to ..."; No leaves everything alone. What it does not do is ask at startup - though the
+# settings below, beta updates on and no day checked, would have a release ask at once.
 #
-# Against tests/gui/update-server.py on 127.0.0.1:5795, so that a request, were one made, would be
-# answered.
+# Against tests/gui/update-server.py on 127.0.0.1:5795. Yes, and the install that follows, is
+# help.gui's and help.rs's tests': the new planner there is a shell script standing for one.
 #
 # Needs no link: tools/gui-headless.sh help-devbuild
 
@@ -19,22 +20,29 @@ setup printf '<?xml version="1.0" encoding="utf-8"?><Config><UpdateManifest>http
 
 screen help
 window 1600x1200
-budget 5
+budget 6
 
 expect screen help
 expect help.build ~ (development build)
+
+# Nothing asked at startup.
 expect help.flow idle
 expect help.last none
 
+# Check for Updates: the stable channel's release, offered. No.
 click help-updatecheck
-expect help.refused 1
-expect status.drawn This is a development build: it is updated from its source, not from a release
+expect help.flow question
+expect help.question Update Found: a development build to 0.0.2 [link;http://127.0.0.1:5795/releases/tag/v0_0_2;ChangeLog]
+click help-question-no
 expect help.flow idle
-expect help.last none
 
+# Check for BETA Updates: the beta's build, offered. No, and nothing touched.
 click help-betaupdate
-expect help.refused 2
-expect status.drawn This is a development build: it is updated from its source, not from a release
+expect help.flow question
+expect help.question BETA Update Found: a development build to 9f8e7d6c5b4a built 2026-11-25 [link;http://127.0.0.1:5795/releases/tag/beta;ChangeLog]
+click help-question-no
 expect help.flow idle
+expect help.refused 0
 expect help.written 0
 expect help.restart none
+expect help.installed false

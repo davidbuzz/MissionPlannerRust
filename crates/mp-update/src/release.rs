@@ -50,6 +50,12 @@ impl ReleaseVersion {
         Ok(Self(parts))
     }
 
+    /// Version nought, below every release.
+    #[must_use]
+    pub fn zero() -> Self {
+        Self(vec![0])
+    }
+
     /// The numbers, a missing one read as zero: `0.1` is `0.1.0`.
     fn padded(&self, len: usize) -> impl Iterator<Item = u64> + '_ {
         self.0.iter().copied().chain(std::iter::repeat(0)).take(len)

@@ -33,7 +33,8 @@
 //! is offered ("0.0.1 to 0.0.2"); the beta button asks as the other does, where the C#'s updates
 //! at once, and Control on it is nothing, there being no master channel; a planner with a link
 //! open installs and does not restart; the Debian package's install fetches the new package and
-//! shows its command; a development build is told so; CONFIG > Planner has a box that turns the
+//! shows its command; a development build - cargo's - updates when a button asks and is not checked
+//! at start; CONFIG > Planner has a box that turns the
 //! check at start off; and in a web page both buttons are hidden, as the C# hides them for a
 //! Windows Store install (`Help.cs:27-31`).
 //!
@@ -60,8 +61,7 @@ use gpui::{AnyElement, Context, MouseButton, Window, div, prelude::*, px, rgb};
 use mp_update::identity::{Channel, Identity};
 use mp_update::manifest::{Manifest, manifest_url};
 use mp_update::{
-    CHECK_FOR_UPDATES, DEVELOPMENT_BUILD, UPDATE_FAILED, UPDATE_FOUND, UPDATE_NOT_FOUND,
-    UPDATE_NOW,
+    CHECK_FOR_UPDATES, UPDATE_FAILED, UPDATE_FOUND, UPDATE_NOT_FOUND, UPDATE_NOW,
 };
 
 use crate::MissionPlanner;
@@ -323,8 +323,9 @@ pub struct Help {
     network: Network,
     /// Where the planner is installed. `// C#: Settings.GetRunningDirectory`
     install_dir: PathBuf,
-    /// What this build is; `None` a development build, which is never updated from a release.
-    build: Option<Identity>,
+    /// What this build is: a release, or a development build - cargo's - which updates when a
+    /// button asks and is left alone at start.
+    build: Identity,
     /// How it is installed.
     kind: Kind,
     /// Where the Debian package's new package is fetched to.
@@ -413,14 +414,14 @@ impl Help {
             mp_update::identity::this_build(),
         );
         #[cfg(target_family = "wasm")]
-        let mut help = Self::with((), install_dir(), None);
+        let mut help = Self::with((), install_dir(), mp_update::identity::this_build());
         help.kind = kind_here();
         help
     }
 
     /// The page over another network, directory and build: the tests'.
     #[must_use]
-    pub fn with(network: Network, install_dir: PathBuf, build: Option<Identity>) -> Self {
+    pub fn with(network: Network, install_dir: PathBuf, build: Identity) -> Self {
         Self {
             show_console: false,
             flow: Flow::Idle,
@@ -539,11 +540,8 @@ impl Help {
         if self.busy() {
             return;
         }
-        let Some(build) = self.build.clone() else {
-            return;
-        };
         let url = manifest_url(which, &|key| persisted.get(key).map(str::to_owned));
-        if let Some(receiver) = self.spawn_check(url, which, build) {
+        if let Some(receiver) = self.spawn_check(url, which, self.build.clone()) {
             self.which = which;
             self.notify_no_update = notify_no_update;
             self.flow = Flow::Checking;
@@ -552,13 +550,10 @@ impl Help {
     }
 
     /// A button's click: the channel checked and "No update available." said when there is
-    /// none - or, for a build that is no release or one already updated and waiting for its
-    /// restart, only the words for the status line.
+    /// none - or, for a planner already updated and waiting for its restart, only the words for
+    /// the status line. A development build is asked as a release is: the owner's local working
+    /// copy is `target/debug/planner`, and its update is to work (2026-11-18).
     fn clicked(&mut self, which: Channel, persisted: &Persisted) -> Option<&'static str> {
-        if self.build.is_none() {
-            self.refused += 1;
-            return Some(DEVELOPMENT_BUILD);
-        }
         if self.installed {
             self.refused += 1;
             return Some(RESTART_TO_FINISH);
@@ -684,11 +679,12 @@ impl Help {
 
     /// `MainV2`'s check at startup: once a day on the stable channel, the day kept as
     /// `update_check`; on a day already checked, the beta channel when `beta_updates` is set.
-    /// Not for a development build, and not when CONFIG > Planner's "Check for updates at
-    /// start" is unticked - a box the C# has not got, the owner's (2026-11-18).
-    /// `// C#: MainV2.cs:3668-3678`
+    /// Not for a development build, which is offered whatever the channel holds and would be
+    /// asked at every day's first start, and whose every test run would ask GitHub; and not when
+    /// CONFIG > Planner's "Check for updates at start" is unticked - a box the C# has not got,
+    /// the owner's (2026-11-18). `// C#: MainV2.cs:3668-3678`
     pub fn startup_check(&mut self, persisted: &mut Persisted) {
-        if self.build.is_none() || !check_at_start(persisted) {
+        if !self.build.stamped || !check_at_start(persisted) {
             return;
         }
         let today = crate::settings::short_date_today();
@@ -751,8 +747,8 @@ impl Help {
     /// logs ("Update check failed") or boxes (the Help page's Error box) and the status line
     /// says. `// C#: Utilities/Update.cs:180-203; GCSViews/Help.cs:44-47; MainV2.cs:4047-4050`
     fn checked(&mut self, outcome: Result<Option<Box<Manifest>>, String>) -> Option<String> {
-        match (outcome, &self.build) {
-            (Ok(Some(manifest)), Some(build)) => {
+        match outcome {
+            Ok(Some(manifest)) => {
                 let extra = if self.which == Channel::Beta {
                     "BETA "
                 } else {
@@ -765,14 +761,14 @@ impl Help {
                 self.flow = Flow::Question {
                     text: format!(
                         "{extra}{UPDATE_FOUND}: {} [link;{};ChangeLog]",
-                        manifest.described_for(build),
+                        manifest.described_for(&self.build),
                         manifest.notes_url
                     ),
                 };
                 self.offered = Some(*manifest);
                 None
             }
-            (Ok(_), _) => {
+            Ok(None) => {
                 self.last = "up to date".to_owned();
                 self.flow = if self.notify_no_update {
                     Flow::Message {
@@ -783,7 +779,7 @@ impl Help {
                 };
                 None
             }
-            (Err(why), _) => {
+            Err(why) => {
                 self.last = format!("Update check failed: {why}");
                 self.flow = Flow::Idle;
                 Some(self.last.clone())
@@ -875,11 +871,7 @@ impl Help {
         record("help.updates", Self::updates_shown());
         record(
             "help.build",
-            mp_update::identity::version_line(
-                "planner",
-                env!("CARGO_PKG_VERSION"),
-                self.build.as_ref(),
-            ),
+            mp_update::identity::version_line("planner", &self.build),
         );
     }
 }
@@ -910,10 +902,7 @@ fn channel_pair<T>() -> (std::sync::mpsc::Sender<T>, Receiver<T>) {
 pub fn update_from_command_line(beta: bool) -> i32 {
     use mp_update::check::{Check, check_for_update};
     use mp_update::install::{downloads_dir, fetch_deb, install, trial};
-    let Some(build) = mp_update::identity::this_build() else {
-        eprintln!("{DEVELOPMENT_BUILD}");
-        return 1;
-    };
+    let build = mp_update::identity::this_build();
     cleanup_files();
     let persisted = Persisted::load();
     let which = if beta { Channel::Beta } else { Channel::Stable };
@@ -1391,8 +1380,9 @@ mod tests {
     const DEB_URL: &str = "https://x/files/missionplanner-rust_0.0.2_amd64.deb";
     const DEB_BYTES: &[u8] = b"!<arch>\ndebian-binary";
 
-    fn build(version: &str, channel: &str, commit: &str, built: &str) -> Option<Identity> {
+    fn build(version: &str, channel: &str, commit: &str, built: &str) -> Identity {
         Identity::from_values(Some(version), Some(commit), Some(channel), Some(built))
+            .expect("a release's identity")
     }
 
     /// A release's archive: the planner and its licence in the release's own folder. A zip, which
@@ -1478,25 +1468,49 @@ mod tests {
         help
     }
 
-    /// A build that is no release - `cargo build`'s - is never updated from one: both buttons
-    /// only say so, and nothing is asked of the network at start either.
+    /// A development build - `cargo build`'s, the owner's local working copy - updates when a
+    /// button asks: it cannot say which release it is, so it is offered whatever the channel
+    /// holds, and Yes installs it as for any planner. Only the check at start is not its own.
     #[test]
-    fn a_development_build_only_says_what_it_is() {
+    fn a_development_build_updates_when_asked_and_is_left_alone_at_start() {
         let dir = scratch("development");
-        let mut help = Help::with(server(), dir.clone(), None);
+        let mut help = release_0_0_1(&dir);
+        help.build = Identity::development("0.0.0");
         let mut persisted = settings(&KEYS);
         persisted.set(BETA_UPDATES_KEY, "True");
-        assert_eq!(help.update_check_clicked(&persisted), Some(DEVELOPMENT_BUILD));
-        assert_eq!(help.beta_update_clicked(&persisted), Some(DEVELOPMENT_BUILD));
-        assert_eq!(help.refused, 2);
+        // At start: nothing asked of the network, and no day kept.
         help.startup_check(&mut persisted);
-        assert_eq!(persisted.get(UPDATE_CHECK_KEY), None, "no day kept: no check made");
-        help.check_for_update(Channel::Beta, true, &persisted);
-        help.start_update();
         assert_eq!(help.flow, Flow::Idle);
-        assert!(help.check.is_none() && help.updating.is_none());
-        assert_eq!(help.written, 0);
-        assert!(help.restart.is_none());
+        assert!(help.check.is_none());
+        assert_eq!(persisted.get(UPDATE_CHECK_KEY), None, "no day kept: no check made");
+
+        // The beta button, asked and answered No; then the other, and Yes.
+        assert_eq!(help.beta_update_clicked(&persisted), None);
+        wait(&mut help);
+        assert_eq!(
+            help.flow,
+            Flow::Question {
+                text: "BETA Update Found: a development build to 42992d086a78 built 2026-11-25 \
+                       [link;https://x/releases/tag/v0_0_2;ChangeLog]"
+                    .to_owned()
+            }
+        );
+        help.answer(false);
+        assert_eq!(help.update_check_clicked(&persisted), None);
+        assert_eq!(help.refused, 0);
+        wait(&mut help);
+        assert_eq!(
+            help.flow,
+            Flow::Question {
+                text: "Update Found: a development build to 0.0.2 \
+                       [link;https://x/releases/tag/v0_0_2;ChangeLog]"
+                    .to_owned()
+            }
+        );
+        help.answer(true);
+        assert_eq!(wait(&mut help).as_deref(), Some(UPDATE_INSTALLED));
+        assert_eq!(mp_os::fs::read(dir.join(program())).expect("planner"), b"the new planner");
+        assert!(help.restarting());
         assert!(Help::updates_shown());
         mp_os::fs::remove_dir_all(&dir).expect("cleanup");
     }

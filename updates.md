@@ -126,8 +126,13 @@ above for width. An address that is not https is refused, the manifest's and eac
 
 `release.yml` passes three values into each build, compiled in: the version (from the tag), the
 commit and the channel. `planner --version` prints all three. A build without them - `cargo
-build` on a developer's machine - is a **development build**: the buttons say so on the status
-line and nothing is fetched.
+build` on a developer's machine, `target/debug/planner` or `target/release/planner` - is a
+**development build**. It was first to be refused any update; the owner's word the same day
+changed that ("we have a process for that called ~/MissionPlannerRust$ ./target/debug/planner
+... or the release binary at the same place"): its buttons update it as any planner's do. It
+cannot say which release it is, so it is offered whatever the channel holds, as "a development
+build to 0.0.2". Only the check at start is not for it: it would be asked every day, and every
+test run would ask GitHub.
 
 Tags keep their form, `v0_0_2` (the owner, 2026-11-18): the planner reads the tag's numbers,
 underscores or dots alike, as the version `0.0.2`, and orders versions number by number. The
@@ -155,7 +160,7 @@ about the user or the vehicle. A failure goes on the status line, never in a box
 | An unpacked archive in a folder the user can write (Linux `.tar.gz`, Windows `.zip`, macOS `.tar.gz`) | Updates in place, section 4.6. |
 | The `.deb` (the program is under `/usr/bin`) | No in-place update: the package manager owns the file. The new `.deb` is downloaded to the user's Downloads folder, checked against the manifest, and the command to run is shown: `sudo apt install ./<file>.deb` (the owner, 2026-11-18). |
 | A folder the user cannot write | The C#'s write test fails: "Unable to write to the install directory", and the release page's link. No elevation is asked for. |
-| A development build | Says it is one. |
+| A development build (`target/debug`, `target/release`) | Updates in place when a button asks, the release's files written beside the planner in that folder; the next `cargo build` puts the development build back. |
 | **The browser page (wasm)** | **Off.** Both buttons hidden, as `Help.cs:27-31` hides them for the Store app, no check at start: the page is whatever the site serves. Left out at compile time. |
 
 ### 4.6 The update in place
@@ -382,8 +387,9 @@ redesigned by the owner's word.
   the planner to use it".
 - **From the `.deb`**: Yes fetches the new package into Downloads, checks it, and a box says
   where it is and the command, `sudo apt install <path>`.
-- **A development build** (`cargo build`): both buttons say so on the status line and nothing is
-  fetched, at start or ever.
+- **A development build** (`cargo build`, the owner's local working copy): both buttons ask the
+  channel and offer what it holds, "Update Found: a development build to 0.0.2", and Yes installs
+  it over `target/debug/planner`. Nothing is asked at start.
 - **In the browser page**: neither button is there.
 - **At start**: once a day, silently unless there is a release to offer; on later starts the same
   day, the beta too when CONFIG > Planner's Beta Updates is ticked; never when "Check for updates

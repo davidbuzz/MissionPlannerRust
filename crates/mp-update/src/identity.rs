@@ -20,9 +20,13 @@
 
 //! What this build is: the release it was built as, from which commit, on which channel. The
 //! release workflow compiles the values in (`MP_RELEASE_VERSION`, `MP_RELEASE_COMMIT`,
-//! `MP_RELEASE_CHANNEL`, `MP_RELEASE_BUILT`); a build without them, `cargo build` on a
-//! developer's machine, is a development build and is never updated from a release. Not in the
-//! C#, which reads `version.txt` beside the program: updates.md, section 4.3.
+//! `MP_RELEASE_CHANNEL`, `MP_RELEASE_BUILT`). A build without them, `cargo build` on a
+//! developer's machine - `target/debug/planner`, `target/release/planner` - is a development
+//! build: it updates as any planner does when its buttons are pressed, offered whatever the
+//! channel holds, since it cannot say which release it is (the owner, 2026-11-18: his local
+//! working copy is that binary, and its update is to work); only the check at start is left to
+//! the releases. Not in the C#, which reads `version.txt` beside the program: updates.md,
+//! section 4.3.
 
 use crate::release::ReleaseVersion;
 
@@ -71,6 +75,9 @@ pub struct Identity {
     pub channel: Channel,
     /// When it was built, `2026-11-20T03:10:00Z`; empty when the build did not say.
     pub built: String,
+    /// Whether the build was told what it is - the release workflow's, or the harness's door's -
+    /// and not a development build, which only knows its package's version.
+    pub stamped: bool,
 }
 
 impl Identity {
@@ -89,7 +96,21 @@ impl Identity {
             commit: commit.to_owned(),
             channel: Channel::parse(channel?)?,
             built: built.map(str::trim).unwrap_or_default().to_owned(),
+            stamped: true,
         })
+    }
+
+    /// A development build's identity: its package's version, no commit and no time, on the
+    /// stable channel.
+    #[must_use]
+    pub fn development(package_version: &str) -> Self {
+        Self {
+            version: ReleaseVersion::parse(package_version).unwrap_or_else(|_| ReleaseVersion::zero()),
+            commit: "development".to_owned(),
+            channel: Channel::Stable,
+            built: String::new(),
+            stamped: false,
+        }
     }
 
     /// The identity the door's text names: `version,channel,commit,built`.
@@ -116,39 +137,39 @@ pub fn short(commit: &str) -> &str {
     commit.get(..12).unwrap_or(commit)
 }
 
-/// This build: the door's when it is set, else what the release workflow compiled in.
+/// This build: the door's when it is set and reads, else what the release workflow compiled in,
+/// else a development build of this package's version.
 #[must_use]
-pub fn this_build() -> Option<Identity> {
-    if let Ok(door) = std::env::var(DOOR) {
-        return Identity::from_door(&door);
-    }
-    Identity::from_values(
-        option_env!("MP_RELEASE_VERSION"),
-        option_env!("MP_RELEASE_COMMIT"),
-        option_env!("MP_RELEASE_CHANNEL"),
-        option_env!("MP_RELEASE_BUILT"),
-    )
+pub fn this_build() -> Identity {
+    let told = match std::env::var(DOOR) {
+        Ok(door) => Identity::from_door(&door),
+        Err(_) => Identity::from_values(
+            option_env!("MP_RELEASE_VERSION"),
+            option_env!("MP_RELEASE_COMMIT"),
+            option_env!("MP_RELEASE_CHANNEL"),
+            option_env!("MP_RELEASE_BUILT"),
+        ),
+    };
+    told.unwrap_or_else(|| Identity::development(env!("CARGO_PKG_VERSION")))
 }
 
 /// What `--version` prints: the program and its version, and what kind of build it is.
 #[must_use]
-pub fn version_line(program: &str, package_version: &str, identity: Option<&Identity>) -> String {
-    match identity {
-        Some(identity) => {
-            let built = if identity.built.is_empty() {
-                String::new()
-            } else {
-                format!(", built {}", identity.built)
-            };
-            format!(
-                "{program} {} ({}, commit {}{built})",
-                identity.version,
-                identity.channel.name(),
-                identity.short_commit()
-            )
-        }
-        None => format!("{program} {package_version} (development build)"),
+pub fn version_line(program: &str, identity: &Identity) -> String {
+    if !identity.stamped {
+        return format!("{program} {} (development build)", identity.version);
     }
+    let built = if identity.built.is_empty() {
+        String::new()
+    } else {
+        format!(", built {}", identity.built)
+    };
+    format!(
+        "{program} {} ({}, commit {}{built})",
+        identity.version,
+        identity.channel.name(),
+        identity.short_commit()
+    )
 }
 
 #[cfg(test)]
@@ -193,12 +214,14 @@ mod tests {
         let identity =
             Identity::from_values(Some("v0_0_2"), Some(COMMIT), Some("stable"), Some("2026-11-20T03:10:00Z"));
         assert_eq!(
-            version_line("planner", "0.0.0", identity.as_ref()),
+            version_line("planner", &identity.unwrap()),
             "planner 0.0.2 (stable, commit 42992d086a78, built 2026-11-20T03:10:00Z)"
         );
-        assert_eq!(
-            version_line("planner", "0.0.0", None),
-            "planner 0.0.0 (development build)"
-        );
+        // A build nobody told what it is: its package's version, and that it is a developer's.
+        let development = Identity::development("0.0.0");
+        assert!(!development.stamped);
+        assert_eq!((development.channel, development.built.as_str()), (Channel::Stable, ""));
+        assert_eq!(version_line("planner", &development), "planner 0.0.0 (development build)");
+        assert_eq!(Identity::development("not a version").version.to_string(), "0");
     }
 }
