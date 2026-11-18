@@ -3,7 +3,8 @@
 # 4.3 and 5): its first job runs this and the build jobs take its answers.
 #
 #   a release tag pushed (v0_0_2)   the stable channel's release 0.0.2, published under that tag
-#   by hand, channel beta           the beta channel's, published under the tag "beta"
+#   by hand, channel beta           the beta channel's: the head of main, published in the one
+#                                   pre-release named "beta". No tag is asked of the owner.
 #   by hand, no channel             a build kept as the run's artifacts: no release, and a planner
 #                                   that calls itself a development build
 #

@@ -10,21 +10,29 @@ name: release builds
 #
 # The planner's own update reads what this publishes (updates.md): each build is told what it is -
 # its version, channel and commit, which `planner --version` prints - and `publish` writes
-# update.json beside the downloads, the manifest the planner fetches. A tag is the stable
-# channel's release. The beta channel's is one rolling pre-release under the tag "beta", made
-# when the owner runs this workflow by hand with the channel "beta". The `what` job
-# (tools/release/what.sh) decides which of these a run is.
+# update.json beside the downloads, the manifest the planner fetches. A tag "v" and numbers is the
+# stable channel's release. The beta channel's is one rolling pre-release named "beta", made when
+# the owner runs this workflow by hand with the channel "beta": it builds the head of main, and
+# needs no tag from him (the owner, 2026-11-18: "pls make beta builds *not* need any sort of tag,
+# they should just build 'head'"). The `what` job (tools/release/what.sh) decides which of these
+# a run is.
 #
 # NOTHING HERE RELEASES BY ITSELF, and nothing may be added that does (the owner, 2026-11-18: "DO
 # NOT DO ANY FORM OF AUTOMATED RELEASE, EVER. this is DENIED. user must always action it."). There
-# is no schedule: a release starts when he pushes a tag, a beta when he runs the workflow, and
-# neither any other way. A nightly beta, which this workflow had for some hours of that day, is
-# removed.
+# is no schedule: a release starts when he pushes its tag, a beta when he runs the workflow.
+#
+# The beta's pre-release is asked of GitHub once, by name alone, before anything is built (the
+# `what` job), and every beta after puts its files in that same pre-release. GitHub keeps a tag
+# of that name for it - it holds no release without one - which it makes itself and nobody moves.
+# No commit is named to GitHub: the first beta run (44249073440, 2026-11-18) asked for a release
+# at a commit (`--target`) after an hour of building, and was refused twice, "HTTP 403: Resource
+# not accessible by integration", the second time with a tag already pushed. Asked first, a
+# refusal costs a minute and not the three builds.
 on:
   workflow_dispatch:
     inputs:
       channel:
-        description: "beta publishes this build as the beta channel's; none keeps it as this run's artifacts"
+        description: "beta builds the head of main as the beta channel's; none keeps the build as this run's artifacts"
         type: choice
         options: [none, beta]
         default: none
@@ -40,7 +48,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
-      contents: read
+      # Write only for the beta's pre-release, asked for below.
+      contents: write
     outputs:
       build: ${{ steps.what.outputs.build }}
       channel: ${{ steps.what.outputs.channel }}
@@ -58,6 +67,20 @@ jobs:
         env:
           WANTED: ${{ inputs.channel }}
         run: tools/release/what.sh >> "$GITHUB_OUTPUT"
+      - name: The beta's place on GitHub, asked for before anything is built
+        # A pre-release named "beta", made the first time and kept: each beta's files replace the
+        # last one's in it (the `publish` job). If GitHub refuses, the run stops here.
+        if: steps.what.outputs.channel == 'beta'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          if gh release view beta > /dev/null 2>&1; then
+            echo "the beta pre-release is there"
+          else
+            gh release create beta --prerelease --title "MissionPlannerRust beta" \
+              --notes "A beta is being built: its downloads follow once all three planners have built."
+          fi
 
   linux:
     name: Linux (x86-64, glibc 2.35)
@@ -425,18 +448,12 @@ jobs:
             --version "$VERSION" --commit "$GITHUB_SHA" --built "$BUILT" \
             --repository "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY" --dir . --out ../update.json
           if [ "$CHANNEL" = beta ]; then
-            # One rolling pre-release: this beta's downloads beside the last one's (their names
-            # carry the commit), then the manifest, then the tag moved and the last one's removed.
-            if gh release view beta > /dev/null 2>&1; then
-              old=$(gh release view beta --json assets --jq '.assets[].name')
-              gh release upload beta * --clobber
-            else
-              old=
-              gh release create beta * --prerelease --target "$GITHUB_SHA" \
-                --title "MissionPlannerRust beta" --notes-file ../notes.md
-            fi
+            # One rolling pre-release, there since the `what` job: this beta's downloads beside
+            # the last one's (their names carry the commit), then the manifest, then the last
+            # one's removed. No tag is made or moved and no commit named.
+            old=$(gh release view beta --json assets --jq '.assets[].name')
+            gh release upload beta * --clobber
             gh release upload beta ../update.json --clobber
-            gh api -X PATCH "repos/$GITHUB_REPOSITORY/git/refs/tags/beta" -f sha="$GITHUB_SHA" -F force=true
             gh release edit beta --prerelease --notes-file ../notes.md
             for name in $old; do
               [ -e "$name" ] || [ "$name" = update.json ] || gh release delete-asset beta "$name" --yes

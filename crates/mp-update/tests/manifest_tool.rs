@@ -343,6 +343,38 @@ fn a_tag_is_a_stable_release_and_a_run_by_hand_is_no_release() {
         None
     );
 
+    // By hand with the channel beta: the beta channel's, after the last release before the
+    // commit, with no tag asked for. Tried only where the repository's release tags are there to
+    // answer (a shallow checkout has none).
+    let tagged = Command::new("git")
+        .args([
+            "describe",
+            "--tags",
+            "--abbrev=0",
+            "--match",
+            "v[0-9]*",
+            COMMIT,
+        ])
+        .current_dir(env!("CARGO_MANIFEST_DIR"))
+        .output()
+        .is_ok_and(|output| output.status.success());
+    if tagged {
+        let (ok, said) = run(&[
+            ("GITHUB_REF_TYPE", "branch"),
+            ("GITHUB_EVENT_NAME", "workflow_dispatch"),
+            ("WANTED", "beta"),
+            ("GITHUB_SHA", COMMIT),
+        ]);
+        assert!(ok, "{said}");
+        assert_eq!(answer(&said, "channel"), "beta");
+        assert_eq!(answer(&said, "tag"), "beta");
+        assert_eq!(answer(&said, "label"), "beta-42992d0");
+        assert_eq!(
+            answer(&said, "deb"),
+            format!("{}+beta.42992d0", answer(&said, "version"))
+        );
+    }
+
     // A tag that is no release.
     let (ok, _) = run(&[
         ("GITHUB_REF_TYPE", "tag"),

@@ -92,7 +92,8 @@ What is missing for updating:
 
 - **Stable** is the newest full GitHub release:
   `releases/latest/download/update.json`.
-- **Beta** is one rolling pre-release under the fixed tag `beta`, replaced by CI:
+- **Beta** is one rolling pre-release under the fixed tag `beta`, replaced when the owner moves
+  that tag and pushes it:
   `releases/download/beta/update.json`. GitHub's "latest" never points at a pre-release, so the
   two cannot be confused.
 - **Master** is dropped. The C#'s is dead, and beta already is main's newest build.
@@ -418,11 +419,14 @@ The steps, the checks afterwards and what to do when a run fails are in
    not against this one, asked of the OSV database for every crate whose version changed, and
    the dependency changes between the two `Cargo.lock` files. They head the release's page, are
    attached as `RELEASE_NOTES.md`, and are committed to `main` in that file.
-2. **The beta**: the owner runs the workflow by hand with the channel `beta` (Actions > release
-   builds > Run workflow). The same three builds are published under the one tag `beta`, a
-   pre-release, their names carrying the commit, the manifest replaced after they are up and the
-   previous beta's files removed after that. Nothing makes a beta by itself.
-3. **A build to look at**: Run workflow with no channel, as before. It is kept as the run's
+2. **The beta**: the owner moves the tag `beta` to the commit and pushes it (`git tag -f beta`,
+   `git push -f buzz beta`). The same three builds are attached to that tag as a pre-release,
+   their names carrying the commit, the manifest replaced after they are up and the previous
+   beta's files removed after that. Nothing makes a beta by itself, and the workflow neither makes
+   nor moves a tag: the first beta run, started from Run workflow on 2026-11-18, built all three
+   planners and was refused its release by GitHub twice ("HTTP 403: Resource not accessible by
+   integration") for asking for one at a named commit.
+3. **A build to look at**: Run workflow, as before. It is kept as the run's
    artifacts and calls itself a development build.
 
 The planners released before this, `v0_0_0` and `v0_0_1`, have no updater: their users fetch the

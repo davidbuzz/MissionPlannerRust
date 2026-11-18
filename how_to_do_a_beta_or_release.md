@@ -7,7 +7,7 @@ does each, where it runs, and the command.
 
 **1. Nothing releases by itself.** The owner's word, 2026-11-18: "DO NOT DO ANY FORM OF AUTOMATED
 RELEASE, EVER. this is DENIED. user must always action it." A release starts when the owner pushes
-a tag. A beta starts when the owner runs the workflow. There is no schedule, no nightly build, and
+a tag: `v0_0_2` for a release, `beta` for a beta. There is no schedule, no nightly build, and
 nothing an assistant or a script may start on his behalf. What runs *after* his action is
 automated; the action is always his.
 
@@ -35,7 +35,7 @@ tested; its steps are not. The first real run may show something to fix; correct
 | | By hand, by the owner, on the Linux box | Automated, on GitHub, after his action |
 |---|---|---|
 | A release | pushes `main`; waits for CI; **pushes the tag** | the three builds, their checks, the packaging, the release notes, the release, `update.json`, the check of what was published, the commit of `RELEASE_NOTES.md` |
-| A beta | pushes `main`; **runs the workflow with channel `beta`** | the same, published under the tag `beta` as a pre-release; no commit to the repository |
+| A beta | pushes `main`; **moves the tag `beta` and pushes it** | the same, published under the tag `beta` as a pre-release; no commit to the repository |
 | Tests | the checks before and after, below | CI on each push |
 
 ## Prerequisites
@@ -198,20 +198,31 @@ Expect "Update Found: a development build to 0.0.2"; a release planner says "0.0
 ### By hand, on the Linux box
 
 1. `main` pushed, CI green on it, and it is a later commit than the last release.
-2. **The action that makes the beta**, either in the browser - Actions > release builds > Run
-   workflow, branch `main`, channel `beta` - or:
+2. On that commit:
 
    ```
-   gh workflow run "release builds" -f channel=beta
+   git fetch buzz && git status -sb
    ```
 
-### Automated, on GitHub, started by that
+3. The tag `beta`, moved to it, and its push. **This is the action that makes the beta.**
+
+   ```
+   git tag -f beta
+   git push -f buzz beta
+   ```
+
+   `-f` because the tag is one rolling tag: it is taken from the last beta's commit and put on
+   this one. Only the owner moves it.
+
+### Automated, on GitHub, started by that push
 
 The same five jobs with the same commands, with these differences: `what.sh` answers "a beta
 after release 0.0.2"; the builds are told they are the beta channel's; the downloads' names carry
-the commit; `gh release` publishes them as a **pre-release under the tag `beta`**, in place of the
-last beta's, and moves that tag; the notes are on the release's page only - **nothing is
-committed to the repository**.
+the commit; `gh release create beta --prerelease --verify-tag` attaches them to the tag as a
+**pre-release**, or `gh release upload beta` puts them beside the last beta's, whose files are
+removed once the new `update.json` is up; the notes are on the release's page only - **nothing is
+committed to the repository**. The workflow neither makes nor moves the tag, and names no commit
+to GitHub: it publishes to the tag that started it.
 
 ### By hand afterwards, on the Linux box
 
@@ -222,7 +233,7 @@ gh release view beta --json assets,isPrerelease --jq '.isPrerelease, (.assets[].
 
 ## A build to look at, and no release
 
-By hand: Actions > release builds > Run workflow with the channel left at `none`. Automated: the
+By hand: Actions > release builds > Run workflow. Automated: the
 three builds, kept as the run's artifacts. Nothing is published, and each planner calls itself a
 development build.
 
@@ -235,13 +246,15 @@ development build.
 | The release **was published** and is wrong | Never move or reuse its tag: planners may already have it. Fix on `main` and release the next number. |
 | The job *GitHub release* failed (the notes could not be computed, an upload failed, the check of the published release failed) | Re-run that job alone. The builds are kept, nothing rebuilds, and a release half made is completed. |
 | `RELEASE_NOTES.md` could not be pushed to `main` | Re-run the job. Writing the same release twice changes nothing. |
+| *GitHub release* fails with "HTTP 403: Resource not accessible by integration" | The workflow's own token was asked for something it may not do. It happened on 2026-11-18, when the workflow asked for a release at a named commit (`--target`), and again with the tag already pushed; since then it only attaches to the tag that started the run. If it returns, read what the failing `gh` command asked for. Re-running the job does not help: a re-run uses the workflow file of the run's own commit. |
 | A planner says the check failed with a 404 | The newest release has no `update.json`: it was made before this workflow, or its release job did not finish. |
 
 ## Never
 
 - Start a release or a beta any way but the owner doing it himself.
 - Add a schedule, or any trigger that releases without him, to the workflow.
-- Make, move or delete the tag `beta` by hand.
+- Let anything but the owner move the tag `beta`: the workflow does not, and may not.
+- Start a beta from Run workflow: that only makes a build to look at.
 - Move or reuse a release tag once its release is published.
 - Edit `RELEASE_NOTES.md` or `update.json` by hand: the workflow writes both.
 
