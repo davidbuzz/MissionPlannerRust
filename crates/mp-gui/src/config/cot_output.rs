@@ -63,7 +63,11 @@
 //!   Connect inside that sleep had two threads running);
 //! * Clear Window with nothing in the box says so on the status line, quietly, where the C#
 //!   empties an empty box without a word (the owner's rule of 2026-10-14, a press that answers
-//!   nothing looks broken).
+//!   nothing looks broken);
+//! * `hae` is metres and `speed` metres per second, as CoT defines them, where the C# writes the
+//!   user's display units (feet and knots under imperial); with the Type box at its default the
+//!   type follows the vehicle's `MAV_TYPE` (`uas_cot::mavlink::vehicle_type`), so a rover, boat
+//!   or sub is not drawn as a fixed-wing drone.
 
 // This module is internal to the binary; `pub` here documents intent rather than exporting API.
 #![allow(unreachable_pub)]
@@ -455,8 +459,8 @@ pub fn row_for<'a>(rows: &'a [Row], uid: &str) -> Option<&'a Row> {
 }
 
 /// What the thread reads of a vehicle: `cs.lat`, `cs.lng`, `cs.altasl`, `cs.groundspeed` and
-/// `cs.groundcourse`, as the C#'s getters give them - the altitude and speed in the user's units.
-/// `// C#: Controls/SerialOutputCoT.cs:215-219`
+/// `cs.groundcourse`, in metres and metres per second as CoT defines them, and the vehicle's
+/// `MAV_TYPE`. `// C#: Controls/SerialOutputCoT.cs:215-219`
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
 pub struct Position {
     pub lat: f64,
@@ -464,18 +468,20 @@ pub struct Position {
     pub alt: f64,
     pub speed: f64,
     pub course: f64,
+    pub mav_type: Option<u8>,
 }
 
 impl Position {
     #[must_use]
-    pub fn of(state: &VehicleState, units: &DisplayUnits) -> Self {
-        let read = |name: &str| crate::quick::display_value(name, state, units).unwrap_or(0.0);
+    pub fn of(state: &VehicleState, _units: &DisplayUnits) -> Self {
+        let read = |name: &str| crate::quick::value(name, state).unwrap_or(0.0);
         Self {
             lat: read("lat"),
             lng: read("lng"),
             alt: read("altasl"),
             speed: read("groundspeed"),
             course: read("groundcourse"),
+            mav_type: Some(state.vehicle_type),
         }
     }
 }
@@ -503,7 +509,12 @@ pub fn vehicle_xml(
     let uid = uid_for(&inputs.rows, sysid).unwrap_or_default();
     let mut event = Event {
         uid: uid.clone(),
-        kind: inputs.xml_type.clone(),
+        kind: at
+            .mav_type
+            .filter(|_| inputs.xml_type == XML_TYPE)
+            .map(|mav_type| uas_cot::mavlink::vehicle_type(Some(mav_type), 'f'))
+            .filter(|kind| kind != "a-f-A")
+            .unwrap_or_else(|| inputs.xml_type.clone()),
         how: HOW.to_owned(),
         lat: at.lat,
         lng: at.lng,
@@ -1889,6 +1900,7 @@ mod tests {
             alt: 100.0,
             speed: 5.0,
             course: 90.0,
+            mav_type: None,
         };
         let time = jiff::Timestamp::now();
         let xml = vehicle_xml(&inputs, 1, &at, time).expect("an event");
@@ -1910,6 +1922,34 @@ mod tests {
         inputs.advanced = true;
         inputs.rows[0].cells[TAKV] = text("yes");
         assert!(vehicle_xml(&inputs, 1, &at, time).is_err());
+    }
+
+    /// Under feet and knots the event still carries metres and metres per second, and a rover
+    /// is a ground vehicle, not the fixed-wing drone the Type box defaults to.
+    #[test]
+    fn an_event_is_si_units_and_the_vehicles_type() {
+        let mut state = VehicleState::default();
+        state.altitude_msl = mp_units::Metres(584.0);
+        state.ground_speed = mp_units::MetresPerSecond(5.0);
+        state.vehicle_type = 10;
+        let imperial =
+            DisplayUnits::default().change_units(Some("Feet"), Some("Feet"), Some("knots"));
+        let at = Position::of(&state, &imperial);
+        assert_eq!((at.alt, at.speed), (584.0, 5.0));
+        let inputs = Inputs {
+            xml_type: XML_TYPE.to_owned(),
+            ..Inputs::default()
+        };
+        let xml = vehicle_xml(&inputs, 1, &at, jiff::Timestamp::now()).expect("an event");
+        assert!(xml.contains(r#"type="a-f-G-E-V""#), "{xml}");
+        assert!(xml.contains(r#"hae="584.00""#), "{xml}");
+        assert!(xml.contains(r#"speed="5.00""#), "{xml}");
+        let generic = Position {
+            mav_type: Some(0),
+            ..at
+        };
+        let xml = vehicle_xml(&inputs, 1, &generic, jiff::Timestamp::now()).expect("an event");
+        assert!(xml.contains(r#"type="a-f-A-M-F-Q""#), "{xml}");
     }
 
     /// `Load` from the settings - the grid, the interval, the indexes, the two boxes - the baud
@@ -2015,6 +2055,7 @@ mod tests {
                 alt: 584.0,
                 speed: 0.0,
                 course: 0.0,
+                mav_type: None,
             },
         );
         cot.tick(vec![vehicle]);
